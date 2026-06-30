@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
+import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { PublicHeader } from "@/components/PublicMarketing";
 
@@ -105,9 +105,11 @@ export function CustomOrderLanding() {
   }, []);
 
   // Every "Start Free Trial" click is tracked and stamps an attribution marker
-  // (source only) so a later signup can be credited to this landing page.
+  // (full campaign tuple, no PII) so a later signup can be credited to this
+  // landing page and its campaign — captured here while the URL still has the
+  // utm_* params, since /signup no longer has them.
   const onStartTrialClick = () => {
-    setLandingAttribution(sourceRef.current);
+    setLandingAttribution(parseLandingCampaign());
     trackLandingEvent("custom_order_landing_cta_click");
   };
   const onHowItWorksClick = () => {
