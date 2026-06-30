@@ -123,3 +123,12 @@ studioflow-web/.git_BACKUP_DO_NOT_COMMIT/
 
 # Android Studio local Gradle daemon settings
 studioflow-android/gradle/gradle-daemon-jvm.properties
+
+# Personal Claude config (settings.local.json etc.) — never commit
+.claude/
+
+# Temporary web deploy staging copy (~94 MB, has its own .git) — never commit
+nivadesk-web-deploy-temp/
+
+# Large demo media — keep out of git history (serve from CDN / use Git LFS)
+studioflow-web/public/demo/*.mp4
