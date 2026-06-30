@@ -7450,9 +7450,12 @@ struct SiparisDetayView: View {
                             if isUploading {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Image(systemName: "ellipsis.circle.fill")
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .foregroundColor(.primary.opacity(0.56))
+                                // Plain three dots (not ellipsis.circle.fill) so the symbol's own
+                                // filled circle doesn't sit inside the translucent Circle backdrop
+                                // and read as "nested circles" — just a clean round dot button.
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundColor(.primary.opacity(0.6))
                             }
                         }
                         .contentShape(Circle())
