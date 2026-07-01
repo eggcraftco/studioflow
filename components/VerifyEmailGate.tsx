@@ -79,7 +79,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         fontWeight: 650
       }}
     >
-      <span>📬 Verify your email ({user.email}) to keep full access.</span>
+      <span>📬 Verify your email ({user.email}) to keep your account — unverified accounts with no data are removed after 30 days.</span>
       <button type="button" onClick={() => void resend()} disabled={busy} style={{ border: "1px solid #d9b96a", background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 700, cursor: "pointer", color: "#7a5200" }}>
         Resend
       </button>
