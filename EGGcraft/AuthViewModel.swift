@@ -752,6 +752,11 @@ class AuthViewModel: ObservableObject {
     @Published var isLoggedIn = false
     @Published var errorMessage = ""
     @Published var isLoading = false
+    // One-time "we sent you a verification link" confirmation, shown right after
+    // a successful email/password sign-up (there was previously no signup notice).
+    @Published var showPostSignupVerifyNotice = false
+    // Per-run dismissal of the in-app verification reminder banner (days 0–3).
+    @Published var verifyReminderBannerDismissed = false
     @Published private(set) var interfaceSessionId = UUID()
     @Published private(set) var currentUserId: String? = nil
     @Published private(set) var currentCompanyId: String? = nil
@@ -1068,6 +1073,11 @@ class AuthViewModel: ObservableObject {
                 let actionSettings = ActionCodeSettings()
                 actionSettings.url = URL(string: "https://nivadesk.app/login")
                 user.sendEmailVerification(with: actionSettings, completion: nil)
+
+                // Tell the brand-new user (once) that a verification link was sent
+                // and why it matters — there was previously no signup-time notice.
+                self?.showPostSignupVerifyNotice = true
+                self?.verifyReminderBannerDismissed = false
 
                 // Seed the new workspace with the chosen studio name and owner
                 // details so it never shows up as a bare "My Studio".
@@ -3522,6 +3532,20 @@ extension AuthViewModel {
         guard let created = user.metadata.creationDate else { return false }
         return Date().timeIntervalSince(created) > 3 * 86400
     }
+
+    /// True while an email/password account is unverified but still inside the
+    /// pre-gate grace window (before `needsEmailVerification` hard-gates at day 3).
+    /// Drives the dismissible in-app reminder banner.
+    var isInEmailVerificationGracePeriod: Bool {
+        guard let user = Auth.auth().currentUser else { return false }
+        guard !user.isEmailVerified else { return false }
+        guard user.providerData.contains(where: { $0.providerID == "password" }) else { return false }
+        guard let created = user.metadata.creationDate else { return false }
+        return Date().timeIntervalSince(created) <= 3 * 86400
+    }
+
+    /// Email address of the signed-in account, for verification messaging.
+    var currentAccountEmail: String { Auth.auth().currentUser?.email ?? "" }
 
     func resendVerificationEmail(completion: @escaping (String) -> Void) {
         guard let user = Auth.auth().currentUser else { return }

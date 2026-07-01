@@ -357,7 +357,12 @@ private fun StudioFlowAppContent(
             onUnlock = { requestLocalUnlock() },
             onSignOut = viewModel::signOut
         )
-        else -> StudioFlowMainScreen(
+        else -> Column(Modifier.fillMaxSize()) {
+            if (uk.co.eggcraft.studioflow.features.auth.firebaseUserInEmailVerificationGracePeriod() && !state.verifyBannerDismissed) {
+                uk.co.eggcraft.studioflow.features.auth.EmailVerifyReminderBanner(onDismiss = viewModel::dismissVerifyReminderBanner)
+            }
+            Box(Modifier.weight(1f)) {
+                StudioFlowMainScreen(
             state = state,
             requireDeviceUnlock = requireDeviceUnlock,
             onSetRequireDeviceUnlock = { enabled ->
@@ -458,6 +463,15 @@ private fun StudioFlowAppContent(
             onSaveMessageWorkspaceSettings = viewModel::saveMessageWorkspaceSettings,
             onReloadMessageWorkspaceSettings = viewModel::reloadMessageWorkspaceSettings,
             onConsumePendingActivityNavigation = viewModel::consumePendingActivityNavigation
+        )
+            }
+        }
+    }
+
+    if (state.showPostSignupVerifyNotice) {
+        uk.co.eggcraft.studioflow.features.auth.PostSignupVerifyDialog(
+            email = state.user?.email ?: "",
+            onDismiss = viewModel::dismissPostSignupVerifyNotice
         )
     }
 }

@@ -520,3 +520,73 @@ struct EmailVerifyView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+// Thin, dismissible reminder shown at the top of the app during the pre-gate
+// grace window (days 0–3) so a newly signed-up user is nudged to verify their
+// email before the hard verification gate kicks in.
+struct EmailVerifyReminderBanner: View {
+    @EnvironmentObject var authVM: AuthViewModel
+    let seciliDil: String
+    @State private var busy = false
+    @State private var statusText = ""
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "envelope.badge.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t("Verify your email to keep your account.", lang: seciliDil))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                if !statusText.isEmpty {
+                    Text(statusText).font(.system(size: 11)).foregroundColor(.secondary)
+                } else if !authVM.currentAccountEmail.isEmpty {
+                    Text(authVM.currentAccountEmail).font(.system(size: 11)).foregroundColor(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            Button {
+                busy = true
+                authVM.refreshEmailVerification { verified in
+                    busy = false
+                    if !verified {
+                        statusText = t("Not verified yet — click the link in the email first.", lang: seciliDil)
+                    }
+                }
+            } label: {
+                Text(t("I've verified — continue", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.blue).cornerRadius(8)
+            }
+            .buttonStyle(.plain).disabled(busy)
+            Button {
+                busy = true
+                authVM.resendVerificationEmail { message in busy = false; statusText = message }
+            } label: {
+                Text(t("Resend email", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.primary.opacity(0.06)).cornerRadius(8)
+            }
+            .buttonStyle(.plain).disabled(busy)
+            Button {
+                authVM.verifyReminderBannerDismissed = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(6)
+            }
+            .buttonStyle(.plain)
+            .help(t("Dismiss", lang: seciliDil))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().frame(height: 1).foregroundColor(Color.orange.opacity(0.28)), alignment: .bottom)
+    }
+}

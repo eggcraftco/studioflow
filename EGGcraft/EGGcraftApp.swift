@@ -147,6 +147,12 @@ struct StudioManagerApp: App {
                                 .id(authVM.interfaceSessionId)
                                 .environmentObject(authVM)
                                 .environmentObject(firebaseManager)
+                                .safeAreaInset(edge: .top) {
+                                    if authVM.isInEmailVerificationGracePeriod && !authVM.verifyReminderBannerDismissed {
+                                        EmailVerifyReminderBanner(seciliDil: seciliDil)
+                                            .environmentObject(authVM)
+                                    }
+                                }
                         } else {
                             WorkspaceLoadingView()
                                 .environmentObject(authVM)
@@ -163,6 +169,15 @@ struct StudioManagerApp: App {
             .onAppear {
                 syncFirebaseWorkspace()
                 AppPresenceHeartbeat.shared.start()
+            }
+            .alert(t("Verify your email", lang: seciliDil), isPresented: $authVM.showPostSignupVerifyNotice) {
+                Button(t("OK", lang: seciliDil), role: .cancel) { }
+            } message: {
+                Text(
+                    t("We sent a verification link to:", lang: seciliDil) + " "
+                    + authVM.currentAccountEmail + "\n\n"
+                    + t("Keep full access by verifying within a few days. Accounts with no data that stay unverified are removed after 30 days.", lang: seciliDil)
+                )
             }
             .onChange(of: authVM.currentCompanyId) { _, _ in
                 syncFirebaseWorkspace()

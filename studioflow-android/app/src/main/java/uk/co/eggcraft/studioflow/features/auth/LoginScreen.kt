@@ -377,6 +377,86 @@ fun EmailVerifyScreen(onVerified: () -> Unit, onSignOut: () -> Unit) {
     }
 }
 
+// True while an email/password account is unverified but still inside the pre-gate
+// grace window (before the hard gate at day 3). Drives the reminder banner below.
+fun firebaseUserInEmailVerificationGracePeriod(): Boolean {
+    val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return false
+    if (user.isEmailVerified) return false
+    if (user.providerData.none { it.providerId == "password" }) return false
+    val createdMs = user.metadata?.creationTimestamp ?: return false
+    return System.currentTimeMillis() - createdMs <= 3L * 86400000L
+}
+
+// Thin, dismissible reminder shown at the top of the app during the grace window
+// (days 0-3) so a newly signed-up user is nudged to verify before the hard gate.
+@Composable
+fun EmailVerifyReminderBanner(onDismiss: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: ""
+
+    Surface(color = Color(0xFFFFF7E6), contentColor = Color(0xFF7A5200), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("📬", fontSize = 16.sp)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(t("Verify your email to keep your account."), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (email.isNotBlank()) Text(email, fontSize = 11.sp)
+            }
+            TextButton(
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.reload()?.await() }
+                        busy = false
+                        if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isEmailVerified == true) onDismiss()
+                    }
+                },
+                enabled = !busy
+            ) { Text(t("I've verified — continue"), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            TextButton(
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        runCatching {
+                            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.sendEmailVerification(
+                                com.google.firebase.auth.ActionCodeSettings.newBuilder().setUrl("https://nivadesk.app/login").build()
+                            )?.await()
+                        }
+                        busy = false
+                    }
+                },
+                enabled = !busy
+            ) { Text(t("Resend email"), fontSize = 12.sp) }
+            TextButton(onClick = onDismiss) { Text("✕", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+// One-time confirmation shown right after a successful email/password sign-up so
+// the brand-new user knows a verification link was sent and why it matters.
+@Composable
+fun PostSignupVerifyDialog(email: String, onDismiss: () -> Unit) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("OK"), fontWeight = FontWeight.Bold) } },
+        title = { Text(t("Verify your email"), fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                t("We sent a verification link to:") + " " + email + "\n\n" +
+                    t("Keep full access by verifying within a few days. Accounts with no data that stay unverified are removed after 30 days.")
+            )
+        }
+    )
+}
+
 
 // Typewriter feature words — letters tick in with a tiny haptic, hold, then
 // rewind-delete at 2x speed. Caret is a small rounded square like the app's
