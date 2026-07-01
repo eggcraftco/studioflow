@@ -35,7 +35,14 @@ const actionResultCache = new Map<string, Promise<ActionResult>>();
 async function performAuthAction(mode: string, oobCode: string): Promise<ActionResult> {
   try {
     if (mode === "verifyEmail") {
-      await applyActionCode(auth, oobCode);
+      // The oobCode is single-use. Email security scanners (Outlook Safe Links,
+      // antivirus, etc.) frequently pre-fetch the link — consuming the code and
+      // verifying the address — before the user clicks it; reloads and double
+      // clicks do the same. So the user's own apply often runs on an
+      // already-consumed code and throws "The operation is not valid." even
+      // though the address is verified. Show success regardless of the apply
+      // result; the app's own emailVerified gate is the real source of truth.
+      await applyActionCode(auth, oobCode).catch(() => undefined);
       return { phase: "verified" };
     }
     if (mode === "resetPassword") {
