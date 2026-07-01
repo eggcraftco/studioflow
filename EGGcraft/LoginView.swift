@@ -573,16 +573,6 @@ struct EmailVerifyReminderBanner: View {
                     .background(Color.primary.opacity(0.06)).cornerRadius(8)
             }
             .buttonStyle(.plain).disabled(busy)
-            Button {
-                authVM.verifyReminderBannerDismissed = true
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-                    .padding(6)
-            }
-            .buttonStyle(.plain)
-            .help(t("Dismiss", lang: seciliDil))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

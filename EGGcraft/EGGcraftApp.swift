@@ -148,7 +148,7 @@ struct StudioManagerApp: App {
                                 .environmentObject(authVM)
                                 .environmentObject(firebaseManager)
                                 .safeAreaInset(edge: .top) {
-                                    if authVM.isInEmailVerificationGracePeriod && !authVM.verifyReminderBannerDismissed {
+                                    if authVM.isInEmailVerificationGracePeriod {
                                         EmailVerifyReminderBanner(seciliDil: seciliDil)
                                             .environmentObject(authVM)
                                     }

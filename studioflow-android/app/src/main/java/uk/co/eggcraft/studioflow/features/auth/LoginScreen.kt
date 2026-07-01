@@ -390,7 +390,7 @@ fun firebaseUserInEmailVerificationGracePeriod(): Boolean {
 // Thin, dismissible reminder shown at the top of the app during the grace window
 // (days 0-3) so a newly signed-up user is nudged to verify before the hard gate.
 @Composable
-fun EmailVerifyReminderBanner(onDismiss: () -> Unit) {
+fun EmailVerifyReminderBanner(onVerified: () -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var busy by remember { mutableStateOf(false) }
@@ -414,7 +414,7 @@ fun EmailVerifyReminderBanner(onDismiss: () -> Unit) {
                     scope.launch {
                         runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.reload()?.await() }
                         busy = false
-                        if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isEmailVerified == true) onDismiss()
+                        if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isEmailVerified == true) onVerified()
                     }
                 },
                 enabled = !busy
@@ -433,7 +433,6 @@ fun EmailVerifyReminderBanner(onDismiss: () -> Unit) {
                 },
                 enabled = !busy
             ) { Text(t("Resend email"), fontSize = 12.sp) }
-            TextButton(onClick = onDismiss) { Text("✕", fontWeight = FontWeight.Bold) }
         }
     }
 }

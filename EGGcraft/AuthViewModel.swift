@@ -755,8 +755,6 @@ class AuthViewModel: ObservableObject {
     // One-time "we sent you a verification link" confirmation, shown right after
     // a successful email/password sign-up (there was previously no signup notice).
     @Published var showPostSignupVerifyNotice = false
-    // Per-run dismissal of the in-app verification reminder banner (days 0–3).
-    @Published var verifyReminderBannerDismissed = false
     @Published private(set) var interfaceSessionId = UUID()
     @Published private(set) var currentUserId: String? = nil
     @Published private(set) var currentCompanyId: String? = nil
@@ -1077,7 +1075,6 @@ class AuthViewModel: ObservableObject {
                 // Tell the brand-new user (once) that a verification link was sent
                 // and why it matters — there was previously no signup-time notice.
                 self?.showPostSignupVerifyNotice = true
-                self?.verifyReminderBannerDismissed = false
 
                 // Seed the new workspace with the chosen studio name and owner
                 // details so it never shows up as a bare "My Studio".

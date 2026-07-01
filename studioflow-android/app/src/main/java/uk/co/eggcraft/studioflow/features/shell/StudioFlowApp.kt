@@ -358,8 +358,8 @@ private fun StudioFlowAppContent(
             onSignOut = viewModel::signOut
         )
         else -> Column(Modifier.fillMaxSize()) {
-            if (uk.co.eggcraft.studioflow.features.auth.firebaseUserInEmailVerificationGracePeriod() && !state.verifyBannerDismissed) {
-                uk.co.eggcraft.studioflow.features.auth.EmailVerifyReminderBanner(onDismiss = viewModel::dismissVerifyReminderBanner)
+            if (uk.co.eggcraft.studioflow.features.auth.firebaseUserInEmailVerificationGracePeriod() && !emailVerifiedOverride) {
+                uk.co.eggcraft.studioflow.features.auth.EmailVerifyReminderBanner(onVerified = { emailVerifiedOverride = true })
             }
             Box(Modifier.weight(1f)) {
                 StudioFlowMainScreen(

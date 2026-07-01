@@ -48,10 +48,8 @@ sealed class PendingActivityNavigation {
 data class StudioFlowUiState(
     val loading: Boolean = true,
     val signingIn: Boolean = false,
-    // One-time post-signup "verify your email" confirmation + per-run dismissal of
-    // the in-app verification reminder banner (days 0–3).
+    // One-time post-signup "verify your email" confirmation.
     val showPostSignupVerifyNotice: Boolean = false,
-    val verifyBannerDismissed: Boolean = false,
     val creatingOrder: Boolean = false,
     val settingsSaving: Boolean = false,
     val user: FirebaseUser? = null,
@@ -271,8 +269,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
             mutableState.update { it.copy(signingIn = true, errorMessage = "") }
             runCatching { repository.register(fullName, studioName, email, password) }
                 .onSuccess {
-                    // Brand-new account: surface the one-time verification notice + show the banner.
-                    mutableState.update { it.copy(showPostSignupVerifyNotice = true, verifyBannerDismissed = false) }
+                    // Brand-new account: surface the one-time verification notice.
+                    mutableState.update { it.copy(showPostSignupVerifyNotice = true) }
                 }
                 .onFailure { error ->
                     mutableState.update {
@@ -284,10 +282,6 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun dismissPostSignupVerifyNotice() {
         mutableState.update { it.copy(showPostSignupVerifyNotice = false) }
-    }
-
-    fun dismissVerifyReminderBanner() {
-        mutableState.update { it.copy(verifyBannerDismissed = true) }
     }
 
     fun signIn(email: String, password: String) {
