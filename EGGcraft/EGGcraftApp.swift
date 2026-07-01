@@ -29,6 +29,44 @@ final class StudioAppCheckProviderFactory: NSObject, AppCheckProviderFactory {
     }
 }
 
+#if os(macOS)
+/// Hard-enforces a minimum macOS window size at the AppKit level. SwiftUI's
+/// windowResizability(.contentMinSize) did not reliably stop the window from being
+/// dragged below the content size (it just centred + clipped the content on both
+/// sides). Setting window.contentMinSize prevents the resize outright (App Review
+/// Guideline 4 — windows that cut off text).
+private struct WindowMinSizeSetter: NSViewRepresentable {
+    let width: CGFloat
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        apply(from: view)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        apply(from: nsView)
+    }
+
+    private func apply(from view: NSView) {
+        let target = NSSize(width: width, height: height)
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.contentMinSize = target
+            // If the window is already narrower/shorter than the new minimum, grow it
+            // so nothing is left clipped after this takes effect.
+            let contentSize = window.contentLayoutRect.size
+            if contentSize.width < width || contentSize.height < height {
+                let newContent = NSSize(width: max(contentSize.width, width),
+                                        height: max(contentSize.height, height))
+                window.setContentSize(newContent)
+            }
+        }
+    }
+}
+#endif
+
 @main
 struct StudioManagerApp: App {
     #if os(iOS)
@@ -163,11 +201,10 @@ struct StudioManagerApp: App {
                 #endif
             }
             #if os(macOS)
-            .frame(minWidth: 900, minHeight: 620)
+            .background(WindowMinSizeSetter(width: 900, height: 620))
             #endif
         }
         #if os(macOS)
-        .windowResizability(.contentMinSize)
         .defaultSize(width: 1280, height: 820)
         #endif
     }

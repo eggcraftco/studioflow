@@ -7539,20 +7539,33 @@ struct ContentView: View {
                 // underneath so the tabs never get cramped or wrap their labels.
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 14) {
-                        topLogoView
-                        topStatsView
-                        Spacer(minLength: 12)
-                        if canSeeFinancialData {
-                            pricePrivacyButton
+                        // Leading (logo + net stats) yields space first and clips its
+                        // own content if the window is very narrow…
+                        HStack(spacing: 14) {
+                            topLogoView
+                            topStatsView
                         }
-                        CloudSyncStatusBadge(
-                            state: cloudSyncState,
-                            message: cloudSyncMessage,
-                            lastSyncDate: lastCloudSyncDate
-                        )
-                        activityTopNavigationButton
-                        if canEditWorkflowFields { newOrderButton }
-                        topAccountAvatarIfAvailable
+                        .layoutPriority(0)
+
+                        Spacer(minLength: 8)
+
+                        // …so the trailing action cluster — including the account
+                        // avatar — is pinned and never cut off at the window edge.
+                        HStack(spacing: 14) {
+                            if canSeeFinancialData {
+                                pricePrivacyButton
+                            }
+                            CloudSyncStatusBadge(
+                                state: cloudSyncState,
+                                message: cloudSyncMessage,
+                                lastSyncDate: lastCloudSyncDate
+                            )
+                            activityTopNavigationButton
+                            if canEditWorkflowFields { newOrderButton }
+                            topAccountAvatarIfAvailable
+                        }
+                        .layoutPriority(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
 
                     // On wide screens (Mac) the nav stays centered; on narrower
