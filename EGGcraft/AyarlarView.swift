@@ -103,7 +103,7 @@ struct AyarlarView: View {
     @AppStorage("showCardCommunication") private var showCardCommunication = true
     @AppStorage("showCardNotes") private var showCardNotes = true
     @AppStorage("showCardFinancial") private var showCardFinancial = true
-    @AppStorage("showCardStatus") private var showCardStatus = false
+    @AppStorage("showCardStatus") private var showCardStatus = true
     @AppStorage("showCardShipping") private var showCardShipping = true
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
@@ -4955,7 +4955,7 @@ struct AyarlarView: View {
         showCardCommunication = true
         showCardNotes = true
         showCardFinancial = true
-        showCardStatus = false
+        showCardStatus = true
         showCardMaterials = preset.showMaterials
         showCardShipping = preset.showShipping
         showCardPriority = preset.showPriority
@@ -5265,7 +5265,7 @@ struct AyarlarView: View {
     }
 
     private func sablonuUygula() {
-        showCardPreview = true; showCardSummary = true; showCardCustomer = true; showCardDelivery = true; showCardCommunication = true; showCardNotes = true; showCardFinancial = true; showCardStatus = false
+        showCardPreview = true; showCardSummary = true; showCardCustomer = true; showCardDelivery = true; showCardCommunication = true; showCardNotes = true; showCardFinancial = true; showCardStatus = true
         
         switch businessType {
         case "Custom Art Studio", "EGGcraft":

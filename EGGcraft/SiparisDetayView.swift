@@ -1242,9 +1242,9 @@ struct SiparisDetayView: View {
     @AppStorage("kartYukseklikleriJSON") private var kartYukseklikleriJSON = "{}"
     
     @State private var kartYerlesimi: [[KartTipi]] = [
-        [.preview, .summary],
-        [.customer, .invoiceItems, .materials, .delivery, .notes, .clientFiles],
-        [.priority, .todo, .workTime, .financial, .status, .shipping, .schedule, .historyLog, .customerNotes]
+        [.preview, .summary, .workTime, .shipping, .schedule, .notes],
+        [.customer, .invoiceItems, .materials, .delivery],
+        [.financial, .priority, .todo, .status, .historyLog, .clientFiles, .customerNotes]
     ]
     @State private var kartYukseklikleri: [String: Double] = [:]
     @State private var sharedKartYukseklikleri: [String: Double] = [:]
@@ -1261,7 +1261,7 @@ struct SiparisDetayView: View {
     @State private var macOSHitboxHack: CGFloat = 0
     @State private var calismaAlaniIcerikBoyutu: CGSize = .zero
     
-    @AppStorage("showCardPreview") private var showCardPreview = true; @AppStorage("showCardSummary") private var showCardSummary = true; @AppStorage("showCardCustomer") private var showCardCustomer = true; @AppStorage("showCardDelivery") private var showCardDelivery = true; @AppStorage("showCardCommunication") private var showCardCommunication = true; @AppStorage("showCardNotes") private var showCardNotes = true; @AppStorage("showCardFinancial") private var showCardFinancial = true; @AppStorage("showCardStatus") private var showCardStatus = false; @AppStorage("showCardShipping") private var showCardShipping = true
+    @AppStorage("showCardPreview") private var showCardPreview = true; @AppStorage("showCardSummary") private var showCardSummary = true; @AppStorage("showCardCustomer") private var showCardCustomer = true; @AppStorage("showCardDelivery") private var showCardDelivery = true; @AppStorage("showCardCommunication") private var showCardCommunication = true; @AppStorage("showCardNotes") private var showCardNotes = true; @AppStorage("showCardFinancial") private var showCardFinancial = true; @AppStorage("showCardStatus") private var showCardStatus = true; @AppStorage("showCardShipping") private var showCardShipping = true
     @AppStorage("showCardCustomerNotes") private var showCardCustomerNotes = false
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true

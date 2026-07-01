@@ -203,15 +203,14 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, Summary, Customer, InvoiceItems),
-            listOf(Notes, ClientFiles, Status),
-            listOf(Todo, WorkTime, Schedule),
-            listOf(Delivery, HistoryLog, Financial),
-            listOf(Shipping, Materials, Priority)
+            listOf(Preview, Summary, WorkTime, Shipping, Schedule, Notes),
+            listOf(Customer, InvoiceItems, Materials, Delivery),
+            listOf(Financial, Priority, Todo, Status, HistoryLog, ClientFiles)
         )
         val DefaultOrder: List<OrderDetailCardId> = listOf(
-            Preview, Summary, Customer, InvoiceItems, Materials, Delivery, Notes, ClientFiles,
-            Priority, Todo, WorkTime, Financial, Status, Shipping, Schedule, HistoryLog
+            Preview, Summary, WorkTime, Shipping, Schedule, Notes,
+            Customer, InvoiceItems, Materials, Delivery,
+            Financial, Priority, Todo, Status, HistoryLog, ClientFiles
         )
 
         fun fromRaw(value: String?): OrderDetailCardId? {
@@ -438,7 +437,7 @@ data class StudioWorkspaceSettings(
     val showCardTodo: Boolean = true,
     val showCardWorkTime: Boolean = true,
     val showCardFinancial: Boolean = true,
-    val showCardStatus: Boolean = false,
+    val showCardStatus: Boolean = true,
     val showCardShipping: Boolean = true,
     val showCardSchedule: Boolean = true,
     val showCardHistoryLog: Boolean = true,

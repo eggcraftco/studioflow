@@ -3861,9 +3861,9 @@ const ORDER_DETAIL_CARD_IDS = [
 ];
 
 const DEFAULT_ORDER_DETAIL_CARD_COLUMNS = [
-  ["preview", "summary"],
-  ["customer", "invoiceItems", "materials", "delivery", "notes", "clientFiles"],
-  ["priority", "todo", "workTime", "financial", "status", "shipping", "schedule", "historyLog"]
+  ["preview", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["customer", "invoiceItems", "materials", "delivery"],
+  ["financial", "priority", "todo", "status", "historyLog", "clientFiles", "customerNotes"]
 ];
 
 const APP_ORDER_DETAIL_CARD_IDS = Array.from(new Set([

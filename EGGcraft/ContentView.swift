@@ -6903,7 +6903,7 @@ struct ContentView: View {
     @AppStorage("showCardCommunication") private var showCardCommunication = true
     @AppStorage("showCardNotes") private var showCardNotes = true
     @AppStorage("showCardFinancial") private var showCardFinancial = true
-    @AppStorage("showCardStatus") private var showCardStatus = false
+    @AppStorage("showCardStatus") private var showCardStatus = true
     @AppStorage("showCardShipping") private var showCardShipping = true
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
@@ -8058,6 +8058,8 @@ struct ContentView: View {
             AccountAvatarImage(urlString: cleanedAccountPhotoUrl, initials: topAccountInitials, size: 38)
         }
         .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .help(t("Account", lang: seciliDil))
         .accessibilityLabel(t("Account", lang: seciliDil))
     }
@@ -9452,7 +9454,7 @@ struct ContentView: View {
         showCardCommunication = true
         showCardNotes = true
         showCardFinancial = true
-        showCardStatus = false
+        showCardStatus = true
         showCardMaterials = preset.showMaterials
         showCardShipping = preset.showShipping
         showCardPriority = preset.showPriority

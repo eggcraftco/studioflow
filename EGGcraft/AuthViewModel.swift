@@ -1057,6 +1057,10 @@ class AuthViewModel: ObservableObject {
                     return
                 }
 
+                // Brand-new account: start from clean device-local defaults so it never
+                // inherits a previously-signed-in account's cached card colours/order/visibility.
+                self?.clearDeviceLocalWorkspaceCardCache()
+
                 // Account hygiene: profile name + verification email (non-blocking).
                 let changeRequest = user.createProfileChangeRequest()
                 changeRequest.displayName = cleanFullName
@@ -2378,10 +2382,40 @@ class AuthViewModel: ObservableObject {
             bypassNextLocalUnlockAfterInteractiveSignIn = false
             errorMessage = ""
             clearProfileState()
+            clearDeviceLocalWorkspaceCardCache()
         } catch {
             errorMessage = error.localizedDescription
             print("Çıkış yapılamadı: \(error.localizedDescription)")
         }
+    }
+
+    /// Card layout, colours, sizes and per-card visibility are stored per-device via
+    /// @AppStorage, not per-account. Without clearing them on logout, signing into a
+    /// *different* account on the same device inherits the previous account's cached
+    /// appearance (colours/order/visibility) — and can even re-upload that stale cache to
+    /// the new company's cloud workspace profile. Clearing here makes every account start
+    /// from clean code defaults (no colours + default card order); a returning account
+    /// restores its own layout from its cloud workspace profile on next login.
+    private func clearDeviceLocalWorkspaceCardCache() {
+        let defaults = UserDefaults.standard
+        let keys: [String] = [
+            "sharedWorkspaceSnapshotJSONV1",
+            "kartRenkleriJSONV1",
+            "kartYerlesimiJSON",
+            "kartYukseklikleriJSON",
+            "sutunGenislikleriJSONV4",
+            "phoneKartSirasiJSONV1",
+            "phoneOrderCompactViewV1",
+            "workspaceCardsLockedV1",
+            "workspaceOwnerCardSyncDismissedV1",
+            // per-card visibility
+            "showCardPreview", "showCardSummary", "showCardCustomer", "showCardDelivery",
+            "showCardCommunication", "showCardNotes", "showCardFinancial", "showCardStatus",
+            "showCardShipping", "showCardCustomerNotes", "showCardMaterials", "showCardPriority",
+            "showCardInvoiceItems", "showCardSchedule", "showCardHistoryLog", "showCardClientFiles",
+            "showCardToDo", "showCardWorkTime"
+        ]
+        for key in keys { defaults.removeObject(forKey: key) }
     }
 
     #if os(iOS)
