@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "B4382CE12F9A845F004BB413"
-               BuildableName = "EGGcraft.app"
+               BuildableName = "NivaDesk.app"
                BlueprintName = "EGGcraft"
                ReferencedContainer = "container:EGGcraft.xcodeproj">
             </BuildableReference>
@@ -46,7 +46,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B4382CE12F9A845F004BB413"
-            BuildableName = "EGGcraft.app"
+            BuildableName = "NivaDesk.app"
             BlueprintName = "EGGcraft"
             ReferencedContainer = "container:EGGcraft.xcodeproj">
          </BuildableReference>
@@ -63,7 +63,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B4382CE12F9A845F004BB413"
-            BuildableName = "EGGcraft.app"
+            BuildableName = "NivaDesk.app"
             BlueprintName = "EGGcraft"
             ReferencedContainer = "container:EGGcraft.xcodeproj">
          </BuildableReference>

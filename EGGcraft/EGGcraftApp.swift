@@ -162,7 +162,14 @@ struct StudioManagerApp: App {
                 GIDSignIn.sharedInstance.handle(url)
                 #endif
             }
+            #if os(macOS)
+            .frame(minWidth: 900, minHeight: 620)
+            #endif
         }
+        #if os(macOS)
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1280, height: 820)
+        #endif
     }
 
     private func syncFirebaseWorkspace() {
