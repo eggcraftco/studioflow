@@ -37,15 +37,15 @@ export type OrderDetailCardLayout = {
 };
 
 const DEFAULT_VISIBILITY = ORDER_DETAIL_CARD_IDS.reduce((output, cardId) => {
-  // Production Status starts hidden for new users; they can enable it later.
-  output[cardId] = cardId !== "status";
+  // All order-detail cards (including Production Status) are visible by default for new users.
+  output[cardId] = true;
   return output;
 }, {} as Record<OrderDetailCardId, boolean>);
 
 export const DEFAULT_ORDER_DETAIL_CARD_COLUMNS: OrderDetailCardId[][] = [
-  ["preview", "summary"],
-  ["customer", "invoiceItems", "materials", "delivery", "notes", "clientFiles"],
-  ["priority", "todo", "workTime", "financial", "status", "shipping", "schedule", "historyLog"]
+  ["preview", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["customer", "invoiceItems", "materials", "delivery"],
+  ["financial", "priority", "todo", "status", "historyLog", "clientFiles"]
 ];
 
 export const DEFAULT_ORDER_DETAIL_CARD_LAYOUT: OrderDetailCardLayout = {
