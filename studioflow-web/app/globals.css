@@ -16800,6 +16800,17 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   padding: 4px 10px;
 }
 
+.changelog-platform-pill {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--public-muted);
+  background: rgba(120, 120, 128, 0.12);
+  border: 1px solid rgba(120, 120, 128, 0.2);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
 .changelog-date {
   color: var(--public-muted);
   font-size: 14px;
