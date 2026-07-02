@@ -3269,10 +3269,11 @@ export function PublicChangelogPage() {
         <section className="public-section">
           <div className="public-shell changelog-list">
             {CHANGELOG.map((entry, index) => (
-              <article key={entry.version} className="changelog-entry">
+              <article key={`${entry.version}-${entry.platform ?? "all"}`} className="changelog-entry">
                 <header className="changelog-entry-head">
                   <div className="changelog-version">
                     <span className="changelog-version-number">{labels.versionWord} {entry.version}</span>
+                    {entry.platform ? <span className="changelog-platform-pill">{entry.platform}</span> : null}
                     {index === 0 ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
                   </div>
                   <time className="changelog-date">{entry.date}</time>

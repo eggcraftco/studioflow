@@ -23,14 +23,28 @@ export type ChangelogChange = {
 
 export type ChangelogEntry = {
   version: string;
+  // Optional platform this release targets (e.g. "Android", "Mac & iPhone",
+  // "Web"). Shown as a small pill so staggered per-platform releases read
+  // clearly. Omit for a cross-platform entry.
+  platform?: string;
   date: string;
   highlight?: string;
   changes: ChangelogChange[];
 };
 
-export const CHANGELOG_LAST_UPDATED = "14 June 2026";
+export const CHANGELOG_LAST_UPDATED = "2 July 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.1.6",
+    platform: "Android",
+    date: "2 July 2026",
+    highlight: "Clearer email verification and a tidier default order layout.",
+    changes: [
+      { tag: "new", text: "After sign-up, a reminder to verify your email now stays until your address is confirmed — with one-tap resend — so your account stays active." },
+      { tag: "improved", text: "New orders open with a cleaner default card layout, with the Production Status card shown by default." },
+    ],
+  },
   {
     version: "0.1.3",
     date: "June 2026",
