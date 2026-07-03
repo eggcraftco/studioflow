@@ -683,7 +683,7 @@ function orderPdfHtml(
   const logoUrl = settings?.appLogoUrl?.trim() || "";
   const taxRuleName = order.taxType === "Profit"
     ? (settings?.taxRuleNameProfit || "Margin Scheme (2nd Hand)")
-    : (settings?.taxRuleNameRevenue || "Standard Tax (Services/New)");
+    : (settings?.taxRuleNameRevenue || "Standard VAT (Services/New)");
   const formatMoney = (value: number) => orderPdfMoney(value, settings, options.hideNumbers);
 
   const customerSection = showCustomer ? orderPdfSectionHtml("Customer & Design", orderPdfRowsHtml([
@@ -754,7 +754,7 @@ function orderPdfHtml(
     const profitAfterVat = order.netProfit;
     if (settings?.corporationTaxEnabled) {
       const ctRate = settings?.corporationTaxRate ?? 19;
-      const corporationTax = Math.max(0, profitAfterVat) * ctRate / 100;
+      const corporationTax = Math.round(Math.max(0, profitAfterVat) * ctRate) / 100;
       financeRows.push({ title: "Profit after VAT", value: formatMoney(profitAfterVat) });
       financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
       financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
@@ -1909,7 +1909,7 @@ export function OrderDetailContent({
   const money = (value: number, hidden = false) => orderMoney(value, hidden, moneySettings);
   const corporationTaxEnabled = Boolean(moneySettings?.corporationTaxEnabled);
   const corporationTaxRate = moneySettings?.corporationTaxRate ?? 19;
-  const corporationTaxAmount = corporationTaxEnabled ? Math.max(0, order.netProfit) * corporationTaxRate / 100 : 0;
+  const corporationTaxAmount = corporationTaxEnabled ? Math.round(Math.max(0, order.netProfit) * corporationTaxRate) / 100 : 0;
   const netProfitAfterCT = order.netProfit - corporationTaxAmount;
   const canInlineEditFinance = Boolean(canSeeFinance && canEditOrderFully);
   const canInlineEditFullDetails = canEditOrderDetailsForRole(workspace.role);

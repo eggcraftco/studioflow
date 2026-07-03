@@ -3382,7 +3382,7 @@ function FinancialSettingsSection({
           </label>
 
           <label className="financial-settings-row wide-control">
-            <span>{t("Default Tax Rate (%)")}</span>
+            <span>{t("Default VAT Rate (%)")}</span>
             <span className="financial-percent-control is-vat-rate">
               <input
                 className="input financial-control"

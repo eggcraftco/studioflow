@@ -1009,7 +1009,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
     financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),
     financialShowBaseCost: booleanValue(data.financialShowBaseCost, true),
-    taxRuleNameRevenue: stringValue(data.taxRuleNameRevenue, "Standard Tax (Services/New)"),
+    taxRuleNameRevenue: stringValue(data.taxRuleNameRevenue, "Standard VAT (Services/New)"),
     taxRuleNameProfit: stringValue(data.taxRuleNameProfit, "Margin Scheme (2nd Hand)"),
     corporationTaxEnabled: booleanValue(data.corporationTaxEnabled, false),
     corporationTaxRate: numberValue(data.corporationTaxRate, 19),
