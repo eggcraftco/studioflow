@@ -865,6 +865,15 @@ function ProfitChart({
               strokeWidth={1}
               strokeDasharray="4 4"
             />
+            {previous[hoverIdx] ? (
+              <circle cx={xForIndex(hoverIdx)} cy={yForValue(previous[hoverIdx].value)} r={5} fill="#f59e0b" stroke="#fff" strokeWidth={2} />
+            ) : null}
+            {twoBack[hoverIdx] ? (
+              <circle cx={xForIndex(hoverIdx)} cy={yForValue(twoBack[hoverIdx].value)} r={5} fill="#7c3aed" stroke="#fff" strokeWidth={2} />
+            ) : null}
+            {threeBack[hoverIdx] ? (
+              <circle cx={xForIndex(hoverIdx)} cy={yForValue(threeBack[hoverIdx].value)} r={5} fill="#6b7280" stroke="#fff" strokeWidth={2} />
+            ) : null}
             <circle cx={xForIndex(hoverIdx)} cy={yForValue(current[hoverIdx].value)} r={6} fill="#16a34a" stroke="#fff" strokeWidth={2} />
           </g>
         )}
@@ -883,6 +892,24 @@ function ProfitChart({
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: "#16a34a" }} />
             Net: {symbol}{current[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </div>
+          {previous[hoverIdx] ? (
+            <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#f59e0b" }} />
+              -1 Yr: {symbol}{previous[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
+          ) : null}
+          {twoBack[hoverIdx] ? (
+            <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#7c3aed" }} />
+              -2 Yrs: {symbol}{twoBack[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
+          ) : null}
+          {threeBack[hoverIdx] ? (
+            <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#6b7280" }} />
+              -3 Yrs: {symbol}{threeBack[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
+          ) : null}
         </div>
       )}
       <div className="dashboard-chart-legend">

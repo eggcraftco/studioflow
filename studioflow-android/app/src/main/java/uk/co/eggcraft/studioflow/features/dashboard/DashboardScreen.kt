@@ -725,6 +725,24 @@ private fun ProfitLineChart(
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
+                            // Compare-year values at the same bucket, like the Mac tooltip.
+                            comparisonSeries.forEach { series ->
+                                series.values.getOrNull(idx)?.let { compareValue ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(series.color, RoundedCornerShape(99.dp))
+                                        )
+                                        Text(
+                                            "${series.label}: ${money(compareValue, currency, decimalSeparator, hideNumbers)}",
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
