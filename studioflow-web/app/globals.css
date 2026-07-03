@@ -9069,6 +9069,79 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   color: #ff3b3b !important;
 }
 
+/* Dashboard: Financial Breakdown (P&L waterfall) */
+.financial-breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 0;
+  margin-top: 6px;
+}
+.financial-breakdown-col:first-child {
+  padding-right: 30px;
+}
+.financial-breakdown-col + .financial-breakdown-col {
+  border-left: 1px solid rgba(20, 22, 28, 0.08);
+  padding-left: 30px;
+}
+.financial-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(20, 22, 28, 0.07);
+  font-size: 14px;
+}
+.financial-breakdown-col > .financial-breakdown-row:last-child {
+  border-bottom: 0;
+}
+.financial-breakdown-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+.financial-breakdown-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.financial-breakdown-value.is-red { color: #ff3b3b; }
+.financial-breakdown-value.is-green { color: #2fbf55; }
+.financial-breakdown-row.is-strong .financial-breakdown-label {
+  color: inherit;
+  font-weight: 800;
+}
+.financial-breakdown-row.is-strong .financial-breakdown-value {
+  font-size: 16px;
+  font-weight: 800;
+}
+body[data-studio-theme="dark"] .financial-breakdown-row {
+  border-bottom-color: rgba(255, 255, 255, 0.09);
+}
+body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-col {
+  border-left-color: rgba(255, 255, 255, 0.09);
+}
+@media (max-width: 760px) {
+  .financial-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+  .financial-breakdown-col:first-child {
+    padding-right: 0;
+  }
+  .financial-breakdown-col + .financial-breakdown-col {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid rgba(20, 22, 28, 0.08);
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+  body[data-studio-theme="dark"] .financial-breakdown-col + .financial-breakdown-col {
+    border-top-color: rgba(255, 255, 255, 0.09);
+  }
+  .financial-breakdown-col:first-child > .financial-breakdown-row:last-child {
+    border-bottom: 1px solid rgba(20, 22, 28, 0.07);
+  }
+}
+
 .tone-blue {
   color: #1285ff !important;
 }

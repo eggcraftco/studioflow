@@ -550,6 +550,7 @@ struct DashboardView: View {
                     headerFiltreAlani
                     ozetKartlariAlani
                     if canSeeAdvancedFinance {
+                        financialBreakdownAlani
                         extraSpendingSummaryAlani
                     }
                     grafikAlani
@@ -1070,6 +1071,75 @@ struct DashboardView: View {
                 .padding(.horizontal)
             }
         }
+    }
+
+    // Clean components for the Financial Breakdown (per-order overrides applied):
+    // Revenue − Base Cost − Extra Spending − Platform Fee − Shipping − VAT = netKar.
+    private var toplamBreakdownBaseCost: Double { filtrelenmisSiparisler.reduce(0) { $0 + baseCostTotal(for: $1) } }
+    private var toplamExtraSpending: Double { filtrelenmisSiparisler.reduce(0) { $0 + customExpenseTotal(for: $1) } }
+
+    private func breakdownRow(_ title: String, _ value: Double, negative: Bool = false, valueColor: Color = .primary, strong: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.system(size: strong ? 14 : 13, weight: strong ? .bold : .semibold))
+                .foregroundColor(strong ? .primary : .secondary)
+            Spacer(minLength: 8)
+            Text("\(negative && !hideSensitiveNumbers ? "-" : "")\(dashboardMoney(value))")
+                .font(.system(size: strong ? 16 : 13, weight: .bold, design: .rounded))
+                .foregroundColor(valueColor)
+        }
+        .padding(.vertical, 7)
+    }
+
+    @ViewBuilder private var breakdownLeftRows: some View {
+        breakdownRow(t("Revenue", lang: seciliDil), toplamCiro)
+        Divider().opacity(0.5)
+        breakdownRow(t("Base Cost", lang: seciliDil), toplamBreakdownBaseCost, negative: true, valueColor: .red)
+        Divider().opacity(0.5)
+        breakdownRow(t("Extra Spending", lang: seciliDil), toplamExtraSpending, negative: true, valueColor: .red)
+        Divider().opacity(0.5)
+        breakdownRow(t("Platform Fee", lang: seciliDil), toplamKesinti, negative: true, valueColor: .red)
+        Divider().opacity(0.5)
+        breakdownRow(t("Shipping", lang: seciliDil), toplamKargo, negative: true, valueColor: .red)
+    }
+
+    @ViewBuilder private var breakdownRightRows: some View {
+        breakdownRow(t("VAT Amount", lang: seciliDil), toplamVergi, negative: true, valueColor: .red)
+        Divider().opacity(0.5)
+        if corporationTaxEnabled {
+            breakdownRow(t("Profit before Corporation Tax", lang: seciliDil), netKar, valueColor: .green)
+            Divider().opacity(0.5)
+            breakdownRow("\(t("Corporation Tax", lang: seciliDil)) (\(Int(corporationTaxRate))%)", kurumlarVergisi, negative: true, valueColor: .red)
+            Divider().opacity(0.5)
+            breakdownRow(t("Net Profit (after CT)", lang: seciliDil), netKarSonrasiCT, valueColor: .green, strong: true)
+        } else {
+            breakdownRow(t("Net Profit", lang: seciliDil), netKar, valueColor: .green, strong: true)
+        }
+    }
+
+    private var financialBreakdownAlani: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("Financial Breakdown", lang: seciliDil))
+                .font(.system(size: 15, weight: .bold))
+            if isPhoneLayout {
+                VStack(spacing: 0) {
+                    breakdownLeftRows
+                    Divider().opacity(0.5)
+                    breakdownRightRows
+                }
+            } else {
+                HStack(alignment: .top, spacing: 22) {
+                    VStack(spacing: 0) { breakdownLeftRows }
+                    Divider()
+                    VStack(spacing: 0) { breakdownRightRows }
+                }
+            }
+        }
+        .padding(isPhoneLayout ? 12 : 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+        .cornerRadius(12)
+        .padding(.horizontal, isPhoneLayout ? 10 : 16)
     }
 
     @ViewBuilder

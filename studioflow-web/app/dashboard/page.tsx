@@ -23,6 +23,8 @@ import {
 } from "@/lib/studioflow/firestore";
 import {
   adjustedDashboardNetProfit,
+  baseCostTotal,
+  customExpenseTotal,
   customPendingTotal,
   dashboardCostTotal
 } from "@/lib/studioflow/finance";
@@ -45,6 +47,10 @@ type FinanceTotals = {
   tax: number;
   netProfit: number;
   corporationTax: number;
+  // Clean components for the Financial Breakdown (per-order overrides applied,
+  // nothing rolled in from hidden cards): they reconcile exactly to netProfit.
+  breakdownBaseCost: number;
+  expenses: number;
 };
 
 type ChartPoint = {
@@ -116,6 +122,26 @@ function dashboardVisibilityFromData(data: Record<string, unknown>): DashboardWi
   };
 }
 
+function BreakdownRow({ label, amount, negative, strong, tone, hideNumbers, settings }: {
+  label: string;
+  amount: number;
+  negative?: boolean;
+  strong?: boolean;
+  tone?: "red" | "green";
+  hideNumbers: boolean;
+  settings: WorkspaceSettingsOverview | null;
+}) {
+  const text = money(amount, hideNumbers, settings);
+  return (
+    <div className={`financial-breakdown-row${strong ? " is-strong" : ""}`}>
+      <span className="financial-breakdown-label">{label}</span>
+      <span className={`financial-breakdown-value${tone ? ` is-${tone}` : ""}`}>
+        {negative && !hideNumbers ? `-${text}` : text}
+      </span>
+    </div>
+  );
+}
+
 function totalsForOrders(
   orders: DashboardFinanceOrder[],
   settings: WorkspaceSettingsOverview | null,
@@ -138,8 +164,10 @@ function totalsForOrders(
     netProfit: totals.netProfit + adjustedDashboardNetProfit(order, settings),
     corporationTax: totals.corporationTax + (settings?.corporationTaxEnabled
       ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * (settings.corporationTaxRate ?? 19)) / 100
-      : 0)
-  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0, corporationTax: 0 });
+      : 0),
+    breakdownBaseCost: totals.breakdownBaseCost + baseCostTotal(order, settings),
+    expenses: totals.expenses + customExpenseTotal(order, settings)
+  }), { received: 0, baseCost: 0, basicBalance: 0, revenue: 0, pending: 0, cost: 0, fee: 0, shipping: 0, tax: 0, netProfit: 0, corporationTax: 0, breakdownBaseCost: 0, expenses: 0 });
 }
 
 function startOfDay(date: Date) {
@@ -568,6 +596,33 @@ export default function DashboardPage() {
                   </>
                 )}
               </section>
+
+              {canSeeAdvancedFinance ? (
+                <section className="card app-card">
+                  <CardTitle icon="finance" title={t("Financial Breakdown")} />
+                  <div className="financial-breakdown-grid">
+                    <div className="financial-breakdown-col">
+                      <BreakdownRow label={t("Revenue")} amount={totals.revenue} hideNumbers={hideNumbers} settings={settings} />
+                      <BreakdownRow label={t("Base Cost")} amount={totals.breakdownBaseCost} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      <BreakdownRow label={t("Extra Spending")} amount={totals.expenses} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      <BreakdownRow label={t("Platform Fee")} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      <BreakdownRow label={t("Shipping")} amount={totals.shipping} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                    </div>
+                    <div className="financial-breakdown-col">
+                      <BreakdownRow label={t("VAT Amount")} amount={totals.tax} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      {settings?.corporationTaxEnabled ? (
+                        <>
+                          <BreakdownRow label={t("Profit before Corporation Tax")} amount={totals.netProfit} tone="green" hideNumbers={hideNumbers} settings={settings} />
+                          <BreakdownRow label={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} amount={totals.corporationTax} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                          <BreakdownRow label={t("Net Profit (after CT)")} amount={totals.netProfit - totals.corporationTax} tone="green" strong hideNumbers={hideNumbers} settings={settings} />
+                        </>
+                      ) : (
+                        <BreakdownRow label={t("Net Profit")} amount={totals.netProfit} tone="green" strong hideNumbers={hideNumbers} settings={settings} />
+                      )}
+                    </div>
+                  </div>
+                </section>
+              ) : null}
 
               {canSeeAdvancedFinance && (
                 <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} />
