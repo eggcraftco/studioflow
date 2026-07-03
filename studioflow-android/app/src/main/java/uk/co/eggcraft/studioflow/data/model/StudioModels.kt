@@ -341,7 +341,7 @@ data class StudioWorkspaceSettings(
     val taxCalculationType: String = "Revenue",
     val taxMilestoneEnabled: Boolean = false,
     val taxMilestoneDate: Double = 0.0,
-    val taxRuleNameRevenue: String = "Standard Tax (Services/New)",
+    val taxRuleNameRevenue: String = "Standard VAT (Services/New)",
     val taxRuleNameProfit: String = "Margin Scheme (2nd Hand)",
     val corporationTaxEnabled: Boolean = false,
     val corporationTaxRate: Double = 19.0,

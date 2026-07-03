@@ -5699,7 +5699,7 @@ function financialSettingsFromData(data = {}) {
     selectedCurrency: cleanFinancialCurrency(data.seciliParaBirimi, "£"),
     selectedDecimalSeparator: cleanDecimalSeparator(data.seciliOndalik, "."),
     feePercentage: cleanPercentageNumber(data.feePercentage, 3),
-    taxRuleNameRevenue: cleanQuickReplyText(data.taxRuleNameRevenue || "Standard Tax (Services/New)", 120),
+    taxRuleNameRevenue: cleanQuickReplyText(data.taxRuleNameRevenue || "Standard VAT (Services/New)", 120),
     taxRuleNameProfit: cleanQuickReplyText(data.taxRuleNameProfit || "Margin Scheme (2nd Hand)", 120),
     defaultTaxRate: cleanPercentageNumber(data.defaultTaxRate, 20),
     defaultDeliveryTime: resolveDefaultDeliveryTime(data),
@@ -5832,7 +5832,7 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
     seciliParaBirimi: cleanFinancialCurrency(incoming.selectedCurrency, "£"),
     seciliOndalik: cleanDecimalSeparator(incoming.selectedDecimalSeparator, "."),
     feePercentage: cleanPercentageNumber(incoming.feePercentage, 3),
-    taxRuleNameRevenue: cleanQuickReplyText(incoming.taxRuleNameRevenue || "Standard Tax (Services/New)", 120),
+    taxRuleNameRevenue: cleanQuickReplyText(incoming.taxRuleNameRevenue || "Standard VAT (Services/New)", 120),
     taxRuleNameProfit: cleanQuickReplyText(incoming.taxRuleNameProfit || "Margin Scheme (2nd Hand)", 120),
     defaultTaxRate: cleanPercentageNumber(incoming.defaultTaxRate, 20),
     defaultDeliveryTime: resolveDefaultDeliveryTime(incoming),
@@ -6397,7 +6397,7 @@ exports.exportOrders = onCall({ region: "europe-west2" }, async (request) => {
       }
     }
   } else if (template === "finance") {
-    header = ["Invoice No", "Payment Date", "Customer", "Sales Total", "Paid", "Outstanding", "Base Cost", "Custom Expenses", "Payment Fee", "Delivery Cost", "Tax Type", "Tax Rate %", "VAT Amount", "Net Profit", "Currency"];
+    header = ["Invoice No", "Payment Date", "Customer", "Sales Total", "Paid", "Outstanding", "Base Cost", "Custom Expenses", "Payment Fee", "Delivery Cost", "VAT Rule", "VAT Rate %", "VAT Amount", "Net Profit", "Currency"];
     for (const order of orders) {
       const o = order.data;
       const paid = exportNumberValue(o.paidAmount);

@@ -2694,6 +2694,58 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "معدل الضريبة الافتراضي (%)",
     "हिन्दी (Hindi)": "डिफ़ॉल्ट कर दर (%)"
   },
+  "Default VAT Rate (%)": {
+    "Türkçe": "Varsayılan KDV Oranı (%)",
+    "Deutsch": "Standard-MwSt.-Satz (%)",
+    "Français": "Taux de TVA par défaut (%)",
+    "Italiano": "Aliquota IVA predefinita (%)",
+    "Español (Spanish)": "Tipo de IVA predeterminado (%)",
+    "Português": "Taxa de IVA predefinida (%)",
+    "Русский (Russian)": "Ставка НДС по умолчанию (%)",
+    "日本語 (Japanese)": "既定の消費税率（%）",
+    "中文 (Chinese)": "默认增值税税率（%）",
+    "العربية (Arabic)": "معدل ضريبة القيمة المضافة الافتراضي (%)",
+    "हिन्दी (Hindi)": "डिफ़ॉल्ट वैट दर (%)"
+  },
+  "VAT Amount": {
+    "Türkçe": "KDV Tutarı",
+    "Deutsch": "MwSt.-Betrag",
+    "Français": "Montant de TVA",
+    "Italiano": "Importo IVA",
+    "Español (Spanish)": "Importe de IVA",
+    "Português": "Valor do IVA",
+    "Русский (Russian)": "Сумма НДС",
+    "日本語 (Japanese)": "消費税額",
+    "中文 (Chinese)": "增值税额",
+    "العربية (Arabic)": "مبلغ ضريبة القيمة المضافة",
+    "हिन्दी (Hindi)": "वैट राशि"
+  },
+  "VAT Rule": {
+    "Türkçe": "KDV Kuralı",
+    "Deutsch": "MwSt.-Regel",
+    "Français": "Règle de TVA",
+    "Italiano": "Regola IVA",
+    "Español (Spanish)": "Regla de IVA",
+    "Português": "Regra de IVA",
+    "Русский (Russian)": "Правило НДС",
+    "日本語 (Japanese)": "消費税ルール",
+    "中文 (Chinese)": "增值税规则",
+    "العربية (Arabic)": "قاعدة ضريبة القيمة المضافة",
+    "हिन्दी (Hindi)": "वैट नियम"
+  },
+  "VAT Rate (%)": {
+    "Türkçe": "KDV Oranı (%)",
+    "Deutsch": "MwSt.-Satz (%)",
+    "Français": "Taux de TVA (%)",
+    "Italiano": "Aliquota IVA (%)",
+    "Español (Spanish)": "Tipo de IVA (%)",
+    "Português": "Taxa de IVA (%)",
+    "Русский (Russian)": "Ставка НДС (%)",
+    "日本語 (Japanese)": "消費税率（%）",
+    "中文 (Chinese)": "增值税税率（%）",
+    "العربية (Arabic)": "معدل ضريبة القيمة المضافة (%)",
+    "हिन्दी (Hindi)": "वैट दर (%)"
+  },
   "Calculate Tax On": {
     "Türkçe": "Varsayılan Hesaplama Modeli",
     "Deutsch": "Steuer berechnen auf",

@@ -11613,7 +11613,7 @@ private fun createOrderPdfFile(
             rows.add(Triple("Platform Fee:", money(order.paymentFee), cRed))
             rows.add(Triple("Watch Cost:", money(order.watchPurchasePrice), cRed))
             rows.add(Triple("Shipping Cost:", money(order.deliveryCost), cRed))
-            rows.add(Triple("Tax Amount:", money(order.taxAmount), cRed))
+            rows.add(Triple("VAT Amount:", money(order.taxAmount), cRed))
             val profitAfterVat = financialFinalProfit(order, settings)
             if (settings.corporationTaxEnabled) {
                 val ct = maxOf(0.0, profitAfterVat) * settings.corporationTaxRate / 100.0

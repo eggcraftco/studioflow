@@ -1465,7 +1465,7 @@ private fun FinancialSettingsDetail(
             "seciliParaBirimi" to selectedCurrency.ifBlank { "£" },
             "seciliOndalik" to if (selectedDecimalSeparator == ",") "," else ".",
             "feePercentage" to parseSettingsNumber(feePercentage, settings.feePercentage).coerceIn(0.0, 100.0),
-            "taxRuleNameRevenue" to taxRuleNameRevenue.trim().ifBlank { "Standard Tax (Services/New)" },
+            "taxRuleNameRevenue" to taxRuleNameRevenue.trim().ifBlank { "Standard VAT (Services/New)" },
             "taxRuleNameProfit" to taxRuleNameProfit.trim().ifBlank { "Margin Scheme (2nd Hand)" },
             "defaultTaxRate" to parseSettingsNumber(defaultTaxRate, settings.defaultTaxRate).coerceIn(0.0, 100.0),
             "defaultDeliveryTime" to parseSettingsNumber(defaultDeliveryTime, settings.defaultDeliveryTime).coerceIn(1.0, 730.0),
@@ -1526,7 +1526,7 @@ private fun FinancialSettingsDetail(
                 singleLine = true
             )
             PercentTextField(
-                label = t("Default Tax Rate (%)"),
+                label = t("Default VAT Rate (%)"),
                 value = defaultTaxRate,
                 enabled = !state.settingsSaving,
                 onValueChange = { defaultTaxRate = cleanSettingsNumberInput(it) }

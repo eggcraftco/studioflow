@@ -138,7 +138,7 @@ struct AyarlarView: View {
     @AppStorage("taxCalculationType") private var taxCalculationType: String = "Revenue"
     @AppStorage("taxMilestoneEnabled") private var taxMilestoneEnabled: Bool = false
     @AppStorage("taxMilestoneDate") private var taxMilestoneDate: Double = Date().timeIntervalSince1970
-    @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard Tax (Services/New)"
+    @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard VAT (Services/New)"
     @AppStorage("taxRuleNameProfit") private var taxRuleNameProfit: String = "Margin Scheme (2nd Hand)"
     @AppStorage("corporationTaxEnabled") private var corporationTaxEnabled: Bool = false
     @AppStorage("corporationTaxRate") private var corporationTaxRate: Double = 19.0
@@ -5751,7 +5751,7 @@ struct AyarlarView: View {
                         .financialSettingsControlStyle(width: isPhoneLayout ? nil : 420)
                 }
 
-                financialSettingsRow(t("Default Tax Rate (%)", lang: seciliDil)) {
+                financialSettingsRow(t("Default VAT Rate (%)", lang: seciliDil)) {
                     HStack(spacing: 8) {
                         TextField("20.0", value: $defaultTaxRate, format: .number)
                             .textFieldStyle(.plain)
@@ -5847,7 +5847,7 @@ struct AyarlarView: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(isRecalculating)
-                .alert(t("Done", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(t("Tax recalculation completed!", lang: seciliDil)) }
+                .alert(t("Done", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(t("VAT recalculation completed!", lang: seciliDil)) }
 
                 Button(action: { showClearTaxConfirm = true }) {
                     HStack(spacing: 10) {
@@ -6663,7 +6663,7 @@ struct AyarlarView: View {
             ("companyNumbersJSON", ""),
             ("appTheme", "System"),
             ("taxCalculationType", "Revenue"),
-            ("taxRuleNameRevenue", "Standard Tax (Services/New)"),
+            ("taxRuleNameRevenue", "Standard VAT (Services/New)"),
             ("taxRuleNameProfit", "Margin Scheme (2nd Hand)"),
             ("replyMode", "AI"),
             ("openAIKey", ""),

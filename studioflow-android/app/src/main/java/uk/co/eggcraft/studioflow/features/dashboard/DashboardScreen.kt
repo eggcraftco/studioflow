@@ -754,6 +754,7 @@ private data class DashboardStats(
     val shipping: Double,
     val tax: Double,
     val netProfit: Double,
+    val perOrderNetProfits: List<Double>,
     val chartValues: List<Double>,
     val chartLabels: List<String>,
     val chartAxisLabels: List<String>,
@@ -816,6 +817,7 @@ private data class DashboardStats(
                 shipping = selectedOrders.sumOf { it.deliveryCost },
                 tax = selectedOrders.sumOf { it.taxAmount },
                 netProfit = selectedOrders.sumOf { it.netProfit },
+                perOrderNetProfits = selectedOrders.map { it.netProfit },
                 chartValues = chartValues,
                 chartLabels = period.chartLabels(now, locale),
                 chartAxisLabels = period.chartAxisLabels(now, locale),
@@ -915,13 +917,15 @@ private fun dashboardSummaryCards(
             add(DashboardSummaryCardSpec("Shipping", money(stats.shipping, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.LocalShipping))
         }
         if (visibility.dashShowTax) {
-            add(DashboardSummaryCardSpec("Tax Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
+            add(DashboardSummaryCardSpec("VAT Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
         }
         if (visibility.dashShowProfit) {
             add(DashboardSummaryCardSpec(if (corporationTaxEnabled) "Profit after VAT" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
         }
         if (visibility.dashShowProfit && corporationTaxEnabled) {
-            val corporationTax = maxOf(0.0, stats.netProfit) * corporationTaxRate / 100.0
+            // Per-order CT, each rounded to 2 dp, then summed — matches the Mac and
+            // web dashboards so every platform shows the same pennies.
+            val corporationTax = stats.perOrderNetProfits.sumOf { kotlin.math.round(maxOf(0.0, it) * corporationTaxRate) / 100.0 }
             add(DashboardSummaryCardSpec("Corporation Tax (${corporationTaxRate.toInt()}%)", money(corporationTax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
             add(DashboardSummaryCardSpec("Profit after CT", money(stats.netProfit - corporationTax, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
         }
@@ -961,7 +965,7 @@ private enum class DashboardWidget(val key: String, val label: String, val color
     Cost("cost", "Cost", StudioRed),
     Fee("fee", "Platform Fee", StudioRed),
     Shipping("shipping", "Shipping", StudioRed),
-    Tax("tax", "Tax Amount", StudioRed),
+    Tax("tax", "VAT Amount", StudioRed),
     Profit("profit", "Net Profit", StudioGreen)
 }
 
