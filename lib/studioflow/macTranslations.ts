@@ -2707,6 +2707,32 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "معدل ضريبة القيمة المضافة الافتراضي (%)",
     "हिन्दी (Hindi)": "डिफ़ॉल्ट वैट दर (%)"
   },
+  "Financial Breakdown": {
+    "Türkçe": "Finansal Döküm",
+    "Deutsch": "Finanzaufschlüsselung",
+    "Français": "Détail financier",
+    "Italiano": "Ripartizione finanziaria",
+    "Español (Spanish)": "Desglose financiero",
+    "Português": "Discriminação financeira",
+    "Русский (Russian)": "Финансовая разбивка",
+    "日本語 (Japanese)": "財務内訳",
+    "中文 (Chinese)": "财务明细",
+    "العربية (Arabic)": "التفصيل المالي",
+    "हिन्दी (Hindi)": "वित्तीय विवरण"
+  },
+  "Net Profit (after CT)": {
+    "Türkçe": "Net Kâr (KV sonrası)",
+    "Deutsch": "Nettogewinn (nach KSt.)",
+    "Français": "Bénéfice net (après IS)",
+    "Italiano": "Profitto netto (dopo IS)",
+    "Español (Spanish)": "Beneficio neto (después de IS)",
+    "Português": "Lucro líquido (após IRC)",
+    "Русский (Russian)": "Чистая прибыль (после налога)",
+    "日本語 (Japanese)": "純利益（法人税後）",
+    "中文 (Chinese)": "净利润（公司税后）",
+    "العربية (Arabic)": "صافي الربح (بعد ضريبة الشركات)",
+    "हिन्दी (Hindi)": "शुद्ध लाभ (CT के बाद)"
+  },
   "Profit before Corporation Tax": {
     "Türkçe": "Kurumlar Vergisi Öncesi Kâr",
     "Deutsch": "Gewinn vor Körperschaftsteuer",
