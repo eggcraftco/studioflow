@@ -755,7 +755,7 @@ function orderPdfHtml(
     if (settings?.corporationTaxEnabled) {
       const ctRate = settings?.corporationTaxRate ?? 19;
       const corporationTax = Math.round(Math.max(0, profitAfterVat) * ctRate) / 100;
-      financeRows.push({ title: "Profit after VAT", value: formatMoney(profitAfterVat) });
+      financeRows.push({ title: "Profit before Corporation Tax", value: formatMoney(profitAfterVat) });
       financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
       financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
     } else {
@@ -5333,7 +5333,7 @@ export function OrderDetailContent({
                     </div>
                     {corporationTaxEnabled ? (
                       <>
-                        <DetailRow label="Profit after VAT" value={money(order.netProfit, hideNumbers)} />
+                        <DetailRow label="Profit before Corporation Tax" value={money(order.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
                         <DetailRow label="Net Profit (after CT)" value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
                       </>

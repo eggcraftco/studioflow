@@ -2707,6 +2707,19 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "معدل ضريبة القيمة المضافة الافتراضي (%)",
     "हिन्दी (Hindi)": "डिफ़ॉल्ट वैट दर (%)"
   },
+  "Profit before Corporation Tax": {
+    "Türkçe": "Kurumlar Vergisi Öncesi Kâr",
+    "Deutsch": "Gewinn vor Körperschaftsteuer",
+    "Français": "Bénéfice avant impôt sur les sociétés",
+    "Italiano": "Utile prima dell'imposta sulle società",
+    "Español (Spanish)": "Beneficio antes del impuesto de sociedades",
+    "Português": "Lucro antes do imposto sobre sociedades",
+    "Русский (Russian)": "Прибыль до налога на прибыль",
+    "日本語 (Japanese)": "法人税引前利益",
+    "中文 (Chinese)": "企业所得税前利润",
+    "العربية (Arabic)": "الربح قبل ضريبة الشركات",
+    "हिन्दी (Hindi)": "कॉर्पोरेशन टैक्स से पहले लाभ"
+  },
   "VAT Amount": {
     "Türkçe": "KDV Tutarı",
     "Deutsch": "MwSt.-Betrag",

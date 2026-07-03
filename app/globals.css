@@ -9064,7 +9064,9 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 }
 
 .tone-negative-soft {
-  color: #ffaaaa !important;
+  /* Auto-calculated cost fields (Platform Fee, VAT Amount): the read-only look
+     comes from the field surface — keep the amount itself readable. */
+  color: #ff3b3b !important;
 }
 
 .tone-blue {
