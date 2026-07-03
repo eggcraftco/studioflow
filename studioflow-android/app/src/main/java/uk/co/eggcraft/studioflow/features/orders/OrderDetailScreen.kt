@@ -6418,7 +6418,7 @@ private fun FinancialCard(
                     FinanceDisplayInlineRow(
                         label = "Platform Fee",
                         value = money(order.paymentFee),
-                        valueColor = StudioRed.copy(alpha = 0.42f),
+                        valueColor = StudioRed,
                         muted = true
                     )
                     FinanceMoneyInlineRow(
@@ -6456,7 +6456,7 @@ private fun FinancialCard(
                     FinanceDisplayInlineRow(
                         label = "VAT Amount",
                         value = money(order.taxAmount),
-                        valueColor = StudioRed.copy(alpha = 0.38f),
+                        valueColor = StudioRed,
                         muted = true
                     )
                     HorizontalRule()
@@ -6505,9 +6505,9 @@ private fun FinancialCard(
                         )
                     }
                     if (workspaceSettings.corporationTaxEnabled) {
-                        val corporationTax = maxOf(0.0, finalProfit) * workspaceSettings.corporationTaxRate / 100.0
+                        val corporationTax = kotlin.math.round(maxOf(0.0, finalProfit) * workspaceSettings.corporationTaxRate) / 100.0
                         FinanceDisplayInlineRow(
-                            label = t("Profit after VAT"),
+                            label = t("Profit before Corporation Tax"),
                             value = money(finalProfit),
                             valueColor = MaterialTheme.colorScheme.onSurface,
                             muted = false
@@ -11616,8 +11616,8 @@ private fun createOrderPdfFile(
             rows.add(Triple("VAT Amount:", money(order.taxAmount), cRed))
             val profitAfterVat = financialFinalProfit(order, settings)
             if (settings.corporationTaxEnabled) {
-                val ct = maxOf(0.0, profitAfterVat) * settings.corporationTaxRate / 100.0
-                rows.add(Triple("Profit after VAT:", money(profitAfterVat), cPrimary))
+                val ct = kotlin.math.round(maxOf(0.0, profitAfterVat) * settings.corporationTaxRate) / 100.0
+                rows.add(Triple("Profit before Corp. Tax:", money(profitAfterVat), cPrimary))
                 rows.add(Triple("Corp. Tax (${settings.corporationTaxRate.toInt()}%):", money(ct), cRed))
                 rows.add(Triple("Net Profit (CT):", money(profitAfterVat - ct), cGreen))
             } else {

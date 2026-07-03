@@ -281,7 +281,7 @@ const TREE_EN: GuideNode[] = [
             "Order Value, Paid / Received and the Remaining balance, plus the payment method.",
             "Your costs: Base Cost, Platform Fee and Shipping Cost.",
             "Tax: VAT Rule, VAT Rate and VAT Amount, following the tax rules you set in Settings.",
-            "Profit: Profit after VAT, Net Profit after Corporation Tax, and the Final Profit."
+            "Profit: Profit before Corporation Tax, Net Profit after Corporation Tax, and the Final Profit."
           ] },
           { kind: "sub", text: "What you can change" },
           { kind: "bullets", items: [
@@ -873,7 +873,7 @@ const TREE_TR: GuideNode[] = [
             "Order Value, Paid / Received ve kalan Remaining bakiyesi, ayrıca ödeme yöntemi.",
             "Maliyetleriniz: Base Cost, Platform Fee ve Shipping Cost.",
             "Vergi: Settings'te belirlediğiniz vergi kurallarına göre VAT Rule, VAT Rate ve VAT Amount.",
-            "Kâr: Profit after VAT, Kurumlar Vergisi sonrası Net Profit ve Final Profit."
+            "Kâr: Kurumlar Vergisi öncesi kâr (Profit before Corporation Tax), Kurumlar Vergisi sonrası Net Profit ve Final Profit."
           ] },
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [

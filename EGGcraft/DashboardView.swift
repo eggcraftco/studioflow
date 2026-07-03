@@ -1081,7 +1081,7 @@ struct DashboardView: View {
             if dashShowFee { OzetKart(title: t("Platform Fee", lang: seciliDil), value: toplamKesinti, iconName: "percent", color: .red, sembol: seciliParaBirimi) }
             if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
             if dashShowTax { OzetKart(title: t("VAT Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
-            if dashShowProfit { OzetKart(title: t(corporationTaxEnabled ? "Profit after VAT" : "Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+            if dashShowProfit { OzetKart(title: t(corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
             if dashShowProfit && corporationTaxEnabled { OzetKart(title: "\(t("Corporation Tax", lang: seciliDil)) (\(Int(corporationTaxRate))%)", value: kurumlarVergisi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
             if dashShowProfit && corporationTaxEnabled { OzetKart(title: t("Profit after CT", lang: seciliDil), value: netKarSonrasiCT, iconName: "checkmark.seal.fill", color: .green, sembol: seciliParaBirimi) }
         } else {

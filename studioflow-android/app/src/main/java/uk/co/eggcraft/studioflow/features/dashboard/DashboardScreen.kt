@@ -920,7 +920,7 @@ private fun dashboardSummaryCards(
             add(DashboardSummaryCardSpec("VAT Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
         }
         if (visibility.dashShowProfit) {
-            add(DashboardSummaryCardSpec(if (corporationTaxEnabled) "Profit after VAT" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
+            add(DashboardSummaryCardSpec(if (corporationTaxEnabled) "Profit before Corporation Tax" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
         }
         if (visibility.dashShowProfit && corporationTaxEnabled) {
             // Per-order CT, each rounded to 2 dp, then summed — matches the Mac and
