@@ -6103,11 +6103,15 @@ exports.mergeOrderIntoOrder = onCall({ region: "europe-west2" }, async (request)
   const targetPayments = Array.isArray(target.payments) ? target.payments.slice() : [];
   const mergedPayments = targetPayments.concat(movedPayments);
 
+  const sourceLabel = String(source.invoiceNumber || "").trim()
+    || String(source.designName || "").trim()
+    || `#${sourceId.slice(-6)}`;
   const batch = db.batch();
   batch.set(targetRef, {
     paidAmount: roundMoneyValue(target.paidAmount) + sourcePaid,
     remainingAmount: Math.max(0, roundMoneyValue(target.remainingAmount) - sourcePaid),
     payments: mergedPayments,
+    historyLog: historyLogWithEntry(target, "Order merged", sourceLabel, amountHistoryValue(sourcePaid)),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedByUid: uid,
     updatedByEmail: email
@@ -6221,6 +6225,12 @@ exports.mergeOrders = onCall({ region: "europe-west2" }, async (request) => {
     paidAmount: mergedPaid,
     remainingAmount: Math.max(0, roundMoneyValue(primary.remainingAmount) - mergedAmount),
     payments: mergedPayments,
+    historyLog: historyLogWithEntry(
+      primary,
+      "Orders merged",
+      mergedCount === 1 ? "1 order" : `${mergedCount} orders`,
+      amountHistoryValue(mergedAmount)
+    ),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedByUid: uid,
     updatedByEmail: email
@@ -14192,6 +14202,14 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
             paidAmount: roundMoneyValue(candidateData.paidAmount) + roundMoneyValue(paymentAmount),
             remainingAmount: Math.max(0, roundMoneyValue(candidateData.remainingAmount) - roundMoneyValue(paymentAmount)),
             payments,
+            // History Log entry so the merged installment is visible on the
+            // order's History card, not only in the Payments ledger.
+            historyLog: historyLogWithEntry(
+              candidateData,
+              "Payment received",
+              `WooCommerce installment #${wooOrderNumber}`,
+              amountHistoryValue(paymentAmount)
+            ),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             source: candidateData.source || "woocommerce"
           }, { merge: true });
