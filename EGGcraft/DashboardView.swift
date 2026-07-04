@@ -457,7 +457,7 @@ struct DashboardView: View {
     }
 
     private func adjustedNetProfit(for siparis: Siparis) -> Double {
-        let salesTotal = siparis.paidAmount + siparis.remainingAmount
+        let salesTotal = siparis.salesTotal
         return salesTotal - baseCostTotal(for: siparis) - customExpenseTotal(for: siparis) - siparis.paymentFee - siparis.deliveryCost - siparis.taxAmount
     }
 
@@ -482,7 +482,7 @@ struct DashboardView: View {
     var toplamReceived: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.paidAmount } }
     var toplamBaseCost: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.watchPurchasePrice } }
     var toplamBasicBalance: Double { toplamReceived - toplamBaseCost }
-    var toplamCiro: Double { filtrelenmisSiparisler.reduce(0) { $0 + ($1.paidAmount + $1.remainingAmount) } }
+    var toplamCiro: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.salesTotal } }
     var bekleyenAlacak: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.remainingAmount + customPendingTotal(for: $1) } }
     var toplamGider: Double { filtrelenmisSiparisler.reduce(0) { $0 + dashboardCostTotal(for: $1) } }
     var toplamKesinti: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.paymentFee } }

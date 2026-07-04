@@ -73,7 +73,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
-import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
+import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
 const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
@@ -872,7 +872,7 @@ function openOrderPdfPrint(
 
 function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
   const money = (value: number) => orderPdfMoney(value, settings, false);
-  const orderValue = order.paidAmount + order.remainingAmount;
+  const orderValue = order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
   const isMarginScheme = order.taxType === "Profit";
   const isZeroRated = (order.taxRate ?? 0) <= 0.0001;
   const vatAmount = order.taxAmount;
@@ -1269,6 +1269,8 @@ function materialToggleValue(order: OrderDetail, title: string) {
 function webFinanceTaxAmount({
   paidAmount,
   remainingAmount,
+  customRemainingTotal = 0,
+  customExpenseTotal = 0,
   watchPurchasePrice,
   paymentFee,
   deliveryCost,
@@ -1277,6 +1279,8 @@ function webFinanceTaxAmount({
 }: {
   paidAmount: number;
   remainingAmount: number;
+  customRemainingTotal?: number;
+  customExpenseTotal?: number;
   watchPurchasePrice: number;
   paymentFee: number;
   deliveryCost: number;
@@ -1284,9 +1288,11 @@ function webFinanceTaxAmount({
   taxType: string;
 }) {
   if (!taxRate || !taxType) return 0;
-  const orderValue = paidAmount + remainingAmount;
+  // Mirrors the backend: custom receivables join the sales total, custom
+  // expenses reduce the Profit tax base.
+  const orderValue = paidAmount + remainingAmount + customRemainingTotal;
   if (taxType.trim().toLowerCase() === "profit") {
-    return Math.round(Math.max(orderValue - watchPurchasePrice - paymentFee - deliveryCost, 0) * taxRate) / 100;
+    return Math.round(Math.max(orderValue - watchPurchasePrice - customExpenseTotal - paymentFee - deliveryCost, 0) * taxRate) / 100;
   }
   return Math.round(orderValue * taxRate) / 100;
 }
@@ -3369,6 +3375,30 @@ export function OrderDetailContent({
       orderValue = paidAmount + remainingAmount;
     }
 
+    // Custom receivables/expenses at their post-patch values, mirroring the
+    // backend recalculation exactly (fullPayment rolls receivables into paid).
+    let customRemainingTotal = orderCustomRemainingTotal(order);
+    if (patch.financialRemainingValues) {
+      for (const [title, raw] of Object.entries(patch.financialRemainingValues)) {
+        const key = `financialRemaining::${title.trim()}`;
+        const previous = Number(String(order.customFields[key] ?? "").replace(/,/g, "")) || 0;
+        customRemainingTotal += Math.max(0, Number(raw) || 0) - previous;
+      }
+    }
+    let customExpenseTotalLocal = orderCustomExpenseTotalLocal(order);
+    if (patch.financialExpenseValues) {
+      for (const [title, raw] of Object.entries(patch.financialExpenseValues)) {
+        const key = `financialExpense::${title.trim()}`;
+        const previous = Number(String(order.customFields[key] ?? "").replace(/,/g, "")) || 0;
+        customExpenseTotalLocal += Math.max(0, Number(raw) || 0) - previous;
+      }
+    }
+    if (patch.fullPaymentReceived) {
+      paidAmount = paidAmount + Math.max(0, customRemainingTotal);
+      orderValue = paidAmount;
+      customRemainingTotal = 0;
+    }
+
     const watchPurchasePrice = typeof patch.watchPurchasePrice === "number" ? Math.max(0, patch.watchPurchasePrice) : order.watchPurchasePrice;
     let paymentFee = typeof patch.paymentFee === "number" ? Math.max(0, patch.paymentFee) : order.paymentFee;
     const deliveryCost = typeof patch.deliveryCost === "number" ? Math.max(0, patch.deliveryCost) : order.deliveryCost;
@@ -3376,20 +3406,22 @@ export function OrderDetailContent({
     const taxType = typeof patch.taxType === "string" ? patch.taxType : (order.taxType || moneySettings?.taxCalculationType || "");
     const paymentMethod = typeof patch.paymentMethod === "string" ? patch.paymentMethod : order.paymentMethod;
 
-    if (patch.paymentFee === undefined && (patch.orderValue !== undefined || patch.paidAmount !== undefined || patch.remainingAmount !== undefined || patch.fullPaymentReceived)) {
-      paymentFee = Math.round(orderValue * (moneySettings?.feePercentage ?? 3)) / 100;
+    if (patch.paymentFee === undefined && (patch.orderValue !== undefined || patch.paidAmount !== undefined || patch.remainingAmount !== undefined || patch.fullPaymentReceived || patch.financialRemainingValues !== undefined)) {
+      paymentFee = Math.round((orderValue + customRemainingTotal) * (moneySettings?.feePercentage ?? 3)) / 100;
     }
 
     const taxAmount = webFinanceTaxAmount({
       paidAmount,
       remainingAmount,
+      customRemainingTotal,
+      customExpenseTotal: customExpenseTotalLocal,
       watchPurchasePrice,
       paymentFee,
       deliveryCost,
       taxRate,
       taxType
     });
-    const netProfit = paidAmount + remainingAmount - watchPurchasePrice - paymentFee - deliveryCost - taxAmount;
+    const netProfit = paidAmount + remainingAmount + customRemainingTotal - watchPurchasePrice - customExpenseTotalLocal - paymentFee - deliveryCost - taxAmount;
 
     let payments = order.payments;
     if (patch.recordPayment && typeof patch.recordPayment.amount === "number" && patch.recordPayment.amount > 0) {
@@ -3460,6 +3492,14 @@ export function OrderDetailContent({
     };
     applyCustomMap("financialExpense::", patch.financialExpenseValues);
     applyCustomMap("financialRemaining::", patch.financialRemainingValues);
+    // Full payment clears the custom receivables (they were rolled into paid),
+    // mirroring the server so the UI doesn't briefly double-count them.
+    if (patch.fullPaymentReceived) {
+      customFields = { ...customFields };
+      for (const key of Object.keys(customFields)) {
+        if (key.startsWith("financialRemaining::")) delete customFields[key];
+      }
+    }
 
     onOptimisticOrderPatch?.({
       paidAmount,
@@ -4759,7 +4799,7 @@ export function OrderDetailContent({
               <div className="app-summary-top">
                 <div className="app-summary-value">
                   <span>Order Value</span>
-                  <strong>{canSeeFinance ? money(order.paidAmount + order.remainingAmount, hideNumbers) : "Hidden"}</strong>
+                  <strong>{canSeeFinance ? money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : "Hidden"}</strong>
                 </div>
                 <div className="app-summary-status-list">
                   <div className="app-summary-status-row">
@@ -5148,7 +5188,7 @@ export function OrderDetailContent({
                             onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
                             displayValue={money(amount, hideNumbers)}
                             value={amount}
-                            tone="negative-soft"
+                            tone="positive"
                             disabled={!canInlineEditFinance}
                             saving={savingFinanceField === `Remaining: ${item.title}`}
                             onSave={value => saveCustomFinanceValue("remaining", item.title, value, `Remaining: ${item.title}`)}
@@ -5329,7 +5369,7 @@ export function OrderDetailContent({
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
                       <span>Order Value</span>
-                      <strong>{money(order.paidAmount + order.remainingAmount, hideNumbers)}</strong>
+                      <strong>{money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}</strong>
                     </div>
                     {corporationTaxEnabled ? (
                       <>
@@ -6730,7 +6770,7 @@ export function OrderDetailContent({
         {headerShowOrderValue && canSeeFinance ? (
           <span className="order-header-meta-pill green">
             <CardIconGlyph icon="finance" symbol={moneySymbol(moneySettings)} />
-            {money(order.paidAmount + order.remainingAmount, hideNumbers)}
+            {money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}
           </span>
         ) : null}
       </div>

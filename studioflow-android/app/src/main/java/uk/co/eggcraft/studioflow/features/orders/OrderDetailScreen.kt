@@ -6338,7 +6338,7 @@ private fun FinancialCard(
                                     map[item.title] = cleanDecimalInput(value)
                                 }
                             },
-                            valueColor = StudioWarningOrange,
+                            valueColor = StudioGreen,
                             enabled = canEditFinance,
                             onCommit = { saveFinance() },
                             onLabelRename = if (canEditFinance) ({ newTitle: String -> renameRemainingItem(item.id, newTitle) }) else null,

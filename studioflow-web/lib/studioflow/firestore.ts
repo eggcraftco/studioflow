@@ -318,6 +318,8 @@ export type CustomerOrderSummary = {
   designName: string;
   status: string;
   notes: string;
+  // Custom "Remaining" receivables total — part of the order's value.
+  customRemainingTotal: number;
   previewImageUrl: string;
   paidAmount: number;
   remainingAmount: number;
@@ -1367,6 +1369,15 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       ),
       paidAmount: numberValue(data.paidAmount, 0),
       remainingAmount: numberValue(data.remainingAmount, 0),
+      customRemainingTotal: Object.entries(
+        data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+          ? data.customFields as Record<string, unknown>
+          : {}
+      ).reduce((total, [key, raw]) => {
+        if (!key.startsWith("financialRemaining::")) return total;
+        const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+        return total + (Number.isFinite(parsed) ? parsed : 0);
+      }, 0),
       paymentDate,
       dueDate,
       invoiceNumber: stringValue(data.invoiceNumber, ""),
@@ -1414,7 +1425,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       lastContactDate: dateValue(data.lastContactDate),
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
-      totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount, 0),
+      totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
       orders: customerOrders
     };
   });
@@ -1682,6 +1693,23 @@ function mapOrderDetailSnapshot(
   const paymentFee = numberValue(data.paymentFee, 0);
   const deliveryCost = numberValue(data.deliveryCost, 0);
   const taxAmount = numberValue(data.taxAmount, 0);
+  // Custom "Remaining" receivables count toward the sales total exactly like
+  // remainingAmount (same rule as Mac, Android and the backend).
+  const rawCustomFields = data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+    ? data.customFields as Record<string, unknown>
+    : {};
+  const customRemainingTotal = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
+    if (!key.startsWith("financialRemaining::")) return total;
+    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+    return total + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+  // Custom spending reduces the profit shown before Corporation Tax, matching
+  // the Mac card and the optimistic client-side recalculation.
+  const customExpenseTotalParsed = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
+    if (!key.startsWith("financialExpense::")) return total;
+    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+    return total + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
 
   return {
     id: snapshot.id,
@@ -1709,7 +1737,7 @@ function mapOrderDetailSnapshot(
     taxType: stringValue(data.taxType, ""),
     taxRate: numberValue(data.taxRate, 0),
     taxAmount,
-    netProfit: paidAmount + remainingAmount - watchPurchasePrice - paymentFee - deliveryCost - taxAmount,
+    netProfit: paidAmount + remainingAmount + customRemainingTotal - watchPurchasePrice - customExpenseTotalParsed - paymentFee - deliveryCost - taxAmount,
     emailAddress: stringValue(data.emailAddress, ""),
     instagramUsername: stringValue(data.instagramUsername, ""),
     whatsappNumber: stringValue(data.whatsappNumber, ""),

@@ -5957,13 +5957,17 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
     const watchPurchasePrice = roundMoneyValue(orderData.watchPurchasePrice);
     const deliveryCost = roundMoneyValue(orderData.deliveryCost);
     const paymentDate = dateFromFirestore(orderData.paymentDate, new Date());
-    const orderValue = paidAmount + remainingAmount;
+    const customRemainingTotal = orderCustomRemainingTotal(orderData.customFields);
+    const customExpenseTotal = orderCustomExpenseTotal(orderData.customFields);
+    const orderValue = paidAmount + remainingAmount + customRemainingTotal;
     const paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
     const taxType = financialTaxTypeForPaymentDate(financialSettings, paymentDate);
     const taxRate = cleanTaxRate(orderData.taxRate) || cleanPercentageNumber(financialSettings.defaultTaxRate, 20);
     const taxAmount = webFinanceTaxAmount({
       paidAmount,
       remainingAmount,
+      customRemainingTotal,
+      customExpenseTotal,
       watchPurchasePrice,
       paymentFee,
       deliveryCost,
@@ -6401,7 +6405,9 @@ exports.exportOrders = onCall({ region: "europe-west2" }, async (request) => {
     for (const order of orders) {
       const o = order.data;
       const paid = exportNumberValue(o.paidAmount);
-      const outstanding = exportNumberValue(o.remainingAmount);
+      // Outstanding = classic remaining + the order's custom "Remaining"
+      // receivables, so Sales Total and Net Profit include them like the app.
+      const outstanding = exportNumberValue(o.remainingAmount) + orderCustomRemainingTotal(o.customFields);
       const salesTotal = paid + outstanding;
       const baseCost = showBaseCost ? exportNumberValue(o.watchPurchasePrice) : 0;
       const customFields = o.customFields && typeof o.customFields === "object" ? o.customFields : {};
@@ -8286,12 +8292,15 @@ function cleanTaxType(value, fallback = "") {
   return text || fallback;
 }
 
-function webFinanceTaxAmount({ paidAmount, remainingAmount, watchPurchasePrice, paymentFee, deliveryCost, taxRate, taxType }) {
+function webFinanceTaxAmount({ paidAmount, remainingAmount, customRemainingTotal = 0, customExpenseTotal = 0, watchPurchasePrice, paymentFee, deliveryCost, taxRate, taxType }) {
   if (!taxRate || !taxType) return 0;
-  const orderValue = roundMoneyValue(paidAmount) + roundMoneyValue(remainingAmount);
+  // Custom "Remaining" receivables are part of the order's sales total, exactly
+  // like remainingAmount; custom expenses reduce the Profit tax base (matches
+  // the Mac calculation).
+  const orderValue = roundMoneyValue(paidAmount) + roundMoneyValue(remainingAmount) + roundMoneyValue(customRemainingTotal);
   if (cleanTaxType(taxType) === "Profit") {
     const taxableProfit = Math.max(
-      orderValue - roundMoneyValue(watchPurchasePrice) - roundMoneyValue(paymentFee) - roundMoneyValue(deliveryCost),
+      orderValue - roundMoneyValue(watchPurchasePrice) - roundMoneyValue(customExpenseTotal) - roundMoneyValue(paymentFee) - roundMoneyValue(deliveryCost),
       0
     );
     return roundMoneyValue((taxableProfit * cleanTaxRate(taxRate)) / 100);
@@ -8322,6 +8331,51 @@ function parseOrderHeadingItemList(raw) {
 
 function orderHeadingTitleList(raw) {
   return parseOrderHeadingItemList(raw).map((item) => item.title).filter(Boolean);
+}
+
+function parseFinancialAmountValue(raw) {
+  const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+  return Number.isFinite(parsed) ? roundMoneyValue(parsed) : 0;
+}
+
+// Total of an order's custom financial amounts (customFields keyed
+// `<prefix><title>`). When the order carries its own heading list the sum is
+// limited to those titles (orphaned amounts are ignored); otherwise every
+// stored key under the prefix counts, which also covers orders that use the
+// workspace template titles. `valueOverrides` lets fee/VAT recalculation see
+// values being changed in the same request, before the customFields merge.
+function orderCustomFinancialTotal(customFields, prefix, headingKey, valueOverrides = null) {
+  const fields = customFields && typeof customFields === "object" && !Array.isArray(customFields) ? customFields : {};
+  const amounts = new Map();
+  for (const [key, raw] of Object.entries(fields)) {
+    if (typeof key === "string" && key.startsWith(prefix)) {
+      amounts.set(key.slice(prefix.length), parseFinancialAmountValue(raw));
+    }
+  }
+  if (valueOverrides && typeof valueOverrides === "object" && !Array.isArray(valueOverrides)) {
+    for (const [title, raw] of Object.entries(valueOverrides)) {
+      const cleanTitle = cleanOrderText(title, "", 120);
+      if (cleanTitle) amounts.set(cleanTitle, parseFinancialAmountValue(raw));
+    }
+  }
+  const headingTitles = orderHeadingTitleList(fields[headingKey]);
+  if (headingTitles.length > 0) {
+    const allowed = new Set(headingTitles);
+    for (const title of Array.from(amounts.keys())) {
+      if (!allowed.has(title)) amounts.delete(title);
+    }
+  }
+  let total = 0;
+  for (const value of amounts.values()) total += value;
+  return roundMoneyValue(total);
+}
+
+function orderCustomRemainingTotal(customFields, valueOverrides = null) {
+  return orderCustomFinancialTotal(customFields, "financialRemaining::", "orderRemainingItemsJSON", valueOverrides);
+}
+
+function orderCustomExpenseTotal(customFields, valueOverrides = null) {
+  return orderCustomFinancialTotal(customFields, "financialExpense::", "orderExpenseItemsJSON", valueOverrides);
 }
 
 function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, email, entitlements, financialSettings }) {
@@ -8356,7 +8410,9 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     "taxType",
     "fullPaymentReceived",
     "recordPayment",
-    "deletePaymentId"
+    "deletePaymentId",
+    "financialRemainingValues",
+    "financialExpenseValues"
   ].includes(field));
 
   const unknownFields = Object.keys(patch).filter((field) => !knownFields.has(field));
@@ -8453,10 +8509,14 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     const existingKey = Object.keys(currentFields).find((fieldKey) => cleanOrderText(fieldKey, "", 160).toLowerCase() === target);
     return existingKey ? currentFields[existingKey] : "";
   };
-  const currentCustomRemainingTotal = (financialSettings?.financialRemainingItems || [])
-    .map((item) => cleanOrderText(item?.title, "", 120))
-    .filter(Boolean)
-    .reduce((total, title) => total + roundMoneyValue(customFieldValueForKey(`financialRemaining::${title}`)), 0);
+  const currentCustomRemainingTotal = orderCustomRemainingTotal(
+    currentFields,
+    hasOwnField(patch, "financialRemainingValues") ? patch.financialRemainingValues : null
+  );
+  const currentCustomExpenseTotal = orderCustomExpenseTotal(
+    currentFields,
+    hasOwnField(patch, "financialExpenseValues") ? patch.financialExpenseValues : null
+  );
 
   if (hasOwnField(patch, "fullPaymentReceived") && Boolean(patch.fullPaymentReceived)) {
     const finalOutstanding = roundMoneyValue(remainingAmount + currentCustomRemainingTotal);
@@ -8474,13 +8534,18 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
   if (hasOwnField(patch, "taxType")) taxType = cleanTaxType(patch.taxType, taxType);
   if (hasOwnField(patch, "paymentMethod")) paymentMethod = cleanOrderText(patch.paymentMethod, paymentMethod, 80) || "Card";
 
-  if (entitlements?.advancedFinanceEnabled === true && !hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived"].some((field) => hasOwnField(patch, field))) {
-    paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings?.feePercentage, 3)) / 100);
+  // On fullPaymentReceived the custom receivables were already rolled into
+  // paidAmount above, so they must not be added to the fee/VAT base again.
+  const saleCustomRemaining = hasOwnField(patch, "fullPaymentReceived") && Boolean(patch.fullPaymentReceived) ? 0 : currentCustomRemainingTotal;
+  if (entitlements?.advancedFinanceEnabled === true && !hasOwnField(patch, "paymentFee") && ["orderValue", "paidAmount", "remainingAmount", "fullPaymentReceived", "financialRemainingValues"].some((field) => hasOwnField(patch, field))) {
+    paymentFee = roundMoneyValue(((orderValue + saleCustomRemaining) * cleanPercentageNumber(financialSettings?.feePercentage, 3)) / 100);
   }
 
   const taxAmount = webFinanceTaxAmount({
     paidAmount,
     remainingAmount,
+    customRemainingTotal: saleCustomRemaining,
+    customExpenseTotal: currentCustomExpenseTotal,
     watchPurchasePrice,
     paymentFee,
     deliveryCost,
@@ -8541,6 +8606,16 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     pushHistoryChange(historyEntries, `${cleanTitle} changed`, amountHistoryValue(previous), amountHistoryValue(next), uid, email);
     customFieldsChanged = true;
   };
+  // Full payment also clears the custom "Remaining" receivables — they were
+  // rolled into paidAmount above; leaving the fields set would double-count
+  // them in the next fee/VAT recalculation. (Mac zeroes these locally too.)
+  if (hasOwnField(patch, "fullPaymentReceived") && Boolean(patch.fullPaymentReceived)) {
+    for (const key of Object.keys({ ...currentFields })) {
+      if (typeof key === "string" && key.startsWith("financialRemaining::")) {
+        setCustomMoneyField("financialRemaining::", key.slice("financialRemaining::".length), 0);
+      }
+    }
+  }
   const applyCustomFinancialMap = (field, prefix, configuredItems, orderListKey) => {
     if (!hasOwnField(patch, field)) return;
     const incoming = patch[field] && typeof patch[field] === "object" && !Array.isArray(patch[field])

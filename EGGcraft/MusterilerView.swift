@@ -964,7 +964,7 @@ struct MusteriDetayView: View {
                                 Spacer(minLength: 8)
 
                                 VStack(alignment: .trailing, spacing: 6) {
-                                    Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
+                                    Text("\(seciliParaBirimi)\(siparis.salesTotal.toCurrencyString())")
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundColor(.green)
                                     orderStatusBadge(siparis)
@@ -1067,7 +1067,7 @@ struct MusteriDetayView: View {
                                 }
                                 Spacer(minLength: 8)
                                 VStack(alignment: .trailing, spacing: 6) {
-                                    Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
+                                    Text("\(seciliParaBirimi)\(siparis.salesTotal.toCurrencyString())")
                                         .font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                                     orderStatusBadge(siparis)
                                 }
@@ -1106,7 +1106,7 @@ struct MusteriDetayView: View {
                                     .font(.system(size: 13)).foregroundColor(.secondary)
                                     .frame(width: 110, alignment: .leading)
                                 HStack { orderStatusBadge(siparis); Spacer(minLength: 0) }.frame(width: 120, alignment: .leading)
-                                Text("\(seciliParaBirimi)\((siparis.paidAmount + siparis.remainingAmount).toCurrencyString())")
+                                Text("\(seciliParaBirimi)\(siparis.salesTotal.toCurrencyString())")
                                     .font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
                                     .frame(width: 100, alignment: .trailing)
                                 Image(systemName: "chevron.right").font(.system(size: 11)).foregroundColor(.secondary).frame(width: 14)

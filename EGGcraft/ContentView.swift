@@ -11800,7 +11800,7 @@ struct ViewOnlyOrderDetailView: View {
     }
 
     private var totalOrderValue: Double {
-        siparis.paidAmount + siparis.remainingAmount
+        siparis.salesTotal
     }
 
     private var profitValue: Double {

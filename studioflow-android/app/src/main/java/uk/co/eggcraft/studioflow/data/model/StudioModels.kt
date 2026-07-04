@@ -937,7 +937,15 @@ data class StudioOrder(
 
     val isClosed: Boolean get() = status == "Done" || status == "Cancelled"
 
-    val orderValue: Double get() = paidAmount + remainingAmount
+    // Total of the order's custom "Remaining" receivables (customFields keyed
+    // financialRemaining::<title>). Counts toward the sales total exactly like
+    // remainingAmount, on every platform.
+    val customRemainingTotal: Double
+        get() = customFields.entries.sumOf { (key, raw) ->
+            if (key.startsWith("financialRemaining::")) raw.replace(",", "").toDoubleOrNull() ?: 0.0 else 0.0
+        }
+
+    val orderValue: Double get() = paidAmount + remainingAmount + customRemainingTotal
 
     val hasLineItems: Boolean get() = lineItems.isNotEmpty()
     val lineItemsTotal: Double get() = lineItems.sumOf { it.lineTotal }

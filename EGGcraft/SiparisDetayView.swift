@@ -1738,7 +1738,7 @@ struct SiparisDetayView: View {
             if orderDetailHeaderShowOrderValue && canAccessFinancialInfo {
                 orderDetailHeaderChip(
                     icon: "sterlingsign.circle.fill",
-                    text: privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers),
+                    text: privacyCurrency(siparis.salesTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers),
                     color: .green
                 )
             }
@@ -8613,7 +8613,7 @@ struct SiparisDetayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func summaryKarti(colIndex: Int) -> some View { DetayKarti(title: t("Order Summary", lang: seciliDil), iconName: cardHeaderIcon(for: .summary), kartTipi: .summary, yukseklik: bindingYukseklik(for: .summary), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .summary), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.summary, false) }, onColorChange: { setKartColor(kart: .summary, color: $0) }, onEditHeadings: { headingEditorTarget = .summary }) { VStack(spacing: 20) { HStack { VStack(alignment: .leading, spacing: 8) { Text(t(hideFinancialForWorkflow ? "Customer" : "Order Value", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); Text(hideFinancialForWorkflow ? (siparis.customerName.isEmpty ? "-" : siparis.customerName) : privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)).font(.system(size: 15, weight: .bold)).foregroundColor(hideFinancialForWorkflow ? .primary : .green) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 6) { HStack { Text(resolvedSummaryStep1).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val1 = getStepValue(for: resolvedSummaryStep1); Text(t(val1, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val1)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val1).opacity(0.2)).cornerRadius(6) }; HStack { Text(resolvedSummaryStep2).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val2 = getStepValue(for: resolvedSummaryStep2); Text(t(val2, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val2)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val2).opacity(0.2)).cornerRadius(6) } }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); HStack { VStack(alignment: .leading, spacing: 8) { Text(t("Placed On", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "calendar").foregroundColor(.gray); Text(privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13)).foregroundColor(.primary) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 8) { Text(t("Delivery In", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "clock").foregroundColor(kalanGunRengi(siparis: siparis)); Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13, weight: .bold)).foregroundColor(kalanGunRengi(siparis: siparis)) }.frame(maxWidth: .infinity, alignment: .leading) } } } }
+    private func summaryKarti(colIndex: Int) -> some View { DetayKarti(title: t("Order Summary", lang: seciliDil), iconName: cardHeaderIcon(for: .summary), kartTipi: .summary, yukseklik: bindingYukseklik(for: .summary), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .summary), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.summary, false) }, onColorChange: { setKartColor(kart: .summary, color: $0) }, onEditHeadings: { headingEditorTarget = .summary }) { VStack(spacing: 20) { HStack { VStack(alignment: .leading, spacing: 8) { Text(t(hideFinancialForWorkflow ? "Customer" : "Order Value", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); Text(hideFinancialForWorkflow ? (siparis.customerName.isEmpty ? "-" : siparis.customerName) : privacyCurrency(siparis.salesTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)).font(.system(size: 15, weight: .bold)).foregroundColor(hideFinancialForWorkflow ? .primary : .green) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 6) { HStack { Text(resolvedSummaryStep1).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val1 = getStepValue(for: resolvedSummaryStep1); Text(t(val1, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val1)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val1).opacity(0.2)).cornerRadius(6) }; HStack { Text(resolvedSummaryStep2).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val2 = getStepValue(for: resolvedSummaryStep2); Text(t(val2, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val2)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val2).opacity(0.2)).cornerRadius(6) } }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); HStack { VStack(alignment: .leading, spacing: 8) { Text(t("Placed On", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "calendar").foregroundColor(.gray); Text(privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13)).foregroundColor(.primary) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 8) { Text(t("Delivery In", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "clock").foregroundColor(kalanGunRengi(siparis: siparis)); Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13, weight: .bold)).foregroundColor(kalanGunRengi(siparis: siparis)) }.frame(maxWidth: .infinity, alignment: .leading) } } } }
 
     private func deliveryKarti(colIndex: Int) -> some View {
         let dueDate = deliveryDueDate(for: siparis)
@@ -9842,7 +9842,7 @@ struct SiparisDetayView: View {
     }
 
     private var financialFinalProfit: Double {
-        let salesTotal = siparis.paidAmount + siparis.remainingAmount
+        let salesTotal = siparis.salesTotal
         return salesTotal - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee - siparis.taxAmount
     }
 
@@ -10159,7 +10159,7 @@ struct SiparisDetayView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.gray)
                     Spacer()
-                    Text(privacyCurrency(siparis.paidAmount + siparis.remainingAmount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                    Text(privacyCurrency(siparis.salesTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.gray)
                 }
@@ -11224,7 +11224,7 @@ struct SiparisDetayView: View {
             }
         }
 
-        let toplamSatis = siparis.paidAmount + siparis.remainingAmount
+        let toplamSatis = siparis.salesTotal
 
         if toplamSatis >= 0 {
             siparis.paymentFee = (toplamSatis * feePercentage) / 100.0
@@ -13005,7 +13005,7 @@ struct OrderInvoicePDFView: View {
         return n.isEmpty ? siparis.customerName : n
     }
 
-    private var orderValue: Double { siparis.paidAmount + siparis.remainingAmount }
+    private var orderValue: Double { siparis.salesTotal }
     private var isMarginScheme: Bool { siparis.taxType == "Profit" }
     private var isZeroRated: Bool { siparis.taxRate <= 0.0001 }
     private var vatAmount: Double { siparis.taxAmount }

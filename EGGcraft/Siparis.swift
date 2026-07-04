@@ -152,9 +152,23 @@ struct Siparis: Identifiable, Codable {
     // lives in the Trash for 30 days before a backend job purges it permanently.
     var isDeleted: Bool = false
     var deletedAt: Date? = nil
+    // Total of the order's custom "Remaining" receivables (customFields keyed
+    // financialRemaining::<title>). Counts toward the sales total exactly like
+    // remainingAmount, on every platform.
+    var customRemainingTotal: Double {
+        (customFields ?? [:]).reduce(0.0) { acc, entry in
+            guard entry.key.hasPrefix("financialRemaining::") else { return acc }
+            let cleaned = entry.value.replacingOccurrences(of: ",", with: "")
+            return acc + (Double(cleaned) ?? 0)
+        }
+    }
+
+    // Order value: classic paid+remaining plus custom receivables.
+    var salesTotal: Double { paidAmount + remainingAmount + customRemainingTotal }
+
     // Computed net profit
     var netKar: Double {
-        return (paidAmount + remainingAmount) - watchPurchasePrice - paymentFee - deliveryCost
+        return salesTotal - watchPurchasePrice - paymentFee - deliveryCost
     }
 
     // Itemized billing helpers. When the order has line items their gross sum is the order

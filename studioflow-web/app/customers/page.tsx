@@ -783,7 +783,7 @@ function CustomerDetail({
                       <td>{order.designName.trim() || t("Untitled design")}</td>
                       <td>{formatDate(order.paymentDate)}</td>
                       <td><CustomerOrderStatusBadge order={order} /></td>
-                      <td className="ta-right">{canSeeFinance ? money(order.paidAmount + order.remainingAmount, hideNumbers, moneySettings) : "—"}</td>
+                      <td className="ta-right">{canSeeFinance ? money(order.paidAmount + order.remainingAmount + order.customRemainingTotal, hideNumbers, moneySettings) : "—"}</td>
                       <td className="ta-right customer-table-chevron">›</td>
                     </tr>
                   ))}
@@ -1201,7 +1201,7 @@ function CustomerOrderRow({ order, canSeeFinance, moneySettings, t }: { order: C
             <small>{formatDate(order.paymentDate)}</small>
           </span>
           <span className="customer-order-meta">
-            {canSeeFinance ? <span className="studio-pill">{money(order.paidAmount + order.remainingAmount, hideNumbers, moneySettings)}</span> : null}
+            {canSeeFinance ? <span className="studio-pill">{money(order.paidAmount + order.remainingAmount + order.customRemainingTotal, hideNumbers, moneySettings)}</span> : null}
             <CustomerOrderStatusBadge order={order} />
           </span>
         </span>
