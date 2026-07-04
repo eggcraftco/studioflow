@@ -26,7 +26,8 @@ import {
   baseCostTotal,
   customExpenseTotal,
   customPendingTotal,
-  dashboardCostTotal
+  dashboardCostTotal,
+  orderSalesTotal
 } from "@/lib/studioflow/finance";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
@@ -151,7 +152,7 @@ function totalsForOrders(
     received: totals.received + order.paidAmount,
     baseCost: totals.baseCost + order.watchPurchasePrice,
     basicBalance: totals.basicBalance + order.paidAmount - order.watchPurchasePrice,
-    revenue: totals.revenue + order.paidAmount + order.remainingAmount,
+    revenue: totals.revenue + orderSalesTotal(order),
     pending: totals.pending + order.remainingAmount + customPendingTotal(order, settings),
     cost: totals.cost + dashboardCostTotal(order, settings, {
       showFee: visibility.fee,

@@ -16,7 +16,44 @@ type DashboardCostOptions = {
 };
 
 export function swiftOrderNetProfit(order: DashboardFinanceOrder) {
-  return order.paidAmount + order.remainingAmount - order.watchPurchasePrice - order.paymentFee - order.deliveryCost;
+  return orderSalesTotal(order) - order.watchPurchasePrice - order.paymentFee - order.deliveryCost;
+}
+
+// Total of the order's custom "Remaining" receivables (customFields keyed
+// financialRemaining::<title>). Settings-free: when the order carries its own
+// heading list only those titles count; otherwise every stored key under the
+// prefix counts (covers workspace-template titles). Matches the Mac model and
+// the backend calculation.
+export function orderCustomRemainingTotal(order: DashboardFinanceOrder) {
+  const ownTitles = decodeFinancialItemsWithId((order.customFields.orderRemainingItemsJSON ?? "").trim()).map(item => item.title);
+  const allowed = ownTitles.length > 0 ? new Set(ownTitles) : null;
+  let total = 0;
+  for (const [key, raw] of Object.entries(order.customFields)) {
+    if (!key.startsWith("financialRemaining::")) continue;
+    const title = key.slice("financialRemaining::".length);
+    if (allowed && !allowed.has(title)) continue;
+    total += parseFinancialAmount(String(raw ?? ""), "");
+  }
+  return total;
+}
+
+// Order value: classic paid+remaining plus custom receivables — same on every platform.
+export function orderSalesTotal(order: DashboardFinanceOrder) {
+  return order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+}
+
+// Settings-free counterpart of customExpenseTotal, mirroring orderCustomRemainingTotal.
+export function orderCustomExpenseTotalLocal(order: DashboardFinanceOrder) {
+  const ownTitles = decodeFinancialItemsWithId((order.customFields.orderExpenseItemsJSON ?? "").trim()).map(item => item.title);
+  const allowed = ownTitles.length > 0 ? new Set(ownTitles) : null;
+  let total = 0;
+  for (const [key, raw] of Object.entries(order.customFields)) {
+    if (!key.startsWith("financialExpense::")) continue;
+    const title = key.slice("financialExpense::".length);
+    if (allowed && !allowed.has(title)) continue;
+    total += parseFinancialAmount(String(raw ?? ""), "");
+  }
+  return total;
 }
 
 export function decodeFinancialItems(json: string): FinancialItem[] {
@@ -146,7 +183,7 @@ export function baseCostTotal(order: DashboardFinanceOrder, settings: WorkspaceS
 }
 
 export function adjustedDashboardNetProfit(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
-  const salesTotal = order.paidAmount + order.remainingAmount;
+  const salesTotal = orderSalesTotal(order);
   return salesTotal
     - baseCostTotal(order, settings)
     - customExpenseTotal(order, settings)
