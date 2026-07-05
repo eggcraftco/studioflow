@@ -32,9 +32,37 @@ export type ChangelogEntry = {
   changes: ChangelogChange[];
 };
 
-export const CHANGELOG_LAST_UPDATED = "2 July 2026";
+export const CHANGELOG_LAST_UPDATED = "5 July 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.1",
+    platform: "Mac & iPhone",
+    date: "5 July 2026",
+    highlight: "Widgets arrive: your net profit and deliveries, right on the Home Screen and desktop.",
+    changes: [
+      { tag: "new", text: "Widgets for the iPhone Home Screen and Mac desktop: Net Profit (weekly, monthly or yearly, with trend), Monthly Net Profit month by month, and Deliveries at a glance." },
+      { tag: "new", text: "Financial Breakdown on the dashboard: revenue, costs, fees, VAT and profit in one clear section." },
+      { tag: "improved", text: "Custom “Remaining” amounts now count into the order value, profit and every dashboard total." },
+      { tag: "improved", text: "Clearer VAT labels throughout, and auto-calculated fields are easier to read." },
+      { tag: "new", text: "After sign-up, a reminder to verify your email now stays until your address is confirmed." },
+      { tag: "fixed", text: "iPhone: long customer names no longer hide the order amount in lists." },
+    ],
+  },
+  {
+    version: "0.1.7",
+    platform: "Android",
+    date: "5 July 2026",
+    highlight: "Home-screen widgets and a full Financial Breakdown.",
+    changes: [
+      { tag: "new", text: "Home-screen widgets: Net Profit (weekly, monthly or yearly — switch the period right on the widget), Monthly Net Profit month by month, and Deliveries." },
+      { tag: "new", text: "Financial Breakdown on the dashboard: revenue, costs, fees, VAT and profit in one clear section." },
+      { tag: "improved", text: "Custom “Remaining” amounts now count into the order value, profit and every dashboard total." },
+      { tag: "improved", text: "Clearer VAT labels throughout, and auto-calculated fields are easier to read." },
+      { tag: "improved", text: "Chart tooltips now show comparison-year values." },
+      { tag: "fixed", text: "Phone: tapping the logo returns to the order list, and long names no longer hide amounts." },
+    ],
+  },
   {
     version: "0.1.6",
     platform: "Android",
