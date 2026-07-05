@@ -967,8 +967,11 @@ struct MusteriDetayView: View {
                                     Text("\(seciliParaBirimi)\(siparis.salesTotal.toCurrencyString())")
                                         .font(.system(size: 13, weight: .bold))
                                         .foregroundColor(.green)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                     orderStatusBadge(siparis)
                                 }
+                                .layoutPriority(1)
                             }
                             .padding(12)
                             .background(Color.primary.opacity(0.03))
@@ -1069,8 +1072,11 @@ struct MusteriDetayView: View {
                                 VStack(alignment: .trailing, spacing: 6) {
                                     Text("\(seciliParaBirimi)\(siparis.salesTotal.toCurrencyString())")
                                         .font(.system(size: 13, weight: .bold)).foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                     orderStatusBadge(siparis)
                                 }
+                                .layoutPriority(1)
                             }
                             .padding(12).background(Color.primary.opacity(0.03)).cornerRadius(10).contentShape(Rectangle())
                         }

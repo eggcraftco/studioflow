@@ -11580,7 +11580,6 @@ struct SiparisKarti: View {
                     }
                 }
             }
-            .layoutPriority(1);
             Spacer();
             VStack(alignment: .trailing, spacing: 10) {
                 if showStatusBadges {
@@ -11595,9 +11594,12 @@ struct SiparisKarti: View {
                         .foregroundColor(siparis.status == "Cancelled" ? .gray : .green)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
-                        .fixedSize(horizontal: false, vertical: true)
+                        // Never compress the amount horizontally — on narrow
+                        // phone rows the customer NAME truncates instead.
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
+            .layoutPriority(1)
         }
         .padding(16)
         .background(kartArkaPlanRengi)
