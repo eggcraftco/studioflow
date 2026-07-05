@@ -331,8 +331,13 @@ fun StudioFlowMainScreen(
         hideSensitiveNumbers = next
         headerPrefs.edit().putBoolean(HideSensitiveNumbersKey, next).apply()
     }
+    // Incremented on every logo tap so OrdersScreen also closes an open order
+    // detail — just switching `section` is a no-op when Orders is already the
+    // active section on phone.
+    var ordersResetToListKey by rememberSaveable { mutableStateOf(0) }
     val openOrdersFromLogo = {
         settingsStartKey = null
+        ordersResetToListKey += 1
         section = when {
             StudioSection.Orders in availableSections -> StudioSection.Orders
             availableSections.isNotEmpty() -> availableSections.first()
@@ -442,6 +447,7 @@ fun StudioFlowMainScreen(
                 )
                 StudioSectionContent(
                     activeSection = activeSection,
+                    ordersResetToListKey = ordersResetToListKey,
                     state = state,
                     requireDeviceUnlock = requireDeviceUnlock,
                     onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
@@ -583,6 +589,7 @@ fun StudioFlowMainScreen(
                 )
                 StudioSectionContent(
                     activeSection = activeSection,
+                    ordersResetToListKey = ordersResetToListKey,
                     state = state,
                     requireDeviceUnlock = requireDeviceUnlock,
                     onSetRequireDeviceUnlock = onSetRequireDeviceUnlock,
@@ -1194,6 +1201,7 @@ internal fun isOnboardingPromptSeed(prompt: String): Boolean {
 @Composable
 private fun StudioSectionContent(
     activeSection: StudioSection?,
+    ordersResetToListKey: Int = 0,
     state: StudioFlowUiState,
     requireDeviceUnlock: Boolean,
     onSetRequireDeviceUnlock: (Boolean) -> Unit,
@@ -1314,7 +1322,8 @@ private fun StudioSectionContent(
                 onDeleteOrder = onDeleteOrder,
                 onRestoreOrder = onRestoreOrder,
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
-                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
+                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                resetToListKey = ordersResetToListKey
             )
             StudioSection.Schedule -> ScheduleScreen(
                 state = state,

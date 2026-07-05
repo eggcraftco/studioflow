@@ -117,7 +117,9 @@ fun OrdersScreen(
     onDeleteOrder: (StudioOrder) -> Unit,
     onRestoreOrder: (StudioOrder) -> Unit = {},
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
-    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    // Bumped by the top-bar logo: close any open order detail and show the list.
+    resetToListKey: Int = 0
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -137,6 +139,10 @@ fun OrdersScreen(
         mutableStateOf(orderSortModeFromKey(ordersPrefs.getString(OrdersSortKey, OrderSortMode.Smart.key)))
     }
     var selectedOrderId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Logo tap returns to the order list even while a detail is open on phone.
+    LaunchedEffect(resetToListKey) {
+        if (resetToListKey > 0) selectedOrderId = null
+    }
     var orderListVisible by rememberSaveable(workspace?.id, state.user?.uid) {
         mutableStateOf(state.workspaceSettings.ordersSidebarVisible)
     }
