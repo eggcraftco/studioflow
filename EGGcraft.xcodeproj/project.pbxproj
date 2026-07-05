@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		93A148B92FF9E0340080C409 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148B82FF9E0340080C409 /* WidgetKit.framework */; };
 		93A148BB2FF9E0340080C409 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148BA2FF9E0340080C409 /* SwiftUI.framework */; };
-		93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B42E74B12FA431BC00B96FEA /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B02FA431BC00B96FEA /* GoogleSignIn */; };
 		B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */; };
 		B433DF5D2FA75FB000A7CD26 /* ClientFileShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -435,7 +435,6 @@
 /* Begin PBXTargetDependency section */
 		93A148CB2FF9E0350080C409 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = ios;
 			target = 93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */;
 			targetProxy = 93A148CA2FF9E0350080C409 /* PBXContainerItemProxy */;
 		};
@@ -468,6 +467,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -475,9 +475,11 @@
 				);
 				MARKETING_VERSION = 1.0;
 				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -503,6 +505,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -510,9 +513,11 @@
 				);
 				MARKETING_VERSION = 1.0;
 				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

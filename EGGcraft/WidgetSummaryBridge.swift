@@ -27,6 +27,9 @@ struct WidgetSummaryPayload: Codable {
     var week: WidgetPeriodSummary
     var month: WidgetPeriodSummary
     var year: WidgetPeriodSummary
+    // Localised month names aligned with month.series (oldest → newest),
+    // for the Monthly Net Profit list widget.
+    var monthLabels: [String]
     var dueTodayCount: Int
     var lateCount: Int
     var dueThisWeekCount: Int
@@ -106,6 +109,15 @@ enum WidgetSummaryBridge {
             if days >= 0 && days <= 7 { dueThisWeek += 1 }
         }
 
+        // Month names in the app's language, aligned with month.series.
+        let monthFormatter = DateFormatter()
+        monthFormatter.locale = Locale(identifier: localeIdentifier(for: lang))
+        monthFormatter.dateFormat = "LLLL yyyy"
+        let monthLabels: [String] = (0..<12).reversed().compactMap { offset in
+            guard let date = calendar.date(byAdding: .month, value: -offset, to: now) else { return nil }
+            return monthFormatter.string(from: date).capitalized
+        }
+
         let labels: [String: String] = [
             "netProfit": t("Net Profit", lang: lang),
             "week": t("This Week", lang: lang),
@@ -122,6 +134,7 @@ enum WidgetSummaryBridge {
             week: periodSummary(component: .weekOfYear, seriesLength: 8),
             month: periodSummary(component: .month, seriesLength: 12),
             year: periodSummary(component: .year, seriesLength: 5),
+            monthLabels: monthLabels,
             dueTodayCount: dueToday,
             lateCount: late,
             dueThisWeekCount: dueThisWeek,
@@ -141,6 +154,23 @@ enum WidgetSummaryBridge {
     }
 
     // MARK: Helpers (mirror the dashboard's adjusted-profit inputs)
+
+    private static func localeIdentifier(for lang: String) -> String {
+        switch lang {
+        case "Türkçe": return "tr_TR"
+        case "Deutsch": return "de_DE"
+        case "Français": return "fr_FR"
+        case "Italiano": return "it_IT"
+        case "Español (Spanish)": return "es_ES"
+        case "Português": return "pt_PT"
+        case "Русский (Russian)": return "ru_RU"
+        case "日本語 (Japanese)": return "ja_JP"
+        case "中文 (Chinese)": return "zh_CN"
+        case "العربية (Arabic)": return "ar_SA"
+        case "हिन्दी (Hindi)": return "hi_IN"
+        default: return "en_GB"
+        }
+    }
 
     private static func decodeHeadingTitles(_ json: String) -> [String] {
         guard let data = json.data(using: .utf8),
