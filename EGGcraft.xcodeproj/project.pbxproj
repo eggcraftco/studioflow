@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		93A148B92FF9E0340080C409 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148B82FF9E0340080C409 /* WidgetKit.framework */; };
+		93A148BB2FF9E0340080C409 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148BA2FF9E0340080C409 /* SwiftUI.framework */; };
+		93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B42E74B12FA431BC00B96FEA /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B02FA431BC00B96FEA /* GoogleSignIn */; };
 		B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */; };
 		B433DF5D2FA75FB000A7CD26 /* ClientFileShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -19,6 +22,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		93A148CA2FF9E0350080C409 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 93A148B62FF9E0340080C409;
+			remoteInfo = NivaDeskWidgetsExtension;
+		};
 		B433DF5E2FA7611C00A7CD26 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
@@ -43,6 +53,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				B433DF5D2FA75FB000A7CD26 /* ClientFileShareExtension.appex in Embed Foundation Extensions */,
+				93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -50,12 +61,22 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NivaDeskWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		93A148B82FF9E0340080C409 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		93A148BA2FF9E0340080C409 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClientFileShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4382CE22F9A845F004BB413 /* NivaDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NivaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EGGcraftNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		93A148D02FF9E0350080C409 /* Exceptions for "NivaDeskWidgets" folder in "NivaDeskWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */;
+		};
 		B433DF352FA6C78C00A7CD26 /* Exceptions for "EGGcraft" folder in "EGGcraft" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -87,6 +108,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		93A148BC2FF9E0340080C409 /* NivaDeskWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				93A148D02FF9E0350080C409 /* Exceptions for "NivaDeskWidgets" folder in "NivaDeskWidgetsExtension" target */,
+			);
+			path = NivaDeskWidgets;
+			sourceTree = "<group>";
+		};
 		B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -115,6 +144,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		93A148B42FF9E0340080C409 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93A148BB2FF9E0340080C409 /* SwiftUI.framework in Frameworks */,
+				93A148B92FF9E0340080C409 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B433DF3B2FA74BD100A7CD26 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -153,6 +191,7 @@
 				B4382CE42F9A845F004BB413 /* EGGcraft */,
 				B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */,
 				B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */,
+				93A148BC2FF9E0340080C409 /* NivaDeskWidgets */,
 				B4382D362F9D879F004BB413 /* Frameworks */,
 				B4382CE32F9A845F004BB413 /* Products */,
 			);
@@ -164,6 +203,7 @@
 				B4382CE22F9A845F004BB413 /* NivaDesk.app */,
 				B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */,
 				B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */,
+				93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,6 +211,8 @@
 		B4382D362F9D879F004BB413 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				93A148B82FF9E0340080C409 /* WidgetKit.framework */,
+				93A148BA2FF9E0340080C409 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -178,6 +220,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 93A148CF2FF9E0350080C409 /* Build configuration list for PBXNativeTarget "NivaDeskWidgetsExtension" */;
+			buildPhases = (
+				93A148B32FF9E0340080C409 /* Sources */,
+				93A148B42FF9E0340080C409 /* Frameworks */,
+				93A148B52FF9E0340080C409 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				93A148BC2FF9E0340080C409 /* NivaDeskWidgets */,
+			);
+			name = NivaDeskWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = NivaDeskWidgetsExtension;
+			productReference = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B433DF492FA74BD100A7CD26 /* Build configuration list for PBXNativeTarget "ClientFileShareExtension" */;
@@ -214,6 +278,7 @@
 			dependencies = (
 				B433DF5F2FA7611C00A7CD26 /* PBXTargetDependency */,
 				B45DF6212FB917BB00C59217 /* PBXTargetDependency */,
+				93A148CB2FF9E0350080C409 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B4382CE42F9A845F004BB413 /* EGGcraft */,
@@ -262,9 +327,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
+				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					93A148B62FF9E0340080C409 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 					B433DF3D2FA74BD100A7CD26 = {
 						CreatedOnToolsVersion = 26.4.1;
 					};
@@ -297,11 +365,19 @@
 				B4382CE12F9A845F004BB413 /* EGGcraft */,
 				B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */,
 				B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */,
+				93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		93A148B52FF9E0340080C409 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B433DF3C2FA74BD100A7CD26 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -326,6 +402,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		93A148B32FF9E0340080C409 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B433DF3A2FA74BD100A7CD26 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -350,6 +433,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		93A148CB2FF9E0350080C409 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */;
+			targetProxy = 93A148CA2FF9E0350080C409 /* PBXContainerItemProxy */;
+		};
 		B433DF5F2FA7611C00A7CD26 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = ios;
@@ -364,6 +453,78 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		93A148CD2FF9E0350080C409 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		93A148CE2FF9E0350080C409 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		B433DF4A2FA74BD100A7CD26 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -735,6 +896,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		93A148CF2FF9E0350080C409 /* Build configuration list for PBXNativeTarget "NivaDeskWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93A148CD2FF9E0350080C409 /* Debug */,
+				93A148CE2FF9E0350080C409 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B433DF492FA74BD100A7CD26 /* Build configuration list for PBXNativeTarget "ClientFileShareExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -891,7 +891,12 @@ struct StudioActivityNotification: Identifiable, Codable, Equatable {
 
 class FirebaseManager: ObservableObject {
     
-    @Published var siparisler: [Siparis] = []
+    @Published var siparisler: [Siparis] = [] {
+        didSet {
+            // Keep the home-screen widgets in sync with every order change.
+            WidgetSummaryBridge.publish(orders: siparisler)
+        }
+    }
     // Soft-deleted orders (Trash). Kept separate so every existing consumer of
     // `siparisler` automatically excludes trashed orders with no extra filtering.
     @Published var deletedSiparisler: [Siparis] = []
