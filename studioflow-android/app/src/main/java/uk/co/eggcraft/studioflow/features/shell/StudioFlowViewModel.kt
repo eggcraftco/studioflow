@@ -10,6 +10,7 @@ import uk.co.eggcraft.studioflow.billing.StudioGooglePlanOffer
 import uk.co.eggcraft.studioflow.billing.StudioGoogleStorageOffer
 import uk.co.eggcraft.studioflow.billing.StudioGooglePlayBillingManager
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +39,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceOption
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
+import uk.co.eggcraft.studioflow.widgets.WidgetSummaryBridge
 
 sealed class PendingActivityNavigation {
     object Messages : PendingActivityNavigation()
@@ -353,6 +355,19 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     fun signOut() {
         repository.signOut()
+        // Blank the home-screen widgets so business figures don't outlive the session.
+        publishWidgetSummary(orders = emptyList())
+    }
+
+    // Recompute the home-screen widget summary (same data bridge as iOS/macOS).
+    // Fire-and-forget: a widget refresh failure must never affect app state.
+    private fun publishWidgetSummary(orders: List<StudioOrder>? = null) {
+        val snapshot = mutableState.value
+        val orderList = orders ?: snapshot.orders
+        val settings = snapshot.workspaceSettings
+        viewModelScope.launch(Dispatchers.Default) {
+            runCatching { WidgetSummaryBridge.publish(getApplication(), orderList, settings) }
+        }
     }
 
     fun assignOrder(order: StudioOrder, member: StudioTeamMember?) {
@@ -1932,6 +1947,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
                 .collect { settings ->
                     mutableState.update { it.copy(workspaceSettings = settings) }
+                    // Currency/language/expense-heading changes must reach the widgets too.
+                    publishWidgetSummary()
                 }
         }
         ordersJob = viewModelScope.launch {
@@ -1947,6 +1964,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     val active = orders.filter { !it.isDeleted }
                     val deleted = orders.filter { it.isDeleted }.sortedByDescending { it.deletedAt?.time ?: 0L }
                     mutableState.update { it.copy(orders = active, deletedOrders = deleted, errorMessage = "") }
+                    publishWidgetSummary()
                 }
         }
         customersJob = viewModelScope.launch {

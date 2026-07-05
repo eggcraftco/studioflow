@@ -42,5 +42,41 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".widgets.NetProfitWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_net_profit_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_net_profit_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widgets.MonthlyProfitWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_monthly_profit_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_monthly_profit_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widgets.DeliveriesWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_deliveries_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_deliveries_info" />
+        </receiver>
     </application>
 </manifest>

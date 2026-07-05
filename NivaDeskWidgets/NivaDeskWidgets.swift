@@ -188,6 +188,7 @@ struct NetProfitWidgetView: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 TrendBadge(value: summary.value, previous: summary.previousValue)
+                WidgetLogoBadge()
             }
 
             Text(payload.money(summary.value, compact: family == .systemSmall))
@@ -221,6 +222,17 @@ struct NetProfitWidgetView: View {
             }
         }
         .containerBackground(for: .widget) { Color.widgetBackground }
+    }
+}
+
+// Tiny app-icon chip in the widget corner so it's obvious which app owns it.
+private struct WidgetLogoBadge: View {
+    var body: some View {
+        Image("WidgetLogo")
+            .resizable()
+            .scaledToFit()
+            .frame(width: 14, height: 14)
+            .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
     }
 }
 
@@ -287,6 +299,7 @@ struct MonthlyProfitWidgetView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                WidgetLogoBadge()
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 VStack(alignment: .leading, spacing: 3) {
@@ -394,6 +407,7 @@ struct DeliveriesWidgetView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                WidgetLogoBadge()
             }
             DeliveriesRow(icon: "exclamationmark.triangle.fill", tint: .red, label: payload.label("late", fallback: "Late"), count: payload.lateCount)
             DeliveriesRow(icon: "clock.badge.exclamationmark.fill", tint: .orange, label: payload.label("dueToday", fallback: "Due today"), count: payload.dueTodayCount)

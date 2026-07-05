@@ -841,7 +841,8 @@ private data class DashboardStats(
                 received = selectedReceived,
                 basicBalance = selectedReceived - selectedBaseCost,
                 revenue = selectedOrders.sumOf { it.orderValue },
-                pending = selectedOrders.sumOf { it.remainingAmount },
+                // Custom "Remaining" items count as pending too — matches Mac/web.
+                pending = selectedOrders.sumOf { it.remainingAmount + it.customRemainingTotal },
                 baseCost = selectedOrders.sumOf { it.watchPurchasePrice },
                 platformFee = selectedOrders.sumOf { it.paymentFee },
                 shipping = selectedOrders.sumOf { it.deliveryCost },
@@ -1591,7 +1592,8 @@ private fun MetricBox(label: String, value: String, modifier: Modifier = Modifie
 
 // Per-order spending headings for dashboard aggregation: an order's own list
 // (customFields.orderExpenseItemsJSON) if it has one, otherwise the workspace template.
-private fun dashboardCustomExpenseTotal(order: StudioOrder, workspaceTitles: List<StudioHeadingItem>): Double {
+// internal: WidgetSummaryBridge reuses these so the widgets show the exact dashboard figures.
+internal fun dashboardCustomExpenseTotal(order: StudioOrder, workspaceTitles: List<StudioHeadingItem>): Double {
     var total = 0.0
     for (item in dashboardOrderExpenseTitles(order, workspaceTitles)) {
         val raw = order.customFields["financialExpense::${item.title}"]
@@ -1603,7 +1605,7 @@ private fun dashboardCustomExpenseTotal(order: StudioOrder, workspaceTitles: Lis
 
 // Per-order profit with custom spending subtracted — matches the Mac and web
 // dashboards, which already deduct per-order spending from net profit.
-private fun adjustedDashboardNetProfit(order: StudioOrder, workspaceTitles: List<StudioHeadingItem>): Double =
+internal fun adjustedDashboardNetProfit(order: StudioOrder, workspaceTitles: List<StudioHeadingItem>): Double =
     order.netProfit - dashboardCustomExpenseTotal(order, workspaceTitles)
 
 private fun dashboardOrderExpenseTitles(order: StudioOrder, workspace: List<StudioHeadingItem>): List<StudioHeadingItem> {

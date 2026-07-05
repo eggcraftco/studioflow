@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">NivaDesk</string>
+    <string name="widget_net_profit_name">Net Profit</string>
+    <string name="widget_net_profit_description">Weekly, monthly or yearly net profit with trend and pending amount.</string>
+    <string name="widget_monthly_profit_name">Monthly Net Profit</string>
+    <string name="widget_monthly_profit_description">Net profit for recent months, newest first.</string>
+    <string name="widget_deliveries_name">Deliveries</string>
+    <string name="widget_deliveries_description">Late, due today and due this week deliveries.</string>
 </resources>
