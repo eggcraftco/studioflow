@@ -14264,6 +14264,11 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   margin: 36px auto 0;
 }
 
+/* Features page reuses the landing player under a standard section header. */
+.public-features-demo-section .lp-demo-frame {
+  margin-top: 0;
+}
+
 .lp-demo-poster {
   position: relative;
   display: block;

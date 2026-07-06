@@ -8653,11 +8653,11 @@ struct LandingStatsAdminView: View {
                                    value: "\(totals["demoCompletes"] ?? 0)",
                                    sub: rateText(totals["demoCompletes"] ?? 0, totals["demoPlays"] ?? 0) + " " + t("of plays", lang: seciliDil))
                         metricTile(icon: "play.circle.fill", iconColor: .indigo,
-                                   title: t("Demo plays · homepage", lang: seciliDil),
+                                   title: t("Demo plays · main site", lang: seciliDil),
                                    value: "\(totals["homepageDemoPlays"] ?? 0)",
                                    sub: "\(uniques["homepageDemoPlays"] ?? 0) " + t("unique viewers", lang: seciliDil))
                         metricTile(icon: "checkmark.circle.fill", iconColor: .indigo,
-                                   title: t("Demo watched to end · homepage", lang: seciliDil),
+                                   title: t("Demo watched to end · main site", lang: seciliDil),
                                    value: "\(totals["homepageDemoCompletes"] ?? 0)",
                                    sub: rateText(totals["homepageDemoCompletes"] ?? 0, totals["homepageDemoPlays"] ?? 0) + " " + t("of plays", lang: seciliDil))
                     }
