@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { PublicHeader } from "@/components/PublicMarketing";
@@ -39,12 +39,29 @@ type Feature = {
   icon: "clients" | "orders" | "files" | "payments" | "team" | "progress";
 };
 
-const PROBLEMS: string[] = [
-  "Orders scattered across WhatsApp chats, email threads and sticky notes.",
-  "Deposits and balances you have to chase from memory.",
-  "Design files and photos lost in phone galleries and random folders.",
-  "No clear view of what's due, what's paid and what's running late.",
-  "Your team asking you the same questions all day long."
+const PROBLEM_CARDS: { title: string; body: string; icon: ReactNode }[] = [
+  {
+    title: "Orders scattered across WhatsApp, email and notes.",
+    body: "Important details buried in chats, threads and sticky notes.",
+    icon: <path d="M17 9.5c0 3-3.1 5.5-7 5.5-.8 0-1.6-.1-2.3-.3L4 16l.9-2.7C3.7 12.3 3 11 3 9.5 3 6.5 6.1 4 10 4s7 2.5 7 5.5Z" />,
+  },
+  {
+    title: "Files, deposits and deadlines getting lost.",
+    body: "Reference files in random folders. Payments and dates easy to miss.",
+    icon: <path d="M3 6.2a1.7 1.7 0 0 1 1.7-1.7h3.2l1.7 1.9h5.7A1.7 1.7 0 0 1 17 8.1v5.7a1.7 1.7 0 0 1-1.7 1.7H4.7A1.7 1.7 0 0 1 3 13.8V6.2Z" />,
+  },
+  {
+    title: "Your team asking the same questions all day long.",
+    body: "Constant updates, repeated questions and no time to focus.",
+    icon: (
+      <>
+        <circle cx="7.4" cy="7" r="2.6" />
+        <path d="M2.8 15.6c.5-2.4 2.4-3.7 4.6-3.7 2.3 0 4.2 1.3 4.7 3.7" />
+        <circle cx="14.2" cy="7.6" r="2.1" />
+        <path d="M13.2 12c1.9.2 3.5 1.3 4 3.1" />
+      </>
+    ),
+  },
 ];
 
 const BEFORE_ITEMS: string[] = [
@@ -189,23 +206,41 @@ export function CustomOrderLanding() {
         {/* 2. PROBLEM */}
         <section className="lp-section lp-section-soft">
           <div className="lp-shell">
-            <div className="lp-section-head">
-              <span className="public-eyebrow">The problem</span>
-              <h2>Running every order from your phone and memory is costing you.</h2>
-              <p>
-                When each order lives in a different place, things slip. A message gets buried. A deposit gets forgotten.
-                A client asks for an update and you can&apos;t find the answer.
-              </p>
+            <div className="lp-problem-top">
+              <div className="lp-section-head lp-problem-head">
+                <span className="public-eyebrow lp-problem-pill">
+                  <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="10" cy="10" r="7.2" />
+                    <path d="M10 6.6v4M10 13.6h.01" />
+                  </svg>
+                  The problem
+                </span>
+                <h2>Running every order from your phone and memory is costing you.</h2>
+                <p>
+                  When each order lives in a different place, things slip. Messages get buried, deposits get
+                  forgotten, and clients wait for answers.
+                </p>
+              </div>
+              <figure className="lp-problem-photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/nivadesk-problem.jpg"
+                  alt="Studio owner at a desk, buried in scattered WhatsApp messages, emails, files and an overdue payment"
+                  width={1146}
+                  height={760}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </figure>
             </div>
-            <div className="lp-problem-grid">
-              {PROBLEMS.map(problem => (
-                <div className="lp-problem-card" key={problem}>
-                  <span className="lp-problem-mark" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                      <path d="M7 7l10 10M17 7L7 17" />
-                    </svg>
+            <div className="lp-problem-cards">
+              {PROBLEM_CARDS.map(card => (
+                <div className="lp-problem-feature" key={card.title}>
+                  <span className="lp-problem-feature-icon" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{card.icon}</svg>
                   </span>
-                  <p>{problem}</p>
+                  <h3>{card.title}</h3>
+                  <p>{card.body}</p>
                 </div>
               ))}
             </div>
@@ -249,7 +284,7 @@ export function CustomOrderLanding() {
               </div>
             </div>
             <div className="lp-midcta">
-              <p>Everything for one order — details, files, deposits and tasks — in one place.</p>
+              <p>Everything you need for each order, from client details and files to deposits and tasks, all in one place.</p>
               <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
             </div>
           </div>
