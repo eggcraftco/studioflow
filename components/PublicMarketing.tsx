@@ -2207,6 +2207,7 @@ function PlatformNote() {
 export function PublicHomePage() {
   const HomeContent = () => {
     const { t } = usePublicSiteLanguage();
+    const [demoOpen, setDemoOpen] = useState(false);
 
     return (
       <>
@@ -2222,11 +2223,38 @@ export function PublicHomePage() {
               <div className="public-hero-actions">
                 <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
                 <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
+                <button type="button" className="public-button ghost large public-demo-button" onClick={() => setDemoOpen(true)}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19 12z" /></svg>
+                  {t("hero.watchDemo")}
+                  <span className="public-demo-duration-inline">1:17</span>
+                </button>
               </div>
               <HeroFeatureChips />
             </div>
           </div>
         </section>
+
+        {demoOpen && typeof document !== "undefined"
+          ? createPortal(
+              <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setDemoOpen(false)}>
+                <div
+                  className="public-demo-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={t("hero.watchDemo")}
+                  onClick={event => event.stopPropagation()}
+                >
+                  <button type="button" className="public-qr-modal-close" onClick={() => setDemoOpen(false)} aria-label="Close">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                  <video className="public-demo-video" src="/nivadesk-demo.mp4" poster="/nivadesk-demo-poster.jpg" controls autoPlay playsInline />
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
 
         <PlatformNote />
 

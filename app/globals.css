@@ -14159,6 +14159,119 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   background: rgba(31, 35, 38, 0.12);
 }
 
+/* --- Demo video: hero "Watch the demo" modal + landing-page player --- */
+
+.public-demo-button svg {
+  margin-right: 2px;
+}
+
+.public-demo-duration-inline {
+  opacity: 0.6;
+  font-weight: 600;
+  font-size: 0.85em;
+  margin-left: 2px;
+}
+
+.public-demo-modal {
+  position: relative;
+  width: min(960px, 94vw);
+  background: #fff;
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.public-demo-modal .public-qr-modal-close {
+  top: -14px;
+  right: -14px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+.public-demo-modal .public-qr-modal-close:hover {
+  background: #f1f1f1;
+}
+
+.public-demo-video {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  background: #000;
+}
+
+.lp-demo-frame {
+  max-width: 940px;
+  margin: 36px auto 0;
+}
+
+.lp-demo-poster {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 30px 80px rgba(15, 23, 32, 0.22);
+}
+
+.lp-demo-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0.94;
+  transition: opacity 0.2s ease;
+}
+
+.lp-demo-poster:hover img {
+  opacity: 1;
+}
+
+.lp-demo-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 5px;
+  background: rgba(12, 15, 20, 0.78);
+  color: #fff;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.lp-demo-poster:hover .lp-demo-play {
+  transform: translate(-50%, -50%) scale(1.06);
+  background: rgba(12, 15, 20, 0.92);
+}
+
+.lp-demo-duration {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.lp-demo-video {
+  display: block;
+  width: 100%;
+  border-radius: 18px;
+  background: #000;
+}
+
 .public-web-links {
   display: flex;
   align-items: center;
