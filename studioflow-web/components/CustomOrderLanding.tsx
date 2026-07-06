@@ -1,10 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { PublicHeader } from "@/components/PublicMarketing";
+
+// Click-to-play demo video: only the poster image loads until the visitor
+// presses play, keeping the ad landing page fast.
+function LandingDemoVideo() {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="lp-demo-frame">
+      {playing ? (
+        <video className="lp-demo-video" src="/nivadesk-demo.mp4" poster="/nivadesk-demo-poster.jpg" controls autoPlay playsInline />
+      ) : (
+        <button type="button" className="lp-demo-poster" onClick={() => setPlaying(true)} aria-label="Play the NivaDesk demo video">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/nivadesk-demo-poster.jpg" alt="Preview of the NivaDesk demo video" loading="lazy" decoding="async" />
+          <span className="lp-demo-play" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
+          </span>
+          <span className="lp-demo-duration">1:17</span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 /* Standalone paid-ads landing page for NivaDesk.
    Intentionally separate from the main marketing shell: a slim header with one
@@ -148,6 +170,20 @@ export function CustomOrderLanding() {
             />
             <figcaption>One place for client details, order status, files, payments and delivery progress.</figcaption>
           </figure>
+        </section>
+
+        {/* 1b. DEMO VIDEO */}
+        <section className="lp-section lp-demo-section">
+          <div className="lp-shell">
+            <div className="lp-section-head">
+              <span className="public-eyebrow">See it in action</span>
+              <h2>Watch NivaDesk run a real order, start to finish.</h2>
+              <p>
+                A 77-second tour: new order, client details, files, payments and delivery — all in one calm workspace.
+              </p>
+            </div>
+            <LandingDemoVideo />
+          </div>
         </section>
 
         {/* 2. PROBLEM */}
