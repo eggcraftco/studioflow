@@ -1886,10 +1886,15 @@ function ChatGPTAppShowcase() {
   ];
   return (
     <section className="public-section gpt-section public-scroll-reveal">
+      <div className="public-shell">
+        <div className="public-section-header">
+          <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
+          <h2>{t("chatgptApp.sectionTitle")}</h2>
+        </div>
+      </div>
       <div className="public-shell gpt-grid">
         <div className="gpt-copy-card">
-          <span className="gpt-eyebrow"><span className="gpt-eyebrow-logo"><GptMark /></span>{t("chatgptApp.eyebrow")}</span>
-          <h2>{t("chatgptApp.titleLead")} <span className="hero-accent">{t("chatgptApp.titleAccent")}</span></h2>
+          <h3>{t("chatgptApp.titleLead")} <span className="hero-accent">{t("chatgptApp.titleAccent")}</span></h3>
           <p>{t("chatgptApp.body")}</p>
           <div className="gpt-queries">
             {queries.map(q => (
@@ -1947,6 +1952,15 @@ function ChatGPTAppShowcase() {
             </div>
           </div>
         </div>
+      </div>
+      <div className="public-shell">
+        <p className="gpt-review-note">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="10" cy="10" r="7.2" />
+            <path d="M10 6.4V10l2.3 1.6" />
+          </svg>
+          {t("chatgptApp.reviewNote")}
+        </p>
       </div>
     </section>
   );
