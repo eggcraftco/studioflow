@@ -20735,7 +20735,9 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
   justify-content: center;
 }
 
-.lp-hero-trust {
+/* Scoped under .lp: the ".lp p" reset (class+type) outspecifies a lone class,
+   which was silently zeroing this margin. */
+.lp .lp-hero-trust {
   margin-top: 20px;
   color: var(--public-muted);
   font-size: 13px;
@@ -21118,7 +21120,9 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
   line-height: 1.5;
 }
 
-.lp-audience-note {
+/* Scoped under .lp: the ".lp p" reset outspecifies a lone class and was
+   zeroing the auto margins, pinning this line to the left. */
+.lp .lp-audience-note {
   margin: 30px auto 0;
   max-width: 640px;
   text-align: center;
