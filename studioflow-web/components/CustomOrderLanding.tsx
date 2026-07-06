@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
-import { PublicHeader } from "@/components/PublicMarketing";
+import { ChatGPTAppShowcase, PublicHeader } from "@/components/PublicMarketing";
 
 // Click-to-play demo video: only the poster image loads until the visitor
 // presses play, keeping the ad landing page fast.
@@ -58,17 +58,17 @@ type Feature = {
 const PROBLEM_CARDS: { title: string; body: string; icon: ReactNode }[] = [
   {
     title: "Orders scattered across WhatsApp, email and notes.",
-    body: "Important details buried in chats, threads and sticky notes.",
+    body: "Important details buried in chats and threads.",
     icon: <path d="M17 9.5c0 3-3.1 5.5-7 5.5-.8 0-1.6-.1-2.3-.3L4 16l.9-2.7C3.7 12.3 3 11 3 9.5 3 6.5 6.1 4 10 4s7 2.5 7 5.5Z" />,
   },
   {
     title: "Files, deposits and deadlines getting lost.",
-    body: "Reference files in random folders. Payments and dates easy to miss.",
+    body: "Reference files, payments and dates become hard to track.",
     icon: <path d="M3 6.2a1.7 1.7 0 0 1 1.7-1.7h3.2l1.7 1.9h5.7A1.7 1.7 0 0 1 17 8.1v5.7a1.7 1.7 0 0 1-1.7 1.7H4.7A1.7 1.7 0 0 1 3 13.8V6.2Z" />,
   },
   {
     title: "Your team asking the same questions all day long.",
-    body: "Constant updates, repeated questions and no time to focus.",
+    body: "Repeated updates take time away from the work.",
     icon: (
       <>
         <circle cx="7.4" cy="7" r="2.6" />
@@ -98,7 +98,7 @@ const AFTER_ITEMS: string[] = [
 
 const FEATURES: Feature[] = [
   { icon: "clients", title: "Customer details", detail: "Contact details, order notes and full history in one client record." },
-  { icon: "orders", title: "Job status", detail: "Track each order — new, in progress, ready, delivered — at a glance." },
+  { icon: "orders", title: "Order status", detail: "Track each order — new, in progress, ready, delivered — at a glance." },
   { icon: "files", title: "Reference files", detail: "Designs, photos and reference files kept on the right order." },
   { icon: "payments", title: "Deposits & payments", detail: "Log deposits and payments per order. Always know what's owed." },
   { icon: "team", title: "Team tasks", detail: "Assign team tasks and see what's done — without chasing." },
@@ -212,12 +212,16 @@ export function CustomOrderLanding() {
               <span className="public-eyebrow">See it in action</span>
               <h2>Watch NivaDesk run a real order, start to finish.</h2>
               <p>
-                A 77-second tour: new order, client details, files, payments and delivery — all in one calm workspace.
+                See how NivaDesk keeps one custom order organised from first message to final delivery.
               </p>
             </div>
             <LandingDemoVideo />
           </div>
         </section>
+
+        {/* 1c. CHATGPT APP — the LP is outside the homepage scroll-reveal
+            observer, so render the shared section without the reveal class. */}
+        <ChatGPTAppShowcase title="Manage orders from inside ChatGPT." revealOnScroll={false} />
 
         {/* 2. PROBLEM */}
         <section className="lp-section lp-section-soft">
@@ -300,7 +304,7 @@ export function CustomOrderLanding() {
               </div>
             </div>
             <div className="lp-midcta">
-              <p>Everything you need for each order, from client details and files to deposits and tasks, all in one place.</p>
+              <p>Everything you need for each order, from client details and files to deposits, tasks and delivery progress, all in one place.</p>
               <Link href="/signup" className="public-button large" onClick={onStartTrialClick}>Start Free Trial</Link>
             </div>
           </div>

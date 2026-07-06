@@ -1866,7 +1866,7 @@ function DashboardFinanceShowcase() {
   );
 }
 
-function ChatGPTAppShowcase() {
+export function ChatGPTAppShowcase({ title, revealOnScroll = true }: { title?: string; revealOnScroll?: boolean }) {
   const { t } = usePublicSiteLanguage();
   const currency = useLocaleCurrency();
   const queries: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
@@ -1885,11 +1885,11 @@ function ChatGPTAppShowcase() {
     { key: "chatgptApp.safeBadge3", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
   ];
   return (
-    <section className="public-section gpt-section public-scroll-reveal">
+    <section className={`public-section gpt-section${revealOnScroll ? " public-scroll-reveal" : ""}`}>
       <div className="public-shell">
         <div className="public-section-header">
           <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
-          <h2>{t("chatgptApp.sectionTitle")}</h2>
+          <h2>{title ?? t("chatgptApp.sectionTitle")}</h2>
         </div>
       </div>
       <div className="public-shell gpt-grid">
