@@ -2334,6 +2334,46 @@ export function PublicHomePage() {
   );
 }
 
+// Big click-to-play demo player (same pattern as the ads landing page): only
+// the poster image loads until the visitor presses play. Plays and completes
+// count into the main-site demo counters together with the homepage modal.
+function SiteDemoPlayer() {
+  const { t } = usePublicSiteLanguage();
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="lp-demo-frame">
+      {playing ? (
+        <video
+          className="lp-demo-video"
+          src="/nivadesk-demo.mp4"
+          poster="/nivadesk-demo-poster.jpg"
+          controls
+          autoPlay
+          playsInline
+          onEnded={() => trackLandingEvent("homepage_demo_complete")}
+        />
+      ) : (
+        <button
+          type="button"
+          className="lp-demo-poster"
+          onClick={() => {
+            setPlaying(true);
+            trackLandingEvent("homepage_demo_play");
+          }}
+          aria-label={t("hero.watchDemo")}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/nivadesk-demo-poster.jpg" alt={t("hero.watchDemo")} loading="lazy" decoding="async" />
+          <span className="lp-demo-play" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
+          </span>
+          <span className="lp-demo-duration">1:17</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function PublicFeaturesPage() {
   const Page = () => {
     const { t } = usePublicSiteLanguage();
@@ -2372,6 +2412,16 @@ export function PublicFeaturesPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="public-section public-features-demo-section">
+          <div className="public-shell">
+            <div className="public-section-header">
+              <span className="public-eyebrow">{t("hero.watchDemo")}</span>
+              <h2>{t("featuresDemo.title")}</h2>
+            </div>
+            <SiteDemoPlayer />
           </div>
         </section>
 

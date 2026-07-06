@@ -569,8 +569,8 @@ function AdminCustomOrderLandingSection() {
               <LandingMetricTile label="Landing → signup conversion" value={landingRate(totals.signupsCompleted, totals.views)} sub="completed ÷ views" />
               <LandingMetricTile label="Demo plays · landing page" value={(totals.demoPlays ?? 0).toLocaleString()} sub={`${(unique.demoPlays ?? 0).toLocaleString()} unique viewers`} />
               <LandingMetricTile label="Demo watched to end · landing" value={(totals.demoCompletes ?? 0).toLocaleString()} sub={`${landingRate(totals.demoCompletes ?? 0, totals.demoPlays ?? 0)} of plays`} />
-              <LandingMetricTile label="Demo plays · homepage" value={(totals.homepageDemoPlays ?? 0).toLocaleString()} sub={`${(unique.homepageDemoPlays ?? 0).toLocaleString()} unique viewers`} />
-              <LandingMetricTile label="Demo watched to end · homepage" value={(totals.homepageDemoCompletes ?? 0).toLocaleString()} sub={`${landingRate(totals.homepageDemoCompletes ?? 0, totals.homepageDemoPlays ?? 0)} of plays`} />
+              <LandingMetricTile label="Demo plays · main site" value={(totals.homepageDemoPlays ?? 0).toLocaleString()} sub={`${(unique.homepageDemoPlays ?? 0).toLocaleString()} unique · homepage + features`} />
+              <LandingMetricTile label="Demo watched to end · main site" value={(totals.homepageDemoCompletes ?? 0).toLocaleString()} sub={`${landingRate(totals.homepageDemoCompletes ?? 0, totals.homepageDemoPlays ?? 0)} of plays`} />
             </div>
             <p className="muted-copy" style={{ fontSize: 11, marginTop: 10 }}>
               Signup visits may include users who reached /signup after being attributed to this landing page, including refreshes
