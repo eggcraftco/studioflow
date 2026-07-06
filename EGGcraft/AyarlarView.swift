@@ -8301,6 +8301,384 @@ struct SiteStatsAdminView: View {
 }
 
 
+// MARK: - NivaDesk admin: /custom-order-management landing-page statistics
+//
+// Mac/iPhone twin of the web admin "Custom Order Landing Page" panel: it calls
+// the same admin-gated getCustomOrderLandingStats callable, so every number —
+// including the demo-video play / watched-to-end counters — matches the web
+// panel exactly. Aggregate-only; no personal data ever reaches the client.
+
+private struct LandingCampaignStat: Identifiable {
+    let id: String
+    let source: String
+    let medium: String
+    let campaign: String
+    let views: Int
+    let ctaClicks: Int
+    let signupsCompleted: Int
+}
+
+struct LandingStatsAdminView: View {
+    @Environment(\.colorScheme) var colorScheme
+    let seciliDil: String
+
+    // 1 = today, 2 = yesterday, 7 / 30 = rolling windows, -1 = custom dates.
+    @State private var rangeMode = 30
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -29, to: Date()) ?? Date()
+    @State private var customEnd = Date()
+    @State private var loading = true
+    @State private var errorText = ""
+    @State private var totals: [String: Int] = [:]
+    @State private var uniques: [String: Int] = [:]
+    @State private var campaigns: [LandingCampaignStat] = []
+    @State private var reportFromDate = ""
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isCompactLayout: Bool { horizontalSizeClass == .compact }
+    #else
+    private var isCompactLayout: Bool { false }
+    #endif
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.05) : Color.white
+    }
+
+    private var selectedRange: (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        switch rangeMode {
+        case 1:
+            return (today, today)
+        case 2:
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+            return (yesterday, yesterday)
+        case -1:
+            let start = calendar.startOfDay(for: min(customStart, customEnd))
+            let end = min(calendar.startOfDay(for: max(customStart, customEnd)), today)
+            return (min(start, end), end)
+        default:
+            let start = calendar.date(byAdding: .day, value: -(rangeMode - 1), to: today) ?? today
+            return (start, today)
+        }
+    }
+
+    private func intValue(_ value: Any?) -> Int {
+        if let number = value as? Int { return number }
+        if let number = value as? Double { return Int(number) }
+        if let number = value as? NSNumber { return number.intValue }
+        return 0
+    }
+
+    private func load() {
+        loading = true
+        errorText = ""
+        let keyFormatter = DateFormatter()
+        keyFormatter.dateFormat = "yyyy-MM-dd"
+        keyFormatter.timeZone = TimeZone(identifier: "Europe/London")
+        let span = selectedRange
+        let payload: [String: Any] = [
+            "startDate": keyFormatter.string(from: span.start),
+            "endDate": keyFormatter.string(from: span.end)
+        ]
+        Functions.functions(region: "europe-west2").httpsCallable("getCustomOrderLandingStats").call(payload) { result, error in
+            DispatchQueue.main.async {
+                loading = false
+                if let error = error {
+                    errorText = error.localizedDescription
+                    return
+                }
+                let data = result?.data as? [String: Any] ?? [:]
+                totals = (data["totals"] as? [String: Any] ?? [:]).mapValues { intValue($0) }
+                uniques = (data["unique"] as? [String: Any] ?? [:]).mapValues { intValue($0) }
+                reportFromDate = data["reportFromDate"] as? String ?? ""
+                let rawCampaigns = data["campaigns"] as? [[String: Any]] ?? []
+                campaigns = rawCampaigns.enumerated().map { index, row in
+                    LandingCampaignStat(
+                        id: "\(index)",
+                        source: row["source"] as? String ?? "direct",
+                        medium: row["medium"] as? String ?? "none",
+                        campaign: row["campaign"] as? String ?? "none",
+                        views: intValue(row["views"]),
+                        ctaClicks: intValue(row["ctaClicks"]),
+                        signupsCompleted: intValue(row["signupsCompleted"])
+                    )
+                }
+            }
+        }
+    }
+
+    private func rateText(_ numerator: Int, _ denominator: Int) -> String {
+        guard denominator > 0 else { return "—" }
+        return String(format: "%.1f%%", Double(numerator) / Double(denominator) * 100)
+    }
+
+    private func metricTile(icon: String, iconColor: Color, title: String, value: String, sub: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(iconColor)
+                    .frame(width: 30, height: 30)
+                    .background(iconColor.opacity(0.13))
+                    .cornerRadius(8)
+                Text(title)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+            }
+            Text(value)
+                .font(.system(size: 23, weight: .heavy))
+                .foregroundColor(.primary)
+            if !sub.isEmpty {
+                Text(sub)
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray.opacity(0.8))
+                    .lineLimit(1)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    private var funnelSteps: [(label: String, value: Int)] {
+        [
+            (t("Landing views", lang: seciliDil), totals["views"] ?? 0),
+            (t("Start Free Trial clicks", lang: seciliDil), totals["ctaClicks"] ?? 0),
+            (t("Signup page visits", lang: seciliDil), totals["signupVisits"] ?? 0),
+            (t("Signups completed", lang: seciliDil), totals["signupsCompleted"] ?? 0)
+        ]
+    }
+
+    private var funnelPanel: some View {
+        let steps = funnelSteps
+        let maxValue = max(steps.map { $0.value }.max() ?? 1, 1)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(t("Landing → signup funnel", lang: seciliDil))
+                .font(.system(size: 13, weight: .bold))
+            VStack(spacing: 6) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                    VStack(alignment: .leading, spacing: 6) {
+                        if index > 0 {
+                            Text("↓ " + rateText(step.value, steps[index - 1].value))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.gray)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.gray.opacity(0.10))
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.blue.opacity(0.18))
+                                    .frame(width: max(geo.size.width * CGFloat(step.value) / CGFloat(maxValue), 0))
+                            }
+                            HStack {
+                                Text(step.label)
+                                    .font(.system(size: 12.5, weight: .bold))
+                                    .lineLimit(1)
+                                Spacer(minLength: 8)
+                                Text("\(step.value)")
+                                    .font(.system(size: 12.5, weight: .heavy))
+                            }
+                            .padding(.horizontal, 12)
+                        }
+                        .frame(height: 38)
+                    }
+                }
+            }
+            Text(t("Overall landing view → completed signup:", lang: seciliDil) + " " + rateText(totals["signupsCompleted"] ?? 0, totals["views"] ?? 0))
+                .font(.system(size: 10.5))
+                .foregroundColor(.gray)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    private func campaignColumn(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.gray)
+            Text(value)
+                .font(.system(size: 12.5, weight: .heavy))
+        }
+        .frame(minWidth: 44, alignment: .trailing)
+    }
+
+    private var campaignsPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("UTM / campaign breakdown", lang: seciliDil))
+                .font(.system(size: 13, weight: .bold))
+            if campaigns.isEmpty {
+                Text(t("No campaign data yet. Tag your ad URLs with utm_source / utm_medium / utm_campaign.", lang: seciliDil))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.gray)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(campaigns.prefix(12).enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { Divider() }
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(row.source) · \(row.medium)")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .lineLimit(1)
+                                Text(row.campaign)
+                                    .font(.system(size: 10.5))
+                                    .foregroundColor(.gray)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 8)
+                            campaignColumn(t("Views", lang: seciliDil), "\(row.views)")
+                            campaignColumn(t("CTA", lang: seciliDil), "\(row.ctaClicks)")
+                            campaignColumn(t("Signups", lang: seciliDil), "\(row.signupsCompleted)")
+                            campaignColumn(t("Conv.", lang: seciliDil), rateText(row.signupsCompleted, row.views))
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(cardBackground)
+        .cornerRadius(14)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(t("Custom Order Landing Page", lang: seciliDil))
+                        .font(.system(size: 20, weight: .heavy))
+                    Text(t("Anonymous, aggregate-only stats for /custom-order-management — the same numbers as the web admin panel.", lang: seciliDil))
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                    Picker("", selection: $rangeMode) {
+                        Text(t("Today", lang: seciliDil)).tag(1)
+                        Text(t("Yesterday", lang: seciliDil)).tag(2)
+                        Text("7d").tag(7)
+                        Text("30d").tag(30)
+                        Text(t("Custom", lang: seciliDil)).tag(-1)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: isCompactLayout ? .infinity : 420)
+                    .onChange(of: rangeMode) { _, _ in load() }
+                }
+
+                if rangeMode == -1 {
+                    let dateControls = Group {
+                        DatePicker(t("Start", lang: seciliDil), selection: $customStart, in: ...Date(), displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 12, weight: .semibold))
+                            .onChange(of: customStart) { _, _ in load() }
+                        DatePicker(t("End", lang: seciliDil), selection: $customEnd, in: ...Date(), displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .font(.system(size: 12, weight: .semibold))
+                            .onChange(of: customEnd) { _, _ in load() }
+                    }
+                    Group {
+                        if isCompactLayout {
+                            VStack(alignment: .leading, spacing: 10) { dateControls }
+                        } else {
+                            HStack(spacing: 14) {
+                                dateControls
+                                Spacer()
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(cardBackground)
+                    .cornerRadius(12)
+                }
+
+                if loading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(t("Loading…", lang: seciliDil))
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 20)
+                } else if !errorText.isEmpty {
+                    Text(errorText)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.red)
+                        .padding(.vertical, 16)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 12)], spacing: 12) {
+                        metricTile(icon: "eye.fill", iconColor: .blue,
+                                   title: t("Landing page views", lang: seciliDil),
+                                   value: "\(totals["views"] ?? 0)",
+                                   sub: "\(uniques["views"] ?? 0) " + t("unique visitors", lang: seciliDil))
+                        metricTile(icon: "cursorarrow.click", iconColor: .orange,
+                                   title: t("Start Free Trial clicks", lang: seciliDil),
+                                   value: "\(totals["ctaClicks"] ?? 0)",
+                                   sub: "\(uniques["ctaClicks"] ?? 0) " + t("unique", lang: seciliDil))
+                        metricTile(icon: "percent", iconColor: .teal,
+                                   title: t("CTA click-through rate", lang: seciliDil),
+                                   value: rateText(totals["ctaClicks"] ?? 0, totals["views"] ?? 0),
+                                   sub: t("clicks ÷ views", lang: seciliDil))
+                        metricTile(icon: "questionmark.circle.fill", iconColor: .gray,
+                                   title: t("See How It Works clicks", lang: seciliDil),
+                                   value: "\(totals["howItWorksClicks"] ?? 0)",
+                                   sub: "")
+                        metricTile(icon: "person.crop.circle.badge.plus", iconColor: .purple,
+                                   title: t("Signup page visits", lang: seciliDil),
+                                   value: "\(totals["signupVisits"] ?? 0)",
+                                   sub: "\(uniques["signupVisits"] ?? 0) " + t("unique", lang: seciliDil))
+                        metricTile(icon: "bolt.fill", iconColor: .indigo,
+                                   title: t("CTA-driven signup visits", lang: seciliDil),
+                                   value: "\(totals["ctaDrivenSignupVisits"] ?? 0)",
+                                   sub: t("right after a CTA click", lang: seciliDil))
+                        metricTile(icon: "checkmark.seal.fill", iconColor: .green,
+                                   title: t("Signups completed", lang: seciliDil),
+                                   value: "\(totals["signupsCompleted"] ?? 0)",
+                                   sub: "\(uniques["signupsCompleted"] ?? 0) " + t("unique", lang: seciliDil))
+                        metricTile(icon: "chart.line.uptrend.xyaxis", iconColor: .green,
+                                   title: t("Landing → signup conversion", lang: seciliDil),
+                                   value: rateText(totals["signupsCompleted"] ?? 0, totals["views"] ?? 0),
+                                   sub: t("completed ÷ views", lang: seciliDil))
+                        metricTile(icon: "play.circle.fill", iconColor: .red,
+                                   title: t("Demo plays · landing page", lang: seciliDil),
+                                   value: "\(totals["demoPlays"] ?? 0)",
+                                   sub: "\(uniques["demoPlays"] ?? 0) " + t("unique viewers", lang: seciliDil))
+                        metricTile(icon: "checkmark.circle.fill", iconColor: .red,
+                                   title: t("Demo watched to end · landing", lang: seciliDil),
+                                   value: "\(totals["demoCompletes"] ?? 0)",
+                                   sub: rateText(totals["demoCompletes"] ?? 0, totals["demoPlays"] ?? 0) + " " + t("of plays", lang: seciliDil))
+                        metricTile(icon: "play.circle.fill", iconColor: .indigo,
+                                   title: t("Demo plays · homepage", lang: seciliDil),
+                                   value: "\(totals["homepageDemoPlays"] ?? 0)",
+                                   sub: "\(uniques["homepageDemoPlays"] ?? 0) " + t("unique viewers", lang: seciliDil))
+                        metricTile(icon: "checkmark.circle.fill", iconColor: .indigo,
+                                   title: t("Demo watched to end · homepage", lang: seciliDil),
+                                   value: "\(totals["homepageDemoCompletes"] ?? 0)",
+                                   sub: rateText(totals["homepageDemoCompletes"] ?? 0, totals["homepageDemoPlays"] ?? 0) + " " + t("of plays", lang: seciliDil))
+                    }
+
+                    funnelPanel
+                    campaignsPanel
+
+                    if !reportFromDate.isEmpty {
+                        Text(t("Reporting from", lang: seciliDil) + " \(reportFromDate) — " + t("older data is hidden (not deleted); change this from the web admin panel.", lang: seciliDil))
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .onAppear { if loading { load() } }
+    }
+}
+
+
 // MARK: - NivaDesk admin: cross-workspace Admin Insights (drill-in pages)
 
 private let aiPlanLabels: [String: String] = ["demo": "Free Demo", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
@@ -9880,7 +10258,7 @@ struct AdminHubView: View {
     #endif
 
     private var pages: [String] {
-        ["Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics", "Google Search"]
+        ["Overview", "Users & Workspaces", "Subscriptions", "Revenue", "Plans", "Feature Usage", "Storage", "User Lookup", "Global Statistics", "Landing Page", "Google Search"]
     }
 
     private func sidebarButton(_ item: String) -> some View {
@@ -9908,6 +10286,7 @@ struct AdminHubView: View {
         case "Storage": AIStorageDetailView(seciliDil: seciliDil) { selection = "Overview" }
         case "User Lookup": AILookupDetailView(seciliDil: seciliDil) { selection = "Overview" }
         case "Global Statistics": SiteStatsAdminView(seciliDil: seciliDil)
+        case "Landing Page": LandingStatsAdminView(seciliDil: seciliDil)
         case "Google Search": SearchConsoleAdminView(seciliDil: seciliDil)
         default:
             AIOverviewView(seciliDil: seciliDil) { page in
