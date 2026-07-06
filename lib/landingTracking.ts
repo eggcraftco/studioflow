@@ -21,7 +21,13 @@ export type LandingEvent =
   | "custom_order_landing_cta_click"
   | "custom_order_landing_how_it_works_click"
   | "custom_order_landing_signup_visit"
-  | "custom_order_landing_signup_completed";
+  | "custom_order_landing_signup_completed"
+  // Demo-video engagement — same anonymous pipeline. The "homepage_" events
+  // come from the main site hero modal, the others from the ads landing page.
+  | "custom_order_landing_demo_play"
+  | "custom_order_landing_demo_complete"
+  | "homepage_demo_play"
+  | "homepage_demo_complete";
 
 export type LandingCampaign = {
   source: string;

@@ -354,8 +354,8 @@ type LandingCampaignRow = {
 type LandingStats = {
   ok: boolean;
   days: LandingDay[];
-  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number; ctaDrivenSignupVisits: number };
-  unique: { views: number; ctaClicks: number; signupVisits: number; signupsCompleted: number };
+  totals: { views: number; ctaClicks: number; howItWorksClicks: number; signupVisits: number; signupsCompleted: number; ctaDrivenSignupVisits: number; demoPlays?: number; demoCompletes?: number; homepageDemoPlays?: number; homepageDemoCompletes?: number };
+  unique: { views: number; ctaClicks: number; signupVisits: number; signupsCompleted: number; demoPlays?: number; homepageDemoPlays?: number };
   devices: Record<string, number>;
   sources: Record<string, number>;
   referrers: Record<string, number>;
@@ -567,6 +567,10 @@ function AdminCustomOrderLandingSection() {
               <LandingMetricTile label="CTA-driven signup visits" value={totals.ctaDrivenSignupVisits.toLocaleString()} sub="visited /signup right after a CTA click" />
               <LandingMetricTile label="Signups completed" value={totals.signupsCompleted.toLocaleString()} sub={`${unique.signupsCompleted.toLocaleString()} unique · from this landing page`} />
               <LandingMetricTile label="Landing → signup conversion" value={landingRate(totals.signupsCompleted, totals.views)} sub="completed ÷ views" />
+              <LandingMetricTile label="Demo plays · landing page" value={(totals.demoPlays ?? 0).toLocaleString()} sub={`${(unique.demoPlays ?? 0).toLocaleString()} unique viewers`} />
+              <LandingMetricTile label="Demo watched to end · landing" value={(totals.demoCompletes ?? 0).toLocaleString()} sub={`${landingRate(totals.demoCompletes ?? 0, totals.demoPlays ?? 0)} of plays`} />
+              <LandingMetricTile label="Demo plays · homepage" value={(totals.homepageDemoPlays ?? 0).toLocaleString()} sub={`${(unique.homepageDemoPlays ?? 0).toLocaleString()} unique viewers`} />
+              <LandingMetricTile label="Demo watched to end · homepage" value={(totals.homepageDemoCompletes ?? 0).toLocaleString()} sub={`${landingRate(totals.homepageDemoCompletes ?? 0, totals.homepageDemoPlays ?? 0)} of plays`} />
             </div>
             <p className="muted-copy" style={{ fontSize: 11, marginTop: 10 }}>
               Signup visits may include users who reached /signup after being attributed to this landing page, including refreshes
