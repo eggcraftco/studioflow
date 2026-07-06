@@ -2237,7 +2237,14 @@ export function PublicHomePage() {
               <div className="public-hero-actions">
                 <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
                 <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
-                <button type="button" className="public-demo-button" onClick={() => setDemoOpen(true)}>
+                <button
+                  type="button"
+                  className="public-demo-button"
+                  onClick={() => {
+                    setDemoOpen(true);
+                    trackLandingEvent("homepage_demo_play");
+                  }}
+                >
                   <span className="public-demo-thumb" aria-hidden="true">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/nivadesk-demo-poster.jpg" alt="" loading="lazy" decoding="async" />
@@ -2271,7 +2278,15 @@ export function PublicHomePage() {
                       <path d="M6 6l12 12M18 6L6 18" />
                     </svg>
                   </button>
-                  <video className="public-demo-video" src="/nivadesk-demo.mp4" poster="/nivadesk-demo-poster.jpg" controls autoPlay playsInline />
+                  <video
+                    className="public-demo-video"
+                    src="/nivadesk-demo.mp4"
+                    poster="/nivadesk-demo-poster.jpg"
+                    controls
+                    autoPlay
+                    playsInline
+                    onEnded={() => trackLandingEvent("homepage_demo_complete")}
+                  />
                 </div>
               </div>,
               document.body

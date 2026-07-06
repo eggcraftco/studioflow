@@ -19348,7 +19348,13 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
         custom_order_landing_cta_click: "ctaClicks",
         custom_order_landing_how_it_works_click: "howItWorksClicks",
         custom_order_landing_signup_visit: "signupVisits",
-        custom_order_landing_signup_completed: "signupsCompleted"
+        custom_order_landing_signup_completed: "signupsCompleted",
+        // Demo-video engagement: the ads landing page player and the homepage
+        // hero modal report plays + watched-to-end through the same pipeline.
+        custom_order_landing_demo_play: "demoPlays",
+        custom_order_landing_demo_complete: "demoCompletes",
+        homepage_demo_play: "homepageDemoPlays",
+        homepage_demo_complete: "homepageDemoCompletes"
       };
       const landingField = EVENT_FIELDS[String(body.event || "")];
       if (landingField) {
@@ -19367,7 +19373,9 @@ exports.recordSiteVisit = onRequest({ region: "europe-west2", memory: "512MiB" }
           views: "viewVids",
           ctaClicks: "ctaVids",
           signupVisits: "signupVisitVids",
-          signupsCompleted: "signupCompletedVids"
+          signupsCompleted: "signupCompletedVids",
+          demoPlays: "demoPlayVids",
+          homepageDemoPlays: "homepageDemoPlayVids"
         };
         if (landingVid && VID_MAPS[landingField]) {
           landingUpdate[VID_MAPS[landingField]] = { [landingVid]: true };
@@ -19534,7 +19542,7 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     for (const [key, value] of Object.entries(source || {})) target[key] = (target[key] || 0) + num(value);
   };
 
-  const totals = { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0, ctaDrivenSignupVisits: 0 };
+  const totals = { views: 0, ctaClicks: 0, howItWorksClicks: 0, signupVisits: 0, signupsCompleted: 0, ctaDrivenSignupVisits: 0, demoPlays: 0, demoCompletes: 0, homepageDemoPlays: 0, homepageDemoCompletes: 0 };
   const devices = {};
   const sources = {};
   const referrers = {};
@@ -19546,6 +19554,8 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
   const uniqCta = new Set();
   const uniqSignupVisit = new Set();
   const uniqSignupDone = new Set();
+  const uniqDemoPlay = new Set();
+  const uniqHomeDemoPlay = new Set();
   // Per-campaign funnel for the UTM breakdown table.
   const campaignAgg = {};
 
@@ -19555,6 +19565,8 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     const ctaVids = Object.keys(data.ctaVids || {});
     const svVids = Object.keys(data.signupVisitVids || {});
     const scVids = Object.keys(data.signupCompletedVids || {});
+    const demoVids = Object.keys(data.demoPlayVids || {});
+    const homeDemoVids = Object.keys(data.homepageDemoPlayVids || {});
     const day = {
       date: effectiveKeys[index],
       views: num(data.views),
@@ -19563,10 +19575,16 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
       signupVisits: num(data.signupVisits),
       signupsCompleted: num(data.signupsCompleted),
       ctaDrivenSignupVisits: num(data.ctaDrivenSignupVisits),
+      demoPlays: num(data.demoPlays),
+      demoCompletes: num(data.demoCompletes),
+      homepageDemoPlays: num(data.homepageDemoPlays),
+      homepageDemoCompletes: num(data.homepageDemoCompletes),
       uniqueViews: viewVids.length,
       uniqueCtaClicks: ctaVids.length,
       uniqueSignupVisits: svVids.length,
-      uniqueSignupsCompleted: scVids.length
+      uniqueSignupsCompleted: scVids.length,
+      uniqueDemoPlays: demoVids.length,
+      uniqueHomepageDemoPlays: homeDemoVids.length
     };
     totals.views += day.views;
     totals.ctaClicks += day.ctaClicks;
@@ -19574,6 +19592,10 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     totals.signupVisits += day.signupVisits;
     totals.signupsCompleted += day.signupsCompleted;
     totals.ctaDrivenSignupVisits += day.ctaDrivenSignupVisits;
+    totals.demoPlays += day.demoPlays;
+    totals.demoCompletes += day.demoCompletes;
+    totals.homepageDemoPlays += day.homepageDemoPlays;
+    totals.homepageDemoCompletes += day.homepageDemoCompletes;
     mergeInto(devices, data.devices);
     mergeInto(sources, data.sources);
     mergeInto(referrers, data.referrers);
@@ -19583,6 +19605,8 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     for (const v of ctaVids) uniqCta.add(v);
     for (const v of svVids) uniqSignupVisit.add(v);
     for (const v of scVids) uniqSignupDone.add(v);
+    for (const v of demoVids) uniqDemoPlay.add(v);
+    for (const v of homeDemoVids) uniqHomeDemoPlay.add(v);
     for (const [campKey, cv] of Object.entries(data.campaigns || {})) {
       const agg = campaignAgg[campKey] || (campaignAgg[campKey] = {
         source: String(cv.source || "direct"),
@@ -19605,7 +19629,9 @@ exports.getCustomOrderLandingStats = onCall({ region: "europe-west2" }, async (r
     views: uniqViews.size,
     ctaClicks: uniqCta.size,
     signupVisits: uniqSignupVisit.size,
-    signupsCompleted: uniqSignupDone.size
+    signupsCompleted: uniqSignupDone.size,
+    demoPlays: uniqDemoPlay.size,
+    homepageDemoPlays: uniqHomeDemoPlay.size
   };
   const campaigns = Object.values(campaignAgg).sort((a, b) => (b.views - a.views) || (b.ctaClicks - a.ctaClicks));
 

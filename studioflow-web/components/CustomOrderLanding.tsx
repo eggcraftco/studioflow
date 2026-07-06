@@ -13,9 +13,25 @@ function LandingDemoVideo() {
   return (
     <div className="lp-demo-frame">
       {playing ? (
-        <video className="lp-demo-video" src="/nivadesk-demo.mp4" poster="/nivadesk-demo-poster.jpg" controls autoPlay playsInline />
+        <video
+          className="lp-demo-video"
+          src="/nivadesk-demo.mp4"
+          poster="/nivadesk-demo-poster.jpg"
+          controls
+          autoPlay
+          playsInline
+          onEnded={() => trackLandingEvent("custom_order_landing_demo_complete")}
+        />
       ) : (
-        <button type="button" className="lp-demo-poster" onClick={() => setPlaying(true)} aria-label="Play the NivaDesk demo video">
+        <button
+          type="button"
+          className="lp-demo-poster"
+          onClick={() => {
+            setPlaying(true);
+            trackLandingEvent("custom_order_landing_demo_play");
+          }}
+          aria-label="Play the NivaDesk demo video"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/nivadesk-demo-poster.jpg" alt="Preview of the NivaDesk demo video" loading="lazy" decoding="async" />
           <span className="lp-demo-play" aria-hidden="true">
