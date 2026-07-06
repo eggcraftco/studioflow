@@ -19288,13 +19288,33 @@ html[dir="rtl"] .login-public-shell {
 .gpt-eyebrow-logo { width: 24px; height: 24px; }
 .gpt-eyebrow-logo svg { width: 15px; height: 15px; }
 
-.gpt-copy-card h2 {
-  margin: 18px 0 14px;
-  font-size: clamp(30px, 3.2vw, 44px);
-  line-height: 1.08;
+.gpt-copy-card h3 {
+  margin: 4px 0 14px;
+  font-size: clamp(26px, 2.6vw, 36px);
+  line-height: 1.1;
   font-weight: 760;
   letter-spacing: -0.022em;
   color: var(--public-text);
+}
+
+/* Small "in review" note under the ChatGPT section. */
+.gpt-review-note {
+  margin: 24px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--public-muted);
+  text-align: center;
+}
+
+.gpt-review-note svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.75;
 }
 
 .gpt-copy-card > p {
@@ -19584,7 +19604,7 @@ html[dir="rtl"] .login-public-shell {
    card on the right (instead of overhanging it). Mobile keeps the base sizes. */
 @media (min-width: 901px) {
   .gpt-copy-card { padding: 30px 32px; }
-  .gpt-copy-card h2 { font-size: clamp(26px, 2.4vw, 34px); margin: 12px 0 10px; line-height: 1.05; }
+  .gpt-copy-card h3 { font-size: clamp(23px, 2.2vw, 30px); margin: 4px 0 10px; line-height: 1.05; }
   .gpt-copy-card > p { font-size: 15px; line-height: 1.5; margin: 0 0 16px; }
   .gpt-queries { gap: 9px; }
   .gpt-query { padding: 10px 14px; }
