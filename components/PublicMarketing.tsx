@@ -2237,10 +2237,18 @@ export function PublicHomePage() {
               <div className="public-hero-actions">
                 <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
                 <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
-                <button type="button" className="public-button ghost large public-demo-button" onClick={() => setDemoOpen(true)}>
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72L19 12z" /></svg>
-                  {t("hero.watchDemo")}
-                  <span className="public-demo-duration-inline">1:17</span>
+                <button type="button" className="public-demo-button" onClick={() => setDemoOpen(true)}>
+                  <span className="public-demo-thumb" aria-hidden="true">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/nivadesk-demo-poster.jpg" alt="" loading="lazy" decoding="async" />
+                    <span className="public-demo-thumb-play">
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
+                    </span>
+                  </span>
+                  <span className="public-demo-button-copy">
+                    <strong>{t("hero.watchDemo")}</strong>
+                    <span>1:17</span>
+                  </span>
                 </button>
               </div>
               <HeroFeatureChips />
