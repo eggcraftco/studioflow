@@ -373,7 +373,7 @@ class MonthlyProfitWidget : GlanceAppWidget() {
 
 @Composable
 private fun MonthlyProfitContent(payload: WidgetSummaryPayload) {
-    val rows = if (LocalSize.current.height >= 200.dp) 6 else 3
+    val rows = if (LocalSize.current.height >= 200.dp) 8 else 3
     val entries = payload.monthLabels.zip(payload.month.series).takeLast(rows).reversed()
     WidgetShell {
         Column(modifier = GlanceModifier.fillMaxSize()) {

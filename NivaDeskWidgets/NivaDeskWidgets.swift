@@ -276,13 +276,13 @@ struct MonthlyProfitWidgetView: View {
     let entry: MonthlyProfitEntry
     @Environment(\.widgetFamily) private var family
 
-    // Newest month first; medium shows 3 rows, large shows 6.
+    // Newest month first; medium shows 3 rows, large shows 8.
     private var rows: [(label: String, value: Double)] {
         let payload = entry.payload
         let count = min(payload.month.series.count, payload.monthLabels.count)
         guard count > 0 else { return [] }
         let pairs = (0..<count).map { (payload.monthLabels[$0], payload.month.series[$0]) }
-        let limit = family == .systemLarge ? 6 : 3
+        let limit = family == .systemLarge ? 8 : 3
         return pairs.suffix(limit).reversed().map { (label: $0.0, value: $0.1) }
     }
 
@@ -324,8 +324,10 @@ struct MonthlyProfitWidgetView: View {
                     }
                     .frame(height: 3)
                 }
+                // Stretch rows evenly so the widget fills its full height with
+                // no dead space at the bottom.
+                .frame(maxHeight: .infinity)
             }
-            Spacer(minLength: 0)
         }
         .containerBackground(for: .widget) { Color.widgetBackground }
     }
