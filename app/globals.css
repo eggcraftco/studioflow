@@ -19362,26 +19362,6 @@ html[dir="rtl"] .login-public-shell {
   color: var(--public-text);
 }
 
-/* Small "in review" note under the ChatGPT section. */
-.gpt-review-note {
-  margin: 24px auto 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 620;
-  color: var(--public-muted);
-  text-align: center;
-}
-
-.gpt-review-note svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  opacity: 0.75;
-}
-
 .gpt-copy-card > p {
   color: var(--public-muted);
   font-size: 16px;

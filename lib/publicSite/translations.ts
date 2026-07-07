@@ -470,7 +470,6 @@ export const PUBLIC_SITE_EN = {
 
   "chatgptApp.eyebrow": "ChatGPT app for NivaDesk",
   "chatgptApp.sectionTitle": "Your studio, inside ChatGPT",
-  "chatgptApp.reviewNote": "The NivaDesk app is currently in OpenAI's review — coming to ChatGPT very soon.",
   "chatgptApp.title": "Connect your studio workspace securely to ChatGPT.",
   "chatgptApp.titleLead": "Connect your studio workspace securely to",
   "chatgptApp.titleAccent": "ChatGPT.",
@@ -1269,7 +1268,6 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "planBridge.todoAssignment.body": "Üretim sorumluluğu net olsun diye görevleri ekip üyelerine atayın.",
   "chatgptApp.eyebrow": "NivaDesk için ChatGPT app",
   "chatgptApp.sectionTitle": "Stüdyonuz, ChatGPT'nin içinde",
-  "chatgptApp.reviewNote": "NivaDesk uygulaması şu anda OpenAI incelemesinde — çok yakında ChatGPT'de.",
   "chatgptApp.title": "Kullanıcılar stüdyoyu doğal sorular sorarak yönetebilsin.",
   "chatgptApp.titleLead": "Stüdyo workspace'ini güvenle",
   "chatgptApp.titleAccent": "ChatGPT'ye bağla.",
@@ -4681,7 +4679,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   Deutsch: {
     "chatgptApp.eyebrow": "ChatGPT-App für NivaDesk",
     "chatgptApp.sectionTitle": "Ihr Studio, direkt in ChatGPT",
-    "chatgptApp.reviewNote": "Die NivaDesk-App befindet sich derzeit in der Prüfung durch OpenAI — bald in ChatGPT verfügbar.",
     "chatgptApp.title": "Verbinden Sie Ihren Studio-Workspace sicher mit ChatGPT.",
     "chatgptApp.body": "In jedem Plan verfügbar, kann die NivaDesk ChatGPT-App erlaubte Dashboard-Übersichten, Bestellungen und persönliche Notizen lesen und unterstützte Aktualisierungen über verbundene Workspace-Berechtigungen durchführen. Erweiterte Finanzen, Dateien und Teamzusammenarbeit bleiben planbasiert.",
     "chatgptApp.useCasesAria": "Anwendungsfälle der ChatGPT-App",
@@ -4708,7 +4705,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "Français": {
     "chatgptApp.eyebrow": "App ChatGPT pour NivaDesk",
     "chatgptApp.sectionTitle": "Votre studio, dans ChatGPT",
-    "chatgptApp.reviewNote": "L'app NivaDesk est en cours d'examen par OpenAI — très bientôt dans ChatGPT.",
     "chatgptApp.title": "Connectez votre espace de studio à ChatGPT en toute sécurité.",
     "chatgptApp.body": "Disponible sur chaque offre, l'app ChatGPT NivaDesk peut lire les résumés de tableau de bord, commandes et notes personnelles autorisés, et effectuer des mises à jour prises en charge via les autorisations de l'espace. Finances avancées, fichiers et collaboration d'équipe restent liés à l'offre.",
     "chatgptApp.useCasesAria": "Cas d'usage de l'app ChatGPT",
@@ -4735,7 +4731,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "Italiano": {
     "chatgptApp.eyebrow": "App ChatGPT per NivaDesk",
     "chatgptApp.sectionTitle": "Il tuo studio, dentro ChatGPT",
-    "chatgptApp.reviewNote": "L'app NivaDesk è attualmente in revisione da OpenAI — prestissimo in ChatGPT.",
     "chatgptApp.title": "Collega il tuo spazio di studio a ChatGPT in sicurezza.",
     "chatgptApp.body": "Disponibile in ogni piano, l'app ChatGPT di NivaDesk può leggere riepiloghi dashboard, ordini e note personali consentiti, ed eseguire aggiornamenti supportati tramite i permessi dello spazio collegati. Finanze avanzate, file e collaborazione del team restano basati sul piano.",
     "chatgptApp.useCasesAria": "Casi d'uso dell'app ChatGPT",
@@ -4762,7 +4757,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "Español (Spanish)": {
     "chatgptApp.eyebrow": "App ChatGPT para NivaDesk",
     "chatgptApp.sectionTitle": "Tu estudio, dentro de ChatGPT",
-    "chatgptApp.reviewNote": "La app de NivaDesk está en revisión de OpenAI — muy pronto en ChatGPT.",
     "chatgptApp.title": "Conecta tu espacio de estudio a ChatGPT de forma segura.",
     "chatgptApp.body": "Disponible en todos los planes, la app ChatGPT de NivaDesk puede leer resúmenes de panel, pedidos y notas personales permitidos, y realizar actualizaciones admitidas mediante los permisos del espacio conectado. Finanzas avanzadas, archivos y colaboración del equipo siguen siendo según el plan.",
     "chatgptApp.useCasesAria": "Casos de uso de la app ChatGPT",
@@ -4789,7 +4783,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "Português": {
     "chatgptApp.eyebrow": "App ChatGPT para o NivaDesk",
     "chatgptApp.sectionTitle": "O seu estúdio, dentro do ChatGPT",
-    "chatgptApp.reviewNote": "A app NivaDesk está em análise pela OpenAI — muito em breve no ChatGPT.",
     "chatgptApp.title": "Ligue o seu espaço de estúdio ao ChatGPT em segurança.",
     "chatgptApp.body": "Disponível em todos os planos, a app ChatGPT do NivaDesk pode ler resumos de painel, encomendas e notas pessoais permitidos, e realizar atualizações suportadas através das permissões do espaço ligado. Finanças avançadas, ficheiros e colaboração de equipa permanecem baseados no plano.",
     "chatgptApp.useCasesAria": "Casos de uso da app ChatGPT",
@@ -4816,7 +4809,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "Русский (Russian)": {
     "chatgptApp.eyebrow": "Приложение ChatGPT для NivaDesk",
     "chatgptApp.sectionTitle": "Ваша студия — внутри ChatGPT",
-    "chatgptApp.reviewNote": "Приложение NivaDesk сейчас на проверке в OpenAI — совсем скоро в ChatGPT.",
     "chatgptApp.title": "Безопасно подключите своё студийное пространство к ChatGPT.",
     "chatgptApp.body": "Доступное на каждом тарифе, приложение NivaDesk ChatGPT может читать разрешённые сводки панели, заказы и личные заметки и выполнять поддерживаемые обновления через подключённые права пространства. Расширенные финансы, файлы и командная работа остаются по тарифу.",
     "chatgptApp.useCasesAria": "Сценарии использования приложения ChatGPT",
@@ -4843,7 +4835,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "日本語 (Japanese)": {
     "chatgptApp.eyebrow": "NivaDesk 向け ChatGPT アプリ",
     "chatgptApp.sectionTitle": "ChatGPTの中に、あなたのスタジオ",
-    "chatgptApp.reviewNote": "NivaDeskアプリは現在OpenAIの審査中です — まもなくChatGPTに登場します。",
     "chatgptApp.title": "スタジオのワークスペースを安全に ChatGPT へ接続。",
     "chatgptApp.body": "すべてのプランで利用でき、NivaDesk ChatGPT アプリは許可されたダッシュボードのサマリー、注文、個人メモを読み取り、接続されたワークスペース権限でサポートされる更新を実行できます。高度な財務、ファイル、チームコラボレーションはプランに基づきます。",
     "chatgptApp.useCasesAria": "ChatGPT アプリの利用例",
@@ -4870,7 +4861,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "中文 (Chinese)": {
     "chatgptApp.eyebrow": "面向 NivaDesk 的 ChatGPT 应用",
     "chatgptApp.sectionTitle": "把你的工作室装进 ChatGPT",
-    "chatgptApp.reviewNote": "NivaDesk 应用目前正在 OpenAI 审核中——很快登陆 ChatGPT。",
     "chatgptApp.title": "将您的工作室工作空间安全连接到 ChatGPT。",
     "chatgptApp.body": "在每个套餐中均可用，NivaDesk ChatGPT 应用可读取获许可的仪表板摘要、订单和个人笔记，并通过连接的工作空间权限执行受支持的更新。高级财务、文件和团队协作仍按套餐提供。",
     "chatgptApp.useCasesAria": "ChatGPT 应用用例",
@@ -4897,7 +4887,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "العربية (Arabic)": {
     "chatgptApp.eyebrow": "تطبيق ChatGPT لـ NivaDesk",
     "chatgptApp.sectionTitle": "استوديوك داخل ChatGPT",
-    "chatgptApp.reviewNote": "تطبيق NivaDesk قيد مراجعة OpenAI حاليًا — قريبًا جدًا في ChatGPT.",
     "chatgptApp.title": "اربط مساحة استوديوك بـ ChatGPT بأمان.",
     "chatgptApp.body": "متاح في كل خطة، يمكن لتطبيق NivaDesk ChatGPT قراءة ملخصات لوحة المعلومات والطلبات والملاحظات الشخصية المسموح بها، وتنفيذ تحديثات مدعومة عبر أذونات المساحة المتصلة. تبقى المالية المتقدمة والملفات وتعاون الفريق مرتبطة بالخطة.",
     "chatgptApp.useCasesAria": "حالات استخدام تطبيق ChatGPT",
@@ -4924,7 +4913,6 @@ const FILL_TRANSLATIONS_4: Partial<Record<StudioLanguage, Partial<Record<PublicS
   "हिन्दी (Hindi)": {
     "chatgptApp.eyebrow": "NivaDesk के लिए ChatGPT ऐप",
     "chatgptApp.sectionTitle": "आपका स्टूडियो, ChatGPT के अंदर",
-    "chatgptApp.reviewNote": "NivaDesk ऐप फ़िलहाल OpenAI की समीक्षा में है — बहुत जल्द ChatGPT पर।",
     "chatgptApp.title": "अपने स्टूडियो वर्कस्पेस को सुरक्षित रूप से ChatGPT से जोड़ें।",
     "chatgptApp.body": "हर प्लान में उपलब्ध, NivaDesk ChatGPT ऐप अनुमत डैशबोर्ड सारांश, ऑर्डर और व्यक्तिगत नोट्स पढ़ सकता है, और जुड़ी वर्कस्पेस अनुमतियों के माध्यम से समर्थित अपडेट कर सकता है। उन्नत वित्त, फ़ाइलें और टीम सहयोग प्लान-आधारित रहते हैं।",
     "chatgptApp.useCasesAria": "ChatGPT ऐप उपयोग के मामले",

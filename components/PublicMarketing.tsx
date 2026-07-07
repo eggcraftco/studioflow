@@ -1953,15 +1953,6 @@ export function ChatGPTAppShowcase({ title, revealOnScroll = true }: { title?: s
           </div>
         </div>
       </div>
-      <div className="public-shell">
-        <p className="gpt-review-note">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="10" cy="10" r="7.2" />
-            <path d="M10 6.4V10l2.3 1.6" />
-          </svg>
-          {t("chatgptApp.reviewNote")}
-        </p>
-      </div>
     </section>
   );
 }
