@@ -590,6 +590,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /shopifyStores/{document=**} {
+      // Shopify App Store integration: shop↔workspace links, settings and the
+      // OAuth access tokens. Strictly server-side (Admin SDK); clients read
+      // integration state only through verified callables.
+      allow read, write: if false;
+    }
+
+    match /shopifySessions/{document=**} {
+      // Embedded-app session storage written by the app server only.
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

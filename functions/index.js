@@ -17,6 +17,10 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
+// Shopify App Store app: webhook HMAC secret (the app's client secret) and the
+// shared secret the Cloud Run app server uses to call shopifyAppBridge.
+const SHOPIFY_APP_SECRET = defineSecret("SHOPIFY_APP_SECRET");
+const SHOPIFY_BRIDGE_SECRET = defineSecret("SHOPIFY_BRIDGE_SECRET");
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -21484,4 +21488,1239 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300 }
 
   console.log("deleteMyAccount completed", { uid, otherMemberships: otherMemberships.length });
   return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
+// Shopify App (App Store) integration — connection + settings layer.
+//
+// This is the OAuth-app tier that complements the manual-token tier above
+// (shopifyOrderWebhook): the embedded app's server talks to shopifyAppBridge
+// with a shared secret, end users link a store to a workspace through the
+// nonce handshake completed by shopifyCompleteConnect on
+// nivadesk.app/connect/shopify, and order traffic will arrive on
+// shopifyAppWebhook (HMAC-verified). Access tokens live ONLY in
+// shopifyStores/{shop} docs — Firestore rules deny all client access, and no
+// bridge/callable response ever includes them.
+// ---------------------------------------------------------------------------
+
+const SHOPIFY_CONNECT_URL = "https://nivadesk.app/connect/shopify";
+const SHOPIFY_STORE_DEFAULT_SETTINGS = {
+  autoSync: true,
+  filterMode: "all", // all | include_products | include_collections | exclude_products
+  productIds: [],
+  collectionIds: [],
+  includeTags: [],
+  excludeTags: [],
+  importUnpaid: false,
+  defaultStatus: "Not Yet",
+  todoTemplate: [],
+  assigneeUid: "",
+  assigneeEmail: "",
+  syncPaymentStatus: true,
+  syncFulfilment: true,
+  syncRefunds: true,
+  syncCancellations: true,
+  pushTracking: false,
+  pushTags: false,
+  productWorkflows: []
+};
+
+function normalizeShopDomain(raw) {
+  const shop = String(raw || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) ? shop : "";
+}
+
+function shopifyStoreRef(shop) {
+  return admin.firestore().collection("shopifyStores").doc(shop);
+}
+
+function shopifyBridgeAuthed(req) {
+  const provided = String(req.headers["x-nivadesk-bridge-secret"] || "");
+  const expected = String(process.env.SHOPIFY_BRIDGE_SECRET || "").trim();
+  return Boolean(expected) && nvTimingSafeEqual(provided, expected);
+}
+
+// Store doc → the shape safe to hand to the app server / NivaDesk clients.
+function shopifyPublicStoreView(shop, data) {
+  const d = data || {};
+  return {
+    shop,
+    shopName: String(d.shopName || ""),
+    status: String(d.status || "pending"),
+    companyId: String(d.companyId || ""),
+    linkedEmail: String(d.linkedEmail || ""),
+    scopes: String(d.scopes || ""),
+    settings: { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...(d.settings || {}) },
+    stats: {
+      syncedOrders: Number(d.stats?.syncedOrders || 0),
+      failedCount: Number(d.stats?.failedCount || 0),
+      lastSyncAt: d.stats?.lastSyncAt || null,
+      lastWebhookAt: d.stats?.lastWebhookAt || null
+    }
+  };
+}
+
+function shopifyCleanStringArray(value, maxItems, maxLen) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean)
+    .slice(0, maxItems)
+    .map((v) => v.slice(0, maxLen));
+}
+
+function shopifyCleanTodoTemplate(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => ({ title: String(item?.title ?? item ?? "").trim().slice(0, 120) }))
+    .filter((item) => item.title)
+    .slice(0, 40);
+}
+
+// Whitelist + coerce settings coming from the embedded app UI. Unknown keys
+// are dropped so the app server can never grow the doc arbitrarily.
+function sanitizeShopifyStoreSettings(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const out = {};
+  for (const key of ["autoSync", "importUnpaid", "syncPaymentStatus", "syncFulfilment", "syncRefunds", "syncCancellations", "pushTracking", "pushTags"]) {
+    if (key in src) out[key] = Boolean(src[key]);
+  }
+  const FILTER_MODES = new Set(["all", "include_products", "include_collections", "exclude_products"]);
+  if ("filterMode" in src) out.filterMode = FILTER_MODES.has(String(src.filterMode)) ? String(src.filterMode) : "all";
+  if ("productIds" in src) out.productIds = shopifyCleanStringArray(src.productIds, 500, 40);
+  if ("collectionIds" in src) out.collectionIds = shopifyCleanStringArray(src.collectionIds, 200, 40);
+  if ("includeTags" in src) out.includeTags = shopifyCleanStringArray(src.includeTags, 100, 60);
+  if ("excludeTags" in src) out.excludeTags = shopifyCleanStringArray(src.excludeTags, 100, 60);
+  if ("defaultStatus" in src) out.defaultStatus = String(src.defaultStatus || "Not Yet").slice(0, 60) || "Not Yet";
+  if ("assigneeUid" in src) out.assigneeUid = String(src.assigneeUid || "").slice(0, 64);
+  if ("assigneeEmail" in src) out.assigneeEmail = String(src.assigneeEmail || "").trim().toLowerCase().slice(0, 120);
+  if ("todoTemplate" in src) out.todoTemplate = shopifyCleanTodoTemplate(src.todoTemplate);
+  if ("productWorkflows" in src && Array.isArray(src.productWorkflows)) {
+    out.productWorkflows = src.productWorkflows.slice(0, 20).map((rule) => ({
+      productIds: shopifyCleanStringArray(rule?.productIds, 100, 40),
+      collectionIds: shopifyCleanStringArray(rule?.collectionIds, 50, 40),
+      tags: shopifyCleanStringArray(rule?.tags, 50, 60),
+      status: String(rule?.status || "").slice(0, 60),
+      todoTemplate: shopifyCleanTodoTemplate(rule?.todoTemplate)
+    })).filter((rule) => rule.productIds.length || rule.collectionIds.length || rule.tags.length);
+  }
+  return out;
+}
+
+// Single action-routed endpoint for the embedded app's server (Cloud Run).
+// Auth: shared secret header — never end-user credentials; end users act
+// through the Firebase callables below instead.
+exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY_BRIDGE_SECRET] }, async (req, res) => {
+  try {
+    if (req.method !== "POST") { res.status(405).json({ ok: false, error: "post_only" }); return; }
+    if (!shopifyBridgeAuthed(req)) { res.status(401).json({ ok: false, error: "unauthorized" }); return; }
+
+    const action = String(req.body?.action || "");
+    const shop = normalizeShopDomain(req.body?.shop);
+    if (!shop) { res.status(400).json({ ok: false, error: "invalid_shop" }); return; }
+    const ref = shopifyStoreRef(shop);
+
+    if (action === "upsertStore") {
+      // After OAuth: persist/refresh the offline token + shop metadata.
+      const existingSnap = await ref.get();
+      const update = { shop, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+      const accessToken = String(req.body?.accessToken || "").trim();
+      if (accessToken) update.accessToken = accessToken;
+      for (const [key, limit] of [["shopName", 120], ["email", 160], ["scopes", 400], ["apiVersion", 20]]) {
+        if (req.body?.[key] !== undefined) update[key] = String(req.body[key] || "").slice(0, limit);
+      }
+      if (!existingSnap.exists) {
+        Object.assign(update, {
+          status: "pending",
+          companyId: "",
+          settings: SHOPIFY_STORE_DEFAULT_SETTINGS,
+          stats: { syncedOrders: 0, failedCount: 0 },
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else if (String(existingSnap.data()?.status) === "uninstalled") {
+        // Re-install: resume as active when a workspace link survives, else pending.
+        update.status = String(existingSnap.data()?.companyId || "") ? "active" : "pending";
+      }
+      await ref.set(update, { merge: true });
+      const after = (await ref.get()).data() || {};
+      res.json({ ok: true, store: shopifyPublicStoreView(shop, after) });
+      return;
+    }
+
+    const snap = await ref.get();
+    if (!snap.exists) { res.status(404).json({ ok: false, error: "unknown_store" }); return; }
+    const data = snap.data() || {};
+
+    if (action === "beginConnect") {
+      const nonce = crypto.randomBytes(24).toString("hex");
+      await ref.set({
+        connectNonce: nonce,
+        connectNonceExpiresAt: Date.now() + 15 * 60 * 1000
+      }, { merge: true });
+      res.json({
+        ok: true,
+        connectUrl: `${SHOPIFY_CONNECT_URL}?shop=${encodeURIComponent(shop)}&nonce=${encodeURIComponent(nonce)}`
+      });
+      return;
+    }
+
+    if (action === "status") {
+      const view = shopifyPublicStoreView(shop, data);
+      let workspaceName = "";
+      if (view.companyId) {
+        try {
+          const companySnap = await admin.firestore().collection("companies").doc(view.companyId).get();
+          const c = companySnap.exists ? (companySnap.data() || {}) : {};
+          workspaceName = String(c.companyName || c.name || c.workspaceName || "");
+        } catch {
+          workspaceName = "";
+        }
+      }
+      res.json({ ok: true, store: view, workspaceName });
+      return;
+    }
+
+    if (action === "getSettings") {
+      res.json({ ok: true, settings: { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...(data.settings || {}) } });
+      return;
+    }
+
+    if (action === "saveSettings") {
+      const patch = sanitizeShopifyStoreSettings(req.body?.settings);
+      if (!Object.keys(patch).length) { res.status(400).json({ ok: false, error: "empty_settings" }); return; }
+      const merged = { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...(data.settings || {}), ...patch };
+      await ref.set({ settings: merged, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      res.json({ ok: true, settings: merged });
+      return;
+    }
+
+    if (action === "syncLog") {
+      const limit = Math.min(Math.max(Number(req.body?.limit) || 50, 1), 200);
+      const logSnap = await ref.collection("syncLog").orderBy("ts", "desc").limit(limit).get();
+      const rows = logSnap.docs.map((docSnap) => {
+        const row = docSnap.data() || {};
+        return {
+          id: docSnap.id,
+          ts: row.ts || null,
+          topic: String(row.topic || ""),
+          shopifyOrderId: String(row.shopifyOrderId || ""),
+          shopifyOrderNumber: String(row.shopifyOrderNumber || ""),
+          nivadeskOrderId: String(row.nivadeskOrderId || ""),
+          status: String(row.status || ""),
+          error: String(row.error || "")
+        };
+      });
+      res.json({ ok: true, rows });
+      return;
+    }
+
+    if (action === "disconnect") {
+      await ref.set({
+        companyId: "",
+        linkedUid: "",
+        linkedEmail: "",
+        status: "pending",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ ok: true });
+      return;
+    }
+
+    if (action === "markUninstalled") {
+      // app/uninstalled webhook → deactivate; Shopify revokes the token anyway.
+      await ref.set({
+        status: "uninstalled",
+        accessToken: "",
+        uninstalledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ ok: true });
+      return;
+    }
+
+    if (action === "importPreview") {
+      // Count how many orders the chosen range would import (shown before start).
+      const rangeQuery = shopifyImportRangeQuery(req.body);
+      const countData = await shopifyAdminGraphQL(
+        shop, data,
+        "query($q: String) { ordersCount(query: $q, limit: 10000) { count } }",
+        { q: rangeQuery }
+      );
+      res.json({ ok: true, count: Number(countData?.ordersCount?.count || 0), range: rangeQuery });
+      return;
+    }
+
+    if (action === "importStatus") {
+      const importId = String(req.body?.importId || "").trim();
+      if (!importId) { res.status(400).json({ ok: false, error: "missing_import" }); return; }
+      const importSnap = await ref.collection("imports").doc(importId).get();
+      if (!importSnap.exists) { res.status(404).json({ ok: false, error: "unknown_import" }); return; }
+      const imp = importSnap.data() || {};
+      res.json({
+        ok: true,
+        importId,
+        status: String(imp.status || ""),
+        total: Number(imp.total || 0),
+        processed: Number(imp.processed || 0),
+        created: Number(imp.created || 0),
+        skipped: Number(imp.skipped || 0),
+        failedCount: Number(imp.failedCount || 0),
+        failed: Array.isArray(imp.failed) ? imp.failed : []
+      });
+      return;
+    }
+
+    if (action === "retryRow") {
+      // Manual retry from the Sync History screen: replay the stored payload
+      // through the same topic router (defined below; hoisted declaration).
+      const rowId = String(req.body?.rowId || "").trim();
+      if (!rowId) { res.status(400).json({ ok: false, error: "missing_row" }); return; }
+      const rowSnap = await ref.collection("syncLog").doc(rowId).get();
+      if (!rowSnap.exists) { res.status(404).json({ ok: false, error: "unknown_row" }); return; }
+      const row = rowSnap.data() || {};
+      if (!row.payloadJson) { res.status(400).json({ ok: false, error: "not_retryable" }); return; }
+      let payload;
+      try { payload = JSON.parse(row.payloadJson); } catch { res.status(400).json({ ok: false, error: "bad_payload" }); return; }
+      const outcome = await routeShopifyAppTopic(shop, data, String(row.topic || "orders/create"), payload);
+      await writeShopifySyncRow(shop, {
+        topic: String(row.topic || ""),
+        status: outcome.status,
+        error: String(outcome.error || ""),
+        retriedFrom: rowId,
+        shopifyOrderId: String(outcome.shopifyOrderId || row.shopifyOrderId || ""),
+        shopifyOrderNumber: String(outcome.shopifyOrderNumber || row.shopifyOrderNumber || ""),
+        nivadeskOrderId: String(outcome.nivadeskOrderId || "")
+      }, { synced: outcome.created ? 1 : 0 });
+      res.json({ ok: true, result: outcome.status, error: String(outcome.error || "") });
+      return;
+    }
+
+    res.status(400).json({ ok: false, error: "unknown_action" });
+  } catch (error) {
+    console.error("shopifyAppBridge error:", error?.message || error);
+    res.status(500).json({ ok: false, error: "internal" });
+  }
+});
+
+// nivadesk.app/connect/shopify completes the handshake: a signed-in workspace
+// OWNER redeems the store's one-time nonce and binds shop ↔ workspace.
+exports.shopifyCompleteConnect = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, true);
+  const shop = normalizeShopDomain(request.data?.shop);
+  const nonce = String(request.data?.nonce || "").trim();
+  if (!shop || !nonce) {
+    throw new HttpsError("invalid-argument", "A shop domain and connect code are required.");
+  }
+  const ref = shopifyStoreRef(shop);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "This Shopify store has not installed the NivaDesk app yet.");
+  }
+  const data = snap.data() || {};
+  const expected = String(data.connectNonce || "");
+  const expiresAt = Number(data.connectNonceExpiresAt || 0);
+  if (!expected || !nvTimingSafeEqual(nonce, expected) || Date.now() > expiresAt) {
+    throw new HttpsError("permission-denied", "This connect link has expired. Open Connect again from the Shopify app.");
+  }
+  if (String(data.status) === "uninstalled") {
+    throw new HttpsError("failed-precondition", "The NivaDesk app is no longer installed on this Shopify store.");
+  }
+  const linkedEmail = String(request.auth?.token?.email || "").toLowerCase();
+  await ref.set({
+    companyId,
+    linkedUid: uid,
+    linkedEmail,
+    linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    status: "active",
+    connectNonce: admin.firestore.FieldValue.delete(),
+    connectNonceExpiresAt: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return {
+    ok: true,
+    shop,
+    shopName: String(data.shopName || ""),
+    workspaceName: String(companyData.companyName || companyData.name || "")
+  };
+});
+
+// NivaDesk → Settings → Integrations: list this workspace's connected stores.
+exports.getShopifyIntegrationsForWorkspace = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const storesSnap = await admin.firestore().collection("shopifyStores").where("companyId", "==", companyId).get();
+  const stores = storesSnap.docs.map((docSnap) => shopifyPublicStoreView(docSnap.id, docSnap.data()));
+  return { ok: true, stores };
+});
+
+// Owner-only pause / resume / unlink from the NivaDesk side.
+exports.setShopifyIntegrationState = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const shop = normalizeShopDomain(request.data?.shop);
+  const state = String(request.data?.state || "");
+  if (!shop || !["active", "paused", "unlinked"].includes(state)) {
+    throw new HttpsError("invalid-argument", "state must be active, paused or unlinked.");
+  }
+  const ref = shopifyStoreRef(shop);
+  const snap = await ref.get();
+  if (!snap.exists || String(snap.data()?.companyId || "") !== companyId) {
+    throw new HttpsError("permission-denied", "This store is not connected to your workspace.");
+  }
+  if (String(snap.data()?.status) === "uninstalled" && state !== "unlinked") {
+    throw new HttpsError("failed-precondition", "The app was uninstalled from this store.");
+  }
+  const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+  if (state === "unlinked") {
+    Object.assign(update, { companyId: "", linkedUid: "", linkedEmail: "", status: "pending" });
+  } else {
+    update.status = state;
+  }
+  await ref.set(update, { merge: true });
+  return { ok: true, shop, state };
+});
+
+// ---------------------------------------------------------------------------
+// Shopify App webhooks — HMAC-verified, idempotent order/customer ingest.
+//
+// One endpoint receives every subscribed topic (configured in the app TOML).
+// Processing is idempotent two ways: the order doc id embeds shop+order id
+// (shopifyOrderDocId) and each delivery's X-Shopify-Event-Id is claimed in
+// webhookEvents before work starts — a failed run releases the claim so
+// Shopify's retry (or the manual Retry button, via payloadJson) can run again.
+// ---------------------------------------------------------------------------
+
+const SHOPIFY_APP_API_VERSION = "2026-10";
+const SHOPIFY_APP_PAID_STATUSES = new Set(["paid", "partially_paid", "partially_refunded"]);
+
+function shopifyAppHmacValid(req) {
+  const secret = String(process.env.SHOPIFY_APP_SECRET || "").trim();
+  if (!secret) return false;
+  const signature = String(req.headers["x-shopify-hmac-sha256"] || "");
+  if (!signature) return false;
+  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
+  return nvTimingSafeEqual(signature, expected);
+}
+
+function shopifyMergedSettings(store) {
+  return { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...((store && store.settings) || {}) };
+}
+
+function shopifyOrderTagList(order) {
+  return String(order?.tags || "")
+    .split(",")
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function shopifyOrderProductIds(order) {
+  return shopifyLineItems(order)
+    .map((item) => cleanWooText(item?.product_id))
+    .filter(Boolean);
+}
+
+function shopifySafePayloadJson(payload) {
+  try {
+    return JSON.stringify(payload).slice(0, 180000);
+  } catch {
+    return "";
+  }
+}
+
+// Product → collection membership via the Admin GraphQL API, cached for 24h in
+// collectionCache so webhook bursts don't hammer the API. Throws on lookup
+// failure so collection-filtered orders land as retryable "failed" rows rather
+// than silently importing against the merchant's filter.
+async function shopifyOrderCollectionIds(shop, store, order) {
+  const token = String(store.accessToken || "").trim();
+  if (!token) throw new Error("collection_lookup_no_token");
+  const productIds = [...new Set(shopifyOrderProductIds(order))];
+  const found = new Set();
+  if (!productIds.length) return found;
+
+  const cacheCol = shopifyStoreRef(shop).collection("collectionCache");
+  const refs = productIds.map((id) => cacheCol.doc(id));
+  const snaps = await admin.firestore().getAll(...refs);
+  const now = Date.now();
+  const missing = [];
+  snaps.forEach((snap, index) => {
+    const cached = snap.exists ? snap.data() : null;
+    if (cached && now - Number(cached.fetchedAt || 0) < 24 * 60 * 60 * 1000) {
+      (cached.collectionIds || []).forEach((c) => found.add(String(c)));
+    } else {
+      missing.push(productIds[index]);
+    }
+  });
+
+  if (missing.length) {
+    const query = "query($ids:[ID!]!){ nodes(ids:$ids){ ... on Product { legacyResourceId collections(first: 50){ nodes { legacyResourceId } } } } }";
+    const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_APP_API_VERSION}/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+      body: JSON.stringify({ query, variables: { ids: missing.map((id) => `gid://shopify/Product/${id}`) } })
+    });
+    if (!response.ok) throw new Error(`collection_lookup_http_${response.status}`);
+    const body = await response.json();
+    if (body.errors) throw new Error("collection_lookup_graphql");
+    const writer = admin.firestore().batch();
+    for (const node of body?.data?.nodes || []) {
+      if (!node) continue;
+      const pid = String(node.legacyResourceId || "");
+      if (!pid) continue;
+      const cols = (node.collections?.nodes || []).map((c) => String(c.legacyResourceId || "")).filter(Boolean);
+      cols.forEach((c) => found.add(c));
+      writer.set(cacheCol.doc(pid), { collectionIds: cols, fetchedAt: Date.now() });
+    }
+    await writer.commit();
+  }
+  return found;
+}
+
+async function shopifyOrderPassesFilters(shop, store, order) {
+  const settings = shopifyMergedSettings(store);
+  const tags = shopifyOrderTagList(order);
+  const excludeTags = (settings.excludeTags || []).map((t) => String(t).toLowerCase());
+  const includeTags = (settings.includeTags || []).map((t) => String(t).toLowerCase());
+  if (excludeTags.length && excludeTags.some((t) => tags.includes(t))) return { pass: false, reason: "excluded_tag" };
+  if (includeTags.length && !includeTags.some((t) => tags.includes(t))) return { pass: false, reason: "tag_not_included" };
+
+  const productIds = shopifyOrderProductIds(order);
+  if (settings.filterMode === "include_products") {
+    const wanted = new Set((settings.productIds || []).map(String));
+    if (wanted.size && !productIds.some((id) => wanted.has(id))) return { pass: false, reason: "product_not_included" };
+  } else if (settings.filterMode === "exclude_products") {
+    // Mixed orders still import: only skip when EVERY line item is excluded.
+    const banned = new Set((settings.productIds || []).map(String));
+    if (banned.size && productIds.length && productIds.every((id) => banned.has(id))) {
+      return { pass: false, reason: "all_products_excluded" };
+    }
+  } else if (settings.filterMode === "include_collections") {
+    const wanted = new Set((settings.collectionIds || []).map(String));
+    if (wanted.size) {
+      const collections = await shopifyOrderCollectionIds(shop, store, order);
+      if (![...collections].some((c) => wanted.has(c))) return { pass: false, reason: "collection_not_included" };
+    }
+  }
+  return { pass: true };
+}
+
+// First matching per-product/tag workflow rule wins; null → store defaults.
+function pickShopifyWorkflowRule(order, settings) {
+  const tags = shopifyOrderTagList(order);
+  const productIds = new Set(shopifyOrderProductIds(order));
+  for (const rule of settings.productWorkflows || []) {
+    const byProduct = (rule.productIds || []).some((id) => productIds.has(String(id)));
+    const byTag = (rule.tags || []).some((t) => tags.includes(String(t).toLowerCase()));
+    if (byProduct || byTag) return rule;
+  }
+  return null;
+}
+
+function shopifyTodoItemsFromTemplate(template, assigneeUid, assigneeEmail) {
+  return (Array.isArray(template) ? template : [])
+    .map((item) => ({
+      id: crypto.randomUUID(),
+      title: String(item?.title || "").trim(),
+      note: "",
+      assignedToUid: String(assigneeUid || ""),
+      assignedToEmail: String(assigneeEmail || ""),
+      dueAt: null,
+      priority: "Normal",
+      isDone: false
+    }))
+    .filter((item) => item.title);
+}
+
+async function writeShopifySyncRow(shop, entry, deltas = {}) {
+  const ref = shopifyStoreRef(shop);
+  await ref.collection("syncLog").add({ ts: admin.firestore.FieldValue.serverTimestamp(), ...entry });
+  const stats = { lastWebhookAt: admin.firestore.FieldValue.serverTimestamp() };
+  if (deltas.synced) stats.syncedOrders = admin.firestore.FieldValue.increment(deltas.synced);
+  if (deltas.failed) stats.failedCount = admin.firestore.FieldValue.increment(deltas.failed);
+  if (entry.status === "ok") stats.lastSyncAt = admin.firestore.FieldValue.serverTimestamp();
+  await ref.set({ stats }, { merge: true });
+}
+
+async function applyShopifyOrderEvent(shop, store, topic, order, options = {}) {
+  const companyId = String(store.companyId || "");
+  const settings = shopifyMergedSettings(store);
+  const shopifyOrderId = cleanWooText(order?.id || order?.order_number || order?.name);
+  if (!shopifyOrderId) return { status: "skipped", error: "no_order_id" };
+  const shopifyOrderNumber = cleanWooText(order?.name || order?.order_number || shopifyOrderId);
+  const base = { shopifyOrderId, shopifyOrderNumber };
+
+  const docId = shopifyOrderDocId(companyId, shopifyOrderId);
+  const ref = orderDocRef(docId);
+  const existing = await ref.get();
+
+  if (!existing.exists) {
+    if (topic === "orders/cancelled") return { status: "skipped", error: "order_not_synced", ...base };
+    // Manual backfill imports run even when live auto-sync is switched off.
+    if (!settings.autoSync && !options.manualImport) return { status: "skipped", error: "auto_sync_off", ...base };
+    const filter = await shopifyOrderPassesFilters(shop, store, order);
+    if (!filter.pass) return { status: "skipped", error: filter.reason, ...base };
+    const financialStatus = String(order?.financial_status || "").trim().toLowerCase();
+    if (!settings.importUnpaid && !SHOPIFY_APP_PAID_STATUSES.has(financialStatus)) {
+      return { status: "skipped", error: `unpaid_${financialStatus || "unknown"}`, ...base };
+    }
+
+    const mapped = mapShopifyOrderToSiparis(order, companyId, true);
+    const rule = pickShopifyWorkflowRule(order, settings);
+    mapped.status = String(rule?.status || settings.defaultStatus || "Not Yet") || "Not Yet";
+    const template = (rule?.todoTemplate?.length ? rule.todoTemplate : settings.todoTemplate) || [];
+    const todoItems = shopifyTodoItemsFromTemplate(template, settings.assigneeUid, settings.assigneeEmail);
+    if (todoItems.length) mapped.todoItems = todoItems;
+    if (settings.assigneeUid) {
+      mapped.assignedToUid = String(settings.assigneeUid);
+      mapped.assignedToEmail = String(settings.assigneeEmail || "");
+    }
+    mapped.customFields = { ...mapped.customFields, "Shopify Store": String(store.shopName || shop) };
+    await ref.set(mapped, { merge: true });
+
+    try {
+      const billing = shopifyAddressParts(order?.billing_address);
+      const rawShip = shopifyAddressParts(order?.shipping_address);
+      const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
+      await upsertIntegrationCustomer(companyId, {
+        name: mapped.customerName,
+        email: mapped.emailAddress,
+        phone: mapped.whatsappNumber,
+        address: formatAddressParts(billing),
+        streetAddress: billing.street,
+        city: billing.city,
+        postalCode: billing.postalCode,
+        country: billing.country,
+        shippingAddress: formatAddressParts(shipping),
+        shippingStreetAddress: shipping.street,
+        shippingCity: shipping.city,
+        shippingPostalCode: shipping.postalCode,
+        shippingCountry: shipping.country,
+        shippingPhone: shipping.phone || mapped.whatsappNumber
+      }, "shopify");
+    } catch (error) {
+      console.warn("shopifyAppWebhook customer upsert failed:", error?.message || error);
+    }
+
+    await sendPushNotificationToCompany(companyId, {
+      title: "New Shopify order",
+      body: `${mapped.customerName}: ${mapped.designName}`,
+      orderId: docId,
+      type: "shopify_order"
+    });
+    return { status: "ok", created: true, nivadeskOrderId: docId, ...base };
+  }
+
+  // Existing order → targeted patch only; a full re-map would stomp the
+  // merchant's in-app edits (design name, notes, workflow status, …).
+  const current = existing.data() || {};
+  const patchCustomFields = {};
+  let historyLog = null;
+  let statusPatch = null;
+
+  const newFinancial = cleanWooText(order?.financial_status || "");
+  const oldFinancial = cleanWooText(current?.customFields?.["Shopify Status"] || "");
+  if (newFinancial && newFinancial !== oldFinancial) {
+    patchCustomFields["Shopify Status"] = newFinancial;
+    if (settings.syncPaymentStatus) {
+      historyLog = historyLogWithEntry(current, "Shopify payment status", oldFinancial || "-", newFinancial);
+    }
+  }
+  const newTotal = order?.total_price !== undefined ? cleanWooText(order.total_price) : "";
+  if (newTotal && newTotal !== cleanWooText(current?.customFields?.["Shopify Total"] || "")) {
+    patchCustomFields["Shopify Total"] = newTotal;
+  }
+  if (topic === "orders/cancelled" && settings.syncCancellations && String(current.status) !== "Cancelled") {
+    statusPatch = "Cancelled";
+    historyLog = historyLogWithEntry(
+      historyLog ? { ...current, historyLog } : current,
+      "Order cancelled",
+      String(current.status || "-"),
+      "Cancelled"
+    );
+  }
+
+  const patch = {};
+  if (Object.keys(patchCustomFields).length) patch.customFields = patchCustomFields;
+  if (statusPatch) patch.status = statusPatch;
+  if (historyLog) patch.historyLog = historyLog;
+  if (!Object.keys(patch).length) return { status: "skipped", error: "no_changes", nivadeskOrderId: docId, ...base };
+  await ref.set(patch, { merge: true });
+  return { status: "ok", created: false, nivadeskOrderId: docId, ...base };
+}
+
+async function applyShopifyFulfilmentEvent(shop, store, topic, payload) {
+  const companyId = String(store.companyId || "");
+  const settings = shopifyMergedSettings(store);
+  if (!settings.syncFulfilment) return { status: "skipped", error: "fulfilment_sync_off" };
+
+  const isOrderPayload = topic === "orders/fulfilled";
+  const shopifyOrderId = cleanWooText(isOrderPayload ? payload?.id : payload?.order_id);
+  if (!shopifyOrderId) return { status: "skipped", error: "no_order_id" };
+  const fulfilment = isOrderPayload ? ((payload?.fulfillments || [])[0] || {}) : (payload || {});
+  const shopifyOrderNumber = cleanWooText(payload?.name || payload?.order_number || shopifyOrderId);
+  const base = { shopifyOrderId, shopifyOrderNumber };
+
+  const docId = shopifyOrderDocId(companyId, shopifyOrderId);
+  const ref = orderDocRef(docId);
+  const existing = await ref.get();
+  if (!existing.exists) return { status: "skipped", error: "order_not_synced", ...base };
+  const current = existing.data() || {};
+
+  const tracking = cleanWooText(fulfilment?.tracking_number || (fulfilment?.tracking_numbers || [])[0] || "");
+  const carrier = cleanWooText(fulfilment?.tracking_company || "");
+  const patch = { isDispatched: true };
+  if (tracking && tracking !== cleanWooText(current.trackingNumber || "")) patch.trackingNumber = tracking;
+  if (carrier) patch.courier = carrier;
+  const alreadyDispatched = current.isDispatched === true && !patch.trackingNumber;
+  if (alreadyDispatched) return { status: "skipped", error: "already_dispatched", nivadeskOrderId: docId, ...base };
+  patch.historyLog = historyLogWithEntry(current, "Dispatched (Shopify)", cleanWooText(current.trackingNumber || "-") || "-", tracking || "Fulfilled");
+  await ref.set(patch, { merge: true });
+  return { status: "ok", created: false, nivadeskOrderId: docId, ...base };
+}
+
+async function applyShopifyRefundEvent(shop, store, refund) {
+  const companyId = String(store.companyId || "");
+  const settings = shopifyMergedSettings(store);
+  if (!settings.syncRefunds) return { status: "skipped", error: "refund_sync_off" };
+  const shopifyOrderId = cleanWooText(refund?.order_id);
+  if (!shopifyOrderId) return { status: "skipped", error: "no_order_id" };
+  const base = { shopifyOrderId, shopifyOrderNumber: shopifyOrderId };
+
+  const docId = shopifyOrderDocId(companyId, shopifyOrderId);
+  const ref = orderDocRef(docId);
+  const existing = await ref.get();
+  if (!existing.exists) return { status: "skipped", error: "order_not_synced", ...base };
+  const current = existing.data() || {};
+
+  const transactionTotal = (Array.isArray(refund?.transactions) ? refund.transactions : [])
+    .reduce((sum, t) => sum + wooNumber(t?.amount, 0), 0);
+  const lineTotal = (Array.isArray(refund?.refund_line_items) ? refund.refund_line_items : [])
+    .reduce((sum, li) => sum + wooNumber(li?.subtotal, 0), 0);
+  const amount = transactionTotal || lineTotal;
+
+  await ref.set({
+    customFields: { "Shopify Status": "refunded" },
+    historyLog: historyLogWithEntry(current, "Refund (Shopify)", "-", amount ? amountHistoryValue(amount) : "Refund created")
+  }, { merge: true });
+  return { status: "ok", created: false, nivadeskOrderId: docId, ...base };
+}
+
+async function applyShopifyCustomerEvent(store, customer) {
+  const companyId = String(store.companyId || "");
+  const name = [customer?.first_name, customer?.last_name].map(cleanWooText).filter(Boolean).join(" ");
+  const addr = shopifyAddressParts(customer?.default_address);
+  await upsertIntegrationCustomer(companyId, {
+    name: name || addr.name,
+    email: cleanWooText(customer?.email || ""),
+    phone: sanitizePhone(customer?.phone || customer?.default_address?.phone || ""),
+    address: formatAddressParts(addr),
+    streetAddress: addr.street,
+    city: addr.city,
+    postalCode: addr.postalCode,
+    country: addr.country,
+    shippingAddress: formatAddressParts(addr),
+    shippingStreetAddress: addr.street,
+    shippingCity: addr.city,
+    shippingPostalCode: addr.postalCode,
+    shippingCountry: addr.country,
+    shippingPhone: addr.phone
+  }, "shopify");
+  return { status: "ok", created: false, shopifyOrderId: "", shopifyOrderNumber: "", nivadeskOrderId: "" };
+}
+
+// GDPR: anonymize a redacted customer's personal fields in this workspace.
+// Only Shopify-sourced orders are touched; financial totals stay intact.
+async function redactShopifyCustomerData(companyId, email, phone) {
+  const db = admin.firestore();
+  const anonymizedOrderFields = {
+    customerName: "Redacted customer",
+    emailAddress: "",
+    whatsappNumber: "",
+    instagramUsername: "",
+    notes: "",
+    shippingName: "",
+    shippingStreetAddress: "",
+    shippingCity: "",
+    shippingPostalCode: "",
+    shippingCountry: "",
+    shippingPhone: ""
+  };
+  const targets = new Map();
+  const collect = async (field, value) => {
+    if (!value) return;
+    try {
+      const snap = await db.collection("siparisler")
+        .where("companyId", "==", companyId)
+        .where(field, "==", value)
+        .limit(400)
+        .get();
+      snap.docs.forEach((docSnap) => targets.set(docSnap.id, docSnap));
+    } catch (error) {
+      console.warn("shopify redact order query failed:", field, error?.message || error);
+    }
+  };
+  await collect("emailAddress", email);
+  await collect("whatsappNumber", phone);
+  for (const [, docSnap] of targets) {
+    const data = docSnap.data() || {};
+    if (String(data?.customFields?.Source || "") !== "Shopify") continue;
+    await docSnap.ref.set({
+      ...anonymizedOrderFields,
+      customFields: { communicationAddress: "" }
+    }, { merge: true });
+  }
+
+  try {
+    const customersSnap = await db.collection("musteriler")
+      .where("companyId", "==", companyId)
+      .where("email", "==", email)
+      .limit(50)
+      .get();
+    for (const docSnap of customersSnap.docs) {
+      if (String(docSnap.data()?.source || "") !== "shopify") continue;
+      await docSnap.ref.set({
+        name: "Redacted customer",
+        email: "",
+        phone: "",
+        address: "",
+        streetAddress: "",
+        city: "",
+        postalCode: "",
+        country: "",
+        shippingAddress: "",
+        shippingStreetAddress: "",
+        shippingCity: "",
+        shippingPostalCode: "",
+        shippingCountry: "",
+        shippingPhone: "",
+        instagram: ""
+      }, { merge: true });
+    }
+  } catch (error) {
+    console.warn("shopify redact customer query failed:", error?.message || error);
+  }
+}
+
+async function handleShopifyPrivacyTopic(shop, storeData, topic, payload, eventId) {
+  const ref = shopifyStoreRef(shop);
+  if (topic === "shop/redact") {
+    // 48h after uninstall: purge everything we hold about the SHOP itself.
+    // Orders already imported belong to the merchant's NivaDesk workspace and
+    // are retained under NivaDesk's own terms (documented in the listing).
+    try {
+      await admin.firestore().recursiveDelete(ref);
+    } catch (error) {
+      console.error("shop/redact recursiveDelete failed:", error?.message || error);
+    }
+    try {
+      const sessions = await admin.firestore().collection("shopifySessions").where("shop", "==", shop).get();
+      const batch = admin.firestore().batch();
+      sessions.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+      await batch.commit();
+    } catch (error) {
+      console.warn("shop/redact session cleanup failed:", error?.message || error);
+    }
+    return;
+  }
+
+  // customers/data_request + customers/redact: keep an audit row either way.
+  const auditId = String(eventId || crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 300);
+  try {
+    await ref.collection("privacyRequests").doc(auditId).set({
+      topic,
+      receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+      payloadJson: shopifySafePayloadJson(payload)
+    });
+  } catch (error) {
+    console.warn("privacy audit write failed:", error?.message || error);
+  }
+
+  if (topic === "customers/redact" && storeData && String(storeData.companyId || "")) {
+    const email = String(payload?.customer?.email || "").trim().toLowerCase();
+    const phone = sanitizePhone(payload?.customer?.phone || "");
+    await redactShopifyCustomerData(String(storeData.companyId), email, phone);
+  }
+}
+
+async function routeShopifyAppTopic(shop, store, topic, payload) {
+  if (String(store.status) !== "active" || !String(store.companyId || "")) {
+    return { status: "skipped", error: store.companyId ? `store_${store.status}` : "store_not_connected" };
+  }
+  switch (topic) {
+    case "orders/create":
+    case "orders/updated":
+    case "orders/paid":
+    case "orders/cancelled":
+      return applyShopifyOrderEvent(shop, store, topic, payload);
+    case "orders/fulfilled":
+    case "fulfillments/create":
+    case "fulfillments/update":
+      return applyShopifyFulfilmentEvent(shop, store, topic, payload);
+    case "refunds/create":
+      return applyShopifyRefundEvent(shop, store, payload);
+    case "customers/create":
+    case "customers/update":
+      return applyShopifyCustomerEvent(store, payload);
+    default:
+      return { status: "skipped", error: `unknown_topic_${topic.replace(/[^a-z_/]/gi, "")}` };
+  }
+}
+
+exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIFY_APP_SECRET] }, async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(200).json({ ok: true, message: "NivaDesk Shopify app webhook endpoint. POST only." });
+      return;
+    }
+    if (!shopifyAppHmacValid(req)) {
+      res.status(401).json({ ok: false, error: "invalid_hmac" });
+      return;
+    }
+
+    const topic = String(req.headers["x-shopify-topic"] || "");
+    const shop = normalizeShopDomain(req.headers["x-shopify-shop-domain"]);
+    const eventId = String(req.headers["x-shopify-event-id"] || req.headers["x-shopify-webhook-id"] || "");
+    const payload = req.body || {};
+    if (!shop || !topic) {
+      res.status(400).json({ ok: false, error: "missing_headers" });
+      return;
+    }
+
+    const storeSnap = await shopifyStoreRef(shop).get();
+    const store = storeSnap.exists ? (storeSnap.data() || {}) : null;
+
+    // Mandatory privacy topics are acknowledged even for unknown stores.
+    if (topic === "customers/data_request" || topic === "customers/redact" || topic === "shop/redact") {
+      await handleShopifyPrivacyTopic(shop, store, topic, payload, eventId);
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    if (!store) {
+      console.warn("shopifyAppWebhook: unknown store", shop, topic);
+      res.status(200).json({ ok: true, ignored: "unknown_store" });
+      return;
+    }
+
+    if (topic === "app/uninstalled") {
+      await shopifyStoreRef(shop).set({
+        status: "uninstalled",
+        accessToken: "",
+        uninstalledAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    // Claim this delivery id; a duplicate redelivery is acknowledged untouched.
+    let eventRef = null;
+    if (eventId) {
+      eventRef = shopifyStoreRef(shop).collection("webhookEvents")
+        .doc(eventId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 300));
+      try {
+        await eventRef.create({
+          topic,
+          receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+          expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+      } catch {
+        res.status(200).json({ ok: true, duplicate: true });
+        return;
+      }
+    }
+
+    let outcome;
+    try {
+      outcome = await routeShopifyAppTopic(shop, store, topic, payload);
+    } catch (error) {
+      const message = String(error?.message || error).slice(0, 500);
+      await writeShopifySyncRow(shop, {
+        topic,
+        status: "failed",
+        error: message,
+        shopifyOrderId: cleanWooText(payload?.id || payload?.order_id || ""),
+        shopifyOrderNumber: cleanWooText(payload?.name || payload?.order_number || ""),
+        nivadeskOrderId: "",
+        payloadJson: shopifySafePayloadJson(payload)
+      }, { failed: 1 });
+      // Release the claim so Shopify's redelivery can reprocess.
+      if (eventRef) { try { await eventRef.delete(); } catch { /* best-effort */ } }
+      res.status(500).json({ ok: false });
+      return;
+    }
+
+    await writeShopifySyncRow(shop, {
+      topic,
+      status: outcome.status,
+      error: String(outcome.error || ""),
+      shopifyOrderId: String(outcome.shopifyOrderId || ""),
+      shopifyOrderNumber: String(outcome.shopifyOrderNumber || ""),
+      nivadeskOrderId: String(outcome.nivadeskOrderId || "")
+    }, { synced: outcome.created ? 1 : 0 });
+    res.status(200).json({ ok: true, result: outcome.status });
+  } catch (error) {
+    console.error("shopifyAppWebhook error:", error?.message || error);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Shopify App — historical order import (backfill).
+//
+// The Admin REST order APIs are legacy for new public apps, so backfill reads
+// orders through GraphQL and reshapes each node into the REST-webhook form the
+// shared mapper understands (shopifyGraphQLOrderToRest). Imports run through
+// the exact same applyShopifyOrderEvent pipeline as live webhooks — same
+// filters, same idempotent doc ids, same syncLog rows — with manualImport set
+// so a disabled live auto-sync doesn't block an explicit backfill.
+// ---------------------------------------------------------------------------
+
+const SHOPIFY_ORDER_IMPORT_FIELDS = `
+  legacyResourceId
+  name
+  displayFinancialStatus
+  createdAt
+  processedAt
+  note
+  tags
+  email
+  phone
+  statusPageUrl
+  currencyCode
+  paymentGatewayNames
+  totalPriceSet { shopMoney { amount } }
+  totalTaxSet { shopMoney { amount } }
+  totalShippingPriceSet { shopMoney { amount } }
+  customer { firstName lastName email phone }
+  billingAddress { name firstName lastName company address1 address2 city province zip country phone }
+  shippingAddress { name firstName lastName company address1 address2 city province zip country phone }
+  lineItems(first: 50) {
+    nodes {
+      title
+      quantity
+      sku
+      originalUnitPriceSet { shopMoney { amount } }
+      product { legacyResourceId }
+    }
+  }
+`;
+
+function shopifyMoneyAmount(set) {
+  return cleanWooText(set?.shopMoney?.amount ?? "");
+}
+
+function shopifyGraphQLAddressToRest(addr) {
+  if (!addr) return null;
+  return {
+    name: addr.name || "",
+    first_name: addr.firstName || "",
+    last_name: addr.lastName || "",
+    company: addr.company || "",
+    address1: addr.address1 || "",
+    address2: addr.address2 || "",
+    city: addr.city || "",
+    province: addr.province || "",
+    zip: addr.zip || "",
+    country: addr.country || "",
+    phone: addr.phone || ""
+  };
+}
+
+function shopifyGraphQLOrderToRest(node) {
+  const n = node || {};
+  return {
+    id: cleanWooText(n.legacyResourceId || ""),
+    name: cleanWooText(n.name || ""),
+    order_number: cleanWooText(n.name || ""),
+    financial_status: String(n.displayFinancialStatus || "").trim().toLowerCase(),
+    created_at: n.createdAt || "",
+    processed_at: n.processedAt || "",
+    note: n.note || "",
+    tags: Array.isArray(n.tags) ? n.tags.join(", ") : String(n.tags || ""),
+    email: n.email || n.customer?.email || "",
+    phone: n.phone || "",
+    order_status_url: n.statusPageUrl || "",
+    currency: n.currencyCode || "",
+    payment_gateway_names: Array.isArray(n.paymentGatewayNames) ? n.paymentGatewayNames : [],
+    total_price: shopifyMoneyAmount(n.totalPriceSet),
+    total_tax: shopifyMoneyAmount(n.totalTaxSet),
+    total_shipping_price_set: { shop_money: { amount: shopifyMoneyAmount(n.totalShippingPriceSet) } },
+    customer: {
+      first_name: n.customer?.firstName || "",
+      last_name: n.customer?.lastName || "",
+      email: n.customer?.email || "",
+      phone: n.customer?.phone || ""
+    },
+    billing_address: shopifyGraphQLAddressToRest(n.billingAddress),
+    shipping_address: shopifyGraphQLAddressToRest(n.shippingAddress),
+    line_items: (n.lineItems?.nodes || []).map((item) => ({
+      title: item?.title || "",
+      name: item?.title || "",
+      quantity: Number(item?.quantity || 1),
+      sku: item?.sku || "",
+      price: shopifyMoneyAmount(item?.originalUnitPriceSet),
+      product_id: cleanWooText(item?.product?.legacyResourceId || "")
+    }))
+  };
+}
+
+async function shopifyAdminGraphQL(shop, store, query, variables) {
+  const token = String(store.accessToken || "").trim();
+  if (!token) throw new Error("missing_access_token");
+  const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_APP_API_VERSION}/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
+    body: JSON.stringify({ query, variables: variables || {} })
+  });
+  if (response.status === 429) throw new Error("shopify_rate_limited");
+  if (!response.ok) throw new Error(`shopify_graphql_http_${response.status}`);
+  const body = await response.json();
+  if (body.errors) {
+    const msg = Array.isArray(body.errors) ? body.errors.map((e) => e?.message).join("; ") : "graphql_error";
+    throw new Error(`shopify_graphql: ${String(msg).slice(0, 200)}`);
+  }
+  return body.data || {};
+}
+
+// "last 30/90/365 days" or explicit YYYY-MM-DD range → Shopify search syntax.
+function shopifyImportRangeQuery(body) {
+  const sinceDays = Number(body?.sinceDays) || 0;
+  const startRaw = String(body?.startDate || "").trim();
+  const endRaw = String(body?.endDate || "").trim();
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  let start = null;
+  let end = null;
+  if (sinceDays > 0) {
+    start = new Date(Date.now() - Math.min(sinceDays, 1830) * 24 * 60 * 60 * 1000);
+  } else if (datePattern.test(startRaw)) {
+    start = new Date(`${startRaw}T00:00:00Z`);
+  }
+  if (datePattern.test(endRaw)) end = new Date(`${endRaw}T23:59:59Z`);
+  const parts = ["status:any"];
+  if (start && !Number.isNaN(start.getTime())) parts.push(`created_at:>='${start.toISOString()}'`);
+  if (end && !Number.isNaN(end.getTime())) parts.push(`created_at:<='${end.toISOString()}'`);
+  return parts.join(" ");
+}
+
+// Runs the whole backfill inline (up to 9 minutes) while the embedded app
+// polls the imports/{id} progress doc through the bridge's importStatus.
+exports.shopifyImportOrders = onRequest({
+  region: "europe-west2",
+  secrets: [SHOPIFY_BRIDGE_SECRET],
+  timeoutSeconds: 540,
+  memory: "512MiB"
+}, async (req, res) => {
+  try {
+    if (req.method !== "POST") { res.status(405).json({ ok: false, error: "post_only" }); return; }
+    if (!shopifyBridgeAuthed(req)) { res.status(401).json({ ok: false, error: "unauthorized" }); return; }
+    const shop = normalizeShopDomain(req.body?.shop);
+    if (!shop) { res.status(400).json({ ok: false, error: "invalid_shop" }); return; }
+    const storeSnap = await shopifyStoreRef(shop).get();
+    if (!storeSnap.exists) { res.status(404).json({ ok: false, error: "unknown_store" }); return; }
+    const store = storeSnap.data() || {};
+    if (String(store.status) !== "active" || !String(store.companyId || "")) {
+      res.status(400).json({ ok: false, error: "store_not_connected" });
+      return;
+    }
+
+    const selectedIds = shopifyCleanStringArray(req.body?.orderIds, 250, 40);
+    const rangeQuery = shopifyImportRangeQuery(req.body);
+    // The app server generates the import id up front so it can fire this
+    // request without awaiting it and poll importStatus immediately.
+    const providedImportId = String(req.body?.importId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+    const importRef = providedImportId
+      ? shopifyStoreRef(shop).collection("imports").doc(providedImportId)
+      : shopifyStoreRef(shop).collection("imports").doc();
+    await importRef.set({
+      status: "running",
+      range: selectedIds.length ? `selected:${selectedIds.length}` : rangeQuery,
+      total: 0,
+      processed: 0,
+      created: 0,
+      skipped: 0,
+      failedCount: 0,
+      failed: [],
+      startedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    const counters = { processed: 0, created: 0, skipped: 0, failedCount: 0 };
+    const failed = [];
+    const applyNode = async (node) => {
+      const restOrder = shopifyGraphQLOrderToRest(node);
+      const label = restOrder.name || restOrder.id || "?";
+      try {
+        const outcome = await applyShopifyOrderEvent(shop, store, "orders/create", restOrder, { manualImport: true });
+        counters.processed += 1;
+        if (outcome.status === "ok" && outcome.created) counters.created += 1;
+        else counters.skipped += 1;
+        await writeShopifySyncRow(shop, {
+          topic: "import",
+          status: outcome.status,
+          error: String(outcome.error || ""),
+          shopifyOrderId: String(outcome.shopifyOrderId || restOrder.id),
+          shopifyOrderNumber: String(outcome.shopifyOrderNumber || label),
+          nivadeskOrderId: String(outcome.nivadeskOrderId || "")
+        }, { synced: outcome.created ? 1 : 0 });
+      } catch (error) {
+        counters.processed += 1;
+        counters.failedCount += 1;
+        const message = String(error?.message || error).slice(0, 300);
+        if (failed.length < 50) failed.push({ orderNumber: label, error: message });
+        await writeShopifySyncRow(shop, {
+          topic: "import",
+          status: "failed",
+          error: message,
+          shopifyOrderId: restOrder.id,
+          shopifyOrderNumber: label,
+          nivadeskOrderId: "",
+          payloadJson: shopifySafePayloadJson(restOrder)
+        }, { failed: 1 });
+      }
+    };
+    const flushProgress = async (extra = {}) => {
+      await importRef.set({ ...counters, failed, ...extra }, { merge: true });
+    };
+
+    if (selectedIds.length) {
+      await importRef.set({ total: selectedIds.length }, { merge: true });
+      const query = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { ${SHOPIFY_ORDER_IMPORT_FIELDS} } } }`;
+      for (let i = 0; i < selectedIds.length; i += 25) {
+        const chunk = selectedIds.slice(i, i + 25).map((id) => `gid://shopify/Order/${id}`);
+        const data = await shopifyAdminGraphQL(shop, store, query, { ids: chunk });
+        for (const node of data.nodes || []) {
+          if (node) await applyNode(node);
+        }
+        await flushProgress();
+      }
+    } else {
+      const countData = await shopifyAdminGraphQL(
+        shop, store,
+        "query($q: String) { ordersCount(query: $q, limit: 10000) { count } }",
+        { q: rangeQuery }
+      );
+      await importRef.set({ total: Number(countData?.ordersCount?.count || 0) }, { merge: true });
+      const pageQuery = `query($q: String, $cursor: String) {
+        orders(first: 50, after: $cursor, query: $q, sortKey: CREATED_AT) {
+          pageInfo { hasNextPage endCursor }
+          nodes { ${SHOPIFY_ORDER_IMPORT_FIELDS} }
+        }
+      }`;
+      let cursor = null;
+      for (let page = 0; page < 200; page += 1) {
+        const data = await shopifyAdminGraphQL(shop, store, pageQuery, { q: rangeQuery, cursor });
+        const orders = data?.orders;
+        for (const node of orders?.nodes || []) {
+          if (node) await applyNode(node);
+        }
+        await flushProgress();
+        if (!orders?.pageInfo?.hasNextPage) break;
+        cursor = orders.pageInfo.endCursor;
+      }
+    }
+
+    await flushProgress({ status: "done", finishedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.json({ ok: true, importId: importRef.id, ...counters, failed });
+  } catch (error) {
+    console.error("shopifyImportOrders error:", error?.message || error);
+    res.status(500).json({ ok: false, error: String(error?.message || "internal").slice(0, 200) });
+  }
 });
