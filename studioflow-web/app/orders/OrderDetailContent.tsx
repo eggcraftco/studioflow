@@ -1144,6 +1144,38 @@ const COURIER_OPTIONS = ["Auto Detect", "Royal Mail", "DHL", "FedEx", "UPS"];
 const DEFAULT_COMMUNICATION_CHANNELS = ["Instagram", "WhatsApp", "TikTok"];
 const APP_DEFAULT_MATERIAL_LABELS = ["Dial Sourced", "Dial Received", "Watch Received", "Materials Ready"];
 
+// Compact origin strip for orders that arrived from a connected Shopify store:
+// store, Shopify order number, payment/fulfilment state and a deep link into
+// the Shopify admin (only when the app-tier sync stamped the store domain).
+function ShopifySourceStrip({ order }: { order: { customFields: Record<string, string>; isDispatched: boolean } }) {
+  const cf = order.customFields || {};
+  if ((cf["Source"] || "").trim() !== "Shopify") return null;
+  const domain = (cf["Shopify Domain"] || "").trim();
+  const handle = domain.replace(/\.myshopify\.com$/, "");
+  const shopifyOrderId = (cf["Shopify Order ID"] || "").trim();
+  const adminUrl = handle && shopifyOrderId
+    ? `https://admin.shopify.com/store/${handle}/orders/${shopifyOrderId}`
+    : "";
+  return (
+    <div className="shopify-source-strip">
+      <span className="shopify-source-badge">Shopify</span>
+      <span className="shopify-source-item">{cf["Shopify Store"] || domain || "Shopify store"}</span>
+      {cf["Shopify Order Number"] ? (
+        <span className="shopify-source-item">· {cf["Shopify Order Number"]}</span>
+      ) : null}
+      {cf["Shopify Status"] ? (
+        <span className="shopify-source-item">· Payment: {cf["Shopify Status"]}</span>
+      ) : null}
+      <span className="shopify-source-item">· {order.isDispatched ? "Fulfilled" : "Unfulfilled"}</span>
+      {adminUrl ? (
+        <a className="shopify-source-link" href={adminUrl} target="_blank" rel="noreferrer">
+          View in Shopify ↗
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function communicationChannelKey(channel: string) {
   return channel.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
@@ -7227,6 +7259,8 @@ export function OrderDetailContent({
           </section>
         </div>
       ) : null}
+
+      <ShopifySourceStrip order={order} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">

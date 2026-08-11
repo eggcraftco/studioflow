@@ -22072,7 +22072,12 @@ async function applyShopifyOrderEvent(shop, store, topic, order, options = {}) {
       mapped.assignedToUid = String(settings.assigneeUid);
       mapped.assignedToEmail = String(settings.assigneeEmail || "");
     }
-    mapped.customFields = { ...mapped.customFields, "Shopify Store": String(store.shopName || shop) };
+    mapped.customFields = {
+      ...mapped.customFields,
+      "Shopify Store": String(store.shopName || shop),
+      // Enables the "View in Shopify" deep link on the NivaDesk order screen.
+      "Shopify Domain": shop
+    };
     await ref.set(mapped, { merge: true });
 
     try {
