@@ -15,6 +15,14 @@ import {
   usePublicSiteLanguage
 } from "@/lib/publicSite/i18n";
 
+// Post-login destination: honour a same-site ?next= (used by e.g. the Shopify
+// connect handshake) and fall back to the app default. Same-origin only.
+function nextDestination(fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  const next = new URLSearchParams(window.location.search).get("next") || "";
+  return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+}
+
 function LoginLanguageSelector() {
   const { language, languages, setLanguage, t } = usePublicSiteLanguage();
   return (
@@ -46,7 +54,7 @@ function LoginPageContent() {
   const closeMenu = () => setMenuOpen(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace("/orders");
+    if (!loading && user) router.replace(nextDestination("/orders"));
   }, [loading, router, user]);
 
   async function handleEmailLogin(event: FormEvent) {
@@ -55,7 +63,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace("/orders");
+      router.replace(nextDestination("/orders"));
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : t("login.errorLoginFailed"));
     } finally {
@@ -131,7 +139,7 @@ function LoginPageContent() {
             setError(null);
             setSubmitting(true);
           }}
-          onSuccess={() => router.replace("/orders")}
+          onSuccess={() => router.replace(nextDestination("/orders"))}
           onError={message => {
             setSubmitting(false);
             if (message) setError(message);

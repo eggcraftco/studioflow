@@ -2719,7 +2719,11 @@ export function PublicSignupPage() {
           fireGoogleAdsSignupConversion();
           clearLandingAttribution();
         }
-        router.replace("/dashboard");
+        {
+          // Honour a same-site ?next= (e.g. the Shopify connect handshake).
+          const nextParam = new URLSearchParams(window.location.search).get("next") || "";
+          router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
+        }
       } catch (signupError) {
         setError(signupErrorMessage(signupError, t));
       } finally {
