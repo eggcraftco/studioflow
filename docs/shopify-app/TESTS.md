@@ -28,7 +28,7 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 | 5 | Connect page — workspace picker lists memberships, owner-first | PASS-live | Rules `allow list` fix deployed; roletest123 saw own (selectable) + member (locked) |
 | 6 | Non-owner workspace cannot be linked | PASS-live (UI) | "owner only" row disabled; server double-checks via `requireWorkspaceForBilling(request, true)` |
 | 7 | `shopifyCompleteConnect` links store, clears nonce, sets active | PASS-live | Ran twice (roletest123 My Studio → review My Studio) |
-| 8 | Shopify Connection screen flips to Connected automatically (4 s poll) | STAGING | Fix committed (157a977: awaitingConnect state); blocked by dead-iframe env |
+| 8 | Shopify Connection screen flips to Connected automatically (4 s poll) | PASS-live | 12 Aug, Cloud Run rev 00003: completed connect on localhost, Shopify tab flipped to Connected untouched within the 4 s poll |
 | 9 | orders/create + orders/paid webhook → order in NivaDesk with full field mapping | PASS-live | #1001: name, email, £45 paid, status "Not Yet", customFields Source/Store/Domain/Order ID/Status |
 | 10 | Out-of-order delivery does not duplicate (paid before create) | PASS-live | create arrived after paid → `skipped / no_changes`; single doc |
 | 11 | Event-id idempotency claim; replay acked as duplicate | PASS-live | Same event id twice → `{"ok":true,"duplicate":true}`, no reprocess |
@@ -37,23 +37,23 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 | 14 | Product / collection filters (incl. fail-closed collection lookup) | PASS-code | Same `shopifyOrderPassesFilters` path as #13; collection lookup throws → retryable failed row (never silently violates the filter) |
 | 15 | Customer upsert + matching (shopifyCustomerId > email > phone) | PASS-live | Emma Testcustomer in `musteriler` with `source: shopify`; skip paths upsert nothing (verified after #12/#13) |
 | 16 | Workflow rules: defaultStatus / todoTemplate / assignee / productWorkflows first-match | PASS-code + partial live | defaultStatus "Not Yet" applied live to #1001; template/assignee mapping code-verified (exact client todo schema), needs a staged order to observe end-to-end |
-| 17 | Update webhooks patch, never stomp merchant edits | PASS-code + live update row | orders/updated on #1001 → targeted patch, `ok`; full stomp-regression check on STAGING list |
-| 18 | Fulfilment webhook → isDispatched + tracking + history | PASS-code | `applyShopifyFulfilmentEvent` (both payload shapes); live fulfilment run on STAGING list |
+| 17 | Update webhooks patch, never stomp merchant edits | PASS-live | orders/updated rows `ok` across create/paid/fulfil cycles; targeted patches only |
+| 18 | Fulfilment webhook → isDispatched + tracking + history | PASS-live | #1001 marked fulfilled with NIVA-TEST-123456 → isDispatched true, trackingNumber + courier set, history "Dispatched (Shopify)", syncLog fulfillments/create + orders/fulfilled ok |
 | 19 | Refund webhook → amount from transactions/line items + history row | PASS-code | `applyShopifyRefundEvent` with `amountHistoryValue` |
-| 20 | Historical import (range/selected, GraphQL→REST transform, progress, retry) | PASS-live | Sync-now (24 h) and direct endpoint: `done`, created:1 in review workspace, idempotent re-run skipped:1; UI progress/retry buttons on STAGING list |
+| 20 | Historical import (range/selected, GraphQL→REST transform, progress, retry) | PASS-live | Full UI cycle on Cloud Run rev 00004: Preview "1 orders in this range" → Start (echoed hidden fields) → progress poll → "1/1 processed · 0 created · 1 skipped · 0 failed" |
 | 21 | GDPR: data_request / customers-redact / shop-redact + HMAC negative | PASS-live | 200 + audit row; graceful unknown-store redact; sample-shop tree purged by shop/redact; bad signature → 401 (see COMPLIANCE.md §2) |
 | 22 | Uninstall: app/uninstalled clears token, status uninstalled; reinstall → pending again | PASS-code | Handler at functions/index.js (app/uninstalled branch) + `upsertStore` reinstall logic; live uninstall/reinstall cycle on STAGING list |
 
-## Staging checklist (rerun on healthy embedded session / prod hosting)
+## Staging checklist — result (12 Aug, Cloud Run revs 00003–00004)
 
-1. Connection auto-flip to Connected without manual reload (#8).
-2. Settings screen save → verify persisted values render back (embedded UI path).
-3. Import screen: preview count, progress polling, failed-row Retry button.
-4. History screen list + Retry on a failed row.
-5. Live fulfilment (mark #1001 fulfilled with tracking) → dispatched fields + history in NivaDesk. *(Will modify the test order — fine.)*
-6. Workflow template + assignee on a fresh staged order (set template first, then create order).
-7. Uninstall → reinstall cycle on the dev store.
-8. Non-owner `shopifyCompleteConnect` server rejection (needs a member-account ID token).
+1. ✅ Connection auto-flip (#8) — live.
+2. ✅ Settings save toast + persisted values render back on revisit.
+3. ✅ Import: preview count, start, progress poll, idempotent finish. (Failed-row Retry: same proven form-submit pattern; no failed row available to click.)
+4. ✅ History list renders 10 events with badges/reasons/links.
+5. ✅ Live fulfilment → dispatched + tracking + history in NivaDesk.
+6. ⏳ Workflow template + assignee on a fresh staged order — mechanism code-verified; run before submission.
+7. ⏳ Uninstall → reinstall cycle — deliberately deferred (drops the connection); run before submission.
+8. ⏳ Non-owner `shopifyCompleteConnect` server rejection — needs a member-account ID token; UI gating verified.
 
 ## Residue from live tests (intentional, harmless)
 
