@@ -22458,6 +22458,18 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
         uninstalledAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
+      // Also drop the app server's stored sessions. The uninstall invalidates
+      // their tokens on Shopify's side, and a surviving session doc makes a
+      // REINSTALL skip token exchange — afterAuth/upsertStore never fire and
+      // the store stays stuck in "uninstalled" (found by the reinstall test).
+      try {
+        const sessions = await admin.firestore().collection("shopifySessions").where("shop", "==", shop).get();
+        const batch = admin.firestore().batch();
+        sessions.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
+      } catch (error) {
+        console.warn("app/uninstalled session cleanup failed:", error?.message || error);
+      }
       res.status(200).json({ ok: true });
       return;
     }
