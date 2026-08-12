@@ -9,7 +9,6 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { nivadeskBridge } from "../nivadesk.server";
-import { wcChange } from "../lib/wc-events";
 
 const WORKFLOW_PRESETS = [
   "Not Yet",
@@ -89,8 +88,11 @@ export default function SyncSettings() {
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const saving = ["loading", "submitting"].includes(fetcher.state);
-  const [filterMode, setFilterMode] = useState(settings.filterMode || "all");
-  const [defaultStatus, setDefaultStatus] = useState(settings.defaultStatus || "Not Yet");
+  // Static initial values only — user changes live in the DOM and reach the
+  // server through the form submission (see wc-events.ts on why change
+  // handlers are unreliable on these custom elements).
+  const filterMode = settings.filterMode || "all";
+  const defaultStatus = settings.defaultStatus || "Not Yet";
 
   useEffect(() => {
     if (fetcher.data?.ok) shopify.toast.show("Settings saved");
@@ -105,35 +107,24 @@ export default function SyncSettings() {
         </s-section>
 
         <s-section heading="Which orders sync">
-          <s-select
-            label="Product filter"
-            name="filterMode"
-            value={filterMode}
-            ref={wcChange((event: Event) =>
-              setFilterMode(String((event.target as HTMLSelectElement).value)),
-            )}
-          >
+          <s-select label="Product filter" name="filterMode" value={filterMode}>
             <s-option value="all">Import all orders</s-option>
             <s-option value="include_products">Only orders with selected products</s-option>
             <s-option value="include_collections">Only orders with selected collections</s-option>
             <s-option value="exclude_products">Exclude selected products</s-option>
           </s-select>
-          {filterMode === "include_products" || filterMode === "exclude_products" ? (
-            <s-text-field
-              label="Product IDs (comma separated)"
-              name="productIds"
-              defaultValue={(settings.productIds || []).join(", ")}
-              details="Numeric product IDs from the product admin URL."
-            />
-          ) : null}
-          {filterMode === "include_collections" ? (
-            <s-text-field
-              label="Collection IDs (comma separated)"
-              name="collectionIds"
-              defaultValue={(settings.collectionIds || []).join(", ")}
-              details="Numeric collection IDs from the collection admin URL."
-            />
-          ) : null}
+          <s-text-field
+            label="Product IDs (comma separated)"
+            name="productIds"
+            defaultValue={(settings.productIds || []).join(", ")}
+            details="Only used with the product filters — numeric IDs from the product admin URL."
+          />
+          <s-text-field
+            label="Collection IDs (comma separated)"
+            name="collectionIds"
+            defaultValue={(settings.collectionIds || []).join(", ")}
+            details="Only used with the collection filter — numeric IDs from the collection admin URL."
+          />
           <s-text-field
             label="Only orders with these tags (comma separated, optional)"
             name="includeTags"
@@ -147,14 +138,7 @@ export default function SyncSettings() {
         </s-section>
 
         <s-section heading="Workflow for new orders">
-          <s-select
-            label="Starting stage"
-            name="defaultStatus"
-            value={defaultStatus}
-            ref={wcChange((event: Event) =>
-              setDefaultStatus(String((event.target as HTMLSelectElement).value)),
-            )}
-          >
+          <s-select label="Starting stage" name="defaultStatus" value={defaultStatus}>
             {WORKFLOW_PRESETS.map((stage) => (
               <s-option key={stage} value={stage}>
                 {stage}

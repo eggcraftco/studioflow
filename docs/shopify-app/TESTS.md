@@ -8,11 +8,16 @@ Statuses: **PASS-live** (exercised against deployed functions / real dev store),
 Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 `review@nivadesk.app / My Studio` (`KSQidetb3oOSItE9amLISf9Lh6h2`).
 
-> **Staging note:** long-lived `shopify app dev` trycloudflare tunnels intermittently
-> kill iframe hydration (buttons inside the embedded page stop firing; only App
-> Bridge chrome actions like "Sync now" keep working). All STAGING rows are blocked
-> by that environment issue, not by app code — rerun them on a fresh dev session or
-> after the app server moves to permanent hosting.
+> **RESOLVED (12 Aug, on Cloud Run):** the dead buttons were NOT a tunnel/CDN
+> issue — React 18 does not attach JSX event props (onClick/onChange) to custom
+> elements, so Polaris web-component handlers never fired inside the iframe.
+> Proven by discriminator test: `fetcher.Form` + `s-button type="submit"`
+> ("Save settings") worked while onClick buttons on the same hosting were dead.
+> Fix: every in-iframe action is now a native form submission (hidden intent
+> inputs), selects are static-initial + form-submitted, and conditional fields
+> render unconditionally with "only used with…" hints. Only App Bridge
+> chrome-slot buttons (e.g. "Sync now") may keep onClick. Keep this pattern for
+> ALL future screens.
 
 | # | Scenario | Status | Evidence |
 | --- | --- | --- | --- |
