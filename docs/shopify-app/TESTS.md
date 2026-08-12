@@ -42,7 +42,7 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 | 19 | Refund webhook → amount from transactions/line items + history row | PASS-code | `applyShopifyRefundEvent` with `amountHistoryValue` |
 | 20 | Historical import (range/selected, GraphQL→REST transform, progress, retry) | PASS-live | Full UI cycle on Cloud Run rev 00004: Preview "1 orders in this range" → Start (echoed hidden fields) → progress poll → "1/1 processed · 0 created · 1 skipped · 0 failed" |
 | 21 | GDPR: data_request / customers-redact / shop-redact + HMAC negative | PASS-live | 200 + audit row; graceful unknown-store redact; sample-shop tree purged by shop/redact; bad signature → 401 (see COMPLIANCE.md §2) |
-| 22 | Uninstall: app/uninstalled clears token, status uninstalled; reinstall → pending again | PASS-code | Handler at functions/index.js (app/uninstalled branch) + `upsertStore` reinstall logic; live uninstall/reinstall cycle on STAGING list |
+| 22 | Uninstall → reinstall cycle | PASS-live | 12 Aug: uninstall → status uninstalled + token cleared + sessions purged (fix f66c754 — surviving sessions previously made reinstall skip token exchange and stay stuck); reinstall via grant screen → fresh token exchange → status active, workspace link + currencyCode resumed |
 
 ## Staging checklist — result (12 Aug, Cloud Run revs 00003–00004)
 
@@ -52,7 +52,7 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 4. ✅ History list renders 10 events with badges/reasons/links.
 5. ✅ Live fulfilment → dispatched + tracking + history in NivaDesk.
 6. ✅ Workflow template + assignee on staged order #1002 — status/todos/email assignment live; email→uid resolution noted as follow-up.
-7. ⏳ Uninstall → reinstall cycle — deliberately deferred (drops the connection); run before submission.
+7. ✅ Uninstall → reinstall cycle — live; found+fixed the stuck-session bug (f66c754), resume-as-active verified.
 8. ⏳ Non-owner `shopifyCompleteConnect` server rejection — needs a member-account ID token; UI gating verified.
 
 ## Residue from live tests (intentional, harmless)
