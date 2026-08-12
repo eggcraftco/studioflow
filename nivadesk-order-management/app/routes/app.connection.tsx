@@ -108,8 +108,29 @@ export default function Connection() {
     return () => clearInterval(timer);
   }, [awaitingConnect, store?.status, revalidator]);
 
-  const submit = (intent: string) => fetcher.submit({ intent }, { method: "POST" });
   const connected = store?.status === "active" && store?.companyId;
+
+  // Real form submissions, not onClick: React 18 does not attach JSX event
+  // props to custom elements, so s-button onClick never fires inside the
+  // embedded iframe. Native submit inside fetcher.Form works everywhere.
+  const IntentButton = ({
+    intent,
+    tone,
+    variant,
+    children,
+  }: {
+    intent: string;
+    tone?: "critical" | "neutral";
+    variant?: "primary" | "secondary";
+    children: React.ReactNode;
+  }) => (
+    <fetcher.Form method="POST" style={{ display: "contents" }}>
+      <input type="hidden" name="intent" value={intent} />
+      <s-button type="submit" tone={tone} variant={variant} disabled={busy}>
+        {children}
+      </s-button>
+    </fetcher.Form>
+  );
 
   return (
     <s-page heading="NivaDesk connection">
@@ -134,15 +155,9 @@ export default function Connection() {
           </s-section>
           <s-section heading="Actions">
             <s-stack direction="inline" gap="base">
-              <s-button onClick={() => submit("test")} disabled={busy}>
-                Test connection
-              </s-button>
-              <s-button onClick={() => submit("begin-connect")} disabled={busy}>
-                Reconnect / change workspace
-              </s-button>
-              <s-button tone="critical" onClick={() => submit("disconnect")} disabled={busy}>
-                Disconnect
-              </s-button>
+              <IntentButton intent="test">Test connection</IntentButton>
+              <IntentButton intent="begin-connect">Reconnect / change workspace</IntentButton>
+              <IntentButton intent="disconnect" tone="critical">Disconnect</IntentButton>
             </s-stack>
             <s-paragraph>
               Disconnecting stops all syncing; nothing already imported into NivaDesk is deleted.
@@ -157,12 +172,10 @@ export default function Connection() {
               workspace this store should sync into. Only workspace owners can complete the link.
             </s-paragraph>
             <s-stack direction="inline" gap="base">
-              <s-button variant="primary" onClick={() => submit("begin-connect")} disabled={busy}>
+              <IntentButton intent="begin-connect" variant="primary">
                 Connect existing NivaDesk account
-              </s-button>
-              <s-button onClick={() => submit("begin-connect")} disabled={busy}>
-                Create a NivaDesk account
-              </s-button>
+              </IntentButton>
+              <IntentButton intent="begin-connect">Create a NivaDesk account</IntentButton>
             </s-stack>
             {store.status === "uninstalled" ? (
               <s-banner tone="warning" heading="App was uninstalled">

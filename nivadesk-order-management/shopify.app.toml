@@ -2,7 +2,7 @@
 
 client_id = "5a55941c16fd51545392f39e314dc186"
 name = "nivadesk-order-management"
-application_url = "https://example.com"
+application_url = "https://nivadesk-shopify-app-477037475099.europe-west2.run.app"
 embedded = true
 
 [access_scopes]
@@ -43,8 +43,13 @@ api_version = "2026-10"
   shop_deletion_url = "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyAppWebhook"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://nivadesk-shopify-app-477037475099.europe-west2.run.app/auth/callback",
+  "https://nivadesk-shopify-app-477037475099.europe-west2.run.app/auth/session-token",
+  "https://nivadesk-shopify-app-477037475099.europe-west2.run.app/api/auth/callback"
+]
 
 [build]
-include_config_on_deploy = true
-automatically_update_urls_on_dev = true
+# Cloud Run is the canonical app URL now. Running `shopify app dev` would
+# rewrite these URLs to a throwaway tunnel — re-enable consciously if needed.
+automatically_update_urls_on_dev = false

@@ -77,12 +77,12 @@ export default function SyncHistory() {
                   {formatTimestamp(row.ts)}
                 </s-paragraph>
                 {row.status === "failed" ? (
-                  <s-button
-                    onClick={() => fetcher.submit({ rowId: row.id }, { method: "POST" })}
-                    disabled={busy}
-                  >
-                    Retry
-                  </s-button>
+                  <fetcher.Form method="POST" style={{ display: "contents" }}>
+                    <input type="hidden" name="rowId" value={row.id} />
+                    <s-button type="submit" disabled={busy}>
+                      Retry
+                    </s-button>
+                  </fetcher.Form>
                 ) : null}
               </s-stack>
               {row.error ? <s-paragraph>Error: {row.error}</s-paragraph> : null}

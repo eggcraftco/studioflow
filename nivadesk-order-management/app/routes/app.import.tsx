@@ -9,6 +9,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { nivadeskBridge, startNivadeskImport } from "../nivadesk.server";
+import { wcChange, wcClick } from "../lib/wc-events";
 
 type ImportStatus = {
   status: string;
@@ -144,10 +145,10 @@ export default function ImportOrders() {
             label="Date range"
             name="range"
             value={range}
-            onChange={(event: Event) => {
+            ref={wcChange((event: Event) => {
               setRange(String((event.target as HTMLSelectElement).value));
               setPreviewCount(null);
-            }}
+            })}
           >
             <s-option value="30">Last 30 days</s-option>
             <s-option value="90">Last 90 days</s-option>
@@ -171,14 +172,14 @@ export default function ImportOrders() {
           ) : null}
           <s-stack direction="inline" gap="base">
             <s-button
-              onClick={() => submit("preview", document.getElementById("import-form") as HTMLFormElement)}
+              ref={wcClick(() => submit("preview", document.getElementById("import-form") as HTMLFormElement))}
               disabled={busy}
             >
               Preview count
             </s-button>
             <s-button
               variant="primary"
-              onClick={() => submit("start", document.getElementById("import-form") as HTMLFormElement)}
+              ref={wcClick(() => submit("start", document.getElementById("import-form") as HTMLFormElement))}
               disabled={busy || Boolean(importId && progress?.status !== "done")}
             >
               Start import

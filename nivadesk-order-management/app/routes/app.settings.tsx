@@ -9,6 +9,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { nivadeskBridge } from "../nivadesk.server";
+import { wcChange } from "../lib/wc-events";
 
 const WORKFLOW_PRESETS = [
   "Not Yet",
@@ -108,9 +109,9 @@ export default function SyncSettings() {
             label="Product filter"
             name="filterMode"
             value={filterMode}
-            onChange={(event: Event) =>
-              setFilterMode(String((event.target as HTMLSelectElement).value))
-            }
+            ref={wcChange((event: Event) =>
+              setFilterMode(String((event.target as HTMLSelectElement).value)),
+            )}
           >
             <s-option value="all">Import all orders</s-option>
             <s-option value="include_products">Only orders with selected products</s-option>
@@ -150,9 +151,9 @@ export default function SyncSettings() {
             label="Starting stage"
             name="defaultStatus"
             value={defaultStatus}
-            onChange={(event: Event) =>
-              setDefaultStatus(String((event.target as HTMLSelectElement).value))
-            }
+            ref={wcChange((event: Event) =>
+              setDefaultStatus(String((event.target as HTMLSelectElement).value)),
+            )}
           >
             {WORKFLOW_PRESETS.map((stage) => (
               <s-option key={stage} value={stage}>
