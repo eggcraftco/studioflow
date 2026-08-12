@@ -1144,6 +1144,67 @@ const COURIER_OPTIONS = ["Auto Detect", "Royal Mail", "DHL", "FedEx", "UPS"];
 const DEFAULT_COMMUNICATION_CHANNELS = ["Instagram", "WhatsApp", "TikTok"];
 const APP_DEFAULT_MATERIAL_LABELS = ["Dial Sourced", "Dial Received", "Watch Received", "Materials Ready"];
 
+// Compact origin strip for orders that arrived from a connected Shopify store:
+// store, Shopify order number, payment/fulfilment state and a deep link into
+// the Shopify admin (only when the app-tier sync stamped the store domain).
+// NivaDesk stores a display symbol, Shopify reports an ISO code; map the
+// Financial Settings picker's symbols so the strip can tell when the order's
+// original currency differs from the workspace display currency.
+const STRIP_SYMBOL_TO_CODE: Record<string, string> = {
+  "£": "GBP", $: "USD", "€": "EUR", "₺": "TRY", "¥": "JPY",
+  AED: "AED", CAD: "CAD", AUD: "AUD", CHF: "CHF",
+};
+const STRIP_CODE_TO_SYMBOL: Record<string, string> = {
+  GBP: "£", USD: "$", EUR: "€", TRY: "₺", JPY: "¥",
+};
+
+function ShopifySourceStrip({
+  order,
+  workspaceCurrency,
+}: {
+  order: { customFields: Record<string, string>; isDispatched: boolean };
+  workspaceCurrency?: string;
+}) {
+  const cf = order.customFields || {};
+  if ((cf["Source"] || "").trim() !== "Shopify") return null;
+  const domain = (cf["Shopify Domain"] || "").trim();
+  const handle = domain.replace(/\.myshopify\.com$/, "");
+  const shopifyOrderId = (cf["Shopify Order ID"] || "").trim();
+  const adminUrl = handle && shopifyOrderId
+    ? `https://admin.shopify.com/store/${handle}/orders/${shopifyOrderId}`
+    : "";
+  // Amounts import as raw numbers (never converted); when the store charged in
+  // a different currency than the workspace displays, show the original.
+  const orderCurrency = (cf["Shopify Currency"] || "").trim().toUpperCase();
+  const workspaceCode = STRIP_SYMBOL_TO_CODE[(workspaceCurrency || "").trim()] || "";
+  const shopifyTotal = (cf["Shopify Total"] || "").trim();
+  const originalAmount =
+    orderCurrency && shopifyTotal && workspaceCode && orderCurrency !== workspaceCode
+      ? `${STRIP_CODE_TO_SYMBOL[orderCurrency] || ""}${shopifyTotal} ${orderCurrency}`
+      : "";
+  return (
+    <div className="shopify-source-strip">
+      <span className="shopify-source-badge">Shopify</span>
+      <span className="shopify-source-item">{cf["Shopify Store"] || domain || "Shopify store"}</span>
+      {cf["Shopify Order Number"] ? (
+        <span className="shopify-source-item">· {cf["Shopify Order Number"]}</span>
+      ) : null}
+      {cf["Shopify Status"] ? (
+        <span className="shopify-source-item">· Payment: {cf["Shopify Status"]}</span>
+      ) : null}
+      {originalAmount ? (
+        <span className="shopify-source-item">· {originalAmount}</span>
+      ) : null}
+      <span className="shopify-source-item">· {order.isDispatched ? "Fulfilled" : "Unfulfilled"}</span>
+      {adminUrl ? (
+        <a className="shopify-source-link" href={adminUrl} target="_blank" rel="noreferrer">
+          View in Shopify ↗
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 function communicationChannelKey(channel: string) {
   return channel.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
@@ -7227,6 +7288,8 @@ export function OrderDetailContent({
           </section>
         </div>
       ) : null}
+
+      <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">

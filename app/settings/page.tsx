@@ -3607,6 +3607,171 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
   );
 }
 
+type ShopifyStoreView = {
+  shop: string;
+  shopName: string;
+  status: string;
+  linkedEmail: string;
+  stats: {
+    syncedOrders: number;
+    failedCount: number;
+    lastSyncAt?: { _seconds?: number } | null;
+    lastWebhookAt?: { _seconds?: number } | null;
+  };
+};
+
+function shopifyTsText(value: unknown): string {
+  const seconds =
+    value && typeof value === "object" && "_seconds" in (value as Record<string, unknown>)
+      ? Number((value as { _seconds?: unknown })._seconds)
+      : 0;
+  if (!seconds || Number.isNaN(seconds)) return "—";
+  return new Date(seconds * 1000).toLocaleString();
+}
+
+// Stores linked through the official Shopify App Store app (the manual webhook
+// cards below remain as the advanced/legacy path).
+function ShopifyConnectedStoresCard({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const isOwner = workspace.role === "owner";
+  const [stores, setStores] = useState<ShopifyStoreView[] | null>(null);
+  const [error, setError] = useState("");
+  const [busyShop, setBusyShop] = useState("");
+
+  const loadStores = useCallback(async () => {
+    try {
+      const callable = httpsCallable<{ companyId: string }, { stores: ShopifyStoreView[] }>(
+        functions,
+        "getShopifyIntegrationsForWorkspace"
+      );
+      const result = await callable({ companyId: workspace.id });
+      setStores(result.data?.stores ?? []);
+      setError("");
+    } catch (err) {
+      setStores([]);
+      setError(err instanceof Error ? err.message : "Could not load connected stores.");
+    }
+  }, [workspace.id]);
+
+  useEffect(() => {
+    void loadStores();
+  }, [loadStores]);
+
+  async function setStoreState(shop: string, state: "active" | "paused" | "unlinked") {
+    if (
+      state === "unlinked" &&
+      !window.confirm(t("Remove this store connection? Orders already synced stay in your workspace."))
+    )
+
+      return;
+    setBusyShop(shop);
+    setError("");
+    try {
+      const callable = httpsCallable(functions, "setShopifyIntegrationState");
+      await callable({ companyId: workspace.id, shop, state });
+      await loadStores();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setBusyShop("");
+    }
+  }
+
+  return (
+    <section className="card app-card">
+      <CardTitle icon="orders" eyebrow={t("Shopify App")} title={t("Connected Shopify stores")} />
+      <p className="muted-copy">
+        {t("Stores connected through the official NivaDesk app on the Shopify App Store. Orders, customers and status updates sync automatically.")}
+      </p>
+      {stores === null ? (
+        <p className="muted-copy">{t("Loading…")}</p>
+      ) : stores.length === 0 ? (
+        <p className="muted-copy">
+          {t("No stores connected yet. Install “NivaDesk – Custom Order Management” from the Shopify App Store, then press Connect inside the app.")}
+        </p>
+      ) : (
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          {stores.map(store => {
+            const handle = store.shop.replace(/\.myshopify\.com$/, "");
+            const paused = store.status === "paused";
+            const uninstalled = store.status === "uninstalled";
+            const busy = busyShop === store.shop;
+            return (
+              <div
+                key={store.shop}
+                style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <strong>{store.shopName || handle}</strong>
+                  <span className="muted-copy" style={{ fontSize: 12 }}>{store.shop}</span>
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: "3px 9px",
+                      borderRadius: 999,
+                      background: uninstalled
+                        ? "rgba(220, 38, 38, 0.1)"
+                        : paused
+                          ? "rgba(234, 138, 0, 0.12)"
+                          : "rgba(22, 163, 74, 0.12)",
+                      color: uninstalled ? "#b91c1c" : paused ? "#b45309" : "#15803d"
+                    }}
+                  >
+                    {t(uninstalled ? "Uninstalled" : paused ? "Paused" : "Active")}
+                  </span>
+                </div>
+                <p className="muted-copy" style={{ fontSize: 12.5, margin: "6px 0 10px" }}>
+                  {store.stats.syncedOrders} {t("orders synced")} · {store.stats.failedCount} {t("failed")} ·{" "}
+                  {t("Last sync")}: {shopifyTsText(store.stats.lastSyncAt)}
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  <a
+                    className="button"
+                    style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700 }}
+                    href={`https://admin.shopify.com/store/${handle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("Open Shopify admin")}
+                  </a>
+                  {!uninstalled ? (
+                    <button
+                      type="button"
+                      className="button"
+                      style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700 }}
+                      disabled={!isOwner || busy}
+                      onClick={() => setStoreState(store.shop, paused ? "active" : "paused")}
+                    >
+                      {t(paused ? "Resume" : "Pause")}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="button"
+                    style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, color: "#b91c1c" }}
+                    disabled={!isOwner || busy}
+                    onClick={() => setStoreState(store.shop, "unlinked")}
+                  >
+                    {t("Remove")}
+                  </button>
+                </div>
+                {!isOwner ? (
+                  <p className="muted-copy" style={{ fontSize: 11.5, marginTop: 6 }}>
+                    {t("Only the workspace owner can change this connection.")}
+                  </p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {error ? <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{error}</p> : null}
+    </section>
+  );
+}
+
 function ShopifyIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
   const [copyStatus, setCopyStatus] = useState("");
@@ -3648,8 +3813,9 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
 
   return (
     <div className="settings-card-stack">
+      <ShopifyConnectedStoresCard workspace={workspace} language={language} />
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="orders" eyebrow={t("Shopify Integration")} title={t("Connect Shopify")} />
+        <CardTitle icon="orders" eyebrow={t("Shopify Integration")} title={t("Connect Shopify (manual webhook)")} />
         <div className="quick-reply-settings-info">
           <strong>{t("Website orders can flow into this workspace.")}</strong>
           <p>{t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders appear in Orders and Schedule automatically.")}</p>
