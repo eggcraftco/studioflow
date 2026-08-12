@@ -362,6 +362,10 @@ service cloud.firestore {
         && validNewCompanyBillingState();
 
       allow read: if canReadCompany(companyId);
+      // Query form used by the workspace pickers (e.g. /connect/shopify):
+      // memberUids array-contains own uid. Must stay resource-only — get()
+      // based helpers like canReadCompany are not provable for list queries.
+      allow list: if signedIn() && request.auth.uid in resource.data.memberUids;
       allow update: if isCompanyOwner(companyId)
         && validCompanyBillingUpdate()
         && validTeamWorkspaceUpdate(companyId);

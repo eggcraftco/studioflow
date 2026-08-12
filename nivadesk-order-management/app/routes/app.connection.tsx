@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -66,17 +66,22 @@ export default function Connection() {
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const busy = ["loading", "submitting"].includes(fetcher.state);
-  const openedConnect = useRef(false);
+  // awaitingConnect must be state, not a ref: the polling effect below has to
+  // re-run when it flips, and each new begin-connect response (deduped by
+  // object identity) may open a fresh tab — e.g. "Reconnect / change workspace".
+  const [awaitingConnect, setAwaitingConnect] = useState(false);
+  const handledResponse = useRef<unknown>(null);
 
   // After "Connect": open the NivaDesk handshake page in a full tab, then poll
   // the connection status so this screen flips to Connected by itself.
   useEffect(() => {
     const data = fetcher.data;
-    if (!data) return;
-    if (data.intent === "begin-connect" && data.ok && "connectUrl" in data && !openedConnect.current) {
-      openedConnect.current = true;
+    if (!data || handledResponse.current === data) return;
+    handledResponse.current = data;
+    if (data.intent === "begin-connect" && data.ok && "connectUrl" in data) {
       window.open(data.connectUrl as string, "_blank");
       shopify.toast.show("Finish connecting in the NivaDesk tab that just opened");
+      setAwaitingConnect(true);
     }
     if (data.intent === "disconnect" && data.ok) {
       shopify.toast.show("Store disconnected");
@@ -94,14 +99,14 @@ export default function Connection() {
   }, [fetcher.data, revalidator, shopify]);
 
   useEffect(() => {
-    if (!openedConnect.current) return;
+    if (!awaitingConnect) return;
     if (store?.status === "active") {
-      openedConnect.current = false;
+      setAwaitingConnect(false);
       return;
     }
     const timer = setInterval(() => revalidator.revalidate(), 4000);
     return () => clearInterval(timer);
-  }, [store?.status, revalidator]);
+  }, [awaitingConnect, store?.status, revalidator]);
 
   const submit = (intent: string) => fetcher.submit({ intent }, { method: "POST" });
   const connected = store?.status === "active" && store?.companyId;

@@ -65,6 +65,8 @@ export default function ConnectShopifyPage() {
   const [nonce, setNonce] = useState("");
   const [ready, setReady] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[] | null>(null);
+  const [workspacesError, setWorkspacesError] = useState(false);
+  const [workspacesAttempt, setWorkspacesAttempt] = useState(0);
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -84,6 +86,7 @@ export default function ConnectShopifyPage() {
       return;
     }
     let cancelled = false;
+    setWorkspacesError(false);
     (async () => {
       try {
         const snap = await getDocs(
@@ -106,13 +109,18 @@ export default function ConnectShopifyPage() {
           setSelected((prev) => prev || list.find((w) => w.isOwner)?.id || "");
         }
       } catch {
-        if (!cancelled) setWorkspaces([]);
+        // Distinguish "couldn't load" from "genuinely no workspaces" — a
+        // rules/network failure must not read as an empty account.
+        if (!cancelled) {
+          setWorkspaces(null);
+          setWorkspacesError(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, workspacesAttempt]);
 
   async function connect() {
     if (!selected) return;
@@ -186,7 +194,27 @@ export default function ConnectShopifyPage() {
             switch account
           </Link>
         </p>
-        {workspaces === null ? (
+        {workspacesError ? (
+          <p style={{ ...muted, margin: "16px 0" }}>
+            Couldn&apos;t load your workspaces.{" "}
+            <button
+              type="button"
+              onClick={() => setWorkspacesAttempt((n) => n + 1)}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                color: "#214f4a",
+                fontWeight: 700,
+                cursor: "pointer",
+                textDecoration: "underline",
+                font: "inherit",
+              }}
+            >
+              Try again
+            </button>
+          </p>
+        ) : workspaces === null ? (
           <p style={muted}>Loading workspaces…</p>
         ) : workspaces.length === 0 ? (
           <p style={muted}>No workspaces found for this account.</p>

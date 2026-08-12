@@ -9,7 +9,7 @@ embedded = true
 # Minimum permissions: NivaDesk only reads orders/customers/products to sync
 # them into the merchant's NivaDesk workspace. Write scopes for the optional
 # tracking push-back are requested separately when the merchant enables it.
-scopes = "read_orders,read_customers,read_products"
+scopes = "read_orders,read_customers,read_products,read_fulfillments"
 
 [webhooks]
 api_version = "2026-10"
