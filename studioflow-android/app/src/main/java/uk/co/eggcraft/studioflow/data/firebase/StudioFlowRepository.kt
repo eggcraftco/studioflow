@@ -769,6 +769,43 @@ class StudioFlowRepository(
         return data?.get("deliveryUrl") as? String ?: ""
     }
 
+    // Stores connected through the official Shopify App Store app (member read).
+    data class ShopifyAppStoreSummary(
+        val shop: String,
+        val shopName: String,
+        val status: String,
+        val syncedOrders: Int,
+        val failedCount: Int,
+    )
+
+    suspend fun getShopifyAppStores(workspace: StudioWorkspace): List<ShopifyAppStoreSummary> {
+        val result = functions.getHttpsCallable("getShopifyIntegrationsForWorkspace")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        val stores = data?.get("stores") as? List<*> ?: return emptyList()
+        return stores.mapNotNull { raw ->
+            val entry = raw as? Map<*, *> ?: return@mapNotNull null
+            val shop = (entry["shop"] as? String).orEmpty().trim()
+            if (shop.isEmpty()) return@mapNotNull null
+            val stats = entry["stats"] as? Map<*, *> ?: emptyMap<Any, Any>()
+            ShopifyAppStoreSummary(
+                shop = shop,
+                shopName = (entry["shopName"] as? String).orEmpty(),
+                status = (entry["status"] as? String).orEmpty().lowercase(),
+                syncedOrders = (stats["syncedOrders"] as? Number)?.toInt() ?: 0,
+                failedCount = (stats["failedCount"] as? Number)?.toInt() ?: 0,
+            )
+        }
+    }
+
+    // Owner-only pause / resume / unlink; state must be active, paused or unlinked.
+    suspend fun setShopifyAppStoreState(workspace: StudioWorkspace, shop: String, state: String) {
+        functions.getHttpsCallable("setShopifyIntegrationState")
+            .call(mapOf("companyId" to workspace.id, "shop" to shop, "state" to state))
+            .await()
+    }
+
     suspend fun getInboundWebhookDeliveryUrl(workspace: StudioWorkspace): String {
         val result = functions.getHttpsCallable("getInboundWebhookToken")
             .call(mapOf("companyId" to workspace.id))

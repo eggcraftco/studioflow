@@ -25,6 +25,11 @@ struct AyarlarView: View {
     @State private var wooCommerceTokenLoading: Bool = false
     @State private var shopifyDeliveryURL: String = ""
     @State private var shopifyTokenLoading: Bool = false
+    @State private var shopifyAppStores: [ShopifyAppStoreSummary] = []
+    @State private var shopifyAppStoresLoading: Bool = false
+    @State private var shopifyAppStoresLoaded: Bool = false
+    @State private var shopifyAppStoreActionBusyShop: String = ""
+    @State private var shopifyAppStoreRemoveCandidate: ShopifyAppStoreSummary? = nil
     @State private var inboundDeliveryURL: String = ""
     @State private var inboundTokenLoading: Bool = false
     @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
@@ -6112,13 +6117,83 @@ struct AyarlarView: View {
             }
     }
 
+    struct ShopifyAppStoreSummary: Identifiable, Equatable {
+        let id: String        // myshopify.com domain
+        let shopName: String
+        let status: String    // active | paused | pending | uninstalled
+        let syncedOrders: Int
+        let failedCount: Int
+
+        var adminURL: URL? {
+            let handle = id.replacingOccurrences(of: ".myshopify.com", with: "")
+            guard !handle.isEmpty else { return nil }
+            return URL(string: "https://admin.shopify.com/store/\(handle)")
+        }
+    }
+
     private var shopifyIntegrationAyari: some View {
         let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedCompanyId = companyId.isEmpty ? "YOUR_COMPANY_ID" : companyId
         let deliveryURL = shopifyDeliveryURL
+        let isOwner = firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
 
         return VStack(alignment: .leading, spacing: 18) {
-            SettingsCard(title: t("Connect Shopify", lang: seciliDil), iconName: "bag.fill", footerText: t("This setup only needs to be done once in Shopify.", lang: seciliDil)) {
+            SettingsCard(
+                title: t("Connected Shopify stores", lang: seciliDil),
+                iconName: "bag.badge.plus",
+                footerText: t("Stores connected through the official NivaDesk app on the Shopify App Store. Orders, customers and status updates sync automatically.", lang: seciliDil)
+            ) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if shopifyAppStoresLoading && shopifyAppStores.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(t("Loading...", lang: seciliDil))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                    } else if shopifyAppStores.isEmpty {
+                        Text(t("No store is connected yet. Install \"NivaDesk – Custom Order Management\" from the Shopify App Store and press Connect inside the app to link this workspace.", lang: seciliDil))
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(shopifyAppStores) { store in
+                            ShopifyAppStoreRow(
+                                store: store,
+                                language: seciliDil,
+                                isOwner: isOwner,
+                                isBusy: shopifyAppStoreActionBusyShop == store.id,
+                                onPauseResume: { setShopifyAppStoreState(store: store, state: store.status == "paused" ? "active" : "paused") },
+                                onRemove: { shopifyAppStoreRemoveCandidate = store }
+                            )
+                        }
+                        if !isOwner {
+                            Text(t("Only the workspace owner can pause or remove a store.", lang: seciliDil))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .alert(
+                t("Remove this Shopify connection?", lang: seciliDil),
+                isPresented: Binding(
+                    get: { shopifyAppStoreRemoveCandidate != nil },
+                    set: { if !$0 { shopifyAppStoreRemoveCandidate = nil } }
+                )
+            ) {
+                Button(t("Remove", lang: seciliDil), role: .destructive) {
+                    if let store = shopifyAppStoreRemoveCandidate {
+                        setShopifyAppStoreState(store: store, state: "unlinked")
+                    }
+                    shopifyAppStoreRemoveCandidate = nil
+                }
+                Button(t("Cancel", lang: seciliDil), role: .cancel) { shopifyAppStoreRemoveCandidate = nil }
+            } message: {
+                Text(t("Syncing stops immediately. Orders already imported into NivaDesk stay in this workspace.", lang: seciliDil))
+            }
+
+            SettingsCard(title: t("Connect Shopify (manual webhook)", lang: seciliDil), iconName: "bag.fill", footerText: t("This setup only needs to be done once in Shopify.", lang: seciliDil)) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically.", lang: seciliDil))
                         .font(.system(size: 13))
@@ -6183,7 +6258,10 @@ struct AyarlarView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onAppear { loadShopifyWebhookSetup() }
+        .onAppear {
+            loadShopifyWebhookSetup()
+            loadShopifyAppStores()
+        }
     }
 
     private var inboundIntegrationAyari: some View {
@@ -6262,6 +6340,47 @@ struct AyarlarView: View {
             }
         }
         .onAppear { loadInboundWebhookSetup() }
+    }
+
+    private func loadShopifyAppStores(force: Bool = false) {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, !shopifyAppStoresLoading, force || !shopifyAppStoresLoaded else { return }
+        shopifyAppStoresLoading = true
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("getShopifyIntegrationsForWorkspace")
+            .call(["companyId": companyId]) { result, _ in
+                DispatchQueue.main.async {
+                    shopifyAppStoresLoading = false
+                    shopifyAppStoresLoaded = true
+                    let raw = ((result?.data as? [String: Any])?["stores"] as? [[String: Any]]) ?? []
+                    shopifyAppStores = raw.compactMap { entry in
+                        let shop = (entry["shop"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !shop.isEmpty else { return nil }
+                        let stats = entry["stats"] as? [String: Any] ?? [:]
+                        return ShopifyAppStoreSummary(
+                            id: shop,
+                            shopName: entry["shopName"] as? String ?? "",
+                            status: (entry["status"] as? String ?? "").lowercased(),
+                            syncedOrders: (stats["syncedOrders"] as? NSNumber)?.intValue ?? 0,
+                            failedCount: (stats["failedCount"] as? NSNumber)?.intValue ?? 0
+                        )
+                    }
+                }
+            }
+    }
+
+    private func setShopifyAppStoreState(store: ShopifyAppStoreSummary, state: String) {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, shopifyAppStoreActionBusyShop.isEmpty else { return }
+        shopifyAppStoreActionBusyShop = store.id
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setShopifyIntegrationState")
+            .call(["companyId": companyId, "shop": store.id, "state": state]) { _, _ in
+                DispatchQueue.main.async {
+                    shopifyAppStoreActionBusyShop = ""
+                    loadShopifyAppStores(force: true)
+                }
+            }
     }
 
     private func loadShopifyWebhookSetup() {
@@ -10321,5 +10440,87 @@ struct AdminHubView: View {
             }
             .padding(.top, 12)
         }
+    }
+}
+
+// Row for one store connected through the official Shopify App Store app.
+// Separate struct on purpose: deeply nested view bodies overflow the stack on
+// real iPhones (see swiftui-device-stack-overflow note).
+struct ShopifyAppStoreRow: View {
+    let store: AyarlarView.ShopifyAppStoreSummary
+    let language: String
+    let isOwner: Bool
+    let isBusy: Bool
+    let onPauseResume: () -> Void
+    let onRemove: () -> Void
+
+    private var statusLabel: String {
+        switch store.status {
+        case "active": return t("Active", lang: language)
+        case "paused": return t("Paused", lang: language)
+        case "uninstalled": return t("Uninstalled", lang: language)
+        default: return t("Not connected", lang: language)
+        }
+    }
+
+    private var statusColor: Color {
+        switch store.status {
+        case "active": return .green
+        case "paused": return .orange
+        case "uninstalled": return .red
+        default: return .gray
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(store.shopName.isEmpty ? store.id : store.shopName)
+                    .font(.system(size: 13.5, weight: .bold))
+                Text(store.id)
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(statusLabel)
+                    .font(.system(size: 10.5, weight: .bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(statusColor.opacity(0.15))
+                    .foregroundColor(statusColor)
+                    .clipShape(Capsule())
+            }
+
+            Text("\(store.syncedOrders) \(t("orders synced", lang: language)) · \(store.failedCount) \(t("failed", lang: language))")
+                .font(.system(size: 11.5))
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 8) {
+                if let adminURL = store.adminURL {
+                    Link(t("Open Shopify admin", lang: language), destination: adminURL)
+                        .font(.system(size: 11.5, weight: .semibold))
+                }
+                if isOwner && store.status != "uninstalled" {
+                    Button(store.status == "paused" ? t("Resume", lang: language) : t("Pause", lang: language), action: onPauseResume)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isBusy)
+                }
+                if isOwner {
+                    Button(t("Remove", lang: language), role: .destructive, action: onRemove)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isBusy)
+                }
+                if isBusy {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }

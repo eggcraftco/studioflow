@@ -1998,7 +1998,14 @@ struct SiparisDetayView: View {
         VStack(spacing: 0) {
             orderDetailHeader
             Divider().background(Color.primary.opacity(0.1))
-            
+
+            ShopifyOrderSourceStrip(
+                customFields: siparis.customFields ?? [:],
+                isDispatched: siparis.isDispatched,
+                language: seciliDil,
+                workspaceCurrency: seciliParaBirimi
+            )
+
             if isPhoneLayout {
                 phoneCalismaAlani
             } else {
@@ -15690,6 +15697,107 @@ struct PickerField: View {
                 .cornerRadius(8)
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+// Green source strip shown when an order came from the official Shopify app
+// (customFields.Source == "Shopify"). Mirrors the web ShopifySourceStrip:
+// store · order no · payment · original amount on currency mismatch ·
+// fulfilment · deep link into the Shopify admin. Separate struct on purpose —
+// deeply nested bodies overflow the stack on real iPhones.
+struct ShopifyOrderSourceStrip: View {
+    let customFields: [String: String]
+    let isDispatched: Bool
+    let language: String
+    let workspaceCurrency: String
+
+    private static let symbolToCode: [String: String] = [
+        "£": "GBP", "$": "USD", "€": "EUR", "₺": "TRY", "¥": "JPY",
+        "AED": "AED", "CAD": "CAD", "AUD": "AUD", "CHF": "CHF"
+    ]
+    private static let codeToSymbol: [String: String] = [
+        "GBP": "£", "USD": "$", "EUR": "€", "TRY": "₺", "JPY": "¥"
+    ]
+
+    private var isShopify: Bool {
+        (customFields["Source"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "Shopify"
+    }
+
+    private var storeName: String {
+        let name = (customFields["Shopify Store"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let domain = (customFields["Shopify Domain"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return domain.isEmpty ? "Shopify" : domain
+    }
+
+    private var orderNumber: String {
+        (customFields["Shopify Order Number"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var paymentStatus: String {
+        (customFields["Shopify Status"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Amounts import as raw numbers (never converted); when the store charged
+    // in a different currency than the workspace displays, show the original.
+    private var originalAmount: String {
+        let code = (customFields["Shopify Currency"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let total = (customFields["Shopify Total"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let workspaceCode = Self.symbolToCode[workspaceCurrency.trimmingCharacters(in: .whitespacesAndNewlines)] ?? ""
+        guard !code.isEmpty, !total.isEmpty, !workspaceCode.isEmpty, code != workspaceCode else { return "" }
+        return "\(Self.codeToSymbol[code] ?? "")\(total) \(code)"
+    }
+
+    private var adminURL: URL? {
+        let domain = (customFields["Shopify Domain"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let orderId = (customFields["Shopify Order ID"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let handle = domain.replacingOccurrences(of: ".myshopify.com", with: "")
+        guard !handle.isEmpty, !orderId.isEmpty else { return nil }
+        return URL(string: "https://admin.shopify.com/store/\(handle)/orders/\(orderId)")
+    }
+
+    var body: some View {
+        if isShopify {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Text("Shopify")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.18))
+                        .foregroundColor(.green)
+                        .clipShape(Capsule())
+
+                    Text(storeName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    if !orderNumber.isEmpty {
+                        Text("· \(orderNumber)").font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    if !paymentStatus.isEmpty {
+                        Text("· \(t("Payment", lang: language)): \(paymentStatus)")
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                    }
+                    if !originalAmount.isEmpty {
+                        Text("· \(originalAmount)").font(.system(size: 12, weight: .semibold)).foregroundColor(.primary)
+                    }
+                    Text("· \(isDispatched ? t("Fulfilled", lang: language) : t("Unfulfilled", lang: language))")
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+
+                    if let url = adminURL {
+                        Link(destination: url) {
+                            Text("\(t("View in Shopify", lang: language)) ↗")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+            }
+            .background(Color.green.opacity(0.07))
         }
     }
 }

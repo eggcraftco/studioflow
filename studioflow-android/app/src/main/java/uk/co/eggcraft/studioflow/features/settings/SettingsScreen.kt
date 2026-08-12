@@ -1796,8 +1796,82 @@ private fun ShopifyDetail(state: StudioFlowUiState) {
         deliveryUrlLoading -> t("Loading...")
         else -> "—"
     }
+    var appStores by remember { mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.ShopifyAppStoreSummary>>(emptyList()) }
+    var appStoresLoading by remember { mutableStateOf(false) }
+    var appStoreBusyShop by remember { mutableStateOf("") }
+    var appStoreReloadKey by remember { mutableStateOf(0) }
+    var removeCandidate by remember { mutableStateOf<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.ShopifyAppStoreSummary?>(null) }
+    val appStoreScope = rememberCoroutineScope()
+    val isOwner = state.workspace?.role?.trim()?.lowercase() == "owner"
+    LaunchedEffect(state.workspace?.id, appStoreReloadKey) {
+        val workspace = state.workspace ?: return@LaunchedEffect
+        if (workspace.id.isEmpty()) return@LaunchedEffect
+        appStoresLoading = true
+        appStores = runCatching { repository.getShopifyAppStores(workspace) }.getOrDefault(emptyList())
+        appStoresLoading = false
+    }
+    removeCandidate?.let { candidate ->
+        AlertDialog(
+            onDismissRequest = { removeCandidate = null },
+            title = { Text(t("Remove this Shopify connection?")) },
+            text = { Text(t("Syncing stops immediately. Orders already imported into NivaDesk stay in this workspace.")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    removeCandidate = null
+                    val workspace = state.workspace ?: return@TextButton
+                    appStoreScope.launch {
+                        appStoreBusyShop = candidate.shop
+                        runCatching { repository.setShopifyAppStoreState(workspace, candidate.shop, "unlinked") }
+                        appStoreBusyShop = ""
+                        appStoreReloadKey += 1
+                    }
+                }) { Text(t("Remove")) }
+            },
+            dismissButton = { TextButton(onClick = { removeCandidate = null }) { Text(t("Cancel")) } }
+        )
+    }
     DetailColumn {
-        DetailCard(title = t("Connect Shopify"), icon = Icons.Filled.ShoppingBag) {
+        DetailCard(title = t("Connected Shopify stores"), icon = Icons.Filled.ShoppingBag) {
+            Text(
+                t("Stores connected through the official NivaDesk app on the Shopify App Store. Orders, customers and status updates sync automatically."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (appStoresLoading && appStores.isEmpty()) {
+                Text(t("Loading..."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (appStores.isEmpty()) {
+                Text(
+                    t("No store is connected yet. Install \"NivaDesk – Custom Order Management\" from the Shopify App Store and press Connect inside the app to link this workspace."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                appStores.forEach { store ->
+                    ShopifyAppStoreRow(
+                        store = store,
+                        t = t,
+                        isOwner = isOwner,
+                        isBusy = appStoreBusyShop == store.shop,
+                        onPauseResume = {
+                            val workspace = state.workspace ?: return@ShopifyAppStoreRow
+                            appStoreScope.launch {
+                                appStoreBusyShop = store.shop
+                                val target = if (store.status == "paused") "active" else "paused"
+                                runCatching { repository.setShopifyAppStoreState(workspace, store.shop, target) }
+                                appStoreBusyShop = ""
+                                appStoreReloadKey += 1
+                            }
+                        },
+                        onRemove = { removeCandidate = store }
+                    )
+                }
+                if (!isOwner) {
+                    Text(
+                        t("Only the workspace owner can pause or remove a store."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        DetailCard(title = t("Connect Shopify (manual webhook)"), icon = Icons.Filled.ShoppingBag) {
             Text(t("To activate this connection, create one Shopify order webhook and paste the Delivery URL below. After that, new Shopify orders will appear in this workspace automatically."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("This setup only needs to be done once in Shopify."), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1813,6 +1887,80 @@ private fun ShopifyDetail(state: StudioFlowUiState) {
         }
         DetailCard(title = t("What happens when it is active"), icon = Icons.Filled.CheckCircle) {
             Text(t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ShopifyAppStoreRow(
+    store: uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.ShopifyAppStoreSummary,
+    t: (String) -> String,
+    isOwner: Boolean,
+    isBusy: Boolean,
+    onPauseResume: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val uriHandler = LocalUriHandler.current
+    val statusLabel = when (store.status) {
+        "active" -> t("Active")
+        "paused" -> t("Paused")
+        "uninstalled" -> t("Uninstalled")
+        else -> t("Not connected")
+    }
+    val statusColor = when (store.status) {
+        "active" -> Color(0xFF2E7D32)
+        "paused" -> Color(0xFFB26A00)
+        "uninstalled" -> Color(0xFFC62828)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        store.shopName.ifBlank { store.shop },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        store.shop,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(shape = RoundedCornerShape(999.dp), color = statusColor.copy(alpha = 0.14f)) {
+                    Text(
+                        statusLabel,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Text(
+                "${store.syncedOrders} ${t("orders synced")} · ${store.failedCount} ${t("failed")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = {
+                    val handle = store.shop.removeSuffix(".myshopify.com")
+                    if (handle.isNotEmpty()) uriHandler.openUri("https://admin.shopify.com/store/$handle")
+                }) { Text(t("Open Shopify admin")) }
+                if (isOwner && store.status != "uninstalled") {
+                    OutlinedButton(onClick = onPauseResume, enabled = !isBusy) {
+                        Text(if (store.status == "paused") t("Resume") else t("Pause"))
+                    }
+                }
+                if (isOwner) {
+                    OutlinedButton(onClick = onRemove, enabled = !isBusy) { Text(t("Remove")) }
+                }
+            }
         }
     }
 }

@@ -553,6 +553,7 @@ fun OrderDetailScreen(
                     }
                 )
             }
+            item { ShopifyOrderSourceStrip(order = order) }
             if (hiddenPhoneCards.isNotEmpty() && effectivePhoneCardsUnlocked) {
                 item {
                     HiddenCardsBar(
@@ -1171,6 +1172,7 @@ private fun DesktopOrderDetailBoard(
                 onSaveWorkspaceProfilesJSON = onSaveWorkspaceProfilesJSON,
                 onMergeOrder = onMergeOrder
             )
+            ShopifyOrderSourceStrip(order = order)
             CompositionLocalProvider(
                 LocalDetailCardsUnlocked provides (cardsUnlocked && canManageCardLayout),
                 LocalUnifiedBoardVerticalScroll provides true
@@ -11899,10 +11901,13 @@ private fun summaryStepValue(order: StudioOrder, settings: StudioWorkspaceSettin
 }
 
 private fun <T> visibleCustomFields(fields: Map<String, T>): Map<String, T> {
-    val internalKeys = setOf("scheduleAlertItemsV1", "reminderItemsV1", "communicationAddress", "communicationCustomerNotes")
+    val internalKeys = setOf("scheduleAlertItemsV1", "reminderItemsV1", "communicationAddress", "communicationCustomerNotes", "Source")
     return fields.toSortedMap().filterKeys { key ->
         val cleaned = key.trim()
-        cleaned.isNotBlank() && !cleaned.startsWith("__") && "::" !in cleaned && cleaned !in internalKeys
+        // "Shopify *" keys feed the source strip at the top of the screen —
+        // hide them here so they don't double up as raw rows in the Customer card.
+        cleaned.isNotBlank() && !cleaned.startsWith("__") && "::" !in cleaned &&
+            cleaned !in internalKeys && !cleaned.startsWith("Shopify ")
     }
 }
 
@@ -11930,4 +11935,97 @@ private fun customFieldValue(fields: Map<String, String>, key: String): String {
     val target = key.trim().lowercase(Locale.UK)
     if (target.isBlank()) return ""
     return fields.entries.firstOrNull { it.key.trim().lowercase(Locale.UK) == target }?.value.orEmpty()
+}
+
+// Green source strip shown when an order came from the official Shopify app
+// (customFields["Source"] == "Shopify"). Mirrors web/Mac: store · order no ·
+// payment · original amount on currency mismatch · fulfilment · admin link.
+// The raw "Shopify *" custom fields are hidden from the Customer card by
+// visibleCustomFields so this strip is their only surface.
+private val ShopifySymbolToCode = mapOf(
+    "£" to "GBP", "$" to "USD", "€" to "EUR", "₺" to "TRY", "¥" to "JPY",
+    "AED" to "AED", "CAD" to "CAD", "AUD" to "AUD", "CHF" to "CHF"
+)
+private val ShopifyCodeToSymbol = mapOf(
+    "GBP" to "£", "USD" to "$", "EUR" to "€", "TRY" to "₺", "JPY" to "¥"
+)
+
+@Composable
+private fun ShopifyOrderSourceStrip(order: StudioOrder) {
+    val fields = order.customFields
+    if ((fields["Source"] ?: "").trim() != "Shopify") return
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val uriHandler = LocalUriHandler.current
+    val green = Color(0xFF2E7D32)
+
+    val storeName = (fields["Shopify Store"] ?: "").trim()
+        .ifBlank { (fields["Shopify Domain"] ?: "").trim() }
+        .ifBlank { "Shopify" }
+    val orderNumber = (fields["Shopify Order Number"] ?: "").trim()
+    val paymentStatus = (fields["Shopify Status"] ?: "").trim()
+
+    // Amounts import as raw numbers (never converted); show the original when
+    // the store charged in a different currency than the workspace displays.
+    val orderCurrency = (fields["Shopify Currency"] ?: "").trim().uppercase()
+    val workspaceCode = ShopifySymbolToCode[LocalCurrencySymbol.current.trim()] ?: ""
+    val shopifyTotal = (fields["Shopify Total"] ?: "").trim()
+    val originalAmount =
+        if (orderCurrency.isNotEmpty() && shopifyTotal.isNotEmpty() && workspaceCode.isNotEmpty() && orderCurrency != workspaceCode) {
+            "${ShopifyCodeToSymbol[orderCurrency] ?: ""}$shopifyTotal $orderCurrency"
+        } else ""
+
+    val domain = (fields["Shopify Domain"] ?: "").trim()
+    val shopifyOrderId = (fields["Shopify Order ID"] ?: "").trim()
+    val adminUrl = if (domain.isNotEmpty() && shopifyOrderId.isNotEmpty()) {
+        "https://admin.shopify.com/store/${domain.removeSuffix(".myshopify.com")}/orders/$shopifyOrderId"
+    } else ""
+
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = green.copy(alpha = 0.08f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(shape = RoundedCornerShape(999.dp), color = green.copy(alpha = 0.16f)) {
+                Text(
+                    "Shopify",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = green,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(storeName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            if (orderNumber.isNotEmpty()) {
+                Text("· $orderNumber", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (paymentStatus.isNotEmpty()) {
+                Text("· ${t("Payment")}: $paymentStatus", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (originalAmount.isNotEmpty()) {
+                Text("· $originalAmount", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            }
+            Text(
+                "· ${if (order.isDispatched) t("Fulfilled") else t("Unfulfilled")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (adminUrl.isNotEmpty()) {
+                Text(
+                    "${t("View in Shopify")} ↗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = green,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { uriHandler.openUri(adminUrl) }
+                )
+            }
+        }
+    }
 }
