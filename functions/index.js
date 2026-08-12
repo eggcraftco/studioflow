@@ -21706,6 +21706,33 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
     if (action === "saveSettings") {
       const patch = sanitizeShopifyStoreSettings(req.body?.settings);
       if (!Object.keys(patch).length) { res.status(400).json({ ok: false, error: "empty_settings" }); return; }
+      // The app's settings UI collects only an email; order-level assignment
+      // needs the uid. Resolve it against the linked workspace's member list
+      // (owner included) — unknown emails clear the uid so stale assignments
+      // never survive an email change.
+      if (patch.assigneeEmail !== undefined && patch.assigneeUid === undefined) {
+        patch.assigneeUid = "";
+        const email = String(patch.assigneeEmail || "");
+        const companyId = String(data.companyId || "");
+        if (email && companyId) {
+          try {
+            const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+            const company = companySnap.exists ? (companySnap.data() || {}) : {};
+            const members = company.members && typeof company.members === "object" ? company.members : {};
+            for (const [uid, member] of Object.entries(members)) {
+              if (String(member?.email || "").trim().toLowerCase() === email) { patch.assigneeUid = uid; break; }
+            }
+            if (!patch.assigneeUid) {
+              const ownerUid = String(company.ownerUid || "");
+              if (ownerUid && String(company.ownerEmail || "").trim().toLowerCase() === email) {
+                patch.assigneeUid = ownerUid;
+              }
+            }
+          } catch (error) {
+            console.warn("assignee email lookup failed:", error?.message || error);
+          }
+        }
+      }
       const merged = { ...SHOPIFY_STORE_DEFAULT_SETTINGS, ...(data.settings || {}), ...patch };
       await ref.set({ settings: merged, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       res.json({ ok: true, settings: merged });
