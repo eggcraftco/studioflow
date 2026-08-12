@@ -35,8 +35,8 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 | 12 | Paid-gate: unpaid order skipped (unless importUnpaid) | PASS-live | Fake `financial_status: pending` → syncLog `skipped / unpaid_pending`, no doc |
 | 13 | Tag include/exclude filters | PASS-live | includeTags `[niva-e2e]` set via bridge → untagged paid order `skipped / tag_not_included`, no doc; settings restored |
 | 14 | Product / collection filters (incl. fail-closed collection lookup) | PASS-code | Same `shopifyOrderPassesFilters` path as #13; collection lookup throws → retryable failed row (never silently violates the filter) |
-| 15 | Customer upsert + matching (shopifyCustomerId > email > phone) | PASS-live | Emma Testcustomer in `musteriler` with `source: shopify`; skip paths upsert nothing (verified after #12/#13) |
-| 16 | Workflow rules: defaultStatus / todoTemplate / assignee / productWorkflows first-match | PASS-code + partial live | defaultStatus "Not Yet" applied live to #1001; template/assignee mapping code-verified (exact client todo schema), needs a staged order to observe end-to-end |
+| 15 | Customer upsert + matching (shopifyCustomerId > email > phone) | PASS-live | Emma upserted on #1001; on #1002 matched to the SAME `musteriler` doc (no duplicate) |
+| 16 | Workflow rules: defaultStatus / todoTemplate / assignee / productWorkflows first-match | PASS-live | Staged order #1002 with template settings: status "In Progress", 3 todos created, each assignedToEmail review@nivadesk.app; settings restored after. Known gap: email-only assignee leaves order-level assignedToUid empty (resolve email→uid in saveSettings — follow-up). productWorkflows first-match remains code-verified |
 | 17 | Update webhooks patch, never stomp merchant edits | PASS-live | orders/updated rows `ok` across create/paid/fulfil cycles; targeted patches only |
 | 18 | Fulfilment webhook → isDispatched + tracking + history | PASS-live | #1001 marked fulfilled with NIVA-TEST-123456 → isDispatched true, trackingNumber + courier set, history "Dispatched (Shopify)", syncLog fulfillments/create + orders/fulfilled ok |
 | 19 | Refund webhook → amount from transactions/line items + history row | PASS-code | `applyShopifyRefundEvent` with `amountHistoryValue` |
@@ -51,11 +51,11 @@ Last run: **12 Aug 2026**, store `nivadesk-dev-store.myshopify.com`, workspace
 3. ✅ Import: preview count, start, progress poll, idempotent finish. (Failed-row Retry: same proven form-submit pattern; no failed row available to click.)
 4. ✅ History list renders 10 events with badges/reasons/links.
 5. ✅ Live fulfilment → dispatched + tracking + history in NivaDesk.
-6. ⏳ Workflow template + assignee on a fresh staged order — mechanism code-verified; run before submission.
+6. ✅ Workflow template + assignee on staged order #1002 — status/todos/email assignment live; email→uid resolution noted as follow-up.
 7. ⏳ Uninstall → reinstall cycle — deliberately deferred (drops the connection); run before submission.
 8. ⏳ Non-owner `shopifyCompleteConnect` server rejection — needs a member-account ID token; UI gating verified.
 
 ## Residue from live tests (intentional, harmless)
 
-- Review workspace holds test order **#1001 Emma Testcustomer (£45)** + customer record — delete on request.
+- Review workspace holds test orders **#1001 (£45, fulfilled)** and **#1002 (£30, In Progress + 3 todos)** for Emma Testcustomer + one customer record — delete on request.
 - Store syncLog contains two `skipped` rows (`#T9001 unpaid_pending`, `#T9002 tag_not_included`) documenting tests 12–13.
