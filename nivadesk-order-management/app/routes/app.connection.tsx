@@ -12,16 +12,41 @@ import { nivadeskBridge, type NivadeskStoreView } from "../nivadesk.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const statusResp = await nivadeskBridge<{ store: NivadeskStoreView; workspaceName: string }>(
-    "status",
-    { shop: session.shop },
-  ).catch(() => null);
+  const statusResp = await nivadeskBridge<{
+    store: NivadeskStoreView;
+    workspaceName: string;
+    workspaceCurrency: string;
+    storeCurrency: string;
+  }>("status", { shop: session.shop }).catch(() => null);
   return {
     shop: session.shop,
     store: statusResp?.store ?? null,
     workspaceName: statusResp?.workspaceName ?? "",
+    workspaceCurrency: statusResp?.workspaceCurrency ?? "",
+    storeCurrency: statusResp?.storeCurrency ?? "",
   };
 };
+
+// NivaDesk stores a display SYMBOL (Financial Settings), Shopify reports an ISO
+// code. Map the picker's known symbols to codes so we can compare; unknown
+// symbols opt out of the warning rather than false-alarm.
+const SYMBOL_TO_CODE: Record<string, string> = {
+  "£": "GBP",
+  $: "USD",
+  "€": "EUR",
+  "₺": "TRY",
+  "¥": "JPY",
+  AED: "AED",
+  CAD: "CAD",
+  AUD: "AUD",
+  CHF: "CHF",
+};
+
+export function currencyMismatch(workspaceSymbol: string, storeCode: string) {
+  const ws = SYMBOL_TO_CODE[workspaceSymbol.trim()] || "";
+  const store = storeCode.trim().toUpperCase();
+  return Boolean(ws && store && ws !== store);
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -61,7 +86,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Connection() {
-  const { store, workspaceName } = useLoaderData<typeof loader>();
+  const { store, workspaceName, workspaceCurrency, storeCurrency } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -152,6 +178,16 @@ export default function Connection() {
               New Shopify orders sync into this workspace automatically. Manage what syncs under{" "}
               <s-link href="/app/settings">Sync settings</s-link>.
             </s-paragraph>
+            {currencyMismatch(workspaceCurrency, storeCurrency) ? (
+              <s-banner tone="warning" heading={`Your store sells in ${storeCurrency}, your workspace displays ${workspaceCurrency}`}>
+                <s-paragraph>
+                  Order amounts import exactly as charged in Shopify — they are never converted.
+                  Each order also keeps its original currency on the NivaDesk order screen. To
+                  match symbols, change the workspace currency in NivaDesk → Settings → Financial
+                  Settings → Currency Symbol.
+                </s-paragraph>
+              </s-banner>
+            ) : null}
           </s-section>
           <s-section heading="Actions">
             <s-stack direction="inline" gap="base">

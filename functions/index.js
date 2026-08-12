@@ -21625,8 +21625,11 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
       const update = { shop, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
       const accessToken = String(req.body?.accessToken || "").trim();
       if (accessToken) update.accessToken = accessToken;
-      for (const [key, limit] of [["shopName", 120], ["email", 160], ["scopes", 400], ["apiVersion", 20]]) {
+      for (const [key, limit] of [["shopName", 120], ["email", 160], ["scopes", 400], ["apiVersion", 20], ["currencyCode", 8]]) {
         if (req.body?.[key] !== undefined) update[key] = String(req.body[key] || "").slice(0, limit);
+      }
+      if (update.currencyCode !== undefined) {
+        update.currencyCode = update.currencyCode.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8);
       }
       if (!existingSnap.exists) {
         Object.assign(update, {
@@ -21666,6 +21669,7 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
     if (action === "status") {
       const view = shopifyPublicStoreView(shop, data);
       let workspaceName = "";
+      let workspaceCurrency = "";
       if (view.companyId) {
         try {
           const companySnap = await admin.firestore().collection("companies").doc(view.companyId).get();
@@ -21674,8 +21678,23 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
         } catch {
           workspaceName = "";
         }
+        try {
+          // Currency symbol lives in companySettings (shared by web/Mac/Android
+          // Financial Settings). Used by the app UI to warn on store/workspace
+          // currency mismatch — amounts import as raw numbers, never converted.
+          const settingsSnap = await admin.firestore().collection("companySettings").doc(view.companyId).get();
+          workspaceCurrency = String((settingsSnap.data() || {}).seciliParaBirimi || "");
+        } catch {
+          workspaceCurrency = "";
+        }
       }
-      res.json({ ok: true, store: view, workspaceName });
+      res.json({
+        ok: true,
+        store: view,
+        workspaceName,
+        workspaceCurrency,
+        storeCurrency: String(data.currencyCode || "")
+      });
       return;
     }
 

@@ -26,15 +26,17 @@ const shopify = shopifyApp({
       try {
         let shopName = "";
         let email = "";
+        let currencyCode = "";
         try {
           const response = await admin.graphql(
-            `query { shop { name email } }`,
+            `query { shop { name email currencyCode } }`,
           );
           const body = (await response.json()) as {
-            data?: { shop?: { name?: string; email?: string } };
+            data?: { shop?: { name?: string; email?: string; currencyCode?: string } };
           };
           shopName = body.data?.shop?.name || "";
           email = body.data?.shop?.email || "";
+          currencyCode = body.data?.shop?.currencyCode || "";
         } catch (error) {
           console.warn("shop info lookup failed:", error);
         }
@@ -44,6 +46,7 @@ const shopify = shopifyApp({
           scopes: session.scope || "",
           shopName,
           email,
+          currencyCode,
           apiVersion: "2026-10",
         });
       } catch (error) {
