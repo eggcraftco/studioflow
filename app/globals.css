@@ -19351,6 +19351,24 @@ html[dir="rtl"] .login-public-shell {
 }
 
 /* ChatGPT App showcase — redesigned */
+
+/* Featured placement (homepage, straight after the platform strip). The
+   sections above and below it are both warm tinted bands, so this one gets a
+   bright band with a cool ChatGPT-toned glow to read as its own moment. */
+.gpt-section-featured {
+  padding: 66px 0 72px;
+  background:
+    radial-gradient(1100px 430px at 12% -12%, rgba(138, 92, 246, 0.16), transparent 62%),
+    radial-gradient(900px 380px at 92% 0%, rgba(79, 140, 255, 0.14), transparent 60%),
+    linear-gradient(180deg, #f6f4f9, #f2f1f5);
+  border-top: 1px solid rgba(31, 35, 38, 0.08);
+  border-bottom: 1px solid rgba(31, 35, 38, 0.08);
+}
+
+.gpt-section-featured .public-section-header {
+  max-width: 820px;
+}
+
 .gpt-grid {
   display: grid;
   grid-template-columns: 0.86fr 1.14fr;

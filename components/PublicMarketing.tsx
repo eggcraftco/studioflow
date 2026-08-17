@@ -1866,7 +1866,11 @@ function DashboardFinanceShowcase() {
   );
 }
 
-export function ChatGPTAppShowcase({ title, revealOnScroll = true }: { title?: string; revealOnScroll?: boolean }) {
+export function ChatGPTAppShowcase({
+  title,
+  revealOnScroll = true,
+  featured = false
+}: { title?: string; revealOnScroll?: boolean; featured?: boolean }) {
   const { t } = usePublicSiteLanguage();
   const currency = useLocaleCurrency();
   const queries: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
@@ -1885,10 +1889,20 @@ export function ChatGPTAppShowcase({ title, revealOnScroll = true }: { title?: s
     { key: "chatgptApp.safeBadge3", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
   ];
   return (
-    <section className={`public-section gpt-section${revealOnScroll ? " public-scroll-reveal" : ""}`}>
+    <section
+      id={featured ? "chatgpt" : undefined}
+      className={`public-section gpt-section${featured ? " gpt-section-featured" : ""}${revealOnScroll ? " public-scroll-reveal" : ""}`}
+    >
       <div className="public-shell">
         <div className="public-section-header">
-          <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
+          {featured ? (
+            <span className="gpt-eyebrow">
+              <span className="gpt-eyebrow-logo"><GptMark /></span>
+              {t("chatgptApp.eyebrow")}
+            </span>
+          ) : (
+            <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
+          )}
           <h2>{title ?? t("chatgptApp.sectionTitle")}</h2>
         </div>
       </div>
@@ -2286,6 +2300,10 @@ export function PublicHomePage() {
 
         <PlatformNote />
 
+        {/* The ChatGPT app sits directly under the platform strip: it is part of
+            "where NivaDesk runs", and it was getting lost further down the page. */}
+        <ChatGPTAppShowcase featured />
+
         <StudioAccentBand />
 
         <ScrollStoryShowcase />
@@ -2302,8 +2320,6 @@ export function PublicHomePage() {
             </div>
           </div>
         </section>
-
-        <ChatGPTAppShowcase />
 
         <section className="public-section public-cta-band public-scroll-reveal">
           <div className="public-shell public-cta-inner">
