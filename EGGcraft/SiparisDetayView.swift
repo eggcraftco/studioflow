@@ -11641,7 +11641,7 @@ struct SoftStyledWorkspaceScrollView<Content: View>: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(rootView: content)
+        Coordinator(rootView: AnyView(content))
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -11675,19 +11675,26 @@ struct SoftStyledWorkspaceScrollView<Content: View>: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        context.coordinator.hostingView.rootView = content
+        context.coordinator.hostingView.rootView = AnyView(content)
         DispatchQueue.main.async {
             context.coordinator.refresh(in: nsView, colorScheme: colorScheme, expectedContentSize: expectedContentSize)
         }
     }
 
+    // AnyView on purpose: the generic NSHostingView<Content> destructor crashed the
+    // Swift 6.3 optimizer (EarlyPerfInliner) while emitting the x86_64 slice of
+    // Release/archive builds. Type-erasing keeps behaviour identical and sidesteps it.
     final class Coordinator {
-        let hostingView: NSHostingView<Content>
+        let hostingView: NSHostingView<AnyView>
 
-        init(rootView: Content) {
+        init(rootView: AnyView) {
             hostingView = NSHostingView(rootView: rootView)
             hostingView.frame.origin = .zero
         }
+
+        // Explicit unoptimized deinit: the Swift 6.3 EarlyPerfInliner pass crashes
+        // while optimizing this class's destructor in Release x86_64 builds.
+        @_optimize(none) deinit {}
 
         func refresh(in scrollView: NSScrollView, colorScheme: ColorScheme, expectedContentSize: CGSize) {
             hostingView.layoutSubtreeIfNeeded()

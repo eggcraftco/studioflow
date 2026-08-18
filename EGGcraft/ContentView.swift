@@ -18381,7 +18381,7 @@ private struct TimelineOrderBlock: View {
         #if os(macOS)
         // Open "grab" hand on hover, closed "grabbing" hand while dragging — so
         // moving an order on the timeline feels like physically picking it up.
-        .pointerStyle(canEdit ? (isMoving ? .grabActive : .grabIdle) : nil)
+        .modifier(TimelinePointerStyle(kind: canEdit ? .grab(active: isMoving) : nil))
         #endif
     }
 
@@ -18426,7 +18426,7 @@ private struct TimelineOrderBlock: View {
             #if os(macOS)
             // Edges resize the order's start/end — show the left–right resize
             // cursor instead of the bar's grab hand.
-            .pointerStyle(canEdit ? .columnResize : nil)
+            .modifier(TimelinePointerStyle(kind: canEdit ? .columnResize : nil))
             #endif
     }
 
@@ -19133,3 +19133,30 @@ struct ClientFilesHubView: View {
         }
     }
 }
+
+#if os(macOS)
+// `pointerStyle` is macOS 15+; this wrapper keeps the timeline cursors on new
+// systems while remaining a no-op on macOS 14.
+private struct TimelinePointerStyle: ViewModifier {
+    enum Kind {
+        case grab(active: Bool)
+        case columnResize
+    }
+    let kind: Kind?
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            switch kind {
+            case .grab(let active):
+                content.pointerStyle(active ? .grabActive : .grabIdle)
+            case .columnResize:
+                content.pointerStyle(.columnResize)
+            case nil:
+                content.pointerStyle(nil)
+            }
+        } else {
+            content
+        }
+    }
+}
+#endif

@@ -1,6 +1,10 @@
 package uk.co.eggcraft.studioflow.data.firebase
 
 import android.os.Build
+import com.google.firebase.Firebase
+import com.google.firebase.analytics.FirebaseAnalytics
+import com.google.firebase.analytics.analytics
+import com.google.firebase.analytics.logEvent
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
@@ -147,6 +151,11 @@ class StudioFlowRepository(
             val existing = ref.get().await().getString("signupPlatform").orEmpty()
             if (existing.isEmpty()) {
                 ref.set(mapOf("signupPlatform" to "mobile"), com.google.firebase.firestore.SetOptions.merge()).await()
+                // First run for a brand-new account: log the sign_up conversion
+                // so Google App campaigns can optimise past the install.
+                Firebase.analytics.logEvent(FirebaseAnalytics.Event.SIGN_UP) {
+                    param(FirebaseAnalytics.Param.METHOD, "mobile")
+                }
             }
         }
     }

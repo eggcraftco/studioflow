@@ -19,6 +19,8 @@
 		B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = B440FCAB2FA291B3007D3DED /* FirebaseFunctions */; };
 		B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */; };
 		B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = B4A9C5010000000000000002 /* FirebaseAppCheck */; };
+		B4A9C5010000000000000003 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = B4A9C5010000000000000004 /* FirebaseAnalytics */; };
+		B4A9C5010000000000000005 /* AdServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4A9C5010000000000000006 /* AdServices.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +65,7 @@
 /* Begin PBXFileReference section */
 		93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NivaDeskWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		93A148B82FF9E0340080C409 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		B4A9C5010000000000000006 /* AdServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AdServices.framework; path = System/Library/Frameworks/AdServices.framework; sourceTree = SDKROOT; };
 		93A148BA2FF9E0340080C409 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClientFileShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4382CE22F9A845F004BB413 /* NivaDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NivaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -172,6 +175,8 @@
 				B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */,
 				B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */,
 				B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */,
+				B4A9C5010000000000000003 /* FirebaseAnalytics in Frameworks */,
+				B4A9C5010000000000000005 /* AdServices.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -213,6 +218,7 @@
 			children = (
 				93A148B82FF9E0340080C409 /* WidgetKit.framework */,
 				93A148BA2FF9E0340080C409 /* SwiftUI.framework */,
+				B4A9C5010000000000000006 /* AdServices.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -293,6 +299,7 @@
 				B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */,
 				B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */,
 				B4A9C5010000000000000002 /* FirebaseAppCheck */,
+				B4A9C5010000000000000004 /* FirebaseAnalytics */,
 			);
 			productName = EGGcraft;
 			productReference = B4382CE22F9A845F004BB413 /* NivaDesk.app */;
@@ -460,20 +467,20 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
@@ -498,20 +505,20 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
@@ -537,19 +544,19 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ClientFileShareExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.ClientFileShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -570,19 +577,19 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ClientFileShareExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.ClientFileShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -720,7 +727,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -750,11 +757,11 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.1;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow;
 				PRODUCT_NAME = NivaDesk;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -768,7 +775,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 26.4;
+				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Debug;
 		};
@@ -781,7 +788,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
@@ -811,11 +818,11 @@
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.1;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow;
 				PRODUCT_NAME = NivaDesk;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -829,7 +836,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 26.4;
+				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Release;
 		};
@@ -839,19 +846,19 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -871,19 +878,19 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 5QG48AF86V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1007,6 +1014,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAppCheck;
+		};
+		B4A9C5010000000000000004 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

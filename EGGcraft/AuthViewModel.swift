@@ -8,6 +8,9 @@ import StoreKit
 #if canImport(FirebaseFunctions)
 import FirebaseFunctions
 #endif
+#if canImport(FirebaseAnalytics)
+import FirebaseAnalytics
+#endif
 import SwiftUI
 import Combine
 import LocalAuthentication
@@ -1015,6 +1018,12 @@ class AuthViewModel: ObservableObject {
             let existing = (snapshot?.data()?["signupPlatform"] as? String) ?? ""
             guard existing.isEmpty else { return }
             userRef.setData(["signupPlatform": platform], merge: true)
+            // First run for a brand-new account: log the sign_up conversion so
+            // ad campaigns (Apple Search Ads / Google App campaigns) can
+            // optimise past the install.
+            #if canImport(FirebaseAnalytics)
+            Analytics.logEvent(AnalyticsEventSignUp, parameters: [AnalyticsParameterMethod: platform])
+            #endif
         }
     }
 
