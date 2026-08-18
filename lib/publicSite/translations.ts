@@ -506,6 +506,13 @@ export const PUBLIC_SITE_EN = {
   "chatgptApp.highlight2": "Order #1021 is waiting on final artwork approval.",
   "chatgptApp.highlight3": "Payment reminder sent for order #1018 on 12 May.",
 
+  "chatgptImport.title": "Bring your old records with you.",
+  "chatgptImport.body": "You don't have to retype years of work. Upload the spreadsheets, invoices, order lists or notes you already keep to ChatGPT, ask it to add them to NivaDesk, and it fills your workspace for you.",
+  "chatgptImport.step1": "Upload what you already have — a spreadsheet, an invoice, an order list, even a photo of a notebook page.",
+  "chatgptImport.step2": "Ask ChatGPT to add them to your NivaDesk workspace.",
+  "chatgptImport.step3": "Each record becomes a real order: customer, price, deposit, dates and status.",
+  "chatgptImport.note": "Orders are created one at a time through your connected workspace permissions, so you can watch them arrive and fix anything before you move on.",
+
   "schedule.eyebrow": "Schedule & Timeline",
   "schedule.title": "See who is doing what and when.",
   "schedule.body": "NivaDesk Schedule gives studios a clear, live timeline of every active order, so you can track progress, meet deadlines and plan ahead with confidence.",
@@ -7890,6 +7897,99 @@ const FILL_TRANSLATIONS_13: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+
+// ChatGPT showcase: the "bring your old records with you" migration panel.
+const FILL_TRANSLATIONS_14: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": {
+    "chatgptImport.title": "Eski kayıtlarını da yanında getir.",
+    "chatgptImport.body": "Yılların işini yeniden yazmana gerek yok. Halihazırda tuttuğun tabloları, faturaları, sipariş listelerini veya notları ChatGPT'ye yükle, NivaDesk'e eklemesini iste; çalışma alanını senin yerine doldursun.",
+    "chatgptImport.step1": "Elinde ne varsa yükle: bir Excel tablosu, bir fatura, bir sipariş listesi, hatta defter sayfasının fotoğrafı.",
+    "chatgptImport.step2": "ChatGPT'den bunları NivaDesk çalışma alanına eklemesini iste.",
+    "chatgptImport.step3": "Her kayıt gerçek bir siparişe dönüşür: müşteri, fiyat, kapora, tarihler ve durum.",
+    "chatgptImport.note": "Siparişler bağlı çalışma alanı izinlerinle tek tek oluşturulur; böylece eklenirken görür, devam etmeden önce gerekirse düzeltirsin."
+  },
+  "Deutsch": {
+    "chatgptImport.title": "Nimm deine alten Aufzeichnungen mit.",
+    "chatgptImport.body": "Du musst jahrelange Arbeit nicht neu eintippen. Lade die Tabellen, Rechnungen, Bestelllisten oder Notizen, die du ohnehin führst, in ChatGPT hoch, bitte darum, sie in NivaDesk anzulegen, und dein Workspace füllt sich von selbst.",
+    "chatgptImport.step1": "Lade hoch, was du schon hast: eine Tabelle, eine Rechnung, eine Bestellliste, sogar ein Foto einer Notizbuchseite.",
+    "chatgptImport.step2": "Bitte ChatGPT, sie in deinen NivaDesk-Workspace einzutragen.",
+    "chatgptImport.step3": "Jeder Eintrag wird zu einer echten Bestellung: Kunde, Preis, Anzahlung, Termine und Status.",
+    "chatgptImport.note": "Bestellungen werden einzeln über deine verbundenen Workspace-Berechtigungen angelegt, sodass du sie ankommen siehst und vorher noch korrigieren kannst."
+  },
+  "Français": {
+    "chatgptImport.title": "Emportez vos anciens dossiers avec vous.",
+    "chatgptImport.body": "Pas besoin de ressaisir des années de travail. Envoyez à ChatGPT les tableaux, factures, listes de commandes ou notes que vous tenez déjà, demandez-lui de les ajouter à NivaDesk, et votre espace de travail se remplit tout seul.",
+    "chatgptImport.step1": "Envoyez ce que vous avez déjà : un tableur, une facture, une liste de commandes, même la photo d’une page de carnet.",
+    "chatgptImport.step2": "Demandez à ChatGPT de les ajouter à votre espace NivaDesk.",
+    "chatgptImport.step3": "Chaque ligne devient une vraie commande : client, prix, acompte, dates et statut.",
+    "chatgptImport.note": "Les commandes sont créées une par une via les autorisations de votre espace connecté : vous les voyez arriver et pouvez corriger avant de continuer."
+  },
+  "Italiano": {
+    "chatgptImport.title": "Porta con te i tuoi vecchi archivi.",
+    "chatgptImport.body": "Non devi riscrivere anni di lavoro. Carica su ChatGPT i fogli di calcolo, le fatture, gli elenchi di ordini o le note che già tieni, chiedigli di aggiungerli a NivaDesk e lo spazio di lavoro si riempie da solo.",
+    "chatgptImport.step1": "Carica quello che hai già: un foglio di calcolo, una fattura, un elenco di ordini, persino la foto di una pagina di quaderno.",
+    "chatgptImport.step2": "Chiedi a ChatGPT di aggiungerli al tuo spazio NivaDesk.",
+    "chatgptImport.step3": "Ogni voce diventa un ordine vero: cliente, prezzo, acconto, date e stato.",
+    "chatgptImport.note": "Gli ordini vengono creati uno alla volta tramite i permessi dello spazio collegato, così li vedi arrivare e puoi correggerli prima di proseguire."
+  },
+  "Español (Spanish)": {
+    "chatgptImport.title": "Trae contigo tus registros antiguos.",
+    "chatgptImport.body": "No tienes que volver a escribir años de trabajo. Sube a ChatGPT las hojas de cálculo, facturas, listas de pedidos o notas que ya llevas, pídele que las añada a NivaDesk y tu espacio de trabajo se llena solo.",
+    "chatgptImport.step1": "Sube lo que ya tienes: una hoja de cálculo, una factura, una lista de pedidos, incluso la foto de una página de cuaderno.",
+    "chatgptImport.step2": "Pide a ChatGPT que los añada a tu espacio de trabajo de NivaDesk.",
+    "chatgptImport.step3": "Cada registro se convierte en un pedido real: cliente, precio, anticipo, fechas y estado.",
+    "chatgptImport.note": "Los pedidos se crean uno a uno con los permisos de tu espacio conectado, así los ves llegar y puedes corregir algo antes de seguir."
+  },
+  "Português": {
+    "chatgptImport.title": "Traz contigo os teus registos antigos.",
+    "chatgptImport.body": "Não precisas de reescrever anos de trabalho. Carrega no ChatGPT as folhas de cálculo, faturas, listas de encomendas ou notas que já tens, pede-lhe para as adicionar ao NivaDesk e o teu espaço de trabalho enche-se sozinho.",
+    "chatgptImport.step1": "Carrega o que já tens: uma folha de cálculo, uma fatura, uma lista de encomendas, até a foto de uma página de caderno.",
+    "chatgptImport.step2": "Pede ao ChatGPT para as adicionar ao teu espaço de trabalho NivaDesk.",
+    "chatgptImport.step3": "Cada registo torna-se uma encomenda real: cliente, preço, sinal, datas e estado.",
+    "chatgptImport.note": "As encomendas são criadas uma a uma através das permissões do teu espaço ligado, para as veres a chegar e corrigires algo antes de continuares."
+  },
+  "Русский (Russian)": {
+    "chatgptImport.title": "Возьмите старые записи с собой.",
+    "chatgptImport.body": "Не нужно заново набирать работу за годы. Загрузите в ChatGPT таблицы, счета, списки заказов или заметки, которые вы уже ведёте, попросите добавить их в NivaDesk — и рабочее пространство заполнится само.",
+    "chatgptImport.step1": "Загрузите то, что уже есть: таблицу, счёт, список заказов и даже фото страницы блокнота.",
+    "chatgptImport.step2": "Попросите ChatGPT добавить их в ваше рабочее пространство NivaDesk.",
+    "chatgptImport.step3": "Каждая запись становится настоящим заказом: клиент, цена, предоплата, даты и статус.",
+    "chatgptImport.note": "Заказы создаются по одному через разрешения подключённого рабочего пространства, так что вы видите их появление и можете что-то поправить."
+  },
+  "日本語 (Japanese)": {
+    "chatgptImport.title": "これまでの記録も一緒に移せます。",
+    "chatgptImport.body": "何年分もの作業を入力し直す必要はありません。すでにお持ちの表計算ファイル、請求書、注文リスト、メモを ChatGPT にアップロードし、NivaDesk に追加するよう頼むだけで、ワークスペースが埋まります。",
+    "chatgptImport.step1": "手元にあるものをアップロードします。表計算ファイル、請求書、注文リスト、ノートの写真でも構いません。",
+    "chatgptImport.step2": "ChatGPT に NivaDesk ワークスペースへ追加するよう頼みます。",
+    "chatgptImport.step3": "各レコードが実際の注文になります。顧客、金額、内金、日付、ステータスまで。",
+    "chatgptImport.note": "注文は接続済みワークスペースの権限を通じて 1 件ずつ作成されるため、追加される様子を確認し、必要なら先に修正できます。"
+  },
+  "中文 (Chinese)": {
+    "chatgptImport.title": "把过去的记录一起带过来。",
+    "chatgptImport.body": "多年的工作不必重新录入。把你现有的表格、发票、订单清单或笔记上传到 ChatGPT，请它添加到 NivaDesk，工作区就会自动填好。",
+    "chatgptImport.step1": "上传你手上已有的资料：表格、发票、订单清单，甚至是笔记本页面的照片。",
+    "chatgptImport.step2": "请 ChatGPT 把它们添加到你的 NivaDesk 工作区。",
+    "chatgptImport.step3": "每条记录都会变成真正的订单：客户、价格、定金、日期和状态。",
+    "chatgptImport.note": "订单通过已连接工作区的权限逐条创建，你可以看着它们进来，并在继续之前更正。"
+  },
+  "العربية (Arabic)": {
+    "chatgptImport.title": "خُذ سجلاتك القديمة معك.",
+    "chatgptImport.body": "لا داعي لإعادة كتابة سنوات من العمل. ارفع إلى ChatGPT الجداول والفواتير وقوائم الطلبات أو الملاحظات التي تحتفظ بها بالفعل، واطلب منه إضافتها إلى NivaDesk، فتمتلئ مساحة عملك تلقائيًا.",
+    "chatgptImport.step1": "ارفع ما لديك بالفعل: جدول بيانات أو فاتورة أو قائمة طلبات، وحتى صورة لصفحة دفتر.",
+    "chatgptImport.step2": "اطلب من ChatGPT إضافتها إلى مساحة عمل NivaDesk الخاصة بك.",
+    "chatgptImport.step3": "يتحول كل سجل إلى طلب حقيقي: العميل والسعر والعربون والتواريخ والحالة.",
+    "chatgptImport.note": "تُنشأ الطلبات واحدًا تلو الآخر عبر أذونات مساحة العمل المتصلة، فتراها أثناء إضافتها ويمكنك تصحيح أي شيء قبل المتابعة."
+  },
+  "हिन्दी (Hindi)": {
+    "chatgptImport.title": "अपने पुराने रिकॉर्ड भी साथ लाएँ।",
+    "chatgptImport.body": "सालों का काम दोबारा टाइप करने की ज़रूरत नहीं। आप जो स्प्रेडशीट, इनवॉइस, ऑर्डर सूचियाँ या नोट्स पहले से रखते हैं, उन्हें ChatGPT पर अपलोड करें, उससे NivaDesk में जोड़ने को कहें, और आपका वर्कस्पेस अपने आप भर जाएगा।",
+    "chatgptImport.step1": "जो आपके पास पहले से है उसे अपलोड करें: स्प्रेडशीट, इनवॉइस, ऑर्डर सूची, यहाँ तक कि नोटबुक के पन्ने की फ़ोटो भी।",
+    "chatgptImport.step2": "ChatGPT से कहें कि उन्हें आपके NivaDesk वर्कस्पेस में जोड़ दे।",
+    "chatgptImport.step3": "हर रिकॉर्ड असली ऑर्डर बन जाता है: ग्राहक, कीमत, अग्रिम राशि, तारीख़ें और स्थिति।",
+    "chatgptImport.note": "ऑर्डर आपके कनेक्टेड वर्कस्पेस की अनुमतियों से एक-एक करके बनते हैं, ताकि आप उन्हें आते हुए देखें और आगे बढ़ने से पहले कुछ भी ठीक कर सकें।"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -7903,7 +8003,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_10,
   FILL_TRANSLATIONS_11,
   FILL_TRANSLATIONS_12,
-  FILL_TRANSLATIONS_13
+  FILL_TRANSLATIONS_13,
+  FILL_TRANSLATIONS_14
 ];
 
 function mergeFill(

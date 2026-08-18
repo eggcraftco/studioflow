@@ -19526,6 +19526,87 @@ html[dir="rtl"] .login-public-shell {
   }
 }
 
+
+/* "Bring your old records with you" — the migration panel above the mock. */
+.gpt-import {
+  border: 1px solid rgba(31, 35, 38, 0.10);
+  border-radius: 20px;
+  background: #fff;
+  padding: 26px 28px;
+  margin-bottom: 22px;
+  box-shadow: 0 14px 40px rgba(23, 25, 35, 0.05);
+}
+
+.gpt-import-intro h3 {
+  margin: 0 0 8px;
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.15;
+  color: var(--public-text);
+}
+
+.gpt-import-intro p {
+  margin: 0;
+  max-width: 760px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--public-muted);
+}
+
+.gpt-import-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.gpt-import-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 15px;
+  border: 1px solid var(--public-border);
+  border-radius: 14px;
+  background: #fbfbfa;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--public-text);
+}
+
+.gpt-import-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(47, 111, 109, 0.12);
+  color: var(--public-accent);
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.gpt-import-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--public-muted);
+}
+
+.gpt-import-note svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--public-accent);
+}
+
 /* The demo card is a mock of a real ChatGPT session: macOS browser chrome,
    the app sidebar, the composer and the answer NivaDesk returns. Everything
    inside is presentational — no links, no inputs. */
@@ -19962,6 +20043,8 @@ html[dir="rtl"] .login-public-shell {
 }
 
 @media (max-width: 560px) {
+  .gpt-import { padding: 20px 18px; border-radius: 16px; }
+  .gpt-import-steps { grid-template-columns: minmax(0, 1fr); }
   /* Phone: drop the browser sidebar and tighten the window so the mock still
      reads as a ChatGPT session instead of a cramped grid. */
   .gpt-win-body { grid-template-columns: minmax(0, 1fr); }

@@ -1866,6 +1866,12 @@ function DashboardFinanceShowcase() {
   );
 }
 
+const IMPORT_STEPS: PublicSiteTranslationKey[] = [
+  "chatgptImport.step1",
+  "chatgptImport.step2",
+  "chatgptImport.step3"
+];
+
 export function ChatGPTAppShowcase({
   title,
   revealOnScroll = true,
@@ -1915,6 +1921,31 @@ export function ChatGPTAppShowcase({
             <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
           )}
           <h2>{title ?? t("chatgptApp.sectionTitle")}</h2>
+        </div>
+      </div>
+      {/* Migration story: the app's create_order tool means a studio can hand
+          ChatGPT its old spreadsheets/invoices and have them land as orders,
+          so nobody starts on an empty workspace. */}
+      <div className="public-shell">
+        <div className="gpt-import">
+          <div className="gpt-import-intro">
+            <h3>{t("chatgptImport.title")}</h3>
+            <p>{t("chatgptImport.body")}</p>
+          </div>
+          <ol className="gpt-import-steps">
+            {IMPORT_STEPS.map((key, index) => (
+              <li className="gpt-import-step" key={key}>
+                <span className="gpt-import-step-no" aria-hidden="true">{index + 1}</span>
+                <span>{t(key)}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="gpt-import-note">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" />
+            </svg>
+            {t("chatgptImport.note")}
+          </p>
         </div>
       </div>
       <div className="public-shell gpt-grid">
