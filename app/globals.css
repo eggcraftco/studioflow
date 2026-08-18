@@ -19371,8 +19371,8 @@ html[dir="rtl"] .login-public-shell {
 
 .gpt-grid {
   display: grid;
-  grid-template-columns: 0.86fr 1.14fr;
-  gap: 26px;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 24px;
   align-items: start;
 }
 
