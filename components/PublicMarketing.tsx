@@ -1996,7 +1996,8 @@ export function ChatGPTAppShowcase({
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M10 5.5v9M5.5 10h9" /></svg>
                   </span>
                   <span className="gpt-composer-chip">
-                    <span className="gpt-composer-chip-logo" aria-hidden="true">N</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="gpt-composer-chip-logo" src="/brand/nivadesk-mark-64.png" alt="" width={20} height={20} loading="lazy" decoding="async" />
                     NivaDesk
                   </span>
                   <p className="gpt-composer-text">{t("chatgptApp.prompt")}</p>
