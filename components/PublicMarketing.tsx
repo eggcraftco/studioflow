@@ -1240,10 +1240,13 @@ function PlanAction({ copy }: { copy: PublicPlanCopy }) {
   );
 }
 
-const PLAN_PRICES: Partial<Record<StudioBillingPlan, { monthly: string; yearly: string }>> = {
-  lifetime_lite: { monthly: "£9", yearly: "£90" },
-  pro_monthly: { monthly: "£19", yearly: "£190" },
-  team_monthly: { monthly: "£49", yearly: "£490" }
+// Yearly is billed at ten times the monthly price, so a year costs two months
+// less than paying monthly. The numbers let the cards show that saving instead
+// of leaving visitors to work it out from the two prices.
+const PLAN_PRICES: Partial<Record<StudioBillingPlan, { monthly: string; yearly: string; monthlyValue: number; yearlyValue: number }>> = {
+  lifetime_lite: { monthly: "£9", yearly: "£90", monthlyValue: 9, yearlyValue: 90 },
+  pro_monthly: { monthly: "£19", yearly: "£190", monthlyValue: 19, yearlyValue: 190 },
+  team_monthly: { monthly: "£49", yearly: "£490", monthlyValue: 49, yearlyValue: 490 }
 };
 
 function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: PlanEntitlements; compact?: boolean; billing?: "monthly" | "yearly" }) {
@@ -1267,10 +1270,22 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
             <div className="public-plan-price">
               <span className="public-plan-price-amount">{billing === "yearly" ? prices.yearly : prices.monthly}</span>
               <span className="public-plan-price-per">{billing === "yearly" ? t("pricing.perYear") : t("pricing.perMonth")}</span>
+              {billing === "yearly" ? (
+                <span className="public-plan-price-was">£{prices.monthlyValue * 12}</span>
+              ) : null}
             </div>
             <div className="public-plan-price-alt">
               {billing === "yearly" ? `${prices.monthly} ${t("pricing.perMonth")}` : `${prices.yearly} ${t("pricing.perYear")}`}
+              {billing === "monthly" ? <span className="public-plan-save-pill">{t("pricing.twoMonthsFree")}</span> : null}
             </div>
+            {billing === "yearly" ? (
+              <div className="public-plan-save">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 10.5l3.2 3.2L15.5 6" />
+                </svg>
+                {t("pricing.yearlySave").replace("{amount}", `£${prices.monthlyValue * 12 - prices.yearlyValue}`)}
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="public-plan-price"><span className="public-plan-price-amount">{t("pricing.freeForever")}</span></div>
@@ -1316,23 +1331,123 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
   );
 }
 
+const YEARLY_PERKS: PublicSiteTranslationKey[] = [
+  "pricing.yearlyPerk1",
+  "pricing.yearlyPerk2",
+  "pricing.yearlyPerk3"
+];
+
+// Reuses copy already on this page rather than adding an unverifiable
+// "trusted by studios worldwide" style claim.
+const BILLING_TRUST: PublicSiteTranslationKey[] = [
+  "pricingHero.mini.fees.title",
+  "pricingHero.trust.cancel",
+  "pricingHero.trust.checkout"
+];
+
+function GiftMark() {
+  return (
+    <svg viewBox="0 0 96 88" fill="none" aria-hidden="true">
+      <path d="M10 38h76v42a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4z" fill="#bfdedb" />
+      <path d="M6 26h84v14H6z" fill="#8cc4bf" />
+      <path d="M40 26h16v58H40z" fill="#2f6f6d" />
+      <path d="M10 38h76" stroke="#2f6f6d" strokeWidth="2" opacity="0.35" />
+      <path d="M48 26C40 26 30 22 30 14s10-6 14 0c3 4 4 8 4 12zM48 26c8 0 18-4 18-12s-10-6-14 0c-3 4-4 8-4 12z" fill="#2f6f6d" />
+      <path d="M78 14l1.6 4.6L84 20l-4.4 1.4L78 26l-1.6-4.6L72 20l4.4-1.4zM16 8l1.2 3.4L20 13l-2.8 1L16 17l-1.2-3L12 13l2.8-1.6z" fill="#8cc4bf" />
+    </svg>
+  );
+}
+
+function ToggleCheck() {
+  return (
+    <span className="public-plan-toggle-check" aria-hidden="true">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5.5 10.5l3.2 3.2L15 6.5" />
+      </svg>
+    </span>
+  );
+}
+
 function PublicPlanGrid({ compact = false }: { compact?: boolean }) {
-  const { t } = usePublicSiteLanguage();
+  const { t, language } = usePublicSiteLanguage();
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
+  // Yearly is ten monthly payments, so the same 17% holds for every paid plan.
+  // Formatted per locale (Turkish writes %17, French 17 %) with Latin digits so
+  // it matches the £ amounts on the cards.
+  const savePercent = (() => {
+    const locale = LANGUAGE_CURRENCY[language as StudioLanguage]?.locale ?? "en-GB";
+    try {
+      return new Intl.NumberFormat(`${locale}-u-nu-latn`, { style: "percent", maximumFractionDigits: 0 }).format(2 / 12);
+    } catch {
+      return "17%";
+    }
+  })();
+  const titleParts = t("pricing.yearlyBanner.title").split("{highlight}");
+  const handNote = t("pricing.yearlyHandNote").replace("{percent}", savePercent);
   return (
     <>
+      {!compact ? (
+        <div className="public-plan-yearly-banner">
+          <span className="public-plan-yearly-badge" aria-hidden="true">
+            <span>{t("pricing.saveWord")}</span>
+            <strong>{savePercent}</strong>
+          </span>
+          <div className="public-plan-yearly-copy">
+            <h3>
+              {titleParts[0]}
+              <span className="hero-accent">{t("pricing.twoMonthsFree")}</span>
+              {titleParts[1] ?? ""}
+            </h3>
+            <p>{t("pricing.yearlyBanner.body")}</p>
+          </div>
+          <ul className="public-plan-yearly-perks">
+            {YEARLY_PERKS.map(key => (
+              <li key={key}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 10.5l3.2 3.2L15.5 6" />
+                </svg>
+                {t(key)}
+              </li>
+            ))}
+          </ul>
+          <span className="public-plan-yearly-gift" aria-hidden="true"><GiftMark /></span>
+        </div>
+      ) : null}
       {!compact ? (
         <div className="public-plan-toggle-row">
           <div className="public-plan-toggle">
             <button type="button" className={billing === "monthly" ? "active" : ""} onClick={() => setBilling("monthly")}>
-              {t("pricing.toggleMonthly")}
+              <strong>{t("pricing.toggleMonthly")}</strong>
+              <span>{t("pricing.togglePayAsYouGo")}</span>
+              {billing === "monthly" ? <ToggleCheck /> : null}
             </button>
             <button type="button" className={billing === "yearly" ? "active" : ""} onClick={() => setBilling("yearly")}>
-              {t("pricing.toggleYearly")}
+              <strong>{t("pricing.toggleYearly")}</strong>
+              <span>{t("pricing.twoMonthsFree")}</span>
+              <span className="public-plan-toggle-flag">{t("pricing.mostValue")}</span>
+              {billing === "yearly" ? <ToggleCheck /> : null}
             </button>
-            <span className="public-plan-toggle-save">{t("pricing.toggleSave")}</span>
           </div>
+          <span className="public-plan-toggle-hand" aria-hidden="true">
+            <svg viewBox="0 0 46 26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M44 4c-14 0-24 6-38 15" />
+              <path d="M6 12.5 5.5 19.5l7-1.5" />
+            </svg>
+            {handNote}
+          </span>
         </div>
+      ) : null}
+      {!compact ? (
+        <ul className="public-plan-toggle-trust">
+          {BILLING_TRUST.map(key => (
+            <li key={key}>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10 3l5 2v4.2c0 3-2.2 5.4-5 6.3-2.8-.9-5-3.3-5-6.3V5z" /><path d="M7.8 9.8 9.5 11.5l3-3.2" />
+              </svg>
+              {t(key)}
+            </li>
+          ))}
+        </ul>
       ) : null}
       <div className="public-plan-grid">
         {PLAN_ORDER.map(planKey => (

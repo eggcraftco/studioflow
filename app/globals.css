@@ -18782,47 +18782,273 @@ html[dir="rtl"] .login-public-shell {
 }
 
 /* Pricing — billing toggle + split price + recommended badge */
+/* Billing period block: a saving badge, the offer, what it buys, and a toggle
+   that says what each side means. Visitors were previously left to compare
+   £9 and £90 on their own. */
+.public-plan-yearly-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 22px;
+  margin: 0 0 22px;
+  padding: 18px 22px;
+  border: 1px solid rgba(47, 111, 109, 0.22);
+  border-radius: 20px;
+  background: linear-gradient(120deg, rgba(47, 111, 109, 0.10), rgba(47, 111, 109, 0.03) 60%, rgba(255, 255, 255, 0.6));
+}
+
+.public-plan-yearly-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 92px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--public-accent);
+  color: #fff;
+  line-height: 1;
+}
+
+.public-plan-yearly-badge span {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.public-plan-yearly-badge strong {
+  font-size: 27px;
+  font-weight: 800;
+}
+
+.public-plan-yearly-copy h3 {
+  margin: 0 0 5px;
+  font-size: clamp(21px, 2.1vw, 28px);
+  line-height: 1.12;
+  color: var(--public-text);
+}
+
+.public-plan-yearly-copy p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--public-muted);
+}
+
+.public-plan-yearly-perks {
+  margin: 0;
+  padding: 0 0 0 22px;
+  border-left: 1px solid rgba(47, 111, 109, 0.22);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.public-plan-yearly-perks li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--public-text);
+  white-space: nowrap;
+}
+
+.public-plan-yearly-perks svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--public-accent);
+}
+
+.public-plan-yearly-gift svg { width: 78px; height: 72px; display: block; }
+
+/* Toggle */
 .public-plan-toggle-row {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 26px;
+  gap: 14px;
+  margin: 26px 0 10px;
 }
 
 .public-plan-toggle {
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 4px;
   padding: 5px;
   border: 1px solid var(--public-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.8);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(23, 25, 35, 0.07);
 }
 
 .public-plan-toggle button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   border: none;
   background: transparent;
   border-radius: 999px;
-  padding: 8px 18px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--public-muted);
+  padding: 10px 28px;
   cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
 }
 
-.public-plan-toggle button.active {
-  background: #fff;
+.public-plan-toggle button strong {
+  font-size: 15px;
+  font-weight: 800;
   color: var(--public-text);
-  box-shadow: 0 2px 8px rgba(23, 25, 35, 0.10);
 }
 
-.public-plan-toggle-save {
-  padding: 0 12px 0 6px;
+.public-plan-toggle button span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--public-muted);
+}
+
+.public-plan-toggle button.active {
+  background: var(--public-accent);
+  padding-right: 50px;
+}
+
+.public-plan-toggle button.active strong,
+.public-plan-toggle button.active span { color: #fff; }
+.public-plan-toggle button.active span { opacity: 0.85; }
+
+.public-plan-toggle-check {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.public-plan-toggle-check svg { width: 15px; height: 15px; color: var(--public-accent); }
+
+.public-plan-toggle-flag {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: #1f4f4d;
+  color: #fff !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  white-space: nowrap;
+  opacity: 1 !important;
+}
+
+.public-plan-toggle-hand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 210px;
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: 15px;
+  line-height: 1.25;
   color: var(--public-accent);
+}
+
+.public-plan-toggle-hand svg { width: 42px; height: 24px; flex-shrink: 0; }
+
+.public-plan-toggle-trust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 22px;
+  margin: 0 0 26px;
+  padding: 0;
+  list-style: none;
+}
+
+.public-plan-toggle-trust li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 12.5px;
+  font-weight: 600;
+  color: var(--public-muted);
+}
+
+.public-plan-toggle-trust svg { width: 15px; height: 15px; color: var(--public-accent); }
+
+@media (max-width: 1080px) {
+  .public-plan-yearly-banner { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .public-plan-yearly-gift { display: none; }
+  .public-plan-toggle-hand { display: none; }
+}
+
+@media (max-width: 820px) {
+  .public-plan-yearly-banner { grid-template-columns: auto minmax(0, 1fr); gap: 16px; }
+  .public-plan-yearly-perks {
+    grid-column: 1 / -1;
+    padding: 14px 0 0;
+    border-left: none;
+    border-top: 1px solid rgba(47, 111, 109, 0.22);
+  }
+  .public-plan-yearly-perks li { white-space: normal; }
+}
+
+@media (max-width: 560px) {
+  .public-plan-yearly-banner { padding: 16px; border-radius: 16px; }
+  .public-plan-yearly-badge { min-width: 76px; padding: 10px 12px; }
+  .public-plan-yearly-badge strong { font-size: 22px; }
+  .public-plan-toggle button { padding: 9px 16px; }
+  .public-plan-toggle button.active { padding-right: 40px; }
+  .public-plan-toggle-check { width: 22px; height: 22px; right: 9px; }
+}
+
+.public-plan-price-was {
+  align-self: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--public-muted);
+  text-decoration: line-through;
+}
+
+.public-plan-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(47, 111, 109, 0.12);
+  color: var(--public-accent);
+  font-size: 13px;
   font-weight: 800;
 }
 
+.public-plan-save svg { width: 14px; height: 14px; }
+
+.public-plan-save-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(47, 111, 109, 0.12);
+  color: var(--public-accent);
+  font-size: 11.5px;
+  font-weight: 800;
+  vertical-align: 2px;
+}
 .public-plan-card {
   position: relative;
 }

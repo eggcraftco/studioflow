@@ -640,6 +640,17 @@ export const PUBLIC_SITE_EN = {
   "pricing.toggleMonthly": "Monthly",
   "pricing.toggleYearly": "Yearly",
   "pricing.toggleSave": "Save with yearly",
+  "pricing.twoMonthsFree": "2 months free",
+  "pricing.yearlyBanner.title": "Pay yearly, get {highlight}",
+  "pricing.yearlyBanner.body": "Pay for 10 months, use for 12. Switch billing period any time.",
+  "pricing.saveWord": "Save",
+  "pricing.yearlyPerk1": "Use for 12 months, pay for 10",
+  "pricing.yearlyPerk2": "Lock in your price for the year",
+  "pricing.yearlyPerk3": "Cancel or switch anytime",
+  "pricing.togglePayAsYouGo": "Pay as you go",
+  "pricing.mostValue": "Most value",
+  "pricing.yearlyHandNote": "Save {percent} with yearly billing",
+  "pricing.yearlySave": "Save {amount} a year",
   "pricing.perMonth": "/ month",
   "pricing.perYear": "/ year",
   "pricing.freeForever": "Free",
@@ -7990,6 +8001,155 @@ const FILL_TRANSLATIONS_14: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+
+// Pricing: make the yearly saving explicit (two months free) instead of
+// leaving visitors to compare the monthly and yearly figures themselves.
+const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": {
+    "pricing.twoMonthsFree": "2 ay bedava",
+    "pricing.yearlySave": "Yılda {amount} tasarruf",
+    "pricing.yearlyBanner.title": "Yıllık öde, {highlight} kullan",
+    "pricing.yearlyBanner.body": "10 ay öde, 12 ay kullan. Ödeme dönemini istediğin zaman değiştir.",
+    "pricing.saveWord": "Tasarruf",
+    "pricing.yearlyPerk1": "12 ay kullan, 10 ay öde",
+    "pricing.yearlyPerk2": "Fiyatını bir yıl sabitle",
+    "pricing.yearlyPerk3": "İstediğin zaman iptal et veya değiştir",
+    "pricing.togglePayAsYouGo": "Kullandıkça öde",
+    "pricing.mostValue": "En avantajlı",
+    "pricing.yearlyHandNote": "Yıllık ödemede {percent} tasarruf"
+  },
+  "Deutsch": {
+    "pricing.twoMonthsFree": "2 Monate gratis",
+    "pricing.yearlySave": "{amount} pro Jahr sparen",
+    "pricing.yearlyBanner.title": "Jährlich zahlen, {highlight} erhalten",
+    "pricing.yearlyBanner.body": "Zehn Monate zahlen, zwölf Monate nutzen. Abrechnungszeitraum jederzeit wechselbar.",
+    "pricing.saveWord": "Sparen",
+    "pricing.yearlyPerk1": "12 Monate nutzen, 10 bezahlen",
+    "pricing.yearlyPerk2": "Preis für das Jahr festschreiben",
+    "pricing.yearlyPerk3": "Jederzeit kündigen oder wechseln",
+    "pricing.togglePayAsYouGo": "Flexibel zahlen",
+    "pricing.mostValue": "Bester Wert",
+    "pricing.yearlyHandNote": "{percent} sparen mit Jahresabrechnung"
+  },
+  "Français": {
+    "pricing.twoMonthsFree": "2 mois offerts",
+    "pricing.yearlySave": "Économisez {amount} par an",
+    "pricing.yearlyBanner.title": "Payez à l’année, obtenez {highlight}",
+    "pricing.yearlyBanner.body": "Payez 10 mois, utilisez-en 12. Changez de périodicité à tout moment.",
+    "pricing.saveWord": "Économie",
+    "pricing.yearlyPerk1": "12 mois d’usage, 10 mois payés",
+    "pricing.yearlyPerk2": "Prix bloqué pour l’année",
+    "pricing.yearlyPerk3": "Annulez ou changez à tout moment",
+    "pricing.togglePayAsYouGo": "Paiement au mois",
+    "pricing.mostValue": "Le plus avantageux",
+    "pricing.yearlyHandNote": "Économisez {percent} avec la facturation annuelle"
+  },
+  "Italiano": {
+    "pricing.twoMonthsFree": "2 mesi gratis",
+    "pricing.yearlySave": "Risparmi {amount} all’anno",
+    "pricing.yearlyBanner.title": "Paga annualmente e ottieni {highlight}",
+    "pricing.yearlyBanner.body": "Paghi 10 mesi, ne usi 12. Cambia periodicità quando vuoi.",
+    "pricing.saveWord": "Risparmio",
+    "pricing.yearlyPerk1": "12 mesi di utilizzo, 10 pagati",
+    "pricing.yearlyPerk2": "Prezzo bloccato per l’anno",
+    "pricing.yearlyPerk3": "Disdici o cambia quando vuoi",
+    "pricing.togglePayAsYouGo": "Paghi mese per mese",
+    "pricing.mostValue": "Più conveniente",
+    "pricing.yearlyHandNote": "Risparmi {percent} con la fatturazione annuale"
+  },
+  "Español (Spanish)": {
+    "pricing.twoMonthsFree": "2 meses gratis",
+    "pricing.yearlySave": "Ahorra {amount} al año",
+    "pricing.yearlyBanner.title": "Paga al año y consigue {highlight}",
+    "pricing.yearlyBanner.body": "Pagas 10 meses y usas 12. Cambia el periodo de facturación cuando quieras.",
+    "pricing.saveWord": "Ahorro",
+    "pricing.yearlyPerk1": "12 meses de uso, 10 pagados",
+    "pricing.yearlyPerk2": "Precio fijo durante el año",
+    "pricing.yearlyPerk3": "Cancela o cambia cuando quieras",
+    "pricing.togglePayAsYouGo": "Pago mes a mes",
+    "pricing.mostValue": "Más ventajoso",
+    "pricing.yearlyHandNote": "Ahorra {percent} con la facturación anual"
+  },
+  "Português": {
+    "pricing.twoMonthsFree": "2 meses grátis",
+    "pricing.yearlySave": "Poupa {amount} por ano",
+    "pricing.yearlyBanner.title": "Paga anualmente e ganha {highlight}",
+    "pricing.yearlyBanner.body": "Pagas 10 meses e usas 12. Muda o período de faturação quando quiseres.",
+    "pricing.saveWord": "Poupança",
+    "pricing.yearlyPerk1": "12 meses de uso, 10 pagos",
+    "pricing.yearlyPerk2": "Preço fixo durante o ano",
+    "pricing.yearlyPerk3": "Cancela ou muda quando quiseres",
+    "pricing.togglePayAsYouGo": "Pagas mês a mês",
+    "pricing.mostValue": "Mais vantajoso",
+    "pricing.yearlyHandNote": "Poupa {percent} com faturação anual"
+  },
+  "Русский (Russian)": {
+    "pricing.twoMonthsFree": "2 месяца бесплатно",
+    "pricing.yearlySave": "Экономия {amount} в год",
+    "pricing.yearlyBanner.title": "Оплата за год — {highlight}",
+    "pricing.yearlyBanner.body": "Платите за 10 месяцев, пользуйтесь 12. Период оплаты меняется в любой момент.",
+    "pricing.saveWord": "Выгода",
+    "pricing.yearlyPerk1": "12 месяцев пользования, оплата за 10",
+    "pricing.yearlyPerk2": "Цена фиксируется на год",
+    "pricing.yearlyPerk3": "Отмена или смена в любой момент",
+    "pricing.togglePayAsYouGo": "Оплата по месяцам",
+    "pricing.mostValue": "Выгоднее всего",
+    "pricing.yearlyHandNote": "Экономия {percent} при оплате за год"
+  },
+  "日本語 (Japanese)": {
+    "pricing.twoMonthsFree": "2 か月分無料",
+    "pricing.yearlySave": "年間 {amount} お得",
+    "pricing.yearlyBanner.title": "年払いなら{highlight}",
+    "pricing.yearlyBanner.body": "10 か月分の支払いで 12 か月使えます。支払い周期はいつでも変更できます。",
+    "pricing.saveWord": "お得",
+    "pricing.yearlyPerk1": "12 か月利用、支払いは 10 か月分",
+    "pricing.yearlyPerk2": "1 年間は料金そのまま",
+    "pricing.yearlyPerk3": "いつでも解約・変更できます",
+    "pricing.togglePayAsYouGo": "毎月払い",
+    "pricing.mostValue": "いちばんお得",
+    "pricing.yearlyHandNote": "年払いで {percent} お得"
+  },
+  "中文 (Chinese)": {
+    "pricing.twoMonthsFree": "免费 2 个月",
+    "pricing.yearlySave": "每年省 {amount}",
+    "pricing.yearlyBanner.title": "按年付费，{highlight}",
+    "pricing.yearlyBanner.body": "付 10 个月，用 12 个月。计费周期随时可改。",
+    "pricing.saveWord": "省",
+    "pricing.yearlyPerk1": "使用 12 个月，只付 10 个月",
+    "pricing.yearlyPerk2": "全年价格锁定",
+    "pricing.yearlyPerk3": "随时取消或更改",
+    "pricing.togglePayAsYouGo": "按月付费",
+    "pricing.mostValue": "最划算",
+    "pricing.yearlyHandNote": "按年付费省 {percent}"
+  },
+  "العربية (Arabic)": {
+    "pricing.twoMonthsFree": "شهران مجانًا",
+    "pricing.yearlySave": "وفّر {amount} سنويًا",
+    "pricing.yearlyBanner.title": "ادفع سنويًا واحصل على {highlight}",
+    "pricing.yearlyBanner.body": "تدفع 10 أشهر وتستخدم 12. يمكنك تغيير دورة الدفع في أي وقت.",
+    "pricing.saveWord": "وفّر",
+    "pricing.yearlyPerk1": "استخدام 12 شهرًا بدفع 10 أشهر",
+    "pricing.yearlyPerk2": "سعرك ثابت طوال السنة",
+    "pricing.yearlyPerk3": "إلغاء أو تغيير في أي وقت",
+    "pricing.togglePayAsYouGo": "الدفع شهريًا",
+    "pricing.mostValue": "الأكثر توفيرًا",
+    "pricing.yearlyHandNote": "وفّر {percent} مع الفاتورة السنوية"
+  },
+  "हिन्दी (Hindi)": {
+    "pricing.twoMonthsFree": "2 महीने मुफ़्त",
+    "pricing.yearlySave": "साल में {amount} की बचत",
+    "pricing.yearlyBanner.title": "सालाना भुगतान करें, {highlight} पाएँ",
+    "pricing.yearlyBanner.body": "10 महीने का भुगतान, 12 महीने का उपयोग। बिलिंग अवधि कभी भी बदलें।",
+    "pricing.saveWord": "बचत",
+    "pricing.yearlyPerk1": "12 महीने उपयोग, 10 महीने भुगतान",
+    "pricing.yearlyPerk2": "साल भर के लिए कीमत तय",
+    "pricing.yearlyPerk3": "कभी भी रद्द करें या बदलें",
+    "pricing.togglePayAsYouGo": "हर महीने भुगतान",
+    "pricing.mostValue": "सबसे फ़ायदेमंद",
+    "pricing.yearlyHandNote": "सालाना बिलिंग पर {percent} बचत"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -8004,7 +8164,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_11,
   FILL_TRANSLATIONS_12,
   FILL_TRANSLATIONS_13,
-  FILL_TRANSLATIONS_14
+  FILL_TRANSLATIONS_14,
+  FILL_TRANSLATIONS_15
 ];
 
 function mergeFill(
