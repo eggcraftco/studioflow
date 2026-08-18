@@ -1878,10 +1878,21 @@ export function ChatGPTAppShowcase({
     { key: "chatgptApp.useCase2", icon: <path d="M4 16V9M9 16V4M14 16v-5" /> },
     { key: "chatgptApp.useCase3", icon: <path d="M4 16l.8-3 8-8 2.2 2.2-8 8-3 .8zM11.8 4.2l2.2 2.2" /> }
   ];
-  const stats: { label: PublicSiteTranslationKey; value: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
-    { label: "chatgptApp.resultMetric1Label", value: "chatgptApp.resultMetric1Value", tone: "clock", icon: <><circle cx="10" cy="10" r="6.4" /><path d="M10 6.4V10l2.6 1.6" /></> },
-    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", tone: "money", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
-    { label: "chatgptApp.resultMetric3Label", value: "chatgptApp.resultMetric3Value", tone: "lock", icon: <><rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" /></> }
+  const stats: {
+    label: PublicSiteTranslationKey;
+    value: PublicSiteTranslationKey;
+    link: PublicSiteTranslationKey;
+    tone: string;
+    icon: ReactNode;
+  }[] = [
+    { label: "chatgptApp.resultMetric1Label", value: "chatgptApp.resultMetric1Value", link: "chatgptApp.tileLinkOrders", tone: "clock", icon: <><circle cx="10" cy="10" r="6.4" /><path d="M10 6.4V10l2.6 1.6" /></> },
+    { label: "chatgptApp.resultMetric2Label", value: "chatgptApp.resultMetric2Value", link: "chatgptApp.tileLinkBreakdown", tone: "money", icon: <><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><circle cx="10" cy="10" r="2" /><path d="M5 8.5v3M15 8.5v3" /></> },
+    { label: "chatgptApp.metricNotesLabel", value: "chatgptApp.metricNotesValue", link: "chatgptApp.tileLinkNotes", tone: "notes", icon: <><path d="M6 3.5h8v13H6zM8 7h4M8 10h4M8 13h2.5" /></> }
+  ];
+  const highlights: PublicSiteTranslationKey[] = [
+    "chatgptApp.highlight1",
+    "chatgptApp.highlight2",
+    "chatgptApp.highlight3"
   ];
   const trust: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
     { key: "chatgptApp.safeBadge1", icon: <path d="M10 3l5 2v4c0 3-2.2 5.4-5 6.4C7.2 14.4 5 12 5 9V5z" /> },
@@ -1920,49 +1931,166 @@ export function ChatGPTAppShowcase({
             ))}
           </div>
         </div>
+        {/* Mock of the NivaDesk app running inside a real ChatGPT session:
+            browser chrome, the ChatGPT sidebar with the connected app, the
+            composer carrying the NivaDesk chip, and the answer it returns. */}
         <div className="gpt-demo-card">
-          <div className="gpt-demo-inner">
-            <div className="gpt-demo-head">
-              <span className="gpt-demo-head-logo"><GptMark /></span>
-              <strong>{t("chatgptApp.windowTitle")}</strong>
+          <div className="gpt-win">
+            <div className="gpt-win-bar" aria-hidden="true">
+              <span className="gpt-win-lights"><i /><i /><i /></span>
+              <span className="gpt-win-chrome">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4.5" width="14" height="11" rx="2" /><path d="M8 4.5v11" />
+                </svg>
+                <svg className="gpt-win-caret" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6.5 8.5 10 12l3.5-3.5" />
+                </svg>
+              </span>
+              <span className="gpt-win-url">chatgpt.com</span>
+              <span className="gpt-win-chrome gpt-win-chrome-end">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="7" /><path d="M10 6.6v6.2M7.4 10.2 10 12.8l2.6-2.6" />
+                </svg>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 3v9M7 6l3-3 3 3M5 11.5v3.5h10v-3.5" />
+                </svg>
+              </span>
             </div>
-            <div className="gpt-ask">
-              <div>
-                <span className="gpt-ask-label">{t("chatgptApp.promptLabel")}</span>
-                <p>{t("chatgptApp.prompt")}</p>
+            <div className="gpt-win-body">
+              <div className="gpt-rail" aria-hidden="true">
+                <span className="gpt-rail-mark"><GptMark /></span>
+                <span className="gpt-rail-btn">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 15.2 5 12l7-7 3 3-7 7zM12.2 5.8l2 2" />
+                  </svg>
+                </span>
+                <span className="gpt-rail-btn">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="9" r="5" /><path d="m12.8 12.8 3.2 3.2" />
+                  </svg>
+                </span>
+                <span className="gpt-rail-app">
+                  <span className="gpt-rail-app-avatar">N</span>
+                  <span className="gpt-rail-app-name">NivaDesk</span>
+                  <span className="gpt-rail-app-state">
+                    {t("chatgptApp.connectedBadge")}<i className="gpt-rail-dot" />
+                  </span>
+                </span>
               </div>
-              <span className="gpt-you">You</span>
-            </div>
-            <div className="gpt-stats">
-              {stats.map(s => {
-                const isMoney = s.tone === "money";
-                return (
-                  <div className="gpt-stat" key={s.label}>
-                    <span className="gpt-stat-icon" data-tone={s.tone}>
-                      {isMoney
-                        ? <span className="gpt-stat-symbol">{currency.symbol}</span>
-                        : <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{s.icon}</svg>}
-                    </span>
-                    <span className="gpt-stat-label">{t(s.label)}</span>
-                    <strong>{isMoney ? currency.format(1028) : t(s.value)}</strong>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="gpt-answer">
-              <span className="gpt-answer-avatar"><GptMark /></span>
-              <div>
-                <span className="gpt-answer-label">{t("chatgptApp.answerLabel")}</span>
-                <p>{t("chatgptApp.answer")}</p>
-              </div>
-            </div>
-            <div className="gpt-trust">
-              {trust.map(tr => (
-                <div className="gpt-trust-item" key={tr.key}>
-                  <span className="gpt-trust-icon"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{tr.icon}</svg></span>
-                  <span>{t(tr.key)}</span>
+
+              <div className="gpt-thread">
+                <div className="gpt-thread-top">
+                  <span className="gpt-thread-model">
+                    {t("chatgptApp.windowTitle")}
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M6.5 8.5 10 12l3.5-3.5" />
+                    </svg>
+                  </span>
+                  <span className="gpt-you">You</span>
                 </div>
-              ))}
+
+                <p className="gpt-agenda">{t("chatgptApp.agenda")}</p>
+
+                <div className="gpt-composer">
+                  <span className="gpt-composer-plus" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M10 5.5v9M5.5 10h9" /></svg>
+                  </span>
+                  <span className="gpt-composer-chip">
+                    <span className="gpt-composer-chip-logo" aria-hidden="true">N</span>
+                    NivaDesk
+                  </span>
+                  <p className="gpt-composer-text">{t("chatgptApp.prompt")}</p>
+                  <span className="gpt-composer-tools" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="7.6" y="3" width="4.8" height="8.4" rx="2.4" /><path d="M5 9.6a5 5 0 0 0 10 0M10 14.6V17" />
+                    </svg>
+                    <span className="gpt-composer-voice">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                        <path d="M5.5 8v4M8.5 5.5v9M11.5 7v6M14.5 8.6v2.8" />
+                      </svg>
+                    </span>
+                  </span>
+                </div>
+
+                <div className="gpt-reply">
+                  <span className="gpt-reply-avatar" aria-hidden="true"><GptMark /></span>
+                  <div className="gpt-reply-body">
+                    <p className="gpt-reply-text">{t("chatgptApp.answer")}</p>
+                    <div className="gpt-result">
+                      <div className="gpt-stats">
+                        {stats.map(s => {
+                          const isMoney = s.tone === "money";
+                          return (
+                            <div className="gpt-stat" key={s.label}>
+                              <span className="gpt-stat-head">
+                                <span className="gpt-stat-icon" data-tone={s.tone}>
+                                  {isMoney
+                                    ? <span className="gpt-stat-symbol">{currency.symbol}</span>
+                                    : <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{s.icon}</svg>}
+                                </span>
+                                <span className="gpt-stat-label">{t(s.label)}</span>
+                              </span>
+                              <strong>{isMoney ? currency.format(1028) : t(s.value)}</strong>
+                              <span className="gpt-stat-link">
+                                {t(s.link)}<span aria-hidden="true">→</span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="gpt-highlights">
+                        <strong>{t("chatgptApp.highlightsLabel")}</strong>
+                        <ul>
+                          {highlights.map(key => <li key={key}>{t(key)}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="gpt-msg-actions" aria-hidden="true">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="7" y="7" width="8.5" height="8.5" rx="2" /><path d="M12.5 7V5.5a1.5 1.5 0 0 0-1.5-1.5H5.9A1.9 1.9 0 0 0 4 5.9V11a1.5 1.5 0 0 0 1.5 1.5H7" />
+                      </svg>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9.2 9.4 3.6c1.2 0 1.9.8 1.7 2L10.8 8h3.4c1 0 1.7.9 1.4 1.8l-1.3 4.6c-.2.7-.8 1.2-1.5 1.2H6zM6 9.2v7.2H4.2V9.2z" />
+                      </svg>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 10.8 10.6 16.4c-1.2 0-1.9-.8-1.7-2L9.2 12H5.8c-1 0-1.7-.9-1.4-1.8l1.3-4.6c.2-.7.8-1.2 1.5-1.2H14zM14 10.8V3.6h1.8v7.2z" />
+                      </svg>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4.5 8v4h2.2L10 15V5L6.7 8zM13 7.6a3.4 3.4 0 0 1 0 4.8" />
+                      </svg>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15.5 7.5A6 6 0 1 0 16 11M15.5 4v3.5H12" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="gpt-composer gpt-composer-ask">
+                  <span className="gpt-composer-plus" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M10 5.5v9M5.5 10h9" /></svg>
+                  </span>
+                  <span className="gpt-composer-placeholder">{t("chatgptApp.composerPlaceholder")}</span>
+                  <span className="gpt-composer-tools" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="7.6" y="3" width="4.8" height="8.4" rx="2.4" /><path d="M5 9.6a5 5 0 0 0 10 0M10 14.6V17" />
+                    </svg>
+                    <span className="gpt-composer-voice">
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                        <path d="M5.5 8v4M8.5 5.5v9M11.5 7v6M14.5 8.6v2.8" />
+                      </svg>
+                    </span>
+                  </span>
+                </div>
+
+                <div className="gpt-win-note">
+                  {trust.map(tr => (
+                    <span className="gpt-win-note-item" key={tr.key}>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{tr.icon}</svg>
+                      {t(tr.key)}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

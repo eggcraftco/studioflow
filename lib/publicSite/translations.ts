@@ -493,6 +493,18 @@ export const PUBLIC_SITE_EN = {
   "chatgptApp.safeBadge1": "OAuth connected",
   "chatgptApp.safeBadge2": "Workspace permissions",
   "chatgptApp.safeBadge3": "Built on secure tools",
+  "chatgptApp.agenda": "What's on the agenda today?",
+  "chatgptApp.connectedBadge": "Connected",
+  "chatgptApp.composerPlaceholder": "Ask anything",
+  "chatgptApp.metricNotesLabel": "Key notes",
+  "chatgptApp.metricNotesValue": "3",
+  "chatgptApp.tileLinkOrders": "View orders",
+  "chatgptApp.tileLinkBreakdown": "View breakdown",
+  "chatgptApp.tileLinkNotes": "View notes",
+  "chatgptApp.highlightsLabel": "Highlights",
+  "chatgptApp.highlight1": "Order #1024 is 12 days overdue.",
+  "chatgptApp.highlight2": "Order #1021 is waiting on final artwork approval.",
+  "chatgptApp.highlight3": "Payment reminder sent for order #1018 on 12 May.",
 
   "schedule.eyebrow": "Schedule & Timeline",
   "schedule.title": "See who is doing what and when.",
@@ -7718,6 +7730,166 @@ const FILL_TRANSLATIONS_12: Partial<Record<StudioLanguage, Partial<Record<Public
   }
 };
 
+
+// ChatGPT showcase: copy for the ChatGPT-session mock (browser window, sidebar,
+// composer, result tiles and highlights).
+const FILL_TRANSLATIONS_13: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": {
+    "chatgptApp.agenda": "Bugün gündemde ne var?",
+    "chatgptApp.connectedBadge": "Bağlı",
+    "chatgptApp.composerPlaceholder": "Bir şey sorun",
+    "chatgptApp.metricNotesLabel": "Önemli notlar",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Siparişleri gör",
+    "chatgptApp.tileLinkBreakdown": "Dökümü gör",
+    "chatgptApp.tileLinkNotes": "Notları gör",
+    "chatgptApp.highlightsLabel": "Öne çıkanlar",
+    "chatgptApp.highlight1": "#1024 numaralı sipariş 12 gün gecikti.",
+    "chatgptApp.highlight2": "#1021 numaralı sipariş son tasarım onayını bekliyor.",
+    "chatgptApp.highlight3": "#1018 numaralı sipariş için 12 Mayıs'ta ödeme hatırlatması gönderildi."
+  },
+  "Deutsch": {
+    "chatgptApp.agenda": "Was steht heute an?",
+    "chatgptApp.connectedBadge": "Verbunden",
+    "chatgptApp.composerPlaceholder": "Frag etwas",
+    "chatgptApp.metricNotesLabel": "Wichtige Notizen",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Bestellungen ansehen",
+    "chatgptApp.tileLinkBreakdown": "Aufschlüsselung ansehen",
+    "chatgptApp.tileLinkNotes": "Notizen ansehen",
+    "chatgptApp.highlightsLabel": "Wichtigste Punkte",
+    "chatgptApp.highlight1": "Bestellung #1024 ist 12 Tage überfällig.",
+    "chatgptApp.highlight2": "Bestellung #1021 wartet auf die finale Freigabe des Designs.",
+    "chatgptApp.highlight3": "Zahlungserinnerung für Bestellung #1018 am 12. Mai gesendet."
+  },
+  "Français": {
+    "chatgptApp.agenda": "Quel est le programme aujourd’hui ?",
+    "chatgptApp.connectedBadge": "Connecté",
+    "chatgptApp.composerPlaceholder": "Posez une question",
+    "chatgptApp.metricNotesLabel": "Notes clés",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Voir les commandes",
+    "chatgptApp.tileLinkBreakdown": "Voir le détail",
+    "chatgptApp.tileLinkNotes": "Voir les notes",
+    "chatgptApp.highlightsLabel": "Points clés",
+    "chatgptApp.highlight1": "La commande #1024 a 12 jours de retard.",
+    "chatgptApp.highlight2": "La commande #1021 attend la validation finale du visuel.",
+    "chatgptApp.highlight3": "Rappel de paiement envoyé pour la commande #1018 le 12 mai."
+  },
+  "Italiano": {
+    "chatgptApp.agenda": "Cosa c’è in programma oggi?",
+    "chatgptApp.connectedBadge": "Connesso",
+    "chatgptApp.composerPlaceholder": "Chiedi qualcosa",
+    "chatgptApp.metricNotesLabel": "Note chiave",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Vedi gli ordini",
+    "chatgptApp.tileLinkBreakdown": "Vedi il dettaglio",
+    "chatgptApp.tileLinkNotes": "Vedi le note",
+    "chatgptApp.highlightsLabel": "In evidenza",
+    "chatgptApp.highlight1": "L’ordine #1024 è in ritardo di 12 giorni.",
+    "chatgptApp.highlight2": "L’ordine #1021 attende l’approvazione finale della grafica.",
+    "chatgptApp.highlight3": "Promemoria di pagamento inviato per l’ordine #1018 il 12 maggio."
+  },
+  "Español (Spanish)": {
+    "chatgptApp.agenda": "¿Qué hay en la agenda de hoy?",
+    "chatgptApp.connectedBadge": "Conectado",
+    "chatgptApp.composerPlaceholder": "Pregunta lo que quieras",
+    "chatgptApp.metricNotesLabel": "Notas clave",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Ver pedidos",
+    "chatgptApp.tileLinkBreakdown": "Ver desglose",
+    "chatgptApp.tileLinkNotes": "Ver notas",
+    "chatgptApp.highlightsLabel": "Destacados",
+    "chatgptApp.highlight1": "El pedido #1024 lleva 12 días de retraso.",
+    "chatgptApp.highlight2": "El pedido #1021 espera la aprobación final del diseño.",
+    "chatgptApp.highlight3": "Recordatorio de pago enviado para el pedido #1018 el 12 de mayo."
+  },
+  "Português": {
+    "chatgptApp.agenda": "O que está na agenda de hoje?",
+    "chatgptApp.connectedBadge": "Ligado",
+    "chatgptApp.composerPlaceholder": "Pergunta o que quiseres",
+    "chatgptApp.metricNotesLabel": "Notas principais",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Ver encomendas",
+    "chatgptApp.tileLinkBreakdown": "Ver detalhe",
+    "chatgptApp.tileLinkNotes": "Ver notas",
+    "chatgptApp.highlightsLabel": "Destaques",
+    "chatgptApp.highlight1": "A encomenda #1024 está 12 dias atrasada.",
+    "chatgptApp.highlight2": "A encomenda #1021 aguarda a aprovação final do design.",
+    "chatgptApp.highlight3": "Lembrete de pagamento enviado para a encomenda #1018 a 12 de maio."
+  },
+  "Русский (Russian)": {
+    "chatgptApp.agenda": "Что в планах на сегодня?",
+    "chatgptApp.connectedBadge": "Подключено",
+    "chatgptApp.composerPlaceholder": "Спросите что угодно",
+    "chatgptApp.metricNotesLabel": "Ключевые заметки",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "Посмотреть заказы",
+    "chatgptApp.tileLinkBreakdown": "Посмотреть разбивку",
+    "chatgptApp.tileLinkNotes": "Посмотреть заметки",
+    "chatgptApp.highlightsLabel": "Главное",
+    "chatgptApp.highlight1": "Заказ #1024 просрочен на 12 дней.",
+    "chatgptApp.highlight2": "Заказ #1021 ждёт финального утверждения макета.",
+    "chatgptApp.highlight3": "Напоминание об оплате по заказу #1018 отправлено 12 мая."
+  },
+  "日本語 (Japanese)": {
+    "chatgptApp.agenda": "今日の予定は？",
+    "chatgptApp.connectedBadge": "接続済み",
+    "chatgptApp.composerPlaceholder": "何でも質問してください",
+    "chatgptApp.metricNotesLabel": "重要なメモ",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "注文を見る",
+    "chatgptApp.tileLinkBreakdown": "内訳を見る",
+    "chatgptApp.tileLinkNotes": "メモを見る",
+    "chatgptApp.highlightsLabel": "ハイライト",
+    "chatgptApp.highlight1": "注文 #1024 は 12 日遅れています。",
+    "chatgptApp.highlight2": "注文 #1021 は最終デザインの承認待ちです。",
+    "chatgptApp.highlight3": "注文 #1018 の支払いリマインダーを 5 月 12 日に送信しました。"
+  },
+  "中文 (Chinese)": {
+    "chatgptApp.agenda": "今天有什么安排？",
+    "chatgptApp.connectedBadge": "已连接",
+    "chatgptApp.composerPlaceholder": "问点什么",
+    "chatgptApp.metricNotesLabel": "重点备注",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "查看订单",
+    "chatgptApp.tileLinkBreakdown": "查看明细",
+    "chatgptApp.tileLinkNotes": "查看备注",
+    "chatgptApp.highlightsLabel": "重点",
+    "chatgptApp.highlight1": "订单 #1024 已逾期 12 天。",
+    "chatgptApp.highlight2": "订单 #1021 正在等待最终稿审批。",
+    "chatgptApp.highlight3": "已于 5 月 12 日发送订单 #1018 的付款提醒。"
+  },
+  "العربية (Arabic)": {
+    "chatgptApp.agenda": "ما جدول أعمال اليوم؟",
+    "chatgptApp.connectedBadge": "متصل",
+    "chatgptApp.composerPlaceholder": "اسأل أي شيء",
+    "chatgptApp.metricNotesLabel": "ملاحظات مهمة",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "عرض الطلبات",
+    "chatgptApp.tileLinkBreakdown": "عرض التفاصيل",
+    "chatgptApp.tileLinkNotes": "عرض الملاحظات",
+    "chatgptApp.highlightsLabel": "أبرز النقاط",
+    "chatgptApp.highlight1": "الطلب #1024 متأخر 12 يومًا.",
+    "chatgptApp.highlight2": "الطلب #1021 بانتظار الموافقة النهائية على التصميم.",
+    "chatgptApp.highlight3": "تم إرسال تذكير بالدفع للطلب #1018 في 12 مايو."
+  },
+  "हिन्दी (Hindi)": {
+    "chatgptApp.agenda": "आज एजेंडा में क्या है?",
+    "chatgptApp.connectedBadge": "कनेक्टेड",
+    "chatgptApp.composerPlaceholder": "कुछ भी पूछें",
+    "chatgptApp.metricNotesLabel": "मुख्य नोट्स",
+    "chatgptApp.metricNotesValue": "3",
+    "chatgptApp.tileLinkOrders": "ऑर्डर देखें",
+    "chatgptApp.tileLinkBreakdown": "विवरण देखें",
+    "chatgptApp.tileLinkNotes": "नोट्स देखें",
+    "chatgptApp.highlightsLabel": "मुख्य बातें",
+    "chatgptApp.highlight1": "ऑर्डर #1024 12 दिन से विलंबित है।",
+    "chatgptApp.highlight2": "ऑर्डर #1021 को अंतिम डिज़ाइन स्वीकृति का इंतज़ार है।",
+    "chatgptApp.highlight3": "ऑर्डर #1018 के लिए 12 मई को भुगतान अनुस्मारक भेजा गया।"
+  }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -7730,7 +7902,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_9,
   FILL_TRANSLATIONS_10,
   FILL_TRANSLATIONS_11,
-  FILL_TRANSLATIONS_12
+  FILL_TRANSLATIONS_12,
+  FILL_TRANSLATIONS_13
 ];
 
 function mergeFill(

@@ -19526,65 +19526,173 @@ html[dir="rtl"] .login-public-shell {
   }
 }
 
-.gpt-demo-inner {
+/* The demo card is a mock of a real ChatGPT session: macOS browser chrome,
+   the app sidebar, the composer and the answer NivaDesk returns. Everything
+   inside is presentational — no links, no inputs. */
+.gpt-win {
   background: #fff;
   border-radius: 21px;
-  padding: 22px;
+  overflow: hidden;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.gpt-demo-head {
+/* Browser chrome */
+.gpt-win-bar {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin-bottom: 16px;
+  gap: 14px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(31, 35, 38, 0.07);
+  color: #8b8f95;
 }
 
-.gpt-demo-head-logo { width: 26px; height: 26px; }
-.gpt-demo-head-logo svg { width: 16px; height: 16px; }
-
-.gpt-demo-head strong {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--public-text);
+.gpt-win-lights {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.gpt-ask {
+.gpt-win-lights i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.gpt-win-lights i:nth-child(2) { background: #febc2e; }
+.gpt-win-lights i:nth-child(3) { background: #28c840; }
+
+.gpt-win-chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.gpt-win-chrome svg { width: 17px; height: 17px; }
+.gpt-win-chrome .gpt-win-caret { width: 13px; height: 13px; }
+.gpt-win-chrome-end { margin-left: auto; gap: 12px; }
+
+.gpt-win-url {
+  flex: 1;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #6f747a;
+  letter-spacing: 0.01em;
+}
+
+/* Sidebar + thread */
+.gpt-win-body {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.gpt-rail {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-radius: 13px;
-  background: #f4f6f5;
-  margin-bottom: 14px;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0 16px;
+  border-right: 1px solid rgba(31, 35, 38, 0.06);
+  color: #8b8f95;
 }
 
-.gpt-ask-label {
-  display: block;
-  font-size: 10.5px;
+.gpt-rail-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--public-accent);
+  color: #fff;
+}
+
+.gpt-rail-mark svg { width: 17px; height: 17px; }
+.gpt-rail-btn svg { width: 18px; height: 18px; }
+
+.gpt-rail-app {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.gpt-rail-app-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--public-border);
+  background: #fff;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--public-muted);
-  margin-bottom: 5px;
+  color: var(--public-accent);
 }
 
-.gpt-ask p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
+.gpt-rail-app-name {
+  font-size: 9.5px;
+  font-weight: 700;
   color: var(--public-text);
 }
+
+.gpt-rail-app-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--public-muted);
+}
+
+.gpt-rail-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #35a35a;
+}
+
+.gpt-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px 16px;
+  min-width: 0;
+}
+
+.gpt-thread-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gpt-thread-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--public-text);
+}
+
+.gpt-thread-model svg { width: 13px; height: 13px; color: var(--public-muted); }
 
 .gpt-you {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--public-accent);
   color: #fff;
@@ -19593,120 +19701,257 @@ html[dir="rtl"] .login-public-shell {
   flex-shrink: 0;
 }
 
+.gpt-agenda {
+  margin: 2px 0 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--public-text);
+}
+
+/* Composer — top one carries the prompt, bottom one is the empty input */
+.gpt-composer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid rgba(31, 35, 38, 0.10);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(23, 25, 35, 0.06);
+}
+
+.gpt-composer-plus,
+.gpt-composer-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #8b8f95;
+  flex-shrink: 0;
+}
+
+.gpt-composer-plus svg,
+.gpt-composer-tools svg { width: 17px; height: 17px; }
+
+.gpt-composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--public-accent);
+  flex-shrink: 0;
+}
+
+.gpt-composer-chip-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: rgba(47, 111, 109, 0.12);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.gpt-composer-text {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--public-text);
+}
+
+.gpt-composer-placeholder {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--public-muted);
+}
+
+.gpt-composer-voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #1c1d20;
+  color: #fff;
+}
+
+.gpt-composer-voice svg { width: 15px; height: 15px; }
+.gpt-composer-ask { background: #f6f6f4; box-shadow: none; }
+
+/* The answer */
+.gpt-reply {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.gpt-reply-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--public-accent);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.gpt-reply-avatar svg { width: 16px; height: 16px; }
+
+.gpt-reply-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gpt-reply-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--public-text);
+}
+
+.gpt-result {
+  border: 1px solid rgba(31, 35, 38, 0.08);
+  border-radius: 14px;
+  background: #fbfbfa;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .gpt-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .gpt-stat {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 8px;
-  padding: 16px 10px;
-  border: 1px solid var(--public-border);
-  border-radius: 13px;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid rgba(31, 35, 38, 0.08);
+  border-radius: 11px;
   background: #fff;
+  min-width: 0;
+}
+
+.gpt-stat-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 
 .gpt-stat-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.gpt-stat-icon svg { width: 18px; height: 18px; }
-.gpt-stat-symbol { font-size: 16px; font-weight: 800; line-height: 1; color: inherit; }
+.gpt-stat-icon svg { width: 14px; height: 14px; }
+.gpt-stat-symbol { font-size: 12px; font-weight: 800; line-height: 1; color: inherit; }
 .gpt-stat-icon[data-tone="clock"] { background: rgba(214, 110, 46, 0.14); color: #d06a26; }
 .gpt-stat-icon[data-tone="money"] { background: rgba(47, 111, 109, 0.14); color: #2f6f6d; }
-.gpt-stat-icon[data-tone="lock"] { background: rgba(92, 110, 214, 0.14); color: #5c6ed6; }
+.gpt-stat-icon[data-tone="notes"] { background: rgba(92, 110, 214, 0.14); color: #5c6ed6; }
 
 .gpt-stat-label {
-  font-size: 11.5px;
-  color: var(--public-muted);
+  font-size: 10.5px;
   font-weight: 600;
+  color: var(--public-muted);
+  line-height: 1.25;
 }
 
 .gpt-stat strong {
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--public-text);
+  line-height: 1;
 }
 
-.gpt-answer {
-  display: flex;
-  gap: 11px;
-  padding: 14px 16px;
-  border-radius: 13px;
-  background: #f4f6f5;
-  margin-bottom: 16px;
-}
-
-.gpt-answer-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.gpt-answer-avatar svg { width: 18px; height: 18px; }
-
-.gpt-answer-label {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--public-muted);
-  margin-bottom: 5px;
-}
-
-.gpt-answer p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--public-text);
-}
-
-.gpt-trust {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.gpt-trust-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--public-muted);
-}
-
-.gpt-trust-icon {
+.gpt-stat-link {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(47, 111, 109, 0.10);
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
   color: var(--public-accent);
-  flex-shrink: 0;
 }
 
-.gpt-trust-icon svg { width: 16px; height: 16px; }
+.gpt-highlights strong {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--public-text);
+  margin-bottom: 6px;
+}
+
+.gpt-highlights ul {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gpt-highlights li {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--public-muted);
+}
+
+.gpt-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #a0a4a9;
+}
+
+.gpt-msg-actions svg { width: 15px; height: 15px; }
+
+/* Bottom status strip — the trust badges live here */
+.gpt-win-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 16px;
+  padding-top: 2px;
+  color: var(--public-muted);
+}
+
+.gpt-win-note-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.gpt-win-note-item svg { width: 13px; height: 13px; color: var(--public-accent); }
 
 /* Desktop only: tighten the left copy card so it stays as compact as the demo
    card on the right (instead of overhanging it). Mobile keeps the base sizes. */
 @media (min-width: 901px) {
-  .gpt-copy-card { padding: 30px 32px; }
+  .gpt-grid { align-items: stretch; }
+  .gpt-copy-card { display: flex; flex-direction: column; padding: 30px 32px; }
+  .gpt-queries { margin-top: auto; }
   .gpt-copy-card h3 { font-size: clamp(23px, 2.2vw, 30px); margin: 4px 0 10px; line-height: 1.05; }
   .gpt-copy-card > p { font-size: 15px; line-height: 1.5; margin: 0 0 16px; }
   .gpt-queries { gap: 9px; }
@@ -19716,17 +19961,23 @@ html[dir="rtl"] .login-public-shell {
 @media (max-width: 900px) {
   .gpt-grid { grid-template-columns: 1fr; gap: 18px; }
   .gpt-copy-card { padding: 26px 22px; }
-  .gpt-demo-inner { padding: 18px; }
 }
 
 @media (max-width: 560px) {
-  /* Keep the three result cards in a row (don't stack) so the section stays compact. */
-  .gpt-trust { grid-template-columns: 1fr; }
-  .gpt-stats { gap: 8px; }
-  .gpt-stat { padding: 12px 6px; gap: 6px; }
-  .gpt-stat-icon { width: 30px; height: 30px; }
-  .gpt-stat strong { font-size: 16px; }
-  .gpt-stat-label { font-size: 10px; }
+  /* Phone: drop the browser sidebar and tighten the window so the mock still
+     reads as a ChatGPT session instead of a cramped grid. */
+  .gpt-win-body { grid-template-columns: minmax(0, 1fr); }
+  .gpt-rail { display: none; }
+  .gpt-thread { padding: 12px 12px 14px; gap: 10px; }
+  .gpt-agenda { font-size: 15px; }
+  .gpt-composer { padding: 10px 12px; gap: 7px; border-radius: 18px; flex-wrap: wrap; }
+  .gpt-composer-text { flex-basis: 100%; order: 3; }
+  .gpt-composer-ask { flex-wrap: nowrap; border-radius: 999px; }
+  .gpt-composer-text, .gpt-composer-placeholder { font-size: 11.5px; }
+  .gpt-stats { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .gpt-stat { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .gpt-stat strong { font-size: 17px; }
+  .gpt-win-note { justify-content: flex-start; }
 }
 
 .public-chatgpt-app-section {
