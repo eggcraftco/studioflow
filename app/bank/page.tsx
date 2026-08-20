@@ -1,6 +1,6 @@
 "use client";
 
-// Bank spending feed (Open Banking via GoCardless Bank Account Data).
+// Bank spending feed (Open Banking via TrueLayer).
 // Owner-only: connect a business bank account, see the live transaction feed.
 // Read-only account information — the app can never move money.
 
@@ -16,13 +16,13 @@ import { db, functions } from "@/lib/firebase/client";
 import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { studioT } from "@/lib/studioflow/language";
 
-type BankInstitution = { id: string; name: string; country: string; logo: string; psuTypes: string[] };
+type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
   id: string;
-  institutionName: string;
-  institutionLogo: string;
+  providerName: string;
+  providerLogo: string;
   status: string;
-  accounts: string[];
+  accounts: BankAccountInfo[];
   lastSyncedAt: Date | null;
 };
 type BankTransaction = {
@@ -50,9 +50,6 @@ function BankPageContent() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
-  const [institutions, setInstitutions] = useState<BankInstitution[]>([]);
-  const [institutionSearch, setInstitutionSearch] = useState("");
-  const [showPicker, setShowPicker] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +87,10 @@ function BankPageContent() {
           const data = doc.data() as Record<string, unknown>;
           return {
             id: doc.id,
-            institutionName: String(data.institutionName || ""),
-            institutionLogo: String(data.institutionLogo || ""),
+            providerName: String(data.providerName || ""),
+            providerLogo: String(data.providerLogo || ""),
             status: String(data.status || ""),
-            accounts: Array.isArray(data.accounts) ? (data.accounts as string[]) : [],
+            accounts: Array.isArray(data.accounts) ? (data.accounts as BankAccountInfo[]) : [],
             lastSyncedAt: toDate(data.lastSyncedAt)
           };
         }));
@@ -125,9 +122,8 @@ function BankPageContent() {
     return result.data;
   }, [companyId]);
 
-  // Returning from the bank's consent screen: Enable Banking redirects back
-  // with ?code=...&state=... — exchange the code for a session, then clean
-  // the URL.
+  // Returning from the bank's consent screen: TrueLayer redirects back with
+  // ?code=...&state=... — exchange the code for tokens, then clean the URL.
   useEffect(() => {
     if (!companyId || !isOwner) return;
     const code = searchParams.get("code");
@@ -155,32 +151,11 @@ function BankPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, isOwner, searchParams]);
 
-  async function openPicker() {
-    setShowPicker(true);
-    setError(null);
-    if (institutions.length > 0) return;
-    setBusy("institutions");
-    try {
-      const result = await call<{ institutions: BankInstitution[] }>("bankListInstitutions", { country: "gb" });
-      setInstitutions(result.institutions);
-    } catch (listError) {
-      setError(listError instanceof Error ? listError.message : "Could not load the bank list.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function connectInstitution(institution: BankInstitution) {
-    setBusy(`connect-${institution.id}`);
+  async function connectBank() {
+    setBusy("connect");
     setError(null);
     try {
-      const result = await call<{ link: string }>("bankCreateRequisition", {
-        institutionName: institution.name,
-        institutionCountry: institution.country,
-        institutionLogo: institution.logo,
-        psuType: institution.psuTypes.includes("business") ? "business" : "personal",
-        redirectUrl: "https://nivadesk.app/bank"
-      });
+      const result = await call<{ link: string }>("bankCreateRequisition", {});
       window.location.href = result.link;
     } catch (connectError) {
       setError(connectError instanceof Error ? connectError.message : "Could not start the bank connection.");
@@ -220,12 +195,6 @@ function BankPageContent() {
     }
   }
 
-  const filteredInstitutions = useMemo(() => {
-    const term = institutionSearch.trim().toLowerCase();
-    if (!term) return institutions.slice(0, 40);
-    return institutions.filter(item => item.name.toLowerCase().includes(term)).slice(0, 40);
-  }, [institutions, institutionSearch]);
-
   const monthTotal = useMemo(() => {
     const now = new Date();
     const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -255,8 +224,8 @@ function BankPageContent() {
             </button>
           ) : null}
           {isOwner ? (
-            <button type="button" className="finance-payments-add" onClick={() => void openPicker()}>
-              + {t("Connect bank")}
+            <button type="button" className="finance-payments-add" disabled={busy === "connect"} onClick={() => void connectBank()}>
+              {busy === "connect" ? t("Opening your bank…") : `+ ${t("Connect bank")}`}
             </button>
           ) : null}
         </div>
@@ -270,50 +239,16 @@ function BankPageContent() {
         {status ? <p style={{ marginTop: 10, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
         {error ? <p style={{ marginTop: 10, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
 
-        {showPicker && isOwner ? (
-          <div style={{ marginTop: 14, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 12, padding: 14 }}>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="text"
-                placeholder={t("Search your bank (e.g. HSBC Business)")}
-                value={institutionSearch}
-                autoFocus
-                onChange={event => setInstitutionSearch(event.target.value)}
-                style={{ flex: 1, fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }}
-              />
-              <button type="button" className="finance-payments-delete" onClick={() => setShowPicker(false)}>✕</button>
-            </div>
-            {busy === "institutions" ? <p style={{ fontSize: 12, marginTop: 10 }}>{t("Loading banks…")}</p> : null}
-            <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
-              {filteredInstitutions.map(institution => (
-                <button
-                  key={institution.id}
-                  type="button"
-                  disabled={busy === `connect-${institution.id}`}
-                  onClick={() => void connectInstitution(institution)}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(120,120,140,0.25)", background: "transparent", color: "inherit", cursor: "pointer", textAlign: "left" }}
-                >
-                  {institution.logo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={institution.logo} alt="" width={22} height={22} style={{ borderRadius: 5 }} />
-                  ) : <span aria-hidden="true">🏦</span>}
-                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{institution.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         {isOwner && connections.length > 0 ? (
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
             {connections.map(connection => (
               <div key={connection.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
-                {connection.institutionLogo ? (
+                {connection.providerLogo ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={connection.institutionLogo} alt="" width={24} height={24} style={{ borderRadius: 6 }} />
+                  <img src={connection.providerLogo} alt="" width={24} height={24} style={{ borderRadius: 6 }} />
                 ) : <span aria-hidden="true">🏦</span>}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{connection.institutionName || t("Bank")}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{connection.providerName || t("Bank")}</div>
                   <div style={{ fontSize: 11, opacity: 0.65 }}>
                     {connection.status === "linked"
                       ? `${connection.accounts.length} ${t("account(s)")}${connection.lastSyncedAt ? ` · ${t("Last sync")}: ${connection.lastSyncedAt.toLocaleString()}` : ""}`
