@@ -9,11 +9,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { db, functions } from "@/lib/firebase/client";
-import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { db, functions, storage } from "@/lib/firebase/client";
+import { loadWorkspaceContext, loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { studioT } from "@/lib/studioflow/language";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
@@ -33,6 +34,10 @@ type BankTransaction = {
   description: string;
   counterparty: string;
   status: string;
+  receiptPath: string;
+  receiptName: string;
+  linkedOrderId: string;
+  linkedOrderLabel: string;
 };
 
 function toDate(value: unknown): Date | null {
@@ -52,6 +57,10 @@ function BankPageContent() {
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "year">("month");
+  const [linkPickerTxId, setLinkPickerTxId] = useState<string | null>(null);
+  const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,7 +118,11 @@ function BankPageContent() {
             bookingDate: String(data.bookingDate || ""),
             description: String(data.description || ""),
             counterparty: String(data.counterparty || ""),
-            status: String(data.status || "booked")
+            status: String(data.status || "booked"),
+            receiptPath: String(data.receiptPath || ""),
+            receiptName: String(data.receiptName || ""),
+            linkedOrderId: String(data.linkedOrderId || ""),
+            linkedOrderLabel: String(data.linkedOrderLabel || "")
           };
         }));
       }
@@ -195,6 +208,97 @@ function BankPageContent() {
       setBusy(null);
     }
   }
+
+  // ---- Receipt attach / view / remove -------------------------------------
+
+  async function attachReceipt(transaction: BankTransaction, file: File) {
+    setBusy(`receipt-${transaction.id}`);
+    setError(null);
+    try {
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "receipt";
+      const path = `companies/${companyId}/bank_receipts/${transaction.id}/${Date.now()}_${safeName}`;
+      await uploadBytes(storageRef(storage, path), file);
+      await call("bankSetTransactionReceipt", { transactionId: transaction.id, storagePath: path, fileName: file.name });
+      setStatus(t("Invoice attached."));
+    } catch (attachError) {
+      setError(attachError instanceof Error ? attachError.message : "Could not attach the invoice.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openReceipt(transaction: BankTransaction) {
+    try {
+      const url = await getDownloadURL(storageRef(storage, transaction.receiptPath));
+      window.open(url, "_blank", "noopener");
+    } catch {
+      setError(t("Could not open the invoice."));
+    }
+  }
+
+  async function removeReceipt(transaction: BankTransaction) {
+    if (!window.confirm(t("Remove this invoice?"))) return;
+    setBusy(`receipt-${transaction.id}`);
+    try {
+      await call("bankSetTransactionReceipt", { transactionId: transaction.id, storagePath: "", fileName: "" });
+      setStatus(t("Invoice removed."));
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Could not remove the invoice.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ---- Link a spending transaction to an order's expenses -----------------
+
+  async function openLinkPicker(transactionId: string) {
+    setLinkPickerTxId(transactionId);
+    setOrderSearch("");
+    if (orderOptions === null && workspace) {
+      try {
+        setOrderOptions(await loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? ""));
+      } catch {
+        setOrderOptions([]);
+      }
+    }
+  }
+
+  async function linkToOrder(transaction: BankTransaction, orderId: string) {
+    setBusy(`link-${transaction.id}`);
+    setError(null);
+    setLinkPickerTxId(null);
+    try {
+      await call("bankLinkTransactionToOrder", { transactionId: transaction.id, orderId });
+      setStatus(t("Added to the order's expenses."));
+    } catch (linkError) {
+      setError(linkError instanceof Error ? linkError.message : "Could not link the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function unlinkFromOrder(transaction: BankTransaction) {
+    if (!window.confirm(t("Remove this amount from the order's expenses?"))) return;
+    setBusy(`link-${transaction.id}`);
+    setError(null);
+    try {
+      await call("bankLinkTransactionToOrder", { transactionId: transaction.id });
+      setStatus(t("Removed from the order's expenses."));
+    } catch (unlinkError) {
+      setError(unlinkError instanceof Error ? unlinkError.message : "Could not unlink the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const filteredOrderOptions = useMemo(() => {
+    if (!orderOptions) return [];
+    const term = orderSearch.trim().toLowerCase();
+    const list = term
+      ? orderOptions.filter(order => `${order.customerName} ${order.designName}`.toLowerCase().includes(term))
+      : orderOptions;
+    return list.slice(0, 25);
+  }, [orderOptions, orderSearch]);
 
   const monthTotal = useMemo(() => {
     const now = new Date();
@@ -360,21 +464,108 @@ function BankPageContent() {
                 {visibleTransactions.length === 0 ? (
                   <p style={{ fontSize: 12.5, opacity: 0.7 }}>{t("No transactions in this period yet.")}</p>
                 ) : null}
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  style={{ display: "none" }}
+                  id="bank-receipt-input"
+                  onChange={event => {
+                    const file = event.target.files?.[0];
+                    const target = visibleTransactions.find(item => item.id === pendingAttachTxId);
+                    event.target.value = "";
+                    setPendingAttachTxId(null);
+                    if (file && target) void attachReceipt(target, file);
+                  }}
+                />
                 {visibleTransactions.slice(0, 300).map(transaction => (
-                  <div key={transaction.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {transaction.counterparty || transaction.description || "—"}
+                  <div key={transaction.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {transaction.counterparty || transaction.description || "—"}
+                          {transaction.linkedOrderId ? (
+                            <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "#2563eb", background: "rgba(37,99,235,0.1)", borderRadius: 999, padding: "1px 8px" }}>
+                              ⛓ {transaction.linkedOrderLabel || t("Order")}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div style={{ fontSize: 10.5, opacity: 0.6 }}>
+                          {transaction.bookingDate}
+                          {transaction.counterparty && transaction.description ? ` · ${transaction.description}` : ""}
+                          {transaction.status === "pending" ? ` · ${t("pending")}` : ""}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 10.5, opacity: 0.6 }}>
-                        {transaction.bookingDate}
-                        {transaction.counterparty && transaction.description ? ` · ${transaction.description}` : ""}
-                        {transaction.status === "pending" ? ` · ${t("pending")}` : ""}
-                      </div>
+                      {transaction.amount < 0 ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          {transaction.receiptPath ? (
+                            <>
+                              <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")}
+                                onClick={() => void openReceipt(transaction)} aria-label={t("View invoice")}>📎</button>
+                              <button type="button" className="finance-payments-delete" title={t("Remove invoice")}
+                                disabled={busy === `receipt-${transaction.id}`}
+                                onClick={() => void removeReceipt(transaction)} aria-label={t("Remove invoice")}
+                                style={{ fontSize: 10 }}>✕</button>
+                            </>
+                          ) : (
+                            <button type="button" className="finance-payments-delete"
+                              title={t("Attach invoice")} aria-label={t("Attach invoice")}
+                              disabled={busy === `receipt-${transaction.id}`}
+                              onClick={() => {
+                                setPendingAttachTxId(transaction.id);
+                                document.getElementById("bank-receipt-input")?.click();
+                              }}
+                              style={{ opacity: 0.55 }}>📎</button>
+                          )}
+                          <button type="button" className="finance-payments-delete"
+                            title={transaction.linkedOrderId ? t("Remove this amount from the order's expenses?") : t("Add to an order's expenses")}
+                            aria-label={t("Add to an order's expenses")}
+                            disabled={busy === `link-${transaction.id}`}
+                            onClick={() => transaction.linkedOrderId
+                              ? void unlinkFromOrder(transaction)
+                              : void openLinkPicker(transaction.id)}
+                            style={{ opacity: transaction.linkedOrderId ? 1 : 0.55 }}>⛓</button>
+                          {!transaction.receiptPath && !transaction.linkedOrderId ? (
+                            <span title={t("No document")} aria-label={t("No document")}
+                              style={{ width: 6, height: 6, borderRadius: 999, background: "#f59e0b", display: "inline-block" }} />
+                          ) : null}
+                        </span>
+                      ) : null}
+                      <span style={{ fontSize: 13, fontWeight: 800, color: transaction.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>
+                        {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
+                      </span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: transaction.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>
-                      {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
-                    </span>
+                    {linkPickerTxId === transaction.id ? (
+                      <div style={{ margin: "0 4px 10px", padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="text"
+                            value={orderSearch}
+                            autoFocus
+                            placeholder={t("Search orders")}
+                            onChange={event => setOrderSearch(event.target.value)}
+                            style={{ flex: 1, fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }}
+                          />
+                          <button type="button" className="finance-payments-delete" onClick={() => setLinkPickerTxId(null)} aria-label={t("Close")}>✕</button>
+                        </div>
+                        <div style={{ marginTop: 8, maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                          {orderOptions === null ? (
+                            <span style={{ fontSize: 12, opacity: 0.7 }}>{t("Loading…")}</span>
+                          ) : filteredOrderOptions.length === 0 ? (
+                            <span style={{ fontSize: 12, opacity: 0.7 }}>{t("No orders found.")}</span>
+                          ) : filteredOrderOptions.map(order => (
+                            <button
+                              key={order.id}
+                              type="button"
+                              onClick={() => void linkToOrder(transaction, order.id)}
+                              style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5 }}
+                            >
+                              <strong>{order.customerName}</strong>
+                              {order.designName ? <span style={{ opacity: 0.65 }}> · {order.designName}</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
