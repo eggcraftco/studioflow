@@ -669,32 +669,43 @@ const FAQ_GROUPS: FaqGroup[] = [
 
 function usePublicScrollReveal(routeKey: string) {
   useEffect(() => {
-    const revealTargets = Array.from(document.querySelectorAll<HTMLElement>(
-      ".public-scroll-reveal, .public-scroll-stagger > *"
-    ));
-
-    if (!revealTargets.length) return;
-
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    revealTargets.forEach((target, index) => {
-      target.style.setProperty("--reveal-index", String(index % 8));
-      if (prefersReducedMotion) target.classList.add("is-visible");
-    });
+    const seen = new WeakSet<Element>();
+    let revealIndex = 0;
 
-    if (prefersReducedMotion) return;
+    const observer = prefersReducedMotion
+      ? null
+      : new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              observer?.unobserve(entry.target);
+            }
+          });
+        }, { rootMargin: "-8% 0px -12% 0px", threshold: 0.16 });
 
-    const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          observer.unobserve(entry.target);
-        }
+    const scan = () => {
+      document.querySelectorAll<HTMLElement>(".public-scroll-reveal, .public-scroll-stagger > *").forEach(target => {
+        if (seen.has(target)) return;
+        seen.add(target);
+        target.style.setProperty("--reveal-index", String(revealIndex++ % 8));
+        if (observer) observer.observe(target);
+        else target.classList.add("is-visible");
       });
-    }, { rootMargin: "-8% 0px -12% 0px", threshold: 0.16 });
+    };
 
-    revealTargets.forEach(target => observer.observe(target));
+    scan();
 
-    return () => observer.disconnect();
+    // If React replaces part of the tree (a remount swaps in fresh nodes
+    // without is-visible), pick the new nodes up rather than leaving them
+    // stuck at opacity 0.
+    const mutations = new MutationObserver(scan);
+    mutations.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      mutations.disconnect();
+      observer?.disconnect();
+    };
   }, [routeKey]);
 }
 
@@ -2498,120 +2509,121 @@ function PlatformNote() {
   );
 }
 
-export function PublicHomePage() {
-  const HomeContent = () => {
-    const { t } = usePublicSiteLanguage();
-    const [demoOpen, setDemoOpen] = useState(false);
+function PublicHomePageContent() {
+  const { t } = usePublicSiteLanguage();
+  const [demoOpen, setDemoOpen] = useState(false);
 
-    return (
-      <>
-        <section className="public-hero">
-          <ProductScene />
-          <div className="public-shell public-hero-content">
-            <div className="public-hero-copy public-scroll-reveal">
-              <span className="public-eyebrow">{t("hero.eyebrow")}</span>
-              <h1>
-                {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
-              </h1>
-              <p>{t("hero.body")}</p>
-              <div className="public-hero-actions">
-                <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
-                <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
-                <button
-                  type="button"
-                  className="public-demo-button"
-                  onClick={() => {
-                    setDemoOpen(true);
-                    trackLandingEvent("homepage_demo_play");
-                  }}
-                >
-                  <span className="public-demo-thumb" aria-hidden="true">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/nivadesk-demo-poster.jpg" alt="" loading="lazy" decoding="async" />
-                    <span className="public-demo-thumb-play">
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
-                    </span>
+  return (
+    <>
+      <section className="public-hero">
+        <ProductScene />
+        <div className="public-shell public-hero-content">
+          <div className="public-hero-copy public-scroll-reveal">
+            <span className="public-eyebrow">{t("hero.eyebrow")}</span>
+            <h1>
+              {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
+            </h1>
+            <p>{t("hero.body")}</p>
+            <div className="public-hero-actions">
+              <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
+              <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
+              <button
+                type="button"
+                className="public-demo-button"
+                onClick={() => {
+                  setDemoOpen(true);
+                  trackLandingEvent("homepage_demo_play");
+                }}
+              >
+                <span className="public-demo-thumb" aria-hidden="true">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/nivadesk-demo-poster.jpg" alt="" loading="lazy" decoding="async" />
+                  <span className="public-demo-thumb-play">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
                   </span>
-                  <span className="public-demo-button-copy">
-                    <strong>{t("hero.watchDemo")}</strong>
-                    <span>1:17</span>
-                  </span>
+                </span>
+                <span className="public-demo-button-copy">
+                  <strong>{t("hero.watchDemo")}</strong>
+                  <span>1:17</span>
+                </span>
+              </button>
+            </div>
+            <HeroFeatureChips />
+          </div>
+        </div>
+      </section>
+
+      {demoOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setDemoOpen(false)}>
+              <div
+                className="public-demo-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("hero.watchDemo")}
+                onClick={event => event.stopPropagation()}
+              >
+                <button type="button" className="public-qr-modal-close" onClick={() => setDemoOpen(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
                 </button>
+                <video
+                  className="public-demo-video"
+                  src="/nivadesk-demo.mp4"
+                  poster="/nivadesk-demo-poster.jpg"
+                  controls
+                  autoPlay
+                  playsInline
+                  onEnded={() => trackLandingEvent("homepage_demo_complete")}
+                />
               </div>
-              <HeroFeatureChips />
-            </div>
+            </div>,
+            document.body
+          )
+        : null}
+
+      <PlatformNote />
+
+      {/* The ChatGPT app sits directly under the platform strip: it is part of
+          "where NivaDesk runs", and it was getting lost further down the page. */}
+      <ChatGPTAppShowcase featured />
+
+      <StudioAccentBand />
+
+      <ScrollStoryShowcase />
+
+      <section className="public-section public-order-flow-section">
+        <div className="public-order-flow-sticky">
+          <div className="public-shell">
+            <SectionHeader
+              eyebrowKey="section.flow.eyebrow"
+              titleKey="section.flow.title"
+              bodyKey="section.flow.body"
+            />
+            <OrderCardTitleGrid />
           </div>
-        </section>
+        </div>
+      </section>
 
-        {demoOpen && typeof document !== "undefined"
-          ? createPortal(
-              <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setDemoOpen(false)}>
-                <div
-                  className="public-demo-modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label={t("hero.watchDemo")}
-                  onClick={event => event.stopPropagation()}
-                >
-                  <button type="button" className="public-qr-modal-close" onClick={() => setDemoOpen(false)} aria-label="Close">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
-                  <video
-                    className="public-demo-video"
-                    src="/nivadesk-demo.mp4"
-                    poster="/nivadesk-demo-poster.jpg"
-                    controls
-                    autoPlay
-                    playsInline
-                    onEnded={() => trackLandingEvent("homepage_demo_complete")}
-                  />
-                </div>
-              </div>,
-              document.body
-            )
-          : null}
-
-        <PlatformNote />
-
-        {/* The ChatGPT app sits directly under the platform strip: it is part of
-            "where NivaDesk runs", and it was getting lost further down the page. */}
-        <ChatGPTAppShowcase featured />
-
-        <StudioAccentBand />
-
-        <ScrollStoryShowcase />
-
-        <section className="public-section public-order-flow-section">
-          <div className="public-order-flow-sticky">
-            <div className="public-shell">
-              <SectionHeader
-                eyebrowKey="section.flow.eyebrow"
-                titleKey="section.flow.title"
-                bodyKey="section.flow.body"
-              />
-              <OrderCardTitleGrid />
-            </div>
+      <section className="public-section public-cta-band public-scroll-reveal">
+        <div className="public-shell public-cta-inner">
+          <div>
+            <span className="public-eyebrow">{t("ctaBand.eyebrow")}</span>
+            <h2>{t("ctaBand.title")}</h2>
           </div>
-        </section>
+          <HeroActions />
+        </div>
+      </section>
+    </>
+  );
+}
 
-        <section className="public-section public-cta-band public-scroll-reveal">
-          <div className="public-shell public-cta-inner">
-            <div>
-              <span className="public-eyebrow">{t("ctaBand.eyebrow")}</span>
-              <h2>{t("ctaBand.title")}</h2>
-            </div>
-            <HeroActions />
-          </div>
-        </section>
-      </>
-    );
-  };
+export function PublicHomePage() {
 
   return (
     <PublicShell>
-      <HomeContent />
+      <PublicHomePageContent />
     </PublicShell>
   );
 }
@@ -2656,247 +2668,249 @@ function SiteDemoPlayer() {
   );
 }
 
-export function PublicFeaturesPage() {
-  const Page = () => {
-    const { t } = usePublicSiteLanguage();
-    return (
-      <>
-        <section className="public-page-hero public-features-hero">
-          <div className="public-shell">
-            <div className="public-features-hero-top">
-              <div className="public-features-hero-copy">
-                <span className="public-eyebrow public-features-hero-eyebrow">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5l1.4 4 4 1.4-4 1.4L10 13.3 8.6 9.3l-4-1.4 4-1.4zM15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>
-                  {t("featuresPage.eyebrow")}
+function PublicFeaturesPageContent() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <>
+      <section className="public-page-hero public-features-hero">
+        <div className="public-shell">
+          <div className="public-features-hero-top">
+            <div className="public-features-hero-copy">
+              <span className="public-eyebrow public-features-hero-eyebrow">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2.5l1.4 4 4 1.4-4 1.4L10 13.3 8.6 9.3l-4-1.4 4-1.4zM15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /></svg>
+                {t("featuresPage.eyebrow")}
+              </span>
+              <h1>{t("featuresPage.title")}</h1>
+              <p>{t("featuresPage.body")}</p>
+            </div>
+            <div className="public-features-hero-shot">
+              <img src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
+            </div>
+          </div>
+          <div className="public-features-hero-strip">
+            {[
+              { key: "s1", tone: "trend", title: "schedule.f1.title" as PublicSiteTranslationKey, body: "schedule.f1.body" as PublicSiteTranslationKey, icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
+              { key: "s2", tone: "calendar", title: "schedule.f2.title" as PublicSiteTranslationKey, body: "schedule.f2.body" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="8" height="11" rx="2" /><rect x="8" y="6.5" width="8" height="11" rx="2" /></> },
+              { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> },
+              { key: "s4", tone: "team", title: "schedule.team.title" as PublicSiteTranslationKey, body: "schedule.team.body" as PublicSiteTranslationKey, icon: <><rect x="3.5" y="4.5" width="13" height="11" rx="2" /><path d="M3.5 8.5h13M8 8.5v7M12 8.5v7" /></> }
+            ].map(item => (
+              <div className="public-features-hero-strip-item" key={item.key}>
+                <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
                 </span>
-                <h1>{t("featuresPage.title")}</h1>
-                <p>{t("featuresPage.body")}</p>
-              </div>
-              <div className="public-features-hero-shot">
-                <img src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
-              </div>
-            </div>
-            <div className="public-features-hero-strip">
-              {[
-                { key: "s1", tone: "trend", title: "schedule.f1.title" as PublicSiteTranslationKey, body: "schedule.f1.body" as PublicSiteTranslationKey, icon: <path d="M4 13l3.5-3.5 2.5 2.5L16 6M16 6h-3M16 6v3" /> },
-                { key: "s2", tone: "calendar", title: "schedule.f2.title" as PublicSiteTranslationKey, body: "schedule.f2.body" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="8" height="11" rx="2" /><rect x="8" y="6.5" width="8" height="11" rx="2" /></> },
-                { key: "s3", tone: "team", title: "featuresPage.glance.title" as PublicSiteTranslationKey, body: "featuresPage.glance.body" as PublicSiteTranslationKey, icon: <path d="M7.5 9.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM13.4 9.2a2.1 2.1 0 100-4.2M3.5 16c0-2.3 1.8-4 4-4s4 1.7 4 4M12 12c2.1 0 3.9 1.4 3.9 4" /> },
-                { key: "s4", tone: "team", title: "schedule.team.title" as PublicSiteTranslationKey, body: "schedule.team.body" as PublicSiteTranslationKey, icon: <><rect x="3.5" y="4.5" width="13" height="11" rx="2" /><path d="M3.5 8.5h13M8 8.5v7M12 8.5v7" /></> }
-              ].map(item => (
-                <div className="public-features-hero-strip-item" key={item.key}>
-                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
-                  </span>
-                  <div>
-                    <strong>{t(item.title)}</strong>
-                    <span>{t(item.body)}</span>
-                  </div>
+                <div>
+                  <strong>{t(item.title)}</strong>
+                  <span>{t(item.body)}</span>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="public-section public-features-demo-section">
-          <div className="public-shell">
-            <div className="public-section-header">
-              <span className="public-eyebrow">{t("hero.watchDemo")}</span>
-              <h2>{t("featuresDemo.title")}</h2>
-            </div>
-            <SiteDemoPlayer />
+      <section className="public-section public-features-demo-section">
+        <div className="public-shell">
+          <div className="public-section-header">
+            <span className="public-eyebrow">{t("hero.watchDemo")}</span>
+            <h2>{t("featuresDemo.title")}</h2>
           </div>
-        </section>
+          <SiteDemoPlayer />
+        </div>
+      </section>
 
-        <FeatureWorkflowPanel />
+      <FeatureWorkflowPanel />
 
-        <FeatureDeepDiveSection />
+      <FeatureDeepDiveSection />
 
-        <DashboardFinanceShowcase />
+      <DashboardFinanceShowcase />
 
-        <ScheduleTimelineShowcase />
+      <ScheduleTimelineShowcase />
 
-        <section className="public-section public-order-flow-section">
-          <div className="public-order-flow-sticky">
-            <div className="public-shell">
-              <SectionHeader
-                eyebrowKey="section.flow.eyebrow"
-                titleKey="section.flow.title"
-                bodyKey="section.flow.body"
-              />
-              <OrderCardTitleGrid />
-            </div>
-          </div>
-        </section>
-
-        <section className="public-section">
+      <section className="public-section public-order-flow-section">
+        <div className="public-order-flow-sticky">
           <div className="public-shell">
             <SectionHeader
-              eyebrowKey="featuresPage.invoice.eyebrow"
-              titleKey="featuresPage.invoice.title"
-              bodyKey="featuresPage.invoice.body"
+              eyebrowKey="section.flow.eyebrow"
+              titleKey="section.flow.title"
+              bodyKey="section.flow.body"
             />
-            <div className="public-features-hero-strip">
-              {[
-                { key: "inv1", tone: "trend", label: "featuresPage.invoice.p1" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7.5h5M7.5 10.5h5M7.5 13h3" /></> },
-                { key: "inv2", tone: "calendar", label: "featuresPage.invoice.p2" as PublicSiteTranslationKey, icon: <path d="M4 16l1-3 8-8 2.5 2.5-8 8H4zM12 5l2.5 2.5" /> },
-                { key: "inv3", tone: "team", label: "featuresPage.invoice.p3" as PublicSiteTranslationKey, icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> }
-              ].map(item => (
-                <div className="public-features-hero-strip-item" key={item.key}>
-                  <span className="public-features-hero-strip-icon" data-tone={item.tone}>
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
-                  </span>
-                  <div>
-                    <strong>{t(item.label)}</strong>
-                  </div>
+            <OrderCardTitleGrid />
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell">
+          <SectionHeader
+            eyebrowKey="featuresPage.invoice.eyebrow"
+            titleKey="featuresPage.invoice.title"
+            bodyKey="featuresPage.invoice.body"
+          />
+          <div className="public-features-hero-strip">
+            {[
+              { key: "inv1", tone: "trend", label: "featuresPage.invoice.p1" as PublicSiteTranslationKey, icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7.5h5M7.5 10.5h5M7.5 13h3" /></> },
+              { key: "inv2", tone: "calendar", label: "featuresPage.invoice.p2" as PublicSiteTranslationKey, icon: <path d="M4 16l1-3 8-8 2.5 2.5-8 8H4zM12 5l2.5 2.5" /> },
+              { key: "inv3", tone: "team", label: "featuresPage.invoice.p3" as PublicSiteTranslationKey, icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> }
+            ].map(item => (
+              <div className="public-features-hero-strip-item" key={item.key}>
+                <span className="public-features-hero-strip-icon" data-tone={item.tone}>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+                </span>
+                <div>
+                  <strong>{t(item.label)}</strong>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="public-section">
-          <div className="public-shell">
-            <SectionHeader
-              eyebrowKey="capability.eyebrow"
-              titleKey="capability.title"
-              bodyKey="capability.body"
-            />
-            <div className="public-feature-grid">
-              {FEATURE_HIGHLIGHTS.map((feature, index) => (
-                <FeatureCard key={feature.titleKey} feature={feature} index={index} />
-              ))}
-            </div>
+      <section className="public-section">
+        <div className="public-shell">
+          <SectionHeader
+            eyebrowKey="capability.eyebrow"
+            titleKey="capability.title"
+            bodyKey="capability.body"
+          />
+          <div className="public-feature-grid">
+            {FEATURE_HIGHLIGHTS.map((feature, index) => (
+              <FeatureCard key={feature.titleKey} feature={feature} index={index} />
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <ChatGPTAppShowcase />
+      <ChatGPTAppShowcase />
 
-        <PlanFeatureBridgeSection />
+      <PlanFeatureBridgeSection />
 
-        <PlatformNote />
-      </>
-    );
-  };
+      <PlatformNote />
+    </>
+  );
+}
+
+export function PublicFeaturesPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicFeaturesPageContent />
     </PublicShell>
   );
 }
 
+function PublicPricingPageContent() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <>
+      <section className="public-page-hero public-pricing-page-hero">
+        <div className="public-shell public-pricing-hero2">
+          <div className="public-pricing-hero2-text">
+            <span className="public-eyebrow">{t("pricingPage.eyebrow")}</span>
+            <h1>{t("pricingPage.title")}</h1>
+            <p>{t("pricingPage.body")}</p>
+            <div className="public-pricing-hero2-actions">
+              <Link href="/signup" className="public-button large">
+                {t("cta.startFree")}<span className="public-button-arrow" aria-hidden="true">→</span>
+              </Link>
+              <Link href="#pricing-plans" className="public-button secondary large">{t("pricingHero.compare")}</Link>
+            </div>
+            <ul className="public-pricing-trust">
+              <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg>
+                {t("pricingHero.trust.checkout")}
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>
+                {t("pricingHero.trust.cancel")}
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg>
+                {t("pricingHero.trust.billing")}
+              </li>
+            </ul>
+          </div>
+
+          <div className="public-pricing-cluster" aria-hidden="true">
+            <div className="public-pricing-orb" />
+            <div className="pc-card pc-card-demo">
+              <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
+              <div><strong>{t("pricingHero.card.demo.title")}</strong><span>{t("pricingHero.card.demo.body")}</span></div>
+            </div>
+            <div className="pc-card pc-card-team">
+              <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><circle cx="17" cy="8.5" r="2.3" /><path d="M16 14c2.4.2 4.5 2 4.5 5" /></svg></span>
+              <div><strong>{t("pricingHero.card.team.title")}</strong><span>{t("pricingHero.card.team.body")}</span></div>
+            </div>
+            <div className="pc-card pc-card-upgrade">
+              <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 16l5-5 3 3 7-7M16 6h4v4" /></svg></span>
+              <strong>{t("pricingHero.card.upgrade")}</strong>
+            </div>
+            <div className="pc-card pc-card-billing">
+              <span className="pc-ico"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg></span>
+              <div><strong>{t("pricingHero.card.billing.title")}</strong><span>{t("pricingHero.card.billing.body")}</span></div>
+              <span className="pc-toggle" />
+            </div>
+            <div className="pc-mini-row">
+              <div className="pc-mini">
+                <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg></span>
+                <strong>{t("pricingHero.mini.fees.title")}</strong><span>{t("pricingHero.mini.fees.body")}</span>
+              </div>
+              <div className="pc-mini">
+                <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5M20 12a8 8 0 01-14 5M17 4v3h-3M7 20v-3h3" /></svg></span>
+                <strong>{t("pricingHero.mini.change.title")}</strong><span>{t("pricingHero.mini.change.body")}</span>
+              </div>
+              <div className="pc-mini">
+                <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M5 13v-1a7 7 0 0114 0v1M5 13h2v5H6a2 2 0 01-2-2zM19 13h-2v5h1a2 2 0 002-2z" /></svg></span>
+                <strong>{t("pricingHero.mini.support.title")}</strong><span>{t("pricingHero.mini.support.body")}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section" id="pricing-plans">
+        <div className="public-shell">
+          <PublicPlanGrid />
+        </div>
+      </section>
+
+      <PlanFeatureBridgeSection compact />
+
+      <ChatGPTAppShowcase />
+
+      <section className="public-section public-section-soft">
+        <div className="public-shell">
+          <SectionHeader
+            eyebrowKey="pricingPage.addons.eyebrow"
+            titleKey="pricingPage.addons.title"
+            bodyKey="pricingPage.addons.body"
+          />
+          <div className="public-addon-grid">
+            <article className="public-card public-addon-card" data-addon="100">
+              <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
+              <h3>{t("pricingPage.addon100.title")}</h3>
+              <p className="public-addon-price">£9 / month · £90 / year</p>
+              <p>{t("pricingPage.addon100.body")}</p>
+              <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
+            </article>
+            <article className="public-card public-addon-card" data-addon="200">
+              <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
+              <h3>{t("pricingPage.addon200.title")}</h3>
+              <p className="public-addon-price">£15 / month · £150 / year</p>
+              <p>{t("pricingPage.addon200.body")}</p>
+              <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
+            </article>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function PublicPricingPage() {
-  const Page = () => {
-    const { t } = usePublicSiteLanguage();
-    return (
-      <>
-        <section className="public-page-hero public-pricing-page-hero">
-          <div className="public-shell public-pricing-hero2">
-            <div className="public-pricing-hero2-text">
-              <span className="public-eyebrow">{t("pricingPage.eyebrow")}</span>
-              <h1>{t("pricingPage.title")}</h1>
-              <p>{t("pricingPage.body")}</p>
-              <div className="public-pricing-hero2-actions">
-                <Link href="/signup" className="public-button large">
-                  {t("cta.startFree")}<span className="public-button-arrow" aria-hidden="true">→</span>
-                </Link>
-                <Link href="#pricing-plans" className="public-button secondary large">{t("pricingHero.compare")}</Link>
-              </div>
-              <ul className="public-pricing-trust">
-                <li>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg>
-                  {t("pricingHero.trust.checkout")}
-                </li>
-                <li>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.5 2.5L16 9.5" /></svg>
-                  {t("pricingHero.trust.cancel")}
-                </li>
-                <li>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg>
-                  {t("pricingHero.trust.billing")}
-                </li>
-              </ul>
-            </div>
-
-            <div className="public-pricing-cluster" aria-hidden="true">
-              <div className="public-pricing-orb" />
-              <div className="pc-card pc-card-demo">
-                <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
-                <div><strong>{t("pricingHero.card.demo.title")}</strong><span>{t("pricingHero.card.demo.body")}</span></div>
-              </div>
-              <div className="pc-card pc-card-team">
-                <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><circle cx="17" cy="8.5" r="2.3" /><path d="M16 14c2.4.2 4.5 2 4.5 5" /></svg></span>
-                <div><strong>{t("pricingHero.card.team.title")}</strong><span>{t("pricingHero.card.team.body")}</span></div>
-              </div>
-              <div className="pc-card pc-card-upgrade">
-                <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 16l5-5 3 3 7-7M16 6h4v4" /></svg></span>
-                <strong>{t("pricingHero.card.upgrade")}</strong>
-              </div>
-              <div className="pc-card pc-card-billing">
-                <span className="pc-ico"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></svg></span>
-                <div><strong>{t("pricingHero.card.billing.title")}</strong><span>{t("pricingHero.card.billing.body")}</span></div>
-                <span className="pc-toggle" />
-              </div>
-              <div className="pc-mini-row">
-                <div className="pc-mini">
-                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" /></svg></span>
-                  <strong>{t("pricingHero.mini.fees.title")}</strong><span>{t("pricingHero.mini.fees.body")}</span>
-                </div>
-                <div className="pc-mini">
-                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5M20 12a8 8 0 01-14 5M17 4v3h-3M7 20v-3h3" /></svg></span>
-                  <strong>{t("pricingHero.mini.change.title")}</strong><span>{t("pricingHero.mini.change.body")}</span>
-                </div>
-                <div className="pc-mini">
-                  <span className="pc-ico"><svg viewBox="0 0 24 24"><path d="M5 13v-1a7 7 0 0114 0v1M5 13h2v5H6a2 2 0 01-2-2zM19 13h-2v5h1a2 2 0 002-2z" /></svg></span>
-                  <strong>{t("pricingHero.mini.support.title")}</strong><span>{t("pricingHero.mini.support.body")}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="public-section" id="pricing-plans">
-          <div className="public-shell">
-            <PublicPlanGrid />
-          </div>
-        </section>
-
-        <PlanFeatureBridgeSection compact />
-
-        <ChatGPTAppShowcase />
-
-        <section className="public-section public-section-soft">
-          <div className="public-shell">
-            <SectionHeader
-              eyebrowKey="pricingPage.addons.eyebrow"
-              titleKey="pricingPage.addons.title"
-              bodyKey="pricingPage.addons.body"
-            />
-            <div className="public-addon-grid">
-              <article className="public-card public-addon-card" data-addon="100">
-                <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
-                <h3>{t("pricingPage.addon100.title")}</h3>
-                <p className="public-addon-price">£9 / month · £90 / year</p>
-                <p>{t("pricingPage.addon100.body")}</p>
-                <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
-              </article>
-              <article className="public-card public-addon-card" data-addon="200">
-                <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
-                <h3>{t("pricingPage.addon200.title")}</h3>
-                <p className="public-addon-price">£15 / month · £150 / year</p>
-                <p>{t("pricingPage.addon200.body")}</p>
-                <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
-              </article>
-            </div>
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicPricingPageContent />
     </PublicShell>
   );
 }
@@ -2923,259 +2937,261 @@ function signupErrorMessage(error: unknown, t: (key: PublicSiteTranslationKey) =
   return raw || t("signup.error.generic");
 }
 
-export function PublicSignupPage() {
-  const Page = () => {
-    const router = useRouter();
-    const { user } = useAuth();
-    const { t } = usePublicSiteLanguage();
-    const [signupStarted, setSignupStarted] = useState(false);
-    const [fullName, setFullName] = useState("");
-    const [workspaceName, setWorkspaceName] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [accepted, setAccepted] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    // Silent bot traps: an invisible field real users never see/fill, and the
-    // moment the form first mounted (to reject instant automated submissions).
-    const [honeypot, setHoneypot] = useState("");
-    const [formStartedAt] = useState(() => Date.now());
+function PublicSignupPageContent() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { t } = usePublicSiteLanguage();
+  const [signupStarted, setSignupStarted] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [accepted, setAccepted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Silent bot traps: an invisible field real users never see/fill, and the
+  // moment the form first mounted (to reject instant automated submissions).
+  const [honeypot, setHoneypot] = useState("");
+  const [formStartedAt] = useState(() => Date.now());
 
-    // Count a signup-page visit only when the visitor arrived from the
-    // /custom-order-management landing page (attribution marker or referrer).
-    useEffect(() => {
-      const fromLanding = getLandingAttribution() !== null ||
-        (typeof document !== "undefined" && document.referrer.includes("/custom-order-management"));
-      if (fromLanding) trackLandingEvent("custom_order_landing_signup_visit");
-    }, []);
+  // Count a signup-page visit only when the visitor arrived from the
+  // /custom-order-management landing page (attribution marker or referrer).
+  useEffect(() => {
+    const fromLanding = getLandingAttribution() !== null ||
+      (typeof document !== "undefined" && document.referrer.includes("/custom-order-management"));
+    if (fromLanding) trackLandingEvent("custom_order_landing_signup_visit");
+  }, []);
 
-    async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
-      event.preventDefault();
-      setError(null);
+  async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
 
-      // Bot traps: either tripping means an automated submission; reject quietly.
-      if (honeypot.trim() !== "" || Date.now() - formStartedAt < 1500) {
-        setError(t("signup.error.generic"));
-        return;
-      }
-
-      const cleanFullName = fullName.trim();
-      const cleanWorkspaceName = workspaceName.trim();
-      const cleanEmail = email.trim();
-
-      if (cleanFullName.length < 2 || cleanWorkspaceName.length < 2) {
-        setError(t("signup.error.required"));
-        return;
-      }
-      if (!auth.currentUser && (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) {
-        setError(t("signup.error.passwordStrength"));
-        return;
-      }
-      if (!auth.currentUser && password !== confirmPassword) {
-        setError(t("signup.error.passwordMismatch"));
-        return;
-      }
-      if (!accepted) {
-        setError(t("signup.error.terms"));
-        return;
-      }
-
-      setSignupStarted(true);
-      setSubmitting(true);
-      try {
-        let currentUser = auth.currentUser;
-        if (!currentUser) {
-          const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-          // Non-blocking email verification: standard account-security hygiene.
-          void sendEmailVerification(credential.user, { url: "https://nivadesk.app/login" }).catch(() => undefined);
-          currentUser = credential.user;
-        }
-        if (currentUser.displayName !== cleanFullName) {
-          await updateProfile(currentUser, { displayName: cleanFullName });
-        }
-
-        const initialiseWorkspace = httpsCallable<Record<string, string>, FreeDemoWorkspaceResult>(
-          functions,
-          "initializeFreeDemoWorkspace"
-        );
-        await initialiseWorkspace({
-          fullName: cleanFullName,
-          workspaceName: cleanWorkspaceName
-        });
-        // Credit the completed signup to the landing page if this visitor came
-        // from it, then clear the marker so it is counted at most once.
-        if (getLandingAttribution() !== null) {
-          trackLandingEvent("custom_order_landing_signup_completed");
-          fireGoogleAdsSignupConversion();
-          clearLandingAttribution();
-        }
-        {
-          // Honour a same-site ?next= (e.g. the Shopify connect handshake).
-          const nextParam = new URLSearchParams(window.location.search).get("next") || "";
-          router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
-        }
-      } catch (signupError) {
-        setError(signupErrorMessage(signupError, t));
-      } finally {
-        setSubmitting(false);
-      }
+    // Bot traps: either tripping means an automated submission; reject quietly.
+    if (honeypot.trim() !== "" || Date.now() - formStartedAt < 1500) {
+      setError(t("signup.error.generic"));
+      return;
     }
 
-    if (user && !signupStarted) {
-      return (
-        <section className="public-page-hero public-signup-hero">
-          <div className="public-shell public-signup-complete">
-            <span className="public-eyebrow">{t("signup.signedIn.eyebrow")}</span>
-            <h1>{t("signup.signedIn.title")}</h1>
-            <p>{t("signup.signedIn.body")}</p>
-            <div className="public-hero-actions">
-              <Link href="/dashboard" className="public-button large">{t("cta.openPortal")}</Link>
-              <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
-            </div>
-          </div>
-        </section>
+    const cleanFullName = fullName.trim();
+    const cleanWorkspaceName = workspaceName.trim();
+    const cleanEmail = email.trim();
+
+    if (cleanFullName.length < 2 || cleanWorkspaceName.length < 2) {
+      setError(t("signup.error.required"));
+      return;
+    }
+    if (!auth.currentUser && (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) {
+      setError(t("signup.error.passwordStrength"));
+      return;
+    }
+    if (!auth.currentUser && password !== confirmPassword) {
+      setError(t("signup.error.passwordMismatch"));
+      return;
+    }
+    if (!accepted) {
+      setError(t("signup.error.terms"));
+      return;
+    }
+
+    setSignupStarted(true);
+    setSubmitting(true);
+    try {
+      let currentUser = auth.currentUser;
+      if (!currentUser) {
+        const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        // Non-blocking email verification: standard account-security hygiene.
+        void sendEmailVerification(credential.user, { url: "https://nivadesk.app/login" }).catch(() => undefined);
+        currentUser = credential.user;
+      }
+      if (currentUser.displayName !== cleanFullName) {
+        await updateProfile(currentUser, { displayName: cleanFullName });
+      }
+
+      const initialiseWorkspace = httpsCallable<Record<string, string>, FreeDemoWorkspaceResult>(
+        functions,
+        "initializeFreeDemoWorkspace"
       );
+      await initialiseWorkspace({
+        fullName: cleanFullName,
+        workspaceName: cleanWorkspaceName
+      });
+      // Credit the completed signup to the landing page if this visitor came
+      // from it, then clear the marker so it is counted at most once.
+      if (getLandingAttribution() !== null) {
+        trackLandingEvent("custom_order_landing_signup_completed");
+        fireGoogleAdsSignupConversion();
+        clearLandingAttribution();
+      }
+      {
+        // Honour a same-site ?next= (e.g. the Shopify connect handshake).
+        const nextParam = new URLSearchParams(window.location.search).get("next") || "";
+        router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
+      }
+    } catch (signupError) {
+      setError(signupErrorMessage(signupError, t));
+    } finally {
+      setSubmitting(false);
     }
+  }
 
+  if (user && !signupStarted) {
     return (
       <section className="public-page-hero public-signup-hero">
-        <div className="public-shell public-signup-layout public-signup-form-layout">
-          <div className="public-signup-copy">
-            <span className="public-eyebrow">{t("signup.eyebrow")}</span>
-            <h1>{t("signup.title")}</h1>
-            <p>{t("signup.body")}</p>
-            <div className="public-signup-includes">
-              <h2>{t("signup.includes.title")}</h2>
-              <ul>
-                <li>{t("signup.includes.bullet1")}</li>
-                <li>{t("signup.includes.bullet2")}</li>
-                <li>{t("signup.includes.bullet3")}</li>
-              </ul>
-            </div>
+        <div className="public-shell public-signup-complete">
+          <span className="public-eyebrow">{t("signup.signedIn.eyebrow")}</span>
+          <h1>{t("signup.signedIn.title")}</h1>
+          <p>{t("signup.signedIn.body")}</p>
+          <div className="public-hero-actions">
+            <Link href="/dashboard" className="public-button large">{t("cta.openPortal")}</Link>
+            <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
           </div>
-
-          <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
-            {/* Honeypot: off-screen field hidden from real users. Bots that
-                auto-fill every input trip it and are rejected. */}
-            <div className="public-signup-hp" aria-hidden="true">
-              <label htmlFor="nd-company-url">Company website</label>
-              <input
-                id="nd-company-url"
-                name="company_url"
-                type="text"
-                tabIndex={-1}
-                autoComplete="off"
-                value={honeypot}
-                onChange={event => setHoneypot(event.target.value)}
-              />
-            </div>
-            <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
-            <h2>{t("signup.form.title")}</h2>
-            <p>{t("signup.form.body")}</p>
-            {!user ? (
-              <>
-                <AuthProviderButtons
-                  appleLabel={t("auth.apple")}
-                  googleLabel={t("auth.google")}
-                  appleUnavailableMessage={t("auth.appleUnavailable")}
-                  disabled={submitting}
-                  onStart={() => setError(null)}
-                  onSuccess={() => setError(null)}
-                  onError={message => {
-                    if (message) setError(message);
-                  }}
-                />
-                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
-                  <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
-                  <span style={{ color: "var(--public-muted, #6b7280)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
-                  <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
-                </div>
-              </>
-            ) : null}
-            <label>
-              <span>{t("signup.form.fullName")}</span>
-              <input autoComplete="name" value={fullName} onChange={event => setFullName(event.target.value)} required disabled={submitting} />
-            </label>
-            <label>
-              <span>{t("signup.form.workspaceName")}</span>
-              <input autoComplete="organization" value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} required disabled={submitting} />
-            </label>
-            <label>
-              <span>{t("signup.form.email")}</span>
-              <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={submitting || Boolean(auth.currentUser)} />
-            </label>
-            <div className="public-signup-form-split">
-              <label>
-                <span>{t("signup.form.password")}</span>
-                <input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
-              </label>
-              <label>
-                <span>{t("signup.form.confirmPassword")}</span>
-                <input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
-              </label>
-            </div>
-            <label className="public-signup-consent">
-              <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={submitting} required />
-              <span>
-                {t("signup.form.agreePrefix")} <Link href="/terms">{t("nav.terms")}</Link> {t("signup.form.agreeAnd")} <Link href="/privacy">{t("nav.privacy")}</Link>.
-              </span>
-            </label>
-            {error ? <p className="public-signup-error" role="alert">{error}</p> : null}
-            <button className="public-button large public-signup-submit" type="submit" disabled={submitting}>
-              {submitting ? t("signup.form.creating") : t("signup.form.submit")}
-            </button>
-            <p className="public-signup-login">
-              {t("signup.form.haveAccount")} <Link href="/login">{t("cta.login")}</Link>
-            </p>
-          </form>
         </div>
       </section>
     );
-  };
+  }
+
+  return (
+    <section className="public-page-hero public-signup-hero">
+      <div className="public-shell public-signup-layout public-signup-form-layout">
+        <div className="public-signup-copy">
+          <span className="public-eyebrow">{t("signup.eyebrow")}</span>
+          <h1>{t("signup.title")}</h1>
+          <p>{t("signup.body")}</p>
+          <div className="public-signup-includes">
+            <h2>{t("signup.includes.title")}</h2>
+            <ul>
+              <li>{t("signup.includes.bullet1")}</li>
+              <li>{t("signup.includes.bullet2")}</li>
+              <li>{t("signup.includes.bullet3")}</li>
+            </ul>
+          </div>
+        </div>
+
+        <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
+          {/* Honeypot: off-screen field hidden from real users. Bots that
+              auto-fill every input trip it and are rejected. */}
+          <div className="public-signup-hp" aria-hidden="true">
+            <label htmlFor="nd-company-url">Company website</label>
+            <input
+              id="nd-company-url"
+              name="company_url"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={event => setHoneypot(event.target.value)}
+            />
+          </div>
+          <span className="public-eyebrow">{t("signup.form.eyebrow")}</span>
+          <h2>{t("signup.form.title")}</h2>
+          <p>{t("signup.form.body")}</p>
+          {!user ? (
+            <>
+              <AuthProviderButtons
+                appleLabel={t("auth.apple")}
+                googleLabel={t("auth.google")}
+                appleUnavailableMessage={t("auth.appleUnavailable")}
+                disabled={submitting}
+                onStart={() => setError(null)}
+                onSuccess={() => setError(null)}
+                onError={message => {
+                  if (message) setError(message);
+                }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
+                <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
+                <span style={{ color: "var(--public-muted, #6b7280)", fontSize: 12, fontWeight: 700 }}>{t("login.or")}</span>
+                <div style={{ height: 1, background: "rgba(31,35,38,0.12)", flex: 1 }} />
+              </div>
+            </>
+          ) : null}
+          <label>
+            <span>{t("signup.form.fullName")}</span>
+            <input autoComplete="name" value={fullName} onChange={event => setFullName(event.target.value)} required disabled={submitting} />
+          </label>
+          <label>
+            <span>{t("signup.form.workspaceName")}</span>
+            <input autoComplete="organization" value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} required disabled={submitting} />
+          </label>
+          <label>
+            <span>{t("signup.form.email")}</span>
+            <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={submitting || Boolean(auth.currentUser)} />
+          </label>
+          <div className="public-signup-form-split">
+            <label>
+              <span>{t("signup.form.password")}</span>
+              <input type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
+            </label>
+            <label>
+              <span>{t("signup.form.confirmPassword")}</span>
+              <input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} required={!auth.currentUser} disabled={submitting || Boolean(auth.currentUser)} />
+            </label>
+          </div>
+          <label className="public-signup-consent">
+            <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} disabled={submitting} required />
+            <span>
+              {t("signup.form.agreePrefix")} <Link href="/terms">{t("nav.terms")}</Link> {t("signup.form.agreeAnd")} <Link href="/privacy">{t("nav.privacy")}</Link>.
+            </span>
+          </label>
+          {error ? <p className="public-signup-error" role="alert">{error}</p> : null}
+          <button className="public-button large public-signup-submit" type="submit" disabled={submitting}>
+            {submitting ? t("signup.form.creating") : t("signup.form.submit")}
+          </button>
+          <p className="public-signup-login">
+            {t("signup.form.haveAccount")} <Link href="/login">{t("cta.login")}</Link>
+          </p>
+        </form>
+      </div>
+    </section>
+  );
+}
+
+export function PublicSignupPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicSignupPageContent />
     </PublicShell>
   );
 }
 
-export function PublicFaqPage() {
-  const Page = () => {
-    const { t } = usePublicSiteLanguage();
-    return (
-      <>
-        <section className="public-page-hero">
+function PublicFaqPageContent() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <>
+      <section className="public-page-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("faq.eyebrow")}</span>
+          <h1>{t("faq.title")}</h1>
+          <p>{t("faq.body")}</p>
+        </div>
+      </section>
+
+      {FAQ_GROUPS.map(group => (
+        <section className="public-section faq-group-section" key={group.categoryKey}>
           <div className="public-shell">
-            <span className="public-eyebrow">{t("faq.eyebrow")}</span>
-            <h1>{t("faq.title")}</h1>
-            <p>{t("faq.body")}</p>
+            <h2 className="faq-category-title">{t(group.categoryKey)}</h2>
+            <div className="public-info-list">
+              {group.items.map(item => (
+                <article className="public-card public-info-card" key={item.titleKey}>
+                  <h3>{t(item.titleKey)}</h3>
+                  <p>{t(item.bodyKey)}</p>
+                </article>
+              ))}
+            </div>
           </div>
         </section>
+      ))}
+    </>
+  );
+}
 
-        {FAQ_GROUPS.map(group => (
-          <section className="public-section faq-group-section" key={group.categoryKey}>
-            <div className="public-shell">
-              <h2 className="faq-category-title">{t(group.categoryKey)}</h2>
-              <div className="public-info-list">
-                {group.items.map(item => (
-                  <article className="public-card public-info-card" key={item.titleKey}>
-                    <h3>{t(item.titleKey)}</h3>
-                    <p>{t(item.bodyKey)}</p>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-        ))}
-      </>
-    );
-  };
+export function PublicFaqPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicFaqPageContent />
     </PublicShell>
   );
 }
@@ -3301,180 +3317,185 @@ function PublicLegalSection({ section }: { section: PrivacyPolicySection }) {
   );
 }
 
-export function PublicPrivacyPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const privacyPolicySections = getPrivacyPolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("privacy.eyebrow")}</span>
-            <h1>{t("privacy.title")}</h1>
-            <p>{t("privacy.body")}</p>
-            <p className="public-legal-updated">
-              {getPrivacyPolicyLastUpdatedLabel(language)}: {PRIVACY_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
+function PublicPrivacyPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const privacyPolicySections = getPrivacyPolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("privacy.eyebrow")}</span>
+          <h1>{t("privacy.title")}</h1>
+          <p>{t("privacy.body")}</p>
+          <p className="public-legal-updated">
+            {getPrivacyPolicyLastUpdatedLabel(language)}: {PRIVACY_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
 
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            <PublicLegalLanguageNotice language={language} />
-            {privacyPolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} />
+          {privacyPolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function PublicPrivacyPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicPrivacyPageContent />
     </PublicShell>
+  );
+}
+
+function PublicTermsPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const termsPolicySections = getTermsPolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("terms.eyebrow")}</span>
+          <h1>{t("terms.title")}</h1>
+          <p>{t("terms.body")}</p>
+          <p className="public-legal-updated">
+            {getTermsPolicyLastUpdatedLabel(language)}: {TERMS_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} />
+          {termsPolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicTermsPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const termsPolicySections = getTermsPolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("terms.eyebrow")}</span>
-            <h1>{t("terms.title")}</h1>
-            <p>{t("terms.body")}</p>
-            <p className="public-legal-updated">
-              {getTermsPolicyLastUpdatedLabel(language)}: {TERMS_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            <PublicLegalLanguageNotice language={language} />
-            {termsPolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicTermsPageContent />
     </PublicShell>
+  );
+}
+
+function PublicCookiePageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const cookiePolicySections = getCookiePolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("cookies.eyebrow")}</span>
+          <h1>{t("cookies.title")}</h1>
+          <p>{t("cookies.body")}</p>
+          <p className="public-legal-updated">
+            {getCookiePolicyLastUpdatedLabel(language)}: {COOKIE_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {cookiePolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicCookiePage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const cookiePolicySections = getCookiePolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("cookies.eyebrow")}</span>
-            <h1>{t("cookies.title")}</h1>
-            <p>{t("cookies.body")}</p>
-            <p className="public-legal-updated">
-              {getCookiePolicyLastUpdatedLabel(language)}: {COOKIE_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {cookiePolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicCookiePageContent />
     </PublicShell>
+  );
+}
+
+function PublicAccountDeletionPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const accountDeletionPolicySections = getAccountDeletionPolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("accountDeletion.eyebrow")}</span>
+          <h1>{t("accountDeletion.title")}</h1>
+          <p>{t("accountDeletion.body")}</p>
+          <p className="public-legal-updated">
+            {getAccountDeletionPolicyLastUpdatedLabel(language)}: {ACCOUNT_DELETION_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {accountDeletionPolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicAccountDeletionPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const accountDeletionPolicySections = getAccountDeletionPolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("accountDeletion.eyebrow")}</span>
-            <h1>{t("accountDeletion.title")}</h1>
-            <p>{t("accountDeletion.body")}</p>
-            <p className="public-legal-updated">
-              {getAccountDeletionPolicyLastUpdatedLabel(language)}: {ACCOUNT_DELETION_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {accountDeletionPolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicAccountDeletionPageContent />
     </PublicShell>
   );
 }
 
-export function PublicRefundCancellationPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const refundCancellationPolicySections = getRefundCancellationPolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("refundCancellation.eyebrow")}</span>
-            <h1>{t("refundCancellation.title")}</h1>
-            <p>{t("refundCancellation.body")}</p>
-            <p className="public-legal-updated">
-              {getRefundCancellationPolicyLastUpdatedLabel(language)}: {REFUND_CANCELLATION_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
+function PublicRefundCancellationPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const refundCancellationPolicySections = getRefundCancellationPolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("refundCancellation.eyebrow")}</span>
+          <h1>{t("refundCancellation.title")}</h1>
+          <p>{t("refundCancellation.body")}</p>
+          <p className="public-legal-updated">
+            {getRefundCancellationPolicyLastUpdatedLabel(language)}: {REFUND_CANCELLATION_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
 
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            <PublicLegalLanguageNotice language={language} />
-            {refundCancellationPolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} />
+          {refundCancellationPolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function PublicRefundCancellationPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicRefundCancellationPageContent />
     </PublicShell>
   );
 }
@@ -3516,364 +3537,371 @@ const GUIDE_NO_RESULTS: Record<string, string> = {
   "हिन्दी (Hindi)": "कोई परिणाम नहीं"
 };
 
-export function PublicGuidePage() {
-  const Page = () => {
-    const { language } = usePublicSiteLanguage();
-    const chrome = getGuideChrome(language);
-    const tree = getGuideTree(language);
+function PublicGuidePageContent() {
+  const { language } = usePublicSiteLanguage();
+  const chrome = getGuideChrome(language);
+  const tree = getGuideTree(language);
 
-    const flat = useState(() => {
-      const list: GuideNode[] = [];
-      tree.forEach(node => {
-        list.push(node);
-        node.children?.forEach(child => list.push(child));
-      });
-      return list;
-    })[0];
+  const flat = useState(() => {
+    const list: GuideNode[] = [];
+    tree.forEach(node => {
+      list.push(node);
+      node.children?.forEach(child => list.push(child));
+    });
+    return list;
+  })[0];
 
-    const [selectedId, setSelectedId] = useState(tree[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(tree[0]?.id ?? "");
 
-    useEffect(() => {
-      const fromHash = decodeURIComponent(window.location.hash.replace("#", ""));
-      if (fromHash && flat.some(node => node.id === fromHash)) {
-        setSelectedId(fromHash);
-      }
-    }, [flat]);
-
-    const selected = flat.find(node => node.id === selectedId) ?? tree[0];
-    const [query, setQuery] = useState("");
-
-    function select(id: string) {
-      setSelectedId(id);
-      if (typeof window !== "undefined") {
-        window.history.replaceState(null, "", `#${id}`);
-      }
+  useEffect(() => {
+    const fromHash = decodeURIComponent(window.location.hash.replace("#", ""));
+    if (fromHash && flat.some(node => node.id === fromHash)) {
+      setSelectedId(fromHash);
     }
+  }, [flat]);
 
-    const nodeText = (node: GuideNode) => {
-      const parts: string[] = [node.title];
-      node.blocks.forEach(block => {
-        if (block.kind === "para" || block.kind === "sub") parts.push(block.text);
-        else parts.push(block.items.join(" "));
-      });
-      return parts.join(" ").toLowerCase();
-    };
+  const selected = flat.find(node => node.id === selectedId) ?? tree[0];
+  const [query, setQuery] = useState("");
 
-    const q = query.trim().toLowerCase();
-    const groups = tree
-      .map(node => {
-        const kids = node.children ?? [];
-        const parentMatch = !q || nodeText(node).includes(q);
-        const childMatches = q ? kids.filter(child => nodeText(child).includes(q)) : kids;
-        const visibleKids = !q ? kids : parentMatch ? kids : childMatches;
-        const show = !q || parentMatch || childMatches.length > 0;
-        return { node, visibleKids, show };
-      })
-      .filter(group => group.show);
+  function select(id: string) {
+    setSelectedId(id);
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `#${id}`);
+    }
+  }
 
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{chrome.eyebrow}</span>
-            <h1>{chrome.title}</h1>
-            <p>{chrome.intro}</p>
-            <p className="public-legal-updated">
-              {chrome.lastUpdated}: {GUIDE_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell guide-layout">
-            <nav className="guide-nav" aria-label={chrome.menuLabel}>
-              <input
-                className="guide-search"
-                type="search"
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder={chrome.searchPlaceholder}
-                aria-label={chrome.searchPlaceholder}
-              />
-              <span className="guide-nav-title">{chrome.menuLabel}</span>
-              {groups.map(({ node, visibleKids }) => (
-                <div key={node.id} className="guide-nav-group">
-                  <button
-                    type="button"
-                    className={node.id === selectedId ? "guide-nav-item is-active" : "guide-nav-item"}
-                    aria-current={node.id === selectedId ? "true" : undefined}
-                    onClick={() => select(node.id)}
-                  >
-                    {node.title}
-                  </button>
-                  {visibleKids.length > 0 ? (
-                    <div className="guide-nav-children">
-                      {visibleKids.map(child => (
-                        <button
-                          key={child.id}
-                          type="button"
-                          className={child.id === selectedId ? "guide-nav-subitem is-active" : "guide-nav-subitem"}
-                          aria-current={child.id === selectedId ? "true" : undefined}
-                          onClick={() => select(child.id)}
-                        >
-                          {child.title}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-              {groups.length === 0 ? (
-                <p className="guide-nav-empty">{GUIDE_NO_RESULTS[language as string] ?? "No matches"}</p>
-              ) : null}
-            </nav>
-
-            <article className="guide-detail" key={selected.id}>
-              <h2>{selected.title}</h2>
-              <GuideBlocks node={selected} />
-            </article>
-          </div>
-        </section>
-      </>
-    );
+  const nodeText = (node: GuideNode) => {
+    const parts: string[] = [node.title];
+    node.blocks.forEach(block => {
+      if (block.kind === "para" || block.kind === "sub") parts.push(block.text);
+      else parts.push(block.items.join(" "));
+    });
+    return parts.join(" ").toLowerCase();
   };
+
+  const q = query.trim().toLowerCase();
+  const groups = tree
+    .map(node => {
+      const kids = node.children ?? [];
+      const parentMatch = !q || nodeText(node).includes(q);
+      const childMatches = q ? kids.filter(child => nodeText(child).includes(q)) : kids;
+      const visibleKids = !q ? kids : parentMatch ? kids : childMatches;
+      const show = !q || parentMatch || childMatches.length > 0;
+      return { node, visibleKids, show };
+    })
+    .filter(group => group.show);
+
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{chrome.eyebrow}</span>
+          <h1>{chrome.title}</h1>
+          <p>{chrome.intro}</p>
+          <p className="public-legal-updated">
+            {chrome.lastUpdated}: {GUIDE_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell guide-layout">
+          <nav className="guide-nav" aria-label={chrome.menuLabel}>
+            <input
+              className="guide-search"
+              type="search"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder={chrome.searchPlaceholder}
+              aria-label={chrome.searchPlaceholder}
+            />
+            <span className="guide-nav-title">{chrome.menuLabel}</span>
+            {groups.map(({ node, visibleKids }) => (
+              <div key={node.id} className="guide-nav-group">
+                <button
+                  type="button"
+                  className={node.id === selectedId ? "guide-nav-item is-active" : "guide-nav-item"}
+                  aria-current={node.id === selectedId ? "true" : undefined}
+                  onClick={() => select(node.id)}
+                >
+                  {node.title}
+                </button>
+                {visibleKids.length > 0 ? (
+                  <div className="guide-nav-children">
+                    {visibleKids.map(child => (
+                      <button
+                        key={child.id}
+                        type="button"
+                        className={child.id === selectedId ? "guide-nav-subitem is-active" : "guide-nav-subitem"}
+                        aria-current={child.id === selectedId ? "true" : undefined}
+                        onClick={() => select(child.id)}
+                      >
+                        {child.title}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {groups.length === 0 ? (
+              <p className="guide-nav-empty">{GUIDE_NO_RESULTS[language as string] ?? "No matches"}</p>
+            ) : null}
+          </nav>
+
+          <article className="guide-detail" key={selected.id}>
+            <h2>{selected.title}</h2>
+            <GuideBlocks node={selected} />
+          </article>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function PublicGuidePage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicGuidePageContent />
     </PublicShell>
+  );
+}
+
+function PublicChangelogPageContent() {
+  const { language } = usePublicSiteLanguage();
+  const labels = getChangelogLabels(language);
+  const tagClass: Record<ChangeTag, string> = {
+    new: "changelog-tag changelog-tag-new",
+    improved: "changelog-tag changelog-tag-improved",
+    fixed: "changelog-tag changelog-tag-fixed"
+  };
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{labels.eyebrow}</span>
+          <h1>{labels.title}</h1>
+          <p>{labels.intro}</p>
+          <p className="public-legal-updated">
+            {labels.lastUpdated}: {CHANGELOG_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell changelog-list">
+          {CHANGELOG.map((entry, index) => (
+            <article key={`${entry.version}-${entry.platform ?? "all"}`} className="changelog-entry">
+              <header className="changelog-entry-head">
+                <div className="changelog-version">
+                  <span className="changelog-version-number">{labels.versionWord} {entry.version}</span>
+                  {entry.platform ? <span className="changelog-platform-pill">{entry.platform}</span> : null}
+                  {index === 0 ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
+                </div>
+                <time className="changelog-date">{entry.date}</time>
+              </header>
+              {entry.highlight ? <p className="changelog-highlight">{entry.highlight}</p> : null}
+              <ul className="changelog-changes">
+                {entry.changes.map((change, i) => (
+                  <li key={i} className="changelog-change">
+                    <span className={tagClass[change.tag]}>{labels.tags[change.tag]}</span>
+                    <span className="changelog-change-text">{change.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicChangelogPage() {
-  const Page = () => {
-    const { language } = usePublicSiteLanguage();
-    const labels = getChangelogLabels(language);
-    const tagClass: Record<ChangeTag, string> = {
-      new: "changelog-tag changelog-tag-new",
-      improved: "changelog-tag changelog-tag-improved",
-      fixed: "changelog-tag changelog-tag-fixed"
-    };
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{labels.eyebrow}</span>
-            <h1>{labels.title}</h1>
-            <p>{labels.intro}</p>
-            <p className="public-legal-updated">
-              {labels.lastUpdated}: {CHANGELOG_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell changelog-list">
-            {CHANGELOG.map((entry, index) => (
-              <article key={`${entry.version}-${entry.platform ?? "all"}`} className="changelog-entry">
-                <header className="changelog-entry-head">
-                  <div className="changelog-version">
-                    <span className="changelog-version-number">{labels.versionWord} {entry.version}</span>
-                    {entry.platform ? <span className="changelog-platform-pill">{entry.platform}</span> : null}
-                    {index === 0 ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
-                  </div>
-                  <time className="changelog-date">{entry.date}</time>
-                </header>
-                {entry.highlight ? <p className="changelog-highlight">{entry.highlight}</p> : null}
-                <ul className="changelog-changes">
-                  {entry.changes.map((change, i) => (
-                    <li key={i} className="changelog-change">
-                      <span className={tagClass[change.tag]}>{labels.tags[change.tag]}</span>
-                      <span className="changelog-change-text">{change.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicChangelogPageContent />
     </PublicShell>
+  );
+}
+
+function PublicSecurityPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const securityOverviewSections = getSecurityOverviewSections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("security.eyebrow")}</span>
+          <h1>{t("security.title")}</h1>
+          <p>{t("security.body")}</p>
+          <p className="public-legal-updated">
+            {getSecurityOverviewLastUpdatedLabel(language)}: {SECURITY_OVERVIEW_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {securityOverviewSections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicSecurityPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const securityOverviewSections = getSecurityOverviewSections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("security.eyebrow")}</span>
-            <h1>{t("security.title")}</h1>
-            <p>{t("security.body")}</p>
-            <p className="public-legal-updated">
-              {getSecurityOverviewLastUpdatedLabel(language)}: {SECURITY_OVERVIEW_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {securityOverviewSections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicSecurityPageContent />
     </PublicShell>
+  );
+}
+
+function PublicSubprocessorsPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const subprocessorsSections = getSubprocessorsSections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("subprocessors.eyebrow")}</span>
+          <h1>{t("subprocessors.title")}</h1>
+          <p>{t("subprocessors.body")}</p>
+          <p className="public-legal-updated">
+            {getSubprocessorsLastUpdatedLabel(language)}: {SUBPROCESSORS_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {subprocessorsSections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicSubprocessorsPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const subprocessorsSections = getSubprocessorsSections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("subprocessors.eyebrow")}</span>
-            <h1>{t("subprocessors.title")}</h1>
-            <p>{t("subprocessors.body")}</p>
-            <p className="public-legal-updated">
-              {getSubprocessorsLastUpdatedLabel(language)}: {SUBPROCESSORS_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {subprocessorsSections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicSubprocessorsPageContent />
     </PublicShell>
+  );
+}
+
+function PublicDataProcessingAgreementPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const dataProcessingAgreementSections = getDataProcessingAgreementSections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("dataProcessingAgreement.eyebrow")}</span>
+          <h1>{t("dataProcessingAgreement.title")}</h1>
+          <p>{t("dataProcessingAgreement.body")}</p>
+          <p className="public-legal-updated">
+            {getDataProcessingAgreementLastUpdatedLabel(language)}: {DATA_PROCESSING_AGREEMENT_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {dataProcessingAgreementSections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicDataProcessingAgreementPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const dataProcessingAgreementSections = getDataProcessingAgreementSections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("dataProcessingAgreement.eyebrow")}</span>
-            <h1>{t("dataProcessingAgreement.title")}</h1>
-            <p>{t("dataProcessingAgreement.body")}</p>
-            <p className="public-legal-updated">
-              {getDataProcessingAgreementLastUpdatedLabel(language)}: {DATA_PROCESSING_AGREEMENT_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {dataProcessingAgreementSections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicDataProcessingAgreementPageContent />
     </PublicShell>
+  );
+}
+
+function PublicAcceptableUsePageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const acceptableUsePolicySections = getAcceptableUsePolicySections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("acceptableUse.eyebrow")}</span>
+          <h1>{t("acceptableUse.title")}</h1>
+          <p>{t("acceptableUse.body")}</p>
+          <p className="public-legal-updated">
+            {getAcceptableUsePolicyLastUpdatedLabel(language)}: {ACCEPTABLE_USE_POLICY_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {acceptableUsePolicySections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
 export function PublicAcceptableUsePage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const acceptableUsePolicySections = getAcceptableUsePolicySections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("acceptableUse.eyebrow")}</span>
-            <h1>{t("acceptableUse.title")}</h1>
-            <p>{t("acceptableUse.body")}</p>
-            <p className="public-legal-updated">
-              {getAcceptableUsePolicyLastUpdatedLabel(language)}: {ACCEPTABLE_USE_POLICY_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
-
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {acceptableUsePolicySections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
 
   return (
     <PublicShell>
-      <Page />
+      <PublicAcceptableUsePageContent />
     </PublicShell>
   );
 }
 
-export function PublicContactPage() {
-  const Page = () => {
-    const { language, t } = usePublicSiteLanguage();
-    const supportContactSections = getSupportContactSections(language);
-    return (
-      <>
-        <section className="public-page-hero public-info-hero">
-          <div className="public-shell">
-            <span className="public-eyebrow">{t("contact.eyebrow")}</span>
-            <h1>{t("contact.title")}</h1>
-            <p>{t("contact.body")}</p>
-            <p className="public-legal-updated">
-              {getSupportContactLastUpdatedLabel(language)}: {SUPPORT_CONTACT_LAST_UPDATED}
-            </p>
-          </div>
-        </section>
+function PublicContactPageContent() {
+  const { language, t } = usePublicSiteLanguage();
+  const supportContactSections = getSupportContactSections(language);
+  return (
+    <>
+      <section className="public-page-hero public-info-hero">
+        <div className="public-shell">
+          <span className="public-eyebrow">{t("contact.eyebrow")}</span>
+          <h1>{t("contact.title")}</h1>
+          <p>{t("contact.body")}</p>
+          <p className="public-legal-updated">
+            {getSupportContactLastUpdatedLabel(language)}: {SUPPORT_CONTACT_LAST_UPDATED}
+          </p>
+        </div>
+      </section>
 
-        <section className="public-section">
-          <div className="public-shell public-legal-document">
-            {supportContactSections.map(section => (
-              <PublicLegalSection key={section.title} section={section} />
-            ))}
-          </div>
-        </section>
-      </>
-    );
-  };
+      <section className="public-section">
+        <div className="public-shell public-legal-document">
+          {supportContactSections.map(section => (
+            <PublicLegalSection key={section.title} section={section} />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function PublicContactPage() {
 
   return (
     <PublicShell>
-      <Page />
+      <PublicContactPageContent />
     </PublicShell>
   );
 }
