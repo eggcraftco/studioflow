@@ -15,6 +15,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
@@ -82,6 +83,7 @@ function BankPageContent() {
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [rules, setRules] = useState<BankRule[]>([]);
   const [showRules, setShowRules] = useState(false);
+  const [showRecurring, setShowRecurring] = useState(true);
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -419,6 +421,11 @@ function BankPageContent() {
     return { rows, total };
   }, [visibleTransactions]);
 
+  // Subscriptions & other recurring charges detected from the feed.
+  const recurring = useMemo<RecurringSpend[]>(() => detectRecurringSpends(transactions), [transactions]);
+  const recurringKeys = useMemo(() => new Set(recurring.filter(item => item.active).map(item => item.key)), [recurring]);
+  const fixedMonthly = useMemo(() => monthlyFixedTotal(recurring), [recurring]);
+
   const money = (value: number, currency: string) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "GBP" }).format(value);
 
@@ -483,6 +490,44 @@ function BankPageContent() {
                 </button>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {isOwner && recurring.length > 0 ? (
+          <div style={{ marginTop: 16, border: "1px solid rgba(120,120,140,0.2)", borderRadius: 12, padding: "12px 14px" }}>
+            <button type="button" onClick={() => setShowRecurring(value => !value)}
+              style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13, fontWeight: 800, padding: 0, display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+              <span aria-hidden="true">{showRecurring ? "▾" : "▸"}</span>
+              ↻ {t("Recurring spending")}
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#b45309", marginLeft: 4 }}>
+                ≈ {money(fixedMonthly, transactions[0]?.currency || "GBP")} / {t("month")}
+              </span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>{recurring.length}</span>
+            </button>
+            {showRecurring ? (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
+                {recurring.map(item => (
+                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 2px", borderBottom: "1px solid rgba(120,120,140,0.12)", opacity: item.active ? 1 : 0.5 }}>
+                    <span aria-hidden="true" style={{ fontSize: 13 }}>↻</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.merchant}
+                        {!item.active ? <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, opacity: 0.8 }}>({t("possibly cancelled")})</span> : null}
+                      </div>
+                      <div style={{ fontSize: 10.5, opacity: 0.6 }}>
+                        {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")}
+                        {" · "}{item.occurrences}× · {t("Next expected")}: {item.nextExpected}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {money(item.typicalAmount, item.currency)}
+                      <span style={{ fontSize: 10, opacity: 0.55, fontWeight: 600 }}> /{t(item.cadence === "weekly" ? "week" : item.cadence === "yearly" ? "year" : "month")}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -612,6 +657,9 @@ function BankPageContent() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {transaction.amount < 0 && recurringKeys.has(recurringMerchantKey(transaction)) ? (
+                            <span aria-hidden="true" title={t("Recurring spending")} style={{ marginRight: 5, fontSize: 11, opacity: 0.7 }}>↻</span>
+                          ) : null}
                           {transaction.counterparty || transaction.description || "—"}
                           {transaction.linkedOrderId ? (
                             <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "#2563eb", background: "rgba(37,99,235,0.1)", borderRadius: 999, padding: "1px 8px" }}>

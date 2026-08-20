@@ -32,6 +32,7 @@ import {
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
+import { detectRecurringSpends, monthlyFixedTotal } from "@/lib/studioflow/bankInsights";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -861,6 +862,8 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
     };
   }, [transactions]);
 
+  const fixedMonthly = useMemo(() => monthlyFixedTotal(detectRecurringSpends(transactions)), [transactions]);
+
   if (!isOwner || transactions.length === 0) return null;
 
   const currency = transactions[0]?.currency || "GBP";
@@ -895,6 +898,11 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
               {delta <= 0 ? "↓" : "↑"} {Math.abs(delta).toFixed(0)}% {t("vs last month")}
             </span>
           ) : <span style={{ fontSize: 12, opacity: 0.6 }}>{t("First month of data")}</span>}
+          {fixedMonthly > 0 ? (
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#b45309", marginTop: 2 }}>
+              ↻ {t("Fixed")} ≈ {bankMoney(fixedMonthly, 0)} / {t("month")}
+            </span>
+          ) : null}
           <div style={{ marginTop: 8 }}>
             <BankSparkline values={summary.daily} color="#16a34a" />
           </div>
