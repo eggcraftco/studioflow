@@ -1264,6 +1264,15 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   async function handleToolbarSignOut() {
     setAvatarMenuOpen(false);
+    // Remove the push registration while still authenticated — Firestore rules
+    // reject the delete after signOut, and the stale token would keep routing
+    // this workspace's pushes to the browser.
+    try {
+      const mod = await import("@/lib/studioflow/pushNotifications");
+      await mod.unregisterWebPush();
+    } catch {
+      /* ignore */
+    }
     await signOut(auth);
     router.replace("/login");
   }

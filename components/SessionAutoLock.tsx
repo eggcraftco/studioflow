@@ -128,6 +128,14 @@ export function SessionAutoLock() {
 
   async function handleSignOut() {
     try {
+      // Remove the push registration while still authenticated — Firestore
+      // rules reject the delete after signOut.
+      try {
+        const mod = await import("@/lib/studioflow/pushNotifications");
+        await mod.unregisterWebPush();
+      } catch {
+        /* ignore */
+      }
       await signOut(auth);
     } catch {
       // Ignore — the auth listener will reconcile state.
