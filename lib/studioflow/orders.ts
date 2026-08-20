@@ -90,6 +90,8 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     fullPaymentReceived?: boolean;
     recordPayment?: { amount: number; method?: string; note?: string };
     deletePaymentId?: string;
+    // Edit the free-text note on any ledger entry (including webhook payments).
+    updatePaymentNote?: { id: string; note: string };
     // Per-order amounts for the workspace's custom Extra Spending / Remaining
     // headings, keyed by heading title. Mirrors the Mac/iPhone/Android editors.
     financialExpenseValues?: Record<string, number>;

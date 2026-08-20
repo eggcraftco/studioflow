@@ -1796,6 +1796,8 @@ export function OrderDetailContent({
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentMethodInput, setPaymentMethodInput] = useState("Deposit");
   const [paymentNoteInput, setPaymentNoteInput] = useState("");
+  const [editingPaymentNoteId, setEditingPaymentNoteId] = useState<string | null>(null);
+  const [editingPaymentNoteText, setEditingPaymentNoteText] = useState("");
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
@@ -3526,6 +3528,10 @@ export function OrderDetailContent({
     if (typeof patch.deletePaymentId === "string") {
       payments = order.payments.filter(entry => entry.id !== patch.deletePaymentId);
     }
+    if (patch.updatePaymentNote) {
+      const { id, note } = patch.updatePaymentNote;
+      payments = payments.map(entry => (entry.id === id ? { ...entry, note } : entry));
+    }
     // Mirror the server-side seed: the first Paid amount entered on an empty
     // ledger becomes Payment #1, so it shows up instantly under Payments.
     if (typeof patch.paidAmount === "number" && order.payments.length === 0 && paidAmount > 0.005) {
@@ -3629,6 +3635,14 @@ export function OrderDetailContent({
 
   async function deletePaymentEntry(paymentId: string) {
     await saveFinancePatch({ deletePaymentId: paymentId }, "Payment");
+  }
+
+  // Edit the note on any ledger entry — including payments recorded
+  // automatically by the WooCommerce/Shopify webhooks.
+  async function savePaymentNote(paymentId: string) {
+    await saveFinancePatch({ updatePaymentNote: { id: paymentId, note: editingPaymentNoteText.trim() } }, "Payment");
+    setEditingPaymentNoteId(null);
+    setEditingPaymentNoteText("");
   }
 
   function savePaidFinanceValue(value: string | number) {
@@ -5326,12 +5340,60 @@ export function OrderDetailContent({
                           {order.payments.map(payment => (
                             <li key={payment.id} className="finance-payments-item">
                               <span className="finance-payments-amount">{money(payment.amount, hideNumbers)}</span>
-                              <span className="finance-payments-meta">
-                                {payment.date ? payment.date.toLocaleDateString() : ""}
-                                {payment.method ? ` · ${payment.method}` : ""}
-                                {payment.note ? ` · ${payment.note}` : ""}
-                              </span>
-                              {canInlineEditFinance ? (
+                              {editingPaymentNoteId === payment.id ? (
+                                <span className="finance-payments-meta" style={{ display: "inline-flex", gap: 6, alignItems: "center", flex: 1 }}>
+                                  <input
+                                    type="text"
+                                    value={editingPaymentNoteText}
+                                    placeholder="Note"
+                                    autoFocus
+                                    onChange={event => setEditingPaymentNoteText(event.target.value)}
+                                    onKeyDown={event => {
+                                      if (event.key === "Enter") void savePaymentNote(payment.id);
+                                      if (event.key === "Escape") setEditingPaymentNoteId(null);
+                                    }}
+                                    style={{ flex: 1, minWidth: 120, fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="finance-payments-add"
+                                    disabled={savingFinanceField === "Payment"}
+                                    onClick={() => void savePaymentNote(payment.id)}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="finance-payments-delete"
+                                    aria-label="Cancel note edit"
+                                    onClick={() => setEditingPaymentNoteId(null)}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="finance-payments-meta">
+                                  {payment.date ? payment.date.toLocaleDateString() : ""}
+                                  {payment.method ? ` · ${payment.method}` : ""}
+                                  {payment.note ? ` · ${payment.note}` : ""}
+                                </span>
+                              )}
+                              {canInlineEditFinance && editingPaymentNoteId !== payment.id ? (
+                                <button
+                                  type="button"
+                                  className="finance-payments-delete"
+                                  aria-label="Edit payment note"
+                                  title="Edit note"
+                                  disabled={savingFinanceField === "Payment"}
+                                  onClick={() => {
+                                    setEditingPaymentNoteText(payment.note || "");
+                                    setEditingPaymentNoteId(payment.id);
+                                  }}
+                                >
+                                  ✎
+                                </button>
+                              ) : null}
+                              {canInlineEditFinance && editingPaymentNoteId !== payment.id ? (
                                 <button
                                   type="button"
                                   className="finance-payments-delete"
