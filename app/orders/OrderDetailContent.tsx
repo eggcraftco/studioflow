@@ -872,10 +872,19 @@ function openOrderPdfPrint(
 
 function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
   const money = (value: number) => orderPdfMoney(value, settings, false);
-  const orderValue = order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+  // Invoice total: when the user added named line items, the invoice bills
+  // exactly those items — the order's paid/remaining figures stay off the
+  // invoice entirely. Orders without line items keep the classic order value.
+  const hasLineItems = order.lineItems.length > 0;
+  const lineItemsTotal = order.lineItems.reduce((acc, it) => acc + it.lineTotal, 0);
+  const orderValue = hasLineItems
+    ? lineItemsTotal
+    : order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
   const isMarginScheme = order.taxType === "Profit";
   const isZeroRated = (order.taxRate ?? 0) <= 0.0001;
-  const vatAmount = order.taxAmount;
+  // Line-item invoices recompute VAT on the item total with the order's rate
+  // (same total*rate/100 convention as the Finance card).
+  const vatAmount = hasLineItems ? (orderValue * (order.taxRate ?? 0)) / 100 : order.taxAmount;
   const subtotal = isMarginScheme ? orderValue : orderValue - vatAmount;
   const businessName = settings?.appSubtitle || "NivaDesk";
   const logoUrl = settings?.appLogoUrl || "";
@@ -971,8 +980,6 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
       ${vatRow}
       <div class="trow total"><span>TOTAL</span><strong>${money(orderValue)}</strong></div>
-      <div class="trow"><span>Paid</span><strong class="paid">${money(order.paidAmount)}</strong></div>
-      <div class="trow"><span>Balance Due</span><strong class="${order.remainingAmount > 0.005 ? "due" : "paid"}">${money(order.remainingAmount)}</strong></div>
     </div>
     ${order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
