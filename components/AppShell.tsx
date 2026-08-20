@@ -542,6 +542,144 @@ function WorkspaceOnboardingScreen({
   );
 }
 
+// First-launch guidance: new sign-ups land on the Free Demo plan and often
+// don't discover Settings → Plan & Access on their own. Mirrors iOS/Android:
+// the X never fully hides the banner — it collapses to a one-line strip that
+// expands back on click. Collapsed state is stored per companyId so it never
+// bleeds into a different account in this browser.
+const DEMO_BANNER_COLLAPSED_KEY = "demoPlanBannerCollapsedCompanyV1";
+
+function DemoPlanBanner({
+  companyId,
+  t,
+  onViewPlans,
+}: {
+  companyId: string;
+  t: (text: string) => string;
+  onViewPlans: () => void;
+}) {
+  const [collapsedCompanyId, setCollapsedCompanyId] = useState(() => {
+    try {
+      return window.localStorage.getItem(DEMO_BANNER_COLLAPSED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const setCollapsed = (collapsed: boolean) => {
+    const next = collapsed ? companyId : "";
+    setCollapsedCompanyId(next);
+    try {
+      window.localStorage.setItem(DEMO_BANNER_COLLAPSED_KEY, next);
+    } catch {
+      /* private mode — state just won't persist */
+    }
+  };
+
+  if (companyId && collapsedCompanyId === companyId) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          width: "100%",
+          padding: "5px 14px",
+          background: "var(--surface, #fff)",
+          border: 0,
+          borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+          fontSize: 11.5,
+          fontWeight: 650,
+          cursor: "pointer",
+          color: "inherit",
+        }}
+      >
+        <span aria-hidden="true">✨</span>
+        <span>{t("Free Demo")}</span>
+        <span style={{ opacity: 0.55 }}>·</span>
+        <span style={{ color: "#2563eb" }}>{t("View plans")}</span>
+        <span aria-hidden="true" style={{ opacity: 0.55 }}>⌄</span>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 14px",
+        background: "var(--surface, #fff)",
+        borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+        fontSize: 13,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+          fontSize: 14,
+        }}
+      >
+        ✨
+      </span>
+      <span style={{ flex: 1, minWidth: 220 }}>
+        <strong style={{ display: "block", fontSize: 12.5 }}>
+          {t("You're on the Free Demo plan.")}
+        </strong>
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {t("Choose a plan in Plan & Access to unlock more orders, storage and team features.")}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onViewPlans}
+        style={{
+          border: 0,
+          background: "#2563eb",
+          color: "#fff",
+          borderRadius: 8,
+          padding: "7px 12px",
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        {t("View plans")}
+      </button>
+      <button
+        type="button"
+        aria-label="Collapse"
+        onClick={() => setCollapsed(true)}
+        style={{
+          border: 0,
+          background: "rgba(120, 120, 140, 0.12)",
+          color: "inherit",
+          borderRadius: 999,
+          width: 26,
+          height: 26,
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const shellAlreadyMounted = useContext(AppShellMountedContext);
   const { user } = useAuth();
@@ -1353,6 +1491,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   return (
     <AppShellMountedContext.Provider value={true}>
       <main className="page-shell app-shell-fixed">
+        {workspace &&
+          workspace.billingPlan === "demo" &&
+          workspace.role === "owner" &&
+          pathname !== "/settings" ? (
+          <DemoPlanBanner
+            companyId={workspace.id}
+            t={t}
+            onViewPlans={() => router.push("/settings?section=plan-access")}
+          />
+        ) : null}
         <div
           className={
             wideWorkspace

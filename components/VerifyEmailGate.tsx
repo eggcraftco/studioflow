@@ -28,12 +28,61 @@ export function emailVerificationRequired(user: User | null | undefined) {
   return Date.now() - createdMs > VERIFICATION_GRACE_DAYS * 86400000;
 }
 
+// The X never fully hides the reminder — it collapses to a one-line strip that
+// expands back on click. Keyed by uid so it never bleeds across accounts.
+const VERIFY_BANNER_COLLAPSED_KEY = "emailVerifyBannerCollapsedUidV1";
+
 export function VerifyEmailBanner({ user }: { user: User }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [hiddenAfterVerify, setHiddenAfterVerify] = useState(false);
+  const [collapsedUid, setCollapsedUid] = useState(() => {
+    try {
+      return window.localStorage.getItem(VERIFY_BANNER_COLLAPSED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   if (hiddenAfterVerify) return null;
+
+  const setCollapsed = (collapsed: boolean) => {
+    const next = collapsed ? user.uid : "";
+    setCollapsedUid(next);
+    try {
+      window.localStorage.setItem(VERIFY_BANNER_COLLAPSED_KEY, next);
+    } catch {
+      /* private mode — state just won't persist */
+    }
+  };
+
+  if (user.uid && collapsedUid === user.uid) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          width: "100%",
+          padding: "5px 14px",
+          background: "#fff7e6",
+          border: 0,
+          borderBottom: "1px solid #f1d9a7",
+          color: "#7a5200",
+          fontSize: 11.5,
+          fontWeight: 650,
+          cursor: "pointer",
+        }}
+      >
+        <span aria-hidden="true">📬</span>
+        <span>Verify email</span>
+        <span aria-hidden="true" style={{ opacity: 0.6 }}>⌄</span>
+      </button>
+    );
+  }
 
   async function resend() {
     setBusy(true);
@@ -87,6 +136,24 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         I&apos;ve verified
       </button>
       {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
+      <button
+        type="button"
+        aria-label="Collapse"
+        onClick={() => setCollapsed(true)}
+        style={{
+          border: 0,
+          background: "rgba(122, 82, 0, 0.10)",
+          color: "#7a5200",
+          borderRadius: 999,
+          width: 24,
+          height: 24,
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
