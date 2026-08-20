@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -598,6 +598,14 @@ export default function DashboardPage() {
                 )}
               </section>
 
+              <BankSpendingCard
+                companyId={workspace?.id ?? ""}
+                isOwner={workspace?.role === "owner"}
+                t={t}
+                hideNumbers={hideNumbers}
+                localeTag={locale}
+              />
+
               {canSeeAdvancedFinance ? (
                 <section className="card app-card">
                   <CardTitle icon="finance" title={t("Financial Breakdown")} />
@@ -699,6 +707,105 @@ export default function DashboardPage() {
         </div>
       ) : null}
     </AppShell>
+  );
+}
+
+// Owner-only bank spending overview fed by the Open Banking sync (/bank).
+// Renders nothing until at least one transaction has been imported, so the
+// dashboard stays clean for workspaces without a connected bank.
+function BankSpendingCard({ companyId, isOwner, t, hideNumbers, localeTag }: {
+  companyId: string;
+  isOwner: boolean;
+  t: (text: string) => string;
+  hideNumbers: boolean;
+  localeTag: string;
+}) {
+  type BankTx = { id: string; amount: number; currency: string; bookingDate: string; description: string; counterparty: string };
+  const [bankTransactions, setBankTransactions] = useState<BankTx[]>([]);
+
+  useEffect(() => {
+    if (!companyId || !isOwner) return;
+    const unsubscribe = onSnapshot(
+      query(collection(db, "companies", companyId, "bankTransactions"), orderBy("bookingDate", "desc")),
+      snap => {
+        setBankTransactions(snap.docs.map(txDoc => {
+          const data = txDoc.data() as Record<string, unknown>;
+          return {
+            id: txDoc.id,
+            amount: Number(data.amount) || 0,
+            currency: String(data.currency || "GBP"),
+            bookingDate: String(data.bookingDate || ""),
+            description: String(data.description || ""),
+            counterparty: String(data.counterparty || "")
+          };
+        }));
+      },
+      () => setBankTransactions([])
+    );
+    return unsubscribe;
+  }, [companyId, isOwner]);
+
+  const summary = useMemo(() => {
+    const now = new Date();
+    const thisPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
+    const spendIn = (prefix: string) => bankTransactions
+      .filter(item => item.amount < 0 && item.bookingDate.startsWith(prefix))
+      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
+    return {
+      thisMonth: spendIn(thisPrefix),
+      lastMonth: spendIn(lastPrefix),
+      yearTotal: bankTransactions
+        .filter(item => item.amount < 0 && item.bookingDate.startsWith(String(now.getFullYear())))
+        .reduce((acc, item) => acc + Math.abs(item.amount), 0),
+      recent: bankTransactions.slice(0, 3)
+    };
+  }, [bankTransactions]);
+
+  if (!isOwner || bankTransactions.length === 0) return null;
+
+  const currency = bankTransactions[0]?.currency || "GBP";
+  const bankMoney = (value: number) => hideNumbers
+    ? hiddenMoneyLabel()
+    : new Intl.NumberFormat(localeTag, { style: "currency", currency }).format(value);
+  const delta = summary.lastMonth > 0 ? ((summary.thisMonth - summary.lastMonth) / summary.lastMonth) * 100 : null;
+
+  return (
+    <section className="card app-card">
+      <CardTitle icon="finance" title={t("Bank Spending")} />
+      <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>{t("This Month")}</p>
+          <strong style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>{bankMoney(summary.thisMonth)}</strong>
+          {delta !== null ? (
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: delta <= 0 ? "#16a34a" : "#dc2626" }}>
+              {delta <= 0 ? "▾" : "▴"} {Math.abs(delta).toFixed(0)}% {t("vs last month")}
+            </span>
+          ) : null}
+        </div>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>{t("This Year")}</p>
+          <strong style={{ fontSize: 24, fontVariantNumeric: "tabular-nums" }}>{bankMoney(summary.yearTotal)}</strong>
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <p className="muted-copy" style={{ margin: "0 0 4px", fontSize: 12 }}>{t("Latest transactions")}</p>
+          {summary.recent.map(item => (
+            <div key={item.id} style={{ display: "flex", gap: 8, fontSize: 12.5, padding: "2px 0" }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {item.counterparty || item.description || "—"}
+              </span>
+              <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums", color: item.amount < 0 ? "#dc2626" : "#16a34a" }}>
+                {item.amount < 0 ? "−" : "+"}{bankMoney(Math.abs(item.amount))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <a href="/bank" style={{ display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "#2563eb", textDecoration: "none" }}>
+        {t("View all transactions")} →
+      </a>
+    </section>
   );
 }
 

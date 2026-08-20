@@ -51,6 +51,7 @@ function BankPageContent() {
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [view, setView] = useState<"month" | "year">("month");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -203,6 +204,28 @@ function BankPageContent() {
       .reduce((acc, item) => acc + Math.abs(item.amount), 0);
   }, [transactions]);
 
+  // Spending per month of the current year (outgoing only), for the Year view.
+  const yearSeries = useMemo(() => {
+    const year = new Date().getFullYear();
+    const totals = Array.from({ length: 12 }, () => 0);
+    for (const item of transactions) {
+      if (item.amount >= 0 || !item.bookingDate.startsWith(String(year))) continue;
+      const month = Number(item.bookingDate.slice(5, 7)) - 1;
+      if (month >= 0 && month < 12) totals[month] += Math.abs(item.amount);
+    }
+    return { year, totals, total: totals.reduce((acc, value) => acc + value, 0) };
+  }, [transactions]);
+
+  // The list follows the selected period; anything older stays reachable by
+  // switching the tab back.
+  const visibleTransactions = useMemo(() => {
+    const now = new Date();
+    const prefix = view === "month"
+      ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      : String(now.getFullYear());
+    return transactions.filter(item => item.bookingDate.startsWith(prefix));
+  }, [transactions, view]);
+
   const money = (value: number, currency: string) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "GBP" }).format(value);
 
@@ -272,14 +295,60 @@ function BankPageContent() {
 
         {isOwner ? (
           <div style={{ marginTop: 20 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <h2 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>{t("Transactions")}</h2>
+              <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 8, padding: 2 }}>
+                {(["month", "year"] as const).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="tab"
+                    aria-selected={view === option}
+                    onClick={() => setView(option)}
+                    style={{
+                      border: 0, cursor: "pointer", fontSize: 11.5, fontWeight: 700,
+                      padding: "4px 12px", borderRadius: 6,
+                      background: view === option ? "#2563eb" : "transparent",
+                      color: view === option ? "#fff" : "inherit"
+                    }}
+                  >
+                    {option === "month" ? t("This Month") : t("This Year")}
+                  </button>
+                ))}
+              </div>
               {transactions.length > 0 ? (
-                <span style={{ fontSize: 11.5, opacity: 0.7 }}>
-                  {t("This month's spending")}: <strong>{money(monthTotal, transactions[0]?.currency || "GBP")}</strong>
+                <span style={{ fontSize: 11.5, opacity: 0.75 }}>
+                  {view === "month"
+                    ? <>{t("This month's spending")}: <strong>{money(monthTotal, transactions[0]?.currency || "GBP")}</strong></>
+                    : <>{yearSeries.year} {t("spending")}: <strong>{money(yearSeries.total, transactions[0]?.currency || "GBP")}</strong></>}
                 </span>
               ) : null}
             </div>
+
+            {view === "year" && transactions.length > 0 ? (
+              <div style={{ marginTop: 14, border: "1px solid rgba(120,120,140,0.2)", borderRadius: 10, padding: "14px 14px 8px" }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 110 }}>
+                  {yearSeries.totals.map((value, index) => {
+                    const max = Math.max(...yearSeries.totals, 1);
+                    const height = Math.max(value > 0 ? 4 : 0, Math.round((value / max) * 100));
+                    const isCurrent = index === new Date().getMonth();
+                    return (
+                      <div key={index} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}
+                        title={`${new Date(yearSeries.year, index, 1).toLocaleDateString(undefined, { month: "long" })}: ${money(value, transactions[0]?.currency || "GBP")}`}>
+                        <div style={{
+                          width: "100%", maxWidth: 34, height, borderRadius: "4px 4px 0 0",
+                          background: isCurrent ? "#2563eb" : "rgba(37,99,235,0.35)",
+                          transition: "height 0.2s ease"
+                        }} />
+                        <span style={{ fontSize: 9.5, opacity: 0.6, fontVariantNumeric: "tabular-nums" }}>
+                          {new Date(yearSeries.year, index, 1).toLocaleDateString(undefined, { month: "narrow" })}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {transactions.length === 0 ? (
               <p style={{ fontSize: 12.5, opacity: 0.7, marginTop: 10 }}>
                 {connections.length === 0
@@ -288,7 +357,10 @@ function BankPageContent() {
               </p>
             ) : (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column" }}>
-                {transactions.slice(0, 200).map(transaction => (
+                {visibleTransactions.length === 0 ? (
+                  <p style={{ fontSize: 12.5, opacity: 0.7 }}>{t("No transactions in this period yet.")}</p>
+                ) : null}
+                {visibleTransactions.slice(0, 300).map(transaction => (
                   <div key={transaction.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
