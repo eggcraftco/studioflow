@@ -3366,6 +3366,30 @@ export function normalizeStudioLanguage(value: string | null | undefined): Studi
   return SUPPORTED_STUDIO_LANGUAGES.includes(cleaned as StudioLanguage) ? cleaned as StudioLanguage : "English";
 }
 
+/**
+ * The app's supported language name best matching a BCP 47 locale tag (e.g.
+ * navigator.language). Used as the default when neither the personal nor the
+ * workspace language has been chosen yet, so a first visit opens in the
+ * user's own language (a stored choice wins).
+ */
+export function studioLanguageForLocaleTag(tag: string | null | undefined): StudioLanguage {
+  const code = String(tag || "").trim().toLowerCase().split("-")[0];
+  switch (code) {
+    case "tr": return "Türkçe";
+    case "de": return "Deutsch";
+    case "fr": return "Français";
+    case "it": return "Italiano";
+    case "es": return "Español (Spanish)";
+    case "pt": return "Português";
+    case "ru": return "Русский (Russian)";
+    case "ja": return "日本語 (Japanese)";
+    case "zh": return "中文 (Chinese)";
+    case "ar": return "العربية (Arabic)";
+    case "hi": return "हिन्दी (Hindi)";
+    default: return "English";
+  }
+}
+
 export function studioT(text: string, language: string | null | undefined) {
   const normalized = normalizeStudioLanguage(language);
   if (normalized === "English") return text;

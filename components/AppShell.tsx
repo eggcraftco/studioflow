@@ -31,7 +31,7 @@ import {
   type WorkspaceSettingsOverview,
 } from "@/lib/studioflow/firestore";
 import { swiftOrderNetProfit } from "@/lib/studioflow/finance";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -1273,7 +1273,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     canCreateOrdersForRole(workspace.role) &&
     workspace.entitlements.features.orders_create,
   );
-  const language = personalLanguage || settings?.selectedLanguage || "English";
+  // No explicit choice yet: follow the browser locale instead of hard-coding
+  // English (a stored personal or workspace choice always wins).
+  const language =
+    personalLanguage ||
+    settings?.selectedLanguage ||
+    studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
   const t = (text: string) => studioT(text, language);
   const showWorkspaceOnboarding = Boolean(
     user &&
