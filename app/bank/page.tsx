@@ -38,7 +38,26 @@ type BankTransaction = {
   receiptName: string;
   linkedOrderId: string;
   linkedOrderLabel: string;
+  category: string;
+  categoryAuto: string;
 };
+type BankRule = { id: string; keyword: string; category: string };
+
+const BANK_CATEGORIES = [
+  "Materials", "Shipping", "Software", "Subscriptions", "Fees",
+  "Marketing", "Travel", "Utilities", "Rent", "Staff", "Tax", "Other"
+] as const;
+
+// Deterministic, readable chip colour per category name.
+const CATEGORY_PALETTE = ["#2563eb", "#0e7a55", "#b45309", "#7c3aed", "#be185d", "#0f766e", "#b91c1c", "#4d7c0f", "#a21caf", "#1d4ed8", "#92400e", "#6b7280"];
+function categoryColor(name: string) {
+  let hash = 0;
+  for (let index = 0; index < name.length; index += 1) hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+}
+function effectiveCategory(tx: BankTransaction) {
+  return tx.category || tx.categoryAuto || "";
+}
 
 function toDate(value: unknown): Date | null {
   const v = value as { toDate?: () => Date } | null | undefined;
@@ -61,6 +80,11 @@ function BankPageContent() {
   const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
+  const [rules, setRules] = useState<BankRule[]>([]);
+  const [showRules, setShowRules] = useState(false);
+  const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
+  const [categoryCustomText, setCategoryCustomText] = useState("");
+  const [categoryMakeRule, setCategoryMakeRule] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,12 +146,24 @@ function BankPageContent() {
             receiptPath: String(data.receiptPath || ""),
             receiptName: String(data.receiptName || ""),
             linkedOrderId: String(data.linkedOrderId || ""),
-            linkedOrderLabel: String(data.linkedOrderLabel || "")
+            linkedOrderLabel: String(data.linkedOrderLabel || ""),
+            category: String(data.category || ""),
+            categoryAuto: String(data.categoryAuto || "")
           };
         }));
       }
     );
-    return () => { unsubConnections(); unsubTransactions(); };
+    const unsubRules = onSnapshot(
+      collection(db, "companies", companyId, "bankRules"),
+      snap => {
+        setRules(snap.docs.map(doc => {
+          const data = doc.data() as Record<string, unknown>;
+          return { id: doc.id, keyword: String(data.keyword || ""), category: String(data.category || "") };
+        }));
+      },
+      () => setRules([])
+    );
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); };
   }, [companyId, isOwner]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -291,6 +327,43 @@ function BankPageContent() {
     }
   }
 
+  // ---- Categories & rules -------------------------------------------------
+
+  async function applyCategory(transaction: BankTransaction, category: string) {
+    setBusy(`cat-${transaction.id}`);
+    setError(null);
+    setCategoryPickerTxId(null);
+    const keyword = (transaction.counterparty || transaction.description).trim().toLowerCase().slice(0, 120);
+    try {
+      await call("bankSetTransactionCategory", { transactionId: transaction.id, category });
+      if (categoryMakeRule && category && keyword.length >= 2) {
+        await call("bankSaveRule", { keyword, category });
+        setStatus(t("Category saved and rule created."));
+      } else {
+        setStatus(category ? t("Category saved.") : t("Category cleared."));
+      }
+    } catch (categoryError) {
+      setError(categoryError instanceof Error ? categoryError.message : "Could not save the category.");
+    } finally {
+      setBusy(null);
+      setCategoryMakeRule(false);
+      setCategoryCustomText("");
+    }
+  }
+
+  async function deleteRule(rule: BankRule) {
+    if (!window.confirm(`${t("Delete this rule?")} (${rule.keyword} → ${t(rule.category)})`)) return;
+    setBusy(`rule-${rule.id}`);
+    try {
+      await call("bankDeleteRule", { ruleId: rule.id });
+      setStatus(t("Rule deleted."));
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not delete the rule.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const filteredOrderOptions = useMemo(() => {
     if (!orderOptions) return [];
     const term = orderSearch.trim().toLowerCase();
@@ -329,6 +402,22 @@ function BankPageContent() {
       : String(now.getFullYear());
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
   }, [transactions, view]);
+
+  // Spending per effective category for the selected period (Year/Month tab).
+  const categoryBreakdown = useMemo(() => {
+    const totals = new Map<string, number>();
+    let total = 0;
+    for (const item of visibleTransactions) {
+      if (item.amount >= 0) continue;
+      const key = effectiveCategory(item) || "__uncategorized__";
+      totals.set(key, (totals.get(key) || 0) + Math.abs(item.amount));
+      total += Math.abs(item.amount);
+    }
+    const rows = Array.from(totals.entries())
+      .map(([name, amount]) => ({ name, amount, share: total > 0 ? (amount / total) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+    return { rows, total };
+  }, [visibleTransactions]);
 
   const money = (value: number, currency: string) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "GBP" }).format(value);
@@ -397,6 +486,29 @@ function BankPageContent() {
           </div>
         ) : null}
 
+        {isOwner && rules.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <button type="button" onClick={() => setShowRules(value => !value)}
+              style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer", fontSize: 12, fontWeight: 700, opacity: 0.75, padding: 0 }}>
+              {showRules ? "▾" : "▸"} {t("Rules")} ({rules.length})
+            </button>
+            {showRules ? (
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                {rules.map(rule => (
+                  <div key={rule.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "4px 8px", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 8 }}>
+                    <span style={{ opacity: 0.7 }}>"{rule.keyword}"</span>
+                    <span aria-hidden="true">→</span>
+                    <span style={{ fontWeight: 700, color: categoryColor(rule.category) }}>{t(rule.category)}</span>
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`}
+                      onClick={() => void deleteRule(rule)} aria-label={t("Delete this rule?")}>✕</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {isOwner ? (
           <div style={{ marginTop: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -453,7 +565,25 @@ function BankPageContent() {
                 </div>
               </div>
             ) : null}
-            {transactions.length === 0 ? (
+            {categoryBreakdown.rows.length > 0 ? (
+              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {categoryBreakdown.rows.map(row => {
+                  const isUncategorized = row.name === "__uncategorized__";
+                  const label = isUncategorized ? t("Uncategorised") : t(row.name);
+                  const color = isUncategorized ? "#9ca3af" : categoryColor(row.name);
+                  return (
+                    <span key={row.name} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 650, border: "1px solid rgba(120,120,140,0.2)", borderRadius: 999, padding: "4px 10px" }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block" }} />
+                      {label}
+                      <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, transactions[0]?.currency || "GBP")}</strong>
+                      <span style={{ opacity: 0.55 }}>{row.share.toFixed(0)}%</span>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+
+                        {transactions.length === 0 ? (
               <p style={{ fontSize: 12.5, opacity: 0.7, marginTop: 10 }}>
                 {connections.length === 0
                   ? t("Connect your business bank to see spending here as it happens.")
@@ -497,6 +627,30 @@ function BankPageContent() {
                       </div>
                       {transaction.amount < 0 ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          {(() => {
+                            const category = effectiveCategory(transaction);
+                            const color = category ? categoryColor(category) : "";
+                            return (
+                              <button type="button"
+                                title={t("Set category")}
+                                aria-label={t("Set category")}
+                                disabled={busy === `cat-${transaction.id}`}
+                                onClick={() => {
+                                  setCategoryPickerTxId(current => current === transaction.id ? null : transaction.id);
+                                  setCategoryMakeRule(false);
+                                  setCategoryCustomText("");
+                                }}
+                                style={category ? {
+                                  border: 0, cursor: "pointer", fontSize: 10, fontWeight: 700, borderRadius: 999,
+                                  padding: "2px 9px", background: `${color}1a`, color
+                                } : {
+                                  border: "1px dashed rgba(120,120,140,0.45)", cursor: "pointer", fontSize: 10, fontWeight: 700,
+                                  borderRadius: 999, padding: "2px 9px", background: "transparent", color: "inherit", opacity: 0.6
+                                }}>
+                                {category ? t(category) : `+ ${t("Category")}`}
+                              </button>
+                            );
+                          })()}
                           {transaction.receiptPath ? (
                             <>
                               <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")}
@@ -534,7 +688,43 @@ function BankPageContent() {
                         {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                       </span>
                     </div>
-                    {linkPickerTxId === transaction.id ? (
+                    {categoryPickerTxId === transaction.id ? (
+                      <div style={{ margin: "0 4px 10px", padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {BANK_CATEGORIES.map(option => (
+                            <button key={option} type="button"
+                              onClick={() => void applyCategory(transaction, option)}
+                              style={{ border: 0, cursor: "pointer", fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "4px 11px", background: `${categoryColor(option)}1a`, color: categoryColor(option) }}>
+                              {t(option)}
+                            </button>
+                          ))}
+                          {effectiveCategory(transaction) ? (
+                            <button type="button" onClick={() => void applyCategory(transaction, "")}
+                              style={{ border: "1px solid rgba(120,120,140,0.35)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "4px 11px", background: "transparent", color: "inherit", opacity: 0.7 }}>
+                              {t("Clear category")}
+                            </button>
+                          ) : null}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                          <input type="text" value={categoryCustomText}
+                            placeholder={t("Custom category")}
+                            onChange={event => setCategoryCustomText(event.target.value)}
+                            onKeyDown={event => {
+                              if (event.key === "Enter" && categoryCustomText.trim()) void applyCategory(transaction, categoryCustomText.trim().slice(0, 60));
+                              if (event.key === "Escape") setCategoryPickerTxId(null);
+                            }}
+                            style={{ flex: "1 1 140px", fontSize: 12, padding: "5px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }} />
+                          {(transaction.counterparty || transaction.description).trim().length >= 2 ? (
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, cursor: "pointer" }}>
+                              <input type="checkbox" checked={categoryMakeRule} onChange={event => setCategoryMakeRule(event.target.checked)} />
+                              {t("Always apply to")} "{(transaction.counterparty || transaction.description).trim().slice(0, 30)}"
+                            </label>
+                          ) : null}
+                          <button type="button" className="finance-payments-delete" onClick={() => setCategoryPickerTxId(null)} aria-label={t("Close")}>✕</button>
+                        </div>
+                      </div>
+                    ) : null}
+                                        {linkPickerTxId === transaction.id ? (
                       <div style={{ margin: "0 4px 10px", padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <input
