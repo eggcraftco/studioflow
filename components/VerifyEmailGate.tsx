@@ -5,6 +5,8 @@
 
 import { useState } from "react";
 import { sendEmailVerification, signOut, type User } from "firebase/auth";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 // After clicking the verification link, land users back on the app instead of
 // a bare Firebase page.
@@ -33,6 +35,8 @@ export function emailVerificationRequired(user: User | null | undefined) {
 const VERIFY_BANNER_COLLAPSED_KEY = "emailVerifyBannerCollapsedUidV1";
 
 export function VerifyEmailBanner({ user }: { user: User }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [hiddenAfterVerify, setHiddenAfterVerify] = useState(false);
@@ -78,7 +82,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         }}
       >
         <span aria-hidden="true">📬</span>
-        <span>Verify email</span>
+        <span>{t("Verify email")}</span>
         <span aria-hidden="true" style={{ opacity: 0.6 }}>⌄</span>
       </button>
     );
@@ -104,7 +108,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         setHiddenAfterVerify(true);
         window.location.reload();
       } else {
-        setStatus("Not verified yet");
+        setStatus(t("Not verified yet"));
       }
     } finally {
       setBusy(false);
@@ -128,12 +132,12 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         fontWeight: 650
       }}
     >
-      <span>📬 Verify your email ({user.email}) to keep your account — unverified accounts with no data are removed after 30 days.</span>
+      <span>📬 {t("Verify your email to keep your account.")} ({user.email}) {t("Unverified accounts with no data are removed after 30 days.")}</span>
       <button type="button" onClick={() => void resend()} disabled={busy} style={{ border: "1px solid #d9b96a", background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 700, cursor: "pointer", color: "#7a5200" }}>
-        Resend
+        {t("Resend email")}
       </button>
       <button type="button" onClick={() => void check()} disabled={busy} style={{ border: 0, background: "transparent", fontWeight: 800, cursor: "pointer", color: "#7a5200", textDecoration: "underline" }}>
-        I&apos;ve verified
+        {t("I've verified — continue")}
       </button>
       {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
       <button

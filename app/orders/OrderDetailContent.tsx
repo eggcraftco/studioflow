@@ -5292,7 +5292,7 @@ export function OrderDetailContent({
                     <div className="finance-payments-ledger">
                       <div className="finance-payments-head">
                         <span className="finance-payments-title">
-                          Payments
+                          {t("Payments")}
                           {order.payments.length > 0 ? <span className="finance-payments-count">{order.payments.length}</span> : null}
                         </span>
                         {canInlineEditFinance ? (
@@ -5301,7 +5301,7 @@ export function OrderDetailContent({
                             className="finance-payments-add"
                             onClick={() => setShowPaymentForm(value => !value)}
                           >
-                            {showPaymentForm ? "Close" : "+ Add Payment"}
+                            {showPaymentForm ? t("Close") : `+ ${t("Add Payment")}`}
                           </button>
                         ) : null}
                       </div>
@@ -5310,7 +5310,7 @@ export function OrderDetailContent({
                           <input
                             type="number"
                             inputMode="decimal"
-                            placeholder="Amount"
+                            placeholder={t("Amount")}
                             value={paymentAmountInput}
                             onChange={event => setPaymentAmountInput(event.target.value)}
                           />
@@ -5321,7 +5321,7 @@ export function OrderDetailContent({
                           </select>
                           <input
                             type="text"
-                            placeholder="Note (optional)"
+                            placeholder={t("Note")}
                             value={paymentNoteInput}
                             onChange={event => setPaymentNoteInput(event.target.value)}
                           />
@@ -5345,7 +5345,7 @@ export function OrderDetailContent({
                                   <input
                                     type="text"
                                     value={editingPaymentNoteText}
-                                    placeholder="Note"
+                                    placeholder={t("Note")}
                                     autoFocus
                                     onChange={event => setEditingPaymentNoteText(event.target.value)}
                                     onKeyDown={event => {
@@ -5360,7 +5360,7 @@ export function OrderDetailContent({
                                     disabled={savingFinanceField === "Payment"}
                                     onClick={() => void savePaymentNote(payment.id)}
                                   >
-                                    Save
+                                    {t("Save")}
                                   </button>
                                   <button
                                     type="button"

@@ -5,6 +5,11 @@ import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
+import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
+
+function browserDefaultLanguage(): string {
+  return studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
+}
 
 type AuthContextValue = {
   user: User | null;
@@ -126,6 +131,10 @@ async function ensurePersonalWorkspace(currentUser: User) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // No explicit choice yet: follow the browser locale instead of hard-coding
+  // English (a stored personal choice always wins once it loads). Initial state
+  // stays "English" so server and client render identically; the effects below
+  // switch to the browser default on mount, before meaningful content shows.
   const [language, setLanguage] = useState<string>("English");
   const [theme, setTheme] = useState<string>("System");
 
@@ -137,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // user's active workspace changes server-side (e.g. when the owner approves their
   // join request and the Cloud Function points them at the newly joined workspace).
   useEffect(() => {
-    if (!user) { setLanguage("English"); setTheme("System"); return; }
+    if (!user) { setLanguage(browserDefaultLanguage()); setTheme("System"); return; }
 
     let unsubPersonal: (() => void) | null = null;
     let lastSeenActiveCompanyId: string | null = null;
@@ -157,9 +166,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = snap2.exists() ? (snap2.data() as Record<string, unknown>) : {};
         const rawLang = data?.["selectedLanguage"];
         const rawTheme = data?.["appTheme"];
-        setLanguage(typeof rawLang === "string" && rawLang.trim() ? rawLang.trim() : "English");
+        setLanguage(typeof rawLang === "string" && rawLang.trim() ? rawLang.trim() : browserDefaultLanguage());
         setTheme(typeof rawTheme === "string" && rawTheme.trim() ? rawTheme.trim() : "System");
-      }, () => { setLanguage("English"); setTheme("System"); });
+      }, () => { setLanguage(browserDefaultLanguage()); setTheme("System"); });
     });
 
     return () => {
