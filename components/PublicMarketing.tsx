@@ -1571,34 +1571,97 @@ function ScrollStoryShowcase() {
     <section className="public-scroll-story public-scroll-reveal">
       <div className="public-shell public-scroll-story-grid">
         <div className="public-scroll-stage" data-active-step={activeStep}>
-          <div className="public-scroll-stage-window">
-            <div className="public-story-record-head">
-              <div>
-                <span className="public-scroll-stage-label">{t("scrollStory.stageLabel")}</span>
-                <strong>{t("scrollStory.orderTitle")}</strong>
-                <small>{t("scrollStory.orderClient")}</small>
-              </div>
-              <span className="public-story-status" data-tone={STORY_STATUS_TONES[activeStep]}>
-                {t(STORY_STATUS_KEYS[activeStep])}
+          {/* Faithful mock of the app's real Shipping & Tracking card; the
+              scroll steps drive the live-status panel through the journey. */}
+          <div className="public-scroll-stage-window track-card">
+            <div className="track-card-head">
+              <span className="track-card-tool" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M4 6.5h12M4 10h12M4 13.5h12" /></svg>
+              </span>
+              <span className="track-card-plane" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 4.5c.6.6.4 1.9-.5 2.8l-4.2 4.2 2.2 8.1-1.6 1.6-3.8-6.7-4.2 4.2.3 2.6-1.2 1.2-1.9-3.5-3.5-1.9 1.2-1.2 2.7.3 4.1-4.2-6.7-3.8L5.9 5l8.2 2.2 4.1-4.2c.9-.9 2.2-1.1 2.8-.5z" /></svg>
+              </span>
+              <strong>{t("trackCard.title")}</strong>
+              <span className="track-card-menu" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4"><circle cx="10" cy="10" r="7.2" /><circle cx="6.8" cy="10" r="0.35" fill="currentColor" /><circle cx="10" cy="10" r="0.35" fill="currentColor" /><circle cx="13.2" cy="10" r="0.35" fill="currentColor" /></svg>
               </span>
             </div>
-
-            <div className="public-story-progress" aria-hidden="true">
-              <span style={{ width: `${((activeStep + 1) / SCROLL_STORY_STEPS.length) * 100}%` }} />
+            <div className="track-card-body">
+              <div className="track-row">
+                <span className="track-label">{t("trackCard.dispatched")}</span>
+                <span className="track-yesno">
+                  <i data-state="yes-on">{t("trackCard.yes")}</i>
+                  <i>{t("trackCard.no")}</i>
+                </span>
+              </div>
+              <div className="track-sep" />
+              <div className="track-row">
+                <span className="track-label">{t("trackCard.courier")}</span>
+                <span className="track-select">
+                  {t("trackCard.autoDetect")}
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.8 8 10 4.8 13.2 8M6.8 12 10 15.2 13.2 12" /></svg>
+                </span>
+              </div>
+              <div className="track-row">
+                <span className="track-label">{t("trackCard.trackingNo")}</span>
+                <span className="track-field">7282151310</span>
+              </div>
+              <div className="track-live" data-tone={STORY_STATUS_TONES[activeStep]}>
+                <div className="track-live-head">
+                  <span className="track-live-dot" aria-hidden="true" />
+                  <strong>{t(STORY_STATUS_KEYS[activeStep])}</strong>
+                  <span className="track-live-chip">17TRACK</span>
+                </div>
+                <div className="track-live-sep" />
+                <div className="track-live-row">
+                  <span className="track-live-label">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></svg>
+                    {t("trackCard.carrier")}
+                  </span>
+                  <strong>DHL Express</strong>
+                </div>
+                <div className="track-live-row">
+                  <span className="track-live-label">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4.5 5.5A7 7 0 1 1 3 10" /><path d="M3 5v3h3M10 6.5V10l2.5 1.5" /></svg>
+                    {t("trackCard.lastUpdate")}
+                  </span>
+                  <strong>{t("trackCard.lastUpdateValue")}</strong>
+                </div>
+                <div className="track-live-row">
+                  <span className="track-live-label">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
+                    {t("trackCard.estDelivery")}
+                  </span>
+                  <strong>{t("trackCard.estDeliveryValue")}</strong>
+                </div>
+                <div className="track-live-row track-live-row-block">
+                  <span className="track-live-label">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="10" cy="8" r="2.4" /><path d="M10 10.4V15M6.5 16.5h7M10 2.5a5.5 5.5 0 0 1 5.5 5.5" opacity="0" /><path d="M10 15c-2.8 0-5-1-5-2.2M15 12.8c0 1.2-2.2 2.2-5 2.2" opacity="0" /></svg>
+                    {t("trackCard.checkpoint")}
+                  </span>
+                  <strong>{t(SCROLL_STORY_STEPS[activeStep].detailKey)}</strong>
+                </div>
+                <small>{t("trackCard.lastChecked")}</small>
+              </div>
+              <div className="track-actions">
+                <span className="track-refresh">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15.5 8A6 6 0 1 0 16 11M15.5 4v4H12" /></svg>
+                  {t("trackCard.refresh")}
+                </span>
+                <span className="track-compass" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="7" /><path d="m12.8 7.2-1.6 4-4 1.6 1.6-4z" /></svg>
+                </span>
+              </div>
+              <div className="track-sep" />
+              <div className="track-row">
+                <span className="track-label">{t("trackCard.delivered")}</span>
+                <span className="track-yesno">
+                  <i data-state={activeStep === 3 ? "yes-on" : undefined}>{t("trackCard.yes")}</i>
+                  <i data-state={activeStep === 3 ? undefined : "no-on"}>{t("trackCard.no")}</i>
+                </span>
+              </div>
             </div>
-
-            <div className="public-scroll-stage-cards">
-              {SCROLL_STORY_STEPS.map((step, index) => (
-                <article data-active={activeStep === index ? "true" : "false"} key={step.cardKey}>
-                  <div className="public-story-card-title">
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <strong>{t(step.cardKey)}</strong>
-                  </div>
-                  <p>{t(step.detailKey)}</p>
-                  <b>{t(step.valueKey)}</b>
-                </article>
-              ))}
-            </div>
+            <span className="track-card-grip" aria-hidden="true" />
           </div>
         </div>
 
