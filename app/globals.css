@@ -14672,14 +14672,18 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 /* Features hero — two-column copy + screenshot, then a 3-up highlight strip. */
+/* The hero lost its schedule screenshot (shown in full further down), so the
+   copy sits alone on a single centered column and the page gets to the ChatGPT
+   showcase quickly. */
 .public-features-hero-top {
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr);
-  gap: 52px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
+  gap: 30px;
 }
 
-.public-features-hero-copy { max-width: 540px; }
+.public-features-hero-copy { max-width: 720px; }
 
 .public-features-hero-eyebrow {
   display: inline-flex;

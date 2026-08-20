@@ -2683,9 +2683,6 @@ function PublicFeaturesPageContent() {
               <h1>{t("featuresPage.title")}</h1>
               <p>{t("featuresPage.body")}</p>
             </div>
-            <div className="public-features-hero-shot">
-              <img src="/schedule.webp" alt={t("schedule.imageAlt")} loading="lazy" />
-            </div>
           </div>
           <div className="public-features-hero-strip">
             {[
@@ -2708,6 +2705,8 @@ function PublicFeaturesPageContent() {
         </div>
       </section>
 
+      <ChatGPTAppShowcase featured />
+
       <section className="public-section public-features-demo-section">
         <div className="public-shell">
           <div className="public-section-header">
@@ -2718,13 +2717,13 @@ function PublicFeaturesPageContent() {
         </div>
       </section>
 
+      <ScheduleTimelineShowcase />
+
       <FeatureWorkflowPanel />
 
       <FeatureDeepDiveSection />
 
       <DashboardFinanceShowcase />
-
-      <ScheduleTimelineShowcase />
 
       <section className="public-section public-order-flow-section">
         <div className="public-order-flow-sticky">
@@ -2779,8 +2778,6 @@ function PublicFeaturesPageContent() {
           </div>
         </div>
       </section>
-
-      <ChatGPTAppShowcase />
 
       <PlanFeatureBridgeSection />
 
