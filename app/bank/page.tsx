@@ -8,16 +8,16 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
-import { detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
-import { PandleCard } from "@/components/PandleCard";
+import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -43,6 +43,10 @@ type BankTransaction = {
   category: string;
   categoryAuto: string;
   txType: string;
+  vatCode: string;
+  note: string;
+  receiptNotNeeded: boolean;
+  pandleStatus: string;
 };
 
 // TrueLayer transaction_category → coloured badge (short label, t()'d at
@@ -62,6 +66,16 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
 type BankRule = { id: string; keyword: string; category: string };
+
+// Pandle's UK tax codes; the label is what the owner sees on a transaction.
+const VAT_CODES: Array<{ code: string; label: string }> = [
+  { code: "ST", label: "VAT 20%" },
+  { code: "RR", label: "VAT 5%" },
+  { code: "RC", label: "Reverse charge" },
+  { code: "NV", label: "No VAT" },
+  { code: "EX", label: "Exempt / 0%" }
+];
+const vatLabel = (code: string) => VAT_CODES.find(item => item.code === code)?.label || code;
 
 const BANK_CATEGORIES = [
   "Materials", "Equipment", "Shipping", "Software", "Subscriptions", "Fees",
@@ -84,7 +98,10 @@ function effectiveCategory(tx: BankTransaction) {
 // variant instead of only the exact string.
 function suggestRuleKeyword(tx: BankTransaction): string {
   const base = (tx.counterparty || tx.description).trim().toLowerCase();
-  const word = base.split(/[\s*,/]+/).find(part => part.replace(/[^a-zç-ü]/gi, "").length >= 3);
+  // Skip card-network prefixes ("INT'L", "POS", "CARD") that every foreign
+  // payment carries — they would match everything.
+  const noise = new Set(["int'l", "intl", "pos", "card", "crd", "payment", "paypal"]);
+  const word = base.split(/[\s*,/]+/).find(part => part.replace(/[^a-zç-ü]/gi, "").length >= 3 && !noise.has(part));
   return (word || base).replace(/[^\p{L}\p{N}. -]/gu, "").slice(0, 60);
 }
 
@@ -143,6 +160,31 @@ function BankPageContent() {
   const [txPageSize, setTxPageSize] = useState<10 | 20 | 30>(10);
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllCats, setShowAllCats] = useState(false);
+  // "Needs attention" queue filter for the transactions table.
+  const [txAttention, setTxAttention] = useState<"none" | "uncategorised" | "noReceipt" | "duplicate">("none");
+  // Bulk review: selected spending rows + the category to apply to all of them.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
+  // After accepting a suggestion: offer to turn it into a rule for that merchant.
+  const [rulePrompt, setRulePrompt] = useState<{ keyword: string; category: string } | null>(null);
+  // Category → default VAT code (from the Pandle mapping, falls back to defaults).
+  const [categoryTax, setCategoryTax] = useState<Record<string, string>>({});
+  const [bulkVat, setBulkVat] = useState("");
+  const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
+  // Banking tabs + the transaction drawer.
+  type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules";
+  const [tab, setTab] = useState<BankTab>(() => {
+    if (typeof window === "undefined") return "overview";
+    const value = new URLSearchParams(window.location.search).get("tab");
+    return (["overview", "transactions", "recurring", "receipts", "rules"] as const).includes(value as BankTab) ? (value as BankTab) : (new URLSearchParams(window.location.search).get("flow") ? "transactions" : "overview");
+  });
+  const [drawerTxId, setDrawerTxId] = useState<string | null>(null);
+  const [drawerCategory, setDrawerCategory] = useState("");
+  const [drawerVat, setDrawerVat] = useState("");
+  const [drawerNote, setDrawerNote] = useState("");
+  const [drawerOrderId, setDrawerOrderId] = useState("");
+  const [drawerRuleKeyword, setDrawerRuleKeyword] = useState("");
+  const [receiptFilter, setReceiptFilter] = useState<"all" | "missing" | "matched">("all");
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -218,7 +260,11 @@ function BankPageContent() {
             linkedOrderLabel: String(data.linkedOrderLabel || ""),
             category: String(data.category || ""),
             categoryAuto: String(data.categoryAuto || ""),
-            txType: String(data.txType || "")
+            txType: String(data.txType || ""),
+            vatCode: String(data.vatCode || ""),
+            note: String(data.note || ""),
+            receiptNotNeeded: data.receiptNotNeeded === true,
+            pandleStatus: String((data.pandle as { status?: string } | undefined)?.status || "")
           };
         }));
       }
@@ -233,7 +279,12 @@ function BankPageContent() {
       },
       () => setRules([])
     );
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); };
+    const unsubPandle = onSnapshot(doc(db, "companies", companyId, "pandleConnection", "main"), snap => {
+      const mappings = (snap.data()?.mappings as Array<{ category: string; taxCode: string }> | undefined) ?? [];
+      const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
+      setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
+    }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -357,6 +408,16 @@ function BankPageContent() {
 
   // ---- Link a spending transaction to an order's expenses -----------------
 
+  useEffect(() => {
+    if (!isOwner || !workspace || orderOptions !== null || transactions.length === 0) return;
+    let cancelled = false;
+    loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? "")
+      .then(options => { if (!cancelled) setOrderOptions(options); })
+      .catch(() => { if (!cancelled) setOrderOptions([]); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner, workspace, companyId, transactions.length]);
+
   async function openLinkPicker(transactionId: string) {
     setLinkPickerTxId(transactionId);
     setOrderSearch("");
@@ -472,6 +533,49 @@ function BankPageContent() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function togglePageSelection() {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageSpendingIds.forEach(id => next.delete(id)); else pageSpendingIds.forEach(id => next.add(id));
+      return next;
+    });
+  }
+  async function applyBulkCategory(category: string) {
+    if (selectedIds.size === 0) return;
+    setBusy("bulk");
+    setError(null);
+    try {
+      const result = await call<{ updated: number }>("bankSetTransactionCategoryBulk", { transactionIds: Array.from(selectedIds), category });
+      setStatus(`${result.updated} ${t("transactions updated")}`);
+      setSelectedIds(new Set());
+      setBulkCategory("");
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : "Could not update the transactions.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const effectiveVat = (tx: BankTransaction) => tx.vatCode || categoryTax[effectiveCategory(tx)] || "";
+  async function applyVat(ids: string[], vatCode: string) {
+    if (ids.length === 0) return;
+    setBusy("vat");
+    setError(null);
+    try {
+      const result = await call<{ updated: number }>("bankSetTransactionVatBulk", { transactionIds: ids, vatCode });
+      setStatus(`${result.updated} ${t("transactions updated")}`);
+      setVatPickerTxId(null);
+      if (ids.length > 1) { setSelectedIds(new Set()); setBulkVat(""); }
+    } catch (vatError) {
+      setError(vatError instanceof Error ? vatError.message : "Could not update the VAT treatment.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function deleteRule(rule: BankRule) {
     if (!window.confirm(`${t("Delete this rule?")} (${rule.keyword} → ${t(rule.category)})`)) return;
     setBusy(`rule-${rule.id}`);
@@ -491,8 +595,11 @@ function BankPageContent() {
     const list = term
       ? orderOptions.filter(order => `${order.customerName} ${order.designName}`.toLowerCase().includes(term))
       : orderOptions;
-    return list.slice(0, 25);
-  }, [orderOptions, orderSearch]);
+    // Orders open around the transaction's date float to the top of the picker.
+    const target = linkPickerTxId ? transactions.find(item => item.id === linkPickerTxId) : null;
+    const ordered = target ? rankOrdersForTransaction(target, list).map(item => item.order) : list;
+    return ordered.slice(0, 25);
+  }, [orderOptions, orderSearch, linkPickerTxId, transactions]);
 
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
   const weekStartIso = isoDay(weekStart);
@@ -589,8 +696,192 @@ function BankPageContent() {
 
   // Subscriptions & other recurring charges detected from the feed.
   const recurring = useMemo<RecurringSpend[]>(() => detectRecurringSpends(transactions), [transactions]);
+  const duplicateIds = useMemo(() => detectPossibleDuplicates(visibleTransactions), [visibleTransactions]);
+  // What the owner should act on in this period — drives the Needs Attention tile.
+  const attention = useMemo(() => {
+    const spending = visibleTransactions.filter(item => item.amount < 0);
+    const uncategorised = spending.filter(item => !effectiveCategory(item));
+    const noReceipt = spending.filter(item => !item.receiptPath);
+    const priceChanged = recurring.filter(item => item.active && item.priceChange);
+    const cancelled = recurring.filter(item => !item.active);
+    return {
+      uncategorised: uncategorised.length,
+      uncategorisedAmount: uncategorised.reduce((acc, item) => acc + Math.abs(item.amount), 0),
+      noReceipt: noReceipt.length,
+      duplicates: duplicateIds.size,
+      priceChanged: priceChanged.length,
+      cancelled: cancelled.length,
+      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length
+    };
+  }, [visibleTransactions, recurring, duplicateIds]);
+  // Heuristic category suggestions for uncategorised spending on the page.
+  const suggestions = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof suggestCategory>>();
+    for (const tx of transactions) {
+      if (tx.amount >= 0 || effectiveCategory(tx)) continue;
+      map.set(tx.id, suggestCategory(tx, transactions));
+    }
+    return map;
+  }, [transactions]);
+  async function acceptSuggestion(transaction: BankTransaction, category: string, source: "history" | "keyword") {
+    setBusy(`cat-${transaction.id}`);
+    setError(null);
+    try {
+      await call("bankSetTransactionCategory", { transactionId: transaction.id, category });
+      setStatus(`${t("Category saved.")} ${t(category)}`);
+      // History-based picks already come from this merchant's past; keyword
+      // picks are worth turning into a rule so next time it's automatic.
+      const keyword = (suggestions.get(transaction.id)?.keyword || suggestRuleKeyword(transaction)).toLowerCase();
+      if (source === "keyword" && keyword.length >= 2 && !rules.some(rule => rule.keyword === keyword)) setRulePrompt({ keyword, category });
+    } catch (suggestError) {
+      setError(suggestError instanceof Error ? suggestError.message : "Could not save the category.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function acceptRulePrompt() {
+    if (!rulePrompt) return;
+    setBusy("rule-prompt");
+    try {
+      await call("bankSaveRule", { keyword: rulePrompt.keyword, category: rulePrompt.category });
+      setStatus(t("Category saved and rule created."));
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not create the rule.");
+    } finally {
+      setBusy(null);
+      setRulePrompt(null);
+    }
+  }
+  function showAttention(kind: "uncategorised" | "noReceipt" | "duplicate") {
+    setTab("transactions");
+    setTxAttention(kind);
+    setTxFlow("out");
+    setTxPage(1);
+    document.getElementById("bank-transactions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const recurringKeys = useMemo(() => new Set(recurring.filter(item => item.active).map(item => item.key)), [recurring]);
   const fixedMonthly = useMemo(() => monthlyFixedTotal(recurring), [recurring]);
+  // Order link suggestions for unlinked spending (skips subscriptions & overheads).
+  const orderSuggestions = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof suggestOrderLink>>();
+    if (!orderOptions || orderOptions.length === 0) return map;
+    for (const tx of transactions) {
+      if (tx.amount >= 0 || tx.linkedOrderId || recurringKeys.has(recurringMerchantKey(tx))) continue;
+      map.set(tx.id, suggestOrderLink(tx, orderOptions));
+    }
+    return map;
+  }, [transactions, orderOptions, recurringKeys]);
+
+  // Receipts tab numbers (spending only; incoming never needs a receipt).
+  const receiptStats = useMemo(() => {
+    const spending = visibleTransactions.filter(item => item.amount < 0);
+    const matched = spending.filter(item => item.receiptPath).length;
+    const notNeeded = spending.filter(item => !item.receiptPath && item.receiptNotNeeded).length;
+    const missing = spending.length - matched - notNeeded;
+    return { total: spending.length, matched, missing, notNeeded, incoming: visibleTransactions.length - spending.length };
+  }, [visibleTransactions]);
+  // Next 30 days of expected recurring charges.
+  const upcomingRenewals = useMemo(() => {
+    const today = isoDay(new Date());
+    const horizon = isoDay(addDays(new Date(), 30));
+    return recurring.filter(item => item.active && item.nextExpected >= today && item.nextExpected <= horizon)
+      .sort((a, b) => a.nextExpected.localeCompare(b.nextExpected));
+  }, [recurring]);
+  // Rules tab: how many transactions each rule catches, and rules worth creating.
+  const ruleStats = useMemo(() => {
+    const stats = new Map<string, { count: number; total: number; lastDate: string }>();
+    for (const rule of rules) {
+      let count = 0, total = 0, lastDate = "";
+      for (const tx of transactions) {
+        if (tx.amount >= 0) continue;
+        if (`${tx.counterparty} ${tx.description}`.toLowerCase().includes(rule.keyword)) {
+          count += 1; total += Math.abs(tx.amount); if (tx.bookingDate > lastDate) lastDate = tx.bookingDate;
+        }
+      }
+      stats.set(rule.id, { count, total, lastDate });
+    }
+    return stats;
+  }, [rules, transactions]);
+  const suggestedRules = useMemo(() => {
+    // Merchants the owner categorised by hand at least twice, with no rule yet.
+    const byKey = new Map<string, { keyword: string; merchant: string; category: string; count: number; total: number }>();
+    for (const tx of transactions) {
+      if (tx.amount >= 0) continue;
+      const keyword = suggestRuleKeyword(tx).toLowerCase();
+      if (keyword.length < 3 || rules.some(rule => rule.keyword === keyword || keyword.includes(rule.keyword))) continue;
+      const category = tx.category || suggestCategory(tx, transactions)?.category || "";
+      if (!category) continue;
+      const entry = byKey.get(keyword) ?? { keyword, merchant: tx.counterparty || tx.description, category, count: 0, total: 0 };
+      if (entry.category !== category) continue;
+      entry.count += 1; entry.total += Math.abs(tx.amount);
+      byKey.set(keyword, entry);
+    }
+    return Array.from(byKey.values()).filter(item => item.count >= 2).sort((a, b) => b.count - a.count).slice(0, 8);
+  }, [transactions, rules]);
+  const autoAppliedCount = useMemo(() => visibleTransactions.filter(item => item.amount < 0 && !item.category && item.categoryAuto).length, [visibleTransactions]);
+
+  // ---- Transaction drawer ---------------------------------------------------
+  const drawerTx = drawerTxId ? transactions.find(item => item.id === drawerTxId) ?? null : null;
+  function openDrawer(tx: BankTransaction) {
+    setDrawerTxId(tx.id);
+    setDrawerCategory(tx.category || tx.categoryAuto || "");
+    setDrawerVat(tx.vatCode);
+    setDrawerNote(tx.note);
+    setDrawerOrderId(tx.linkedOrderId);
+    setDrawerRuleKeyword(suggestions.get(tx.id)?.keyword || suggestRuleKeyword(tx));
+    setCategoryPickerTxId(null);
+    setLinkPickerTxId(null);
+  }
+  function drawerStep(direction: -1 | 1) {
+    if (!drawerTx) return;
+    const index = sortedTransactions.findIndex(item => item.id === drawerTx.id);
+    const next = sortedTransactions[index + direction];
+    if (next) openDrawer(next);
+  }
+  async function saveDrawer(createRule = false) {
+    if (!drawerTx) return;
+    setBusy("drawer");
+    setError(null);
+    try {
+      await call("bankUpdateTransaction", { transactionId: drawerTx.id, category: drawerCategory, vatCode: drawerVat, note: drawerNote });
+      if (drawerOrderId !== drawerTx.linkedOrderId) {
+        if (drawerTx.linkedOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerTx.linkedOrderId });
+        if (drawerOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerOrderId });
+      }
+      const keyword = drawerRuleKeyword.trim().toLowerCase();
+      if (createRule && drawerCategory && keyword.length >= 2) {
+        await call("bankSaveRule", { keyword, category: drawerCategory });
+        setStatus(t("Category saved and rule created."));
+      } else {
+        setStatus(t("Transaction saved."));
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function setReceiptNotNeeded(tx: BankTransaction, value: boolean) {
+    setBusy(`receipt-${tx.id}`);
+    try {
+      await call("bankUpdateTransaction", { transactionId: tx.id, receiptNotNeeded: value });
+    } catch (flagError) {
+      setError(flagError instanceof Error ? flagError.message : "Could not update the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function createSuggestedRule(item: { keyword: string; category: string }) {
+    setBusy(`rule-${item.keyword}`);
+    try {
+      await call("bankSaveRule", { keyword: item.keyword, category: item.category });
+      setStatus(t("Rule created."));
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not create the rule.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const currency0 = transactions[0]?.currency || "GBP";
   const incomingTotal = useMemo(() => visibleTransactions
@@ -631,14 +922,23 @@ function BankPageContent() {
     item.lastSyncedAt && (!latest || item.lastSyncedAt > latest) ? item.lastSyncedAt : latest, null);
 
   const sortedTransactions = useMemo(() => {
-    const list = visibleTransactions.filter(item => txFlow === "all" ? true : txFlow === "in" ? item.amount > 0 : item.amount < 0);
+    const list = visibleTransactions.filter(item => {
+      if (txFlow === "in" && item.amount <= 0) return false;
+      if (txFlow === "out" && item.amount >= 0) return false;
+      if (txAttention === "uncategorised") return item.amount < 0 && !effectiveCategory(item);
+      if (txAttention === "noReceipt") return item.amount < 0 && !item.receiptPath;
+      if (txAttention === "duplicate") return duplicateIds.has(item.id);
+      return true;
+    });
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc, txFlow]);
+  }, [visibleTransactions, sortAsc, txFlow, txAttention, duplicateIds]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
-  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth, weekStart, txFlow]);
+  const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
+  const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
@@ -653,6 +953,7 @@ function BankPageContent() {
   const deltaLabel = view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
   const incomingCount = visibleTransactions.filter(item => item.amount > 0).length;
   function showIncoming() {
+    setTab("transactions");
     setTxFlow("in");
     setTxPage(1);
     document.getElementById("bank-transactions")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -669,13 +970,13 @@ function BankPageContent() {
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: drawerTx ? 440 : 0, transition: "padding-right 160ms" }}>
 
         {/* ---- Header ------------------------------------------------------ */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <span aria-hidden="true" style={{ width: 46, height: 46, borderRadius: 12, border: "1.5px solid rgba(120,120,140,0.3)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🏛</span>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{t("Bank Spending")}</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{t("Banking")}</h1>
             <p style={{ margin: 0, fontSize: 12.5, opacity: 0.65 }}>{t("Read-only Open Banking feed — NivaDesk can never move money.")}</p>
           </div>
           {isOwner && linkedBanks.length > 0 ? (
@@ -708,6 +1009,13 @@ function BankPageContent() {
         ) : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
         {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+        {rulePrompt ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
+            <span>{t("Always categorise")} <strong>"{rulePrompt.keyword}"</strong> {t("as")} <strong>{t(rulePrompt.category)}</strong>?</span>
+            <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "rule-prompt"} onClick={() => void acceptRulePrompt()}>{t("Yes, create rule")}</button>
+            <button type="button" style={bankBtnSm} onClick={() => setRulePrompt(null)}>{t("Not now")}</button>
+          </div>
+        ) : null}
 
         {/* ---- OCR candidates --------------------------------------------- */}
         {ocrCandidates !== null ? (
@@ -752,7 +1060,7 @@ function BankPageContent() {
 
         {canViewBank ? (
           <>
-            {/* ---- Connection pill + period control ------------------------ */}
+            {/* ---- Connection pills --------------------------------------- */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               {connections.map(connection => (
                 <div key={connection.id} style={{ ...bankCard, padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 12, opacity: connection.status === "linked" ? 1 : 0.75 }}>
@@ -780,6 +1088,25 @@ function BankPageContent() {
               {linkedBanks.length > 0 ? (
                 <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === "connect"} onClick={() => void connectBank()} title={t("Connect bank")}>＋</button>
               ) : null}
+            </div>
+
+            {/* ---- Tabs + period control ---------------------------------- */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid rgba(120,120,140,0.18)" }}>
+              <div role="tablist" aria-label={t("Banking sections")} style={{ display: "flex", gap: 2 }}>
+                {([
+                  ["overview", t("Overview"), 0],
+                  ["transactions", t("Transactions"), attention.uncategorised],
+                  ["recurring", t("Recurring"), cancelledRecurring.length],
+                  ["receipts", t("Receipts"), receiptStats.missing],
+                  ["rules", t("Rules"), suggestedRules.length]
+                ] as const).map(([key, label, badge]) => (
+                  <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
+                    style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "8px 12px", cursor: "pointer", marginBottom: -1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {label}
+                    {badge ? <span style={{ fontSize: 10, fontWeight: 800, background: tab === key ? "rgba(37,99,235,0.14)" : "rgba(120,120,140,0.16)", borderRadius: 999, padding: "1px 6px" }}>{badge}</span> : null}
+                  </button>
+                ))}
+              </div>
               <span style={{ flex: 1 }} />
               <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
                 {(["week", "month", "year"] as const).map(option => (
@@ -805,15 +1132,17 @@ function BankPageContent() {
                     : t("No transactions imported yet. Try Refresh.")}
                 </p>
               </div>
-            ) : (
+            ) : null}
+
+            {/* ================= OVERVIEW ================= */}
+            {transactions.length > 0 && tab === "overview" ? (
               <>
-                {/* ---- Stat tiles ------------------------------------------ */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
                   <div style={bankCard}>
                     <p style={tileLabel}>{t("Total spent")} — {periodLabel}</p>
                     <strong style={tileValue}>{money(spentTotal, currency0)}</strong>
                     {spentDelta !== null ? (
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#dc2626" }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#6b7280" }}>
                         {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {deltaLabel}
                       </span>
                     ) : null}
@@ -824,7 +1153,7 @@ function BankPageContent() {
                   <div style={bankCard}>
                     <p style={{ ...tileLabel, color: "#ea770b" }}>{t("Recurring spending")}</p>
                     <strong style={tileValue}>≈ {money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("recurring items")}</span>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("active")}{cancelledRecurring.length ? ` · ${cancelledRecurring.length} ${t("possibly cancelled")}` : ""}</span>
                     <TileIcon bg="rgba(234,119,11,0.12)">↻</TileIcon>
                   </div>
                   <div style={bankCard}>
@@ -835,83 +1164,24 @@ function BankPageContent() {
                     <TileIcon bg="rgba(22,163,74,0.12)">↗</TileIcon>
                   </div>
                   <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Connected accounts")}</p>
-                    <strong style={tileValue}>{accountsCount}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{linkedBanks.length} {t("bank(s)")}{lastSync ? ` · ${t("Last sync")} ${lastSync.toLocaleTimeString()}` : ""}</span>
-                    <TileIcon bg="rgba(124,58,237,0.12)">🏛</TileIcon>
+                    <p style={{ ...tileLabel, color: attention.total ? "#b45309" : "#16a34a" }}>{t("Needs attention")}</p>
+                    <strong style={tileValue}>{attention.total}</strong>
+                    {attention.total === 0 ? (
+                      <span style={{ fontSize: 11.5, opacity: 0.65 }}>✓ {t("All clear for this period")}</span>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11.5 }}>
+                        {attention.uncategorised ? <button type="button" onClick={() => showAttention("uncategorised")} style={attentionLink}>{attention.uncategorised} {t("uncategorised")} →</button> : null}
+                        {attention.noReceipt ? <button type="button" onClick={() => showAttention("noReceipt")} style={attentionLink}>{attention.noReceipt} {t("missing receipts")} →</button> : null}
+                        {attention.duplicates ? <button type="button" onClick={() => showAttention("duplicate")} style={attentionLink}>{attention.duplicates} {t("possible duplicates")} →</button> : null}
+                        {attention.priceChanged ? <span style={{ opacity: 0.8 }}>{attention.priceChanged} {t("price changed")}</span> : null}
+                        {attention.cancelled ? <span style={{ opacity: 0.8 }}>{attention.cancelled} {t("possibly cancelled")}</span> : null}
+                      </div>
+                    )}
+                    <TileIcon bg={attention.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attention.total ? "!" : "✓"}</TileIcon>
                   </div>
                 </div>
 
-                {/* ---- Recurring + spending mix ---------------------------- */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
-                  {recurring.length > 0 ? (
-                    <div style={bankCard}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                        <TileBadge bg="rgba(234,119,11,0.12)">↻</TileBadge>
-                        <strong style={{ fontSize: 14.5 }}>{t("Recurring spending")}</strong>
-                        <span style={{ flex: 1 }} />
-                        <span style={countBadge}>{recurring.length}</span>
-                      </div>
-                      {activeRecurring.map(item => (
-                        <div key={item.key} style={recurringRow}>
-                          <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(item.merchant)}22`, color: avatarColor(item.merchant) }}>{initials(item.merchant)}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
-                            <div style={{ fontSize: 10.5, opacity: 0.6 }}>
-                              {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×
-                            </div>
-                          </div>
-                          <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                            {money(item.typicalAmount, item.currency)}
-                            <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}> /{t(item.cadence === "weekly" ? "week" : item.cadence === "yearly" ? "year" : "month")}</span>
-                          </span>
-                        </div>
-                      ))}
-                      {cancelledRecurring.length > 0 ? (
-                        <>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 4px" }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, opacity: 0.6 }}>{t("Possible cancellations")}</span>
-                            <span style={{ flex: 1 }} />
-                            <span style={countBadge}>{cancelledRecurring.length}</span>
-                          </div>
-                          {cancelledRecurring.map(item => (
-                            <div key={item.key} style={{ ...recurringRow, opacity: 0.5 }}>
-                              <span aria-hidden="true" style={{ ...avatarStyle, background: "rgba(120,120,140,0.15)" }}>{initials(item.merchant)}</span>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
-                                <div style={{ fontSize: 10.5, opacity: 0.6 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</div>
-                              </div>
-                              <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55 }}>/{t("month")}</span></span>
-                            </div>
-                          ))}
-                        </>
-                      ) : null}
-                      {isOwner ? (
-                        <button type="button" onClick={() => setShowRules(value => !value)} style={cardFootLink}>
-                          {t("Manage recurring rules")} →
-                        </button>
-                      ) : null}
-                      {isOwner && showRules ? (
-                        rules.length === 0 ? (
-                          <p style={{ fontSize: 12, opacity: 0.65, margin: "8px 0 0" }}>{t("No rules yet — set a category on a transaction and tick the rule box.")}</p>
-                        ) : (
-                          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                            {rules.map(rule => (
-                              <div key={rule.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 8px", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 8 }}>
-                                <span style={{ opacity: 0.7 }}>"{rule.keyword}"</span>
-                                <span aria-hidden="true">→</span>
-                                <span style={{ fontWeight: 700, color: categoryColor(rule.category) }}>{t(rule.category)}</span>
-                                <span style={{ flex: 1 }} />
-                                <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`}
-                                  onClick={() => void deleteRule(rule)} aria-label={t("Delete this rule?")}>✕</button>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      ) : null}
-                    </div>
-                  ) : null}
-
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, alignItems: "start" }}>
                   <div style={bankCard}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                       <TileBadge bg="rgba(37,99,235,0.1)">◔</TileBadge>
@@ -936,19 +1206,131 @@ function BankPageContent() {
                         })}
                       </div>
                     </div>
+                    {(() => {
+                      const shownRows = showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 4);
+                      const shownTotal = shownRows.reduce((acc, row) => acc + row.amount, 0);
+                      const hidden = Math.max(0, categoryBreakdown.total - shownTotal);
+                      const unRow = categoryBreakdown.rows.find(row => row.name === "__uncategorized__");
+                      const unShare = unRow && categoryBreakdown.total > 0 ? (unRow.amount / categoryBreakdown.total) * 100 : 0;
+                      return (
+                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5, opacity: 0.8 }}>
+                          <span>
+                            {hidden > 0.005
+                              ? `${money(hidden, currency0)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`
+                              : `${money(categoryBreakdown.total, currency0)} ${t("of")} ${money(categoryBreakdown.total, currency0)} ${t("accounted for")}`}
+                          </span>
+                          {unRow ? (
+                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(120,120,140,0.15)", overflow: "hidden" }}>
+                                <span style={{ display: "block", height: "100%", width: `${Math.max(2, 100 - unShare)}%`, background: "#16a34a" }} />
+                              </span>
+                              <span>{Math.round(100 - unShare)}% {t("categorised")}</span>
+                              <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("Categorise")} {attention.uncategorised} →</button>
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                     {categoryBreakdown.rows.length > 4 ? (
                       <button type="button" onClick={() => setShowAllCats(value => !value)} style={cardFootLink}>
                         {showAllCats ? `${t("Show less")} ←` : `${t("View category breakdown")} →`}
                       </button>
                     ) : null}
                   </div>
+                  <div style={bankCard}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(234,119,11,0.12)">↻</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Top recurring vendors")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" onClick={() => setTab("recurring")} style={{ ...attentionLink, fontSize: 12 }}>{t("View recurring")} →</button>
+                    </div>
+                    {activeRecurring.slice(0, 5).map(item => (
+                      <div key={item.key} style={recurringRow}>
+                        <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(item.merchant)}22`, color: avatarColor(item.merchant) }}>{initials(item.merchant)}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
+                          <div style={{ fontSize: 10.5, opacity: 0.6 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</div>
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>/{t("month")}</span></span>
+                      </div>
+                    ))}
+                    {activeRecurring.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("No recurring payments detected yet.")}</p> : null}
+                    <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 12 }}>
+                      <span><strong style={{ color: "#16a34a", fontSize: 16 }}>{activeRecurring.length}</strong> {t("active")}</span>
+                      <span><strong style={{ color: "#b45309", fontSize: 16 }}>{cancelledRecurring.length}</strong> {t("possibly cancelled")}</span>
+                    </div>
+                  </div>
+                  <div style={bankCard}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(37,99,235,0.1)">📎</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Receipts summary")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>{t("Review receipts")} →</button>
+                    </div>
+                    <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                      <div><strong style={{ fontSize: 24, color: "#16a34a" }}>{receiptStats.matched}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("Receipts matched")}</div></div>
+                      <div><strong style={{ fontSize: 24, color: receiptStats.missing ? "#dc2626" : "inherit" }}>{receiptStats.missing}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("Missing receipts")}</div></div>
+                      <div><strong style={{ fontSize: 24, opacity: 0.7 }}>{receiptStats.notNeeded}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("No receipt needed")}</div></div>
+                    </div>
+                    <p style={{ fontSize: 12, opacity: 0.7, margin: "12px 0 0" }}>{t("Keep your records complete — match missing receipts to stay audit-ready.")}</p>
+                  </div>
                 </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
+                  <div style={bankCard}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(120,120,140,0.12)">🧾</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Recent transactions")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" onClick={() => setTab("transactions")} style={{ ...attentionLink, fontSize: 12 }}>{t("View all transactions")} →</button>
+                    </div>
+                    {visibleTransactions.slice(0, 6).map(tx => (
+                      <div key={tx.id} style={{ ...recurringRow, cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>
+                        <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, opacity: effectiveCategory(tx) ? 0.9 : 0.5, color: effectiveCategory(tx) ? categoryColor(effectiveCategory(tx)) : "inherit" }}>{tx.amount < 0 ? (effectiveCategory(tx) ? t(effectiveCategory(tx)) : t("Uncategorised")) : t("Incoming")}</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: tx.amount < 0 ? "#dc2626" : "#16a34a" }}>{tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount), tx.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={bankCard}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(124,58,237,0.12)">📅</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Upcoming payments & renewals")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <span style={countBadge}>{upcomingRenewals.length}</span>
+                    </div>
+                    {upcomingRenewals.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("Nothing expected in the next 30 days.")}</p> : null}
+                    {upcomingRenewals.slice(0, 8).map(item => (
+                      <div key={item.key} style={recurringRow}>
+                        <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</span>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
 
-                {/* ---- Transactions table ---------------------------------- */}
+            {/* ================= TRANSACTIONS ================= */}
+            {transactions.length > 0 && tab === "transactions" ? (
+              <>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {categoryBreakdown.rows.slice(0, 6).map(row => {
+                    const isUn = row.name === "__uncategorized__";
+                    return (
+                      <span key={row.name} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, border: "1px solid rgba(120,120,140,0.16)", borderRadius: 9, padding: "5px 10px" }}>
+                        <span style={{ width: 7, height: 7, borderRadius: 999, background: isUn ? "#5b6ee8" : categoryColor(row.name), display: "inline-block" }} />
+                        <span style={{ fontWeight: 650 }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
+                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
+                      </span>
+                    );
+                  })}
+                </div>
                 <div id="bank-transactions" style={{ ...bankCard, padding: 0, overflow: "hidden", scrollMarginTop: 90 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
                     <TileBadge bg="rgba(120,120,140,0.12)">🧾</TileBadge>
-                    <strong style={{ fontSize: 14.5 }}>{t("Recent transactions")}</strong>
+                    <strong style={{ fontSize: 14.5 }}>{t("Transactions")}</strong>
                     <span role="group" aria-label={t("Direction")} style={{ display: "inline-flex", gap: 2, marginLeft: 6, background: "rgba(120,120,140,0.12)", borderRadius: 7, padding: 2 }}>
                       {(["all", "out", "in"] as const).map(flow => (
                         <button key={flow} type="button" onClick={() => setTxFlow(flow)}
@@ -957,13 +1339,47 @@ function BankPageContent() {
                         </button>
                       ))}
                     </span>
+                    {txAttention !== "none" ? (
+                      <button type="button" onClick={() => setTxAttention("none")}
+                        style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>
+                        ! {txAttention === "uncategorised" ? t("Uncategorised") : txAttention === "noReceipt" ? t("No receipt") : t("Possible duplicates")} ✕
+                      </button>
+                    ) : null}
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 12, opacity: 0.6 }}>{sortedTransactions.length} {t("Transactions").toLowerCase()}</span>
                   </div>
+                  {isOwner && selectedIds.size > 0 ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 18px 12px", background: "rgba(37,99,235,0.06)", borderTop: "1px solid rgba(37,99,235,0.18)" }}>
+                      <strong style={{ fontSize: 12.5 }}>{selectedIds.size} {t("selected")}</strong>
+                      <select value={bulkCategory} onChange={event => setBulkCategory(event.target.value)} style={{ ...pickerInput, flex: "0 1 220px" }} aria-label={t("Set category")}>
+                        <option value="">{t("Set category")}…</option>
+                        {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                      </select>
+                      <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "bulk" || !bulkCategory} onClick={() => void applyBulkCategory(bulkCategory)}>
+                        {busy === "bulk" ? t("Saving…") : t("Apply")}
+                      </button>
+                      <button type="button" style={bankBtnSm} disabled={busy === "bulk"} onClick={() => void applyBulkCategory("")}>{t("Clear category")}</button>
+                      <select value={bulkVat} onChange={event => setBulkVat(event.target.value)} style={{ ...pickerInput, flex: "0 1 160px" }} aria-label={t("Set VAT")}>
+                        <option value="">{t("Set VAT")}…</option>
+                        {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                        <option value="__clear">{t("Use category default")}</option>
+                      </select>
+                      <button type="button" style={bankBtnSm} disabled={busy === "vat" || !bulkVat} onClick={() => void applyVat(Array.from(selectedIds), bulkVat === "__clear" ? "" : bulkVat)}>
+                        {busy === "vat" ? t("Saving…") : t("Apply VAT")}
+                      </button>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} onClick={() => setSelectedIds(new Set())}>{t("Clear selection")}</button>
+                    </div>
+                  ) : null}
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700, fontSize: 12.5 }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                          {isOwner ? (
+                            <th style={{ ...thStyle, width: 34, paddingRight: 0 }}>
+                              <input type="checkbox" aria-label={t("Select all on page")} checked={allPageSelected} disabled={pageSpendingIds.length === 0} onChange={togglePageSelection} />
+                            </th>
+                          ) : null}
                           <th style={thStyle}>{t("Merchant")}</th>
                           <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => setSortAsc(value => !value)}>
                             {t("Date")} {sortAsc ? "↑" : "↓"}
@@ -981,8 +1397,13 @@ function BankPageContent() {
                           const meta = TX_TYPE_META[transaction.txType];
                           return (
                             <React.Fragment key={transaction.id}>
-                              <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                                <td style={tdStyle}>
+                              <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: drawerTxId === transaction.id ? "rgba(37,99,235,0.1)" : selectedIds.has(transaction.id) ? "rgba(37,99,235,0.06)" : undefined, boxShadow: drawerTxId === transaction.id ? "inset 3px 0 0 #2563eb" : undefined }}>
+                                {isOwner ? (
+                                  <td style={{ ...tdStyle, paddingRight: 0 }}>
+                                    {transaction.amount < 0 ? <input type="checkbox" aria-label={t("Select")} checked={selectedIds.has(transaction.id)} onChange={() => toggleSelected(transaction.id)} /> : null}
+                                  </td>
+                                ) : null}
+                                <td style={{ ...tdStyle, cursor: "pointer" }} onClick={() => openDrawer(transaction)} title={t("Open details")}>
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 10, maxWidth: 280 }}>
                                     <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(transaction.counterparty || transaction.description || "x")}22`, color: avatarColor(transaction.counterparty || transaction.description || "x"), flexShrink: 0 }}>
                                       {initials(transaction.counterparty || transaction.description)}
@@ -990,11 +1411,21 @@ function BankPageContent() {
                                     <span style={{ minWidth: 0 }}>
                                       <span style={{ display: "block", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                         {transaction.amount < 0 && recurringKeys.has(recurringMerchantKey(transaction)) ? <span aria-hidden="true" title={t("Recurring spending")} style={{ marginRight: 4, opacity: 0.6, fontSize: 11 }}>↻</span> : null}
+                                        {duplicateIds.has(transaction.id) ? <span title={t("Possible duplicates")} style={{ marginRight: 4, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{t("Duplicate?")}</span> : null}
                                         {transaction.counterparty || transaction.description || "—"}
                                       </span>
                                       {transaction.linkedOrderId ? (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: "#2563eb" }}>⛓ {transaction.linkedOrderLabel || t("Order")}</span>
-                                      ) : null}
+                                      ) : isOwner && orderSuggestions.get(transaction.id) ? (() => {
+                                        const hint = orderSuggestions.get(transaction.id)!;
+                                        return (
+                                          <button type="button" disabled={busy === `link-${transaction.id}`} onClick={event => { event.stopPropagation(); void linkToOrder(transaction, hint.orderId); }}
+                                            title={`${t("Likely related to this order")} · ${Math.round(hint.confidence * 100)}%`}
+                                            style={{ border: "1px dashed #2563eb", cursor: "pointer", fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "1px 8px", background: "transparent", color: "#2563eb", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+                                            ⛓ {hint.label}? ✓
+                                          </button>
+                                        );
+                                      })() : null}
                                     </span>
                                   </span>
                                 </td>
@@ -1022,9 +1453,36 @@ function BankPageContent() {
                                         : { border: 0, cursor: "pointer", fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.13)", color: "inherit", opacity: 0.75 }}>
                                       {category ? t(category) : t("Uncategorised")}
                                     </button>
-                                  ) : (
+                                  ) : null}
+                                  {transaction.amount < 0 && isOwner && !category && suggestions.get(transaction.id) ? (() => {
+                                    const suggestion = suggestions.get(transaction.id)!;
+                                    return (
+                                      <button type="button" disabled={busy === `cat-${transaction.id}`}
+                                        onClick={() => void acceptSuggestion(transaction, suggestion.category, suggestion.source)}
+                                        title={`${suggestion.source === "history" ? t("Used before for this merchant") : t("Suggested from the merchant name")} · ${Math.round(suggestion.confidence * 100)}%`}
+                                        style={{ marginLeft: 4, border: `1px dashed ${categoryColor(suggestion.category)}`, cursor: "pointer", fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "2px 9px", background: "transparent", color: categoryColor(suggestion.category) }}>
+                                        {t(suggestion.category)}? ✓
+                                      </button>
+                                    );
+                                  })() : null}
+                                  {transaction.amount < 0 && category && effectiveVat(transaction) ? (
+                                    <button type="button" disabled={!isOwner || busy === "vat"}
+                                      title={transaction.vatCode ? t("VAT set on this transaction") : t("Category default VAT")}
+                                      onClick={() => isOwner && setVatPickerTxId(current => current === transaction.id ? null : transaction.id)}
+                                      style={{ marginLeft: 4, border: 0, cursor: isOwner ? "pointer" : "default", fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "2px 8px", background: "rgba(120,120,140,0.12)", color: "inherit", opacity: transaction.vatCode ? 0.95 : 0.6 }}>
+                                      {t(vatLabel(effectiveVat(transaction)))}
+                                    </button>
+                                  ) : null}
+                                  {vatPickerTxId === transaction.id ? (
+                                    <select autoFocus value={transaction.vatCode} onChange={event => void applyVat([transaction.id], event.target.value)} onBlur={() => setVatPickerTxId(null)}
+                                      style={{ ...pickerInput, marginLeft: 4, flex: "0 1 140px", fontSize: 11, padding: "3px 6px" }} aria-label={t("Set VAT")}>
+                                      <option value="">{t("Use category default")}</option>
+                                      {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                                    </select>
+                                  ) : null}
+                                  {transaction.amount >= 0 ? (
                                     <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.1)", opacity: 0.55 }}>—</span>
-                                  )}
+                                  ) : null}
                                 </td>
                                 <td style={tdStyle}>
                                   {meta ? (
@@ -1074,7 +1532,7 @@ function BankPageContent() {
                               </tr>
                               {categoryPickerTxId === transaction.id || linkPickerTxId === transaction.id ? (
                                 <tr>
-                                  <td colSpan={6} style={{ padding: "0 18px 12px" }}>
+                                  <td colSpan={isOwner ? 7 : 6} style={{ padding: "0 18px 12px" }}>
                                     {categoryPickerTxId === transaction.id ? (
                                       <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
                                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1180,16 +1638,432 @@ function BankPageContent() {
                   </div>
                 </div>
               </>
-            )}
+            ) : null}
 
-            {/* ---- Pandle bookkeeping bridge (works before the bank feed too, so
-                 the mapping can be set up ahead of time) ---------------------- */}
+            {/* ================= RECURRING ================= */}
+            {transactions.length > 0 && tab === "recurring" ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
+                  <div style={bankCard}>
+                    <p style={tileLabel}>{t("Monthly recurring spend")}</p>
+                    <strong style={tileValue}>{money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
+                    <TileIcon bg="rgba(234,119,11,0.12)">↻</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Active recurring")}</p>
+                    <strong style={tileValue}>{activeRecurring.length}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Regular payments we expect to continue")}</span>
+                    <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#b45309" }}>{t("Possibly cancelled")}</p>
+                    <strong style={tileValue}>{cancelledRecurring.length}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("We haven't seen recent payments")}</span>
+                    <TileIcon bg="rgba(245,158,11,0.14)">!</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Upcoming renewals")}</p>
+                    <strong style={tileValue}>{upcomingRenewals.length}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Next 30 days")}</span>
+                    <TileIcon bg="rgba(124,58,237,0.12)">📅</TileIcon>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 14, alignItems: "start" }}>
+                  <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                    <div style={{ padding: "14px 18px 10px" }}>
+                      <strong style={{ fontSize: 14.5 }}>{t("Active recurring")}</strong>
+                      <div style={{ fontSize: 12, opacity: 0.65 }}>{t("Regular payments we expect to continue")}</div>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                            <th style={thStyle}>{t("Merchant")}</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>{t("Amount")}</th>
+                            <th style={thStyle}>{t("Cadence")}</th>
+                            <th style={thStyle}>{t("Next expected")}</th>
+                            <th style={thStyle}>{t("Rule")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeRecurring.map(item => {
+                            const rule = rules.find(candidate => item.merchant.toLowerCase().includes(candidate.keyword));
+                            return (
+                              <tr key={item.key} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                                <td style={tdStyle}>
+                                  <div style={{ fontWeight: 700 }}>{item.merchant}</div>
+                                  {item.priceChange ? (
+                                    <div style={{ fontSize: 10.5, fontWeight: 700, color: item.priceChange.current > item.priceChange.previous ? "#b45309" : "#16a34a" }}>
+                                      {item.priceChange.current > item.priceChange.previous ? "↑" : "↓"} {money(item.priceChange.previous, item.currency)} → {money(item.priceChange.current, item.currency)}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>/{t(item.cadence === "weekly" ? "week" : item.cadence === "yearly" ? "year" : "month")}</span></td>
+                                <td style={{ ...tdStyle, opacity: 0.75 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</td>
+                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
+                                <td style={tdStyle}>
+                                  {rule ? <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ {t(rule.category)}</span>
+                                    : isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => { setTab("rules"); }}>{t("Create rule")} →</button> : <span style={{ opacity: 0.5 }}>—</span>}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={bankCard}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <strong style={{ fontSize: 14.5 }}>{t("Possibly cancelled")}</strong>
+                        <span style={{ flex: 1 }} />
+                        <span style={countBadge}>{cancelledRecurring.length}</span>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 6 }}>{t("We haven't seen recent payments")}</div>
+                      {cancelledRecurring.map(item => (
+                        <div key={item.key} style={recurringRow}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
+                            <div style={{ fontSize: 10.5, opacity: 0.6 }}>{t("Last seen")} {new Date(item.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</div>
+                          </div>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)}</span>
+                        </div>
+                      ))}
+                      {cancelledRecurring.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("Nothing looks cancelled.")}</p> : null}
+                    </div>
+                    <div style={bankCard}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <strong style={{ fontSize: 14.5 }}>{t("Upcoming payments & renewals")}</strong>
+                        <span style={{ flex: 1 }} />
+                        <span style={countBadge}>{upcomingRenewals.length}</span>
+                      </div>
+                      {upcomingRenewals.map(item => (
+                        <div key={item.key} style={recurringRow}>
+                          <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)}</span>
+                        </div>
+                      ))}
+                      {upcomingRenewals.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("Nothing expected in the next 30 days.")}</p> : null}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {/* ================= RECEIPTS ================= */}
+            {transactions.length > 0 && tab === "receipts" ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Receipts matched")}</p>
+                    <strong style={tileValue}>{receiptStats.matched}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.total ? Math.round((receiptStats.matched / receiptStats.total) * 100) : 0}% {t("of")} {receiptStats.total} {t("transactions").toLowerCase()}</span>
+                    <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#dc2626" }}>{t("Missing receipts")}</p>
+                    <strong style={tileValue}>{receiptStats.missing}</strong>
+                    <button type="button" onClick={() => setReceiptFilter("missing")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("View missing")} →</button>
+                    <TileIcon bg="rgba(220,38,38,0.12)">!</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={tileLabel}>{t("No receipt needed")}</p>
+                    <strong style={tileValue}>{receiptStats.notNeeded + receiptStats.incoming}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.incoming} {t("incoming")} · {receiptStats.notNeeded} {t("marked")}</span>
+                    <TileIcon bg="rgba(120,120,140,0.12)">—</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Match a receipt")}</p>
+                    <span style={{ fontSize: 12, opacity: 0.7, display: "block", margin: "6px 0 10px" }}>{t("Upload a photo or scan — NivaDesk reads the total and date and finds the transaction.")}</span>
+                    {isOwner ? (
+                      <button type="button" disabled={busy === "ocr"} onClick={() => document.getElementById("bank-ocr-input")?.click()} style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}>
+                        📷 {busy === "ocr" ? t("Reading the receipt…") : t("Upload receipt")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 14.5 }}>{t("Receipts")}</strong>
+                    <span role="group" style={{ display: "inline-flex", gap: 2, marginLeft: 6, background: "rgba(120,120,140,0.12)", borderRadius: 7, padding: 2 }}>
+                      {(["all", "missing", "matched"] as const).map(key => (
+                        <button key={key} type="button" onClick={() => setReceiptFilter(key)}
+                          style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 5, background: receiptFilter === key ? (key === "missing" ? "#dc2626" : key === "matched" ? "#16a34a" : "#2563eb") : "transparent", color: receiptFilter === key ? "#fff" : "inherit" }}>
+                          {key === "all" ? t("All") : key === "missing" ? t("Missing") : t("Matched")}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640, fontSize: 12.5 }}>
+                      <thead>
+                        <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                          <th style={thStyle}>{t("Merchant")}</th>
+                          <th style={thStyle}>{t("Date")}</th>
+                          <th style={{ ...thStyle, textAlign: "right" }}>{t("Amount")}</th>
+                          <th style={thStyle}>{t("Category")}</th>
+                          <th style={thStyle}>{t("Receipt status")}</th>
+                          <th style={thStyle} aria-label={t("Actions")} />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleTransactions.filter(tx => tx.amount < 0).filter(tx => receiptFilter === "all" ? true : receiptFilter === "matched" ? Boolean(tx.receiptPath) : !tx.receiptPath && !tx.receiptNotNeeded).map(tx => {
+                          const category = effectiveCategory(tx);
+                          return (
+                            <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>{tx.counterparty || tx.description}</td>
+                              <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
+                              <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
+                              <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
+                              <td style={tdStyle}>
+                                {tx.receiptPath ? <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}<div style={{ fontSize: 10.5, opacity: 0.65, fontWeight: 500 }}>{tx.receiptName}</div></span>
+                                  : tx.receiptNotNeeded ? <span style={{ opacity: 0.6 }}>{t("No receipt needed")}</span>
+                                  : <span style={{ color: "#dc2626", fontWeight: 700 }}>! {t("Missing receipt")}</span>}
+                              </td>
+                              <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                                {tx.receiptPath ? (
+                                  <button type="button" className="finance-payments-delete" onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}>📎</button>
+                                ) : isOwner ? (
+                                  <span style={{ display: "inline-flex", gap: 6 }}>
+                                    <button type="button" style={bankBtnSm} disabled={busy === `receipt-${tx.id}`} onClick={() => { setPendingAttachTxId(tx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button>
+                                    <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `receipt-${tx.id}`} onClick={() => void setReceiptNotNeeded(tx, !tx.receiptNotNeeded)}>{tx.receiptNotNeeded ? t("Needs receipt") : t("No receipt needed")}</button>
+                                  </span>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <input type="file" accept="image/*,.pdf" style={{ display: "none" }} id="bank-receipt-input"
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      const target = transactions.find(item => item.id === pendingAttachTxId);
+                      event.target.value = "";
+                      setPendingAttachTxId(null);
+                      if (file && target) void attachReceipt(target, file);
+                    }} />
+                </div>
+              </>
+            ) : null}
+
+            {/* ================= RULES ================= */}
+            {transactions.length > 0 && tab === "rules" ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Active rules")}</p>
+                    <strong style={tileValue}>{rules.length}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Rules running")}</span>
+                    <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Suggested rules")}</p>
+                    <strong style={tileValue}>{suggestedRules.length}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Ready to review")}</span>
+                    <TileIcon bg="rgba(124,58,237,0.12)">✦</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#2563eb" }}>{t("Auto-applied")} — {periodLabel}</p>
+                    <strong style={tileValue}>{autoAppliedCount}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Transactions auto-categorised")}</span>
+                    <TileIcon bg="rgba(37,99,235,0.12)">⚡</TileIcon>
+                  </div>
+                  <div style={bankCard}>
+                    <p style={{ ...tileLabel, color: "#b45309" }}>{t("Needs review")}</p>
+                    <strong style={tileValue}>{attention.uncategorised}</strong>
+                    <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("View transactions")} →</button>
+                    <TileIcon bg="rgba(245,158,11,0.14)">!</TileIcon>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 14, alignItems: "start" }}>
+                  <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px" }}>
+                      <strong style={{ fontSize: 14.5 }}>{t("Rules")} ({rules.length})</strong>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>{t("Create rules from a transaction's category picker or the suggestions on the right.")}</span>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
+                        <thead>
+                          <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                            <th style={thStyle}>{t("Condition")}</th>
+                            <th style={thStyle}>{t("Category")}</th>
+                            <th style={thStyle}>{t("VAT / Tax code")}</th>
+                            <th style={{ ...thStyle, textAlign: "right" }}>{t("Matches")}</th>
+                            <th style={thStyle}>{t("Last used")}</th>
+                            <th style={thStyle} aria-label={t("Actions")} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rules.length === 0 ? (
+                            <tr><td colSpan={6} style={{ ...tdStyle, opacity: 0.65 }}>{t("No rules yet — set a category on a transaction and tick the rule box.")}</td></tr>
+                          ) : rules.map(rule => {
+                            const stat = ruleStats.get(rule.id);
+                            return (
+                              <tr key={rule.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                                <td style={tdStyle}><span style={{ opacity: 0.65 }}>{t("If merchant contains")}</span> <strong>"{rule.keyword}"</strong></td>
+                                <td style={tdStyle}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(rule.category)}1a`, color: categoryColor(rule.category) }}>{t(rule.category)}</span></td>
+                                <td style={{ ...tdStyle, opacity: 0.75 }}>{categoryTax[rule.category] ? t(vatLabel(categoryTax[rule.category])) : "—"}</td>
+                                <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}><strong>{stat?.count ?? 0}</strong> <span style={{ opacity: 0.6 }}>· {money(stat?.total ?? 0, currency0)}</span></td>
+                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                                  {isOwner ? <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`} onClick={() => void deleteRule(rule)} aria-label={t("Delete this rule?")}>✕</button> : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div style={bankCard}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <strong style={{ fontSize: 14.5 }}>{t("Suggested rules")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <span style={countBadge}>{suggestedRules.length}</span>
+                    </div>
+                    {suggestedRules.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("No suggestions right now — categorise a few more transactions.")}</p> : null}
+                    {suggestedRules.map(item => (
+                      <div key={item.keyword} style={{ padding: "8px 0", borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
+                            <div style={{ fontSize: 11, opacity: 0.65 }}>{t("If merchant contains")} "{item.keyword}" → <span style={{ color: categoryColor(item.category), fontWeight: 700 }}>{t(item.category)}</span> · {item.count} {t("matches").toLowerCase()}</div>
+                          </div>
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 12 }} disabled={busy === `rule-${item.keyword}`} onClick={() => void createSuggestedRule(item)}>{t("Create rule")}</button> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
             {/* Pandle bridge ships dark until Pandle issues the OAuth app credentials
                  (NEXT_PUBLIC_PANDLE_ENABLED=1 turns the card on). */}
-            {isOwner && process.env.NEXT_PUBLIC_PANDLE_ENABLED === "1" ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
+            {isOwner && tab === "overview" && process.env.NEXT_PUBLIC_PANDLE_ENABLED === "1" ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
           </>
         ) : null}
       </div>
+
+      {/* ================= TRANSACTION DRAWER ================= */}
+      {drawerTx ? (
+        <aside style={drawerStyle} aria-label={t("Transaction details")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px", borderBottom: "1px solid rgba(120,120,140,0.16)" }}>
+            <button type="button" className="finance-payments-delete" onClick={() => setDrawerTxId(null)} aria-label={t("Close")}>✕</button>
+            <div style={{ flex: 1 }}>
+              <strong style={{ fontSize: 14.5 }}>{t("Transaction details")}</strong>
+              <div style={{ fontSize: 11, opacity: 0.6 }}>{new Date(drawerTx.bookingDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}{drawerTx.status === "pending" ? ` · ${t("pending")}` : ""}</div>
+            </div>
+            <button type="button" className="finance-payments-delete" onClick={() => drawerStep(-1)} aria-label={t("Previous")}>↑</button>
+            <button type="button" className="finance-payments-delete" onClick={() => drawerStep(1)} aria-label={t("Next")}>↓</button>
+          </div>
+          <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto", flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden="true" style={{ ...avatarStyle, width: 38, height: 38, background: `${avatarColor(drawerTx.counterparty || drawerTx.description || "x")}22`, color: avatarColor(drawerTx.counterparty || drawerTx.description || "x") }}>{initials(drawerTx.counterparty || drawerTx.description)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drawerTx.counterparty || drawerTx.description}</div>
+                <div style={{ fontSize: 11, opacity: 0.65 }}>{TX_TYPE_META[drawerTx.txType] ? (TX_TYPE_META[drawerTx.txType].translate ? t(TX_TYPE_META[drawerTx.txType].label) : TX_TYPE_META[drawerTx.txType].label) : drawerTx.txType}{lastSync ? ` · ${t("Last sync")} ${lastSync.toLocaleString()}` : ""}</div>
+              </div>
+              <strong style={{ fontSize: 16, fontVariantNumeric: "tabular-nums", color: drawerTx.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>{drawerTx.amount < 0 ? "−" : "+"}{money(Math.abs(drawerTx.amount), drawerTx.currency)}</strong>
+            </div>
+            <div>
+              <div style={drawerLabel}>{t("Raw bank description")}</div>
+              <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, background: "rgba(120,120,140,0.1)", wordBreak: "break-word" }}>{drawerTx.description || "—"}</div>
+            </div>
+            {drawerTx.amount < 0 ? (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <label>
+                    <div style={drawerLabel}>{t("Category")}</div>
+                    <select value={drawerCategory} disabled={!isOwner} onChange={event => setDrawerCategory(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
+                      <option value="">{t("Uncategorised")}</option>
+                      {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse, ...(drawerCategory ? [drawerCategory] : [])])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                    </select>
+                    {!drawerTx.category && drawerTx.categoryAuto ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(drawerTx.categoryAuto)}</div> : null}
+                  </label>
+                  <label>
+                    <div style={drawerLabel}>{t("VAT / Tax code")}</div>
+                    <select value={drawerVat} disabled={!isOwner} onChange={event => setDrawerVat(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
+                      <option value="">{t("Use category default")}{drawerCategory && categoryTax[drawerCategory] ? ` (${t(vatLabel(categoryTax[drawerCategory]))})` : ""}</option>
+                      {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <label>
+                    <div style={drawerLabel}>{t("Linked order or project")}</div>
+                    <select value={drawerOrderId} disabled={!isOwner} onChange={event => setDrawerOrderId(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
+                      <option value="">{t("Not linked")}</option>
+                      {(orderOptions ? rankOrdersForTransaction(drawerTx, orderOptions).slice(0, 40).map(item => item.order) : []).map(order => (
+                        <option key={order.id} value={order.id}>{order.customerName}{order.designName && order.designName !== "Untitled design" ? ` · ${order.designName}` : ""}</option>
+                      ))}
+                      {drawerOrderId && orderOptions && !orderOptions.some(order => order.id === drawerOrderId) ? <option value={drawerOrderId}>{drawerTx.linkedOrderLabel || t("Order")}</option> : null}
+                    </select>
+                    {orderSuggestions.get(drawerTx.id) && !drawerOrderId ? (
+                      <button type="button" onClick={() => setDrawerOrderId(orderSuggestions.get(drawerTx.id)!.orderId)} style={{ ...attentionLink, fontSize: 11, marginTop: 3 }}>
+                        ⛓ {t("Likely related to this order")}: {orderSuggestions.get(drawerTx.id)!.label} ({Math.round(orderSuggestions.get(drawerTx.id)!.confidence * 100)}%)
+                      </button>
+                    ) : null}
+                  </label>
+                  <div>
+                    <div style={drawerLabel}>{t("Receipt / attachment")}</div>
+                    <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
+                      {drawerTx.receiptPath ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}</span>
+                          <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{drawerTx.receiptName || t("View invoice")}</button>
+                          {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <span style={{ color: drawerTx.receiptNotNeeded ? "inherit" : "#dc2626", fontWeight: 700, opacity: drawerTx.receiptNotNeeded ? 0.6 : 1 }}>{drawerTx.receiptNotNeeded ? t("No receipt needed") : `! ${t("Missing receipt")}`}</span>
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button> : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : null}
+            <label>
+              <div style={drawerLabel}>{t("Notes")}</div>
+              <textarea value={drawerNote} disabled={!isOwner} onChange={event => setDrawerNote(event.target.value)} rows={3} placeholder={t("Internal note for this transaction")} style={{ ...pickerInput, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+            </label>
+            {drawerTx.amount < 0 && isOwner && drawerCategory && !rules.some(rule => `${drawerTx.counterparty} ${drawerTx.description}`.toLowerCase().includes(rule.keyword)) ? (
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", fontSize: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>✦ {t("Rule suggestion")}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {t("If merchant contains")}
+                  <input type="text" value={drawerRuleKeyword} onChange={event => setDrawerRuleKeyword(event.target.value)} style={{ ...pickerInput, width: 120, flex: "none", fontWeight: 700, padding: "3px 6px", fontSize: 11.5 }} />
+                  → <strong style={{ color: categoryColor(drawerCategory) }}>{t(drawerCategory)}</strong>
+                </div>
+              </div>
+            ) : null}
+            {drawerTx.amount < 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
+                <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 2 }}>↻ {t("Recurring")}</div>
+                  {recurringKeys.has(recurringMerchantKey(drawerTx)) ? <span style={{ color: "#16a34a" }}>{t("Part of a recurring payment")}</span> : <span style={{ opacity: 0.65 }}>{t("This transaction doesn't appear to repeat.")}</span>}
+                </div>
+                <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 2 }}>⇄ {t("Activity & sync")}</div>
+                  {drawerTx.pandleStatus === "confirmed" ? <span style={{ color: "#16a34a" }}>✓ {t("Confirmed in Pandle")}</span> : <span style={{ opacity: 0.65 }}>{t("Not synced to Pandle yet")}</span>}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {isOwner ? (
+            <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(120,120,140,0.16)" }}>
+              <button type="button" style={{ ...bankBtn, flex: 1, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "drawer"} onClick={() => void saveDrawer(false)}>{busy === "drawer" ? t("Saving…") : t("Save")}</button>
+              {drawerTx.amount < 0 && drawerCategory ? <button type="button" style={{ ...bankBtn, flex: 1 }} disabled={busy === "drawer"} onClick={() => void saveDrawer(true)}>{t("Save & create rule")}</button> : null}
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
     </AppShell>
   );
 }
@@ -1214,6 +2088,9 @@ const tileUnit: React.CSSProperties = { fontSize: 12, fontWeight: 600, opacity: 
 const countBadge: React.CSSProperties = { fontSize: 11, fontWeight: 800, background: "rgba(120,120,140,0.14)", borderRadius: 7, padding: "2px 8px" };
 const recurringRow: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid rgba(120,120,140,0.1)" };
 const avatarStyle: React.CSSProperties = { width: 30, height: 30, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 };
+const attentionLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 11.5, cursor: "pointer", padding: 0, textAlign: "left" };
+const drawerStyle: React.CSSProperties = { position: "fixed", top: 0, right: 0, bottom: 0, width: 420, maxWidth: "100vw", background: "var(--surface, #fff)", borderLeft: "1px solid rgba(120,120,140,0.2)", boxShadow: "-12px 0 30px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", zIndex: 60 };
+const drawerLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.65, marginBottom: 4 };
 const cardFootLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" };
 const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, padding: "9px 18px" };
 const tdStyle: React.CSSProperties = { padding: "9px 18px", verticalAlign: "middle" };

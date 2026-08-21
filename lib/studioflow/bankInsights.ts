@@ -3,6 +3,7 @@
 // shared by /bank and the dashboard Bank Activity card.
 
 export type BankInsightTx = {
+  id?: string;
   amount: number;
   currency: string;
   bookingDate: string; // YYYY-MM-DD
@@ -26,6 +27,9 @@ export type RecurringSpend = {
   // are visible too.
   active: boolean;
   monthlyEquivalent: number;
+  // Set when the latest charge differs noticeably from what this merchant
+  // usually costs (price increase/decrease on a subscription).
+  priceChange: { previous: number; current: number } | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -100,6 +104,12 @@ export function detectRecurringSpends(transactions: BankInsightTx[]): RecurringS
     const last = unique[unique.length - 1];
     const nextTime = last.time + expected * DAY_MS;
     const active = Date.now() - last.time <= expected * DAY_MS * 1.6;
+    // Price change: the latest charge vs the median of the earlier ones.
+    const previousTypical = median(amounts.slice(0, -1));
+    const lastAmount = amounts[amounts.length - 1];
+    const priceChange = previousTypical > 0 && Math.abs(lastAmount - previousTypical) >= Math.max(0.5, previousTypical * 0.05)
+      ? { previous: previousTypical, current: lastAmount }
+      : null;
 
     results.push({
       key,
@@ -111,7 +121,8 @@ export function detectRecurringSpends(transactions: BankInsightTx[]): RecurringS
       lastDate: last.tx.bookingDate,
       nextExpected: new Date(nextTime).toISOString().slice(0, 10),
       active,
-      monthlyEquivalent: typicalAmount * MONTHLY_FACTOR[cadence]
+      monthlyEquivalent: typicalAmount * MONTHLY_FACTOR[cadence],
+      priceChange
     });
   }
 
@@ -120,4 +131,129 @@ export function detectRecurringSpends(transactions: BankInsightTx[]): RecurringS
 
 export function monthlyFixedTotal(recurring: RecurringSpend[]): number {
   return recurring.filter(item => item.active).reduce((acc, item) => acc + item.monthlyEquivalent, 0);
+}
+
+// Possible duplicates: same merchant, same amount, booked within two days of
+// each other. Returns the ids involved (both sides of every pair).
+export function detectPossibleDuplicates(transactions: BankInsightTx[]): Set<string> {
+  const flagged = new Set<string>();
+  const byKey = new Map<string, BankInsightTx[]>();
+  for (const tx of transactions) {
+    if (!tx.id || tx.amount >= 0 || !tx.bookingDate) continue;
+    const key = `${recurringMerchantKey(tx)}|${Math.abs(tx.amount).toFixed(2)}`;
+    const list = byKey.get(key) ?? [];
+    list.push(tx);
+    byKey.set(key, list);
+  }
+  for (const list of byKey.values()) {
+    if (list.length < 2) continue;
+    const sorted = [...list].sort((a, b) => a.bookingDate.localeCompare(b.bookingDate));
+    for (let index = 1; index < sorted.length; index += 1) {
+      const gap = (parseDay(sorted[index].bookingDate) - parseDay(sorted[index - 1].bookingDate)) / DAY_MS;
+      if (gap <= 2) {
+        flagged.add(sorted[index - 1].id as string);
+        flagged.add(sorted[index].id as string);
+      }
+    }
+  }
+  return flagged;
+}
+
+// ---- Category suggestions ---------------------------------------------------
+// Heuristic, no AI cost: (1) what the owner chose for the same merchant before,
+// (2) a small keyword library for common UK business merchants.
+
+export type CategorySuggestion = { category: string; confidence: number; source: "history" | "keyword"; keyword: string };
+
+const CATEGORY_KEYWORDS: Array<{ category: string; words: string[] }> = [
+  { category: "Software", words: ["adobe", "openai", "anthropic", "google*gsuite", "gsuite", "google workspace", "microsoft", "eset", "akismet", "github", "notion", "figma", "canva", "dropbox", "icloud", "apple.com/bill", "zoom", "slack", "1password", "cloudflare", "godaddy", "hostinger", "ionos"] },
+  { category: "Subscriptions", words: ["shopify", "squarespace", "wix", "spotify", "netflix", "cookieyes", "creem.io", "patreon", "membership", "subscription"] },
+  { category: "Shipping", words: ["royal mail", "dhl", "ups", "fedex", "evri", "hermes", "parcelforce", "parcel2go", "dpd", "click and drop", "postage"] },
+  { category: "Fees", words: ["stripe", "paypal", "non-sterling", "transaction fee", "bank charge", "sumup", "square", "klarna", "wise"] },
+  { category: "Marketing", words: ["facebk", "facebook", "meta ads", "google ads", "adwords", "instagram", "mailchimp", "linkedin", "etsy ads", "tiktok"] },
+  { category: "Travel", words: ["uber", "trainline", "tfl", "national rail", "easyjet", "ryanair", "british airways", "bp ", "shell ", "esso", "texaco", "parking", "ringgo", "just park"] },
+  { category: "Utilities", words: ["octopus", "edf", "british gas", "eon", "ovo", "thames water", "vodafone", "ee ltd", "o2 ", "three", "bt group", "virgin media", "sky "] },
+  { category: "Tax", words: ["hmrc"] },
+  { category: "Rent", words: ["rent", "lovespace", "storage", "wework", "regus"] },
+  { category: "Materials", words: ["cousinsuk", "cousins uk", "amazon", "amzn", "ebay", "screwfix", "toolstation", "hobbycraft", "b&q", "wickes", "ikea"] },
+  { category: "Equipment", words: ["apple store", "currys", "argos"] }
+];
+
+export function suggestCategory(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  history: Array<BankInsightTx & { category?: string }>
+): CategorySuggestion | null {
+  if (tx.amount >= 0) return null;
+  const key = recurringMerchantKey(tx);
+  if (key) {
+    // Same merchant, manually categorised before → strongest signal.
+    const counts = new Map<string, number>();
+    for (const other of history) {
+      if (!other.category || other === tx) continue;
+      if (recurringMerchantKey(other) !== key) continue;
+      counts.set(other.category, (counts.get(other.category) ?? 0) + 1);
+    }
+    let best: [string, number] | null = null;
+    for (const entry of counts) if (!best || entry[1] > best[1]) best = entry;
+    if (best) return { category: best[0], confidence: Math.min(0.97, 0.8 + best[1] * 0.05), source: "history", keyword: key.split(" ")[0] || key };
+  }
+  const haystack = `${tx.counterparty} ${tx.description}`.toLowerCase();
+  for (const group of CATEGORY_KEYWORDS) {
+    const hit = group.words.find(word => haystack.includes(word));
+    if (hit) return { category: group.category, confidence: 0.7, source: "keyword", keyword: hit.trim() };
+  }
+  return null;
+}
+
+// ---- Order link suggestions -------------------------------------------------
+// Which order a spend probably belongs to: orders that were open around the
+// booking date, boosted by name/customer words appearing in the bank line.
+
+export type OrderCandidate = { id: string; customerName: string; designName: string; status: string; paymentDate: Date | null };
+export type OrderLinkSuggestion = { orderId: string; label: string; confidence: number };
+
+const ORDER_UNRELATED_CATEGORIES = new Set(["Subscriptions", "Software", "Fees", "Rent", "Utilities", "Tax", "Staff", "Marketing"]);
+
+export function rankOrdersForTransaction(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  orders: OrderCandidate[]
+): Array<{ order: OrderCandidate; score: number }> {
+  if (!tx.bookingDate) return orders.map(order => ({ order, score: 0 }));
+  const txTime = parseDay(tx.bookingDate);
+  const words = new Set(`${tx.counterparty} ${tx.description}`.toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length >= 4));
+  const open = orders.filter(order => {
+    if (/cancel/i.test(order.status) || !order.paymentDate) return false;
+    const days = (txTime - order.paymentDate.getTime()) / DAY_MS;
+    return days >= -7 && days <= 60; // created up to 60 days before the spend (or a week after)
+  });
+  const openIds = new Set(open.map(order => order.id));
+  const ranked = orders.map(order => {
+    let score = 0;
+    if (openIds.has(order.id) && order.paymentDate) {
+      const days = Math.abs((txTime - order.paymentDate.getTime()) / DAY_MS);
+      score = days <= 7 ? 30 : days <= 14 ? 20 : days <= 30 ? 10 : 5;
+      // Few orders open at the time → the spend is probably for one of them.
+      if (open.length === 1) score += 25; else if (open.length <= 3) score += 15;
+    }
+    const orderWords = `${order.customerName} ${order.designName}`.toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length >= 4);
+    const overlap = orderWords.filter(word => words.has(word)).length;
+    score += Math.min(2, overlap) * 30;
+    return { order, score };
+  });
+  return ranked.sort((a, b) => b.score - a.score || (b.order.paymentDate?.getTime() ?? 0) - (a.order.paymentDate?.getTime() ?? 0));
+}
+
+export function suggestOrderLink(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  orders: OrderCandidate[]
+): OrderLinkSuggestion | null {
+  if (tx.amount >= 0 || !tx.bookingDate) return null;
+  const category = tx.category || tx.categoryAuto || "";
+  if (ORDER_UNRELATED_CATEGORIES.has(category)) return null;
+  const best = rankOrdersForTransaction(tx, orders)[0];
+  if (!best || best.score < 40) return null;
+  const label = best.order.designName && best.order.designName !== "Untitled design"
+    ? `${best.order.customerName} · ${best.order.designName}`
+    : best.order.customerName;
+  return { orderId: best.order.id, label, confidence: Math.min(0.95, best.score / 100) };
 }
