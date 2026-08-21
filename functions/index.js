@@ -18784,6 +18784,17 @@ function nvMcpToolsWithSecuritySchemes() {
   });
 }
 
+// Tool annotations are always explicit booleans (never null) and describe what the
+// handler really does:
+//   readOnlyHint    true only for tools that just read Firestore (search_*, get_*).
+//   destructiveHint true when a call overwrites something the workspace already had
+//                   (update_order_status, update_note, attach_bank_receipt replacing
+//                   an existing receipt). Additive writes (create_*, append/add note)
+//                   and reversible flags (pin_note, archive_note) are false.
+//   idempotentHint  true when the call sets an explicit end state, so repeating it
+//                   with the same arguments leaves the workspace unchanged.
+//   openWorldHint   true only for attach_bank_receipt, which fetches the user's file
+//                   from ChatGPT's file host; every other tool stays inside NivaDesk.
 function nvMcpOrderToolSchemas() {
   return [
     {
@@ -18984,7 +18995,7 @@ function nvMcpOrderToolSchemas() {
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
-        idempotentHint: false,
+        idempotentHint: true,
         openWorldHint: false
       }
     },
@@ -19075,7 +19086,7 @@ function nvMcpOrderToolSchemas() {
           colorName: { type: "string", description: "Replacement color name." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
     },
     {
       name: "pin_note",
@@ -19091,7 +19102,7 @@ function nvMcpOrderToolSchemas() {
           isPinned: { type: "boolean", description: "True to pin, false to unpin." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
     },
     {
       name: "archive_note",
@@ -19107,7 +19118,7 @@ function nvMcpOrderToolSchemas() {
           isArchived: { type: "boolean", description: "True to archive, false to unarchive." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
     },
     {
       name: "get_order_financials",
@@ -19325,7 +19336,7 @@ function nvMcpOrderToolSchemas() {
           merchant: { type: "string", description: "Merchant/supplier name on the document, if you can read it." }
         }
       },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       _meta: { "openai/fileParams": ["receipt"] }
     }
   ];
