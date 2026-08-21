@@ -15,7 +15,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
-import { detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard } from "@/components/PandleCard";
 
@@ -143,6 +143,8 @@ function BankPageContent() {
   const [txPageSize, setTxPageSize] = useState<10 | 20 | 30>(10);
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllCats, setShowAllCats] = useState(false);
+  // "Needs attention" queue filter for the transactions table.
+  const [txAttention, setTxAttention] = useState<"none" | "uncategorised" | "noReceipt" | "duplicate">("none");
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -589,6 +591,30 @@ function BankPageContent() {
 
   // Subscriptions & other recurring charges detected from the feed.
   const recurring = useMemo<RecurringSpend[]>(() => detectRecurringSpends(transactions), [transactions]);
+  const duplicateIds = useMemo(() => detectPossibleDuplicates(visibleTransactions), [visibleTransactions]);
+  // What the owner should act on in this period — drives the Needs Attention tile.
+  const attention = useMemo(() => {
+    const spending = visibleTransactions.filter(item => item.amount < 0);
+    const uncategorised = spending.filter(item => !effectiveCategory(item));
+    const noReceipt = spending.filter(item => !item.receiptPath);
+    const priceChanged = recurring.filter(item => item.active && item.priceChange);
+    const cancelled = recurring.filter(item => !item.active);
+    return {
+      uncategorised: uncategorised.length,
+      uncategorisedAmount: uncategorised.reduce((acc, item) => acc + Math.abs(item.amount), 0),
+      noReceipt: noReceipt.length,
+      duplicates: duplicateIds.size,
+      priceChanged: priceChanged.length,
+      cancelled: cancelled.length,
+      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length
+    };
+  }, [visibleTransactions, recurring, duplicateIds]);
+  function showAttention(kind: "uncategorised" | "noReceipt" | "duplicate") {
+    setTxAttention(kind);
+    setTxFlow("out");
+    setTxPage(1);
+    document.getElementById("bank-transactions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const recurringKeys = useMemo(() => new Set(recurring.filter(item => item.active).map(item => item.key)), [recurring]);
   const fixedMonthly = useMemo(() => monthlyFixedTotal(recurring), [recurring]);
 
@@ -631,14 +657,21 @@ function BankPageContent() {
     item.lastSyncedAt && (!latest || item.lastSyncedAt > latest) ? item.lastSyncedAt : latest, null);
 
   const sortedTransactions = useMemo(() => {
-    const list = visibleTransactions.filter(item => txFlow === "all" ? true : txFlow === "in" ? item.amount > 0 : item.amount < 0);
+    const list = visibleTransactions.filter(item => {
+      if (txFlow === "in" && item.amount <= 0) return false;
+      if (txFlow === "out" && item.amount >= 0) return false;
+      if (txAttention === "uncategorised") return item.amount < 0 && !effectiveCategory(item);
+      if (txAttention === "noReceipt") return item.amount < 0 && !item.receiptPath;
+      if (txAttention === "duplicate") return duplicateIds.has(item.id);
+      return true;
+    });
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc, txFlow]);
+  }, [visibleTransactions, sortAsc, txFlow, txAttention, duplicateIds]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
-  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth, weekStart, txFlow]);
+  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
@@ -813,7 +846,7 @@ function BankPageContent() {
                     <p style={tileLabel}>{t("Total spent")} — {periodLabel}</p>
                     <strong style={tileValue}>{money(spentTotal, currency0)}</strong>
                     {spentDelta !== null ? (
-                      <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#dc2626" }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#6b7280" }}>
                         {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {deltaLabel}
                       </span>
                     ) : null}
@@ -824,7 +857,7 @@ function BankPageContent() {
                   <div style={bankCard}>
                     <p style={{ ...tileLabel, color: "#ea770b" }}>{t("Recurring spending")}</p>
                     <strong style={tileValue}>≈ {money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("recurring items")}</span>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("active")}{cancelledRecurring.length ? ` · ${cancelledRecurring.length} ${t("possibly cancelled")}` : ""}</span>
                     <TileIcon bg="rgba(234,119,11,0.12)">↻</TileIcon>
                   </div>
                   <div style={bankCard}>
@@ -835,10 +868,20 @@ function BankPageContent() {
                     <TileIcon bg="rgba(22,163,74,0.12)">↗</TileIcon>
                   </div>
                   <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Connected accounts")}</p>
-                    <strong style={tileValue}>{accountsCount}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{linkedBanks.length} {t("bank(s)")}{lastSync ? ` · ${t("Last sync")} ${lastSync.toLocaleTimeString()}` : ""}</span>
-                    <TileIcon bg="rgba(124,58,237,0.12)">🏛</TileIcon>
+                    <p style={{ ...tileLabel, color: attention.total ? "#b45309" : "#16a34a" }}>{t("Needs attention")}</p>
+                    <strong style={tileValue}>{attention.total}</strong>
+                    {attention.total === 0 ? (
+                      <span style={{ fontSize: 11.5, opacity: 0.65 }}>✓ {t("All clear for this period")}</span>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11.5 }}>
+                        {attention.uncategorised ? <button type="button" onClick={() => showAttention("uncategorised")} style={attentionLink}>{attention.uncategorised} {t("uncategorised")} →</button> : null}
+                        {attention.noReceipt ? <button type="button" onClick={() => showAttention("noReceipt")} style={attentionLink}>{attention.noReceipt} {t("missing receipts")} →</button> : null}
+                        {attention.duplicates ? <button type="button" onClick={() => showAttention("duplicate")} style={attentionLink}>{attention.duplicates} {t("possible duplicates")} →</button> : null}
+                        {attention.priceChanged ? <span style={{ opacity: 0.8 }}>{attention.priceChanged} {t("price changed")}</span> : null}
+                        {attention.cancelled ? <span style={{ opacity: 0.8 }}>{attention.cancelled} {t("possibly cancelled")}</span> : null}
+                      </div>
+                    )}
+                    <TileIcon bg={attention.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attention.total ? "!" : "✓"}</TileIcon>
                   </div>
                 </div>
 
@@ -859,6 +902,11 @@ function BankPageContent() {
                             <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
                             <div style={{ fontSize: 10.5, opacity: 0.6 }}>
                               {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×
+                              {item.priceChange ? (
+                                <span style={{ marginLeft: 6, color: item.priceChange.current > item.priceChange.previous ? "#b45309" : "#16a34a", fontWeight: 700, opacity: 1 }}>
+                                  {item.priceChange.current > item.priceChange.previous ? "↑" : "↓"} {money(item.priceChange.previous, item.currency)} → {money(item.priceChange.current, item.currency)}
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                           <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
@@ -936,6 +984,31 @@ function BankPageContent() {
                         })}
                       </div>
                     </div>
+                    {(() => {
+                      const shownRows = showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 4);
+                      const shownTotal = shownRows.reduce((acc, row) => acc + row.amount, 0);
+                      const hidden = Math.max(0, categoryBreakdown.total - shownTotal);
+                      const unRow = categoryBreakdown.rows.find(row => row.name === "__uncategorized__");
+                      const unShare = unRow && categoryBreakdown.total > 0 ? (unRow.amount / categoryBreakdown.total) * 100 : 0;
+                      return (
+                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5, opacity: 0.8 }}>
+                          <span>
+                            {hidden > 0.005
+                              ? `${money(hidden, currency0)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`
+                              : `${money(categoryBreakdown.total, currency0)} ${t("of")} ${money(categoryBreakdown.total, currency0)} ${t("accounted for")}`}
+                          </span>
+                          {unRow ? (
+                            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(120,120,140,0.15)", overflow: "hidden" }}>
+                                <span style={{ display: "block", height: "100%", width: `${Math.max(2, 100 - unShare)}%`, background: "#16a34a" }} />
+                              </span>
+                              <span>{Math.round(100 - unShare)}% {t("categorised")}</span>
+                              <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("Categorise")} {attention.uncategorised} →</button>
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                     {categoryBreakdown.rows.length > 4 ? (
                       <button type="button" onClick={() => setShowAllCats(value => !value)} style={cardFootLink}>
                         {showAllCats ? `${t("Show less")} ←` : `${t("View category breakdown")} →`}
@@ -957,6 +1030,12 @@ function BankPageContent() {
                         </button>
                       ))}
                     </span>
+                    {txAttention !== "none" ? (
+                      <button type="button" onClick={() => setTxAttention("none")}
+                        style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>
+                        ! {txAttention === "uncategorised" ? t("Uncategorised") : txAttention === "noReceipt" ? t("No receipt") : t("Possible duplicates")} ✕
+                      </button>
+                    ) : null}
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 12, opacity: 0.6 }}>{sortedTransactions.length} {t("Transactions").toLowerCase()}</span>
                   </div>
@@ -990,6 +1069,7 @@ function BankPageContent() {
                                     <span style={{ minWidth: 0 }}>
                                       <span style={{ display: "block", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                         {transaction.amount < 0 && recurringKeys.has(recurringMerchantKey(transaction)) ? <span aria-hidden="true" title={t("Recurring spending")} style={{ marginRight: 4, opacity: 0.6, fontSize: 11 }}>↻</span> : null}
+                                        {duplicateIds.has(transaction.id) ? <span title={t("Possible duplicates")} style={{ marginRight: 4, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{t("Duplicate?")}</span> : null}
                                         {transaction.counterparty || transaction.description || "—"}
                                       </span>
                                       {transaction.linkedOrderId ? (
@@ -1214,6 +1294,7 @@ const tileUnit: React.CSSProperties = { fontSize: 12, fontWeight: 600, opacity: 
 const countBadge: React.CSSProperties = { fontSize: 11, fontWeight: 800, background: "rgba(120,120,140,0.14)", borderRadius: 7, padding: "2px 8px" };
 const recurringRow: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid rgba(120,120,140,0.1)" };
 const avatarStyle: React.CSSProperties = { width: 30, height: 30, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 };
+const attentionLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 11.5, cursor: "pointer", padding: 0, textAlign: "left" };
 const cardFootLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" };
 const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, padding: "9px 18px" };
 const tdStyle: React.CSSProperties = { padding: "9px 18px", verticalAlign: "middle" };

@@ -1,0 +1,45 @@
+# Banking module — roadmap (from the Aug 2026 integration brief)
+
+Source: `NivaDesk_Banking_Pandle_Integration_Brief.md` (product/design review + competitor notes) reconciled
+against what already ships. Positioning stays: **NivaDesk = working/decision layer, Pandle = bookkeeping layer.**
+
+## Status of the brief's items
+
+| Brief item | Status | Notes |
+|---|---|---|
+| Bank feed, sync, categories, rules, receipts, OCR match, order linking | ✅ shipped | TrueLayer feed, `bankRules`, receipt inbox + Vision OCR, `financialExpense::Bank Spending` link |
+| Weekly/monthly/yearly, incoming view, rows per page | ✅ shipped | 21 Aug |
+| Team permission (read-only members) | ✅ shipped | `bankFeed` access key |
+| ChatGPT tools (summary, search, attach receipt via file) | ✅ shipped, v1.1.0 in OpenAI review | |
+| Pandle: match existing imported tx → confirm, ids stored, code-based mapping, OAuth server-side | ✅ code ready, ⏳ waits for Pandle app credentials | `functions/pandle.js`, `PandleCard` behind `NEXT_PUBLIC_PANDLE_ENABLED` |
+| Breakdown ≠ total consistency line | 🔜 step 1 | "£X of £Y accounted for" under spending mix |
+| Spending increase shown green | 🔜 step 1 | neutral colour unless over expected |
+| Recurring "8 active · 3 possibly cancelled" | 🔜 step 1 | |
+| Uncategorised progress indicator | 🔜 step 1 | |
+| **Needs Attention** card + queues | 🔜 step 2 | replaces "Connected accounts" tile; uncategorised / missing receipt / possible duplicate / price changed / possibly cancelled |
+| Bulk review (multi-select → category / link / mark reviewed) | 🔜 step 3 | |
+| Category suggestions (merchant history + keyword library, "always?" prompt) | 🔜 step 4 | heuristic first, no AI cost; AI later |
+| VAT treatment per transaction (+ category default) | 🔜 step 5 | feeds Pandle tax-code mapping |
+| Order / project link suggestions with confidence | 🔜 step 6 | uses open orders, dates, customer/material keywords |
+| Transaction detail drawer + hover actions; "Banking" tabs (Overview / Transactions / Recurring / Receipts / Rules) | 🔜 step 7 | UI restructure |
+| Pandle phase 1 (read-only view) → phase 2 (confirm) → phase 3 (receipt sync, rules push, order→project, bulk confirm, reverse sync after confirm) | ⏳ credentials | phase 1–2 code exists; phase 3 after live test |
+| Split transaction, transfer detection, recurring price-change alerts, merchant profiles | P1 | price-change detection lands with Needs Attention |
+| Cash-flow forecast, budgets, approvals, accountant mode, audit log, email receipt fetch, AI finance chat | P2 | |
+| Native (Mac/iOS/Android) parity for weekly view, incoming filter, needs-attention | after web | read-only mirrors |
+
+## Execution order
+
+1. Consistency fixes (accounted-for line, neutral delta, recurring counts, uncategorised progress)
+2. Needs Attention card + queue filters (incl. duplicate + price-change detection in `bankInsights.ts`)
+3. Bulk review
+4. Category suggestions
+5. VAT treatment
+6. Order link suggestions
+7. Drawer + Banking tabs
+8. Pandle phases (when credentials arrive) + native parity
+
+## Data model additions planned
+
+- `bankTransactions.{vatCode}` (ST/RR/RC/NV/EX), `reviewedAt`, `splitLines[]`, `transferOf`
+- `bankRules.{vatCode}`
+- `pandleConnection.mappings[].taxCode` already exists (category default)
