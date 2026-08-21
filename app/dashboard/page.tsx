@@ -67,6 +67,8 @@ type BankTx = {
   bookingDate: string;
   description: string;
   counterparty: string;
+  category: string;
+  categoryAuto: string;
 };
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
@@ -364,7 +366,9 @@ export default function DashboardPage() {
             currency: String(data.currency || "GBP"),
             bookingDate: String(data.bookingDate || ""),
             description: String(data.description || ""),
-            counterparty: String(data.counterparty || "")
+            counterparty: String(data.counterparty || ""),
+            category: String(data.category || ""),
+            categoryAuto: String(data.categoryAuto || "")
           };
         }));
       },
@@ -687,6 +691,17 @@ export default function DashboardPage() {
               />
 
               {canSeeAdvancedFinance ? (
+                <TaxSetAsideCard
+                  orders={financeOrders}
+                  settings={settings}
+                  bankTransactions={bankTransactions}
+                  isOwner={isWorkspaceOwner}
+                  t={t}
+                  hideNumbers={hideNumbers}
+                />
+              ) : null}
+
+              {canSeeAdvancedFinance ? (
                 <section className="card app-card">
                   <CardTitle icon="finance" title={t("Financial Breakdown")} />
                   <div className="financial-breakdown-grid">
@@ -936,6 +951,96 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
             ))}
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// Tax set-aside — built from the SAME per-order figures the dashboard already
+// aggregates (order taxAmount = VAT, plus the Corporation Tax estimate from
+// workspace settings), not a rough percentage of bank inflows. Bank payments
+// the owner categorised as "Tax" count as already paid.
+function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideNumbers }: {
+  orders: DashboardFinanceOrder[];
+  settings: WorkspaceSettingsOverview | null;
+  bankTransactions: BankTx[];
+  isOwner: boolean;
+  t: (text: string) => string;
+  hideNumbers: boolean;
+}) {
+  const summary = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const ctEnabled = settings?.corporationTaxEnabled === true;
+    const ctRate = settings?.corporationTaxRate ?? 19;
+
+    let vatYtd = 0;
+    let ctYtd = 0;
+    let vatMonth = 0;
+    let ctMonth = 0;
+    for (const order of orders) {
+      if (!order.paymentDate || order.paymentDate.getFullYear() !== year) continue;
+      const ct = ctEnabled ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * ctRate) / 100 : 0;
+      vatYtd += order.taxAmount;
+      ctYtd += ct;
+      if (order.paymentDate.getMonth() === month) {
+        vatMonth += order.taxAmount;
+        ctMonth += ct;
+      }
+    }
+
+    const paidYtd = bankTransactions
+      .filter(item => item.amount < 0
+        && item.bookingDate.startsWith(String(year))
+        && (item.category || item.categoryAuto) === "Tax")
+      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
+
+    return { vatYtd, ctYtd, totalYtd: vatYtd + ctYtd, monthTotal: vatMonth + ctMonth, paidYtd, ctEnabled, ctRate };
+  }, [orders, settings, bankTransactions]);
+
+  if (summary.totalYtd <= 0.005) return null;
+
+  const remaining = Math.max(0, summary.totalYtd - summary.paidYtd);
+  const paidShare = summary.totalYtd > 0 ? Math.min(100, (summary.paidYtd / summary.totalYtd) * 100) : 0;
+  const showMoney = (value: number) => money(value, hideNumbers, settings);
+
+  return (
+    <section className="card app-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 10, background: "rgba(180,83,9,0.12)", fontSize: 16 }}>🏛</span>
+        <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>{t("Tax set-aside")}</h2>
+        <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Keep this money apart — it already belongs to the tax office.")}</span>
+      </div>
+      <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Set aside this year")}</p>
+          <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.totalYtd)}</strong>
+          <span style={{ fontSize: 11.5, opacity: 0.7 }}>
+            {t("VAT Amount")}: {showMoney(summary.vatYtd)}
+            {summary.ctEnabled ? <> · {t("Corporation Tax")} ({Math.round(summary.ctRate)}%): {showMoney(summary.ctYtd)}</> : null}
+          </span>
+        </div>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Month")}</p>
+          <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.monthTotal)}</strong>
+        </div>
+        {isOwner ? (
+          <div style={{ flex: "1 1 240px", minWidth: 220 }}>
+            <p className="muted-copy" style={{ margin: "0 0 4px", fontSize: 12.5 }}>
+              {t("Paid from the bank")} <span style={{ opacity: 0.6 }}>({t("transactions categorised as Tax")})</span>
+            </p>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <strong style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: "#16a34a" }}>{showMoney(summary.paidYtd)}</strong>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: remaining > 0.005 ? "#b45309" : "#16a34a" }}>
+                {remaining > 0.005 ? `${t("Still to hold")}: ${showMoney(remaining)}` : t("Fully covered")}
+              </span>
+            </div>
+            <div style={{ marginTop: 7, height: 7, borderRadius: 999, background: "rgba(120,120,140,0.16)", overflow: "hidden" }}>
+              <div style={{ width: `${paidShare}%`, height: "100%", borderRadius: 999, background: "#16a34a", transition: "width 0.25s ease" }} />
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
   );
