@@ -432,3 +432,196 @@ struct DeliveriesWidget: Widget {
         .supportedFamilies([.systemSmall])
     }
 }
+
+// MARK: - Notes widget
+// Payload kept in sync with EGGcraft/WidgetSummaryBridge.swift (WidgetNotesPayload).
+
+struct WidgetNotesPayload: Codable {
+    struct Note: Codable, Identifiable {
+        var id: String
+        var title: String
+        var text: String
+        var colorName: String
+        var isPinned: Bool
+    }
+
+    var notes: [Note]
+    var heading: String
+    var emptyText: String
+    var updatedAt: Date
+
+    static let payloadKey = "nivadeskWidgetNotesV1"
+
+    static func load() -> WidgetNotesPayload? {
+        guard let defaults = UserDefaults(suiteName: WidgetSummaryPayload.appGroupId),
+              let data = defaults.data(forKey: payloadKey) else { return nil }
+        return try? JSONDecoder().decode(WidgetNotesPayload.self, from: data)
+    }
+
+    static let placeholder = WidgetNotesPayload(
+        notes: [
+            Note(id: "1", title: "Supplier call", text: "Confirm the gold clasp restock before Friday.", colorName: "yellow", isPinned: true),
+            Note(id: "2", title: "Packaging ideas", text: "Kraft boxes with the new logo stamp.", colorName: "blue", isPinned: false),
+            Note(id: "3", title: "Workshop", text: "Order resin + polish pads.", colorName: "green", isPinned: false),
+            Note(id: "4", title: "", text: "Reply to the Etsy custom request.", colorName: "default", isPinned: false)
+        ],
+        heading: "Notes",
+        emptyText: "Notes you add appear here",
+        updatedAt: Date()
+    )
+}
+
+struct NotesWidgetEntry: TimelineEntry {
+    let date: Date
+    let payload: WidgetNotesPayload
+}
+
+struct NotesWidgetProvider: TimelineProvider {
+    func placeholder(in context: Context) -> NotesWidgetEntry {
+        NotesWidgetEntry(date: Date(), payload: .placeholder)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (NotesWidgetEntry) -> Void) {
+        completion(NotesWidgetEntry(date: Date(), payload: WidgetNotesPayload.load() ?? .placeholder))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<NotesWidgetEntry>) -> Void) {
+        let entry = NotesWidgetEntry(date: Date(), payload: WidgetNotesPayload.load() ?? .placeholder)
+        let next = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+}
+
+// Mirrors the in-app note card colours (light/dark variants).
+private func noteAccentColor(_ name: String, dark: Bool) -> Color {
+    switch name {
+    case "yellow": return dark ? Color(red: 0.30, green: 0.25, blue: 0.10) : Color(red: 1.0, green: 0.96, blue: 0.72)
+    case "green": return dark ? Color(red: 0.12, green: 0.27, blue: 0.18) : Color(red: 0.82, green: 0.95, blue: 0.84)
+    case "blue": return dark ? Color(red: 0.12, green: 0.22, blue: 0.34) : Color(red: 0.82, green: 0.91, blue: 1.0)
+    case "pink": return dark ? Color(red: 0.32, green: 0.14, blue: 0.22) : Color(red: 1.0, green: 0.86, blue: 0.91)
+    case "purple": return dark ? Color(red: 0.24, green: 0.17, blue: 0.34) : Color(red: 0.91, green: 0.86, blue: 1.0)
+    default: return dark ? Color(white: 0.16) : Color(white: 0.95)
+    }
+}
+
+private func noteDotColor(_ name: String) -> Color {
+    switch name {
+    case "yellow": return .yellow
+    case "green": return .green
+    case "blue": return .blue
+    case "pink": return .pink
+    case "purple": return .purple
+    default: return .gray
+    }
+}
+
+struct NotesWidgetView: View {
+    let entry: NotesWidgetEntry
+    @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var visibleNotes: [WidgetNotesPayload.Note] {
+        let limit: Int
+        switch family {
+        case .systemSmall: limit = 3
+        case .systemMedium: limit = 3
+        default: limit = 8
+        }
+        return Array(entry.payload.notes.prefix(limit))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: family == .systemLarge ? 7 : 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.yellow)
+                Text(entry.payload.heading)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                WidgetLogoBadge()
+            }
+
+            if visibleNotes.isEmpty {
+                Spacer(minLength: 0)
+                Text(entry.payload.emptyText)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Spacer(minLength: 0)
+            } else {
+                ForEach(visibleNotes) { note in
+                    NoteRow(note: note, compact: family == .systemSmall, dark: colorScheme == .dark)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .containerBackground(for: .widget) { Color.widgetBackground }
+        .widgetURL(URL(string: "nivadesk://notes"))
+    }
+}
+
+private struct NoteRow: View {
+    let note: WidgetNotesPayload.Note
+    let compact: Bool
+    let dark: Bool
+
+    private var titleLine: String {
+        let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty { return title }
+        return note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var detailLine: String {
+        let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return "" }
+        return note.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Circle()
+                .fill(noteDotColor(note.colorName))
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 3) {
+                    if note.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.orange)
+                    }
+                    Text(titleLine.isEmpty ? "—" : titleLine)
+                        .font(.system(size: compact ? 10.5 : 11.5, weight: .semibold))
+                        .lineLimit(1)
+                }
+                if !compact, !detailLine.isEmpty {
+                    Text(detailLine)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, compact ? 4 : 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(noteAccentColor(note.colorName, dark: dark))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+struct NotesWidget: Widget {
+    let kind: String = "NivaDeskNotesWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: NotesWidgetProvider()) { entry in
+            NotesWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Notes")
+        .description("Your pinned and latest notes at a glance.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}

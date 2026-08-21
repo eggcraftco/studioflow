@@ -28,6 +28,11 @@ final class PushNotificationManager: NSObject, ObservableObject {
     private var hasAPNSToken = false
     private var pendingFCMRetryWorkItem: DispatchWorkItem?
 
+    // Persisted so the registration can be removed on logout even after an app
+    // restart (the in-memory lastSaved* values start empty on every launch).
+    private static let persistedTokenKey = "pushDeviceTokenLastSavedV1"
+    private static let persistedCompanyKey = "pushDeviceTokenCompanyLastSavedV1"
+
     private override init() {
         super.init()
     }
@@ -60,11 +65,66 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
     func resetForLogout() {
         companyId = ""
+        lastSavedToken = ""
+        lastSavedCompanyId = ""
         lastSavedTokenPreview = ""
         hasConfigured = false
         hasAPNSToken = false
         pendingFCMRetryWorkItem?.cancel()
         pendingFCMRetryWorkItem = nil
+    }
+
+    /// Deletes this device's push registration from the company it was last saved
+    /// under. Must run BEFORE Auth.signOut(): the Firestore rule for deviceTokens
+    /// requires the caller to still be a signed-in member of that company. Without
+    /// this, the token stays enabled under the old company and the device keeps
+    /// receiving that workspace's pushes after switching accounts.
+    func unregisterStoredDeviceToken(completion: @escaping () -> Void) {
+        let defaults = UserDefaults.standard
+        let token = lastSavedToken.isEmpty
+            ? (defaults.string(forKey: Self.persistedTokenKey) ?? "")
+            : lastSavedToken
+        let savedCompanyId = lastSavedCompanyId.isEmpty
+            ? (defaults.string(forKey: Self.persistedCompanyKey) ?? "")
+            : lastSavedCompanyId
+
+        guard !token.isEmpty, !savedCompanyId.isEmpty else {
+            completion()
+            return
+        }
+
+        var didComplete = false
+        let finish = {
+            DispatchQueue.main.async {
+                guard !didComplete else { return }
+                didComplete = true
+                defaults.removeObject(forKey: Self.persistedTokenKey)
+                defaults.removeObject(forKey: Self.persistedCompanyKey)
+                completion()
+            }
+        }
+
+        // Don't let a slow/offline delete block logout indefinitely.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: finish)
+
+        Firestore.firestore()
+            .collection("companies")
+            .document(savedCompanyId)
+            .collection("deviceTokens")
+            .document(Self.deviceTokenDocumentId(for: token))
+            .delete { error in
+                if let error = error {
+                    print("FCM token unregister error: \(error.localizedDescription)")
+                }
+                finish()
+            }
+    }
+
+    private static func deviceTokenDocumentId(for token: String) -> String {
+        token
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: ":", with: "_")
     }
 
     func requestNotificationPermission() {
@@ -182,10 +242,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
         }
 
         let language = UserDefaults.standard.string(forKey: "seciliDil") ?? Locale.preferredLanguages.first ?? "English"
-        let documentId = token
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: ":", with: "_")
+        let documentId = Self.deviceTokenDocumentId(for: token)
 
         var payload: [String: Any] = [
             "token": token,
@@ -223,6 +280,9 @@ final class PushNotificationManager: NSObject, ObservableObject {
                     self?.lastSavedToken = token
                     self?.lastSavedCompanyId = cleanCompanyId
                     self?.lastSavedTokenPreview = "\(prefix)...\(suffix)"
+                    let defaults = UserDefaults.standard
+                    defaults.set(token, forKey: Self.persistedTokenKey)
+                    defaults.set(cleanCompanyId, forKey: Self.persistedCompanyKey)
                 }
                 self?.writePushDebug(event: "deviceTokenSaved", status: "tokenSaved", error: "", hasToken: true)
                 print("FCM token saved for company \(cleanCompanyId)")
@@ -413,6 +473,56 @@ extension PushNotificationManager: MessagingDelegate {
 
 #if os(iOS)
 final class EGGcraftAppDelegate: NSObject, UIApplicationDelegate {
+    // Home-screen quick action (long-press the app icon): "New note" jumps
+    // straight into the Notes tab with the composer open.
+    static let newNoteShortcutType = "uk.co.eggcraft.studioflow.newNote"
+
+    @discardableResult
+    static func handleQuickAction(_ item: UIApplicationShortcutItem) -> Bool {
+        guard item.type == newNoteShortcutType else { return false }
+        let defaults = UserDefaults.standard
+        defaults.set("Notes", forKey: "studioRequestedStartTab")
+        defaults.set(true, forKey: "pendingQuickActionNewNote")
+        return true
+    }
+
+    static func installQuickActions() {
+        let language = UserDefaults.standard.string(forKey: "seciliDil") ?? "English"
+        UIApplication.shared.shortcutItems = [
+            UIApplicationShortcutItem(
+                type: newNoteShortcutType,
+                localizedTitle: t("New note", lang: language),
+                localizedSubtitle: nil,
+                icon: UIApplicationShortcutIcon(systemImageName: "square.and.pencil"),
+                userInfo: nil
+            )
+        ]
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        Self.installQuickActions()
+        return true
+    }
+
+    // SwiftUI lifecycle: quick actions arrive through the window-scene delegate,
+    // so route scene connections through our own delegate class. A cold launch
+    // from the shortcut delivers the item in the connection options instead.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if let shortcutItem = options.shortcutItem {
+            Self.handleQuickAction(shortcutItem)
+        }
+        let config = UISceneConfiguration(name: connectingSceneSession.configuration.name, sessionRole: connectingSceneSession.role)
+        config.delegateClass = StudioQuickActionSceneDelegate.self
+        return config
+    }
+
     func application(
         _ application: UIApplication,
         didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
@@ -426,6 +536,16 @@ final class EGGcraftAppDelegate: NSObject, UIApplicationDelegate {
     ) {
         PushNotificationManager.shared.handleAPNSRegistrationError(error)
         print("Remote notification registration failed: \(error.localizedDescription)")
+    }
+}
+
+final class StudioQuickActionSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        performActionFor shortcutItem: UIApplicationShortcutItem,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        completionHandler(EGGcraftAppDelegate.handleQuickAction(shortcutItem))
     }
 }
 #endif

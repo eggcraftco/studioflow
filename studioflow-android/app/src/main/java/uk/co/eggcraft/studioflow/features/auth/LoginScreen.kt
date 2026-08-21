@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.features.auth
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -387,8 +388,11 @@ fun firebaseUserInEmailVerificationGracePeriod(): Boolean {
     return System.currentTimeMillis() - createdMs <= 3L * 86400000L
 }
 
-// Thin, dismissible reminder shown at the top of the app during the grace window
-// (days 0-3) so a newly signed-up user is nudged to verify before the hard gate.
+// Thin reminder shown at the top of the app during the grace window (days 0-3)
+// so a newly signed-up user is nudged to verify before the hard gate. Mirrors
+// iOS: the X never fully hides it — it collapses to a one-line strip that
+// expands back on tap. Collapsed state is stored per uid so it never bleeds
+// into a different account on this device.
 @Composable
 fun EmailVerifyReminderBanner(onVerified: () -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -396,6 +400,38 @@ fun EmailVerifyReminderBanner(onVerified: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: ""
+    val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences("email_verify_banner", android.content.Context.MODE_PRIVATE)
+    }
+    var collapsedUid by remember {
+        mutableStateOf(prefs.getString("collapsedUid", "") ?: "")
+    }
+    val setCollapsed: (Boolean) -> Unit = { collapsed ->
+        collapsedUid = if (collapsed) uid else ""
+        prefs.edit().putString("collapsedUid", collapsedUid).apply()
+    }
+
+    if (uid.isNotBlank() && collapsedUid == uid) {
+        Surface(color = Color(0xFFFFF7E6), contentColor = Color(0xFF7A5200), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { setCollapsed(false) }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("📬", fontSize = 10.sp)
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(t("Verify email"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("⌄", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        return
+    }
 
     Surface(color = Color(0xFFFFF7E6), contentColor = Color(0xFF7A5200), modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -433,6 +469,14 @@ fun EmailVerifyReminderBanner(onVerified: () -> Unit) {
                 },
                 enabled = !busy
             ) { Text(t("Resend email"), fontSize = 12.sp) }
+            Text(
+                "✕",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clickable { setCollapsed(true) }
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+            )
         }
     }
 }

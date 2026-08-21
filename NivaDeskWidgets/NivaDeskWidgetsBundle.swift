@@ -7,5 +7,6 @@ struct NivaDeskWidgetsBundle: WidgetBundle {
         NetProfitWidget()
         MonthlyProfitWidget()
         DeliveriesWidget()
+        NotesWidget()
     }
 }

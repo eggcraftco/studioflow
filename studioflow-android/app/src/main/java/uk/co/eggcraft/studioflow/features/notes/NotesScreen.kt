@@ -121,6 +121,21 @@ fun NotesScreen(
     val others = visible.filter { !it.isPinned }
 
     var editingNote by remember { mutableStateOf<StudioKeepNote?>(null) }
+
+    // Launcher shortcut ("New note"): open a fresh note editor as soon as the
+    // Notes section is on screen (mirrors the iOS quick action).
+    LaunchedEffect(Unit) {
+        uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingNewNote.collect { pending ->
+            if (pending && uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.consumePendingNewNote()) {
+                editingNote = StudioKeepNote(
+                    id = UUID.randomUUID().toString(),
+                    createdAt = Date(),
+                    updatedAt = Date(),
+                    manualOrder = System.currentTimeMillis().toDouble()
+                )
+            }
+        }
+    }
     var viewerImageUrl by remember { mutableStateOf<String?>(null) }
     var gridMode by rememberSaveable { mutableStateOf(true) }
     var dateForNote by remember { mutableStateOf<StudioKeepNote?>(null) }

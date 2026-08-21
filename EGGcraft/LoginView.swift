@@ -529,8 +529,53 @@ struct EmailVerifyReminderBanner: View {
     let seciliDil: String
     @State private var busy = false
     @State private var statusText = ""
+    // X never fully hides the reminder — it collapses to a one-line strip that
+    // expands back on tap. Keyed by uid so it never bleeds across accounts.
+    @AppStorage("emailVerifyBannerCollapsedUidV1") private var collapsedUid: String = ""
+
+    private var isCollapsed: Bool {
+        !currentUid.isEmpty && collapsedUid == currentUid
+    }
+
+    private var currentUid: String {
+        authVM.currentUserId ?? ""
+    }
 
     var body: some View {
+        if isCollapsed {
+            collapsedStrip
+        } else {
+            expandedBanner
+        }
+    }
+
+    private var collapsedStrip: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                collapsedUid = ""
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "envelope.badge.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.orange)
+                Text(t("Verify email", lang: seciliDil))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .background(.ultraThinMaterial)
+            .overlay(Rectangle().frame(height: 1).foregroundColor(Color.orange.opacity(0.28)), alignment: .bottom)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var expandedBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "envelope.badge.fill")
                 .font(.system(size: 15, weight: .semibold))
@@ -573,6 +618,20 @@ struct EmailVerifyReminderBanner: View {
                     .background(Color.primary.opacity(0.06)).cornerRadius(8)
             }
             .buttonStyle(.plain).disabled(busy)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    collapsedUid = currentUid
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

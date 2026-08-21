@@ -41,6 +41,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/studio_shortcuts" />
         </activity>
 
         <receiver
@@ -77,6 +80,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_deliveries_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widgets.NotesWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_notes_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_notes_info" />
         </receiver>
     </application>
 </manifest>

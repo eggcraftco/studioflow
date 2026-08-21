@@ -65,11 +65,11 @@
 /* Begin PBXFileReference section */
 		93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NivaDeskWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		93A148B82FF9E0340080C409 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
-		B4A9C5010000000000000006 /* AdServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AdServices.framework; path = System/Library/Frameworks/AdServices.framework; sourceTree = SDKROOT; };
 		93A148BA2FF9E0340080C409 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClientFileShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4382CE22F9A845F004BB413 /* NivaDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NivaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EGGcraftNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4A9C5010000000000000006 /* AdServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AdServices.framework; path = System/Library/Frameworks/AdServices.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -357,6 +357,17 @@
 			knownRegions = (
 				en,
 				Base,
+				tr,
+				de,
+				fr,
+				it,
+				es,
+				pt,
+				ru,
+				ja,
+				zh,
+				ar,
+				hi,
 			);
 			mainGroup = B4382CD92F9A845F004BB413;
 			minimizedProjectReferenceProxies = 1;
@@ -464,6 +475,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -474,21 +487,19 @@
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.2;
-				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -502,6 +513,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
@@ -512,21 +525,19 @@
 				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.2;
-				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = YES;

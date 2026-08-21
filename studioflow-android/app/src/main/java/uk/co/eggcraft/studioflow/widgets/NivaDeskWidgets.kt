@@ -47,6 +47,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import org.json.JSONArray
 import org.json.JSONObject
 import uk.co.eggcraft.studioflow.MainActivity
 import uk.co.eggcraft.studioflow.R
@@ -465,4 +466,183 @@ private fun DeliveryRow(count: Int, label: String, tint: ColorProvider) {
 
 class DeliveriesWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = DeliveriesWidget()
+}
+
+// MARK: - Notes widget (pinned + latest Keep notes; payload mirrors the Apple
+// WidgetNotesPayload JSON written by WidgetSummaryBridge.publishNotes)
+
+data class WidgetNote(
+    val id: String,
+    val title: String,
+    val text: String,
+    val colorName: String,
+    val isPinned: Boolean,
+)
+
+data class WidgetNotesPayload(
+    val notes: List<WidgetNote>,
+    val heading: String,
+    val emptyText: String,
+) {
+    companion object {
+        fun load(context: Context): WidgetNotesPayload {
+            val raw = context.getSharedPreferences(WidgetSummaryBridge.PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(WidgetSummaryBridge.NOTES_PAYLOAD_KEY, null)
+                ?: return placeholder()
+            return runCatching { parse(JSONObject(raw)) }.getOrElse { placeholder() }
+        }
+
+        private fun parse(json: JSONObject): WidgetNotesPayload {
+            val arr = json.optJSONArray("notes") ?: JSONArray()
+            val notes = (0 until arr.length()).mapNotNull { index ->
+                val item = arr.optJSONObject(index) ?: return@mapNotNull null
+                WidgetNote(
+                    id = item.optString("id"),
+                    title = item.optString("title"),
+                    text = item.optString("text"),
+                    colorName = item.optString("colorName", "default"),
+                    isPinned = item.optBoolean("isPinned", false),
+                )
+            }
+            return WidgetNotesPayload(
+                notes = notes,
+                heading = json.optString("heading", "Notes"),
+                emptyText = json.optString("emptyText", "Notes you add appear here"),
+            )
+        }
+
+        private fun placeholder() = WidgetNotesPayload(
+            notes = listOf(
+                WidgetNote("1", "Supplier call", "Confirm the gold clasp restock before Friday.", "yellow", true),
+                WidgetNote("2", "Packaging ideas", "Kraft boxes with the new logo stamp.", "blue", false),
+                WidgetNote("3", "Workshop", "Order resin + polish pads.", "green", false),
+            ),
+            heading = "Notes",
+            emptyText = "Notes you add appear here",
+        )
+    }
+}
+
+// Mirrors the in-app note card colours (day/night variants).
+private fun noteCardBackground(name: String): ColorProvider = when (name) {
+    "yellow" -> dayNight(Color(0xFFFFF5B8), Color(0xFF4D4019))
+    "green" -> dayNight(Color(0xFFD1F2D6), Color(0xFF1F452E))
+    "blue" -> dayNight(Color(0xFFD1E8FF), Color(0xFF1F3857))
+    "pink" -> dayNight(Color(0xFFFFDBE8), Color(0xFF522438))
+    "purple" -> dayNight(Color(0xFFE8DBFF), Color(0xFF3D2B57))
+    else -> dayNight(Color(0xFFF2F2F4), Color(0xFF29292E))
+}
+
+private fun noteDotColor(name: String): ColorProvider = when (name) {
+    "yellow" -> solid(Color(0xFFF2C230))
+    "green" -> solid(Color(0xFF34C759))
+    "blue" -> solid(Color(0xFF3B82F6))
+    "pink" -> solid(Color(0xFFF472B6))
+    "purple" -> solid(Color(0xFFA78BFA))
+    else -> solid(Color(0xFF9CA3AF))
+}
+
+class NotesWidget : GlanceAppWidget() {
+    companion object {
+        private val SMALL = DpSize(110.dp, 110.dp)
+        private val MEDIUM = DpSize(250.dp, 110.dp)
+        private val TALL = DpSize(250.dp, 250.dp)
+    }
+
+    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, MEDIUM, TALL))
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val payload = WidgetNotesPayload.load(context)
+        provideContent { NotesContent(payload) }
+    }
+}
+
+// Tapping the widget lands directly on the Notes section (same pending-route
+// mechanism the launcher shortcut uses).
+class OpenNotesAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val intent = android.content.Intent(context, MainActivity::class.java).apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra("studio_open_notes", true)
+        }
+        context.startActivity(intent)
+    }
+}
+
+@Composable
+private fun NotesContent(payload: WidgetNotesPayload) {
+    val size = LocalSize.current
+    val compact = size.width < 200.dp
+    val rows = if (size.height >= 200.dp) 7 else 3
+    val visible = payload.notes.take(rows)
+    WidgetShell {
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .clickable(actionRunCallback<OpenNotesAction>())
+        ) {
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    payload.heading,
+                    style = TextStyle(color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                    maxLines = 1,
+                )
+                Spacer(modifier = GlanceModifier.defaultWeight())
+                WidgetLogoBadge()
+            }
+            if (visible.isEmpty()) {
+                Spacer(modifier = GlanceModifier.defaultWeight())
+                Text(
+                    payload.emptyText,
+                    style = TextStyle(color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                )
+                Spacer(modifier = GlanceModifier.defaultWeight())
+            } else {
+                visible.forEach { note ->
+                    Spacer(modifier = GlanceModifier.height(5.dp))
+                    NoteRow(note, compact)
+                }
+                Spacer(modifier = GlanceModifier.defaultWeight())
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoteRow(note: WidgetNote, compact: Boolean) {
+    val titleLine = note.title.trim().ifBlank { note.text.trim() }
+    val detailLine = if (note.title.trim().isBlank()) "" else note.text.trim()
+    Row(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .background(noteCardBackground(note.colorName))
+            .rounded(8.dp)
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("●", style = TextStyle(color = noteDotColor(note.colorName), fontSize = 8.sp))
+        Spacer(modifier = GlanceModifier.width(6.dp))
+        Column {
+            Text(
+                (if (note.isPinned) "📌 " else "") + titleLine.ifBlank { "—" },
+                style = TextStyle(
+                    color = TextPrimary,
+                    fontSize = if (compact) 11.sp else 12.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+                maxLines = 1,
+            )
+            if (!compact && detailLine.isNotBlank()) {
+                Text(
+                    detailLine,
+                    style = TextStyle(color = TextSecondary, fontSize = 10.sp),
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+class NotesWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = NotesWidget()
 }

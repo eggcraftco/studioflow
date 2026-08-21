@@ -70,6 +70,17 @@ class MainActivity : ComponentActivity() {
                 intent?.getStringExtra("studio_order_card").orEmpty().ifBlank { "shipping" }
             )
         }
+        // Launcher shortcut (long-press app icon → "New note"). The extra arrives
+        // as a string on some launchers, so accept both representations.
+        val newNote = intent?.getBooleanExtra("studio_new_note", false) == true ||
+            intent?.getStringExtra("studio_new_note") == "true"
+        if (newNote) {
+            StudioMessageRouteHolder.setPendingNewNote()
+        }
+        // Notes widget tapped: land on the Notes section (no editor).
+        if (intent?.getBooleanExtra("studio_open_notes", false) == true) {
+            StudioMessageRouteHolder.setPendingOpenNotes()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

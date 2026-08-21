@@ -23,6 +23,51 @@ import java.util.Date
 object WidgetSummaryBridge {
     const val PREFS_NAME = "nivadesk_widget_summary"
     const val PAYLOAD_KEY = "payloadV1"
+    const val NOTES_PAYLOAD_KEY = "notesPayloadV1"
+
+    // Snapshot of the user's Keep notes for the home-screen Notes widget —
+    // counterpart of WidgetNotesBridge in EGGcraft/WidgetSummaryBridge.swift.
+    // Published whenever the notes flow delivers data; blanked on sign-out.
+    suspend fun publishNotes(
+        context: Context,
+        notes: List<uk.co.eggcraft.studioflow.data.model.StudioKeepNote>,
+        settings: StudioWorkspaceSettings
+    ) {
+        val lang = settings.selectedLanguage.ifBlank { "English" }
+        val visible = notes
+            .filter { !it.isDeleted && !it.isArchived }
+            .sortedWith(
+                compareByDescending<uk.co.eggcraft.studioflow.data.model.StudioKeepNote> { it.isPinned }
+                    .thenByDescending { it.manualOrder }
+                    .thenByDescending { it.updatedAt?.time ?: 0L }
+            )
+            .take(12)
+
+        val notesJson = JSONArray()
+        visible.forEach { note ->
+            notesJson.put(
+                JSONObject().apply {
+                    put("id", note.id)
+                    put("title", note.title)
+                    put("text", note.text)
+                    put("colorName", note.colorName)
+                    put("isPinned", note.isPinned)
+                }
+            )
+        }
+        val payload = JSONObject().apply {
+            put("notes", notesJson)
+            put("heading", studioT("Notes", lang))
+            put("emptyText", studioT("Notes you add appear here", lang))
+        }
+
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(NOTES_PAYLOAD_KEY, payload.toString())
+            .apply()
+
+        NotesWidget().updateAll(context)
+    }
 
     // StudioFlowMainScreen's header prefs — where the eye toggle persists.
     private const val HEADER_PREFS_NAME = "studioflow_header"

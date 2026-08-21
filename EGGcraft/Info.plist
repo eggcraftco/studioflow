@@ -28,6 +28,26 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<!-- The app localizes all UI through its own translation engine (DilMotoru),
+	     so there are no .lproj bundles. Declare the supported languages here so
+	     the system and the App Store "Languages" row reflect them. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>tr</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>it</string>
+		<string>es</string>
+		<string>pt</string>
+		<string>ru</string>
+		<string>ja</string>
+		<string>zh</string>
+		<string>ar</string>
+		<string>hi</string>
+	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.business</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

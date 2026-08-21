@@ -1,10 +1,15 @@
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { deleteDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
 import { db } from "@/lib/firebase/client";
 import { getApp } from "firebase/app";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
+
+// Persisted so the registration can be removed on sign-out even after a page
+// reload (module state does not survive navigation).
+const LAST_TOKEN_KEY = "pushDeviceTokenLastSavedV1";
+const LAST_COMPANY_KEY = "pushDeviceTokenCompanyLastSavedV1";
 
 function sanitizeTokenForDocId(token: string): string {
   return token.replace(/\//g, "_").replace(/\+/g, "-").replace(/:/g, "_");
@@ -66,6 +71,13 @@ export async function registerWebPush(
       { merge: true },
     );
 
+    try {
+      window.localStorage.setItem(LAST_TOKEN_KEY, token);
+      window.localStorage.setItem(LAST_COMPANY_KEY, workspace.id);
+    } catch {
+      /* private mode — cleanup on sign-out just becomes a no-op */
+    }
+
     // Foreground push: show a browser notification ourselves
     onMessage(messaging, (payload) => {
       const title = payload.notification?.title || payload.data?.title || "New message";
@@ -76,5 +88,26 @@ export async function registerWebPush(
     });
   } catch (err) {
     console.warn("[push] registration failed:", err);
+  }
+}
+
+/**
+ * Delete this browser's push registration from the company it was last saved
+ * under. Must run BEFORE signOut(): the Firestore rule for deviceTokens
+ * requires the caller to still be a signed-in member of that company. Without
+ * cleanup the token stays enabled under the old company and the browser keeps
+ * receiving that workspace's pushes after switching accounts.
+ */
+export async function unregisterWebPush(): Promise<void> {
+  try {
+    if (typeof window === "undefined") return;
+    const token = window.localStorage.getItem(LAST_TOKEN_KEY) ?? "";
+    const companyId = window.localStorage.getItem(LAST_COMPANY_KEY) ?? "";
+    if (!token || !companyId) return;
+    await deleteDoc(doc(db, "companies", companyId, "deviceTokens", sanitizeTokenForDocId(token)));
+    window.localStorage.removeItem(LAST_TOKEN_KEY);
+    window.localStorage.removeItem(LAST_COMPANY_KEY);
+  } catch (err) {
+    console.warn("[push] unregister failed:", err);
   }
 }

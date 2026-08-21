@@ -83,6 +83,10 @@ struct StudioManagerApp: App {
         Self.closeOlderDebugInstancesBeforeFirebaseStarts()
         #endif
 
+        // First launch on this device: default the app language to the device
+        // locale (runs before any view reads "seciliDil"; a stored choice wins).
+        seedStudioLanguageFromDeviceIfNeeded()
+
         AppCheck.setAppCheckProviderFactory(StudioAppCheckProviderFactory())
         FirebaseApp.configure()
         #if os(iOS)

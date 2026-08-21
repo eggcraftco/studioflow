@@ -2385,6 +2385,17 @@ class AuthViewModel: ObservableObject {
     }
 
     func logout() {
+        // Remove this device's push registration while the session is still
+        // authenticated; after signOut() the Firestore rules reject the delete
+        // and the device would keep receiving the old workspace's pushes.
+        PushNotificationManager.shared.unregisterStoredDeviceToken { [weak self] in
+            self?.finishLogout()
+        }
+    }
+
+    private func finishLogout() {
+        // Blank the home-screen Notes widget so notes don't outlive the session.
+        WidgetNotesBridge.clear()
         do {
             stopRealtimeWorkspaceListeners()
             try Auth.auth().signOut()

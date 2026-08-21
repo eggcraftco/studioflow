@@ -190,3 +190,62 @@ enum WidgetSummaryBridge {
         }
     }
 }
+
+// MARK: - Notes widget bridge
+//
+// Snapshot of the user's Keep notes for the home-screen Notes widget. Written
+// whenever the Notes screen's live listener delivers data (and cleared on
+// logout). `WidgetNotesPayload` is duplicated in NivaDeskWidgets — keep in sync.
+
+struct WidgetNotesPayload: Codable {
+    struct Note: Codable {
+        var id: String
+        var title: String
+        var text: String
+        var colorName: String
+        var isPinned: Bool
+    }
+
+    var notes: [Note]
+    var heading: String
+    var emptyText: String
+    var updatedAt: Date
+
+    static let payloadKey = "nivadeskWidgetNotesV1"
+}
+
+enum WidgetNotesBridge {
+    static func publish(notes: [StudioKeepNote], language: String) {
+        guard let defaults = UserDefaults(suiteName: WidgetSummaryBridge.appGroupId) else { return }
+
+        let visible = notes
+            .filter { !$0.isDeleted && !$0.isArchived }
+            .sorted { a, b in
+                if a.isPinned != b.isPinned { return a.isPinned }
+                if a.manualOrder != b.manualOrder { return a.manualOrder > b.manualOrder }
+                return a.updatedAt > b.updatedAt
+            }
+            .prefix(12)
+            .map { WidgetNotesPayload.Note(id: $0.id, title: $0.title, text: $0.text, colorName: $0.colorName, isPinned: $0.isPinned) }
+
+        let payload = WidgetNotesPayload(
+            notes: Array(visible),
+            heading: t("Notes", lang: language),
+            emptyText: t("Notes you add appear here", lang: language),
+            updatedAt: Date()
+        )
+
+        guard let encoded = try? JSONEncoder().encode(payload) else { return }
+        defaults.set(encoded, forKey: WidgetNotesPayload.payloadKey)
+
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "NivaDeskNotesWidget")
+        #endif
+    }
+
+    // Blank the widget on sign-out so notes never outlive the session on the
+    // home screen (same policy as the finance widgets).
+    static func clear() {
+        publish(notes: [], language: UserDefaults.standard.string(forKey: "seciliDil") ?? "English")
+    }
+}

@@ -19,7 +19,7 @@ class StudioMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         val companyId = StudioMessageRouteHolder.currentCompanyId()
         if (companyId.isNotBlank()) {
-            StudioMessageRouteHolder.saveDeviceToken(companyId, token)
+            StudioMessageRouteHolder.saveDeviceToken(companyId, token, this)
         }
     }
 
