@@ -78,6 +78,15 @@ function effectiveCategory(tx: BankTransaction) {
   return tx.category || tx.categoryAuto || "";
 }
 
+// Rule-keyword suggestion: the first meaningful word of the merchant name
+// ("AMAZON MKTPLC AMZN.CO.UK*123" → "amazon"), so the rule catches every
+// variant instead of only the exact string.
+function suggestRuleKeyword(tx: BankTransaction): string {
+  const base = (tx.counterparty || tx.description).trim().toLowerCase();
+  const word = base.split(/[\s*,/]+/).find(part => part.replace(/[^a-zç-ü]/gi, "").length >= 3);
+  return (word || base).replace(/[^\p{L}\p{N}. -]/gu, "").slice(0, 60);
+}
+
 function toDate(value: unknown): Date | null {
   const v = value as { toDate?: () => Date } | null | undefined;
   return v && typeof v.toDate === "function" ? v.toDate() : null;
@@ -109,6 +118,7 @@ function BankPageContent() {
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
+  const [categoryRuleKeyword, setCategoryRuleKeyword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -358,7 +368,7 @@ function BankPageContent() {
     setBusy(`cat-${transaction.id}`);
     setError(null);
     setCategoryPickerTxId(null);
-    const keyword = (transaction.counterparty || transaction.description).trim().toLowerCase().slice(0, 120);
+    const keyword = categoryRuleKeyword.trim().toLowerCase().slice(0, 120);
     try {
       await call("bankSetTransactionCategory", { transactionId: transaction.id, category });
       if (categoryMakeRule && category && keyword.length >= 2) {
@@ -727,6 +737,7 @@ function BankPageContent() {
                                   setCategoryPickerTxId(current => current === transaction.id ? null : transaction.id);
                                   setCategoryMakeRule(false);
                                   setCategoryCustomText("");
+                                  setCategoryRuleKeyword(suggestRuleKeyword(transaction));
                                 }}
                                 style={category ? {
                                   border: 0, cursor: "pointer", fontSize: 10, fontWeight: 700, borderRadius: 999,
@@ -814,12 +825,15 @@ function BankPageContent() {
                               if (event.key === "Escape") setCategoryPickerTxId(null);
                             }}
                             style={{ flex: "1 1 140px", fontSize: 12, padding: "5px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }} />
-                          {(transaction.counterparty || transaction.description).trim().length >= 2 ? (
-                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, cursor: "pointer" }}>
-                              <input type="checkbox" checked={categoryMakeRule} onChange={event => setCategoryMakeRule(event.target.checked)} />
-                              {t("Always apply to")} "{(transaction.counterparty || transaction.description).trim().slice(0, 30)}"
-                            </label>
-                          ) : null}
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, cursor: "pointer", flexWrap: "wrap" }}>
+                            <input type="checkbox" checked={categoryMakeRule} onChange={event => setCategoryMakeRule(event.target.checked)} />
+                            {t("Rule: whenever it contains")}
+                            <input type="text" value={categoryRuleKeyword}
+                              onChange={event => { setCategoryRuleKeyword(event.target.value); if (event.target.value.trim().length >= 2) setCategoryMakeRule(true); }}
+                              onClick={event => event.stopPropagation()}
+                              placeholder={t("keyword")}
+                              style={{ width: 110, fontSize: 11.5, fontWeight: 700, padding: "3px 7px", borderRadius: 6, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }} />
+                          </label>
                           <button type="button" className="finance-payments-delete" onClick={() => setCategoryPickerTxId(null)} aria-label={t("Close")}>✕</button>
                         </div>
                       </div>
