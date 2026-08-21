@@ -1,0 +1,5 @@
+• Shopify-Integration: Bestellungen aus Ihrem Shopify-Shop fließen jetzt automatisch in NivaDesk.
+• Widgets: überarbeitete Home-Bildschirm-Widgets, darunter ein neues Notizen-Widget.
+• Schnellnotiz: App-Symbol gedrückt halten, um eine neue Notiz zu beginnen.
+• Die App startet beim ersten Öffnen in Ihrer Gerätesprache (12 Sprachen).
+• Fehlerbehebungen und Leistungsverbesserungen.

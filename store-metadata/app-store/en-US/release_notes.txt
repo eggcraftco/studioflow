@@ -1,4 +1,5 @@
-• Full 12-language support across every settings and workflow screen.
-• Industry-aware workflow descriptions that update when you change your trade.
-• Polished dark mode with the premium NivaDesk logo.
-• Stability and performance improvements.
+• Shopify integration: orders from your Shopify store now flow into NivaDesk automatically.
+• Widgets: refreshed home-screen widgets, including a new Notes widget.
+• Quick note: press and hold the app icon to start a new note.
+• The app now opens in your device language on first launch (12 languages).
+• Bug fixes and performance improvements.
