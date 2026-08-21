@@ -204,3 +204,56 @@ export function suggestCategory(
   }
   return null;
 }
+
+// ---- Order link suggestions -------------------------------------------------
+// Which order a spend probably belongs to: orders that were open around the
+// booking date, boosted by name/customer words appearing in the bank line.
+
+export type OrderCandidate = { id: string; customerName: string; designName: string; status: string; paymentDate: Date | null };
+export type OrderLinkSuggestion = { orderId: string; label: string; confidence: number };
+
+const ORDER_UNRELATED_CATEGORIES = new Set(["Subscriptions", "Software", "Fees", "Rent", "Utilities", "Tax", "Staff", "Marketing"]);
+
+export function rankOrdersForTransaction(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  orders: OrderCandidate[]
+): Array<{ order: OrderCandidate; score: number }> {
+  if (!tx.bookingDate) return orders.map(order => ({ order, score: 0 }));
+  const txTime = parseDay(tx.bookingDate);
+  const words = new Set(`${tx.counterparty} ${tx.description}`.toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length >= 4));
+  const open = orders.filter(order => {
+    if (/cancel/i.test(order.status) || !order.paymentDate) return false;
+    const days = (txTime - order.paymentDate.getTime()) / DAY_MS;
+    return days >= -7 && days <= 60; // created up to 60 days before the spend (or a week after)
+  });
+  const openIds = new Set(open.map(order => order.id));
+  const ranked = orders.map(order => {
+    let score = 0;
+    if (openIds.has(order.id) && order.paymentDate) {
+      const days = Math.abs((txTime - order.paymentDate.getTime()) / DAY_MS);
+      score = days <= 7 ? 30 : days <= 14 ? 20 : days <= 30 ? 10 : 5;
+      // Few orders open at the time → the spend is probably for one of them.
+      if (open.length === 1) score += 25; else if (open.length <= 3) score += 15;
+    }
+    const orderWords = `${order.customerName} ${order.designName}`.toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length >= 4);
+    const overlap = orderWords.filter(word => words.has(word)).length;
+    score += Math.min(2, overlap) * 30;
+    return { order, score };
+  });
+  return ranked.sort((a, b) => b.score - a.score || (b.order.paymentDate?.getTime() ?? 0) - (a.order.paymentDate?.getTime() ?? 0));
+}
+
+export function suggestOrderLink(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  orders: OrderCandidate[]
+): OrderLinkSuggestion | null {
+  if (tx.amount >= 0 || !tx.bookingDate) return null;
+  const category = tx.category || tx.categoryAuto || "";
+  if (ORDER_UNRELATED_CATEGORIES.has(category)) return null;
+  const best = rankOrdersForTransaction(tx, orders)[0];
+  if (!best || best.score < 40) return null;
+  const label = best.order.designName && best.order.designName !== "Untitled design"
+    ? `${best.order.customerName} · ${best.order.designName}`
+    : best.order.customerName;
+  return { orderId: best.order.id, label, confidence: Math.min(0.95, best.score / 100) };
+}

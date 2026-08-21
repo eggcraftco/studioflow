@@ -15,7 +15,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
-import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, suggestCategory, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
@@ -388,6 +388,16 @@ function BankPageContent() {
 
   // ---- Link a spending transaction to an order's expenses -----------------
 
+  useEffect(() => {
+    if (!isOwner || !workspace || orderOptions !== null || transactions.length === 0) return;
+    let cancelled = false;
+    loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? "")
+      .then(options => { if (!cancelled) setOrderOptions(options); })
+      .catch(() => { if (!cancelled) setOrderOptions([]); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner, workspace, companyId, transactions.length]);
+
   async function openLinkPicker(transactionId: string) {
     setLinkPickerTxId(transactionId);
     setOrderSearch("");
@@ -565,8 +575,11 @@ function BankPageContent() {
     const list = term
       ? orderOptions.filter(order => `${order.customerName} ${order.designName}`.toLowerCase().includes(term))
       : orderOptions;
-    return list.slice(0, 25);
-  }, [orderOptions, orderSearch]);
+    // Orders open around the transaction's date float to the top of the picker.
+    const target = linkPickerTxId ? transactions.find(item => item.id === linkPickerTxId) : null;
+    const ordered = target ? rankOrdersForTransaction(target, list).map(item => item.order) : list;
+    return ordered.slice(0, 25);
+  }, [orderOptions, orderSearch, linkPickerTxId, transactions]);
 
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
   const weekStartIso = isoDay(weekStart);
@@ -727,6 +740,16 @@ function BankPageContent() {
   }
   const recurringKeys = useMemo(() => new Set(recurring.filter(item => item.active).map(item => item.key)), [recurring]);
   const fixedMonthly = useMemo(() => monthlyFixedTotal(recurring), [recurring]);
+  // Order link suggestions for unlinked spending (skips subscriptions & overheads).
+  const orderSuggestions = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof suggestOrderLink>>();
+    if (!orderOptions || orderOptions.length === 0) return map;
+    for (const tx of transactions) {
+      if (tx.amount >= 0 || tx.linkedOrderId || recurringKeys.has(recurringMerchantKey(tx))) continue;
+      map.set(tx.id, suggestOrderLink(tx, orderOptions));
+    }
+    return map;
+  }, [transactions, orderOptions, recurringKeys]);
 
   const currency0 = transactions[0]?.currency || "GBP";
   const incomingTotal = useMemo(() => visibleTransactions
@@ -1226,7 +1249,16 @@ function BankPageContent() {
                                       </span>
                                       {transaction.linkedOrderId ? (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: "#2563eb" }}>⛓ {transaction.linkedOrderLabel || t("Order")}</span>
-                                      ) : null}
+                                      ) : isOwner && orderSuggestions.get(transaction.id) ? (() => {
+                                        const hint = orderSuggestions.get(transaction.id)!;
+                                        return (
+                                          <button type="button" disabled={busy === `link-${transaction.id}`} onClick={() => void linkToOrder(transaction, hint.orderId)}
+                                            title={`${t("Likely related to this order")} · ${Math.round(hint.confidence * 100)}%`}
+                                            style={{ border: "1px dashed #2563eb", cursor: "pointer", fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "1px 8px", background: "transparent", color: "#2563eb", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "left" }}>
+                                            ⛓ {hint.label}? ✓
+                                          </button>
+                                        );
+                                      })() : null}
                                     </span>
                                   </span>
                                 </td>
