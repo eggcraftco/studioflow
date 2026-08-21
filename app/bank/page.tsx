@@ -974,7 +974,6 @@ function BankPageContent() {
 
         {/* ---- Header ------------------------------------------------------ */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <span aria-hidden="true" style={{ width: 46, height: 46, borderRadius: 12, border: "1.5px solid rgba(120,120,140,0.3)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🏛</span>
           <div style={{ flex: 1, minWidth: 220 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>{t("Banking")}</h1>
             <p style={{ margin: 0, fontSize: 12.5, opacity: 0.65 }}>{t("Read-only Open Banking feed — NivaDesk can never move money.")}</p>
@@ -1060,50 +1059,54 @@ function BankPageContent() {
 
         {canViewBank ? (
           <>
-            {/* ---- Connection pills --------------------------------------- */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              {connections.map(connection => (
-                <div key={connection.id} style={{ ...bankCard, padding: "10px 16px", display: "inline-flex", alignItems: "center", gap: 12, opacity: connection.status === "linked" ? 1 : 0.75 }}>
-                  {connection.providerLogo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={connection.providerLogo} alt="" width={34} height={34} style={{ borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)" }} />
-                  ) : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <strong style={{ fontSize: 13.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{connection.providerName || t("Bank")}</strong>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: connection.status === "linked" ? "#16a34a" : "#b45309" }}>
-                        <span style={{ width: 6, height: 6, borderRadius: 999, background: connection.status === "linked" ? "#16a34a" : "#f59e0b", display: "inline-block" }} />
-                        {connection.status === "linked" ? t("Connected") : t("Waiting for bank consent…")}
-                      </span>
+            {/* ---- Connected account bar ---------------------------------- */}
+            {connections.length > 0 ? (
+              <div style={{ ...bankCard, padding: "12px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                {connections.map((connection, index) => (
+                  <div key={connection.id} style={{ display: "flex", alignItems: "center", gap: 12, opacity: connection.status === "linked" ? 1 : 0.75, paddingLeft: index > 0 ? 14 : 0, borderLeft: index > 0 ? "1px solid rgba(120,120,140,0.18)" : undefined }}>
+                    {connection.providerLogo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={connection.providerLogo} alt="" width={34} height={34} style={{ borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)" }} />
+                    ) : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <strong style={{ fontSize: 13.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{connection.providerName || t("Bank")}</strong>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: connection.status === "linked" ? "#16a34a" : "#b45309" }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: connection.status === "linked" ? "#16a34a" : "#f59e0b", display: "inline-block" }} />
+                          {connection.status === "linked" ? t("Connected") : t("Waiting for bank consent…")}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.6 }}>
+                        {connection.lastSyncedAt ? `${t("Last sync")} ${connection.lastSyncedAt.toLocaleString()}` : ""}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.6 }}>
-                      {connection.lastSyncedAt ? `${t("Last sync")} ${connection.lastSyncedAt.toLocaleString()}` : ""}
-                    </div>
+                    {isOwner ? (
+                      <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
+                        onClick={() => void removeConnection(connection)} aria-label={t("Disconnect")} title={t("Disconnect")}
+                        style={{ opacity: 0.4 }}>✕</button>
+                    ) : null}
                   </div>
-                  <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
-                    onClick={() => void removeConnection(connection)} aria-label={t("Disconnect")} title={t("Disconnect")}
-                    style={{ opacity: 0.5 }}>✕</button>
-                </div>
-              ))}
-              {linkedBanks.length > 0 ? (
-                <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === "connect"} onClick={() => void connectBank()} title={t("Connect bank")}>＋</button>
-              ) : null}
-            </div>
+                ))}
+                <span style={{ flex: 1 }} />
+                {isOwner && linkedBanks.length > 0 ? (
+                  <button type="button" style={bankBtnSm} disabled={busy === "connect"} onClick={() => void connectBank()}>＋ {t("Add account")}</button>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* ---- Tabs + period control ---------------------------------- */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid rgba(120,120,140,0.18)" }}>
               <div role="tablist" aria-label={t("Banking sections")} style={{ display: "flex", gap: 2 }}>
                 {([
-                  ["overview", t("Overview"), 0],
-                  ["transactions", t("Transactions"), attention.uncategorised],
-                  ["recurring", t("Recurring"), cancelledRecurring.length],
-                  ["receipts", t("Receipts"), receiptStats.missing],
-                  ["rules", t("Rules"), suggestedRules.length]
-                ] as const).map(([key, label, badge]) => (
+                  ["overview", t("Overview")],
+                  ["transactions", t("Transactions")],
+                  ["recurring", t("Recurring")],
+                  ["receipts", t("Receipts")],
+                  ["rules", t("Rules")]
+                ] as const).map(([key, label]) => (
                   <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
-                    style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "8px 12px", cursor: "pointer", marginBottom: -1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1 }}>
                     {label}
-                    {badge ? <span style={{ fontSize: 10, fontWeight: 800, background: tab === key ? "rgba(37,99,235,0.14)" : "rgba(120,120,140,0.16)", borderRadius: 999, padding: "1px 6px" }}>{badge}</span> : null}
                   </button>
                 ))}
               </div>
@@ -1117,7 +1120,7 @@ function BankPageContent() {
                   </button>
                 ))}
               </div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
                 <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
                 <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
                 <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
@@ -1137,176 +1140,233 @@ function BankPageContent() {
             {/* ================= OVERVIEW ================= */}
             {transactions.length > 0 && tab === "overview" ? (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
-                  <div style={bankCard}>
-                    <p style={tileLabel}>{t("Total spent")} — {periodLabel}</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
+                  <div style={statTile}>
+                    <p style={tileLabel}>{t("Total spent")}</p>
                     <strong style={tileValue}>{money(spentTotal, currency0)}</strong>
                     {spentDelta !== null ? (
                       <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#6b7280" }}>
                         {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {deltaLabel}
                       </span>
-                    ) : null}
-                    <div style={{ marginTop: 8 }}>
+                    ) : <span style={{ fontSize: 11.5, opacity: 0.6 }}>{t("First month of data")}</span>}
+                    <div style={{ marginTop: "auto", paddingTop: 10 }}>
                       <BankMiniSpark values={spentSeries} color="#16a34a" />
                     </div>
+                    <TileIcon bg="rgba(22,163,74,0.12)">📈</TileIcon>
                   </div>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#ea770b" }}>{t("Recurring spending")}</p>
-                    <strong style={tileValue}>≈ {money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("active")}{cancelledRecurring.length ? ` · ${cancelledRecurring.length} ${t("possibly cancelled")}` : ""}</span>
-                    <TileIcon bg="rgba(234,119,11,0.12)">↻</TileIcon>
-                  </div>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Incoming")} — {periodLabel}</p>
+                  <div style={statTile}>
+                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Incoming")}</p>
                     <strong style={{ ...tileValue, color: "#16a34a" }}>+{money(incomingTotal, currency0)}</strong>
                     <span style={{ fontSize: 11.5, opacity: 0.65 }}>↗ {incomingCount} {t("payments received")}</span>
-                    <button type="button" onClick={showIncoming} style={{ ...cardFootLink, display: "block", padding: "6px 0 0", fontSize: 12 }}>{t("View all incoming")} →</button>
+                    <button type="button" onClick={showIncoming} style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12 }}>{t("View all incoming")} →</button>
                     <TileIcon bg="rgba(22,163,74,0.12)">↗</TileIcon>
                   </div>
-                  <div style={bankCard}>
+                  <div style={statTile}>
+                    <p style={{ ...tileLabel, color: "#ea770b" }}>{t("Recurring spend")}</p>
+                    <strong style={tileValue}>{money(fixedMonthly, currency0)} <span style={tileUnit}>/ {t("month")}</span></strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↻ {activeRecurring.length} {t("recurring items")}</span>
+                    <button type="button" onClick={() => setTab("recurring")} style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12 }}>{t("View recurring")} →</button>
+                    <TileIcon bg="rgba(234,119,11,0.12)">📅</TileIcon>
+                  </div>
+                  <div style={statTile}>
                     <p style={{ ...tileLabel, color: attention.total ? "#b45309" : "#16a34a" }}>{t("Needs attention")}</p>
-                    <strong style={tileValue}>{attention.total}</strong>
+                    <strong style={tileValue}>{attention.total} <span style={tileUnit}>{t("items")}</span></strong>
                     {attention.total === 0 ? (
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>✓ {t("All clear for this period")}</span>
                     ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11.5 }}>
-                        {attention.uncategorised ? <button type="button" onClick={() => showAttention("uncategorised")} style={attentionLink}>{attention.uncategorised} {t("uncategorised")} →</button> : null}
-                        {attention.noReceipt ? <button type="button" onClick={() => showAttention("noReceipt")} style={attentionLink}>{attention.noReceipt} {t("missing receipts")} →</button> : null}
-                        {attention.duplicates ? <button type="button" onClick={() => showAttention("duplicate")} style={attentionLink}>{attention.duplicates} {t("possible duplicates")} →</button> : null}
-                        {attention.priceChanged ? <span style={{ opacity: 0.8 }}>{attention.priceChanged} {t("price changed")}</span> : null}
-                        {attention.cancelled ? <span style={{ opacity: 0.8 }}>{attention.cancelled} {t("possibly cancelled")}</span> : null}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1, fontSize: 11.5, opacity: 0.85 }}>
+                        {attention.uncategorised ? <span>• {attention.uncategorised} {t("uncategorised")}</span> : null}
+                        {attention.noReceipt ? <span>• {attention.noReceipt} {t("missing receipts")}</span> : null}
+                        {attention.duplicates ? <span>• {attention.duplicates} {t("possible duplicates")}</span> : null}
+                        {suggestedRules.length ? <span>• {suggestedRules.length} {t("rule suggestions")}</span> : null}
                       </div>
                     )}
-                    <TileIcon bg={attention.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attention.total ? "!" : "✓"}</TileIcon>
+                    {attention.total ? (
+                      <button type="button" onClick={() => showAttention(attention.uncategorised ? "uncategorised" : "noReceipt")}
+                        style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12, color: "#dc2626" }}>{t("Review now")} →</button>
+                    ) : null}
+                    <TileIcon bg={attention.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attention.total ? "⚠" : "✓"}</TileIcon>
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, alignItems: "start" }}>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
+                  <div style={{ ...bankCard, display: "flex", flexDirection: "column" }}>
+                    <div style={cardHead}>
                       <TileBadge bg="rgba(37,99,235,0.1)">◔</TileBadge>
-                      <strong style={{ fontSize: 14.5 }}>{periodLabel} {t("spending mix")}</strong>
+                      <strong style={cardTitle}>{t("Spending mix")}</strong>
                     </div>
-                    <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                       <BankDonut rows={categoryBreakdown.rows} total={categoryBreakdown.total}
                         centerLabel={t("Total spent")} centerValue={money(categoryBreakdown.total, currency0)}
                         uncategorisedLabel={t("Uncategorised")} translate={t} />
-                      <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
-                        {(showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 4)).map(row => {
+                      <div style={{ flex: 1, minWidth: 190, display: "flex", flexDirection: "column" }}>
+                        {(showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 5)).map(row => {
                           const isUn = row.name === "__uncategorized__";
                           const color = isUn ? "#5b6ee8" : categoryColor(row.name);
                           return (
-                            <div key={row.name} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, border: "1px solid rgba(120,120,140,0.16)", borderRadius: 9, padding: "7px 11px" }}>
-                              <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block" }} />
-                              <span style={{ flex: 1, fontWeight: 650 }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
+                            <div key={row.name} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, padding: "5px 0" }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block", flexShrink: 0 }} />
+                              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
                               <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
-                              <span style={{ opacity: 0.5, minWidth: 32, textAlign: "right" }}>{row.share.toFixed(0)}%</span>
+                              <span style={{ opacity: 0.5, minWidth: 30, textAlign: "right" }}>{row.share.toFixed(0)}%</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                     {(() => {
-                      const shownRows = showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 4);
-                      const shownTotal = shownRows.reduce((acc, row) => acc + row.amount, 0);
-                      const hidden = Math.max(0, categoryBreakdown.total - shownTotal);
+                      const shownRows = showAllCats ? categoryBreakdown.rows : categoryBreakdown.rows.slice(0, 5);
+                      const hidden = Math.max(0, categoryBreakdown.total - shownRows.reduce((acc, row) => acc + row.amount, 0));
                       const unRow = categoryBreakdown.rows.find(row => row.name === "__uncategorized__");
                       const unShare = unRow && categoryBreakdown.total > 0 ? (unRow.amount / categoryBreakdown.total) * 100 : 0;
                       return (
-                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, fontSize: 11.5, opacity: 0.8 }}>
-                          <span>
-                            {hidden > 0.005
-                              ? `${money(hidden, currency0)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`
-                              : `${money(categoryBreakdown.total, currency0)} ${t("of")} ${money(categoryBreakdown.total, currency0)} ${t("accounted for")}`}
-                          </span>
+                        <div style={{ marginTop: "auto", paddingTop: 10, borderTop: "1px solid rgba(120,120,140,0.14)", display: "flex", flexDirection: "column", gap: 7, fontSize: 11.5 }}>
+                          {hidden > 0.005 ? (
+                            <span style={{ opacity: 0.7 }}>
+                              {`${money(hidden, currency0)} ${t("in")} ${categoryBreakdown.rows.length - shownRows.length} ${t("more categories")}`}
+                            </span>
+                          ) : null}
                           {unRow ? (
                             <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                               <span style={{ flex: 1, height: 5, borderRadius: 999, background: "rgba(120,120,140,0.15)", overflow: "hidden" }}>
                                 <span style={{ display: "block", height: "100%", width: `${Math.max(2, 100 - unShare)}%`, background: "#16a34a" }} />
                               </span>
-                              <span>{Math.round(100 - unShare)}% {t("categorised")}</span>
+                              <span style={{ opacity: 0.7 }}>{Math.round(100 - unShare)}% {t("categorised")}</span>
                               <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("Categorise")} {attention.uncategorised} →</button>
                             </span>
+                          ) : null}
+                          {categoryBreakdown.rows.length > 5 ? (
+                            <button type="button" onClick={() => setShowAllCats(value => !value)} style={{ ...attentionLink, fontSize: 12 }}>
+                              {showAllCats ? `${t("Show less")} ←` : `${t("View category breakdown")} →`}
+                            </button>
                           ) : null}
                         </div>
                       );
                     })()}
-                    {categoryBreakdown.rows.length > 4 ? (
-                      <button type="button" onClick={() => setShowAllCats(value => !value)} style={cardFootLink}>
-                        {showAllCats ? `${t("Show less")} ←` : `${t("View category breakdown")} →`}
-                      </button>
-                    ) : null}
                   </div>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                  <div style={{ ...bankCard, display: "flex", flexDirection: "column" }}>
+                    <div style={cardHead}>
                       <TileBadge bg="rgba(234,119,11,0.12)">↻</TileBadge>
-                      <strong style={{ fontSize: 14.5 }}>{t("Top recurring vendors")}</strong>
+                      <strong style={cardTitle}>{t("Top recurring vendors")}</strong>
                       <span style={{ flex: 1 }} />
                       <button type="button" onClick={() => setTab("recurring")} style={{ ...attentionLink, fontSize: 12 }}>{t("View recurring")} →</button>
                     </div>
                     {activeRecurring.slice(0, 5).map(item => (
-                      <div key={item.key} style={recurringRow}>
-                        <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(item.merchant)}22`, color: avatarColor(item.merchant) }}>{initials(item.merchant)}</span>
+                      <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
+                        <span aria-hidden="true" style={{ ...avatarStyle, width: 26, height: 26, fontSize: 10, background: `${avatarColor(item.merchant)}22`, color: avatarColor(item.merchant), flexShrink: 0 }}>{initials(item.merchant)}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
-                          <div style={{ fontSize: 10.5, opacity: 0.6 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</div>
+                          <div style={{ fontSize: 10.5, opacity: 0.55 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</div>
                         </div>
-                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>/{t("month")}</span></span>
+                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.5, fontWeight: 600 }}>/ {t("month")}</span></span>
                       </div>
                     ))}
                     {activeRecurring.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("No recurring payments detected yet.")}</p> : null}
-                    <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 12 }}>
-                      <span><strong style={{ color: "#16a34a", fontSize: 16 }}>{activeRecurring.length}</strong> {t("active")}</span>
-                      <span><strong style={{ color: "#b45309", fontSize: 16 }}>{cancelledRecurring.length}</strong> {t("possibly cancelled")}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto", padding: "9px 12px", borderRadius: 10, background: "rgba(120,120,140,0.08)", fontSize: 12 }}>
+                      <strong style={{ color: "#16a34a", fontSize: 15 }}>{activeRecurring.length}</strong>
+                      <span style={{ opacity: 0.75 }}>{t("Active recurring")}</span>
+                      <span style={{ flex: 1 }} />
+                      <strong style={{ color: "#b45309", fontSize: 15 }}>{cancelledRecurring.length}</strong>
+                      <span style={{ opacity: 0.75 }}>{t("Possibly cancelled")}</span>
                     </div>
                   </div>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                  <div style={{ ...bankCard, display: "flex", flexDirection: "column" }}>
+                    <div style={cardHead}>
                       <TileBadge bg="rgba(37,99,235,0.1)">📎</TileBadge>
-                      <strong style={{ fontSize: 14.5 }}>{t("Receipts summary")}</strong>
-                      <span style={{ flex: 1 }} />
-                      <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>{t("Review receipts")} →</button>
+                      <strong style={cardTitle}>{t("Receipts summary")}</strong>
                     </div>
-                    <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-                      <div><strong style={{ fontSize: 24, color: "#16a34a" }}>{receiptStats.matched}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("Receipts matched")}</div></div>
-                      <div><strong style={{ fontSize: 24, color: receiptStats.missing ? "#dc2626" : "inherit" }}>{receiptStats.missing}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("Missing receipts")}</div></div>
-                      <div><strong style={{ fontSize: 24, opacity: 0.7 }}>{receiptStats.notNeeded}</strong><div style={{ fontSize: 11, opacity: 0.65 }}>{t("No receipt needed")}</div></div>
+                    <div style={{ display: "flex", alignItems: "stretch", textAlign: "center", padding: "10px 0" }}>
+                      <div style={{ flex: 1 }}>
+                        <strong style={{ fontSize: 26, fontWeight: 800, color: "#16a34a", display: "block" }}>{receiptStats.matched}</strong>
+                        <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("Receipts matched")}</div>
+                      </div>
+                      <div style={{ flex: 1, borderLeft: "1px solid rgba(120,120,140,0.14)", borderRight: "1px solid rgba(120,120,140,0.14)" }}>
+                        <strong style={{ fontSize: 26, fontWeight: 800, color: receiptStats.missing ? "#dc2626" : "inherit", display: "block" }}>{receiptStats.missing}</strong>
+                        <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("Missing receipts")}</div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <strong style={{ fontSize: 26, fontWeight: 800, opacity: 0.7, display: "block" }}>{receiptStats.notNeeded}</strong>
+                        <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("No receipt needed")}</div>
+                      </div>
                     </div>
-                    <p style={{ fontSize: 12, opacity: 0.7, margin: "12px 0 0" }}>{t("Keep your records complete — match missing receipts to stay audit-ready.")}</p>
+                    <div style={{ marginTop: "auto", paddingTop: 14 }}>
+                    <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(37,99,235,0.06)" }}>
+                      <strong style={{ fontSize: 12.5, display: "block" }}>{t("Keep your records complete.")}</strong>
+                      <span style={{ fontSize: 12, opacity: 0.7 }}>{t("Match missing receipts to stay audit-ready.")}</span>
+                      <button type="button" onClick={() => setTab("receipts")} style={{ ...bankBtnSm, display: "block", marginTop: 10, background: "var(--surface, #fff)" }}>{t("Review receipts")} →</button>
+                    </div>
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14, alignItems: "start" }}>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 14 }}>
+                  <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                    <div style={{ ...cardHead, padding: "14px 18px 10px", marginBottom: 0 }}>
                       <TileBadge bg="rgba(120,120,140,0.12)">🧾</TileBadge>
-                      <strong style={{ fontSize: 14.5 }}>{t("Recent transactions")}</strong>
+                      <strong style={cardTitle}>{t("Recent transactions")}</strong>
                       <span style={{ flex: 1 }} />
                       <button type="button" onClick={() => setTab("transactions")} style={{ ...attentionLink, fontSize: 12 }}>{t("View all transactions")} →</button>
                     </div>
-                    {visibleTransactions.slice(0, 6).map(tx => (
-                      <div key={tx.id} style={{ ...recurringRow, cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>
-                        <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</span>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, opacity: effectiveCategory(tx) ? 0.9 : 0.5, color: effectiveCategory(tx) ? categoryColor(effectiveCategory(tx)) : "inherit" }}>{tx.amount < 0 ? (effectiveCategory(tx) ? t(effectiveCategory(tx)) : t("Uncategorised")) : t("Incoming")}</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: tx.amount < 0 ? "#dc2626" : "#16a34a" }}>{tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount), tx.currency)}</span>
-                      </div>
-                    ))}
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, tableLayout: "fixed" }}>
+                      <thead>
+                        <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                          <th style={{ ...miniTh, width: 78 }}>{t("Date")}</th>
+                          <th style={miniTh}>{t("Merchant")}</th>
+                          <th style={{ ...miniTh, width: 104, paddingLeft: 4 }}>{t("Category")}</th>
+                          <th style={{ ...miniTh, width: 104, textAlign: "right", paddingRight: 18 }}>{t("Amount")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleTransactions.slice(0, 6).map(tx => {
+                          const rowCategory = effectiveCategory(tx);
+                          return (
+                            <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>
+                              <td style={{ ...miniTd, opacity: 0.6, whiteSpace: "nowrap" }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</td>
+                              <td style={{ ...miniTd, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</td>
+                              <td style={{ ...miniTd, paddingLeft: 4 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "2px 8px", display: "inline-block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", background: tx.amount >= 0 ? "rgba(22,163,74,0.12)" : rowCategory ? `${categoryColor(rowCategory)}1a` : "rgba(120,120,140,0.13)", color: tx.amount >= 0 ? "#16a34a" : rowCategory ? categoryColor(rowCategory) : "inherit" }}>
+                                  {tx.amount >= 0 ? t("Incoming") : rowCategory ? t(rowCategory) : t("Uncategorised")}
+                                </span>
+                              </td>
+                              <td style={{ ...miniTd, paddingLeft: 4, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: tx.amount < 0 ? "#dc2626" : "#16a34a" }}>{tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount), tx.currency)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+
+                  <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                    <div style={{ ...cardHead, padding: "14px 18px 10px", marginBottom: 0 }}>
                       <TileBadge bg="rgba(124,58,237,0.12)">📅</TileBadge>
-                      <strong style={{ fontSize: 14.5 }}>{t("Upcoming payments & renewals")}</strong>
+                      <strong style={cardTitle}>{t("Upcoming payments & renewals")}</strong>
                       <span style={{ flex: 1 }} />
                       <span style={countBadge}>{upcomingRenewals.length}</span>
                     </div>
-                    {upcomingRenewals.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("Nothing expected in the next 30 days.")}</p> : null}
-                    {upcomingRenewals.slice(0, 8).map(item => (
-                      <div key={item.key} style={recurringRow}>
-                        <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)}</span>
-                      </div>
-                    ))}
+                    {upcomingRenewals.length === 0 ? (
+                      <p style={{ fontSize: 12, opacity: 0.65, margin: 0, padding: "0 18px 16px" }}>{t("Nothing expected in the next 30 days.")}</p>
+                    ) : (
+                      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, tableLayout: "fixed" }}>
+                        <thead>
+                          <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                            <th style={{ ...miniTh, width: 78 }}>{t("Date")}</th>
+                            <th style={miniTh}>{t("Merchant")}</th>
+                            <th style={{ ...miniTh, width: 132, textAlign: "right", paddingRight: 18 }}>{t("Amount")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {upcomingRenewals.slice(0, 6).map(item => (
+                            <tr key={item.key} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                              <td style={{ ...miniTd, opacity: 0.6, whiteSpace: "nowrap" }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</td>
+                              <td style={{ ...miniTd, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</td>
+                              <td style={{ ...miniTd, paddingLeft: 4, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.5, fontWeight: 600 }}>/ {t("month")}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
               </>
@@ -2082,6 +2142,13 @@ const bankBtn: React.CSSProperties = {
   borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer"
 };
 const bankBtnSm: React.CSSProperties = { ...bankBtn, padding: "5px 12px", fontSize: 12 };
+// Stat tiles share a min height and push their footer link to the bottom so a
+// row of them lines up however much text each one carries.
+const statTile: React.CSSProperties = { background: "var(--surface, rgba(255,255,255,0.6))", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 14, padding: "16px 18px", position: "relative", display: "flex", flexDirection: "column", minHeight: 148 };
+const cardHead: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 };
+const cardTitle: React.CSSProperties = { fontSize: 14.5, fontWeight: 800 };
+const miniTh: React.CSSProperties = { textAlign: "left", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.5, padding: "7px 18px" };
+const miniTd: React.CSSProperties = { padding: "9px 18px", verticalAlign: "middle" };
 const tileLabel: React.CSSProperties = { margin: 0, fontSize: 12, fontWeight: 700, opacity: 0.75 };
 const tileValue: React.CSSProperties = { fontSize: 25, fontWeight: 800, fontVariantNumeric: "tabular-nums", display: "block", margin: "3px 0 2px" };
 const tileUnit: React.CSSProperties = { fontSize: 12, fontWeight: 600, opacity: 0.55 };
@@ -2134,8 +2201,8 @@ function BankDonut({ rows, total, centerLabel, centerValue, uncategorisedLabel, 
   uncategorisedLabel: string;
   translate: (text: string) => string;
 }) {
-  const size = 190;
-  const stroke = 26;
+  const size = 152;
+  const stroke = 22;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
@@ -2160,7 +2227,7 @@ function BankDonut({ rows, total, centerLabel, centerValue, uncategorisedLabel, 
         offset += fraction * circumference;
         return element;
       }) : null}
-      <text x="50%" y="47%" textAnchor="middle" fontSize="19" fontWeight="800" fill="currentColor">{centerValue}</text>
+      <text x="50%" y="47%" textAnchor="middle" fontSize="17" fontWeight="800" fill="currentColor">{centerValue}</text>
       <text x="50%" y="58%" textAnchor="middle" fontSize="10.5" fill="currentColor" opacity="0.55">{centerLabel}</text>
     </svg>
   );
