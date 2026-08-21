@@ -1267,9 +1267,14 @@ private fun OrderListCard(
                             Spacer(modifier = Modifier.height(1.dp))
                         }
                         if (workspaceSettings.orderCardShowOrderValue && workspace?.canSeeFinancialData == true) {
+                            // Order value = paid + outstanding; amber while a balance is due.
                             Text(
-                                text = moneyAmount(order.paidAmount, hideSensitiveNumbers),
-                                color = if (order.status == "Cancelled") MaterialTheme.colorScheme.onSurfaceVariant else StudioGreen,
+                                text = moneyAmount(order.orderValue, hideSensitiveNumbers),
+                                color = when {
+                                    order.status == "Cancelled" -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    order.remainingAmount + order.customRemainingTotal > 0.009 -> StudioWarningOrange
+                                    else -> StudioGreen
+                                },
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = if (compact) 17.sp else 19.sp,
                                 maxLines = 1,

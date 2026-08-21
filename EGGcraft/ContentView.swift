@@ -11774,9 +11774,13 @@ struct SiparisKarti: View {
                     }
                 }
                 if showOrderValue {
-                    Text(hideSensitiveNumbers ? "\(sembol)••••" : "\(sembol)\(formatFiyat(siparis.paidAmount, ondalik: seciliOndalik))")
+                    // Order value = paid + outstanding. Green once fully paid,
+                    // amber while any balance is still due.
+                    let orderTotal = siparis.salesTotal
+                    let outstanding = (siparis.remainingAmount + siparis.customRemainingTotal) > 0.009
+                    Text(hideSensitiveNumbers ? "\(sembol)••••" : "\(sembol)\(formatFiyat(orderTotal, ondalik: seciliOndalik))")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(siparis.status == "Cancelled" ? .gray : .green)
+                        .foregroundColor(siparis.status == "Cancelled" ? .gray : (outstanding ? .orange : .green))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                         // Never compress the amount horizontally — on narrow
