@@ -283,6 +283,83 @@ function createStripeBillingFunctions({
     return new Stripe(secretKey);
   }
 
+  // ---------------------------------------------------------------------------
+  // Account-deletion cleanup: cancel every Stripe subscription still attached to
+  // the workspace before its documents are wiped. Without this, deleting an
+  // account leaves the provider subscription alive and Stripe keeps retrying the
+  // card (real incident: a past_due live subscription retried 6 times after the
+  // account was gone). Best-effort by design — deletion must never be blocked by
+  // a billing failure, so every error is collected instead of thrown. Bypasses
+  // the STRIPE_ALLOW_LIVE_BILLING purchase gate on purpose: stopping charges is
+  // always safe. Apple/Google subscriptions cannot be canceled server-side, so
+  // they are only reported for follow-up.
+  async function cancelWorkspaceStripeSubscriptionsForDeletion(workspaceId) {
+    const summary = { canceled: [], voidedInvoices: [], unmanaged: [], errors: [] };
+    const db = admin.firestore();
+
+    let subsSnap;
+    try {
+      subsSnap = await db.collection("companies").doc(String(workspaceId)).collection("subscriptions").get();
+    } catch (error) {
+      summary.errors.push(`ledger read failed: ${error?.message || error}`);
+      return summary;
+    }
+    if (subsSnap.empty) return summary;
+
+    const secretKey = secretValue(STRIPE_SECRET_KEY, "STRIPE_SECRET_KEY");
+    let stripe = null;
+
+    for (const subDoc of subsSnap.docs) {
+      const data = subDoc.data() || {};
+      const provider = String(data.provider || "").trim().toLowerCase();
+
+      if (provider !== "stripe") {
+        if (data.activeForEntitlement === true) {
+          summary.unmanaged.push(`${provider || "unknown"}:${subDoc.id}`);
+        }
+        continue;
+      }
+      if (String(data.providerStatus || "").toLowerCase() === "canceled") continue;
+
+      const subscriptionId = String(data.externalSubscriptionId || "").trim() ||
+        (subDoc.id.startsWith("stripe_") ? subDoc.id.slice("stripe_".length) : "");
+      if (!subscriptionId) {
+        summary.errors.push(`${subDoc.id}: no subscription id on ledger doc`);
+        continue;
+      }
+      if (!secretKey) {
+        summary.errors.push(`${subscriptionId}: STRIPE_SECRET_KEY unavailable`);
+        continue;
+      }
+      if (!stripe) stripe = stripeClient(secretKey);
+
+      try {
+        await stripe.subscriptions.cancel(subscriptionId);
+        summary.canceled.push(subscriptionId);
+      } catch (error) {
+        // resource_missing covers already-deleted subs and test/live key-mode
+        // mismatches — nothing left to stop in either case.
+        if (error?.code === "resource_missing") continue;
+        summary.errors.push(`${subscriptionId}: cancel failed: ${error?.message || error}`);
+        continue;
+      }
+
+      // Cancellation alone does not stop dunning on an invoice that is already
+      // open — void those so no further payment attempts happen.
+      try {
+        const openInvoices = await stripe.invoices.list({ subscription: subscriptionId, status: "open", limit: 10 });
+        for (const invoice of openInvoices.data || []) {
+          await stripe.invoices.voidInvoice(invoice.id);
+          summary.voidedInvoices.push(invoice.id);
+        }
+      } catch (error) {
+        summary.errors.push(`${subscriptionId}: invoice void failed: ${error?.message || error}`);
+      }
+    }
+
+    return summary;
+  }
+
   function appleBillingEnabled() {
     return String(process.env.APPLE_BILLING_ENABLED || "").trim().toLowerCase() === "true";
   }
@@ -1971,7 +2048,10 @@ function createStripeBillingFunctions({
     verifyGooglePlayPurchase,
     googlePlayRtdnNotification,
     scheduledBillingEntitlementReconcile,
-    stripeWebhook
+    stripeWebhook,
+    // Not a deployable function — consumed by deleteMyAccount in index.js and
+    // stripped out before Object.assign(exports, ...).
+    _internal: { cancelWorkspaceStripeSubscriptionsForDeletion }
   };
 }
 
