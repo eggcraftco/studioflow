@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -119,6 +119,10 @@ function BankPageContent() {
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
   const [categoryRuleKeyword, setCategoryRuleKeyword] = useState("");
+  const [ocrInboxPath, setOcrInboxPath] = useState<string | null>(null);
+  const [ocrFileName, setOcrFileName] = useState("");
+  const [ocrParsed, setOcrParsed] = useState<{ amount: number; date: string } | null>(null);
+  const [ocrCandidates, setOcrCandidates] = useState<Array<{ transactionId: string; score: number; amount: number; currency: string; bookingDate: string; counterparty: string; description: string; hasReceipt: boolean }> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -362,6 +366,57 @@ function BankPageContent() {
     }
   }
 
+  // ---- Receipt OCR matching ----------------------------------------------
+
+  async function startReceiptMatch(file: File) {
+    setBusy("ocr");
+    setError(null);
+    setStatus(t("Reading the receipt…"));
+    setOcrCandidates(null);
+    try {
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "receipt.jpg";
+      const path = `companies/${companyId}/bank_receipts/_inbox/${Date.now()}_${safeName}`;
+      await uploadBytes(storageRef(storage, path), file);
+      const result = await call<{ parsed: { amount: number; date: string }; candidates: NonNullable<typeof ocrCandidates> }>("bankMatchReceipt", { storagePath: path });
+      setOcrInboxPath(path);
+      setOcrFileName(file.name);
+      setOcrParsed(result.parsed);
+      setOcrCandidates(result.candidates);
+      setStatus(null);
+    } catch (ocrError) {
+      setError(ocrError instanceof Error ? ocrError.message : "Could not read the receipt.");
+      setStatus(null);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function confirmReceiptMatch(transactionId: string) {
+    if (!ocrInboxPath) return;
+    setBusy("ocr-assign");
+    setError(null);
+    try {
+      await call("bankAssignInboxReceipt", { storagePath: ocrInboxPath, transactionId, fileName: ocrFileName });
+      setStatus(t("Invoice attached."));
+      setOcrInboxPath(null);
+      setOcrCandidates(null);
+      setOcrParsed(null);
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not attach the invoice.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelReceiptMatch() {
+    if (ocrInboxPath) {
+      try { await deleteObject(storageRef(storage, ocrInboxPath)); } catch { /* already gone */ }
+    }
+    setOcrInboxPath(null);
+    setOcrCandidates(null);
+    setOcrParsed(null);
+  }
+
   // ---- Categories & rules -------------------------------------------------
 
   async function applyCategory(transaction: BankTransaction, category: string) {
@@ -483,9 +538,21 @@ function BankPageContent() {
           </span>
           <span style={{ flex: 1 }} />
           {isOwner && connections.some(item => item.status === "linked") ? (
-            <button type="button" className="finance-payments-add" disabled={busy === "sync"} onClick={() => void refresh()}>
-              {busy === "sync" ? t("Refreshing…") : t("Refresh")}
-            </button>
+            <>
+              <input type="file" accept="image/*" id="bank-ocr-input" style={{ display: "none" }}
+                onChange={event => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void startReceiptMatch(file);
+                }} />
+              <button type="button" className="finance-payments-add" disabled={busy === "ocr"}
+                onClick={() => document.getElementById("bank-ocr-input")?.click()}>
+                {busy === "ocr" ? t("Reading the receipt…") : `📷 ${t("Match a receipt")}`}
+              </button>
+              <button type="button" className="finance-payments-add" disabled={busy === "sync"} onClick={() => void refresh()}>
+                {busy === "sync" ? t("Refreshing…") : t("Refresh")}
+              </button>
+            </>
           ) : null}
           {isOwner ? (
             <button type="button" className="finance-payments-add" disabled={busy === "connect"} onClick={() => void connectBank()}>
@@ -502,6 +569,47 @@ function BankPageContent() {
 
         {status ? <p style={{ marginTop: 10, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
         {error ? <p style={{ marginTop: 10, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+
+        {ocrCandidates !== null ? (
+          <div style={{ marginTop: 14, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 12, padding: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <strong style={{ fontSize: 13 }}>📷 {ocrFileName}</strong>
+              {ocrParsed && ocrParsed.amount > 0 ? (
+                <span style={{ fontSize: 12, opacity: 0.75 }}>
+                  {t("Detected")}: <strong>{money(ocrParsed.amount, transactions[0]?.currency || "GBP")}</strong>
+                  {ocrParsed.date ? ` · ${ocrParsed.date}` : ""}
+                </span>
+              ) : <span style={{ fontSize: 12, opacity: 0.75 }}>{t("No amount detected on the receipt.")}</span>}
+              <span style={{ flex: 1 }} />
+              <button type="button" className="finance-payments-delete" onClick={() => void cancelReceiptMatch()} aria-label={t("Close")}>✕</button>
+            </div>
+            {ocrCandidates.length === 0 ? (
+              <p style={{ fontSize: 12.5, opacity: 0.75, margin: "10px 0 0" }}>{t("No matching transaction found — you can attach it manually with the 📎 button on a row.")}</p>
+            ) : (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                {ocrCandidates.map(candidate => (
+                  <div key={candidate.transactionId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 9 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {candidate.counterparty || candidate.description || "—"}
+                        {candidate.hasReceipt ? <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.6 }}>📎</span> : null}
+                      </div>
+                      <div style={{ fontSize: 10.5, opacity: 0.6 }}>{candidate.bookingDate}</div>
+                    </div>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: "#dc2626", fontVariantNumeric: "tabular-nums" }}>
+                      −{money(Math.abs(candidate.amount), candidate.currency)}
+                    </span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, opacity: 0.6, minWidth: 34, textAlign: "right" }}>{Math.min(99, candidate.score)}%</span>
+                    <button type="button" className="finance-payments-add" disabled={busy === "ocr-assign"}
+                      onClick={() => void confirmReceiptMatch(candidate.transactionId)}>
+                      {t("Attach")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {isOwner && connections.length > 0 ? (
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
