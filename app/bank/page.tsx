@@ -44,24 +44,22 @@ type BankTransaction = {
   txType: string;
 };
 
-// TrueLayer transaction_category → short human label (t()'d at render time).
-const TX_TYPE_LABELS: Record<string, string> = {
-  PURCHASE: "Card payment",
-  POS: "Card payment",
-  DIRECT_DEBIT: "Direct Debit",
-  STANDING_ORDER: "Standing Order",
-  TRANSFER: "Transfer",
-  BILL_PAYMENT: "Bill payment",
-  ATM: "ATM",
-  CASH: "Cash",
-  FEE_CHARGE: "Bank fee",
-  INTEREST: "Interest",
-  CREDIT: "Incoming",
-  DEBIT: "Payment"
+// TrueLayer transaction_category → coloured badge (short label, t()'d at
+// render time; universal abbreviations like DD/SO/ATM stay as-is).
+const TX_TYPE_META: Record<string, { label: string; color: string; translate: boolean }> = {
+  PURCHASE: { label: "Card", color: "#2563eb", translate: true },
+  POS: { label: "Card", color: "#2563eb", translate: true },
+  DIRECT_DEBIT: { label: "DD", color: "#7c3aed", translate: false },
+  STANDING_ORDER: { label: "SO", color: "#0e7a55", translate: false },
+  TRANSFER: { label: "Transfer", color: "#0f766e", translate: true },
+  BILL_PAYMENT: { label: "Bill", color: "#b45309", translate: true },
+  ATM: { label: "ATM", color: "#be185d", translate: false },
+  CASH: { label: "Cash", color: "#be185d", translate: true },
+  FEE_CHARGE: { label: "Fee", color: "#b91c1c", translate: true },
+  INTEREST: { label: "Interest", color: "#16a34a", translate: true },
+  CREDIT: { label: "Incoming", color: "#16a34a", translate: true },
+  DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
-function txTypeLabel(txType: string): string {
-  return TX_TYPE_LABELS[txType] || "";
-}
 type BankRule = { id: string; keyword: string; category: string };
 
 const BANK_CATEGORIES = [
@@ -711,7 +709,6 @@ function BankPageContent() {
                         </div>
                         <div style={{ fontSize: 10.5, opacity: 0.6 }}>
                           {transaction.bookingDate}
-                          {txTypeLabel(transaction.txType) ? ` · ${t(txTypeLabel(transaction.txType))}` : ""}
                           {transaction.counterparty && transaction.description ? ` · ${transaction.description}` : ""}
                           {transaction.status === "pending" ? ` · ${t("pending")}` : ""}
                         </div>
@@ -775,7 +772,19 @@ function BankPageContent() {
                           ) : null}
                         </span>
                       ) : null}
-                      <span style={{ fontSize: 13, fontWeight: 800, color: transaction.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>
+                      {TX_TYPE_META[transaction.txType] ? (() => {
+                        const meta = TX_TYPE_META[transaction.txType];
+                        return (
+                          <span title={transaction.txType} style={{
+                            fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase",
+                            padding: "2px 7px", borderRadius: 999, whiteSpace: "nowrap",
+                            background: `${meta.color}1c`, color: meta.color
+                          }}>
+                            {meta.translate ? t(meta.label) : meta.label}
+                          </span>
+                        );
+                      })() : null}
+                      <span style={{ fontSize: 13, fontWeight: 800, color: transaction.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap", minWidth: 86, textAlign: "right" }}>
                         {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                       </span>
                     </div>
