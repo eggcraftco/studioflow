@@ -271,6 +271,15 @@ service firebase.storage {
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
+    // Receipts/invoices attached to bank transactions — owner-only, like the
+    // bank feed itself. 25MB covers photographed invoices and PDFs.
+    match /companies/{companyId}/bank_receipts/{transactionId}/{fileName} {
+      allow read: if isOwner(companyId);
+      allow create, update: if isOwner(companyId)
+        && request.resource != null && request.resource.size <= 25 * 1024 * 1024;
+      allow delete: if isOwner(companyId);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

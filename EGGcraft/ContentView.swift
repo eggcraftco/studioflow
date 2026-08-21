@@ -2213,7 +2213,15 @@ struct StudioKeepNotesView: View {
             loadWorkspaceMembersForNotes()
             loadKeepCollaborationInvites()
             startKeepInviteLiveRefresh()
+            consumeQuickActionNewNoteIfNeeded()
         }
+        #if os(iOS)
+        // Warm launch while Notes is already the active tab: the home-screen
+        // quick action only foregrounds the app, so onAppear never re-fires.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            consumeQuickActionNewNoteIfNeeded()
+        }
+        #endif
         .onChange(of: selectedSection) { _, _ in
             saveKeepSelectedSectionState()
             if selectedSection == "notes" {
@@ -4564,6 +4572,19 @@ struct StudioKeepNotesView: View {
         }
     }
 
+    // Home-screen quick action ("New note"): once the Notes screen is on
+    // screen, open the composer ready to type and clear the pending flag.
+    private func consumeQuickActionNewNoteIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "pendingQuickActionNewNote") else { return }
+        defaults.removeObject(forKey: "pendingQuickActionNewNote")
+        selectedSection = "notes"
+        expandQuickComposer()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            isComposerTextFocused = true
+        }
+    }
+
     private func collapseQuickComposerIfNeeded() {
         guard composerExpanded else { return }
         closeOrAddComposerNote()
@@ -5834,6 +5855,7 @@ struct StudioKeepNotesView: View {
 
                     let loadedNotes = snapshot?.documents.map { StudioKeepNote(document: $0) } ?? []
                     notes = loadedNotes.filter { canSeeKeepNote($0) }
+                    WidgetNotesBridge.publish(notes: notes, language: seciliDil)
                 }
             }
     }
@@ -6834,6 +6856,10 @@ struct ContentView: View {
     @State private var showPlanAccessAlert: Bool = false
     @State private var planAccessAlertTitle: String = ""
     @State private var planAccessAlertMessage: String = ""
+    // Stores the companyId whose owner collapsed the Free Demo upgrade banner
+    // to its one-line strip, so the state never bleeds into a different
+    // account on this device.
+    @AppStorage("demoPlanBannerDismissedCompanyV1") private var demoPlanBannerDismissedCompanyId: String = ""
     @State private var macFirstProjectGuideCompleted: Bool = false
     @State private var macFirstProjectGuideStep: Int = 0
     @State private var macFirstProjectGuideActive: Bool = false
@@ -6961,6 +6987,8 @@ struct ContentView: View {
     private var canAccessMessages: Bool { authVM.currentPlanEntitlements.teamAccessEnabled && workspaceAccessAllows("messages") }
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
+    // Bank feed data is owner-only at the Firestore rules level, so the tab is too.
+    private var canAccessBankSpending: Bool { authVM.isCompanyOwner && canSeeFinancialData }
 
     private var canEditCurrentWorkspace: Bool {
         ["owner", "admin", "member"].contains(currentWorkspaceRoleNormalized) && canAccessOrders
@@ -7683,6 +7711,11 @@ struct ContentView: View {
                     aktifSekme = "Dashboard"; phoneShowsOrderDetail = false
                 }
             }
+            if canAccessBankSpending {
+                phoneNavMenuRow(t("Bank", lang: seciliDil), "building.columns.fill") {
+                    aktifSekme = "BankSpending"; phoneShowsOrderDetail = false
+                }
+            }
             if canAccessSchedule {
                 phoneNavMenuRow(t("Schedule", lang: seciliDil), "calendar") {
                     aktifSekme = "Schedule"; phoneShowsOrderDetail = false
@@ -8008,6 +8041,9 @@ struct ContentView: View {
             }
             if canAccessDashboard {
                 UstMenuButonu(title: t("Dashboard", lang: seciliDil), icon: "chart.bar.xaxis", isSelected: aktifSekme == "Dashboard") { aktifSekme = "Dashboard" }
+            }
+            if canAccessBankSpending {
+                UstMenuButonu(title: t("Bank", lang: seciliDil), icon: "building.columns.fill", isSelected: aktifSekme == "BankSpending") { aktifSekme = "BankSpending" }
             }
             if canAccessSchedule {
                 UstMenuButonu(title: t("Schedule", lang: seciliDil), icon: "calendar", isSelected: aktifSekme == "Schedule") { aktifSekme = "Schedule" }
@@ -8411,6 +8447,12 @@ struct ContentView: View {
                     .environmentObject(firebaseManager)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(bgMain)
+            } else if aktifSekme == "BankSpending" {
+                if canAccessBankSpending {
+                    BankSpendingView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(title: t("Bank Spending hidden", lang: seciliDil), message: t("Bank connections are managed by the workspace owner.", lang: seciliDil))
+                }
             } else if aktifSekme == "Dashboard" {
                 if canAccessDashboard {
                     DashboardView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -8498,6 +8540,11 @@ struct ContentView: View {
         #endif
         .background(bgMain)
         .preferredColorScheme(aktifTema)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if shouldShowDemoPlanBanner {
+                demoPlanUpgradeBanner
+            }
+        }
         .overlay(alignment: .topTrailing) {
             macFirstProjectGuideOverlay
         }
@@ -8558,6 +8605,7 @@ struct ContentView: View {
             refreshMacFirstProjectGuideForCurrentAccount()
             consumePendingSupportTicketLaunchRoute()
             consumePendingMessageThreadLaunchRoute()
+            consumePendingQuickActionNewNoteRoute()
             startActivityNotificationsIfPossible()
         }
         .onDisappear {
@@ -8601,6 +8649,7 @@ struct ContentView: View {
                 refreshCloudSyncIndicatorForOfflineState()
                 consumePendingSupportTicketLaunchRoute()
                 consumePendingMessageThreadLaunchRoute()
+                consumePendingQuickActionNewNoteRoute()
             }
         }
         .onReceive(firebaseManager.$isOnline) { _ in
@@ -8782,6 +8831,11 @@ struct ContentView: View {
         guard scheme == "studioflow" || scheme == "nivadesk" else { return }
         let host = url.host?.lowercased() ?? ""
         let path = url.path.lowercased()
+        // Home-screen Notes widget tap → jump to the Notes tab.
+        if host == "notes" || path.contains("notes") {
+            if canAccessNotes { aktifSekme = "Notes" }
+            return
+        }
         guard host == "client-files" || path.contains("client-files") else { return }
         scheduleSharedClientFileInboxCheck(immediate: true)
     }
@@ -8790,6 +8844,122 @@ struct ContentView: View {
         planAccessAlertTitle = title
         planAccessAlertMessage = message
         showPlanAccessAlert = true
+    }
+
+    // First-launch guidance: App Store installs land on the Free Demo plan and
+    // often don't discover Settings → Plan & Access on their own. Show a banner
+    // at the very top (same slot as the email-verify reminder) until the owner
+    // upgrades. X never fully hides it — it collapses to a one-line strip that
+    // expands back on tap, so the upgrade path stays reachable.
+    private var shouldShowDemoPlanBanner: Bool {
+        authVM.currentBillingPlan == .demo
+            && authVM.isCompanyOwner
+            && aktifSekme != "Settings"
+    }
+
+    private var isDemoPlanBannerCollapsed: Bool {
+        demoPlanBannerDismissedCompanyId == (authVM.currentCompanyId ?? "")
+    }
+
+    @ViewBuilder
+    private var demoPlanUpgradeBanner: some View {
+        if isDemoPlanBannerCollapsed {
+            demoPlanCollapsedStrip
+        } else {
+            demoPlanExpandedBanner
+        }
+    }
+
+    private var demoPlanCollapsedStrip: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                demoPlanBannerDismissedCompanyId = ""
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.purple)
+                Text(t("Free Demo", lang: seciliDil))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text("·")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Text(t("View plans", lang: seciliDil))
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.blue)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .background(.regularMaterial)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var demoPlanExpandedBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .background(
+                    LinearGradient(colors: [Color.blue, Color.purple], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t("You're on the Free Demo plan.", lang: seciliDil))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(t("Choose a plan in Plan & Access to unlock more orders, storage and team features.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                settingsStartSection = t("Plan & Access", lang: seciliDil)
+                aktifSekme = "Settings"
+            } label: {
+                Text(t("View plans", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.blue).cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    demoPlanBannerDismissedCompanyId = authVM.currentCompanyId ?? ""
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+        }
     }
 
     private func scheduleSharedClientFileInboxCheck(immediate: Bool = false) {
@@ -10155,6 +10325,7 @@ struct ContentView: View {
         switch tab {
         case "Orders": return canAccessOrders
         case "Dashboard": return canAccessDashboard
+        case "BankSpending": return canAccessBankSpending
         case "Schedule": return canAccessSchedule
         case "TeamSchedule": return canAccessTeamSchedule
         case "Customers": return canAccessCustomers
@@ -10241,6 +10412,20 @@ struct ContentView: View {
         if canAccessSettings {
             aktifSekme = "Settings"
         }
+        defaults.removeObject(forKey: "studioRequestedStartTab")
+    }
+
+    // Home-screen quick action ("New note"): switch to the Notes tab; the
+    // Notes screen itself consumes the flag and opens the composer.
+    private func consumePendingQuickActionNewNoteRoute() {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "pendingQuickActionNewNote") else { return }
+        guard canAccessNotes else {
+            defaults.removeObject(forKey: "pendingQuickActionNewNote")
+            defaults.removeObject(forKey: "studioRequestedStartTab")
+            return
+        }
+        aktifSekme = "Notes"
         defaults.removeObject(forKey: "studioRequestedStartTab")
     }
 
@@ -13160,14 +13345,14 @@ struct AccountProfileView: View {
         return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 Image(systemName: plan.systemImage)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(accent)
-                    .frame(width: 26, height: 26)
+                    .frame(width: 30, height: 30)
                     .background(accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                 Text(t(plan.displayName, lang: seciliDil))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
 
                 Spacer(minLength: 0)
 
@@ -13198,47 +13383,75 @@ struct AccountProfileView: View {
 
     private func storeProductPurchaseRow(plan: StudioBillingPlan, interval: StudioStoreBillingInterval, isCurrent: Bool, accent: Color) -> some View {
         let product = storeKitManager.productSummary(for: plan, interval: interval)
-        let productId = storeKitManager.configuredProductId(for: plan, interval: interval)
         let isCurrentInterval = isCurrent && authVM.currentBillingInterval == interval
+        let bothIntervalsLoaded = StudioStoreBillingInterval.allCases.allSatisfy {
+            storeKitManager.productSummary(for: plan, interval: $0) != nil
+        }
+        let showBestValue = interval == .yearly && bothIntervalsLoaded && !isCurrentInterval
+        let canPurchase = !isCurrentInterval && authVM.isCompanyOwner && product != nil
+            && !storeKitManager.isPurchasing && !authVM.isProfileLoading
 
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .center, spacing: 8) {
                 Text(t(interval.displayName, lang: seciliDil))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                if showBestValue {
+                    Text(t("Best value", lang: seciliDil))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(accent.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
                 Spacer(minLength: 0)
-                Text(product?.displayPrice ?? t("Product not loaded", lang: seciliDil))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(product == nil ? .secondary : accent)
-            }
 
-            Text(productId)
-                .font(.system(size: 8.5, weight: .medium, design: .monospaced))
-                .foregroundColor(.secondary)
-                .lineLimit(2)
-                .textSelection(.enabled)
-
-            if product == nil {
-                Text(t("Create this product ID in App Store Connect.", lang: seciliDil))
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let product {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(product.displayPrice)
+                            .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            .foregroundColor(.primary)
+                        Text(t(interval == .monthly ? "per month" : "per year", lang: seciliDil))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    Text(t("Price unavailable", lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
             }
 
             Button {
                 Task { await purchaseStoreKitPlan(plan, interval: interval) }
             } label: {
-                Text(t(isCurrentInterval ? "Current plan" : "Subscribe", lang: seciliDil))
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    if isCurrentInterval {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    Text(t(isCurrentInterval ? "Current plan" : "Subscribe", lang: seciliDil))
+                        .font(.system(size: 13, weight: .bold))
+                }
+                .foregroundColor(isCurrentInterval ? accent : (canPurchase ? .white : .secondary))
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .background(
+                    isCurrentInterval
+                        ? AnyShapeStyle(accent.opacity(0.12))
+                        : (canPurchase ? AnyShapeStyle(accent) : AnyShapeStyle(Color.primary.opacity(0.06)))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(isCurrentInterval || !authVM.isCompanyOwner || product == nil || storeKitManager.isPurchasing || authVM.isProfileLoading)
+            .buttonStyle(.plain)
+            .disabled(!canPurchase)
         }
-        .padding(8)
+        .padding(10)
         .background(Color.primary.opacity(0.03))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     @ViewBuilder

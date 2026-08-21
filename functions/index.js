@@ -3827,7 +3827,7 @@ exports.getSupportTicketUnreadSummary = onCall({ region: "europe-west2" }, async
 
 
 const { createStripeBillingFunctions } = require("./stripeBilling");
-Object.assign(exports, createStripeBillingFunctions({
+const { _internal: stripeBillingInternal, ...stripeBillingExports } = createStripeBillingFunctions({
   admin,
   onCall,
   onRequest,
@@ -3842,7 +3842,18 @@ Object.assign(exports, createStripeBillingFunctions({
   workspaceOrderRole,
   normalizeWorkspaceRole,
   workspaceRoleLabel
-}));
+});
+Object.assign(exports, stripeBillingExports);
+const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
+
+// Bank spending feed (GoCardless Bank Account Data / Open Banking, read-only).
+const { createBankFeedFunctions } = require("./bankFeed");
+Object.assign(exports, createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner }));
+
+// Pandle bookkeeping bridge: confirms NivaDesk-categorised bank transactions
+// in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
+const { createPandleFunctions } = require("./pandle");
+Object.assign(exports, createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner }));
 
 
 const ORDER_DETAIL_CARD_IDS = [
@@ -4069,7 +4080,8 @@ const DASHBOARD_VISIBILITY_KEYS = [
   "fee",
   "shipping",
   "tax",
-  "profit"
+  "profit",
+  "bankSpending"
 ];
 
 function cleanDashboardWidgetVisibility(value = {}) {
@@ -8408,6 +8420,7 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     "fullPaymentReceived",
     "recordPayment",
     "deletePaymentId",
+    "updatePaymentNote",
     "financialRemainingValues",
     "financialExpenseValues"
   ]);
@@ -8512,6 +8525,19 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
       remainingAmount = roundMoneyValue(remainingAmount + amt);
       orderValue = paidAmount + remainingAmount;
       pushHistoryChange(historyEntries, "Payment removed", amountHistoryValue(amt), "-", uid, email);
+    }
+  }
+
+  // Edit the free-text note on any ledger entry — including payments recorded
+  // automatically by the WooCommerce/Shopify webhooks. Amount/date stay immutable.
+  if (hasOwnField(patch, "updatePaymentNote") && patch.updatePaymentNote && typeof patch.updatePaymentNote === "object" && !Array.isArray(patch.updatePaymentNote)) {
+    const targetId = cleanOrderText(patch.updatePaymentNote.id, "", 80);
+    const nextNote = cleanOrderText(patch.updatePaymentNote.note, "", 200);
+    const idx = nextPayments.findIndex((entry) => entry && cleanOrderText(entry.id, "", 80) === targetId);
+    if (idx >= 0 && cleanOrderText(nextPayments[idx].note, "", 200) !== nextNote) {
+      nextPayments = nextPayments.slice();
+      nextPayments[idx] = { ...nextPayments[idx], note: nextNote };
+      paymentsChanged = true;
     }
   }
 
@@ -12777,6 +12803,17 @@ function isDeliveredResult(result) {
   return text.includes("delivered") || text.includes("teslim edildi");
 }
 
+// A parcel the carrier reports as moving (in transit, out for delivery,
+// available for pickup) or already delivered has necessarily left the studio,
+// so live tracking auto-flips the order's Dispatched toggle to Yes. Only ever
+// sets it true — a manual "No" stays untouched until the carrier sees movement.
+function isMovingResult(result) {
+  if (isDeliveredResult(result)) return true;
+  const text = `${result?.status || ""} ${result?.statusText || ""}`.toLowerCase();
+  return ["intransit", "in transit", "out for delivery", "availableforpickup", "available for pickup"]
+    .some((word) => text.includes(word));
+}
+
 function limitedSupportForCarrier(carrierCode, language) {
   const code = Number(carrierCode);
   if (code === 11031) {
@@ -13425,6 +13462,8 @@ exports.registerTracking = onCall({ secrets: [TRACK17_TOKEN, ROYALMAIL_CLIENT_ID
       if (isDeliveredResult(result)) {
         orderTrackingUpdate.isDelivered = true;
         orderTrackingUpdate.isDispatched = true;
+      } else if (isMovingResult(result)) {
+        orderTrackingUpdate.isDispatched = true;
       }
 
       await orderDocRef(orderId).set(orderTrackingUpdate, { merge: true });
@@ -13513,6 +13552,7 @@ exports.scheduledTrackingRefresh = onSchedule({
 
       await doc.ref.set(result, { merge: true });
       await orderDocRef(orderId).set({
+        ...(isMovingResult(result) ? { isDispatched: true } : {}),
         customFields: buildTrackingCustomFields({
           ...result,
           lastCheckedAt: new Date().toISOString()
@@ -15052,6 +15092,11 @@ exports.track17Webhook = onRequest({ region: "europe-west2" }, async (req, res) 
           customFields: buildTrackingCustomFields(normalized)
         }, { merge: true });
         deliveredToNotify.push({ companyId, orderId, result: normalized, language: normalized.language || "English" });
+      } else if (isMovingResult(normalized)) {
+        batch.set(orderDocRef(orderId), {
+          isDispatched: true,
+          customFields: buildTrackingCustomFields(normalized)
+        }, { merge: true });
       }
 
       writeCount += 1;
@@ -21422,7 +21467,7 @@ exports.nvOneOffSetActionUrl = onRequest({ region: "europe-west2" }, async (req,
 // workspaces, then deletes the Firebase Auth user.
 // ---------------------------------------------------------------------------
 
-exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, secrets: [STRIPE_SECRET_KEY] }, async (request) => {
   const uid = String(request.auth?.uid || "").trim();
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
@@ -21464,7 +21509,25 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300 }
     }
   }
 
-  // 3) Own workspace doc + every nested subcollection, then the user doc tree.
+  // 3) Cancel any Stripe subscriptions still attached to the workspace BEFORE the
+  // ledger docs are wiped — otherwise Stripe keeps retrying the card against an
+  // account that no longer exists. Best-effort: deletion proceeds regardless.
+  let billingCleanup = null;
+  try {
+    billingCleanup = await cancelWorkspaceStripeSubscriptionsForDeletion(uid);
+    if (billingCleanup.canceled.length || billingCleanup.unmanaged.length || billingCleanup.errors.length) {
+      console.log("deleteMyAccount billing cleanup:", JSON.stringify(billingCleanup));
+    }
+    if (billingCleanup.unmanaged.length) {
+      // Apple/Google subscriptions cannot be canceled server-side; surface them
+      // loudly so support can follow up (the user must cancel on-device).
+      console.warn("deleteMyAccount: non-Stripe subscriptions still active for deleted workspace", uid, billingCleanup.unmanaged);
+    }
+  } catch (error) {
+    console.warn("deleteMyAccount billing cleanup failed:", error?.message || error);
+  }
+
+  // 4) Own workspace doc + every nested subcollection, then the user doc tree.
   try {
     await db.recursiveDelete(db.collection("companies").doc(uid));
   } catch (error) {
@@ -21476,14 +21539,14 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300 }
     console.warn("deleteMyAccount user recursiveDelete failed:", error?.message || error);
   }
 
-  // 4) Uploaded files (client files, design images, support/message files).
+  // 5) Uploaded files (client files, design images, support/message files).
   try {
     await admin.storage().bucket().deleteFiles({ prefix: `companies/${uid}/`, force: true });
   } catch (error) {
     console.warn("deleteMyAccount storage cleanup failed:", error?.message || error);
   }
 
-  // 5) Finally the Auth account itself.
+  // 6) Finally the Auth account itself.
   await admin.auth().deleteUser(uid);
 
   console.log("deleteMyAccount completed", { uid, otherMemberships: otherMemberships.length });

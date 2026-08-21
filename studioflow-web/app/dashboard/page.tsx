@@ -2,7 +2,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -32,6 +32,7 @@ import {
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
+import { detectRecurringSpends, monthlyFixedTotal } from "@/lib/studioflow/bankInsights";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -59,6 +60,17 @@ type ChartPoint = {
   value: number;
 };
 
+type BankTx = {
+  id: string;
+  amount: number;
+  currency: string;
+  bookingDate: string;
+  description: string;
+  counterparty: string;
+  category: string;
+  categoryAuto: string;
+};
+
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
   { key: "week", label: "Week" },
   { key: "month", label: "Month" },
@@ -74,7 +86,8 @@ const DEFAULT_DASHBOARD_VISIBILITY: DashboardWidgetVisibility = {
   fee: true,
   shipping: true,
   tax: true,
-  profit: true
+  profit: true,
+  bankSpending: true
 };
 
 const DASHBOARD_WIDGET_ROWS: Array<{
@@ -90,7 +103,8 @@ const DASHBOARD_WIDGET_ROWS: Array<{
   { key: "fee", title: "Platform Fee", glyph: "%", icon: "finance", tone: "red" },
   { key: "shipping", title: "Shipping", glyph: "↗", icon: "airplane", tone: "red" },
   { key: "tax", title: "VAT Amount", glyph: "▦", icon: "plan", tone: "red" },
-  { key: "profit", title: "Net Profit", glyph: "✓", icon: "check", tone: "green" }
+  { key: "profit", title: "Net Profit", glyph: "✓", icon: "check", tone: "green" },
+  { key: "bankSpending", title: "Bank Spending", glyph: "🏦", icon: "finance", tone: "red" }
 ];
 
 const DASHBOARD_WIDGET_META = DASHBOARD_WIDGET_ROWS.reduce(
@@ -119,7 +133,8 @@ function dashboardVisibilityFromData(data: Record<string, unknown>): DashboardWi
     fee: boolSetting(mapValue.fee, boolSetting(data.dashShowFee, true)),
     shipping: boolSetting(mapValue.shipping, boolSetting(data.dashShowShipping, true)),
     tax: boolSetting(mapValue.tax, boolSetting(data.dashShowTax, true)),
-    profit: boolSetting(mapValue.profit, boolSetting(data.dashShowProfit, true))
+    profit: boolSetting(mapValue.profit, boolSetting(data.dashShowProfit, true)),
+    bankSpending: boolSetting(mapValue.bankSpending, true)
   };
 }
 
@@ -330,6 +345,50 @@ export default function DashboardPage() {
   const [customizeError, setCustomizeError] = useState<string | null>(null);
   const [customStart, setCustomStart] = useState(dateInputValue(addMonths(new Date(), -1)));
   const [customEnd, setCustomEnd] = useState(dateInputValue(new Date()));
+  const [bankTransactions, setBankTransactions] = useState<BankTx[]>([]);
+  const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
+
+  // Owner-only live bank feed — shared by the Bank Activity card and the red
+  // spending line on the profit chart. Rules deny other roles, so the error
+  // handler simply keeps the feed empty for them.
+  const isWorkspaceOwner = workspace?.role === "owner";
+  const workspaceId = workspace?.id ?? "";
+  useEffect(() => {
+    if (!workspaceId || !isWorkspaceOwner) return;
+    const unsubTx = onSnapshot(
+      query(collection(db, "companies", workspaceId, "bankTransactions"), orderBy("bookingDate", "desc")),
+      snap => {
+        setBankTransactions(snap.docs.map(txDoc => {
+          const data = txDoc.data() as Record<string, unknown>;
+          return {
+            id: txDoc.id,
+            amount: Number(data.amount) || 0,
+            currency: String(data.currency || "GBP"),
+            bookingDate: String(data.bookingDate || ""),
+            description: String(data.description || ""),
+            counterparty: String(data.counterparty || ""),
+            category: String(data.category || ""),
+            categoryAuto: String(data.categoryAuto || "")
+          };
+        }));
+      },
+      () => setBankTransactions([])
+    );
+    const unsubConnections = onSnapshot(
+      collection(db, "companies", workspaceId, "bankConnections"),
+      snap => {
+        let latest: Date | null = null;
+        snap.docs.forEach(connDoc => {
+          const raw = (connDoc.data() as Record<string, unknown>).lastSyncedAt as { toDate?: () => Date } | undefined;
+          const when = raw && typeof raw.toDate === "function" ? raw.toDate() : null;
+          if (when && (!latest || when > latest)) latest = when;
+        });
+        setBankLastSync(latest);
+      },
+      () => setBankLastSync(null)
+    );
+    return () => { unsubTx(); unsubConnections(); };
+  }, [workspaceId, isWorkspaceOwner]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -431,6 +490,30 @@ export default function DashboardPage() {
     () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 3, "netProfit", locale),
     [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
   );
+  // Bank spending per chart bucket (red line). Buckets mirror buildChartSeries
+  // exactly so the series lines up point-for-point with the profit line.
+  const bankSeries = useMemo<ChartPoint[]>(() => {
+    if (!isWorkspaceOwner || !dashboardVisibility.bankSpending || bankTransactions.length === 0) return [];
+    const spends = bankTransactions
+      .filter(item => item.amount < 0 && item.bookingDate)
+      .map(item => {
+        const [y, m, d] = item.bookingDate.split("-").map(Number);
+        return { when: new Date(y, (m || 1) - 1, d || 1), amount: Math.abs(item.amount) };
+      });
+    const points: ChartPoint[] = [];
+    let cursor = currentWindow.unit === "month" ? startOfMonth(currentWindow.start) : startOfDay(currentWindow.start);
+    let any = false;
+    while (cursor <= currentWindow.end && points.length < 80) {
+      const bucketStart = new Date(cursor);
+      const bucketEnd = nextBucket(bucketStart, currentWindow.unit);
+      const value = spends.reduce((total, item) => (item.when >= bucketStart && item.when < bucketEnd ? total + item.amount : total), 0);
+      if (value > 0) any = true;
+      points.push({ label: bucketLabel(bucketStart, currentWindow.unit, locale), value });
+      cursor = bucketEnd;
+    }
+    return any ? points : [];
+  }, [bankTransactions, currentWindow.end, currentWindow.start, currentWindow.unit, dashboardVisibility.bankSpending, isWorkspaceOwner, locale]);
+
   const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
 
@@ -598,6 +681,26 @@ export default function DashboardPage() {
                 )}
               </section>
 
+              <BankSpendingCard
+                transactions={bankTransactions}
+                lastSync={bankLastSync}
+                isOwner={isWorkspaceOwner}
+                t={t}
+                hideNumbers={hideNumbers}
+                localeTag={locale}
+              />
+
+              {canSeeAdvancedFinance ? (
+                <TaxSetAsideCard
+                  orders={financeOrders}
+                  settings={settings}
+                  bankTransactions={bankTransactions}
+                  isOwner={isWorkspaceOwner}
+                  t={t}
+                  hideNumbers={hideNumbers}
+                />
+              ) : null}
+
               {canSeeAdvancedFinance ? (
                 <section className="card app-card">
                   <CardTitle icon="finance" title={t("Financial Breakdown")} />
@@ -636,6 +739,7 @@ export default function DashboardPage() {
                   previous={canSeeAdvancedFinance && (compareOneYear || compareThreeYears) ? previousYearSeries : []}
                   twoBack={canSeeAdvancedFinance && compareThreeYears ? twoYearsBackSeries : []}
                   threeBack={canSeeAdvancedFinance && compareThreeYears ? threeYearsBackSeries : []}
+                  bank={bankSeries}
                   settings={settings}
                 />
                 {!canSeeAdvancedFinance ? (
@@ -702,6 +806,246 @@ export default function DashboardPage() {
   );
 }
 
+// Bank Activity card — fed by the page-level Open Banking subscription.
+// Two stat tiles with sparklines + a recent-activity list, matching the
+// finance-app style the owner asked for. Renders nothing without data.
+function BankSparkline({ values, color, height = 46 }: { values: number[]; color: string; height?: number }) {
+  const W = 220;
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? W / 2 : (index / (values.length - 1)) * W;
+    const y = height - 4 - (value / max) * (height - 10);
+    return `${x},${y}`;
+  });
+  const area = `0,${height} ${points.join(" ")} ${W},${height}`;
+  const gradientId = `bank-spark-${color.replace("#", "")}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${height}`} style={{ width: "100%", height }} aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill={`url(#${gradientId})`} />
+      <polyline points={points.join(" ")} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, localeTag }: {
+  transactions: BankTx[];
+  lastSync: Date | null;
+  isOwner: boolean;
+  t: (text: string) => string;
+  hideNumbers: boolean;
+  localeTag: string;
+}) {
+  const summary = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const thisPrefix = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const lastMonthDate = new Date(year, now.getMonth() - 1, 1);
+    const lastPrefix = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
+    const spendIn = (prefix: string) => transactions
+      .filter(item => item.amount < 0 && item.bookingDate.startsWith(prefix))
+      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
+
+    // Daily spending curve for this month + monthly curve for this year.
+    const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
+    const daily = Array.from({ length: daysInMonth }, () => 0);
+    const monthly = Array.from({ length: 12 }, () => 0);
+    for (const item of transactions) {
+      if (item.amount >= 0 || !item.bookingDate.startsWith(String(year))) continue;
+      const month = Number(item.bookingDate.slice(5, 7)) - 1;
+      if (month >= 0 && month < 12) monthly[month] += Math.abs(item.amount);
+      if (item.bookingDate.startsWith(thisPrefix)) {
+        const day = Number(item.bookingDate.slice(8, 10)) - 1;
+        if (day >= 0 && day < daysInMonth) daily[day] += Math.abs(item.amount);
+      }
+    }
+    const monthsWithData = monthly.filter((value, index) => value > 0 || index <= now.getMonth()).length || 1;
+    const yearTotal = monthly.reduce((acc, value) => acc + value, 0);
+    return {
+      thisMonth: spendIn(thisPrefix),
+      lastMonth: spendIn(lastPrefix),
+      yearTotal,
+      monthlyAvg: yearTotal / monthsWithData,
+      daily: daily.slice(0, Math.max(now.getDate(), 2)),
+      monthly: monthly.slice(0, now.getMonth() + 1),
+      recent: transactions.slice(0, 3)
+    };
+  }, [transactions]);
+
+  const fixedMonthly = useMemo(() => monthlyFixedTotal(detectRecurringSpends(transactions)), [transactions]);
+
+  if (!isOwner || transactions.length === 0) return null;
+
+  const currency = transactions[0]?.currency || "GBP";
+  const bankMoney = (value: number, digits = 2) => hideNumbers
+    ? hiddenMoneyLabel()
+    : new Intl.NumberFormat(localeTag, { style: "currency", currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value);
+  const delta = summary.lastMonth > 0 ? ((summary.thisMonth - summary.lastMonth) / summary.lastMonth) * 100 : null;
+  const syncedRecently = lastSync !== null && Date.now() - lastSync.getTime() < 12 * 60 * 60 * 1000;
+  const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
+  const tileStyle: React.CSSProperties = { flex: "1 1 220px", maxWidth: 320, border: "1px solid rgba(120,120,140,0.18)", borderRadius: 12, padding: "14px 16px 8px" };
+
+  return (
+    <section className="card app-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 10, background: "rgba(37,99,235,0.1)", fontSize: 16 }}>🏦</span>
+        <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>{t("Bank Activity")}</h2>
+        {lastSync ? (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, opacity: 0.75 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: syncedRecently ? "#16a34a" : "#f59e0b", display: "inline-block" }} />
+            {t("Synced")} · {syncedRecently ? t("Updated recently") : lastSync.toLocaleString(localeTag)}
+          </span>
+        ) : null}
+        <span style={{ flex: 1 }} />
+        <a href="/bank" style={{ fontSize: 13, fontWeight: 700, color: "#2563eb", textDecoration: "none" }}>{t("View all")} →</a>
+      </div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "stretch" }}>
+        <div style={tileStyle}>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Month")}</p>
+          <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{bankMoney(summary.thisMonth)}</strong>
+          {delta !== null ? (
+            <span style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? "#16a34a" : "#dc2626" }}>
+              {delta <= 0 ? "↓" : "↑"} {Math.abs(delta).toFixed(0)}% {t("vs last month")}
+            </span>
+          ) : <span style={{ fontSize: 12, opacity: 0.6 }}>{t("First month of data")}</span>}
+          {fixedMonthly > 0 ? (
+            <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#b45309", marginTop: 2 }}>
+              ↻ {t("Fixed")} ≈ {bankMoney(fixedMonthly, 0)} / {t("month")}
+            </span>
+          ) : null}
+          <div style={{ marginTop: 8 }}>
+            <BankSparkline values={summary.daily} color="#16a34a" />
+          </div>
+        </div>
+        <div style={tileStyle}>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Year")}</p>
+          <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{bankMoney(summary.yearTotal)}</strong>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>{t("Avg.")} {bankMoney(summary.monthlyAvg, 0)} / {t("month")}</span>
+          <div style={{ marginTop: 8 }}>
+            <BankSparkline values={summary.monthly.length > 1 ? summary.monthly : [0, summary.yearTotal]} color="#2563eb" />
+          </div>
+        </div>
+        <div style={{ flex: "2 1 300px", minWidth: 260 }}>
+          <p className="muted-copy" style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 700 }}>{t("Recent activity")}</p>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {summary.recent.map(item => (
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(120,120,140,0.13)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+                  {initials(item.counterparty || item.description)}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.counterparty || item.description || "—"}</div>
+                  {item.counterparty && item.description ? (
+                    <div style={{ fontSize: 11.5, opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.description}</div>
+                  ) : null}
+                </div>
+                <span style={{ fontSize: 13.5, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: item.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>
+                  {item.amount < 0 ? "−" : "+"}{bankMoney(Math.abs(item.amount))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Tax set-aside — built from the SAME per-order figures the dashboard already
+// aggregates (order taxAmount = VAT, plus the Corporation Tax estimate from
+// workspace settings), not a rough percentage of bank inflows. Bank payments
+// the owner categorised as "Tax" count as already paid.
+function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideNumbers }: {
+  orders: DashboardFinanceOrder[];
+  settings: WorkspaceSettingsOverview | null;
+  bankTransactions: BankTx[];
+  isOwner: boolean;
+  t: (text: string) => string;
+  hideNumbers: boolean;
+}) {
+  const summary = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const ctEnabled = settings?.corporationTaxEnabled === true;
+    const ctRate = settings?.corporationTaxRate ?? 19;
+
+    let vatYtd = 0;
+    let ctYtd = 0;
+    let vatMonth = 0;
+    let ctMonth = 0;
+    for (const order of orders) {
+      if (!order.paymentDate || order.paymentDate.getFullYear() !== year) continue;
+      const ct = ctEnabled ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * ctRate) / 100 : 0;
+      vatYtd += order.taxAmount;
+      ctYtd += ct;
+      if (order.paymentDate.getMonth() === month) {
+        vatMonth += order.taxAmount;
+        ctMonth += ct;
+      }
+    }
+
+    const paidYtd = bankTransactions
+      .filter(item => item.amount < 0
+        && item.bookingDate.startsWith(String(year))
+        && (item.category || item.categoryAuto) === "Tax")
+      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
+
+    return { vatYtd, ctYtd, totalYtd: vatYtd + ctYtd, monthTotal: vatMonth + ctMonth, paidYtd, ctEnabled, ctRate };
+  }, [orders, settings, bankTransactions]);
+
+  if (summary.totalYtd <= 0.005) return null;
+
+  const remaining = Math.max(0, summary.totalYtd - summary.paidYtd);
+  const paidShare = summary.totalYtd > 0 ? Math.min(100, (summary.paidYtd / summary.totalYtd) * 100) : 0;
+  const showMoney = (value: number) => money(value, hideNumbers, settings);
+
+  return (
+    <section className="card app-card">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 10, background: "rgba(180,83,9,0.12)", fontSize: 16 }}>🏛</span>
+        <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>{t("Tax set-aside")}</h2>
+        <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Keep this money apart — it already belongs to the tax office.")}</span>
+      </div>
+      <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Set aside this year")}</p>
+          <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.totalYtd)}</strong>
+          <span style={{ fontSize: 11.5, opacity: 0.7 }}>
+            {t("VAT Amount")}: {showMoney(summary.vatYtd)}
+            {summary.ctEnabled ? <> · {t("Corporation Tax")} ({Math.round(summary.ctRate)}%): {showMoney(summary.ctYtd)}</> : null}
+          </span>
+        </div>
+        <div>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Month")}</p>
+          <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.monthTotal)}</strong>
+        </div>
+        {isOwner ? (
+          <div style={{ flex: "1 1 240px", minWidth: 220 }}>
+            <p className="muted-copy" style={{ margin: "0 0 4px", fontSize: 12.5 }}>
+              {t("Paid from the bank")} <span style={{ opacity: 0.6 }}>({t("transactions categorised as Tax")})</span>
+            </p>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <strong style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: "#16a34a" }}>{showMoney(summary.paidYtd)}</strong>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: remaining > 0.005 ? "#b45309" : "#16a34a" }}>
+                {remaining > 0.005 ? `${t("Still to hold")}: ${showMoney(remaining)}` : t("Fully covered")}
+              </span>
+            </div>
+            <div style={{ marginTop: 7, height: 7, borderRadius: 999, background: "rgba(120,120,140,0.16)", overflow: "hidden" }}>
+              <div style={{ width: `${paidShare}%`, height: "100%", borderRadius: 999, background: "#16a34a", transition: "width 0.25s ease" }} />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function DashboardSummaryCard({ icon, title, value, tone, locked = false }: { icon: CardIcon; title: string; value: string; tone: "blue" | "green" | "orange" | "red"; locked?: boolean }) {
   return (
     <article className={locked ? "dashboard-summary-card is-locked" : "dashboard-summary-card"} data-tone={tone}>
@@ -747,15 +1091,17 @@ function ProfitChart({
   previous,
   twoBack,
   threeBack,
+  bank = [],
   settings
 }: {
   current: ChartPoint[];
   previous: ChartPoint[];
   twoBack: ChartPoint[];
   threeBack: ChartPoint[];
+  bank?: ChartPoint[];
   settings: StudioMoneySettings;
 }) {
-  const allValues = [...current, ...previous, ...twoBack, ...threeBack].map(point => point.value);
+  const allValues = [...current, ...previous, ...twoBack, ...threeBack, ...bank].map(point => point.value);
   const min = Math.min(0, ...allValues);
   const max = Math.max(1, ...allValues);
 
@@ -844,6 +1190,7 @@ function ProfitChart({
         {previous.length ? <polyline className="chart-line previous" points={pointsForSeries(previous, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
         {twoBack.length ? <polyline className="chart-line two-back" points={pointsForSeries(twoBack, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
         {threeBack.length ? <polyline className="chart-line three-back" points={pointsForSeries(threeBack, 0, niceMax, padXLeft, padY, W, H, padXRight)} /> : null}
+        {bank.length ? <polyline points={pointsForSeries(bank, 0, niceMax, padXLeft, padY, W, H, padXRight)} fill="none" stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" /> : null}
         {/* data point dots on current line */}
         {current.map((point, i) => (
           <circle key={i} cx={xForIndex(i)} cy={yForValue(point.value)} r={4} fill="#16a34a" />
@@ -875,6 +1222,9 @@ function ProfitChart({
             {threeBack[hoverIdx] ? (
               <circle cx={xForIndex(hoverIdx)} cy={yForValue(threeBack[hoverIdx].value)} r={5} fill="#6b7280" stroke="#fff" strokeWidth={2} />
             ) : null}
+            {bank[hoverIdx] ? (
+              <circle cx={xForIndex(hoverIdx)} cy={yForValue(bank[hoverIdx].value)} r={5} fill="#dc2626" stroke="#fff" strokeWidth={2} />
+            ) : null}
             <circle cx={xForIndex(hoverIdx)} cy={yForValue(current[hoverIdx].value)} r={6} fill="#16a34a" stroke="#fff" strokeWidth={2} />
           </g>
         )}
@@ -893,6 +1243,12 @@ function ProfitChart({
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: "#16a34a" }} />
             Net: {symbol}{current[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </div>
+          {bank[hoverIdx] ? (
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#dc2626" }} />
+              Bank: {symbol}{bank[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </div>
+          ) : null}
           {previous[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#f59e0b" }} />
@@ -915,6 +1271,7 @@ function ProfitChart({
       )}
       <div className="dashboard-chart-legend">
         <span><i className="legend-current" /> Current</span>
+        {bank.length ? <span><i style={{ background: "#dc2626" }} /> Bank</span> : null}
         {previous.length ? <span><i className="legend-previous" /> -1 Yr</span> : null}
         {twoBack.length ? <span><i className="legend-two" /> -2 Yrs</span> : null}
         {threeBack.length ? <span><i className="legend-three" /> -3 Yrs</span> : null}

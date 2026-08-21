@@ -967,6 +967,9 @@ class FirebaseManager: ObservableObject {
     private var messageTypingListenerRegistration: ListenerRegistration?
     private var messageTypingListenerKey: String = ""
     private var activityNotificationsListenerRegistration: ListenerRegistration?
+    private var bankTransactionsListenerRegistration: ListenerRegistration?
+    private var bankConnectionsListenerRegistration: ListenerRegistration?
+    private var bankFeedCompanyId: String = ""
     private var activityNotificationsCompanyId: String = ""
     private var locallyReadActivityNotificationIds: Set<String> = []
     private var locallyPinnedMessageIdsByThreadId: [String: Set<String>] = [:]
@@ -985,6 +988,9 @@ class FirebaseManager: ObservableObject {
     private let maxHistoryCount = 100
     
     @Published var currentCompanyId: String = ""
+    // Bank feed (read-only mirror of the web feature; owner-only per rules).
+    @Published var bankTransactions: [StudioBankTransaction] = []
+    @Published var bankConnections: [StudioBankConnection] = []
     @Published var currentWorkspaceRole: String = "owner"
     @Published var currentWorkspaceAssignedProjectsOnly: Bool = false
     @Published var currentWorkspaceManageProjectAssignments: Bool = false
@@ -2236,6 +2242,15 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    // Trash write used by undo/redo: no history entry, no local-list bookkeeping.
+    private func softDeleteSiparisDocument(id: String) {
+        db.collection("siparisler").document(id).updateData([
+            "isDeleted": true,
+            "deletedAt": FieldValue.serverTimestamp(),
+            "deletedBy": Auth.auth().currentUser?.uid ?? ""
+        ])
+    }
+
     // Bring a trashed order back to life.
     func restoreTrashedSiparis(_ siparis: Siparis) {
         guard let id = siparis.id else { return }
@@ -2508,7 +2523,8 @@ class FirebaseManager: ObservableObject {
     private func applyUndo(_ action: StudioHistoryAction) {
         switch action {
         case .addedSiparis(let siparis):
-            if let id = siparis.id { removeLocalSiparis(id: id); db.collection("siparisler").document(id).delete() }
+            // Undo of "add" goes to Trash (30-day grace), never a hard delete.
+            if let id = siparis.id { removeLocalSiparis(id: id); softDeleteSiparisDocument(id: id) }
         case .deletedSiparis(let siparis):
             restoreSiparis(siparis)
         case .updatedSiparis(let before, _):
@@ -2529,7 +2545,7 @@ class FirebaseManager: ObservableObject {
         case .addedSiparis(let siparis):
             restoreSiparis(siparis)
         case .deletedSiparis(let siparis):
-            if let id = siparis.id { removeLocalSiparis(id: id); db.collection("siparisler").document(id).delete() }
+            if let id = siparis.id { removeLocalSiparis(id: id); softDeleteSiparisDocument(id: id) }
         case .updatedSiparis(_, let after):
             restoreSiparis(after)
         case .addedMusteri(let musteri):
@@ -3200,7 +3216,43 @@ class FirebaseManager: ObservableObject {
         }
     }
     
+    // MARK: - Bank feed (read-only)
+
+    func startBankFeedRealtime(companyId: String, isOwner: Bool) {
+        let cleanCompanyId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanCompanyId.isEmpty, isOwner else { stopBankFeedRealtime(clearData: true); return }
+        if bankFeedCompanyId == cleanCompanyId, bankTransactionsListenerRegistration != nil { return }
+        stopBankFeedRealtime(clearData: false)
+        bankFeedCompanyId = cleanCompanyId
+        let base = db.collection("companies").document(cleanCompanyId)
+        bankTransactionsListenerRegistration = base.collection("bankTransactions")
+            .order(by: "bookingDate", descending: true)
+            .limit(to: 3000)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let items = (snapshot?.documents ?? []).map { StudioBankTransaction(id: $0.documentID, data: $0.data()) }
+                DispatchQueue.main.async { self?.bankTransactions = items }
+            }
+        bankConnectionsListenerRegistration = base.collection("bankConnections")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let items = (snapshot?.documents ?? []).map { StudioBankConnection(id: $0.documentID, data: $0.data()) }
+                DispatchQueue.main.async { self?.bankConnections = items }
+            }
+    }
+
+    func stopBankFeedRealtime(clearData: Bool = false) {
+        bankTransactionsListenerRegistration?.remove()
+        bankConnectionsListenerRegistration?.remove()
+        bankTransactionsListenerRegistration = nil
+        bankConnectionsListenerRegistration = nil
+        bankFeedCompanyId = ""
+        if clearData {
+            bankTransactions = []
+            bankConnections = []
+        }
+    }
+
     func stopListening() {
+        stopBankFeedRealtime(clearData: true)
         listenerRegistration?.remove()
         musteriListenerRegistration?.remove()
         supportTicketsListenerRegistration?.remove()

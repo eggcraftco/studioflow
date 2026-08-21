@@ -89,6 +89,8 @@ data class StudioFlowUiState(
     val dismissedActivityNotificationIds: Set<String> = emptySet(),
     val pendingActivityNavigation: PendingActivityNavigation? = null,
     val keepNotes: List<StudioKeepNote> = emptyList(),
+    val bankTransactions: List<uk.co.eggcraft.studioflow.data.model.StudioBankTransaction> = emptyList(),
+    val bankConnections: List<uk.co.eggcraft.studioflow.data.model.StudioBankConnection> = emptyList(),
     val keepNotesSearch: String = "",
     val keepNotesSection: String = "notes",
     val keepCollaborationInvites: List<StudioKeepCollaborationInvite> = emptyList(),
@@ -221,6 +223,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     private var lastTypingSentAt: Long = 0L
     private var activityNotificationsJob: Job? = null
     private var keepNotesJob: Job? = null
+    private var bankFeedJob: Job? = null
     private var activeCompanyJob: Job? = null
 
     init {
@@ -353,10 +356,35 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    private fun clearDeviceLocalWorkspaceCache() {
+        val app = getApplication<Application>()
+        for (name in listOf("studioflow_order_detail_layout", "studio_customer_pane")) {
+            app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().apply()
+        }
+    }
+
     fun signOut() {
-        repository.signOut()
-        // Blank the home-screen widgets so business figures don't outlive the session.
-        publishWidgetSummary(orders = emptyList())
+        // Remove this device's push registration while the session is still
+        // authenticated; after signOut() the Firestore rules reject the delete
+        // and the device would keep receiving the old workspace's pushes.
+        // Device-local card layout/colour state must not leak into the next
+        // account on this device (mirrors iOS clearDeviceLocalWorkspaceCardCache).
+        clearDeviceLocalWorkspaceCache()
+        StudioMessageRouteHolder.unregisterStoredDeviceToken(getApplication()) {
+            repository.signOut()
+            // Blank the home-screen widgets so business figures don't outlive the session.
+            publishWidgetSummary(orders = emptyList())
+            publishNotesWidget(emptyList())
+        }
+    }
+
+    // Push the Keep notes snapshot to the home-screen Notes widget (same data
+    // bridge as iOS). Fire-and-forget like publishWidgetSummary below.
+    private fun publishNotesWidget(notes: List<StudioKeepNote>) {
+        val settings = mutableState.value.workspaceSettings
+        viewModelScope.launch(Dispatchers.Default) {
+            runCatching { WidgetSummaryBridge.publishNotes(getApplication(), notes, settings) }
+        }
     }
 
     // Recompute the home-screen widget summary (same data bridge as iOS/macOS).
@@ -1836,6 +1864,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
 
     private fun observeWorkspace(workspace: StudioWorkspace, user: FirebaseUser) {
         ordersJob?.cancel()
+        bankFeedJob?.cancel()
         customersJob?.cancel()
         teamJob?.cancel()
         joinRequestsJob?.cancel()
@@ -1931,6 +1960,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 .catch { }
                 .collect { items ->
                     mutableState.update { it.copy(keepNotes = items) }
+                    publishNotesWidget(items)
                 }
         }
         viewModelScope.launch {
@@ -1975,6 +2005,17 @@ class StudioFlowViewModel @JvmOverloads constructor(
                 }
         }
         if (workspace.isOwner) {
+            // Bank feed mirrors are owner-only at the rules level; subscribe only as owner.
+            bankFeedJob = viewModelScope.launch {
+                kotlinx.coroutines.flow.combine(
+                    repository.bankTransactionsFlow(workspace.id),
+                    repository.bankConnectionsFlow(workspace.id)
+                ) { transactions, connections -> transactions to connections }
+                    .catch { }
+                    .collect { (transactions, connections) ->
+                        mutableState.update { it.copy(bankTransactions = transactions, bankConnections = connections) }
+                    }
+            }
             teamJob = viewModelScope.launch {
                 repository.teamAccessFlow(workspace.id)
                     .catch { error ->
@@ -1997,7 +2038,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
             // Members can switch workspaces and use their assigned tools, but Owner-only
             // management collections must not be subscribed to in the background.
             mutableState.update {
-                it.copy(teamMembers = emptyList(), customRoles = emptyList(), joinRequests = emptyList())
+                it.copy(teamMembers = emptyList(), customRoles = emptyList(), joinRequests = emptyList(),
+                    bankTransactions = emptyList(), bankConnections = emptyList())
             }
         }
     }

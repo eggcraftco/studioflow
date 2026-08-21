@@ -209,6 +209,8 @@ export type DashboardWidgetVisibility = {
   shipping: boolean;
   tax: boolean;
   profit: boolean;
+  // Bank spending line on the profit chart (owner-only data; toggle hides it).
+  bankSpending: boolean;
 };
 
 export type CompanyNumberSetting = {
@@ -1042,6 +1044,7 @@ function dashboardWidgetVisibilityValue(data: DocumentData): DashboardWidgetVisi
     cost: booleanValue(mapValue.cost, booleanValue(data.dashShowCost, true)),
     fee: booleanValue(mapValue.fee, booleanValue(data.dashShowFee, true)),
     shipping: booleanValue(mapValue.shipping, booleanValue(data.dashShowShipping, true)),
+    bankSpending: booleanValue(mapValue.bankSpending, true),
     tax: booleanValue(mapValue.tax, booleanValue(data.dashShowTax, true)),
     profit: booleanValue(mapValue.profit, booleanValue(data.dashShowProfit, true))
   };

@@ -99,7 +99,11 @@ fun StudioFlowApp(
     val state by viewModel.state.collectAsStateWithLifecycle()
     uk.co.eggcraft.studioflow.ui.theme.StudioFlowTheme(appTheme = state.workspaceSettings.appTheme) {
         androidx.compose.runtime.CompositionLocalProvider(
-            uk.co.eggcraft.studioflow.language.LocalStudioLanguage provides state.workspaceSettings.selectedLanguage.ifBlank { "English" }
+            uk.co.eggcraft.studioflow.language.LocalStudioLanguage provides state.workspaceSettings.selectedLanguage.ifBlank {
+                // No explicit choice yet (first launch / pre-login): follow the
+                // device locale instead of hard-coding English.
+                uk.co.eggcraft.studioflow.language.deviceDefaultStudioLanguage()
+            }
         ) {
             StudioFlowAppContent(viewModel = viewModel, state = state)
         }

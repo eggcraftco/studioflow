@@ -34,6 +34,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
 import com.google.firebase.firestore.Query
 import uk.co.eggcraft.studioflow.data.model.StudioActivityNotification
+import uk.co.eggcraft.studioflow.data.model.StudioBankConnection
+import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
+import uk.co.eggcraft.studioflow.data.model.bankConnectionFromDocument
+import uk.co.eggcraft.studioflow.data.model.bankTransactionFromDocument
 import uk.co.eggcraft.studioflow.data.model.StudioKeepCollaborationInvite
 import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioMessageItem
@@ -2419,6 +2423,32 @@ class StudioFlowRepository(
         }
         return resolvedAccess
     }
+    // ---- Bank feed (read-only; Firestore rules restrict reads to the owner) ----
+
+    fun bankTransactionsFlow(workspaceId: String): Flow<List<StudioBankTransaction>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankTransactions")
+            .orderBy("bookingDate", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .limit(3000)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                trySend(snapshot?.documents?.map { bankTransactionFromDocument(it.id, it.data.orEmpty()) } ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
+    fun bankConnectionsFlow(workspaceId: String): Flow<List<StudioBankConnection>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankConnections")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                trySend(snapshot?.documents?.map { bankConnectionFromDocument(it.id, it.data.orEmpty()) } ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
 }
 
 private fun workspaceSettings(

@@ -426,6 +426,40 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Bank feed (Open Banking) data is server-written and owner-only: the
+    // connection docs and transaction feed never open to other roles.
+    match /companies/{companyId}/bankConnections/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/bankTransactions/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
+    // Provider consent tokens — server-only, never client-readable.
+    match /companies/{companyId}/bankTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Categorisation rules — owner-readable, written only via callables.
+    match /companies/{companyId}/bankRules/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
+    // Pandle bookkeeping bridge — connection/meta/mapping is owner-readable,
+    // OAuth tokens are server-only.
+    match /companies/{companyId}/pandleConnection/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/pandleTokens/{document=**} {
+      allow read, write: if false;
+    }
+
     match /companies/{companyId}/orderDeletionRequests/{document=**} {
       // Workflow deletion approval is validated by callable functions only.
       allow read, write: if false;
@@ -495,6 +529,12 @@ service cloud.firestore {
         && collectionId != 'quickReplyUserSettings'
         && collectionId != 'orderDeletionRequests'
         && collectionId != 'personalInterfaceSettings'
+        && collectionId != 'bankConnections'
+        && collectionId != 'bankTransactions'
+        && collectionId != 'bankTokens'
+        && collectionId != 'bankRules'
+        && collectionId != 'pandleConnection'
+        && collectionId != 'pandleTokens'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -508,6 +548,12 @@ service cloud.firestore {
         && collectionId != 'quickReplyUserSettings'
         && collectionId != 'orderDeletionRequests'
         && collectionId != 'personalInterfaceSettings'
+        && collectionId != 'bankConnections'
+        && collectionId != 'bankTransactions'
+        && collectionId != 'bankTokens'
+        && collectionId != 'bankRules'
+        && collectionId != 'pandleConnection'
+        && collectionId != 'pandleTokens'
         && canWriteCompanyData(companyId);
     }
 

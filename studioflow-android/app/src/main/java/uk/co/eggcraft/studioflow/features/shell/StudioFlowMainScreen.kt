@@ -40,10 +40,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.outlined.CloudDone
@@ -137,6 +140,7 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 enum class StudioSection(val title: String, val icon: ImageVector, val accessKey: String) {
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
+    BankSpending("Bank", Icons.Filled.AccountBalance, "dashboard"),
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     TeamSchedule("Team Schedule", Icons.Filled.Groups, "schedule"),
@@ -273,6 +277,7 @@ fun StudioFlowMainScreen(
     val preferredSectionOrder = listOf(
         StudioSection.Orders,
         StudioSection.Dashboard,
+        StudioSection.BankSpending,
         StudioSection.Schedule,
         StudioSection.TeamSchedule,
         StudioSection.Notes,
@@ -291,6 +296,9 @@ fun StudioFlowMainScreen(
         val adminAllowsSection = item != StudioSection.Insights || mainScreenIsNivaDeskAdmin()
         if (item == StudioSection.Insights) {
             adminAllowsSection
+        } else if (item == StudioSection.BankSpending) {
+            // Bank feed reads are owner-only in Firestore rules.
+            state.workspace?.isOwner == true && (state.workspace?.canSeeFinancialData ?: true)
         } else {
             planAllowsSection && menuAllowsSection &&
                 (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
@@ -373,6 +381,29 @@ fun StudioFlowMainScreen(
         }
     }
 
+    // Launcher shortcut ("New note"): switch to the Notes section; NotesScreen
+    // consumes the flag and opens a fresh note editor.
+    LaunchedEffect(Unit) {
+        uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingNewNote.collect { pending ->
+            if (pending && StudioSection.Notes in availableSections) {
+                settingsStartKey = null
+                section = StudioSection.Notes
+            }
+        }
+    }
+
+    // Notes widget tap: land on the Notes section (list only, no editor).
+    LaunchedEffect(Unit) {
+        uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingOpenNotes.collect { pending ->
+            if (pending && uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.consumePendingOpenNotes() &&
+                StudioSection.Notes in availableSections
+            ) {
+                settingsStartKey = null
+                section = StudioSection.Notes
+            }
+        }
+    }
+
     LaunchedEffect(state.pendingActivityNavigation) {
         val pending = state.pendingActivityNavigation ?: return@LaunchedEffect
         when (pending) {
@@ -408,10 +439,29 @@ fun StudioFlowMainScreen(
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
             )
         } else {
-            BoxWithConstraints(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
+            ) {
+            if (state.workspace?.billingPlan == StudioBillingPlan.Demo &&
+                state.workspace.isOwner &&
+                activeSection != StudioSection.Settings
+            ) {
+                DemoPlanUpgradeBanner(
+                    companyId = state.workspace.id,
+                    onViewPlans = {
+                        settingsStartKey = "plan"
+                        if (StudioSection.Settings in availableSections) {
+                            section = StudioSection.Settings
+                        }
+                    }
+                )
+            }
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
         val useTopNavigation = maxWidth >= 840.dp
         val containerWidth = maxWidth
@@ -723,7 +773,9 @@ fun StudioFlowMainScreen(
                 Spacer(modifier = Modifier.width(drawerWidthDp))
             }
         }
-        AnimatedVisibility(
+        // Fully qualified: the outer Column (demo-banner wrapper) would otherwise
+        // make this resolve to the ColumnScope.AnimatedVisibility extension.
+        androidx.compose.animation.AnimatedVisibility(
             visible = isNotificationDrawerOpen,
             enter = slideInHorizontally(initialOffsetX = { it }),
             exit = slideOutHorizontally(targetOffsetX = { it }),
@@ -748,6 +800,86 @@ fun StudioFlowMainScreen(
             )
         }
         }
+        }
+        }
+    }
+}
+
+// First-launch guidance: Play Store installs land on the Free Demo plan and
+// often don't discover Settings → Plan & Access on their own. Mirrors iOS: the
+// X never fully hides the banner — it collapses to a one-line strip that
+// expands back on tap. Collapsed state is stored per companyId so it never
+// bleeds into a different account on this device.
+@Composable
+private fun DemoPlanUpgradeBanner(
+    companyId: String,
+    onViewPlans: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        context.getSharedPreferences("demo_plan_banner", Context.MODE_PRIVATE)
+    }
+    var collapsedCompanyId by rememberSaveable {
+        mutableStateOf(prefs.getString("collapsedCompanyId", "") ?: "")
+    }
+    val setCollapsed: (Boolean) -> Unit = { collapsed ->
+        collapsedCompanyId = if (collapsed) companyId else ""
+        prefs.edit().putString("collapsedCompanyId", collapsedCompanyId).apply()
+    }
+    val isCollapsed = companyId.isNotBlank() && collapsedCompanyId == companyId
+
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+        if (isCollapsed) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { setCollapsed(false) }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text("✨", fontSize = 10.sp)
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(t("Free Demo"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text("  ·  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("View plans"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("✨", fontSize = 16.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(t("You're on the Free Demo plan."), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        t("Choose a plan in Plan & Access to unlock more orders, storage and team features."),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(onClick = onViewPlans, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                    Text(t("View plans"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                IconButton(onClick = { setCollapsed(true) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = t("Close"),
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -1392,6 +1524,7 @@ private fun StudioSectionContent(
                 onLoadDraft = onLoadDraft,
                 onSaveDraft = onSaveDraft
             )
+            StudioSection.BankSpending -> uk.co.eggcraft.studioflow.features.bank.BankSpendingScreen(state = state)
             StudioSection.Notes -> uk.co.eggcraft.studioflow.features.notes.NotesScreen(
                 state = state,
                 onSetSearch = onSetKeepNotesSearch,
