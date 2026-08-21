@@ -4091,6 +4091,11 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   color: var(--muted);
 }
 
+/* Order value still has a balance due: amber until fully paid. */
+.order-list-amount.outstanding {
+  color: var(--warning);
+}
+
 .studio-pill,
 .status-pill,
 .due-pill {

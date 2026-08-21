@@ -352,9 +352,10 @@ export default function DashboardPage() {
   // spending line on the profit chart. Rules deny other roles, so the error
   // handler simply keeps the feed empty for them.
   const isWorkspaceOwner = workspace?.role === "owner";
+  const canViewBankFeed = isWorkspaceOwner || Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "bankFeed"));
   const workspaceId = workspace?.id ?? "";
   useEffect(() => {
-    if (!workspaceId || !isWorkspaceOwner) return;
+    if (!workspaceId || !canViewBankFeed) return;
     const unsubTx = onSnapshot(
       query(collection(db, "companies", workspaceId, "bankTransactions"), orderBy("bookingDate", "desc")),
       snap => {
@@ -388,7 +389,7 @@ export default function DashboardPage() {
       () => setBankLastSync(null)
     );
     return () => { unsubTx(); unsubConnections(); };
-  }, [workspaceId, isWorkspaceOwner]);
+  }, [workspaceId, canViewBankFeed]);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
@@ -493,7 +494,7 @@ export default function DashboardPage() {
   // Bank spending per chart bucket (red line). Buckets mirror buildChartSeries
   // exactly so the series lines up point-for-point with the profit line.
   const bankSeries = useMemo<ChartPoint[]>(() => {
-    if (!isWorkspaceOwner || !dashboardVisibility.bankSpending || bankTransactions.length === 0) return [];
+    if (!canViewBankFeed || !dashboardVisibility.bankSpending || bankTransactions.length === 0) return [];
     const spends = bankTransactions
       .filter(item => item.amount < 0 && item.bookingDate)
       .map(item => {
@@ -512,7 +513,7 @@ export default function DashboardPage() {
       cursor = bucketEnd;
     }
     return any ? points : [];
-  }, [bankTransactions, currentWindow.end, currentWindow.start, currentWindow.unit, dashboardVisibility.bankSpending, isWorkspaceOwner, locale]);
+  }, [bankTransactions, currentWindow.end, currentWindow.start, currentWindow.unit, dashboardVisibility.bankSpending, canViewBankFeed, locale]);
 
   const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
@@ -684,7 +685,7 @@ export default function DashboardPage() {
               <BankSpendingCard
                 transactions={bankTransactions}
                 lastSync={bankLastSync}
-                isOwner={isWorkspaceOwner}
+                isOwner={canViewBankFeed}
                 t={t}
                 hideNumbers={hideNumbers}
                 localeTag={locale}
@@ -695,7 +696,7 @@ export default function DashboardPage() {
                   orders={financeOrders}
                   settings={settings}
                   bankTransactions={bankTransactions}
-                  isOwner={isWorkspaceOwner}
+                  isOwner={canViewBankFeed}
                   t={t}
                   hideNumbers={hideNumbers}
                 />

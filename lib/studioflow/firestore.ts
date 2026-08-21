@@ -66,7 +66,8 @@ export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
   { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
   { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
-  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." }
+  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." },
+  { key: "bankFeed", label: "Bank Spending", description: "View the Open Banking spending feed (read-only). Connecting banks and Pandle stay with the owner." }
 ] as const;
 
 export const WORKSPACE_SETTINGS_ACCESS_OPTIONS = [
@@ -129,7 +130,7 @@ export type WorkspaceCustomRole = {
 };
 
 export const WORKSPACE_MEMBER_ACCESS_DEFAULTS: WorkspaceMemberAccess = WORKSPACE_MEMBER_ACCESS_OPTIONS.reduce((acc, option) => {
-  acc[option.key] = option.key === "assignedProjectsOnly" || option.key === "manageProjectAssignments" ? false : true;
+  acc[option.key] = option.key === "assignedProjectsOnly" || option.key === "manageProjectAssignments" || option.key === "bankFeed" ? false : true;
   return acc;
 }, {} as WorkspaceMemberAccess);
 

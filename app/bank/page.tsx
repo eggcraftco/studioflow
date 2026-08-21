@@ -14,9 +14,10 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
-import { loadWorkspaceContext, loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
+import { PandleCard } from "@/components/PandleCard";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -63,7 +64,7 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
 type BankRule = { id: string; keyword: string; category: string };
 
 const BANK_CATEGORIES = [
-  "Materials", "Shipping", "Software", "Subscriptions", "Fees",
+  "Materials", "Equipment", "Shipping", "Software", "Subscriptions", "Fees",
   "Marketing", "Travel", "Utilities", "Rent", "Staff", "Tax", "Other"
 ] as const;
 
@@ -116,6 +117,7 @@ function BankPageContent() {
   const [showRules, setShowRules] = useState(false);
   const [showRecurring, setShowRecurring] = useState(true);
   const [txPage, setTxPage] = useState(1);
+  const [txPageSize, setTxPageSize] = useState<10 | 20 | 30>(10);
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllCats, setShowAllCats] = useState(false);
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
@@ -150,11 +152,14 @@ function BankPageContent() {
   }, [user]);
 
   const isOwner = workspace?.role === "owner";
+  // Members the owner granted "Bank Spending" get a read-only view; every
+  // mutation (connect, categorise, receipts, Pandle) stays with the owner.
+  const canViewBank = isOwner || workspaceAccessAllows(workspace?.memberAccess, "bankFeed");
   const companyId = workspace?.id ?? "";
 
   // Live views over the server-written feed (owner-only per Firestore rules).
   useEffect(() => {
-    if (!companyId || !isOwner) return;
+    if (!companyId || !canViewBank) return;
     const unsubConnections = onSnapshot(
       collection(db, "companies", companyId, "bankConnections"),
       snap => {
@@ -206,7 +211,7 @@ function BankPageContent() {
       () => setRules([])
     );
     return () => { unsubConnections(); unsubTransactions(); unsubRules(); };
-  }, [companyId, isOwner]);
+  }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
     const callable = httpsCallable<Record<string, unknown>, T>(functions, name);
@@ -505,6 +510,15 @@ function BankPageContent() {
   }, [transactions, view, monthPrefix, selectedYear]);
 
   // Spending per effective category for the selected period (Year/Month tab).
+  // Every category name present in the feed (presets + custom), for the
+  // Pandle mapping editor.
+  const categoriesInUse = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach(tx => { const name = effectiveCategory(tx); if (name) set.add(name); });
+    rules.forEach(rule => { if (rule.category) set.add(rule.category); });
+    return Array.from(set);
+  }, [transactions, rules]);
+
   const categoryBreakdown = useMemo(() => {
     const totals = new Map<string, number>();
     let total = 0;
@@ -567,9 +581,8 @@ function BankPageContent() {
     return list;
   }, [visibleTransactions, sortAsc]);
 
-  const TX_PAGE_SIZE = 8;
-  const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / TX_PAGE_SIZE));
-  const pagedTransactions = sortedTransactions.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
+  const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
+  const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
   useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth]);
 
   const activeRecurring = recurring.filter(item => item.active);
@@ -627,7 +640,7 @@ function BankPageContent() {
           ) : null}
         </div>
 
-        {!isOwner ? (
+        {!canViewBank ? (
           <p style={{ fontSize: 13, opacity: 0.75 }}>{t("Bank connections are managed by the workspace owner.")}</p>
         ) : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
@@ -674,7 +687,7 @@ function BankPageContent() {
           </div>
         ) : null}
 
-        {isOwner ? (
+        {canViewBank ? (
           <>
             {/* ---- Connection pill + period control ------------------------ */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -809,10 +822,12 @@ function BankPageContent() {
                           ))}
                         </>
                       ) : null}
-                      <button type="button" onClick={() => setShowRules(value => !value)} style={cardFootLink}>
-                        {t("Manage recurring rules")} →
-                      </button>
-                      {showRules ? (
+                      {isOwner ? (
+                        <button type="button" onClick={() => setShowRules(value => !value)} style={cardFootLink}>
+                          {t("Manage recurring rules")} →
+                        </button>
+                      ) : null}
+                      {isOwner && showRules ? (
                         rules.length === 0 ? (
                           <p style={{ fontSize: 12, opacity: 0.65, margin: "8px 0 0" }}>{t("No rules yet — set a category on a transaction and tick the rule box.")}</p>
                         ) : (
@@ -916,7 +931,13 @@ function BankPageContent() {
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
                                 <td style={tdStyle}>
-                                  {transaction.amount < 0 ? (
+                                  {transaction.amount < 0 && !isOwner ? (
+                                    <span style={category
+                                      ? { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${catColor}1a`, color: catColor }
+                                      : { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.13)", opacity: 0.75 }}>
+                                      {category ? t(category) : t("Uncategorised")}
+                                    </span>
+                                  ) : transaction.amount < 0 ? (
                                     <button type="button" disabled={busy === `cat-${transaction.id}`}
                                       onClick={() => {
                                         setCategoryPickerTxId(current => current === transaction.id ? null : transaction.id);
@@ -944,7 +965,14 @@ function BankPageContent() {
                                   {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                                 </td>
                                 <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                                  {transaction.amount < 0 ? (
+                                  {transaction.amount < 0 && !isOwner ? (
+                                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                                      {transaction.receiptPath ? (
+                                        <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")} onClick={() => void openReceipt(transaction)} aria-label={t("View invoice")}>📎</button>
+                                      ) : null}
+                                      {transaction.linkedOrderId ? <span title={transaction.linkedOrderLabel} style={{ fontSize: 11, color: "#2563eb" }}>⛓</span> : null}
+                                    </span>
+                                  ) : transaction.amount < 0 ? (
                                     <span style={{ display: "inline-flex", gap: 2 }}>
                                       {transaction.receiptPath ? (
                                         <>
@@ -1055,6 +1083,14 @@ function BankPageContent() {
                   <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 18px 14px", justifyContent: "center", flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11.5, opacity: 0.6, marginRight: "auto" }}>
                       {t("Showing")} {pagedTransactions.length} / {sortedTransactions.length}
+                      <span role="group" aria-label={t("Rows per page")} style={{ display: "inline-flex", gap: 2, marginLeft: 10, background: "rgba(120,120,140,0.12)", borderRadius: 7, padding: 2 }}>
+                        {([10, 20, 30] as const).map(size => (
+                          <button key={size} type="button" onClick={() => { setTxPageSize(size); setTxPage(1); }}
+                            style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 5, background: txPageSize === size ? "#2563eb" : "transparent", color: txPageSize === size ? "#fff" : "inherit" }}>
+                            {size}
+                          </button>
+                        ))}
+                      </span>
                     </span>
                     <button type="button" className="finance-payments-delete" disabled={txPage <= 1} onClick={() => setTxPage(page => Math.max(1, page - 1))} aria-label={t("Previous period")}>‹</button>
                     {Array.from({ length: Math.min(5, txPageCount) }, (_, index) => {
@@ -1073,6 +1109,12 @@ function BankPageContent() {
                 </div>
               </>
             )}
+
+            {/* ---- Pandle bookkeeping bridge (works before the bank feed too, so
+                 the mapping can be set up ahead of time) ---------------------- */}
+            {/* Pandle bridge ships dark until Pandle issues the OAuth app credentials
+                 (NEXT_PUBLIC_PANDLE_ENABLED=1 turns the card on). */}
+            {isOwner && process.env.NEXT_PUBLIC_PANDLE_ENABLED === "1" ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
           </>
         ) : null}
       </div>

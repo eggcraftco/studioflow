@@ -1,5 +1,6 @@
 "use client";
 
+import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -2760,6 +2761,7 @@ function AccountSection({
       } catch {
         /* ignore */
       }
+      clearDeviceLocalWorkspaceCache();
       await signOut(auth);
       router.replace("/login");
     } catch (signOutError) {
@@ -3088,6 +3090,7 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
     try {
       const callable = httpsCallable<{ confirmation: string }, { ok: boolean }>(functions, "deleteMyAccount");
       await callable({ confirmation: "DELETE" });
+      clearDeviceLocalWorkspaceCache();
       try {
         await auth.signOut();
       } catch {

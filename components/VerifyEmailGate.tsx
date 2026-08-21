@@ -3,6 +3,7 @@
 // Blocks email/password accounts until the address is verified. OAuth users
 // (Google, Apple) pass straight through — their providers verify the email.
 
+import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { useState } from "react";
 import { sendEmailVerification, signOut, type User } from "firebase/auth";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -218,7 +219,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
           </button>
           <button
             type="button"
-            onClick={() => void signOut(auth).then(() => window.location.replace("/login"))}
+            onClick={() => { clearDeviceLocalWorkspaceCache(); void signOut(auth).then(() => window.location.replace("/login")); }}
             style={{ background: "none", border: 0, color: "var(--muted)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 8 }}
           >
             Sign out

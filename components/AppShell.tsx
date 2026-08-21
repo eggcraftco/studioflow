@@ -1,5 +1,6 @@
 "use client";
 
+import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import {
   createContext,
   useContext,
@@ -1416,6 +1417,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    clearDeviceLocalWorkspaceCache();
     await signOut(auth);
     router.replace("/login");
   }

@@ -17,6 +17,8 @@ export type OrderListCardItem = {
   status: string;
   paidAmount: number;
   remainingAmount: number;
+  // Custom "Remaining" receivables (financialRemaining::*) — part of the order value.
+  customRemainingTotal?: number;
   paymentDate?: Date | null;
   dueDate: Date | null;
   isDispatched?: boolean;
@@ -270,6 +272,8 @@ export function OrderListCard({
   multiSelected?: boolean;
   selectionActive?: boolean;
 }) {
+  // Order value = paid + every kind of outstanding balance; amber until it reaches zero.
+  const outstandingAmount = Math.max(0, order.remainingAmount) + Math.max(0, order.customRemainingTotal ?? 0);
   const { hideNumbers } = usePricePrivacy();
   const firstBadgeStep = resolveBadgeStep(blockHeadingSettings, 1);
   const secondBadgeStep = resolveBadgeStep(blockHeadingSettings, 2);
@@ -406,8 +410,8 @@ export function OrderListCard({
             </div>
           ) : null}
           {canSeeFinance ? (
-            <strong className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : "order-list-amount"}>
-              {money(order.paidAmount, hideNumbers, moneySettings)}
+            <strong className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : (outstandingAmount > 0.009 ? "order-list-amount outstanding" : "order-list-amount")}>
+              {money(order.paidAmount + outstandingAmount, hideNumbers, moneySettings)}
             </strong>
           ) : null}
         </div>
