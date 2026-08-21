@@ -4,8 +4,11 @@ App: **NivaDesk** · Bundle ID: `uk.co.eggcraft.studioflow` · Vendor: EGGCRAFT 
 Current version: 0.1.3 (Android versionCode 4)
 
 This folder holds ready-to-paste store listing copy for the App Store and Google
-Play. Primary locale is **en-US**; **tr** is also provided. The app ships in 12
-languages, so additional locales can be translated from the en-US masters later.
+Play. Primary locale is **en-US**. All 12 app languages are provided: en-US, tr,
+de-DE, fr-FR, it, es-ES, pt-PT, ru, ja, zh-Hans, ar-SA, hi (App Store) and the
+matching Play locales (de-DE, fr-FR, it-IT, es-ES, pt-PT, ru-RU, ja-JP, zh-CN,
+ar, hi-IN). Translated from the en-US masters — keep them in sync when the
+English copy changes.
 
 ## Character limits (hard limits enforced by the stores)
 

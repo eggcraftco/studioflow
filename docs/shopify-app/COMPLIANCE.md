@@ -55,10 +55,14 @@ store events for verification.
 **Step 1 — done (12 Aug 2026):** Protected customer data + all four fields (Name,
 Email, Phone, Address) approved with reasons *Store management* and *App functionality*.
 
-**Step 2 — "Data protection details" (16 questions): draft answers below.**
-Required before public App Store submission (not for dev stores). The user pastes /
-adapts these in the Partner dashboard — wording can be tightened to fit each field's
-character limit.
+**Step 2 — done (12 Aug 2026): 16/16 saved in the Partner dashboard.** The live form
+turned out to be Yes/No/Not-applicable radios (not free text). Answers given, grounded
+in the notes below: **13 × Yes**; **Not applicable** for the three consent questions
+(customer consent decisions, opt-out of data sale, automated decision-making) because
+the app does no marketing, never sells data, and makes no automated decisions.
+Audits free-text field: "No third-party audit of the app itself yet. Infrastructure
+runs on Google Cloud / Firebase (ISO 27001, SOC 1/2/3 certified), region europe-west2
+(London)." The draft answers below remain as the supporting rationale.
 
 1. **Why does your app need protected customer data?**
    NivaDesk turns Shopify orders into production job records. Customer name and
@@ -124,10 +128,13 @@ character limit.
 
 ## 5. Residual items before public submission
 
-- [ ] Paste step-2 answers into Partner dashboard (owner action, with review).
+- [x] Paste step-2 answers into Partner dashboard — done 12 Aug 2026 (16/16 saved).
 - [ ] Listing privacy/data section must link nivadesk.app/privacy + state retention
-      terms for imported orders.
-- [ ] `shopify app deploy` so the webhook + scopes config is versioned for production
-      installs (currently applied via `shopify app dev`).
-- [ ] Cloud Run (or equivalent) deploy of the app server + `application_url` update —
-      trycloudflare tunnels are dev-only.
+      terms for imported orders. (Listing form blocked on the one-time $19 App Store
+      registration — owner: business questions + attestation + payment.)
+- [x] `shopify app deploy` — config version `nivadesk-order-management-3` released
+      with Cloud Run URLs (12 Aug 2026).
+- [x] Cloud Run deploy of the app server + `application_url` update — service
+      `nivadesk-shopify-app`, europe-west2 (12 Aug 2026; branded root page live).
+- [x] Public distribution selected in the Partner dashboard (12 Aug 2026 — required
+      gateway to the listing form; permanent by design).

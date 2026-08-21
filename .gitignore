@@ -136,3 +136,7 @@ studioflow-web/public/demo/*.mp4
 
 # Photoshop masters are too large for git
 store-metadata/screenshots/source/**/*.psd
+
+# Large local demo recordings (not served by the site)
+studioflow-web/public/NivaDesk_Demo_high.mov
+studioflow-web/public/NivaDesk_Demo.mp4
