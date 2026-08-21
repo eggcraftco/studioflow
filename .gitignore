@@ -133,3 +133,6 @@ nivadesk-web-deploy-temp/
 
 # Large demo media — keep out of git history (serve from CDN / use Git LFS)
 studioflow-web/public/demo/*.mp4
+
+# Photoshop masters are too large for git
+store-metadata/screenshots/source/**/*.psd
