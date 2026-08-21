@@ -41,7 +41,27 @@ type BankTransaction = {
   linkedOrderLabel: string;
   category: string;
   categoryAuto: string;
+  txType: string;
 };
+
+// TrueLayer transaction_category → short human label (t()'d at render time).
+const TX_TYPE_LABELS: Record<string, string> = {
+  PURCHASE: "Card payment",
+  POS: "Card payment",
+  DIRECT_DEBIT: "Direct Debit",
+  STANDING_ORDER: "Standing Order",
+  TRANSFER: "Transfer",
+  BILL_PAYMENT: "Bill payment",
+  ATM: "ATM",
+  CASH: "Cash",
+  FEE_CHARGE: "Bank fee",
+  INTEREST: "Interest",
+  CREDIT: "Incoming",
+  DEBIT: "Payment"
+};
+function txTypeLabel(txType: string): string {
+  return TX_TYPE_LABELS[txType] || "";
+}
 type BankRule = { id: string; keyword: string; category: string };
 
 const BANK_CATEGORIES = [
@@ -77,6 +97,10 @@ function BankPageContent() {
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<"month" | "year">("month");
+  // Navigable period: month view walks month by month, year view year by year.
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-based, for month view
   const [linkPickerTxId, setLinkPickerTxId] = useState<string | null>(null);
   const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
@@ -150,7 +174,8 @@ function BankPageContent() {
             linkedOrderId: String(data.linkedOrderId || ""),
             linkedOrderLabel: String(data.linkedOrderLabel || ""),
             category: String(data.category || ""),
-            categoryAuto: String(data.categoryAuto || "")
+            categoryAuto: String(data.categoryAuto || ""),
+            txType: String(data.txType || "")
           };
         }));
       }
@@ -220,7 +245,7 @@ function BankPageContent() {
     setError(null);
     setStatus(null);
     try {
-      const result = await call<{ synced: number; skipped: number; imported: number }>("bankSyncTransactions", {});
+      const result = await call<{ synced: number; skipped: number; imported: number }>("bankSyncTransactions", { force: true });
       setStatus(
         result.skipped > 0 && result.synced === 0
           ? t("Already up to date — banks limit how often transactions can be fetched.")
@@ -375,35 +400,43 @@ function BankPageContent() {
     return list.slice(0, 25);
   }, [orderOptions, orderSearch]);
 
-  const monthTotal = useMemo(() => {
-    const now = new Date();
-    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return transactions
-      .filter(item => item.bookingDate.startsWith(prefix) && item.amount < 0)
-      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
-  }, [transactions]);
+  const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const isCurrentPeriod = view === "month"
+    ? selectedYear === now.getFullYear() && selectedMonth === now.getMonth()
+    : selectedYear === now.getFullYear();
 
-  // Spending per month of the current year (outgoing only), for the Year view.
+  function stepPeriod(direction: -1 | 1) {
+    if (view === "year") {
+      setSelectedYear(year => Math.min(now.getFullYear(), year + direction));
+      return;
+    }
+    const next = new Date(selectedYear, selectedMonth + direction, 1);
+    if (next > now) return;
+    setSelectedYear(next.getFullYear());
+    setSelectedMonth(next.getMonth());
+  }
+
+  const monthTotal = useMemo(() => transactions
+    .filter(item => item.bookingDate.startsWith(monthPrefix) && item.amount < 0)
+    .reduce((acc, item) => acc + Math.abs(item.amount), 0), [transactions, monthPrefix]);
+
+  // Spending per month of the selected year (outgoing only), for the Year view.
   const yearSeries = useMemo(() => {
-    const year = new Date().getFullYear();
     const totals = Array.from({ length: 12 }, () => 0);
     for (const item of transactions) {
-      if (item.amount >= 0 || !item.bookingDate.startsWith(String(year))) continue;
+      if (item.amount >= 0 || !item.bookingDate.startsWith(String(selectedYear))) continue;
       const month = Number(item.bookingDate.slice(5, 7)) - 1;
       if (month >= 0 && month < 12) totals[month] += Math.abs(item.amount);
     }
-    return { year, totals, total: totals.reduce((acc, value) => acc + value, 0) };
-  }, [transactions]);
+    return { year: selectedYear, totals, total: totals.reduce((acc, value) => acc + value, 0) };
+  }, [transactions, selectedYear]);
 
   // The list follows the selected period; anything older stays reachable by
   // switching the tab back.
   const visibleTransactions = useMemo(() => {
-    const now = new Date();
-    const prefix = view === "month"
-      ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-      : String(now.getFullYear());
+    const prefix = view === "month" ? monthPrefix : String(selectedYear);
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
-  }, [transactions, view]);
+  }, [transactions, view, monthPrefix, selectedYear]);
 
   // Spending per effective category for the selected period (Year/Month tab).
   const categoryBreakdown = useMemo(() => {
@@ -573,15 +606,24 @@ function BankPageContent() {
                       color: view === option ? "#fff" : "inherit"
                     }}
                   >
-                    {option === "month" ? t("This Month") : t("This Year")}
+                    {option === "month" ? t("Monthly") : t("Yearly")}
                   </button>
                 ))}
               </div>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
+                <strong style={{ fontSize: 12.5, minWidth: 92, textAlign: "center" }}>
+                  {view === "month"
+                    ? new Date(selectedYear, selectedMonth, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
+                    : selectedYear}
+                </strong>
+                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
+              </span>
               {transactions.length > 0 ? (
                 <span style={{ fontSize: 11.5, opacity: 0.75 }}>
                   {view === "month"
-                    ? <>{t("This month's spending")}: <strong>{money(monthTotal, transactions[0]?.currency || "GBP")}</strong></>
-                    : <>{yearSeries.year} {t("spending")}: <strong>{money(yearSeries.total, transactions[0]?.currency || "GBP")}</strong></>}
+                    ? <>{t("spending")}: <strong>{money(monthTotal, transactions[0]?.currency || "GBP")}</strong></>
+                    : <>{t("spending")}: <strong>{money(yearSeries.total, transactions[0]?.currency || "GBP")}</strong></>}
                 </span>
               ) : null}
             </div>
@@ -592,7 +634,7 @@ function BankPageContent() {
                   {yearSeries.totals.map((value, index) => {
                     const max = Math.max(...yearSeries.totals, 1);
                     const height = Math.max(value > 0 ? 4 : 0, Math.round((value / max) * 100));
-                    const isCurrent = index === new Date().getMonth();
+                    const isCurrent = selectedYear === new Date().getFullYear() && index === new Date().getMonth();
                     return (
                       <div key={index} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}
                         title={`${new Date(yearSeries.year, index, 1).toLocaleDateString(undefined, { month: "long" })}: ${money(value, transactions[0]?.currency || "GBP")}`}>
@@ -669,6 +711,7 @@ function BankPageContent() {
                         </div>
                         <div style={{ fontSize: 10.5, opacity: 0.6 }}>
                           {transaction.bookingDate}
+                          {txTypeLabel(transaction.txType) ? ` · ${t(txTypeLabel(transaction.txType))}` : ""}
                           {transaction.counterparty && transaction.description ? ` · ${transaction.description}` : ""}
                           {transaction.status === "pending" ? ` · ${t("pending")}` : ""}
                         </div>
