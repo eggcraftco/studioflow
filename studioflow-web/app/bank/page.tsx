@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -17,7 +17,7 @@ import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, suggestCategory, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
-import { PandleCard } from "@/components/PandleCard";
+import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -43,6 +43,7 @@ type BankTransaction = {
   category: string;
   categoryAuto: string;
   txType: string;
+  vatCode: string;
 };
 
 // TrueLayer transaction_category → coloured badge (short label, t()'d at
@@ -62,6 +63,16 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
 type BankRule = { id: string; keyword: string; category: string };
+
+// Pandle's UK tax codes; the label is what the owner sees on a transaction.
+const VAT_CODES: Array<{ code: string; label: string }> = [
+  { code: "ST", label: "VAT 20%" },
+  { code: "RR", label: "VAT 5%" },
+  { code: "RC", label: "Reverse charge" },
+  { code: "NV", label: "No VAT" },
+  { code: "EX", label: "Exempt / 0%" }
+];
+const vatLabel = (code: string) => VAT_CODES.find(item => item.code === code)?.label || code;
 
 const BANK_CATEGORIES = [
   "Materials", "Equipment", "Shipping", "Software", "Subscriptions", "Fees",
@@ -153,6 +164,10 @@ function BankPageContent() {
   const [bulkCategory, setBulkCategory] = useState("");
   // After accepting a suggestion: offer to turn it into a rule for that merchant.
   const [rulePrompt, setRulePrompt] = useState<{ keyword: string; category: string } | null>(null);
+  // Category → default VAT code (from the Pandle mapping, falls back to defaults).
+  const [categoryTax, setCategoryTax] = useState<Record<string, string>>({});
+  const [bulkVat, setBulkVat] = useState("");
+  const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -228,7 +243,8 @@ function BankPageContent() {
             linkedOrderLabel: String(data.linkedOrderLabel || ""),
             category: String(data.category || ""),
             categoryAuto: String(data.categoryAuto || ""),
-            txType: String(data.txType || "")
+            txType: String(data.txType || ""),
+            vatCode: String(data.vatCode || "")
           };
         }));
       }
@@ -243,7 +259,12 @@ function BankPageContent() {
       },
       () => setRules([])
     );
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); };
+    const unsubPandle = onSnapshot(doc(db, "companies", companyId, "pandleConnection", "main"), snap => {
+      const mappings = (snap.data()?.mappings as Array<{ category: string; taxCode: string }> | undefined) ?? [];
+      const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
+      setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
+    }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -503,6 +524,23 @@ function BankPageContent() {
       setBulkCategory("");
     } catch (bulkError) {
       setError(bulkError instanceof Error ? bulkError.message : "Could not update the transactions.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const effectiveVat = (tx: BankTransaction) => tx.vatCode || categoryTax[effectiveCategory(tx)] || "";
+  async function applyVat(ids: string[], vatCode: string) {
+    if (ids.length === 0) return;
+    setBusy("vat");
+    setError(null);
+    try {
+      const result = await call<{ updated: number }>("bankSetTransactionVatBulk", { transactionIds: ids, vatCode });
+      setStatus(`${result.updated} ${t("transactions updated")}`);
+      setVatPickerTxId(null);
+      if (ids.length > 1) { setSelectedIds(new Set()); setBulkVat(""); }
+    } catch (vatError) {
+      setError(vatError instanceof Error ? vatError.message : "Could not update the VAT treatment.");
     } finally {
       setBusy(null);
     }
@@ -1131,6 +1169,14 @@ function BankPageContent() {
                         {busy === "bulk" ? t("Saving…") : t("Apply")}
                       </button>
                       <button type="button" style={bankBtnSm} disabled={busy === "bulk"} onClick={() => void applyBulkCategory("")}>{t("Clear category")}</button>
+                      <select value={bulkVat} onChange={event => setBulkVat(event.target.value)} style={{ ...pickerInput, flex: "0 1 160px" }} aria-label={t("Set VAT")}>
+                        <option value="">{t("Set VAT")}…</option>
+                        {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                        <option value="__clear">{t("Use category default")}</option>
+                      </select>
+                      <button type="button" style={bankBtnSm} disabled={busy === "vat" || !bulkVat} onClick={() => void applyVat(Array.from(selectedIds), bulkVat === "__clear" ? "" : bulkVat)}>
+                        {busy === "vat" ? t("Saving…") : t("Apply VAT")}
+                      </button>
                       <span style={{ flex: 1 }} />
                       <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} onClick={() => setSelectedIds(new Set())}>{t("Clear selection")}</button>
                     </div>
@@ -1220,6 +1266,21 @@ function BankPageContent() {
                                       </button>
                                     );
                                   })() : null}
+                                  {transaction.amount < 0 && category && effectiveVat(transaction) ? (
+                                    <button type="button" disabled={!isOwner || busy === "vat"}
+                                      title={transaction.vatCode ? t("VAT set on this transaction") : t("Category default VAT")}
+                                      onClick={() => isOwner && setVatPickerTxId(current => current === transaction.id ? null : transaction.id)}
+                                      style={{ marginLeft: 4, border: 0, cursor: isOwner ? "pointer" : "default", fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "2px 8px", background: "rgba(120,120,140,0.12)", color: "inherit", opacity: transaction.vatCode ? 0.95 : 0.6 }}>
+                                      {t(vatLabel(effectiveVat(transaction)))}
+                                    </button>
+                                  ) : null}
+                                  {vatPickerTxId === transaction.id ? (
+                                    <select autoFocus value={transaction.vatCode} onChange={event => void applyVat([transaction.id], event.target.value)} onBlur={() => setVatPickerTxId(null)}
+                                      style={{ ...pickerInput, marginLeft: 4, flex: "0 1 140px", fontSize: 11, padding: "3px 6px" }} aria-label={t("Set VAT")}>
+                                      <option value="">{t("Use category default")}</option>
+                                      {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                                    </select>
+                                  ) : null}
                                   {transaction.amount >= 0 ? (
                                     <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.1)", opacity: 0.55 }}>—</span>
                                   ) : null}

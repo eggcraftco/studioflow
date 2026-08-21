@@ -12,14 +12,14 @@ against what already ships. Positioning stays: **NivaDesk = working/decision lay
 | Team permission (read-only members) | ✅ shipped | `bankFeed` access key |
 | ChatGPT tools (summary, search, attach receipt via file) | ✅ shipped, v1.1.0 in OpenAI review | |
 | Pandle: match existing imported tx → confirm, ids stored, code-based mapping, OAuth server-side | ✅ code ready, ⏳ waits for Pandle app credentials | `functions/pandle.js`, `PandleCard` behind `NEXT_PUBLIC_PANDLE_ENABLED` |
-| Breakdown ≠ total consistency line | 🔜 step 1 | "£X of £Y accounted for" under spending mix |
-| Spending increase shown green | 🔜 step 1 | neutral colour unless over expected |
-| Recurring "8 active · 3 possibly cancelled" | 🔜 step 1 | |
-| Uncategorised progress indicator | 🔜 step 1 | |
-| **Needs Attention** card + queues | 🔜 step 2 | replaces "Connected accounts" tile; uncategorised / missing receipt / possible duplicate / price changed / possibly cancelled |
-| Bulk review (multi-select → category / link / mark reviewed) | 🔜 step 3 | |
-| Category suggestions (merchant history + keyword library, "always?" prompt) | 🔜 step 4 | heuristic first, no AI cost; AI later |
-| VAT treatment per transaction (+ category default) | 🔜 step 5 | feeds Pandle tax-code mapping |
+| Breakdown ≠ total consistency line | ✅ 21 Aug | "£X of £Y accounted for" under spending mix |
+| Spending increase shown green | ✅ 21 Aug | neutral colour unless over expected |
+| Recurring "8 active · 3 possibly cancelled" | ✅ 21 Aug | |
+| Uncategorised progress indicator | ✅ 21 Aug | |
+| **Needs Attention** card + queues | ✅ 21 Aug | replaces "Connected accounts" tile; uncategorised / missing receipt / possible duplicate / price changed / possibly cancelled |
+| Bulk review (multi-select → category / VAT) | ✅ 21 Aug (link/mark reviewed later) | |
+| Category suggestions (merchant history + keyword library, "always?" prompt) | ✅ 21 Aug | heuristic first, no AI cost; AI later |
+| VAT treatment per transaction (+ category default) | ✅ 21 Aug (`vatCode`, Pandle push honours it) | feeds Pandle tax-code mapping |
 | Order / project link suggestions with confidence | 🔜 step 6 | uses open orders, dates, customer/material keywords |
 | Transaction detail drawer + hover actions; "Banking" tabs (Overview / Transactions / Recurring / Receipts / Rules) | 🔜 step 7 | UI restructure |
 | Pandle phase 1 (read-only view) → phase 2 (confirm) → phase 3 (receipt sync, rules push, order→project, bulk confirm, reverse sync after confirm) | ⏳ credentials | phase 1–2 code exists; phase 3 after live test |
@@ -40,6 +40,6 @@ against what already ships. Positioning stays: **NivaDesk = working/decision lay
 
 ## Data model additions planned
 
-- `bankTransactions.{vatCode}` (ST/RR/RC/NV/EX), `reviewedAt`, `splitLines[]`, `transferOf`
+- `bankTransactions.vatCode` ✅ (ST/RR/RC/NV/EX); planned: `reviewedAt`, `splitLines[]`, `transferOf`
 - `bankRules.{vatCode}`
 - `pandleConnection.mappings[].taxCode` already exists (category default)

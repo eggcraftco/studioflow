@@ -260,12 +260,15 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     return out;
   }
 
-  function resolveMapping(connection, category) {
+  // vatOverride: the transaction's own VAT treatment (set in NivaDesk) wins
+  // over the category's default tax code.
+  function resolveMapping(connection, category, vatOverride = "") {
     const mappings = Array.isArray(connection.mappings) && connection.mappings.length ? connection.mappings : DEFAULT_MAPPINGS;
     const mapping = mappings.find((item) => item.category === category);
     if (!mapping || !mapping.nominalCode) return { error: "unmapped" };
     const nominal = (connection.categories || []).find((item) => item.code === mapping.nominalCode);
-    const tax = (connection.taxCodes || []).find((item) => item.code === mapping.taxCode);
+    const taxCode = cleanText(vatOverride, 4).toUpperCase() || mapping.taxCode;
+    const tax = (connection.taxCodes || []).find((item) => item.code === taxCode);
     if (!nominal) return { error: "nominal-missing", mapping };
     if (!tax) return { error: "tax-missing", mapping };
     return { mapping, nominal, tax };
@@ -494,6 +497,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         description: cleanText(data.description, 300),
         counterparty: cleanText(data.counterparty, 160),
         category: cleanText(data.category, 60) || cleanText(data.categoryAuto, 60),
+        vatCode: cleanText(data.vatCode, 4),
         hasReceipt: Boolean(data.receiptPath),
         linkedOrderLabel: cleanText(data.linkedOrderLabel, 120),
         pandleStatus: cleanText(data.pandle?.status, 20)
@@ -502,7 +506,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
 
     const { matches } = matchFeeds(nivaRows, pandleRows);
     const items = matches.map(({ niva, pandle, score, drift }) => {
-      const resolved = niva.category ? resolveMapping(connection, niva.category) : { error: "uncategorised" };
+      const resolved = niva.category ? resolveMapping(connection, niva.category, niva.vatCode) : { error: "uncategorised" };
       return {
         transactionId: niva.id,
         importedId: pandle.id,
@@ -555,7 +559,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       if (!tx) { results.push({ ...item, ok: false, error: "Transaction not found." }); continue; }
       if (tx.pandle?.status === "confirmed") { results.push({ ...item, ok: true, skipped: true }); continue; }
       const category = cleanText(tx.category, 60) || cleanText(tx.categoryAuto, 60);
-      const resolved = category ? resolveMapping(connection, category) : { error: "uncategorised" };
+      const resolved = category ? resolveMapping(connection, category, cleanText(tx.vatCode, 4)) : { error: "uncategorised" };
       if (resolved.error) { results.push({ ...item, ok: false, error: `Category "${category || "—"}" is not mapped to a Pandle category.` }); continue; }
 
       // Re-read the Pandle row so the amount and direction come from Pandle

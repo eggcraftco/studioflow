@@ -522,6 +522,24 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true, updated };
   });
 
+  // VAT treatment per transaction (Pandle tax codes: ST 20%, RR 5%, RC reverse
+  // charge, NV no VAT, EX exempt/zero). Empty = fall back to the category default.
+  const bankSetTransactionVatBulk = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const ids = Array.from(new Set((Array.isArray(request.data?.transactionIds) ? request.data.transactionIds : [])
+      .map((id) => cleanText(id, 250)).filter(Boolean))).slice(0, 200);
+    if (!ids.length) throw new HttpsError("invalid-argument", "transactionIds is required.");
+    const vatCode = cleanText(request.data?.vatCode, 4).toUpperCase();
+    if (vatCode && !["ST", "RR", "RC", "NV", "EX"].includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+    const value = vatCode ? { vatCode } : { vatCode: admin.firestore.FieldValue.delete() };
+    const docs = await db().getAll(...ids.map((id) => transactionsRef(companyId).doc(id)));
+    const batch = db().batch();
+    let updated = 0;
+    docs.forEach((doc) => { if (doc.exists) { batch.set(doc.ref, value, { merge: true }); updated += 1; } });
+    if (updated) await batch.commit();
+    return { ok: true, updated };
+  });
+
   // Walks the whole feed (paged) recomputing categoryAuto against the current
   // rule set. Shared by rule create and rule delete so both stay consistent.
   async function recomputeAutoCategories(companyId) {
@@ -742,6 +760,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankLinkTransactionToOrder,
     bankSetTransactionCategory,
     bankSetTransactionCategoryBulk,
+    bankSetTransactionVatBulk,
     bankSaveRule,
     bankDeleteRule,
     bankMatchReceipt,
