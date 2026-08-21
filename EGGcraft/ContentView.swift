@@ -6988,7 +6988,7 @@ struct ContentView: View {
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
     // Bank feed data is owner-only at the Firestore rules level, so the tab is too.
-    private var canAccessBankSpending: Bool { authVM.isCompanyOwner && canSeeFinancialData }
+    private var canAccessBankSpending: Bool { authVM.isCompanyOwner || (workspaceAccessAllows("bankFeed") && canSeeFinancialData) }
 
     private var canEditCurrentWorkspace: Bool {
         ["owner", "admin", "member"].contains(currentWorkspaceRoleNormalized) && canAccessOrders

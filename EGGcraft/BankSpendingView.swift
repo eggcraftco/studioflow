@@ -120,6 +120,8 @@ struct BankSpendingView: View {
 
     enum BankPeriodView { case month, year }
 
+    // Owner, or a member the owner granted "Bank Spending" in Team Access.
+    private var canViewFeed: Bool { authVM.isCompanyOwner || (authVM.currentWorkspaceAccess["bankFeed"] ?? false) }
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
     private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
 
@@ -195,7 +197,7 @@ struct BankSpendingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: isPhoneLayout ? 14 : 16) {
                 header
-                if !authVM.isCompanyOwner {
+                if !canViewFeed {
                     Text(t("Bank connections are managed by the workspace owner.", lang: seciliDil))
                         .font(.system(size: 13)).foregroundColor(.secondary)
                 } else {
@@ -213,11 +215,11 @@ struct BankSpendingView: View {
             .frame(maxWidth: 1180, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .onAppear { firebaseManager.startBankFeedRealtime(companyId: firebaseManager.currentCompanyId, isOwner: authVM.isCompanyOwner) }
+        .onAppear { firebaseManager.startBankFeedRealtime(companyId: firebaseManager.currentCompanyId, isOwner: canViewFeed) }
         .onChange(of: firebaseManager.currentCompanyId) { newValue in
-            firebaseManager.startBankFeedRealtime(companyId: newValue, isOwner: authVM.isCompanyOwner)
+            firebaseManager.startBankFeedRealtime(companyId: newValue, isOwner: canViewFeed)
         }
-        .onChange(of: authVM.isCompanyOwner) { newValue in
+        .onChange(of: canViewFeed) { newValue in
             firebaseManager.startBankFeedRealtime(companyId: firebaseManager.currentCompanyId, isOwner: newValue)
         }
         .onChange(of: pageSize) { _ in page = 1 }

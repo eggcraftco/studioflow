@@ -61,7 +61,8 @@ let studioNavigationAccessOptions: [(key: String, label: String)] = [
     ("teamAccess", "Team Access"),
     ("clientFiles", "Client Files"),
     ("financialInfo", "Financial Info"),
-    ("exportData", "Export Data")
+    ("exportData", "Export Data"),
+    ("bankFeed", "Bank Spending")
 ]
 
 let studioSettingsAccessOptions: [(key: String, label: String)] = [
@@ -108,7 +109,7 @@ let studioFilePermissionAccessOptions: [(key: String, label: String)] = [
 let studioMemberAccessOptions = studioNavigationAccessOptions + studioSettingsAccessOptions + studioCardAccessOptions + studioScopeAccessOptions + studioFilePermissionAccessOptions
 
 func studioDefaultMemberAccess() -> [String: Bool] {
-    Dictionary(uniqueKeysWithValues: studioMemberAccessOptions.map { ($0.key, ["assignedProjectsOnly", "manageProjectAssignments"].contains($0.key) ? false : true) })
+    Dictionary(uniqueKeysWithValues: studioMemberAccessOptions.map { ($0.key, ["assignedProjectsOnly", "manageProjectAssignments", "bankFeed"].contains($0.key) ? false : true) })
 }
 
 private func studioCleanMemberAccess(_ raw: [String: Any]?, forceFullAccess: Bool = false) -> [String: Bool] {

@@ -71,6 +71,21 @@ service cloud.firestore {
         && get(companyPath(companyId)).data.memberAccess[request.auth.uid].manageProjectAssignments != true;
     }
 
+    // Per-member access flag granted by the owner in Team Access. The server
+    // always mirrors the effective access into memberAccess[uid] (custom-role
+    // fan-out included), so one lookup is enough here.
+    function memberAccessAllows(companyId, key) {
+      return signedIn()
+        && companyExists(companyId)
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid][key] == true;
+    }
+
+    // Bank Spending feed: owner, or a member the owner explicitly granted bankFeed.
+    function canReadBankFeed(companyId) {
+      return isCompanyOwner(companyId)
+        || (canReadCompany(companyId) && memberAccessAllows(companyId, 'bankFeed'));
+    }
+
     // Strict workflow-only members read finance-free order summaries from the
     // /workflowOrders subcollection and must use callables to write — they never
     // touch /siparisler directly.
@@ -429,12 +444,12 @@ service cloud.firestore {
     // Bank feed (Open Banking) data is server-written and owner-only: the
     // connection docs and transaction feed never open to other roles.
     match /companies/{companyId}/bankConnections/{document=**} {
-      allow read: if isCompanyOwner(companyId);
+      allow read: if canReadBankFeed(companyId);
       allow write: if false;
     }
 
     match /companies/{companyId}/bankTransactions/{document=**} {
-      allow read: if isCompanyOwner(companyId);
+      allow read: if canReadBankFeed(companyId);
       allow write: if false;
     }
 
@@ -445,14 +460,14 @@ service cloud.firestore {
 
     // Categorisation rules — owner-readable, written only via callables.
     match /companies/{companyId}/bankRules/{document=**} {
-      allow read: if isCompanyOwner(companyId);
+      allow read: if canReadBankFeed(companyId);
       allow write: if false;
     }
 
     // Pandle bookkeeping bridge — connection/meta/mapping is owner-readable,
     // OAuth tokens are server-only.
     match /companies/{companyId}/pandleConnection/{document=**} {
-      allow read: if isCompanyOwner(companyId);
+      allow read: if canReadBankFeed(companyId);
       allow write: if false;
     }
 

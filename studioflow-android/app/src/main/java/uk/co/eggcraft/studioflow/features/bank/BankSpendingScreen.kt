@@ -137,7 +137,7 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     val transactions = state.bankTransactions
     val connections = state.bankConnections
     val linked = connections.filter { it.isLinked }
-    val isOwner = state.workspace?.isOwner == true
+    val isOwner = state.workspace?.canViewBankFeed == true
     val currencyCode = transactions.firstOrNull()?.currency ?: "GBP"
     val fmt: (Double, String?) -> String = { value, code -> money(value, code ?: currencyCode, decimalSeparator, hideNumbers) }
 

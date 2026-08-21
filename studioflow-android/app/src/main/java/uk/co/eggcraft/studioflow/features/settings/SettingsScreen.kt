@@ -3250,7 +3250,8 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
                 AccessOption("teamAccess", "Team Access"),
                 AccessOption("clientFiles", "Client Files"),
                 AccessOption("financialInfo", "Financial Info"),
-                AccessOption("exportData", t("Export Data"))
+                AccessOption("exportData", t("Export Data")),
+                AccessOption("bankFeed", "Bank Spending")
             ),
             access = access,
             accent = StudioBlue,

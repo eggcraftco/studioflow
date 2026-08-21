@@ -298,7 +298,8 @@ fun StudioFlowMainScreen(
             adminAllowsSection
         } else if (item == StudioSection.BankSpending) {
             // Bank feed reads are owner-only in Firestore rules.
-            state.workspace?.isOwner == true && (state.workspace?.canSeeFinancialData ?: true)
+            state.workspace?.isOwner == true ||
+                (state.workspace?.memberAccess?.bankFeed == true && (state.workspace?.canSeeFinancialData ?: true))
         } else {
             planAllowsSection && menuAllowsSection &&
                 (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)

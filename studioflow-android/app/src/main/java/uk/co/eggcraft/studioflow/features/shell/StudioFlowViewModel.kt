@@ -2004,8 +2004,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     mutableState.update { it.copy(customers = customers) }
                 }
         }
-        if (workspace.isOwner) {
-            // Bank feed mirrors are owner-only at the rules level; subscribe only as owner.
+        if (workspace.canViewBankFeed) {
+            // Bank feed reads are owner-or-granted at the rules level; subscribe only then.
             bankFeedJob = viewModelScope.launch {
                 kotlinx.coroutines.flow.combine(
                     repository.bankTransactionsFlow(workspace.id),
@@ -2016,6 +2016,10 @@ class StudioFlowViewModel @JvmOverloads constructor(
                         mutableState.update { it.copy(bankTransactions = transactions, bankConnections = connections) }
                     }
             }
+        } else {
+            mutableState.update { it.copy(bankTransactions = emptyList(), bankConnections = emptyList()) }
+        }
+        if (workspace.isOwner) {
             teamJob = viewModelScope.launch {
                 repository.teamAccessFlow(workspace.id)
                     .catch { error ->
@@ -2038,8 +2042,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             // Members can switch workspaces and use their assigned tools, but Owner-only
             // management collections must not be subscribed to in the background.
             mutableState.update {
-                it.copy(teamMembers = emptyList(), customRoles = emptyList(), joinRequests = emptyList(),
-                    bankTransactions = emptyList(), bankConnections = emptyList())
+                it.copy(teamMembers = emptyList(), customRoles = emptyList(), joinRequests = emptyList())
             }
         }
     }

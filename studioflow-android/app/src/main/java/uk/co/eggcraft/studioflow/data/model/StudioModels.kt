@@ -35,6 +35,8 @@ data class WorkspaceMemberAccess(
     val clientFiles: Boolean = true,
     val financialInfo: Boolean = true,
     val exportData: Boolean = true,
+    // Bank Spending feed — off unless the owner grants it.
+    val bankFeed: Boolean = false,
     val settingsGeneral: Boolean = true,
     val settingsPdf: Boolean = true,
     val settingsQuickReply: Boolean = true,
@@ -80,6 +82,7 @@ data class WorkspaceMemberAccess(
             "teamAccess" -> teamAccess
             "clientFiles" -> clientFiles
             "financialInfo" -> financialInfo
+            "bankFeed" -> bankFeed
             "exportData" -> exportData
             "settingsGeneral" -> settingsGeneral
             "settingsPdf" -> settingsPdf
@@ -140,6 +143,7 @@ data class StudioWorkspace(
 ) {
     val isOwner: Boolean get() = role == "owner"
     val canSeeFinancialData: Boolean get() = memberAccess.financialInfo
+    val canViewBankFeed: Boolean get() = isOwner || memberAccess.bankFeed
     // Effective team seats (base plan + purchased seats); falls back to plan default.
     val effectiveTeamMemberLimit: Int get() = maxOf(teamMemberLimitEffective, billingPlan.teamMemberLimit)
     val teamSeatSelfServiceMax: Int get() = 10

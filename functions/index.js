@@ -2188,6 +2188,9 @@ const WORKSPACE_MEMBER_ACCESS_DEFAULTS = Object.freeze({
   clientFiles: true,
   financialInfo: true,
   exportData: true,
+  // Bank Spending feed (Open Banking). Off by default for every role — the
+  // owner grants it per member; connecting banks/Pandle stays owner-only.
+  bankFeed: false,
   settingsGeneral: true,
   settingsPdf: true,
   settingsQuickReply: true,
@@ -2253,7 +2256,7 @@ function defaultWorkspaceAccessForRole(roleValue = "member") {
 function workspaceMemberAccess(companyData = {}, uid = "") {
   const normalizedUid = String(uid || "").trim();
   if (!normalizedUid || uidIsCompanyOwner(companyData, normalizedUid)) {
-    return { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+    return { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS, bankFeed: true };
   }
 
   const members = companyMembersMap(companyData);

@@ -14,7 +14,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
-import { loadWorkspaceContext, loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard } from "@/components/PandleCard";
@@ -152,11 +152,14 @@ function BankPageContent() {
   }, [user]);
 
   const isOwner = workspace?.role === "owner";
+  // Members the owner granted "Bank Spending" get a read-only view; every
+  // mutation (connect, categorise, receipts, Pandle) stays with the owner.
+  const canViewBank = isOwner || workspaceAccessAllows(workspace?.memberAccess, "bankFeed");
   const companyId = workspace?.id ?? "";
 
   // Live views over the server-written feed (owner-only per Firestore rules).
   useEffect(() => {
-    if (!companyId || !isOwner) return;
+    if (!companyId || !canViewBank) return;
     const unsubConnections = onSnapshot(
       collection(db, "companies", companyId, "bankConnections"),
       snap => {
@@ -208,7 +211,7 @@ function BankPageContent() {
       () => setRules([])
     );
     return () => { unsubConnections(); unsubTransactions(); unsubRules(); };
-  }, [companyId, isOwner]);
+  }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
     const callable = httpsCallable<Record<string, unknown>, T>(functions, name);
@@ -637,7 +640,7 @@ function BankPageContent() {
           ) : null}
         </div>
 
-        {!isOwner ? (
+        {!canViewBank ? (
           <p style={{ fontSize: 13, opacity: 0.75 }}>{t("Bank connections are managed by the workspace owner.")}</p>
         ) : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
@@ -684,7 +687,7 @@ function BankPageContent() {
           </div>
         ) : null}
 
-        {isOwner ? (
+        {canViewBank ? (
           <>
             {/* ---- Connection pill + period control ------------------------ */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -819,10 +822,12 @@ function BankPageContent() {
                           ))}
                         </>
                       ) : null}
-                      <button type="button" onClick={() => setShowRules(value => !value)} style={cardFootLink}>
-                        {t("Manage recurring rules")} →
-                      </button>
-                      {showRules ? (
+                      {isOwner ? (
+                        <button type="button" onClick={() => setShowRules(value => !value)} style={cardFootLink}>
+                          {t("Manage recurring rules")} →
+                        </button>
+                      ) : null}
+                      {isOwner && showRules ? (
                         rules.length === 0 ? (
                           <p style={{ fontSize: 12, opacity: 0.65, margin: "8px 0 0" }}>{t("No rules yet — set a category on a transaction and tick the rule box.")}</p>
                         ) : (
@@ -926,7 +931,13 @@ function BankPageContent() {
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
                                 <td style={tdStyle}>
-                                  {transaction.amount < 0 ? (
+                                  {transaction.amount < 0 && !isOwner ? (
+                                    <span style={category
+                                      ? { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${catColor}1a`, color: catColor }
+                                      : { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.13)", opacity: 0.75 }}>
+                                      {category ? t(category) : t("Uncategorised")}
+                                    </span>
+                                  ) : transaction.amount < 0 ? (
                                     <button type="button" disabled={busy === `cat-${transaction.id}`}
                                       onClick={() => {
                                         setCategoryPickerTxId(current => current === transaction.id ? null : transaction.id);
@@ -954,7 +965,14 @@ function BankPageContent() {
                                   {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                                 </td>
                                 <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                                  {transaction.amount < 0 ? (
+                                  {transaction.amount < 0 && !isOwner ? (
+                                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                                      {transaction.receiptPath ? (
+                                        <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")} onClick={() => void openReceipt(transaction)} aria-label={t("View invoice")}>📎</button>
+                                      ) : null}
+                                      {transaction.linkedOrderId ? <span title={transaction.linkedOrderLabel} style={{ fontSize: 11, color: "#2563eb" }}>⛓</span> : null}
+                                    </span>
+                                  ) : transaction.amount < 0 ? (
                                     <span style={{ display: "inline-flex", gap: 2 }}>
                                       {transaction.receiptPath ? (
                                         <>
@@ -1094,7 +1112,7 @@ function BankPageContent() {
 
             {/* ---- Pandle bookkeeping bridge (works before the bank feed too, so
                  the mapping can be set up ahead of time) ---------------------- */}
-            <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} />
+            {isOwner ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
           </>
         ) : null}
       </div>

@@ -3146,7 +3146,7 @@ private fun defaultAccessMapForRole(roleValue: String): Map<String, Any?> {
 }
 
 private fun accessFromMap(value: Map<*, *>, forceFullAccess: Boolean = false): WorkspaceMemberAccess {
-    if (forceFullAccess) return WorkspaceMemberAccess()
+    if (forceFullAccess) return WorkspaceMemberAccess(bankFeed = true)
     return WorkspaceMemberAccess(
         orders = boolValue(value["orders"], true),
         dashboard = boolValue(value["dashboard"], true),
@@ -3159,6 +3159,7 @@ private fun accessFromMap(value: Map<*, *>, forceFullAccess: Boolean = false): W
         teamAccess = boolValue(value["teamAccess"], true),
         clientFiles = boolValue(value["clientFiles"], true),
         financialInfo = boolValue(value["financialInfo"], true),
+        bankFeed = boolValue(value["bankFeed"], false),
         exportData = boolValue(value["exportData"], true),
         settingsGeneral = boolValue(value["settingsGeneral"], true),
         settingsPdf = boolValue(value["settingsPdf"], true),
@@ -3205,6 +3206,7 @@ private fun accessToMap(access: WorkspaceMemberAccess): Map<String, Boolean> {
         "teamAccess" to access.teamAccess,
         "clientFiles" to access.clientFiles,
         "financialInfo" to access.financialInfo,
+        "bankFeed" to access.bankFeed,
         "exportData" to access.exportData,
         "settingsGeneral" to access.settingsGeneral,
         "settingsPdf" to access.settingsPdf,
