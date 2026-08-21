@@ -158,3 +158,49 @@ export function detectPossibleDuplicates(transactions: BankInsightTx[]): Set<str
   }
   return flagged;
 }
+
+// ---- Category suggestions ---------------------------------------------------
+// Heuristic, no AI cost: (1) what the owner chose for the same merchant before,
+// (2) a small keyword library for common UK business merchants.
+
+export type CategorySuggestion = { category: string; confidence: number; source: "history" | "keyword"; keyword: string };
+
+const CATEGORY_KEYWORDS: Array<{ category: string; words: string[] }> = [
+  { category: "Software", words: ["adobe", "openai", "anthropic", "google*gsuite", "gsuite", "google workspace", "microsoft", "eset", "akismet", "github", "notion", "figma", "canva", "dropbox", "icloud", "apple.com/bill", "zoom", "slack", "1password", "cloudflare", "godaddy", "hostinger", "ionos"] },
+  { category: "Subscriptions", words: ["shopify", "squarespace", "wix", "spotify", "netflix", "cookieyes", "creem.io", "patreon", "membership", "subscription"] },
+  { category: "Shipping", words: ["royal mail", "dhl", "ups", "fedex", "evri", "hermes", "parcelforce", "parcel2go", "dpd", "click and drop", "postage"] },
+  { category: "Fees", words: ["stripe", "paypal", "non-sterling", "transaction fee", "bank charge", "sumup", "square", "klarna", "wise"] },
+  { category: "Marketing", words: ["facebk", "facebook", "meta ads", "google ads", "adwords", "instagram", "mailchimp", "linkedin", "etsy ads", "tiktok"] },
+  { category: "Travel", words: ["uber", "trainline", "tfl", "national rail", "easyjet", "ryanair", "british airways", "bp ", "shell ", "esso", "texaco", "parking", "ringgo", "just park"] },
+  { category: "Utilities", words: ["octopus", "edf", "british gas", "eon", "ovo", "thames water", "vodafone", "ee ltd", "o2 ", "three", "bt group", "virgin media", "sky "] },
+  { category: "Tax", words: ["hmrc"] },
+  { category: "Rent", words: ["rent", "lovespace", "storage", "wework", "regus"] },
+  { category: "Materials", words: ["cousinsuk", "cousins uk", "amazon", "amzn", "ebay", "screwfix", "toolstation", "hobbycraft", "b&q", "wickes", "ikea"] },
+  { category: "Equipment", words: ["apple store", "currys", "argos"] }
+];
+
+export function suggestCategory(
+  tx: BankInsightTx & { category?: string; categoryAuto?: string },
+  history: Array<BankInsightTx & { category?: string }>
+): CategorySuggestion | null {
+  if (tx.amount >= 0) return null;
+  const key = recurringMerchantKey(tx);
+  if (key) {
+    // Same merchant, manually categorised before → strongest signal.
+    const counts = new Map<string, number>();
+    for (const other of history) {
+      if (!other.category || other === tx) continue;
+      if (recurringMerchantKey(other) !== key) continue;
+      counts.set(other.category, (counts.get(other.category) ?? 0) + 1);
+    }
+    let best: [string, number] | null = null;
+    for (const entry of counts) if (!best || entry[1] > best[1]) best = entry;
+    if (best) return { category: best[0], confidence: Math.min(0.97, 0.8 + best[1] * 0.05), source: "history", keyword: key.split(" ")[0] || key };
+  }
+  const haystack = `${tx.counterparty} ${tx.description}`.toLowerCase();
+  for (const group of CATEGORY_KEYWORDS) {
+    const hit = group.words.find(word => haystack.includes(word));
+    if (hit) return { category: group.category, confidence: 0.7, source: "keyword", keyword: hit.trim() };
+  }
+  return null;
+}

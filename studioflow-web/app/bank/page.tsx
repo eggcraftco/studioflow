@@ -15,7 +15,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
-import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, suggestCategory, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard } from "@/components/PandleCard";
 
@@ -84,7 +84,10 @@ function effectiveCategory(tx: BankTransaction) {
 // variant instead of only the exact string.
 function suggestRuleKeyword(tx: BankTransaction): string {
   const base = (tx.counterparty || tx.description).trim().toLowerCase();
-  const word = base.split(/[\s*,/]+/).find(part => part.replace(/[^a-zç-ü]/gi, "").length >= 3);
+  // Skip card-network prefixes ("INT'L", "POS", "CARD") that every foreign
+  // payment carries — they would match everything.
+  const noise = new Set(["int'l", "intl", "pos", "card", "crd", "payment", "paypal"]);
+  const word = base.split(/[\s*,/]+/).find(part => part.replace(/[^a-zç-ü]/gi, "").length >= 3 && !noise.has(part));
   return (word || base).replace(/[^\p{L}\p{N}. -]/gu, "").slice(0, 60);
 }
 
@@ -148,6 +151,8 @@ function BankPageContent() {
   // Bulk review: selected spending rows + the category to apply to all of them.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
+  // After accepting a suggestion: offer to turn it into a rule for that merchant.
+  const [rulePrompt, setRulePrompt] = useState<{ keyword: string; category: string } | null>(null);
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -638,6 +643,44 @@ function BankPageContent() {
       total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length
     };
   }, [visibleTransactions, recurring, duplicateIds]);
+  // Heuristic category suggestions for uncategorised spending on the page.
+  const suggestions = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof suggestCategory>>();
+    for (const tx of transactions) {
+      if (tx.amount >= 0 || effectiveCategory(tx)) continue;
+      map.set(tx.id, suggestCategory(tx, transactions));
+    }
+    return map;
+  }, [transactions]);
+  async function acceptSuggestion(transaction: BankTransaction, category: string, source: "history" | "keyword") {
+    setBusy(`cat-${transaction.id}`);
+    setError(null);
+    try {
+      await call("bankSetTransactionCategory", { transactionId: transaction.id, category });
+      setStatus(`${t("Category saved.")} ${t(category)}`);
+      // History-based picks already come from this merchant's past; keyword
+      // picks are worth turning into a rule so next time it's automatic.
+      const keyword = (suggestions.get(transaction.id)?.keyword || suggestRuleKeyword(transaction)).toLowerCase();
+      if (source === "keyword" && keyword.length >= 2 && !rules.some(rule => rule.keyword === keyword)) setRulePrompt({ keyword, category });
+    } catch (suggestError) {
+      setError(suggestError instanceof Error ? suggestError.message : "Could not save the category.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function acceptRulePrompt() {
+    if (!rulePrompt) return;
+    setBusy("rule-prompt");
+    try {
+      await call("bankSaveRule", { keyword: rulePrompt.keyword, category: rulePrompt.category });
+      setStatus(t("Category saved and rule created."));
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not create the rule.");
+    } finally {
+      setBusy(null);
+      setRulePrompt(null);
+    }
+  }
   function showAttention(kind: "uncategorised" | "noReceipt" | "duplicate") {
     setTxAttention(kind);
     setTxFlow("out");
@@ -772,6 +815,13 @@ function BankPageContent() {
         ) : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
         {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+        {rulePrompt ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
+            <span>{t("Always categorise")} <strong>"{rulePrompt.keyword}"</strong> {t("as")} <strong>{t(rulePrompt.category)}</strong>?</span>
+            <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "rule-prompt"} onClick={() => void acceptRulePrompt()}>{t("Yes, create rule")}</button>
+            <button type="button" style={bankBtnSm} onClick={() => setRulePrompt(null)}>{t("Not now")}</button>
+          </div>
+        ) : null}
 
         {/* ---- OCR candidates --------------------------------------------- */}
         {ocrCandidates !== null ? (
@@ -1158,9 +1208,21 @@ function BankPageContent() {
                                         : { border: 0, cursor: "pointer", fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.13)", color: "inherit", opacity: 0.75 }}>
                                       {category ? t(category) : t("Uncategorised")}
                                     </button>
-                                  ) : (
+                                  ) : null}
+                                  {transaction.amount < 0 && isOwner && !category && suggestions.get(transaction.id) ? (() => {
+                                    const suggestion = suggestions.get(transaction.id)!;
+                                    return (
+                                      <button type="button" disabled={busy === `cat-${transaction.id}`}
+                                        onClick={() => void acceptSuggestion(transaction, suggestion.category, suggestion.source)}
+                                        title={`${suggestion.source === "history" ? t("Used before for this merchant") : t("Suggested from the merchant name")} · ${Math.round(suggestion.confidence * 100)}%`}
+                                        style={{ marginLeft: 4, border: `1px dashed ${categoryColor(suggestion.category)}`, cursor: "pointer", fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "2px 9px", background: "transparent", color: categoryColor(suggestion.category) }}>
+                                        {t(suggestion.category)}? ✓
+                                      </button>
+                                    );
+                                  })() : null}
+                                  {transaction.amount >= 0 ? (
                                     <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.1)", opacity: 0.55 }}>—</span>
-                                  )}
+                                  ) : null}
                                 </td>
                                 <td style={tdStyle}>
                                   {meta ? (
