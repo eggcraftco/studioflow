@@ -1112,7 +1112,9 @@ function BankPageContent() {
 
             {/* ---- Pandle bookkeeping bridge (works before the bank feed too, so
                  the mapping can be set up ahead of time) ---------------------- */}
-            {isOwner ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
+            {/* Pandle bridge ships dark until Pandle issues the OAuth app credentials
+                 (NEXT_PUBLIC_PANDLE_ENABLED=1 turns the card on). */}
+            {isOwner && process.env.NEXT_PUBLIC_PANDLE_ENABLED === "1" ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
           </>
         ) : null}
       </div>
