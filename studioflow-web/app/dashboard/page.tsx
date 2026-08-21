@@ -851,6 +851,16 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
     const spendIn = (prefix: string) => transactions
       .filter(item => item.amount < 0 && item.bookingDate.startsWith(prefix))
       .reduce((acc, item) => acc + Math.abs(item.amount), 0);
+    const incomeIn = (prefix: string) => transactions
+      .filter(item => item.amount > 0 && item.bookingDate.startsWith(prefix))
+      .reduce((acc, item) => acc + item.amount, 0);
+    // Monthly incoming curve for this year (money in).
+    const incomingMonthly = Array.from({ length: 12 }, () => 0);
+    for (const item of transactions) {
+      if (item.amount <= 0 || !item.bookingDate.startsWith(String(year))) continue;
+      const month = Number(item.bookingDate.slice(5, 7)) - 1;
+      if (month >= 0 && month < 12) incomingMonthly[month] += item.amount;
+    }
 
     // Daily spending curve for this month + monthly curve for this year.
     const daysInMonth = new Date(year, now.getMonth() + 1, 0).getDate();
@@ -874,7 +884,12 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
       monthlyAvg: yearTotal / monthsWithData,
       daily: daily.slice(0, Math.max(now.getDate(), 2)),
       monthly: monthly.slice(0, now.getMonth() + 1),
-      recent: transactions.slice(0, 3)
+      recent: transactions.slice(0, 3),
+      incomingThisMonth: incomeIn(thisPrefix),
+      incomingLastMonth: incomeIn(lastPrefix),
+      incomingYear: incomingMonthly.reduce((acc, value) => acc + value, 0),
+      incomingMonthly: incomingMonthly.slice(0, now.getMonth() + 1),
+      incomingCountThisMonth: transactions.filter(item => item.amount > 0 && item.bookingDate.startsWith(thisPrefix)).length
     };
   }, [transactions]);
 
@@ -887,6 +902,7 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
     ? hiddenMoneyLabel()
     : new Intl.NumberFormat(localeTag, { style: "currency", currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value);
   const delta = summary.lastMonth > 0 ? ((summary.thisMonth - summary.lastMonth) / summary.lastMonth) * 100 : null;
+  const incomingDelta = summary.incomingLastMonth > 0 ? ((summary.incomingThisMonth - summary.incomingLastMonth) / summary.incomingLastMonth) * 100 : null;
   const syncedRecently = lastSync !== null && Date.now() - lastSync.getTime() < 12 * 60 * 60 * 1000;
   const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
   const tileStyle: React.CSSProperties = { flex: "1 1 220px", maxWidth: 320, border: "1px solid rgba(120,120,140,0.18)", borderRadius: 12, padding: "14px 16px 8px" };
@@ -930,6 +946,20 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
           <div style={{ marginTop: 8 }}>
             <BankSparkline values={summary.monthly.length > 1 ? summary.monthly : [0, summary.yearTotal]} color="#2563eb" />
           </div>
+        </div>
+        <div style={{ ...tileStyle, borderColor: "rgba(22,163,74,0.35)" }}>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5, color: "#16a34a", fontWeight: 700 }}>↗ {t("Incoming")} · {t("This Month")}</p>
+          <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0", color: "#16a34a" }}>+{bankMoney(summary.incomingThisMonth)}</strong>
+          {incomingDelta !== null ? (
+            <span style={{ fontSize: 12, fontWeight: 700, color: incomingDelta >= 0 ? "#16a34a" : "#dc2626" }}>
+              {incomingDelta >= 0 ? "↑" : "↓"} {Math.abs(incomingDelta).toFixed(0)}% {t("vs last month")}
+            </span>
+          ) : <span style={{ fontSize: 12, opacity: 0.6 }}>{summary.incomingCountThisMonth} {t("payments received")}</span>}
+          <span style={{ display: "block", fontSize: 11.5, opacity: 0.7, marginTop: 2 }}>{t("This Year")}: {bankMoney(summary.incomingYear, 0)}</span>
+          <div style={{ marginTop: 8 }}>
+            <BankSparkline values={summary.incomingMonthly.length > 1 ? summary.incomingMonthly : [0, summary.incomingYear]} color="#16a34a" />
+          </div>
+          <a href="/bank?flow=in" style={{ display: "inline-block", marginTop: 6, fontSize: 12, fontWeight: 700, color: "#2563eb", textDecoration: "none" }}>{t("View all incoming")} →</a>
         </div>
         <div style={{ flex: "2 1 300px", minWidth: 260 }}>
           <p className="muted-copy" style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 700 }}>{t("Recent activity")}</p>
