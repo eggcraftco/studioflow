@@ -624,18 +624,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { amount, date, words: Array.from(words).slice(0, 30) };
   }
 
-  const bankMatchReceipt = onCall({ region: REGION, timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
-    const { companyId } = await requireOwner(request);
-    const storagePath = cleanText(request.data?.storagePath, 500);
-    const inboxPrefix = `companies/${companyId}/bank_receipts/_inbox/`;
-    if (!storagePath.startsWith(inboxPrefix)) {
-      throw new HttpsError("invalid-argument", "storagePath must be an inbox upload.");
-    }
-
-    const text = await visionOcrText(storagePath);
-    const parsed = parseReceiptText(text);
-
-    // Score recent spending against the parsed receipt.
+  // Scores recent spending against a parsed receipt (amount/date/merchant words).
+  // Shared by the web OCR flow and the ChatGPT attach_bank_receipt tool.
+  async function scoreReceiptCandidates(companyId, parsed) {
     const snap = await transactionsRef(companyId).orderBy("bookingDate", "desc").limit(1500).get();
     const receiptTime = parsed.date ? new Date(parsed.date).getTime() : 0;
     const candidates = [];
@@ -672,6 +663,21 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }
     candidates.sort((a, b) => b.score - a.score);
 
+    return candidates;
+  }
+
+  const bankMatchReceipt = onCall({ region: REGION, timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const storagePath = cleanText(request.data?.storagePath, 500);
+    const inboxPrefix = `companies/${companyId}/bank_receipts/_inbox/`;
+    if (!storagePath.startsWith(inboxPrefix)) {
+      throw new HttpsError("invalid-argument", "storagePath must be an inbox upload.");
+    }
+
+    const text = await visionOcrText(storagePath);
+    const parsed = parseReceiptText(text);
+
+    const candidates = await scoreReceiptCandidates(companyId, parsed);
     return {
       parsed: { amount: parsed.amount, date: parsed.date },
       candidates: candidates.slice(0, 5)
@@ -688,20 +694,27 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const inboxPrefix = `companies/${companyId}/bank_receipts/_inbox/`;
     if (!storagePath.startsWith(inboxPrefix)) throw new HttpsError("invalid-argument", "storagePath must be an inbox upload.");
     if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
+    await assignInboxReceipt(companyId, storagePath, transactionId, fileName);
+    return { ok: true };
+  });
+
+  // Moves an inbox upload into the transaction's receipt slot and stamps the doc.
+  async function assignInboxReceipt(companyId, storagePath, transactionId, fileName) {
     const txRef = transactionsRef(companyId).doc(transactionId);
     const txDoc = await txRef.get();
     if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
 
-    const destination = `companies/${companyId}/bank_receipts/${transactionId}/${Date.now()}_${fileName.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+    const safeName = (cleanText(fileName, 200) || "receipt.jpg").replace(/[^A-Za-z0-9._-]/g, "_");
+    const destination = `companies/${companyId}/bank_receipts/${transactionId}/${Date.now()}_${safeName}`;
     await admin.storage().bucket().file(storagePath).move(destination);
 
     const previousPath = cleanText((txDoc.data() || {}).receiptPath, 500);
-    await txRef.set({ receiptPath: destination, receiptName: fileName }, { merge: true });
+    await txRef.set({ receiptPath: destination, receiptName: safeName }, { merge: true });
     if (previousPath) {
       try { await admin.storage().bucket().file(previousPath).delete(); } catch { /* already gone */ }
     }
-    return { ok: true };
-  });
+    return { transactionId, receiptPath: destination, receiptName: safeName, transaction: txDoc.data() || {} };
+  }
 
   return {
     bankCreateRequisition,
@@ -715,7 +728,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankDeleteRule,
     bankMatchReceipt,
     bankAssignInboxReceipt,
-    scheduledBankSync
+    scheduledBankSync,
+    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt }
   };
 }
 

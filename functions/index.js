@@ -3851,7 +3851,9 @@ const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 
 // Bank spending feed (GoCardless Bank Account Data / Open Banking, read-only).
 const { createBankFeedFunctions } = require("./bankFeed");
-Object.assign(exports, createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner }));
+const bankFeedExports = createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner });
+const { _internal: bankFeedInternal, ...bankFeedCallables } = bankFeedExports;
+Object.assign(exports, bankFeedCallables);
 
 // Pandle bookkeeping bridge: confirms NivaDesk-categorised bank transactions
 // in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
@@ -17622,11 +17624,307 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTGetFinancialOverview(context, args);
     case "get_extra_spending_overview":
       return nvChatGPTGetExtraSpendingOverview(context, args);
+    case "get_bank_spending_summary":
+      return nvChatGPTGetBankSpendingSummary(context, args);
+    case "search_bank_transactions":
+      return nvChatGPTSearchBankTransactions(context, args);
+    case "attach_bank_receipt":
+      return nvChatGPTAttachBankReceipt(context, args);
     default:
-      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_extra_spending_overview.");
+      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_bank_spending_summary, search_bank_transactions, attach_bank_receipt.");
   }
 }
 
+
+
+// MARK: - ChatGPT bank feed tools
+
+function nvRequireBankFeedAccess(context, { ownerOnly = false } = {}) {
+  const isOwner = uidIsCompanyOwner(context.companyData, context.uid);
+  if (isOwner) return true;
+  if (ownerOnly) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can change bank feed data.");
+  }
+  if (!uidCanAccessWorkspaceArea(context.companyData, context.uid, "bankFeed")) {
+    throw new HttpsError("permission-denied", "Bank Spending is not enabled for your role. Ask the workspace owner to grant it in Team Access.");
+  }
+  return true;
+}
+
+async function nvLoadBankTransactions(companyId) {
+  const snap = await admin.firestore()
+    .collection("companies").doc(companyId).collection("bankTransactions")
+    .orderBy("bookingDate", "desc").limit(3000).get();
+  return snap.docs.map((doc) => {
+    const data = doc.data() || {};
+    return {
+      id: doc.id,
+      amount: Number(data.amount) || 0,
+      currency: nvCleanString(data.currency || "GBP", 8),
+      bookingDate: nvCleanString(data.bookingDate || "", 10),
+      description: nvCleanString(data.description || "", 200),
+      counterparty: nvCleanString(data.counterparty || "", 160),
+      category: nvCleanString(data.category || data.categoryAuto || "", 60),
+      txType: nvCleanString(data.txType || "", 40),
+      hasReceipt: Boolean(data.receiptPath),
+      receiptName: nvCleanString(data.receiptName || "", 200),
+      linkedOrderLabel: nvCleanString(data.linkedOrderLabel || "", 120),
+      pandleConfirmed: data.pandle && data.pandle.status === "confirmed"
+    };
+  });
+}
+
+const nvBankMerchantKey = (tx) => {
+  const base = (tx.counterparty || tx.description || "").toLowerCase();
+  return base.split(/[\s*,/]+/).filter((part) => part.replace(/[^a-z]/g, "").length >= 3).slice(0, 3).join(" ") || base;
+};
+const nvRound2 = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
+async function nvChatGPTGetBankSpendingSummary(context, args = {}) {
+  nvRequireBankFeedAccess(context);
+  const now = new Date();
+  const period = nvCleanString(args.period || "month", 10) === "year" ? "year" : "month";
+  const year = Number.isInteger(Number(args.year)) && Number(args.year) > 2000 ? Number(args.year) : now.getUTCFullYear();
+  const month = Number.isInteger(Number(args.month)) && Number(args.month) >= 1 && Number(args.month) <= 12 ? Number(args.month) : now.getUTCMonth() + 1;
+  const inPeriod = (tx, y, m) => Number(tx.bookingDate.slice(0, 4)) === y && (period === "year" || Number(tx.bookingDate.slice(5, 7)) === m);
+
+  const all = await nvLoadBankTransactions(context.companyId);
+  if (!all.length) {
+    return { action: "get_bank_spending_summary", ok: true, connected: false, message: "No bank feed is connected to this workspace yet — connect a bank on nivadesk.app/bank." };
+  }
+  const rows = all.filter((tx) => inPeriod(tx, year, month));
+  let prevYear = year, prevMonth = month;
+  if (period === "year") prevYear -= 1; else if (month === 1) { prevMonth = 12; prevYear -= 1; } else prevMonth -= 1;
+  const prevRows = all.filter((tx) => inPeriod(tx, prevYear, prevMonth));
+  const spent = (list) => nvRound2(list.filter((tx) => tx.amount < 0).reduce((acc, tx) => acc + Math.abs(tx.amount), 0));
+  const spentTotal = spent(rows);
+  const prevSpent = spent(prevRows);
+  const incoming = nvRound2(rows.filter((tx) => tx.amount > 0).reduce((acc, tx) => acc + tx.amount, 0));
+
+  const byCategory = {};
+  const byMerchant = {};
+  for (const tx of rows) {
+    if (tx.amount >= 0) continue;
+    const cat = tx.category || "Uncategorised";
+    byCategory[cat] = (byCategory[cat] || 0) + Math.abs(tx.amount);
+    const key = nvBankMerchantKey(tx);
+    if (!byMerchant[key]) byMerchant[key] = { merchant: tx.counterparty || tx.description, total: 0, count: 0 };
+    byMerchant[key].total += Math.abs(tx.amount);
+    byMerchant[key].count += 1;
+  }
+  const categories = Object.entries(byCategory).map(([name, total]) => ({
+    category: name, total: nvRound2(total), share: spentTotal ? Math.round(total / spentTotal * 100) : 0
+  })).sort((a, b) => b.total - a.total);
+  const topMerchants = Object.values(byMerchant).map((item) => ({ ...item, total: nvRound2(item.total) }))
+    .sort((a, b) => b.total - a.total).slice(0, 8);
+
+  // Recurring: merchants charged in at least 3 distinct months over the last 12.
+  const cutoff = new Date(Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  const monthsByMerchant = {};
+  for (const tx of all) {
+    if (tx.amount >= 0 || tx.bookingDate < cutoff) continue;
+    const key = nvBankMerchantKey(tx);
+    if (!monthsByMerchant[key]) monthsByMerchant[key] = { merchant: tx.counterparty || tx.description, months: new Set(), amounts: [] };
+    monthsByMerchant[key].months.add(tx.bookingDate.slice(0, 7));
+    monthsByMerchant[key].amounts.push(Math.abs(tx.amount));
+  }
+  const recurring = Object.values(monthsByMerchant).filter((item) => item.months.size >= 3).map((item) => {
+    const sorted = [...item.amounts].sort((a, b) => a - b);
+    return { merchant: item.merchant, monthsCharged: item.months.size, typicalAmount: nvRound2(sorted[Math.floor(sorted.length / 2)]) };
+  }).sort((a, b) => b.typicalAmount - a.typicalAmount).slice(0, 12);
+
+  return {
+    action: "get_bank_spending_summary",
+    ok: true,
+    connected: true,
+    period: period === "year" ? String(year) : `${year}-${String(month).padStart(2, "0")}`,
+    currency: rows[0]?.currency || all[0].currency,
+    totalSpent: spentTotal,
+    incoming,
+    net: nvRound2(incoming - spentTotal),
+    previousPeriodSpent: prevSpent,
+    changeVsPreviousPercent: prevSpent ? Math.round((spentTotal - prevSpent) / prevSpent * 100) : null,
+    transactionCount: rows.length,
+    spendingWithoutReceipt: rows.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length,
+    categories,
+    topMerchants,
+    recurringSubscriptions: recurring,
+    monthlyFixedEstimate: nvRound2(recurring.reduce((acc, item) => acc + item.typicalAmount, 0))
+  };
+}
+
+async function nvChatGPTSearchBankTransactions(context, args = {}) {
+  nvRequireBankFeedAccess(context);
+  const query = nvCleanString(args.query || "", 120).toLowerCase();
+  const from = nvCleanString(args.from || "", 10);
+  const to = nvCleanString(args.to || "", 10);
+  const category = nvCleanString(args.category || "", 60).toLowerCase();
+  const direction = ["in", "all"].includes(nvCleanString(args.direction || "", 5)) ? nvCleanString(args.direction, 5) : "out";
+  const minAmount = Number(args.minAmount) || 0;
+  const maxAmount = Number(args.maxAmount) || 0;
+  const withoutReceipt = args.withoutReceipt === true;
+  const limit = Math.min(50, Math.max(1, Number(args.limit) || 20));
+
+  const all = await nvLoadBankTransactions(context.companyId);
+  const rows = all.filter((tx) => {
+    if (direction === "out" && tx.amount >= 0) return false;
+    if (direction === "in" && tx.amount <= 0) return false;
+    if (from && tx.bookingDate < from) return false;
+    if (to && tx.bookingDate > to) return false;
+    if (query && !`${tx.counterparty} ${tx.description}`.toLowerCase().includes(query)) return false;
+    if (category) {
+      const own = (tx.category || "uncategorised").toLowerCase();
+      if (own !== category && !(category === "uncategorised" && !tx.category)) return false;
+    }
+    const abs = Math.abs(tx.amount);
+    if (minAmount && abs < minAmount) return false;
+    if (maxAmount && abs > maxAmount) return false;
+    if (withoutReceipt && (tx.amount >= 0 || tx.hasReceipt)) return false;
+    return true;
+  });
+  return {
+    action: "search_bank_transactions",
+    ok: true,
+    total: rows.length,
+    returned: Math.min(rows.length, limit),
+    totalAmount: nvRound2(rows.reduce((acc, tx) => acc + tx.amount, 0)),
+    transactions: rows.slice(0, limit).map((tx) => ({
+      transactionId: tx.id,
+      date: tx.bookingDate,
+      merchant: tx.counterparty || tx.description,
+      description: tx.description,
+      amount: tx.amount,
+      currency: tx.currency,
+      category: tx.category || "Uncategorised",
+      type: tx.txType,
+      hasReceipt: tx.hasReceipt,
+      linkedOrder: tx.linkedOrderLabel || null,
+      pandleConfirmed: Boolean(tx.pandleConfirmed)
+    }))
+  };
+}
+
+async function nvChatGPTAttachBankReceipt(context, args = {}) {
+  nvRequireBankFeedAccess(context, { ownerOnly: true });
+  const companyId = context.companyId;
+  const inboxPrefix = `companies/${companyId}/bank_receipts/_inbox/`;
+  const transactionId = nvCleanString(args.transactionId || "", 250);
+  let inboxPath = nvCleanString(args.inboxPath || "", 500);
+  let fileName = "";
+  let mimeType = "";
+
+  // 1) Bring the file into our inbox (once). Follow-up calls reuse inboxPath.
+  if (inboxPath && !inboxPath.startsWith(inboxPrefix)) {
+    throw new HttpsError("invalid-argument", "inboxPath is not a valid receipt inbox path.");
+  }
+  if (!inboxPath) {
+    const receipt = args.receipt && typeof args.receipt === "object" ? args.receipt : null;
+    const downloadUrl = nvCleanString(receipt?.download_url || "", 2000);
+    if (!downloadUrl || !/^https:\/\//i.test(downloadUrl)) {
+      throw new HttpsError("invalid-argument", "Attach the invoice/receipt file to the message so it can be passed as `receipt`.");
+    }
+    const response = await fetch(downloadUrl);
+    if (!response.ok) throw new HttpsError("unavailable", `Could not download the file from ChatGPT (HTTP ${response.status}).`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > 15 * 1024 * 1024) throw new HttpsError("invalid-argument", "The file is larger than 15MB.");
+    mimeType = nvCleanString(receipt?.mime_type || response.headers.get("content-type") || "", 100).split(";")[0].trim();
+    fileName = nvCleanString(receipt?.file_name || "", 200) || `receipt.${mimeType.includes("pdf") ? "pdf" : mimeType.includes("png") ? "png" : "jpg"}`;
+    inboxPath = `${inboxPrefix}chatgpt_${Date.now()}_${fileName.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+    await admin.storage().bucket().file(inboxPath).save(buffer, { contentType: mimeType || undefined, resumable: false });
+  } else {
+    fileName = inboxPath.split("/").pop().replace(/^chatgpt_\d+_/, "");
+    mimeType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/*";
+  }
+
+  // 2) Direct attach when the transaction is already chosen.
+  if (transactionId) {
+    const assigned = await bankFeedInternal.assignInboxReceipt(companyId, inboxPath, transactionId, fileName);
+    const tx = assigned.transaction;
+    return {
+      action: "attach_bank_receipt",
+      ok: true,
+      attached: true,
+      transactionId,
+      merchant: nvCleanString(tx.counterparty || tx.description || "", 160),
+      date: nvCleanString(tx.bookingDate || "", 10),
+      amount: Number(tx.amount) || 0,
+      receiptName: assigned.receiptName
+    };
+  }
+
+  // 3) Work out what the document says: OCR for images, ChatGPT's reading for PDFs.
+  let parsed = { amount: 0, date: "", words: [] };
+  let ocrUsed = false;
+  if (!mimeType.includes("pdf")) {
+    try {
+      parsed = bankFeedInternal.parseReceiptText(await bankFeedInternal.visionOcrText(inboxPath));
+      ocrUsed = true;
+    } catch (error) {
+      console.warn("attach_bank_receipt OCR skipped:", error?.message || error);
+    }
+  }
+  const hintAmount = Number(args.amount) || 0;
+  const hintDate = nvCleanString(args.date || "", 10);
+  const hintMerchant = nvCleanString(args.merchant || "", 120).toLowerCase();
+  if (hintAmount > 0) parsed.amount = hintAmount;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(hintDate)) parsed.date = hintDate;
+  if (hintMerchant) {
+    parsed.words = Array.from(new Set([...(parsed.words || []), ...hintMerchant.split(/[^\p{L}]+/u).filter((word) => word.length >= 4)]));
+  }
+  if (!parsed.amount && !parsed.date && !parsed.words.length) {
+    await admin.storage().bucket().file(inboxPath).delete({ ignoreNotFound: true });
+    throw new HttpsError("failed-precondition", "Could not read an amount or date from the document. Tell me the total amount, the date and the merchant, and share the file again.");
+  }
+
+  // 4) Score the feed; attach only when one match clearly stands out.
+  const candidates = await bankFeedInternal.scoreReceiptCandidates(companyId, parsed);
+  const top = candidates[0];
+  const second = candidates[1];
+  const confident = top && top.score >= 60 && (!second || top.score - second.score >= 20);
+  if (confident) {
+    const assigned = await bankFeedInternal.assignInboxReceipt(companyId, inboxPath, top.transactionId, fileName);
+    return {
+      action: "attach_bank_receipt",
+      ok: true,
+      attached: true,
+      transactionId: top.transactionId,
+      merchant: top.counterparty || top.description,
+      date: top.bookingDate,
+      amount: top.amount,
+      currency: top.currency,
+      matchScore: top.score,
+      readFromDocument: { amount: parsed.amount || null, date: parsed.date || null, ocr: ocrUsed },
+      receiptName: assigned.receiptName
+    };
+  }
+  if (!candidates.length) {
+    await admin.storage().bucket().file(inboxPath).delete({ ignoreNotFound: true });
+    return {
+      action: "attach_bank_receipt",
+      ok: true,
+      attached: false,
+      readFromDocument: { amount: parsed.amount || null, date: parsed.date || null, ocr: ocrUsed },
+      message: "No bank transaction matches this document (amount/date). It may not have reached the bank feed yet, or the amount differs — ask the user which transaction it belongs to, then search_bank_transactions and call again with transactionId."
+    };
+  }
+  return {
+    action: "attach_bank_receipt",
+    ok: true,
+    attached: false,
+    inboxPath,
+    readFromDocument: { amount: parsed.amount || null, date: parsed.date || null, ocr: ocrUsed },
+    candidates: candidates.slice(0, 5).map((item) => ({
+      transactionId: item.transactionId,
+      date: item.bookingDate,
+      merchant: item.counterparty || item.description,
+      amount: item.amount,
+      currency: item.currency,
+      alreadyHasReceipt: item.hasReceipt,
+      score: item.score
+    })),
+    message: "Several transactions could match. Ask the user to pick one, then call attach_bank_receipt again with that transactionId and this inboxPath."
+  };
+}
 
 
 // MARK: - ChatGPT OAuth skeleton
@@ -18420,6 +18718,11 @@ function nvMcpOAuthScopesForTool(toolName = "") {
       return ["finance.read"];
     case "get_dashboard_summary":
       return ["orders.read", "finance.read"];
+    case "get_bank_spending_summary":
+    case "search_bank_transactions":
+      return ["finance.read"];
+    case "attach_bank_receipt":
+      return ["finance.read", "orders.write"];
     default:
       return ["orders.read"];
   }
@@ -18925,6 +19228,77 @@ function nvMcpOrderToolSchemas() {
         idempotentHint: true,
         openWorldHint: false
       }
+    },
+    {
+      name: "get_bank_spending_summary",
+      title: "Bank spending summary",
+      description: "Summarise the connected workspace's business bank feed (Open Banking) for a month or a year: total spent, incoming, change vs the previous period, spending by category, top merchants and recurring subscriptions. Use for questions like 'how much did I spend in July', 'what are my biggest costs this year', 'which subscriptions do I pay monthly'. Requires the Bank Spending permission (workspace owner or a member the owner granted). Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+          period: { type: "string", enum: ["month", "year"], description: "month (default) or year." },
+          year: { type: "integer", description: "Four-digit year. Defaults to the current year." },
+          month: { type: "integer", minimum: 1, maximum: 12, description: "1-12. Defaults to the current month when period is month." }
+        }
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    {
+      name: "search_bank_transactions",
+      title: "Search bank transactions",
+      description: "List individual bank transactions from the connected workspace's bank feed, filtered by keyword (merchant/description), date range, category, amount range, or missing receipt. Returns the newest first. Requires the Bank Spending permission. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+          query: { type: "string", description: "Keyword matched against merchant and description, e.g. amazon, openai." },
+          from: { type: "string", description: "Start date YYYY-MM-DD (inclusive)." },
+          to: { type: "string", description: "End date YYYY-MM-DD (inclusive)." },
+          category: { type: "string", description: "Category name as shown in NivaDesk, e.g. Materials, Software, Shipping; use Uncategorised for transactions without a category." },
+          direction: { type: "string", enum: ["out", "in", "all"], description: "out = spending (default), in = incoming, all = both." },
+          minAmount: { type: "number", description: "Minimum absolute amount." },
+          maxAmount: { type: "number", description: "Maximum absolute amount." },
+          withoutReceipt: { type: "boolean", description: "true = only spending that has no receipt/invoice attached yet." },
+          limit: { type: "integer", minimum: 1, maximum: 50, description: "Max rows to return (default 20)." }
+        }
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    {
+      name: "attach_bank_receipt",
+      title: "Attach receipt to a bank transaction",
+      description: "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {
+          companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+          receipt: {
+            type: "object",
+            description: "The invoice/receipt file the user attached (image or PDF).",
+            properties: {
+              download_url: { type: "string" },
+              file_id: { type: "string" },
+              mime_type: { type: "string" },
+              file_name: { type: "string" }
+            },
+            required: ["download_url", "file_id"]
+          },
+          inboxPath: { type: "string", description: "Returned by a previous call when several candidates matched; pass it back together with transactionId instead of resending the file." },
+          transactionId: { type: "string", description: "Bank transaction to attach to, when the user has chosen one of the candidates (or named the transaction)." },
+          amount: { type: "number", description: "Total amount printed on the document, if you can read it." },
+          date: { type: "string", description: "Document/payment date YYYY-MM-DD, if you can read it." },
+          merchant: { type: "string", description: "Merchant/supplier name on the document, if you can read it." }
+        }
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      _meta: { "openai/fileParams": ["receipt"] }
     }
   ];
 }
