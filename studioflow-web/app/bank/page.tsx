@@ -145,6 +145,9 @@ function BankPageContent() {
   const [showAllCats, setShowAllCats] = useState(false);
   // "Needs attention" queue filter for the transactions table.
   const [txAttention, setTxAttention] = useState<"none" | "uncategorised" | "noReceipt" | "duplicate">("none");
+  // Bulk review: selected spending rows + the category to apply to all of them.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
   const [categoryPickerTxId, setCategoryPickerTxId] = useState<string | null>(null);
   const [categoryCustomText, setCategoryCustomText] = useState("");
   const [categoryMakeRule, setCategoryMakeRule] = useState(false);
@@ -474,6 +477,32 @@ function BankPageContent() {
     }
   }
 
+  function toggleSelected(id: string) {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function togglePageSelection() {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSelected) pageSpendingIds.forEach(id => next.delete(id)); else pageSpendingIds.forEach(id => next.add(id));
+      return next;
+    });
+  }
+  async function applyBulkCategory(category: string) {
+    if (selectedIds.size === 0) return;
+    setBusy("bulk");
+    setError(null);
+    try {
+      const result = await call<{ updated: number }>("bankSetTransactionCategoryBulk", { transactionIds: Array.from(selectedIds), category });
+      setStatus(`${result.updated} ${t("transactions updated")}`);
+      setSelectedIds(new Set());
+      setBulkCategory("");
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : "Could not update the transactions.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function deleteRule(rule: BankRule) {
     if (!window.confirm(`${t("Delete this rule?")} (${rule.keyword} → ${t(rule.category)})`)) return;
     setBusy(`rule-${rule.id}`);
@@ -671,7 +700,9 @@ function BankPageContent() {
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
-  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention]);
+  const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
+  const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
@@ -1039,10 +1070,30 @@ function BankPageContent() {
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 12, opacity: 0.6 }}>{sortedTransactions.length} {t("Transactions").toLowerCase()}</span>
                   </div>
+                  {isOwner && selectedIds.size > 0 ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "8px 18px 12px", background: "rgba(37,99,235,0.06)", borderTop: "1px solid rgba(37,99,235,0.18)" }}>
+                      <strong style={{ fontSize: 12.5 }}>{selectedIds.size} {t("selected")}</strong>
+                      <select value={bulkCategory} onChange={event => setBulkCategory(event.target.value)} style={{ ...pickerInput, flex: "0 1 220px" }} aria-label={t("Set category")}>
+                        <option value="">{t("Set category")}…</option>
+                        {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                      </select>
+                      <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "bulk" || !bulkCategory} onClick={() => void applyBulkCategory(bulkCategory)}>
+                        {busy === "bulk" ? t("Saving…") : t("Apply")}
+                      </button>
+                      <button type="button" style={bankBtnSm} disabled={busy === "bulk"} onClick={() => void applyBulkCategory("")}>{t("Clear category")}</button>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} onClick={() => setSelectedIds(new Set())}>{t("Clear selection")}</button>
+                    </div>
+                  ) : null}
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700, fontSize: 12.5 }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                          {isOwner ? (
+                            <th style={{ ...thStyle, width: 34, paddingRight: 0 }}>
+                              <input type="checkbox" aria-label={t("Select all on page")} checked={allPageSelected} disabled={pageSpendingIds.length === 0} onChange={togglePageSelection} />
+                            </th>
+                          ) : null}
                           <th style={thStyle}>{t("Merchant")}</th>
                           <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => setSortAsc(value => !value)}>
                             {t("Date")} {sortAsc ? "↑" : "↓"}
@@ -1060,7 +1111,12 @@ function BankPageContent() {
                           const meta = TX_TYPE_META[transaction.txType];
                           return (
                             <React.Fragment key={transaction.id}>
-                              <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                              <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: selectedIds.has(transaction.id) ? "rgba(37,99,235,0.06)" : undefined }}>
+                                {isOwner ? (
+                                  <td style={{ ...tdStyle, paddingRight: 0 }}>
+                                    {transaction.amount < 0 ? <input type="checkbox" aria-label={t("Select")} checked={selectedIds.has(transaction.id)} onChange={() => toggleSelected(transaction.id)} /> : null}
+                                  </td>
+                                ) : null}
                                 <td style={tdStyle}>
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 10, maxWidth: 280 }}>
                                     <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(transaction.counterparty || transaction.description || "x")}22`, color: avatarColor(transaction.counterparty || transaction.description || "x"), flexShrink: 0 }}>
@@ -1154,7 +1210,7 @@ function BankPageContent() {
                               </tr>
                               {categoryPickerTxId === transaction.id || linkPickerTxId === transaction.id ? (
                                 <tr>
-                                  <td colSpan={6} style={{ padding: "0 18px 12px" }}>
+                                  <td colSpan={isOwner ? 7 : 6} style={{ padding: "0 18px 12px" }}>
                                     {categoryPickerTxId === transaction.id ? (
                                       <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
                                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>

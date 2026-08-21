@@ -505,6 +505,23 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true };
   });
 
+  // Bulk review: one category for many transactions (≤200 per call).
+  const bankSetTransactionCategoryBulk = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const ids = Array.from(new Set((Array.isArray(request.data?.transactionIds) ? request.data.transactionIds : [])
+      .map((id) => cleanText(id, 250)).filter(Boolean))).slice(0, 200);
+    if (!ids.length) throw new HttpsError("invalid-argument", "transactionIds is required.");
+    const category = cleanText(request.data?.category, 60);
+    const value = category ? { category } : { category: admin.firestore.FieldValue.delete() };
+    const refs = ids.map((id) => transactionsRef(companyId).doc(id));
+    const docs = await db().getAll(...refs);
+    const batch = db().batch();
+    let updated = 0;
+    docs.forEach((doc) => { if (doc.exists) { batch.set(doc.ref, value, { merge: true }); updated += 1; } });
+    if (updated) await batch.commit();
+    return { ok: true, updated };
+  });
+
   // Walks the whole feed (paged) recomputing categoryAuto against the current
   // rule set. Shared by rule create and rule delete so both stay consistent.
   async function recomputeAutoCategories(companyId) {
@@ -724,6 +741,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankSetTransactionReceipt,
     bankLinkTransactionToOrder,
     bankSetTransactionCategory,
+    bankSetTransactionCategoryBulk,
     bankSaveRule,
     bankDeleteRule,
     bankMatchReceipt,
