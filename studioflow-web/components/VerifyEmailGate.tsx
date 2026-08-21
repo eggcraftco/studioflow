@@ -3,8 +3,11 @@
 // Blocks email/password accounts until the address is verified. OAuth users
 // (Google, Apple) pass straight through — their providers verify the email.
 
+import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { useState } from "react";
 import { sendEmailVerification, signOut, type User } from "firebase/auth";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 // After clicking the verification link, land users back on the app instead of
 // a bare Firebase page.
@@ -28,12 +31,63 @@ export function emailVerificationRequired(user: User | null | undefined) {
   return Date.now() - createdMs > VERIFICATION_GRACE_DAYS * 86400000;
 }
 
+// The X never fully hides the reminder — it collapses to a one-line strip that
+// expands back on click. Keyed by uid so it never bleeds across accounts.
+const VERIFY_BANNER_COLLAPSED_KEY = "emailVerifyBannerCollapsedUidV1";
+
 export function VerifyEmailBanner({ user }: { user: User }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [hiddenAfterVerify, setHiddenAfterVerify] = useState(false);
+  const [collapsedUid, setCollapsedUid] = useState(() => {
+    try {
+      return window.localStorage.getItem(VERIFY_BANNER_COLLAPSED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   if (hiddenAfterVerify) return null;
+
+  const setCollapsed = (collapsed: boolean) => {
+    const next = collapsed ? user.uid : "";
+    setCollapsedUid(next);
+    try {
+      window.localStorage.setItem(VERIFY_BANNER_COLLAPSED_KEY, next);
+    } catch {
+      /* private mode — state just won't persist */
+    }
+  };
+
+  if (user.uid && collapsedUid === user.uid) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          width: "100%",
+          padding: "5px 14px",
+          background: "#fff7e6",
+          border: 0,
+          borderBottom: "1px solid #f1d9a7",
+          color: "#7a5200",
+          fontSize: 11.5,
+          fontWeight: 650,
+          cursor: "pointer",
+        }}
+      >
+        <span aria-hidden="true">📬</span>
+        <span>{t("Verify email")}</span>
+        <span aria-hidden="true" style={{ opacity: 0.6 }}>⌄</span>
+      </button>
+    );
+  }
 
   async function resend() {
     setBusy(true);
@@ -55,7 +109,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         setHiddenAfterVerify(true);
         window.location.reload();
       } else {
-        setStatus("Not verified yet");
+        setStatus(t("Not verified yet"));
       }
     } finally {
       setBusy(false);
@@ -79,14 +133,32 @@ export function VerifyEmailBanner({ user }: { user: User }) {
         fontWeight: 650
       }}
     >
-      <span>📬 Verify your email ({user.email}) to keep your account — unverified accounts with no data are removed after 30 days.</span>
+      <span>📬 {t("Verify your email to keep your account.")} ({user.email}) {t("Unverified accounts with no data are removed after 30 days.")}</span>
       <button type="button" onClick={() => void resend()} disabled={busy} style={{ border: "1px solid #d9b96a", background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 700, cursor: "pointer", color: "#7a5200" }}>
-        Resend
+        {t("Resend email")}
       </button>
       <button type="button" onClick={() => void check()} disabled={busy} style={{ border: 0, background: "transparent", fontWeight: 800, cursor: "pointer", color: "#7a5200", textDecoration: "underline" }}>
-        I&apos;ve verified
+        {t("I've verified — continue")}
       </button>
       {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
+      <button
+        type="button"
+        aria-label="Collapse"
+        onClick={() => setCollapsed(true)}
+        style={{
+          border: 0,
+          background: "rgba(122, 82, 0, 0.10)",
+          color: "#7a5200",
+          borderRadius: 999,
+          width: 24,
+          height: 24,
+          fontWeight: 700,
+          fontSize: 12,
+          cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -147,7 +219,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
           </button>
           <button
             type="button"
-            onClick={() => void signOut(auth).then(() => window.location.replace("/login"))}
+            onClick={() => { clearDeviceLocalWorkspaceCache(); void signOut(auth).then(() => window.location.replace("/login")); }}
             style={{ background: "none", border: 0, color: "var(--muted)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 8 }}
           >
             Sign out

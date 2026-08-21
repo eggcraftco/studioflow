@@ -1,5 +1,6 @@
 "use client";
 
+import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -2752,6 +2753,15 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     try {
+      // Remove the push registration while still authenticated — Firestore
+      // rules reject the delete after signOut.
+      try {
+        const mod = await import("@/lib/studioflow/pushNotifications");
+        await mod.unregisterWebPush();
+      } catch {
+        /* ignore */
+      }
+      clearDeviceLocalWorkspaceCache();
       await signOut(auth);
       router.replace("/login");
     } catch (signOutError) {
@@ -3080,6 +3090,7 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
     try {
       const callable = httpsCallable<{ confirmation: string }, { ok: boolean }>(functions, "deleteMyAccount");
       await callable({ confirmation: "DELETE" });
+      clearDeviceLocalWorkspaceCache();
       try {
         await auth.signOut();
       } catch {

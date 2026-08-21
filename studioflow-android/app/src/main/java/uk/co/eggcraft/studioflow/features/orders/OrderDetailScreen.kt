@@ -6382,7 +6382,13 @@ private fun FinancialCard(
                         onMethodChange = { paymentMethodInput = it },
                         onNoteChange = { paymentNoteInput = it },
                         onAdd = { recordPayment() },
-                        onDelete = { deletePayment(it) }
+                        onDelete = { deletePayment(it) },
+                        onEditNote = { paymentId, note ->
+                            onUpdateOrderFields(
+                                order,
+                                mapOf("finance" to mapOf("updatePaymentNote" to mapOf("id" to paymentId, "note" to note)))
+                            )
+                        }
                     )
                 }
                 HorizontalRule()
@@ -6543,13 +6549,18 @@ private fun PaymentLedgerSection(
     onMethodChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     onAdd: () -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onEditNote: (String, String) -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val dateFormatter = remember(lang) {
         java.text.SimpleDateFormat("dd MMM yyyy", uk.co.eggcraft.studioflow.language.studioLocale(lang))
     }
+    // Per-entry note editing — works for every ledger entry, including payments
+    // that arrived automatically from the WooCommerce/Shopify webhooks.
+    var editingNoteId by remember(order.id) { mutableStateOf<String?>(null) }
+    var editingNoteText by remember(order.id) { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -6633,16 +6644,54 @@ private fun PaymentLedgerSection(
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StudioGreen, modifier = Modifier.size(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(money(payment.amount), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        val meta = buildList {
-                            payment.date?.let { add(dateFormatter.format(it)) }
-                            if (payment.method.isNotBlank()) add(payment.method)
-                            if (payment.note.isNotBlank()) add(payment.note)
-                        }.joinToString("  ·  ")
-                        if (meta.isNotBlank()) {
-                            Text(meta, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (editingNoteId == payment.id) {
+                            OutlinedTextField(
+                                value = editingNoteText,
+                                onValueChange = { editingNoteText = it },
+                                label = { Text(t("Note")) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                Text(
+                                    t("Save"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StudioGreen,
+                                    modifier = Modifier.clickable {
+                                        onEditNote(payment.id, editingNoteText.trim())
+                                        editingNoteId = null
+                                    }
+                                )
+                                Text(
+                                    t("Cancel"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.clickable { editingNoteId = null }
+                                )
+                            }
+                        } else {
+                            val meta = buildList {
+                                payment.date?.let { add(dateFormatter.format(it)) }
+                                if (payment.method.isNotBlank()) add(payment.method)
+                                if (payment.note.isNotBlank()) add(payment.note)
+                            }.joinToString("  ·  ")
+                            if (meta.isNotBlank()) {
+                                Text(meta, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                    if (canEditFinance) {
+                    if (canEditFinance && editingNoteId != payment.id) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "Edit payment note",
+                            tint = StudioBlue.copy(alpha = 0.75f),
+                            modifier = Modifier.size(16.dp).clickable {
+                                editingNoteText = payment.note
+                                editingNoteId = payment.id
+                            }
+                        )
                         Icon(
                             Icons.Filled.Delete,
                             contentDescription = "Remove payment",
@@ -10920,10 +10969,15 @@ private fun buildInvoiceHtml(order: StudioOrder, settings: StudioWorkspaceSettin
     val currency = settings.selectedCurrency.ifBlank { "£" }
     val dec = settings.selectedDecimalSeparator
     fun m(v: Double) = invoiceMoney(v, currency, dec)
-    val orderValue = order.paidAmount + order.remainingAmount
+    // Invoice total: when the user added named line items, the invoice bills
+    // exactly those items — the order's paid/remaining figures stay off the
+    // invoice entirely. Orders without line items keep the classic order value.
+    val orderValue = if (order.hasLineItems) order.lineItemsTotal else order.paidAmount + order.remainingAmount
     val isMargin = order.taxType == "Profit"
     val isZero = order.taxRate <= 0.0001
-    val vat = order.taxAmount
+    // Line-item invoices recompute VAT on the item total with the order's rate
+    // (same total*rate/100 convention as the Finance card).
+    val vat = if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
     val subtotal = if (isMargin) orderValue else orderValue - vat
     val business = escapeInvoiceHtml(settings.appSubtitle.ifBlank { "NivaDesk" })
     val logo = settings.appLogoUrl.trim()
@@ -10937,7 +10991,15 @@ private fun buildInvoiceHtml(order: StudioOrder, settings: StudioWorkspaceSettin
         isZero -> "<div class=\"trow\"><span>VAT (Zero-rated / Export)</span><strong>${m(0.0)}</strong></div>"
         else -> "<div class=\"trow\"><span>VAT (${order.taxRate.toInt()}%)</span><strong>${m(vat)}</strong></div>"
     }
-    val dueClass = if (order.remainingAmount > 0.005) "due" else "paid"
+    val fmtQty = { q: Double -> if (q % 1.0 == 0.0) q.toInt().toString() else String.format(java.util.Locale.UK, "%.2f", q) }
+    val itemRows = if (order.hasLineItems) {
+        order.lineItems.joinToString("") { item ->
+            val qtyLine = if (item.quantity != 1.0) "<div style=\"font-size:10px;color:#6b7280;\">${fmtQty(item.quantity)} × ${m(item.unitPrice)}</div>" else ""
+            "<tr><td>${escapeInvoiceHtml(item.name.ifBlank { "-" })}$qtyLine</td><td class=\"r\">${m(item.lineTotal)}</td></tr>"
+        }
+    } else {
+        "<tr><td>$desc</td><td class=\"r\">${m(subtotal)}</td></tr>"
+    }
     return """<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
 @page { size: A4; margin: 14mm; }
@@ -10985,13 +11047,11 @@ footer { margin-top: 26px; border-top: 1px solid #e5e7eb; padding-top: 12px; col
   ${if (order.emailAddress.isNotBlank()) "<div class=\"email\">${escapeInvoiceHtml(order.emailAddress)}</div>" else ""}
 </div>
 <table><thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-<tbody><tr><td>$desc</td><td class="r">${m(subtotal)}</td></tr></tbody></table>
+<tbody>$itemRows</tbody></table>
 <div class="totals">
   <div class="trow"><span>Subtotal</span><strong>${m(subtotal)}</strong></div>
   $vatRow
   <div class="trow total"><span>TOTAL</span><strong>${m(orderValue)}</strong></div>
-  <div class="trow"><span>Paid</span><strong class="paid">${m(order.paidAmount)}</strong></div>
-  <div class="trow"><span>Balance Due</span><strong class="$dueClass">${m(order.remainingAmount)}</strong></div>
 </div>
 ${if (footer.isNotBlank()) "<footer>${escapeInvoiceHtml(footer)}</footer>" else ""}
 <div class="credit">Generated with NivaDesk</div>
@@ -11295,11 +11355,12 @@ private fun createInvoicePdfFile(
 
     y = maxOf(billBottom, shipBottom) + 12f
 
-    // Line item table
+    // Line item table. Same rule as the HTML/web/Mac invoices: line items drive
+    // the invoice total (VAT recomputed on it); paid/remaining stay off the invoice.
     val isMargin = order.taxType == "Profit"
     val isZero = order.taxRate <= 0.0001
-    val orderValue = order.paidAmount + order.remainingAmount
-    val vat = order.taxAmount
+    val orderValue = if (order.hasLineItems) order.lineItemsTotal else order.paidAmount + order.remainingAmount
+    val vat = if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
     val subtotal = if (isMargin) orderValue else orderValue - vat
 
     val tableHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F4F6.toInt() }
@@ -11346,13 +11407,6 @@ private fun createInvoicePdfFile(
     canvas.drawLine(totalsLeft, y - 4f, rightX, y - 4f, linePaint)
     y += 8f
     totalRow("TOTAL", money(orderValue), totalPaint, totalPaint)
-    y += 4f
-    val paidPaint = Paint(bodyBold).apply { color = 0xFF16A34A.toInt() }
-    totalRow("Paid", money(order.paidAmount), paidPaint)
-    val duePaint = Paint(bodyBold).apply {
-        color = if (order.remainingAmount > 0.005) 0xFFDC2626.toInt() else 0xFF16A34A.toInt()
-    }
-    totalRow("Balance Due", money(order.remainingAmount), duePaint)
     y += 18f
 
     // Per-order invoice note (customer-facing "Notes" box)

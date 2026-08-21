@@ -872,10 +872,19 @@ function openOrderPdfPrint(
 
 function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
   const money = (value: number) => orderPdfMoney(value, settings, false);
-  const orderValue = order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+  // Invoice total: when the user added named line items, the invoice bills
+  // exactly those items — the order's paid/remaining figures stay off the
+  // invoice entirely. Orders without line items keep the classic order value.
+  const hasLineItems = order.lineItems.length > 0;
+  const lineItemsTotal = order.lineItems.reduce((acc, it) => acc + it.lineTotal, 0);
+  const orderValue = hasLineItems
+    ? lineItemsTotal
+    : order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
   const isMarginScheme = order.taxType === "Profit";
   const isZeroRated = (order.taxRate ?? 0) <= 0.0001;
-  const vatAmount = order.taxAmount;
+  // Line-item invoices recompute VAT on the item total with the order's rate
+  // (same total*rate/100 convention as the Finance card).
+  const vatAmount = hasLineItems ? (orderValue * (order.taxRate ?? 0)) / 100 : order.taxAmount;
   const subtotal = isMarginScheme ? orderValue : orderValue - vatAmount;
   const businessName = settings?.appSubtitle || "NivaDesk";
   const logoUrl = settings?.appLogoUrl || "";
@@ -971,8 +980,6 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
       <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
       ${vatRow}
       <div class="trow total"><span>TOTAL</span><strong>${money(orderValue)}</strong></div>
-      <div class="trow"><span>Paid</span><strong class="paid">${money(order.paidAmount)}</strong></div>
-      <div class="trow"><span>Balance Due</span><strong class="${order.remainingAmount > 0.005 ? "due" : "paid"}">${money(order.remainingAmount)}</strong></div>
     </div>
     ${order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
@@ -1789,6 +1796,8 @@ export function OrderDetailContent({
   const [paymentAmountInput, setPaymentAmountInput] = useState("");
   const [paymentMethodInput, setPaymentMethodInput] = useState("Deposit");
   const [paymentNoteInput, setPaymentNoteInput] = useState("");
+  const [editingPaymentNoteId, setEditingPaymentNoteId] = useState<string | null>(null);
+  const [editingPaymentNoteText, setEditingPaymentNoteText] = useState("");
   const [inlineStatus, setInlineStatus] = useState<string | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
@@ -3519,6 +3528,10 @@ export function OrderDetailContent({
     if (typeof patch.deletePaymentId === "string") {
       payments = order.payments.filter(entry => entry.id !== patch.deletePaymentId);
     }
+    if (patch.updatePaymentNote) {
+      const { id, note } = patch.updatePaymentNote;
+      payments = payments.map(entry => (entry.id === id ? { ...entry, note } : entry));
+    }
     // Mirror the server-side seed: the first Paid amount entered on an empty
     // ledger becomes Payment #1, so it shows up instantly under Payments.
     if (typeof patch.paidAmount === "number" && order.payments.length === 0 && paidAmount > 0.005) {
@@ -3622,6 +3635,14 @@ export function OrderDetailContent({
 
   async function deletePaymentEntry(paymentId: string) {
     await saveFinancePatch({ deletePaymentId: paymentId }, "Payment");
+  }
+
+  // Edit the note on any ledger entry — including payments recorded
+  // automatically by the WooCommerce/Shopify webhooks.
+  async function savePaymentNote(paymentId: string) {
+    await saveFinancePatch({ updatePaymentNote: { id: paymentId, note: editingPaymentNoteText.trim() } }, "Payment");
+    setEditingPaymentNoteId(null);
+    setEditingPaymentNoteText("");
   }
 
   function savePaidFinanceValue(value: string | number) {
@@ -5271,7 +5292,7 @@ export function OrderDetailContent({
                     <div className="finance-payments-ledger">
                       <div className="finance-payments-head">
                         <span className="finance-payments-title">
-                          Payments
+                          {t("Payments")}
                           {order.payments.length > 0 ? <span className="finance-payments-count">{order.payments.length}</span> : null}
                         </span>
                         {canInlineEditFinance ? (
@@ -5280,7 +5301,7 @@ export function OrderDetailContent({
                             className="finance-payments-add"
                             onClick={() => setShowPaymentForm(value => !value)}
                           >
-                            {showPaymentForm ? "Close" : "+ Add Payment"}
+                            {showPaymentForm ? t("Close") : `+ ${t("Add Payment")}`}
                           </button>
                         ) : null}
                       </div>
@@ -5289,7 +5310,7 @@ export function OrderDetailContent({
                           <input
                             type="number"
                             inputMode="decimal"
-                            placeholder="Amount"
+                            placeholder={t("Amount")}
                             value={paymentAmountInput}
                             onChange={event => setPaymentAmountInput(event.target.value)}
                           />
@@ -5300,7 +5321,7 @@ export function OrderDetailContent({
                           </select>
                           <input
                             type="text"
-                            placeholder="Note (optional)"
+                            placeholder={t("Note")}
                             value={paymentNoteInput}
                             onChange={event => setPaymentNoteInput(event.target.value)}
                           />
@@ -5319,12 +5340,60 @@ export function OrderDetailContent({
                           {order.payments.map(payment => (
                             <li key={payment.id} className="finance-payments-item">
                               <span className="finance-payments-amount">{money(payment.amount, hideNumbers)}</span>
-                              <span className="finance-payments-meta">
-                                {payment.date ? payment.date.toLocaleDateString() : ""}
-                                {payment.method ? ` · ${payment.method}` : ""}
-                                {payment.note ? ` · ${payment.note}` : ""}
-                              </span>
-                              {canInlineEditFinance ? (
+                              {editingPaymentNoteId === payment.id ? (
+                                <span className="finance-payments-meta" style={{ display: "inline-flex", gap: 6, alignItems: "center", flex: 1 }}>
+                                  <input
+                                    type="text"
+                                    value={editingPaymentNoteText}
+                                    placeholder={t("Note")}
+                                    autoFocus
+                                    onChange={event => setEditingPaymentNoteText(event.target.value)}
+                                    onKeyDown={event => {
+                                      if (event.key === "Enter") void savePaymentNote(payment.id);
+                                      if (event.key === "Escape") setEditingPaymentNoteId(null);
+                                    }}
+                                    style={{ flex: 1, minWidth: 120, fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="finance-payments-add"
+                                    disabled={savingFinanceField === "Payment"}
+                                    onClick={() => void savePaymentNote(payment.id)}
+                                  >
+                                    {t("Save")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="finance-payments-delete"
+                                    aria-label="Cancel note edit"
+                                    onClick={() => setEditingPaymentNoteId(null)}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="finance-payments-meta">
+                                  {payment.date ? payment.date.toLocaleDateString() : ""}
+                                  {payment.method ? ` · ${payment.method}` : ""}
+                                  {payment.note ? ` · ${payment.note}` : ""}
+                                </span>
+                              )}
+                              {canInlineEditFinance && editingPaymentNoteId !== payment.id ? (
+                                <button
+                                  type="button"
+                                  className="finance-payments-delete"
+                                  aria-label="Edit payment note"
+                                  title="Edit note"
+                                  disabled={savingFinanceField === "Payment"}
+                                  onClick={() => {
+                                    setEditingPaymentNoteText(payment.note || "");
+                                    setEditingPaymentNoteId(payment.id);
+                                  }}
+                                >
+                                  ✎
+                                </button>
+                              ) : null}
+                              {canInlineEditFinance && editingPaymentNoteId !== payment.id ? (
                                 <button
                                   type="button"
                                   className="finance-payments-delete"

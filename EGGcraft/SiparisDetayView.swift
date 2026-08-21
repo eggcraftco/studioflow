@@ -1161,6 +1161,10 @@ struct SiparisDetayView: View {
     @State private var newPaymentAmount: String = ""
     @State private var newPaymentMethod: String = ""
     @State private var newPaymentNote: String = ""
+    // Per-entry note editing — works for every ledger entry, including payments
+    // that arrived automatically from WooCommerce/Shopify webhooks.
+    @State private var editingPaymentEntry: PaymentEntry? = nil
+    @State private var editingPaymentNoteText: String = ""
     @State private var paymentsExpanded: Bool = false
     @State private var workspaceStatusMessage: String = ""
     @State private var isApplyingWorkspaceLayout: Bool = false
@@ -9778,6 +9782,14 @@ struct SiparisDetayView: View {
                                 }
                             }
                             Spacer()
+                            Button {
+                                editingPaymentNoteText = entry.note
+                                editingPaymentEntry = entry
+                            } label: {
+                                Image(systemName: "square.and.pencil").font(.system(size: 11))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.blue.opacity(0.75))
                             Button { deletePayment(entry) } label: {
                                 Image(systemName: "trash").font(.system(size: 11))
                             }
@@ -9792,6 +9804,61 @@ struct SiparisDetayView: View {
             }
         }
         .sheet(isPresented: $showAddPaymentSheet) { addPaymentSheet }
+        .sheet(item: $editingPaymentEntry) { entry in editPaymentNoteSheet(entry) }
+    }
+
+    // Edit the free-text note on any ledger entry — including payments recorded
+    // automatically by the WooCommerce/Shopify webhooks, which previously had
+    // no way to be annotated after the fact.
+    @ViewBuilder
+    private func editPaymentNoteSheet(_ entry: PaymentEntry) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(t("Payment Note", lang: seciliDil))
+                .font(.system(size: 18, weight: .bold))
+
+            HStack(spacing: 6) {
+                Text(privacyCurrency(entry.amount, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                    .font(.system(size: 13, weight: .bold))
+                Text(privacyDate(entry.date, hideNumbers: hideSensitiveNumbers))
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
+                if !entry.method.isEmpty {
+                    Text("· \(t(entry.method, lang: seciliDil))")
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Note", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray)
+                TextField(t("Optional", lang: seciliDil), text: $editingPaymentNoteText)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                Button(t("Cancel", lang: seciliDil)) { editingPaymentEntry = nil }
+                Spacer()
+                Button(t("Save", lang: seciliDil)) {
+                    updatePaymentNote(entry, note: editingPaymentNoteText)
+                    editingPaymentEntry = nil
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 340)
+    }
+
+    private func updatePaymentNote(_ entry: PaymentEntry, note: String) {
+        var updatedOrder = siparis
+        var ledger = updatedOrder.payments ?? []
+        guard let idx = ledger.firstIndex(where: { $0.id == entry.id }) else { return }
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ledger[idx].note != cleanNote else { return }
+        ledger[idx].note = cleanNote
+        updatedOrder.payments = ledger
+        siparis = updatedOrder
+        firebaseManager.updateSiparis(updatedOrder)
     }
 
     @ViewBuilder
@@ -13019,10 +13086,18 @@ struct OrderInvoicePDFView: View {
         return n.isEmpty ? siparis.customerName : n
     }
 
-    private var orderValue: Double { siparis.salesTotal }
+    // Invoice total: when the user added named line items, the invoice bills
+    // exactly those items — the order's paid/remaining figures stay off the
+    // invoice entirely. Orders without line items keep the classic order value.
+    private var orderValue: Double { siparis.hasLineItems ? siparis.lineItemsTotal : siparis.salesTotal }
     private var isMarginScheme: Bool { siparis.taxType == "Profit" }
     private var isZeroRated: Bool { siparis.taxRate <= 0.0001 }
-    private var vatAmount: Double { siparis.taxAmount }
+    private var vatAmount: Double {
+        // Line-item invoices recompute VAT on the item total with the order's
+        // rate (same total*rate/100 convention as the Finance card); otherwise
+        // the stored order-level tax amount is used as before.
+        siparis.hasLineItems ? (orderValue * siparis.taxRate) / 100.0 : siparis.taxAmount
+    }
     private var subtotal: Double { isMarginScheme ? orderValue : orderValue - vatAmount }
     private func money(_ v: Double) -> String { "\(sembol)\(formatFiyat(v, ondalik: ondalik))" }
 
@@ -13118,9 +13193,6 @@ struct OrderInvoicePDFView: View {
                     }
                     Divider().frame(width: 240)
                     totalRow(t("TOTAL", lang: seciliDil), money(orderValue), bold: true)
-                    Spacer().frame(height: 4)
-                    totalRow(t("Paid", lang: seciliDil), money(siparis.paidAmount), color: .green)
-                    totalRow(t("Balance Due", lang: seciliDil), money(siparis.remainingAmount), color: siparis.remainingAmount > 0.005 ? .red : .green)
                 }.frame(width: 270)
             }
             Spacer()
