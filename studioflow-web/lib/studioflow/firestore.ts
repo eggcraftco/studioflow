@@ -643,7 +643,8 @@ function workspaceMemberRole(companyData: Record<string, unknown>, uid: string, 
 
 export function normalizeWorkspaceMemberAccess(value: unknown, forceFullAccess = false): WorkspaceMemberAccess {
   const output: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
-  if (forceFullAccess) return output;
+  // Owners see everything, including the opt-in bank feed.
+  if (forceFullAccess) return { ...output, bankFeed: true };
   if (!value || typeof value !== "object" || Array.isArray(value)) return output;
 
   const raw = value as Record<string, unknown>;

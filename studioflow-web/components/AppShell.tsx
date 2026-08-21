@@ -77,7 +77,8 @@ type NavIconName =
   | "activity"
   | "account"
   | "signout"
-  | "insights";
+  | "insights"
+  | "bank";
 
 const NAV_ITEMS: Array<
   | { href: string; label: string; icon: NavIconName }
@@ -85,6 +86,7 @@ const NAV_ITEMS: Array<
 > = [
   { href: "/orders", label: "Orders", icon: "orders" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/bank", label: "Banking", icon: "bank" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
@@ -99,6 +101,7 @@ const NAV_ITEMS: Array<
 const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/orders": "orders",
   "/dashboard": "dashboard",
+  "/bank": "bankFeed",
   "/schedule": "schedule",
   "/team-schedule": "schedule",
   "/customers": "customers",
@@ -382,6 +385,14 @@ function NavIcon({ name }: { name: NavIconName }) {
       "M10 20V4",
       "M16 20v-7",
       "M22 20H2",
+    ],
+    bank: [
+      "M3 10l9-6 9 6",
+      "M5 10v8",
+      "M10 10v8",
+      "M14 10v8",
+      "M19 10v8",
+      "M3 20h18",
     ],
   };
 

@@ -540,6 +540,37 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true, updated };
   });
 
+  // Transaction drawer "Save": category, VAT code and note in one write.
+  const bankUpdateTransaction = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 250);
+    if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
+    const txRef = transactionsRef(companyId).doc(transactionId);
+    if (!(await txRef.get()).exists) throw new HttpsError("not-found", "Transaction not found.");
+    const patch = {};
+    const data = request.data || {};
+    if (data.category !== undefined) {
+      const category = cleanText(data.category, 60);
+      patch.category = category || admin.firestore.FieldValue.delete();
+    }
+    if (data.vatCode !== undefined) {
+      const vatCode = cleanText(data.vatCode, 4).toUpperCase();
+      if (vatCode && !["ST", "RR", "RC", "NV", "EX"].includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+      patch.vatCode = vatCode || admin.firestore.FieldValue.delete();
+    }
+    if (data.note !== undefined) {
+      const note = cleanText(data.note, 1000);
+      patch.note = note || admin.firestore.FieldValue.delete();
+    }
+    if (data.receiptNotNeeded !== undefined) {
+      patch.receiptNotNeeded = data.receiptNotNeeded === true ? true : admin.firestore.FieldValue.delete();
+    }
+    if (!Object.keys(patch).length) throw new HttpsError("invalid-argument", "Nothing to update.");
+    patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
+    await txRef.set(patch, { merge: true });
+    return { ok: true };
+  });
+
   // Walks the whole feed (paged) recomputing categoryAuto against the current
   // rule set. Shared by rule create and rule delete so both stay consistent.
   async function recomputeAutoCategories(companyId) {
@@ -761,6 +792,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankSetTransactionCategory,
     bankSetTransactionCategoryBulk,
     bankSetTransactionVatBulk,
+    bankUpdateTransaction,
     bankSaveRule,
     bankDeleteRule,
     bankMatchReceipt,

@@ -21,7 +21,7 @@ against what already ships. Positioning stays: **NivaDesk = working/decision lay
 | Category suggestions (merchant history + keyword library, "always?" prompt) | ✅ 21 Aug | heuristic first, no AI cost; AI later |
 | VAT treatment per transaction (+ category default) | ✅ 21 Aug (`vatCode`, Pandle push honours it) | feeds Pandle tax-code mapping |
 | Order / project link suggestions with confidence | ✅ 21 Aug (chip only when score ≥40; picker ranked) | uses open orders, dates, customer/material keywords |
-| Transaction detail drawer + hover actions; "Banking" tabs (Overview / Transactions / Recurring / Receipts / Rules) | 🔜 step 7 | UI restructure |
+| Transaction detail drawer; "Banking" tabs (Overview / Transactions / Recurring / Receipts / Rules) | ✅ 21 Aug | page renamed Banking, nav link added, drawer saves category/VAT/order/note via `bankUpdateTransaction`; Receipts tab has "No receipt needed"; Rules tab has suggested rules + match counts |
 | Pandle phase 1 (read-only view) → phase 2 (confirm) → phase 3 (receipt sync, rules push, order→project, bulk confirm, reverse sync after confirm) | ⏳ credentials | phase 1–2 code exists; phase 3 after live test |
 | Split transaction, transfer detection, recurring price-change alerts, merchant profiles | P1 | price-change detection lands with Needs Attention |
 | Cash-flow forecast, budgets, approvals, accountant mode, audit log, email receipt fetch, AI finance chat | P2 | |
@@ -40,6 +40,6 @@ against what already ships. Positioning stays: **NivaDesk = working/decision lay
 
 ## Data model additions planned
 
-- `bankTransactions.vatCode` ✅ (ST/RR/RC/NV/EX); planned: `reviewedAt`, `splitLines[]`, `transferOf`
+- `bankTransactions.vatCode` ✅, `note` ✅, `receiptNotNeeded` ✅, `reviewedAt` ✅ (set by drawer save); planned: `splitLines[]`, `transferOf`
 - `bankRules.{vatCode}`
 - `pandleConnection.mappings[].taxCode` already exists (category default)
