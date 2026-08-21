@@ -88,6 +88,21 @@ function suggestRuleKeyword(tx: BankTransaction): string {
   return (word || base).replace(/[^\p{L}\p{N}. -]/gu, "").slice(0, 60);
 }
 
+function startOfWeek(date: Date): Date {
+  const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = (copy.getDay() + 6) % 7; // Monday = 0
+  copy.setDate(copy.getDate() - day);
+  return copy;
+}
+function isoDay(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
 function toDate(value: unknown): Date | null {
   const v = value as { toDate?: () => Date } | null | undefined;
   return v && typeof v.toDate === "function" ? v.toDate() : null;
@@ -104,7 +119,15 @@ function BankPageContent() {
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [view, setView] = useState<"month" | "year">("month");
+  const [view, setView] = useState<"week" | "month" | "year">("month");
+  // Week view: Monday of the selected week (local time).
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
+  // Transactions table direction filter: everything, spending only, or incoming only.
+  const [txFlow, setTxFlow] = useState<"all" | "out" | "in">(() => {
+    if (typeof window === "undefined") return "all";
+    const flow = new URLSearchParams(window.location.search).get("flow");
+    return flow === "in" || flow === "out" ? flow : "all";
+  });
   // Navigable period: month view walks month by month, year view year by year.
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -472,13 +495,23 @@ function BankPageContent() {
   }, [orderOptions, orderSearch]);
 
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const weekStartIso = isoDay(weekStart);
+  const weekEndIso = isoDay(addDays(weekStart, 6));
   const isCurrentPeriod = view === "month"
     ? selectedYear === now.getFullYear() && selectedMonth === now.getMonth()
-    : selectedYear === now.getFullYear();
+    : view === "week"
+      ? weekStartIso >= isoDay(startOfWeek(now))
+      : selectedYear === now.getFullYear();
 
   function stepPeriod(direction: -1 | 1) {
     if (view === "year") {
       setSelectedYear(year => Math.min(now.getFullYear(), year + direction));
+      return;
+    }
+    if (view === "week") {
+      const nextWeek = addDays(weekStart, direction * 7);
+      if (nextWeek > now) return;
+      setWeekStart(nextWeek);
       return;
     }
     const next = new Date(selectedYear, selectedMonth + direction, 1);
@@ -505,9 +538,29 @@ function BankPageContent() {
   // The list follows the selected period; anything older stays reachable by
   // switching the tab back.
   const visibleTransactions = useMemo(() => {
+    if (view === "week") {
+      return transactions.filter(item => item.bookingDate >= weekStartIso && item.bookingDate <= weekEndIso);
+    }
     const prefix = view === "month" ? monthPrefix : String(selectedYear);
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
-  }, [transactions, view, monthPrefix, selectedYear]);
+  }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso]);
+
+  // Previous period spend (week/month/year) for the "vs last …" delta.
+  const previousPeriodSpent = useMemo(() => {
+    let inRange: (date: string) => boolean;
+    if (view === "week") {
+      const start = isoDay(addDays(weekStart, -7));
+      const end = isoDay(addDays(weekStart, -1));
+      inRange = date => date >= start && date <= end;
+    } else if (view === "month") {
+      const previous = new Date(selectedYear, selectedMonth - 1, 1);
+      const prefix = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+      inRange = date => date.startsWith(prefix);
+    } else {
+      inRange = date => date.startsWith(String(selectedYear - 1));
+    }
+    return transactions.filter(item => item.amount < 0 && inRange(item.bookingDate)).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+  }, [transactions, view, weekStart, selectedYear, selectedMonth]);
 
   // Spending per effective category for the selected period (Year/Month tab).
   // Every category name present in the feed (presets + custom), for the
@@ -544,17 +597,19 @@ function BankPageContent() {
     .filter(item => item.amount > 0)
     .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions]);
 
-  const lastMonthTotal = useMemo(() => {
-    const previous = new Date(selectedYear, selectedMonth - 1, 1);
-    const prefix = `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
-    return transactions
-      .filter(item => item.bookingDate.startsWith(prefix) && item.amount < 0)
-      .reduce((acc, item) => acc + Math.abs(item.amount), 0);
-  }, [transactions, selectedYear, selectedMonth]);
-
   // Sparkline for the "Total spent" tile: daily in month view, monthly in year view.
   const spentSeries = useMemo(() => {
     if (view === "year") return yearSeries.totals;
+    if (view === "week") {
+      const daily = Array.from({ length: 7 }, () => 0);
+      for (const item of visibleTransactions) {
+        if (item.amount >= 0) continue;
+        const index = Math.round((new Date(item.bookingDate).getTime() - new Date(weekStartIso).getTime()) / 86400000);
+        if (index >= 0 && index < 7) daily[index] += Math.abs(item.amount);
+      }
+      let runningWeek = 0;
+      return daily.map(value => (runningWeek += value));
+    }
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const limit = isCurrentPeriod ? now.getDate() : daysInMonth;
     const daily = Array.from({ length: limit }, () => 0);
@@ -566,7 +621,7 @@ function BankPageContent() {
     // cumulative curve reads better than spiky dailies
     let running = 0;
     return daily.map(value => (running += value));
-  }, [view, yearSeries.totals, selectedYear, selectedMonth, visibleTransactions, isCurrentPeriod, now]);
+  }, [view, yearSeries.totals, selectedYear, selectedMonth, visibleTransactions, isCurrentPeriod, now, weekStartIso]);
 
   const accountsCount = useMemo(() => connections
     .filter(item => item.status === "linked")
@@ -576,24 +631,32 @@ function BankPageContent() {
     item.lastSyncedAt && (!latest || item.lastSyncedAt > latest) ? item.lastSyncedAt : latest, null);
 
   const sortedTransactions = useMemo(() => {
-    const list = [...visibleTransactions];
+    const list = visibleTransactions.filter(item => txFlow === "all" ? true : txFlow === "in" ? item.amount > 0 : item.amount < 0);
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc]);
+  }, [visibleTransactions, sortAsc, txFlow]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
-  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth]);
+  useEffect(() => { setTxPage(1); }, [view, selectedYear, selectedMonth, weekStart, txFlow]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
   const periodLabel = view === "month"
     ? new Date(selectedYear, selectedMonth, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
-    : String(selectedYear);
-  const spentTotal = view === "month" ? monthTotal : yearSeries.total;
-  const spentDelta = view === "month" && lastMonthTotal > 0
-    ? ((monthTotal - lastMonthTotal) / lastMonthTotal) * 100
-    : null;
+    : view === "week"
+      ? `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+      : String(selectedYear);
+  const weekTotal = view === "week" ? visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0) : 0;
+  const spentTotal = view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
+  const spentDelta = previousPeriodSpent > 0 ? ((spentTotal - previousPeriodSpent) / previousPeriodSpent) * 100 : null;
+  const deltaLabel = view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
+  const incomingCount = visibleTransactions.filter(item => item.amount > 0).length;
+  function showIncoming() {
+    setTxFlow("in");
+    setTxPage(1);
+    document.getElementById("bank-transactions")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const avatarColor = (name: string) => CATEGORY_PALETTE[(name.length * 31 + (name.charCodeAt(0) || 7)) % CATEGORY_PALETTE.length];
   const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
@@ -719,11 +782,11 @@ function BankPageContent() {
               ) : null}
               <span style={{ flex: 1 }} />
               <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
-                {(["month", "year"] as const).map(option => (
+                {(["week", "month", "year"] as const).map(option => (
                   <button key={option} type="button" role="tab" aria-selected={view === option}
                     onClick={() => setView(option)}
                     style={{ border: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, background: view === option ? "#2563eb" : "transparent", color: view === option ? "#fff" : "inherit" }}>
-                    {option === "month" ? t("Monthly") : t("Yearly")}
+                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : t("Yearly")}
                   </button>
                 ))}
               </div>
@@ -751,7 +814,7 @@ function BankPageContent() {
                     <strong style={tileValue}>{money(spentTotal, currency0)}</strong>
                     {spentDelta !== null ? (
                       <span style={{ fontSize: 11.5, fontWeight: 700, color: spentDelta <= 0 ? "#16a34a" : "#dc2626" }}>
-                        {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {t("vs last month")}
+                        {spentDelta <= 0 ? "↓" : "↑"}{Math.abs(spentDelta).toFixed(0)}% {deltaLabel}
                       </span>
                     ) : null}
                     <div style={{ marginTop: 8 }}>
@@ -767,7 +830,8 @@ function BankPageContent() {
                   <div style={bankCard}>
                     <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Incoming")} — {periodLabel}</p>
                     <strong style={{ ...tileValue, color: "#16a34a" }}>+{money(incomingTotal, currency0)}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↗ {t("Total inflow this period")}</span>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>↗ {incomingCount} {t("payments received")}</span>
+                    <button type="button" onClick={showIncoming} style={{ ...cardFootLink, display: "block", padding: "6px 0 0", fontSize: 12 }}>{t("View all incoming")} →</button>
                     <TileIcon bg="rgba(22,163,74,0.12)">↗</TileIcon>
                   </div>
                   <div style={bankCard}>
@@ -881,10 +945,18 @@ function BankPageContent() {
                 </div>
 
                 {/* ---- Transactions table ---------------------------------- */}
-                <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px" }}>
+                <div id="bank-transactions" style={{ ...bankCard, padding: 0, overflow: "hidden", scrollMarginTop: 90 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
                     <TileBadge bg="rgba(120,120,140,0.12)">🧾</TileBadge>
                     <strong style={{ fontSize: 14.5 }}>{t("Recent transactions")}</strong>
+                    <span role="group" aria-label={t("Direction")} style={{ display: "inline-flex", gap: 2, marginLeft: 6, background: "rgba(120,120,140,0.12)", borderRadius: 7, padding: 2 }}>
+                      {(["all", "out", "in"] as const).map(flow => (
+                        <button key={flow} type="button" onClick={() => setTxFlow(flow)}
+                          style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 5, background: txFlow === flow ? (flow === "in" ? "#16a34a" : flow === "out" ? "#dc2626" : "#2563eb") : "transparent", color: txFlow === flow ? "#fff" : "inherit" }}>
+                          {flow === "all" ? t("All") : flow === "out" ? t("Spending") : t("Incoming")}
+                        </button>
+                      ))}
+                    </span>
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 12, opacity: 0.6 }}>{sortedTransactions.length} {t("Transactions").toLowerCase()}</span>
                   </div>
