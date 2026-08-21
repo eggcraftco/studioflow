@@ -196,18 +196,43 @@ function pushText(key, language = "English") {
   return PUSH_TEXT[key]?.[language] || PUSH_TEXT[key]?.English || key;
 }
 
-function deliveryPushTitle(language = "English") {
-  return pushText("deliveryTitle", language);
+// The customer is the useful part of a delivery alert, so it rides in the
+// title (the only line a collapsed push always shows); the project name and
+// carrier details follow in the body.
+function deliveryPushTitle(language = "English", order = {}) {
+  const base = pushText("deliveryTitle", language);
+  const customerName = String(order?.customerName || "").trim();
+  return customerName ? `${base} · ${customerName}` : base;
 }
 
-function deliveryPushMessage(result, language = "English") {
+function deliveryPushMessage(result, language = "English", order = {}) {
   const carrier = result?.carrier || (language === "Türkçe" ? "Kargo firması" : "Carrier");
   const number = result?.trackingNumber || "";
   const checkpoint = result?.checkpoint || result?.location || "";
-  if (language === "Türkçe") {
-    return (carrier + " " + number + " takip numarasını teslim etti." + (checkpoint ? " " + checkpoint : "")).trim();
+  const designName = String(order?.designName || "").trim();
+  const customerName = String(order?.customerName || "").trim();
+  // The title already carries the customer; name the project here, and fall
+  // back to the customer when the order has no project name yet.
+  const lead = designName || customerName;
+  const carrierLine = language === "Türkçe"
+    ? (carrier + " " + number + " takip numarasını teslim etti.").trim()
+    : (carrier + " delivered tracking number " + number + ".").trim();
+  return [lead ? lead + " —" : "", carrierLine, checkpoint].filter(Boolean).join(" ").trim();
+}
+
+// Delivery alerts name the order, so the notification needs the order document.
+async function loadOrderNamesForNotification(orderId) {
+  try {
+    const snap = await orderDocRef(orderId).get();
+    const data = snap.exists ? snap.data() || {} : {};
+    return {
+      customerName: String(data.customerName || "").trim(),
+      designName: String(data.designName || "").trim()
+    };
+  } catch (error) {
+    console.warn("delivery notification: could not read order names:", error?.message || error);
+    return { customerName: "", designName: "" };
   }
-  return (carrier + " delivered tracking number " + number + "." + (checkpoint ? " " + checkpoint : "")).trim();
 }
 
 function toPushStringMap(data = {}) {
@@ -13230,14 +13255,17 @@ async function writeDeliveryNotification(companyId, orderId, result, language = 
     return;
   }
 
-  const title = deliveryPushTitle(language);
-  const message = deliveryPushMessage(result, language);
+  const order = await loadOrderNamesForNotification(orderId);
+  const title = deliveryPushTitle(language, order);
+  const message = deliveryPushMessage(result, language, order);
   const data = {
     companyId,
     orderId,
     type: "delivery",
     title,
     message,
+    customerName: order.customerName,
+    designName: order.designName,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     read: false,
     actioned: false,
