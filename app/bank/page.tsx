@@ -149,9 +149,7 @@ function BankPageContent() {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-based, for month view
-  const [linkPickerTxId, setLinkPickerTxId] = useState<string | null>(null);
   const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
-  const [orderSearch, setOrderSearch] = useState("");
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [rules, setRules] = useState<BankRule[]>([]);
   const [showRules, setShowRules] = useState(false);
@@ -161,7 +159,11 @@ function BankPageContent() {
   const [sortAsc, setSortAsc] = useState(false);
   const [showAllCats, setShowAllCats] = useState(false);
   // "Needs attention" queue filter for the transactions table.
-  const [txAttention, setTxAttention] = useState<"none" | "uncategorised" | "noReceipt" | "duplicate">("none");
+  const [txAttention, setTxAttention] = useState<"none" | "any" | "uncategorised" | "noReceipt" | "duplicate">("none");
+  // Free-text search over merchant / raw description, and the opt-in bulk-select mode
+  // that reveals the row checkboxes (kept out of the way until it is asked for).
+  const [txSearch, setTxSearch] = useState("");
+  const [selectMode, setSelectMode] = useState(false);
   // Bulk review: selected spending rows + the category to apply to all of them.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
@@ -418,41 +420,14 @@ function BankPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOwner, workspace, companyId, transactions.length]);
 
-  async function openLinkPicker(transactionId: string) {
-    setLinkPickerTxId(transactionId);
-    setOrderSearch("");
-    if (orderOptions === null && workspace) {
-      try {
-        setOrderOptions(await loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? ""));
-      } catch {
-        setOrderOptions([]);
-      }
-    }
-  }
-
   async function linkToOrder(transaction: BankTransaction, orderId: string) {
     setBusy(`link-${transaction.id}`);
     setError(null);
-    setLinkPickerTxId(null);
     try {
       await call("bankLinkTransactionToOrder", { transactionId: transaction.id, orderId });
       setStatus(t("Added to the order's expenses."));
     } catch (linkError) {
       setError(linkError instanceof Error ? linkError.message : "Could not link the transaction.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function unlinkFromOrder(transaction: BankTransaction) {
-    if (!window.confirm(t("Remove this amount from the order's expenses?"))) return;
-    setBusy(`link-${transaction.id}`);
-    setError(null);
-    try {
-      await call("bankLinkTransactionToOrder", { transactionId: transaction.id });
-      setStatus(t("Removed from the order's expenses."));
-    } catch (unlinkError) {
-      setError(unlinkError instanceof Error ? unlinkError.message : "Could not unlink the transaction.");
     } finally {
       setBusy(null);
     }
@@ -589,17 +564,6 @@ function BankPageContent() {
     }
   }
 
-  const filteredOrderOptions = useMemo(() => {
-    if (!orderOptions) return [];
-    const term = orderSearch.trim().toLowerCase();
-    const list = term
-      ? orderOptions.filter(order => `${order.customerName} ${order.designName}`.toLowerCase().includes(term))
-      : orderOptions;
-    // Orders open around the transaction's date float to the top of the picker.
-    const target = linkPickerTxId ? transactions.find(item => item.id === linkPickerTxId) : null;
-    const ordered = target ? rankOrdersForTransaction(target, list).map(item => item.order) : list;
-    return ordered.slice(0, 25);
-  }, [orderOptions, orderSearch, linkPickerTxId, transactions]);
 
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
   const weekStartIso = isoDay(weekStart);
@@ -830,7 +794,6 @@ function BankPageContent() {
     setDrawerOrderId(tx.linkedOrderId);
     setDrawerRuleKeyword(suggestions.get(tx.id)?.keyword || suggestRuleKeyword(tx));
     setCategoryPickerTxId(null);
-    setLinkPickerTxId(null);
   }
   function drawerStep(direction: -1 | 1) {
     if (!drawerTx) return;
@@ -925,20 +888,23 @@ function BankPageContent() {
     const list = visibleTransactions.filter(item => {
       if (txFlow === "in" && item.amount <= 0) return false;
       if (txFlow === "out" && item.amount >= 0) return false;
-      if (txAttention === "uncategorised") return item.amount < 0 && !effectiveCategory(item);
-      if (txAttention === "noReceipt") return item.amount < 0 && !item.receiptPath;
-      if (txAttention === "duplicate") return duplicateIds.has(item.id);
+      if (txAttention === "uncategorised" && !(item.amount < 0 && !effectiveCategory(item))) return false;
+      if (txAttention === "noReceipt" && !(item.amount < 0 && !item.receiptPath)) return false;
+      if (txAttention === "duplicate" && !duplicateIds.has(item.id)) return false;
+      if (txAttention === "any" && !(item.amount < 0 && (!effectiveCategory(item) || (!item.receiptPath && !item.receiptNotNeeded) || duplicateIds.has(item.id)))) return false;
+      const needle = txSearch.trim().toLowerCase();
+      if (needle && !`${item.counterparty} ${item.description}`.toLowerCase().includes(needle)) return false;
       return true;
     });
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc, txFlow, txAttention, duplicateIds]);
+  }, [visibleTransactions, sortAsc, txFlow, txAttention, txSearch, duplicateIds]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
   const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
   const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
-  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention]);
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention, txSearch]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
@@ -1059,6 +1025,41 @@ function BankPageContent() {
 
         {canViewBank ? (
           <>
+            {/* ---- Tabs + period control ---------------------------------- */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid rgba(120,120,140,0.18)" }}>
+              <div role="tablist" aria-label={t("Banking sections")} style={{ display: "flex", gap: 2 }}>
+                {([
+                  ["overview", t("Overview")],
+                  ["transactions", t("Transactions")],
+                  ["recurring", t("Recurring")],
+                  ["receipts", t("Receipts")],
+                  ["rules", t("Rules")]
+                ] as const).map(([key, label]) => (
+                  <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
+                    style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1 }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span style={{ flex: 1 }} />
+              {tab !== "transactions" ? (<>
+              <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
+                {(["week", "month", "year"] as const).map(option => (
+                  <button key={option} type="button" role="tab" aria-selected={view === option}
+                    onClick={() => setView(option)}
+                    style={{ border: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, background: view === option ? "#2563eb" : "transparent", color: view === option ? "#fff" : "inherit" }}>
+                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : t("Yearly")}
+                  </button>
+                ))}
+              </div>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
+                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
+                <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
+                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
+              </span>
+              </>) : null}
+            </div>
+
             {/* ---- Connected account bar ---------------------------------- */}
             {connections.length > 0 ? (
               <div style={{ ...bankCard, padding: "12px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -1093,39 +1094,6 @@ function BankPageContent() {
                 ) : null}
               </div>
             ) : null}
-
-            {/* ---- Tabs + period control ---------------------------------- */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid rgba(120,120,140,0.18)" }}>
-              <div role="tablist" aria-label={t("Banking sections")} style={{ display: "flex", gap: 2 }}>
-                {([
-                  ["overview", t("Overview")],
-                  ["transactions", t("Transactions")],
-                  ["recurring", t("Recurring")],
-                  ["receipts", t("Receipts")],
-                  ["rules", t("Rules")]
-                ] as const).map(([key, label]) => (
-                  <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setDrawerTxId(null); }}
-                    style={{ border: 0, borderBottom: tab === key ? "2px solid #2563eb" : "2px solid transparent", background: "transparent", color: tab === key ? "#2563eb" : "inherit", fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1 }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span style={{ flex: 1 }} />
-              <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
-                {(["week", "month", "year"] as const).map(option => (
-                  <button key={option} type="button" role="tab" aria-selected={view === option}
-                    onClick={() => setView(option)}
-                    style={{ border: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, background: view === option ? "#2563eb" : "transparent", color: view === option ? "#fff" : "inherit" }}>
-                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : t("Yearly")}
-                  </button>
-                ))}
-              </div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
-                <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
-              </span>
-            </div>
 
             {transactions.length === 0 ? (
               <div style={{ ...bankCard, textAlign: "center", padding: 40 }}>
@@ -1375,34 +1343,76 @@ function BankPageContent() {
             {/* ================= TRANSACTIONS ================= */}
             {transactions.length > 0 && tab === "transactions" ? (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {categoryBreakdown.rows.slice(0, 6).map(row => {
-                    const isUn = row.name === "__uncategorized__";
-                    return (
-                      <span key={row.name} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, border: "1px solid rgba(120,120,140,0.16)", borderRadius: 9, padding: "5px 10px" }}>
-                        <span style={{ width: 7, height: 7, borderRadius: 999, background: isUn ? "#5b6ee8" : categoryColor(row.name), display: "inline-block" }} />
-                        <span style={{ fontWeight: 650 }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
-                        <strong style={{ fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
-                      </span>
-                    );
-                  })}
+                {/* Filter bar: period, queue chips, search — then the category totals
+                    for whatever the filters currently leave on screen. */}
+                <div style={{ ...bankCard, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "3px 6px" }}>
+                      <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
+                      <strong style={{ fontSize: 12.5, minWidth: 96, textAlign: "center" }}>📅 {periodLabel}</strong>
+                      <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
+                    </span>
+                    <span style={{ width: 1, height: 22, background: "rgba(120,120,140,0.2)", margin: "0 2px" }} />
+                    {([
+                      ["all", t("All"), ""],
+                      ["attention", t("Needs attention"), "#f59e0b"],
+                      ["in", t("Incoming"), "#16a34a"],
+                      ["out", t("Spending"), "#dc2626"]
+                    ] as const).map(([key, label, dot]) => {
+                      const active = key === "attention" ? txAttention !== "none" : txAttention === "none" && txFlow === (key === "all" ? "all" : key);
+                      return (
+                        <button key={key} type="button"
+                          onClick={() => {
+                            if (key === "attention") { setTxAttention(txAttention === "none" ? "any" : "none"); return; }
+                            setTxAttention("none");
+                            setTxFlow(key as "all" | "in" | "out");
+                          }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "5px 12px",
+                            border: active ? "1px solid transparent" : "1px solid rgba(120,120,140,0.22)",
+                            background: active ? (dot || "#2563eb") : "transparent",
+                            color: active ? "#fff" : "inherit" }}>
+                          {dot ? <span style={{ width: 7, height: 7, borderRadius: 999, background: active ? "rgba(255,255,255,0.9)" : dot, display: "inline-block" }} /> : null}
+                          {label}
+                        </button>
+                      );
+                    })}
+                    <span style={{ flex: 1 }} />
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "5px 10px", minWidth: 190 }}>
+                      <span aria-hidden="true" style={{ opacity: 0.5, fontSize: 12 }}>🔍</span>
+                      <input type="search" value={txSearch} onChange={event => setTxSearch(event.target.value)} placeholder={t("Search transactions")}
+                        aria-label={t("Search transactions")}
+                        style={{ border: 0, outline: "none", background: "transparent", color: "inherit", fontSize: 12.5, width: "100%" }} />
+                    </span>
+                    {isOwner ? (
+                      <button type="button" onClick={() => { setSelectMode(value => !value); setSelectedIds(new Set()); }}
+                        title={t("Bulk review")}
+                        style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, borderRadius: 10, padding: "5px 12px", border: "1px solid rgba(120,120,140,0.22)", background: selectMode ? "rgba(37,99,235,0.12)" : "transparent", color: selectMode ? "#2563eb" : "inherit" }}>
+                        ☑ {t("Select")}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                    {categoryBreakdown.rows.slice(0, 5).map(row => {
+                      const isUn = row.name === "__uncategorized__";
+                      return (
+                        <div key={row.name} style={{ border: "1px solid rgba(120,120,140,0.18)", borderRadius: 11, padding: "9px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, opacity: 0.75 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 999, background: isUn ? "#5b6ee8" : categoryColor(row.name), display: "inline-block", flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isUn ? t("Uncategorised") : t(row.name)}</span>
+                          </div>
+                          <strong style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(row.amount, currency0)}</strong>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div id="bank-transactions" style={{ ...bankCard, padding: 0, overflow: "hidden", scrollMarginTop: 90 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
-                    <TileBadge bg="rgba(120,120,140,0.12)">🧾</TileBadge>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px 11px", flexWrap: "wrap", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
                     <strong style={{ fontSize: 14.5 }}>{t("Transactions")}</strong>
-                    <span role="group" aria-label={t("Direction")} style={{ display: "inline-flex", gap: 2, marginLeft: 6, background: "rgba(120,120,140,0.12)", borderRadius: 7, padding: 2 }}>
-                      {(["all", "out", "in"] as const).map(flow => (
-                        <button key={flow} type="button" onClick={() => setTxFlow(flow)}
-                          style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 5, background: txFlow === flow ? (flow === "in" ? "#16a34a" : flow === "out" ? "#dc2626" : "#2563eb") : "transparent", color: txFlow === flow ? "#fff" : "inherit" }}>
-                          {flow === "all" ? t("All") : flow === "out" ? t("Spending") : t("Incoming")}
-                        </button>
-                      ))}
-                    </span>
                     {txAttention !== "none" ? (
                       <button type="button" onClick={() => setTxAttention("none")}
                         style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>
-                        ! {txAttention === "uncategorised" ? t("Uncategorised") : txAttention === "noReceipt" ? t("No receipt") : t("Possible duplicates")} ✕
+                        ! {txAttention === "any" ? t("Needs attention") : txAttention === "uncategorised" ? t("Uncategorised") : txAttention === "noReceipt" ? t("No receipt") : t("Possible duplicates")} ✕
                       </button>
                     ) : null}
                     <span style={{ flex: 1 }} />
@@ -1435,19 +1445,19 @@ function BankPageContent() {
                     <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700, fontSize: 12.5 }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
-                          {isOwner ? (
+                          {isOwner && selectMode ? (
                             <th style={{ ...thStyle, width: 34, paddingRight: 0 }}>
                               <input type="checkbox" aria-label={t("Select all on page")} checked={allPageSelected} disabled={pageSpendingIds.length === 0} onChange={togglePageSelection} />
                             </th>
                           ) : null}
                           <th style={thStyle}>{t("Merchant")}</th>
-                          <th style={{ ...thStyle, cursor: "pointer" }} onClick={() => setSortAsc(value => !value)}>
+                          <th style={{ ...thStyle, cursor: "pointer", width: 128 }} onClick={() => setSortAsc(value => !value)}>
                             {t("Date")} {sortAsc ? "↑" : "↓"}
                           </th>
-                          <th style={thStyle}>{t("Category")}</th>
-                          <th style={thStyle}>{t("Method")}</th>
-                          <th style={{ ...thStyle, textAlign: "right" }}>{t("Amount")}</th>
-                          <th style={thStyle} aria-label={t("Actions")} />
+                          <th style={{ ...thStyle, width: 150 }}>{t("Category")}</th>
+                          <th style={{ ...thStyle, width: 88 }}>{t("Method")}</th>
+                          <th style={{ ...thStyle, width: 120 }}>{t("Receipt")}</th>
+                          <th style={{ ...thStyle, textAlign: "right", width: 118 }}>{t("Amount")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1458,7 +1468,7 @@ function BankPageContent() {
                           return (
                             <React.Fragment key={transaction.id}>
                               <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: drawerTxId === transaction.id ? "rgba(37,99,235,0.1)" : selectedIds.has(transaction.id) ? "rgba(37,99,235,0.06)" : undefined, boxShadow: drawerTxId === transaction.id ? "inset 3px 0 0 #2563eb" : undefined }}>
-                                {isOwner ? (
+                                {isOwner && selectMode ? (
                                   <td style={{ ...tdStyle, paddingRight: 0 }}>
                                     {transaction.amount < 0 ? <input type="checkbox" aria-label={t("Select")} checked={selectedIds.has(transaction.id)} onChange={() => toggleSelected(transaction.id)} /> : null}
                                   </td>
@@ -1489,7 +1499,7 @@ function BankPageContent() {
                                     </span>
                                   </span>
                                 </td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>
+                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75, cursor: "pointer" }} onClick={() => openDrawer(transaction)}>
                                   {new Date(transaction.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
@@ -1525,7 +1535,7 @@ function BankPageContent() {
                                       </button>
                                     );
                                   })() : null}
-                                  {transaction.amount < 0 && category && effectiveVat(transaction) ? (
+                                  {transaction.amount < 0 && category && transaction.vatCode ? (
                                     <button type="button" disabled={!isOwner || busy === "vat"}
                                       title={transaction.vatCode ? t("VAT set on this transaction") : t("Category default VAT")}
                                       onClick={() => isOwner && setVatPickerTxId(current => current === transaction.id ? null : transaction.id)}
@@ -1551,48 +1561,33 @@ function BankPageContent() {
                                     </span>
                                   ) : null}
                                 </td>
+                                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                                  {transaction.amount >= 0 ? (
+                                    <span style={{ opacity: 0.4 }}>—</span>
+                                  ) : transaction.receiptPath ? (
+                                    <button type="button" onClick={() => void openReceipt(transaction)} title={transaction.receiptName || t("View invoice")}
+                                      style={{ ...attentionLink, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                                      ✓ {t("Matched")}
+                                    </button>
+                                  ) : transaction.receiptNotNeeded ? (
+                                    <span style={{ opacity: 0.55, fontSize: 12 }}>{t("Not needed")}</span>
+                                  ) : isOwner ? (
+                                    <button type="button" disabled={busy === `receipt-${transaction.id}`} title={t("Attach invoice")}
+                                      onClick={() => { setPendingAttachTxId(transaction.id); document.getElementById("bank-receipt-input")?.click(); }}
+                                      style={{ ...attentionLink, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                                      ! {t("Missing")}
+                                    </button>
+                                  ) : (
+                                    <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700 }}>! {t("Missing")}</span>
+                                  )}
+                                </td>
                                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: transaction.amount < 0 ? "#dc2626" : "#16a34a" }}>
                                   {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                                 </td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                                  {transaction.amount < 0 && !isOwner ? (
-                                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                                      {transaction.receiptPath ? (
-                                        <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")} onClick={() => void openReceipt(transaction)} aria-label={t("View invoice")}>📎</button>
-                                      ) : null}
-                                      {transaction.linkedOrderId ? <span title={transaction.linkedOrderLabel} style={{ fontSize: 11, color: "#2563eb" }}>⛓</span> : null}
-                                    </span>
-                                  ) : transaction.amount < 0 ? (
-                                    <span style={{ display: "inline-flex", gap: 2 }}>
-                                      {transaction.receiptPath ? (
-                                        <>
-                                          <button type="button" className="finance-payments-delete" title={transaction.receiptName || t("View invoice")} onClick={() => void openReceipt(transaction)} aria-label={t("View invoice")}>📎</button>
-                                          <button type="button" className="finance-payments-delete" title={t("Remove invoice")} disabled={busy === `receipt-${transaction.id}`} onClick={() => void removeReceipt(transaction)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button>
-                                        </>
-                                      ) : (
-                                        <button type="button" className="finance-payments-delete" title={t("Attach invoice")} aria-label={t("Attach invoice")} disabled={busy === `receipt-${transaction.id}`}
-                                          onClick={() => {
-                                            setPendingAttachTxId(transaction.id);
-                                            document.getElementById("bank-receipt-input")?.click();
-                                          }}
-                                          style={{ opacity: 0.45 }}>📎</button>
-                                      )}
-                                      <button type="button" className="finance-payments-delete"
-                                        title={transaction.linkedOrderId ? t("Remove this amount from the order's expenses?") : t("Add to an order's expenses")}
-                                        aria-label={t("Add to an order's expenses")}
-                                        disabled={busy === `link-${transaction.id}`}
-                                        onClick={() => transaction.linkedOrderId ? void unlinkFromOrder(transaction) : void openLinkPicker(transaction.id)}
-                                        style={{ opacity: transaction.linkedOrderId ? 1 : 0.45 }}>⛓</button>
-                                      {!transaction.receiptPath && !transaction.linkedOrderId ? (
-                                        <span title={t("No document")} aria-label={t("No document")} style={{ width: 6, height: 6, borderRadius: 999, background: "#f59e0b", display: "inline-block", alignSelf: "center" }} />
-                                      ) : null}
-                                    </span>
-                                  ) : null}
-                                </td>
                               </tr>
-                              {categoryPickerTxId === transaction.id || linkPickerTxId === transaction.id ? (
+                              {categoryPickerTxId === transaction.id ? (
                                 <tr>
-                                  <td colSpan={isOwner ? 7 : 6} style={{ padding: "0 18px 12px" }}>
+                                  <td colSpan={isOwner && selectMode ? 7 : 6} style={{ padding: "0 18px 12px" }}>
                                     {categoryPickerTxId === transaction.id ? (
                                       <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
                                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -1628,28 +1623,6 @@ function BankPageContent() {
                                               style={{ ...pickerInput, width: 110, flex: "none", fontWeight: 700 }} />
                                           </label>
                                           <button type="button" className="finance-payments-delete" onClick={() => setCategoryPickerTxId(null)} aria-label={t("Close")}>✕</button>
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                    {linkPickerTxId === transaction.id ? (
-                                      <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
-                                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                          <input type="text" value={orderSearch} autoFocus placeholder={t("Search orders")}
-                                            onChange={event => setOrderSearch(event.target.value)} style={pickerInput} />
-                                          <button type="button" className="finance-payments-delete" onClick={() => setLinkPickerTxId(null)} aria-label={t("Close")}>✕</button>
-                                        </div>
-                                        <div style={{ marginTop: 8, maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-                                          {orderOptions === null ? (
-                                            <span style={{ fontSize: 12, opacity: 0.7 }}>{t("Loading…")}</span>
-                                          ) : filteredOrderOptions.length === 0 ? (
-                                            <span style={{ fontSize: 12, opacity: 0.7 }}>{t("No orders found.")}</span>
-                                          ) : filteredOrderOptions.map(order => (
-                                            <button key={order.id} type="button" onClick={() => void linkToOrder(transaction, order.id)}
-                                              style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5 }}>
-                                              <strong>{order.customerName}</strong>
-                                              {order.designName ? <span style={{ opacity: 0.65 }}> · {order.designName}</span> : null}
-                                            </button>
-                                          ))}
                                         </div>
                                       </div>
                                     ) : null}
@@ -2026,7 +1999,14 @@ function BankPageContent() {
               <span aria-hidden="true" style={{ ...avatarStyle, width: 38, height: 38, background: `${avatarColor(drawerTx.counterparty || drawerTx.description || "x")}22`, color: avatarColor(drawerTx.counterparty || drawerTx.description || "x") }}>{initials(drawerTx.counterparty || drawerTx.description)}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drawerTx.counterparty || drawerTx.description}</div>
-                <div style={{ fontSize: 11, opacity: 0.65 }}>{TX_TYPE_META[drawerTx.txType] ? (TX_TYPE_META[drawerTx.txType].translate ? t(TX_TYPE_META[drawerTx.txType].label) : TX_TYPE_META[drawerTx.txType].label) : drawerTx.txType}{lastSync ? ` · ${t("Last sync")} ${lastSync.toLocaleString()}` : ""}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
+                  {TX_TYPE_META[drawerTx.txType] ? (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", padding: "3px 8px", borderRadius: 6, background: `${TX_TYPE_META[drawerTx.txType].color}1a`, color: TX_TYPE_META[drawerTx.txType].color }}>
+                      {TX_TYPE_META[drawerTx.txType].translate ? t(TX_TYPE_META[drawerTx.txType].label) : TX_TYPE_META[drawerTx.txType].label}
+                    </span>
+                  ) : null}
+                  <span style={{ fontSize: 11, opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lastSync ? `${t("Last sync")} ${lastSync.toLocaleString()}` : ""}</span>
+                </div>
               </div>
               <strong style={{ fontSize: 16, fontVariantNumeric: "tabular-nums", color: drawerTx.amount < 0 ? "#dc2626" : "#16a34a", whiteSpace: "nowrap" }}>{drawerTx.amount < 0 ? "−" : "+"}{money(Math.abs(drawerTx.amount), drawerTx.currency)}</strong>
             </div>
@@ -2073,10 +2053,13 @@ function BankPageContent() {
                     <div style={drawerLabel}>{t("Receipt / attachment")}</div>
                     <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
                       {drawerTx.receiptPath ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}</span>
-                          <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{drawerTx.receiptName || t("View invoice")}</button>
-                          {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 11.5 }}>✓ {t("Receipt matched")}</span>
+                            <span style={{ flex: 1 }} />
+                            {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
+                          </div>
+                          <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, marginTop: 3, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drawerTx.receiptName || t("View invoice")} ↗</button>
                         </div>
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -2095,11 +2078,19 @@ function BankPageContent() {
             </label>
             {drawerTx.amount < 0 && isOwner && drawerCategory && !rules.some(rule => `${drawerTx.counterparty} ${drawerTx.description}`.toLowerCase().includes(rule.keyword)) ? (
               <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(37,99,235,0.25)", background: "rgba(37,99,235,0.06)", fontSize: 12 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>✦ {t("Rule suggestion")}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <strong style={{ fontWeight: 800 }}>✦ {t("Rule suggestion")}</strong>
+                  <span style={{ flex: 1 }} />
+                  <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, padding: "2px 7px", borderRadius: 999, background: "rgba(124,58,237,0.14)", color: "#7c3aed" }}>{t("Suggested rule")}</span>
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  {t("If merchant contains")}
-                  <input type="text" value={drawerRuleKeyword} onChange={event => setDrawerRuleKeyword(event.target.value)} style={{ ...pickerInput, width: 120, flex: "none", fontWeight: 700, padding: "3px 6px", fontSize: 11.5 }} />
-                  → <strong style={{ color: categoryColor(drawerCategory) }}>{t(drawerCategory)}</strong>
+                  <span style={{ flex: 1, minWidth: 180 }}>
+                    {t("If merchant contains")}{" "}
+                    <input type="text" value={drawerRuleKeyword} onChange={event => setDrawerRuleKeyword(event.target.value)} style={{ ...pickerInput, width: 120, flex: "none", fontWeight: 700, padding: "3px 6px", fontSize: 11.5 }} />
+                    {" → "}<strong style={{ color: categoryColor(drawerCategory) }}>{t(drawerCategory)}</strong>
+                    {drawerVat ? <span style={{ opacity: 0.7 }}>, {t("VAT")}: {t(vatLabel(drawerVat))}</span> : null}
+                  </span>
+                  <button type="button" style={{ ...bankBtnSm, background: "var(--surface, #fff)" }} disabled={busy === "drawer"} onClick={() => void saveDrawer(true)}>{t("Create rule")}</button>
                 </div>
               </div>
             ) : null}
@@ -2117,9 +2108,11 @@ function BankPageContent() {
             ) : null}
           </div>
           {isOwner ? (
-            <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(120,120,140,0.16)" }}>
-              <button type="button" style={{ ...bankBtn, flex: 1, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "drawer"} onClick={() => void saveDrawer(false)}>{busy === "drawer" ? t("Saving…") : t("Save")}</button>
-              {drawerTx.amount < 0 && drawerCategory ? <button type="button" style={{ ...bankBtn, flex: 1 }} disabled={busy === "drawer"} onClick={() => void saveDrawer(true)}>{t("Save & create rule")}</button> : null}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(120,120,140,0.16)" }}>
+              <button type="button" style={{ ...bankBtnSm, opacity: 0.75 }} onClick={() => setDrawerTxId(null)}>{t("Close")}</button>
+              <span style={{ flex: 1 }} />
+              {drawerTx.amount < 0 && drawerCategory ? <button type="button" style={bankBtn} disabled={busy === "drawer"} onClick={() => void saveDrawer(true)}>{t("Save & create rule")}</button> : null}
+              <button type="button" style={{ ...bankBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "drawer"} onClick={() => void saveDrawer(false)}>{busy === "drawer" ? t("Saving…") : t("Save")}</button>
             </div>
           ) : null}
         </aside>
