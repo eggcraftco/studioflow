@@ -17862,6 +17862,53 @@ async function nvChatGPTSearchBankTransactions(context, args = {}) {
   };
 }
 
+// A receipt can now arrive three ways: a file the user attached in the chat, a
+// link ChatGPT found (Gmail attachment, Stripe/Adobe hosted invoice), or the
+// email itself when the invoice is only in the message body.
+
+const NV_RECEIPT_MIME_ALLOWLIST = ["image/", "application/pdf", "text/html", "text/plain", "application/octet-stream"];
+
+/** Blocks link fetches that point back inside our own network (SSRF). */
+function nvAssertPublicHttpsUrl(rawUrl) {
+  let url;
+  try { url = new URL(rawUrl); } catch { throw new HttpsError("invalid-argument", "receiptUrl is not a valid URL."); }
+  if (url.protocol !== "https:") throw new HttpsError("invalid-argument", "receiptUrl must be an https link.");
+  const host = url.hostname.toLowerCase();
+  const blocked = host === "localhost" || host.endsWith(".localhost") || host.endsWith(".internal") || host === "metadata.google.internal";
+  const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  const privateIp = isIp && (() => {
+    const [a, b] = host.split(".").map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  })();
+  if (blocked || privateIp || host.startsWith("[")) {
+    throw new HttpsError("invalid-argument", "receiptUrl must point to a public https address.");
+  }
+  return url.toString();
+}
+
+function nvEscapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
+}
+
+/**
+ * Turns an email into a self-contained receipt document. Everything is escaped —
+ * we never store the sender's markup, so the saved file cannot execute anything.
+ */
+function nvEmailReceiptDocument(email) {
+  const from = nvCleanString(email.from || "", 200);
+  const subject = nvCleanString(email.subject || "", 300);
+  const date = nvCleanString(email.date || "", 40);
+  const body = String(email.bodyText || email.body || "").slice(0, 40000);
+  return `<!doctype html><meta charset="utf-8"><title>${nvEscapeHtml(subject) || "Receipt"}</title>
+<style>body{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:32px;color:#111}
+h1{font-size:18px;margin:0 0 4px}dl{margin:0 0 20px}dt{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#666}
+dd{margin:0 0 8px}pre{white-space:pre-wrap;word-break:break-word;background:#f6f6f8;padding:16px;border-radius:8px}</style>
+<h1>${nvEscapeHtml(subject) || "Email receipt"}</h1>
+<dl><dt>From</dt><dd>${nvEscapeHtml(from)}</dd><dt>Date</dt><dd>${nvEscapeHtml(date)}</dd></dl>
+<pre>${nvEscapeHtml(body)}</pre>
+<p style="color:#888;font-size:11px">Saved from email by NivaDesk.</p>`;
+}
+
 async function nvChatGPTAttachBankReceipt(context, args = {}) {
   nvRequireBankFeedAccess(context, { ownerOnly: true });
   const companyId = context.companyId;
@@ -17877,18 +17924,48 @@ async function nvChatGPTAttachBankReceipt(context, args = {}) {
   }
   if (!inboxPath) {
     const receipt = args.receipt && typeof args.receipt === "object" ? args.receipt : null;
-    const downloadUrl = nvCleanString(receipt?.download_url || "", 2000);
-    if (!downloadUrl || !/^https:\/\//i.test(downloadUrl)) {
-      throw new HttpsError("invalid-argument", "Attach the invoice/receipt file to the message so it can be passed as `receipt`.");
+    const chatFileUrl = nvCleanString(receipt?.download_url || "", 2000);
+    const linkUrl = nvCleanString(args.receiptUrl || "", 2000);
+    const email = args.emailReceipt && typeof args.emailReceipt === "object" ? args.emailReceipt : null;
+
+    if (chatFileUrl || linkUrl) {
+      const source = chatFileUrl && /^https:\/\//i.test(chatFileUrl) ? chatFileUrl : nvAssertPublicHttpsUrl(linkUrl);
+      let response;
+      try {
+        response = await fetch(source, { redirect: "follow", headers: { Accept: "application/pdf,image/*,text/html;q=0.8,*/*;q=0.5" } });
+      } catch (error) {
+        throw new HttpsError("unavailable", `Could not download the document (${error?.message || "network error"}).`);
+      }
+      if (!response.ok) throw new HttpsError("unavailable", `Could not download the document (HTTP ${response.status}).`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 15 * 1024 * 1024) throw new HttpsError("invalid-argument", "The file is larger than 15MB.");
+      if (buffer.length === 0) throw new HttpsError("invalid-argument", "The link returned an empty document.");
+      mimeType = nvCleanString(receipt?.mime_type || response.headers.get("content-type") || "", 100).split(";")[0].trim().toLowerCase();
+      if (mimeType && !NV_RECEIPT_MIME_ALLOWLIST.some((prefix) => mimeType.startsWith(prefix))) {
+        throw new HttpsError("invalid-argument", `That link is a ${mimeType} document — pass a PDF, an image or the email itself.`);
+      }
+      const extension = mimeType.includes("pdf") ? "pdf" : mimeType.includes("png") ? "png" : mimeType.startsWith("text/html") ? "html" : mimeType.startsWith("text/") ? "txt" : "jpg";
+      fileName = nvCleanString(receipt?.file_name || args.fileName || "", 200) || `receipt.${extension}`;
+      inboxPath = `${inboxPrefix}chatgpt_${Date.now()}_${fileName.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+      await admin.storage().bucket().file(inboxPath).save(buffer, { contentType: mimeType || undefined, resumable: false });
+    } else if (email) {
+      // No file anywhere — the email body is the invoice. Keep it as a document
+      // so the transaction still ends up with something auditable attached.
+      const html = nvEmailReceiptDocument(email);
+      const subject = nvCleanString(email.subject || "", 80).replace(/[^A-Za-z0-9._ -]/g, "").trim();
+      fileName = `${(subject || "email-receipt").slice(0, 60).replace(/\s+/g, "-")}.html`;
+      mimeType = "text/html";
+      inboxPath = `${inboxPrefix}chatgpt_${Date.now()}_${fileName}`;
+      await admin.storage().bucket().file(inboxPath).save(Buffer.from(html, "utf8"), { contentType: "text/html", resumable: false });
+      if (!args.amount && !args.date) {
+        // Fall back to reading the email text the same way we read a receipt.
+        const guessed = bankFeedInternal.parseReceiptText(String(email.bodyText || email.body || ""));
+        if (guessed.amount && !args.amount) args.amount = guessed.amount;
+        if (guessed.date && !args.date) args.date = guessed.date;
+      }
+    } else {
+      throw new HttpsError("invalid-argument", "Pass the invoice as `receipt` (a file in the chat), `receiptUrl` (a link to the PDF/image, e.g. a Gmail attachment or a hosted invoice) or `emailReceipt` (the email itself).");
     }
-    const response = await fetch(downloadUrl);
-    if (!response.ok) throw new HttpsError("unavailable", `Could not download the file from ChatGPT (HTTP ${response.status}).`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > 15 * 1024 * 1024) throw new HttpsError("invalid-argument", "The file is larger than 15MB.");
-    mimeType = nvCleanString(receipt?.mime_type || response.headers.get("content-type") || "", 100).split(";")[0].trim();
-    fileName = nvCleanString(receipt?.file_name || "", 200) || `receipt.${mimeType.includes("pdf") ? "pdf" : mimeType.includes("png") ? "png" : "jpg"}`;
-    inboxPath = `${inboxPrefix}chatgpt_${Date.now()}_${fileName.replace(/[^A-Za-z0-9._-]/g, "_")}`;
-    await admin.storage().bucket().file(inboxPath).save(buffer, { contentType: mimeType || undefined, resumable: false });
   } else {
     fileName = inboxPath.split("/").pop().replace(/^chatgpt_\d+_/, "");
     mimeType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/*";
@@ -17913,7 +17990,7 @@ async function nvChatGPTAttachBankReceipt(context, args = {}) {
   // 3) Work out what the document says: OCR for images, ChatGPT's reading for PDFs.
   let parsed = { amount: 0, date: "", words: [] };
   let ocrUsed = false;
-  if (!mimeType.includes("pdf")) {
+  if (!mimeType.includes("pdf") && !mimeType.startsWith("text/")) {
     try {
       parsed = bankFeedInternal.parseReceiptText(await bankFeedInternal.visionOcrText(inboxPath));
       ocrUsed = true;
@@ -18839,6 +18916,11 @@ function nvMcpToolsWithSecuritySchemes() {
 //                   with the same arguments leaves the workspace unchanged.
 //   openWorldHint   true only for attach_bank_receipt, which fetches the user's file
 //                   from ChatGPT's file host; every other tool stays inside NivaDesk.
+// Flip to "1" once the version in OpenAI review is decided: it adds the
+// receiptUrl / emailReceipt inputs to attach_bank_receipt so ChatGPT can pull an
+// invoice straight out of the user's mail. The handler already accepts them.
+const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
+
 function nvMcpOrderToolSchemas() {
   return [
     {
@@ -19355,7 +19437,9 @@ function nvMcpOrderToolSchemas() {
     {
       name: "attach_bank_receipt",
       title: "Attach receipt to a bank transaction",
-      description: "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`. NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId.",
+      description: (NV_MCP_EMAIL_RECEIPTS
+        ? "Attach an invoice/receipt to the matching bank transaction in NivaDesk. The document can come from the chat (`receipt`), from a link you found for the user — including an attachment in their email or a hosted invoice page (`receiptUrl`) — or, when the invoice is only in an email body, from the message itself (`emailReceipt`). When the user asks to file the invoices sitting in their mail, read each one, then call this tool per invoice; NivaDesk matches it to the bank transaction by amount and date."
+        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : ""),
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -19373,6 +19457,23 @@ function nvMcpOrderToolSchemas() {
             },
             required: ["download_url", "file_id"]
           },
+          // Email-sourced receipts stay out of the published schema until the
+          // version in review is approved: tools/list must match what OpenAI saw.
+          ...(NV_MCP_EMAIL_RECEIPTS ? {
+            receiptUrl: { type: "string", description: "https link to the invoice PDF/image when the user did not attach a file — e.g. an attachment link from their email, or a hosted invoice page (Stripe, Adobe, Shopify). NivaDesk downloads it and stores it as the receipt." },
+            emailReceipt: {
+              type: "object",
+              description: "Use when the invoice only exists as an email (no attachment): NivaDesk saves the message itself as the receipt document. Also pass amount/date/merchant when you can read them.",
+              properties: {
+                from: { type: "string" },
+                subject: { type: "string" },
+                date: { type: "string" },
+                bodyText: { type: "string", description: "Plain-text body of the email." }
+              },
+              required: ["subject", "bodyText"]
+            },
+            fileName: { type: "string", description: "Optional file name for a receiptUrl download." }
+          } : {}),
           inboxPath: { type: "string", description: "Returned by a previous call when several candidates matched; pass it back together with transactionId instead of resending the file." },
           transactionId: { type: "string", description: "Bank transaction to attach to, when the user has chosen one of the candidates (or named the transaction)." },
           amount: { type: "number", description: "Total amount printed on the document, if you can read it." },
