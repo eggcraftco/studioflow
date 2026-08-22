@@ -2,7 +2,7 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 
-export type StudioSupportTicketType = "appSupport" | "workspace";
+export type StudioSupportTicketType = "appSupport" | "workspace" | "website";
 export type StudioSupportTicketStatus = "open" | "inProgress" | "waitingForUser" | "resolved" | "closed";
 
 export type StudioSupportTicket = {
@@ -315,6 +315,21 @@ export async function getSupportTicketUnreadSummary(workspace: WorkspaceContext)
   try {
     const callable = httpsCallable<Record<string, unknown>, SupportTicketUnreadSummary>(functions, "getSupportTicketUnreadSummary");
     const result = await callable({ companyId: workspace.id });
+    return result.data;
+  } catch (error) {
+    throw new Error(supportError(error));
+  }
+}
+
+export async function assignNivaDeskSupportTicket(input: {
+  ticketId: string;
+  assignedToUid?: string;
+  assignedToEmail?: string;
+  assignedToName?: string;
+}) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "assignSupportTicket");
+    const result = await callable({ ...input });
     return result.data;
   } catch (error) {
     throw new Error(supportError(error));

@@ -4847,7 +4847,13 @@ function SupportTicketsSection({
   const [canSeeWorkspaceQueue, setCanSeeWorkspaceQueue] = useState(false);
   const t = (text: string) => studioT(text, language);
   const isWorkspaceMode = ticketMode === "workspace";
+  // Website chats arrive through the same NivaDesk support inbox, so they use
+  // the appSupport callables and are split out by ticketType for display.
+  const isWebsiteMode = ticketMode === "website";
   const canUpdateStatus = isWorkspaceMode ? canSeeWorkspaceQueue : isSupportAdmin;
+  const visibleTickets = isWorkspaceMode
+    ? tickets
+    : tickets.filter(ticket => (String(ticket.ticketType || "") === "website") === isWebsiteMode);
   const categories = isWorkspaceMode ? WORKSPACE_SUPPORT_CATEGORY_OPTIONS : APP_SUPPORT_CATEGORY_OPTIONS;
   const currentUserUid = auth.currentUser?.uid ?? "";
 
@@ -5082,9 +5088,23 @@ function SupportTicketsSection({
               <small>{t("For app bugs, sync issues, billing, account or feature requests.")}</small>
             </span>
           </button>
+          {isSupportAdmin ? (
+            <button
+              className={isWebsiteMode ? "settings-section-button active" : "settings-section-button"}
+              type="button"
+              onClick={() => setTicketMode("website")}
+              style={{ textAlign: "left" }}
+            >
+              <span>
+                <strong>{t("Website Chats")}</strong>
+                <small>{t("Questions people send from the nivadesk.app chat widget.")}</small>
+              </span>
+            </button>
+          ) : null}
         </div>
       </section>
 
+      {isWebsiteMode ? null : (
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="notes" eyebrow={isWorkspaceMode ? t("Workspace Ticket") : t("NivaDesk Support")} title={t("New Ticket")} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -5120,20 +5140,23 @@ function SupportTicketsSection({
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
+      )}
 
       <section className="card app-card">
         <CardTitle
           icon="notes"
-          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : t("NivaDesk Support Inbox")}
+          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : (isWebsiteMode ? t("Website Chats") : t("NivaDesk Support Inbox"))}
           title={isWorkspaceMode
             ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
-            : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets"))}
+            : (isWebsiteMode
+              ? t("Questions from the website")
+              : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets")))}
         />
         {supportUnreadCount > 0 ? <p className="muted-copy" style={{ marginTop: -4 }}>{supportUnreadCount} {t("unread ticket update")}</p> : null}
         {loadingTickets ? <p className="muted-copy">{t("Loading tickets...")}</p> : null}
-        {!loadingTickets && tickets.length === 0 ? <p className="muted-copy">{t("No tickets yet.")}</p> : null}
+        {!loadingTickets && visibleTickets.length === 0 ? <p className="muted-copy">{isWebsiteMode ? t("No website questions yet.") : t("No tickets yet.")}</p> : null}
         <div style={{ display: "grid", gap: 12 }}>
-          {tickets.map(ticket => {
+          {visibleTickets.map(ticket => {
             const isSelected = selectedTicketId === ticket.id;
             const ticketMessages = messagesByTicketId[ticket.id] ?? [];
             const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);

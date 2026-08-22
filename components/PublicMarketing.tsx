@@ -95,6 +95,7 @@ import {
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
 import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
+import SupportChatWidget from "@/components/SupportChatWidget";
 
 type FeatureTone = "sage" | "clay" | "sky" | "lilac" | "rose" | "gold" | "graphite";
 
@@ -969,6 +970,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
       <PublicHeader />
       <main>{children}</main>
       <PublicFooter />
+      <SupportChatWidget />
     </div>
   );
 }
