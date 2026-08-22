@@ -28,7 +28,7 @@ against what already ships. Positioning stays: **NivaDesk = working/decision lay
 | Pandle phase 1 (read-only view) → phase 2 (confirm) → phase 3 (receipt sync, rules push, order→project, bulk confirm, reverse sync after confirm) | ⏳ credentials | phase 1–2 code exists; phase 3 after live test |
 | Split transaction, transfer detection, recurring price-change alerts, merchant profiles | P1 | price-change detection lands with Needs Attention |
 | Cash-flow forecast, budgets, approvals, accountant mode, audit log, email receipt fetch, AI finance chat | P2 | |
-| Native (Mac/iOS/Android) parity for weekly view, incoming filter, needs-attention | after web | read-only mirrors |
+| Native (Mac/iOS/Android) parity | ✅ 22 Aug — full feature, not a mirror | Same five tabs, insights and callables as the web; Mac/iPad get an inspector column, iPhone a sheet, Android a Material 3 bottom sheet. Receipts can be attached from the photo library/files on both platforms. |
 
 ## Execution order
 
