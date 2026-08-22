@@ -66,6 +66,9 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
 type BankRule = { id: string; keyword: string; category: string };
+// A receipt uploaded before its payment reached the bank feed; the server
+// re-scores it after every sync and attaches it when a confident match lands.
+type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
 
 // Pandle's UK tax codes; the label is what the owner sees on a transaction.
 const VAT_CODES: Array<{ code: string; label: string }> = [
@@ -152,6 +155,9 @@ function BankPageContent() {
   const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [rules, setRules] = useState<BankRule[]>([]);
+  const [waitingReceipts, setWaitingReceipts] = useState<WaitingReceipt[]>([]);
+  // Waiting receipt being assigned by hand → shows a transaction picker.
+  const [assignWaitingId, setAssignWaitingId] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showRecurring, setShowRecurring] = useState(true);
   const [txPage, setTxPage] = useState(1);
@@ -164,6 +170,12 @@ function BankPageContent() {
   // that reveals the row checkboxes (kept out of the way until it is asked for).
   const [txSearch, setTxSearch] = useState("");
   const [selectMode, setSelectMode] = useState(false);
+  // Rules tab: search box, the rule shown in the preview bar, and the inline "New rule" form.
+  const [ruleSearch, setRuleSearch] = useState("");
+  const [previewRuleId, setPreviewRuleId] = useState<string | null>(null);
+  const [newRuleOpen, setNewRuleOpen] = useState(false);
+  const [newRuleKeyword, setNewRuleKeyword] = useState("");
+  const [newRuleCategory, setNewRuleCategory] = useState("");
   // Bulk review: selected spending rows + the category to apply to all of them.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
@@ -281,12 +293,35 @@ function BankPageContent() {
       },
       () => setRules([])
     );
+    const unsubWaiting = onSnapshot(
+      collection(db, "companies", companyId, "bankReceiptInbox"),
+      snap => {
+        setWaitingReceipts(snap.docs
+          .map(docSnap => {
+            const data = docSnap.data() as Record<string, unknown>;
+            const created = data.createdAt as { toDate?: () => Date } | undefined;
+            return {
+              id: docSnap.id,
+              storagePath: String(data.storagePath || ""),
+              fileName: String(data.fileName || "receipt"),
+              amount: Number(data.amount) || 0,
+              date: String(data.date || ""),
+              source: String(data.source || "web"),
+              createdAt: created?.toDate ? created.toDate() : null,
+              attempts: Number(data.attempts) || 0
+            };
+          })
+          .filter(item => item.storagePath)
+          .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)));
+      },
+      () => setWaitingReceipts([])
+    );
     const unsubPandle = onSnapshot(doc(db, "companies", companyId, "pandleConnection", "main"), snap => {
       const mappings = (snap.data()?.mappings as Array<{ category: string; taxCode: string }> | undefined) ?? [];
       const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
       setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
     }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubPandle(); };
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubWaiting(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -475,6 +510,48 @@ function BankPageContent() {
     }
   }
 
+  // "Keep waiting": the receipt stays in the inbox and the server attaches it
+  // once the payment shows up in the feed.
+  async function keepReceiptWaiting() {
+    if (!ocrInboxPath) return;
+    setBusy("ocr-queue");
+    setError(null);
+    try {
+      await call("bankQueueInboxReceipt", { storagePath: ocrInboxPath, fileName: ocrFileName, amount: ocrParsed?.amount ?? 0, date: ocrParsed?.date ?? "" });
+      setStatus(t("Receipt saved — it will be attached when the payment reaches the bank."));
+      setOcrInboxPath(null);
+      setOcrCandidates(null);
+      setOcrParsed(null);
+    } catch (queueError) {
+      setError(queueError instanceof Error ? queueError.message : "Could not save the receipt.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function assignWaitingReceipt(item: WaitingReceipt, transactionId: string) {
+    setBusy(`waiting-${item.id}`);
+    setError(null);
+    try {
+      await call("bankAssignInboxReceipt", { storagePath: item.storagePath, transactionId, fileName: item.fileName });
+      setStatus(t("Invoice attached."));
+      setAssignWaitingId(null);
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not attach the invoice.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function deleteWaitingReceipt(item: WaitingReceipt) {
+    if (!window.confirm(t("Remove this waiting receipt?"))) return;
+    setBusy(`waiting-${item.id}`);
+    try {
+      await call("bankDeleteInboxReceipt", { id: item.id });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not remove the receipt.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function cancelReceiptMatch() {
     if (ocrInboxPath) {
       try { await deleteObject(storageRef(storage, ocrInboxPath)); } catch { /* already gone */ }
@@ -675,9 +752,10 @@ function BankPageContent() {
       duplicates: duplicateIds.size,
       priceChanged: priceChanged.length,
       cancelled: cancelled.length,
-      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length
+      waitingReceipts: waitingReceipts.length,
+      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length + waitingReceipts.length
     };
-  }, [visibleTransactions, recurring, duplicateIds]);
+  }, [visibleTransactions, recurring, duplicateIds, waitingReceipts]);
   // Heuristic category suggestions for uncategorised spending on the page.
   const suggestions = useMemo(() => {
     const map = new Map<string, ReturnType<typeof suggestCategory>>();
@@ -753,16 +831,19 @@ function BankPageContent() {
   }, [recurring]);
   // Rules tab: how many transactions each rule catches, and rules worth creating.
   const ruleStats = useMemo(() => {
-    const stats = new Map<string, { count: number; total: number; lastDate: string }>();
+    const stats = new Map<string, { count: number; total: number; lastDate: string; txType: string }>();
     for (const rule of rules) {
       let count = 0, total = 0, lastDate = "";
+      const types = new Map<string, number>();
       for (const tx of transactions) {
         if (tx.amount >= 0) continue;
         if (`${tx.counterparty} ${tx.description}`.toLowerCase().includes(rule.keyword)) {
           count += 1; total += Math.abs(tx.amount); if (tx.bookingDate > lastDate) lastDate = tx.bookingDate;
+          types.set(tx.txType, (types.get(tx.txType) ?? 0) + 1);
         }
       }
-      stats.set(rule.id, { count, total, lastDate });
+      const txType = Array.from(types.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+      stats.set(rule.id, { count, total, lastDate, txType });
     }
     return stats;
   }, [rules, transactions]);
@@ -830,6 +911,32 @@ function BankPageContent() {
       await call("bankUpdateTransaction", { transactionId: tx.id, receiptNotNeeded: value });
     } catch (flagError) {
       setError(flagError instanceof Error ? flagError.message : "Could not update the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function createAllSuggestedRules() {
+    if (!suggestedRules.length || !window.confirm(`${t("Create")} ${suggestedRules.length} ${t("suggested rules")}?`)) return;
+    setBusy("rule-bulk");
+    try {
+      for (const item of suggestedRules) await call("bankSaveRule", { keyword: item.keyword, category: item.category });
+      setStatus(t("Rules created."));
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not create the rules.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function createRuleFromForm() {
+    const keyword = newRuleKeyword.trim().toLowerCase();
+    if (keyword.length < 2 || !newRuleCategory) return;
+    setBusy("rule-new");
+    try {
+      await call("bankSaveRule", { keyword, category: newRuleCategory });
+      setStatus(t("Rule created."));
+      setNewRuleKeyword(""); setNewRuleCategory(""); setNewRuleOpen(false);
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not create the rule.");
     } finally {
       setBusy(null);
     }
@@ -1001,7 +1108,14 @@ function BankPageContent() {
               <button type="button" className="finance-payments-delete" onClick={() => void cancelReceiptMatch()} aria-label={t("Close")}>✕</button>
             </div>
             {ocrCandidates.length === 0 ? (
-              <p style={{ fontSize: 12.5, opacity: 0.75, margin: "10px 0 0" }}>{t("No matching transaction found — you can attach it manually with the 📎 button on a row.")}</p>
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <p style={{ fontSize: 12.5, opacity: 0.75, margin: 0, flex: 1, minWidth: 240 }}>{t("No matching transaction yet — card payments usually reach the bank feed 1–3 days later.")}</p>
+                {isOwner && (ocrParsed?.amount ?? 0) > 0 ? (
+                  <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "ocr-queue"} onClick={() => void keepReceiptWaiting()}>
+                    ⏳ {busy === "ocr-queue" ? t("Saving…") : t("Keep waiting for the bank")}
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                 {ocrCandidates.map(candidate => (
@@ -1009,7 +1123,7 @@ function BankPageContent() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {candidate.counterparty || candidate.description || "—"}
-                        {candidate.hasReceipt ? <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.6 }}>📎</span> : null}
+                        {candidate.hasReceipt ? <span style={{ marginLeft: 6, opacity: 0.6, verticalAlign: "middle" }}><AttachIcon size={11} /></span> : null}
                       </div>
                       <div style={{ fontSize: 10.5, opacity: 0.6 }}>{candidate.bookingDate}</div>
                     </div>
@@ -1022,6 +1136,11 @@ function BankPageContent() {
                     </button>
                   </div>
                 ))}
+                {isOwner && (ocrParsed?.amount ?? 0) > 0 ? (
+                  <button type="button" style={{ ...attentionLink, fontSize: 12, alignSelf: "flex-start", marginTop: 2 }} disabled={busy === "ocr-queue"} onClick={() => void keepReceiptWaiting()}>
+                    ⏳ {t("None of these — keep waiting for the bank")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -1149,6 +1268,7 @@ function BankPageContent() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 1, fontSize: 11.5, opacity: 0.85 }}>
                         {attention.uncategorised ? <span>• {attention.uncategorised} {t("uncategorised")}</span> : null}
                         {attention.noReceipt ? <span>• {attention.noReceipt} {t("missing receipts")}</span> : null}
+                        {attention.waitingReceipts ? <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>• {attention.waitingReceipts} {t("receipts waiting for the bank")} →</button> : null}
                         {attention.duplicates ? <span>• {attention.duplicates} {t("possible duplicates")}</span> : null}
                         {suggestedRules.length ? <span>• {suggestedRules.length} {t("rule suggestions")}</span> : null}
                       </div>
@@ -1246,7 +1366,7 @@ function BankPageContent() {
 
                   <div style={{ ...bankCard, display: "flex", flexDirection: "column" }}>
                     <div style={cardHead}>
-                      <TileBadge bg="rgba(37,99,235,0.1)">📎</TileBadge>
+                      <TileBadge bg="rgba(37,99,235,0.1)"><ReceiptGlyph size={15} color="#2563eb" /></TileBadge>
                       <strong style={cardTitle}>{t("Receipts summary")}</strong>
                     </div>
                     <div style={{ display: "flex", alignItems: "stretch", textAlign: "center", padding: "10px 0" }}>
@@ -1263,6 +1383,11 @@ function BankPageContent() {
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("No receipt needed")}</div>
                       </div>
                     </div>
+                    {waitingReceipts.length ? (
+                      <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12, color: "#b45309", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        ⏳ {waitingReceipts.length} {t("receipts waiting for the bank")} →
+                      </button>
+                    ) : null}
                     <div style={{ marginTop: "auto", paddingTop: 14 }}>
                     <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(37,99,235,0.06)" }}>
                       <strong style={{ fontSize: 12.5, display: "block" }}>{t("Keep your records complete.")}</strong>
@@ -1570,19 +1695,20 @@ function BankPageContent() {
                                     <span style={{ opacity: 0.4 }}>—</span>
                                   ) : transaction.receiptPath ? (
                                     <button type="button" onClick={() => void openReceipt(transaction)} title={transaction.receiptName || t("View invoice")}
-                                      style={{ ...attentionLink, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                                      ✓ {t("Matched")}
+                                      style={{ ...attentionLink, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12 }}>
+                                      <FileBadge name={transaction.receiptName} size={24} /> {t("Matched")}
                                     </button>
                                   ) : transaction.receiptNotNeeded ? (
-                                    <span style={{ opacity: 0.55, fontSize: 12 }}>{t("Not needed")}</span>
+                                    <span style={{ opacity: 0.55, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><ReceiptGlyph size={15} /> {t("Not needed")}</span>
                                   ) : isOwner ? (
                                     <button type="button" disabled={busy === `receipt-${transaction.id}`} title={t("Attach invoice")}
                                       onClick={() => { setPendingAttachTxId(transaction.id); document.getElementById("bank-receipt-input")?.click(); }}
-                                      style={{ ...attentionLink, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                                      ! {t("Missing")}
+                                      style={{ ...attentionLink, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                                      <span style={{ width: 24, height: 24, borderRadius: 7, border: "1.5px dashed rgba(220,38,38,0.55)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><AttachIcon size={13} color="#dc2626" /></span>
+                                      {t("Missing")}
                                     </button>
                                   ) : (
-                                    <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700 }}>! {t("Missing")}</span>
+                                    <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><AttachIcon size={14} color="#dc2626" /> {t("Missing")}</span>
                                   )}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: transaction.amount < 0 ? "#dc2626" : "#16a34a" }}>
@@ -1820,6 +1946,56 @@ function BankPageContent() {
                     ) : null}
                   </div>
                 </div>
+                {waitingReceipts.length ? (
+                  <div style={{ ...bankCard, borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.05)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(245,158,11,0.16)">⏳</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Waiting for the bank")} ({waitingReceipts.length})</strong>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {waitingReceipts.map(item => {
+                        const ageDays = item.createdAt ? Math.floor((Date.now() - item.createdAt.getTime()) / 86400000) : 0;
+                        const stale = ageDays >= 14;
+                        const picking = assignWaitingId === item.id;
+                        return (
+                          <div key={item.id} style={{ border: `1px solid ${stale ? "rgba(220,38,38,0.35)" : "rgba(120,120,140,0.18)"}`, borderRadius: 10, padding: "8px 12px", background: "var(--surface, #fff)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                              <FileBadge name={item.fileName} size={28} />
+                              <div style={{ flex: 1, minWidth: 180 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.fileName}</div>
+                                <div style={{ fontSize: 11, opacity: 0.65 }}>
+                                  {item.amount ? money(item.amount, currency0) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {stale ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
+                                </div>
+                              </div>
+                              {isOwner ? (
+                                <span style={{ display: "inline-flex", gap: 6 }}>
+                                  <button type="button" style={bankBtnSm} disabled={busy === `waiting-${item.id}`} onClick={() => setAssignWaitingId(picking ? null : item.id)}>{picking ? t("Cancel") : t("Assign to a transaction")}</button>
+                                  <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `waiting-${item.id}`} onClick={() => void deleteWaitingReceipt(item)}>{t("Remove")}</button>
+                                </span>
+                              ) : null}
+                            </div>
+                            {picking ? (
+                              <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", borderTop: "1px solid rgba(120,120,140,0.14)", paddingTop: 6 }}>
+                                {sortedTransactions.filter(tx => tx.amount < 0).slice(0, 40).map(tx => (
+                                  <button key={tx.id} type="button" disabled={busy === `waiting-${item.id}`} onClick={() => void assignWaitingReceipt(item, tx.id)}
+                                    style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" }}>
+                                    <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                                    <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</strong>
+                                    <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
+                                    {tx.receiptPath ? <FileBadge name={tx.receiptName} size={16} /> : null}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 14.5 }}>{t("Receipts")}</strong>
@@ -1854,16 +2030,21 @@ function BankPageContent() {
                               <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
                               <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
                               <td style={tdStyle}>
-                                {tx.receiptPath ? <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}<div style={{ fontSize: 10.5, opacity: 0.65, fontWeight: 500 }}>{tx.receiptName}</div></span>
+                                {tx.receiptPath ? (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                    <FileBadge name={tx.receiptName} size={28} />
+                                    <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}<div style={{ fontSize: 10.5, opacity: 0.65, fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.receiptName}</div></span>
+                                  </span>
+                                )
                                   : tx.receiptNotNeeded ? <span style={{ opacity: 0.6 }}>{t("No receipt needed")}</span>
                                   : <span style={{ color: "#dc2626", fontWeight: 700 }}>! {t("Missing receipt")}</span>}
                               </td>
                               <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                                 {tx.receiptPath ? (
-                                  <button type="button" className="finance-payments-delete" onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}>📎</button>
+                                  <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}><ReceiptGlyph size={14} /> {t("View")} ↗</button>
                                 ) : isOwner ? (
                                   <span style={{ display: "inline-flex", gap: 6 }}>
-                                    <button type="button" style={bankBtnSm} disabled={busy === `receipt-${tx.id}`} onClick={() => { setPendingAttachTxId(tx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button>
+                                    <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6, color: "#2563eb", borderColor: "rgba(37,99,235,0.35)" }} disabled={busy === `receipt-${tx.id}`} onClick={() => { setPendingAttachTxId(tx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={14} color="#2563eb" /> {t("Attach")}</button>
                                     <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `receipt-${tx.id}`} onClick={() => void setReceiptNotNeeded(tx, !tx.receiptNotNeeded)}>{tx.receiptNotNeeded ? t("Needs receipt") : t("No receipt needed")}</button>
                                   </span>
                                 ) : null}
@@ -1889,93 +2070,195 @@ function BankPageContent() {
             {/* ================= RULES ================= */}
             {transactions.length > 0 && tab === "rules" ? (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Active rules")}</p>
-                    <strong style={tileValue}>{rules.length}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Rules running")}</span>
-                    <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
-                  </div>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#7c3aed" }}>{t("Suggested rules")}</p>
-                    <strong style={tileValue}>{suggestedRules.length}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Ready to review")}</span>
-                    <TileIcon bg="rgba(124,58,237,0.12)">✦</TileIcon>
-                  </div>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#2563eb" }}>{t("Auto-applied")} — {periodLabel}</p>
-                    <strong style={tileValue}>{autoAppliedCount}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Transactions auto-categorised")}</span>
-                    <TileIcon bg="rgba(37,99,235,0.12)">⚡</TileIcon>
-                  </div>
-                  <div style={bankCard}>
-                    <p style={{ ...tileLabel, color: "#b45309" }}>{t("Needs review")}</p>
-                    <strong style={tileValue}>{attention.uncategorised}</strong>
-                    <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, fontSize: 11.5 }}>{t("View transactions")} →</button>
-                    <TileIcon bg="rgba(245,158,11,0.14)">!</TileIcon>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(280px, 1fr)", gap: 14, alignItems: "start" }}>
-                  <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px" }}>
-                      <strong style={{ fontSize: 14.5 }}>{t("Rules")} ({rules.length})</strong>
-                      <span style={{ flex: 1 }} />
-                      <span style={{ fontSize: 12, opacity: 0.65 }}>{t("Create rules from a transaction's category picker or the suggestions on the right.")}</span>
-                    </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5 }}>
-                        <thead>
-                          <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
-                            <th style={thStyle}>{t("Condition")}</th>
-                            <th style={thStyle}>{t("Category")}</th>
-                            <th style={thStyle}>{t("VAT / Tax code")}</th>
-                            <th style={{ ...thStyle, textAlign: "right" }}>{t("Matches")}</th>
-                            <th style={thStyle}>{t("Last used")}</th>
-                            <th style={thStyle} aria-label={t("Actions")} />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rules.length === 0 ? (
-                            <tr><td colSpan={6} style={{ ...tdStyle, opacity: 0.65 }}>{t("No rules yet — set a category on a transaction and tick the rule box.")}</td></tr>
-                          ) : rules.map(rule => {
-                            const stat = ruleStats.get(rule.id);
-                            return (
-                              <tr key={rule.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                                <td style={tdStyle}><span style={{ opacity: 0.65 }}>{t("If merchant contains")}</span> <strong>"{rule.keyword}"</strong></td>
-                                <td style={tdStyle}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(rule.category)}1a`, color: categoryColor(rule.category) }}>{t(rule.category)}</span></td>
-                                <td style={{ ...tdStyle, opacity: 0.75 }}>{categoryTax[rule.category] ? t(vatLabel(categoryTax[rule.category])) : "—"}</td>
-                                <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}><strong>{stat?.count ?? 0}</strong> <span style={{ opacity: 0.6 }}>· {money(stat?.total ?? 0, currency0)}</span></td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                                  {isOwner ? <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`} onClick={() => void deleteRule(rule)} aria-label={t("Delete this rule?")}>✕</button> : null}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div style={bankCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <strong style={{ fontSize: 14.5 }}>{t("Suggested rules")}</strong>
-                      <span style={{ flex: 1 }} />
-                      <span style={countBadge}>{suggestedRules.length}</span>
-                    </div>
-                    {suggestedRules.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("No suggestions right now — categorise a few more transactions.")}</p> : null}
-                    {suggestedRules.map(item => (
-                      <div key={item.keyword} style={{ padding: "8px 0", borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</div>
-                            <div style={{ fontSize: 11, opacity: 0.65 }}>{t("If merchant contains")} "{item.keyword}" → <span style={{ color: categoryColor(item.category), fontWeight: 700 }}>{t(item.category)}</span> · {item.count} {t("matches").toLowerCase()}</div>
+                {(() => {
+                  const ruleName = (rule: BankRule) => `${rule.keyword.charAt(0).toUpperCase()}${rule.keyword.slice(1)} ${t(rule.category)} ${t("Rule")}`;
+                  const appliesTo = (txType: string) => {
+                    const meta = TX_TYPE_META[txType];
+                    if (!meta) return "—";
+                    const label = meta.translate ? t(meta.label) : meta.label;
+                    return txType === "PURCHASE" || txType === "POS" ? t("Card spending") : txType === "DIRECT_DEBIT" ? `${t("Direct Debit")} (DD)` : label;
+                  };
+                  const needle = ruleSearch.trim().toLowerCase();
+                  const shownRules = needle ? rules.filter(rule => `${rule.keyword} ${rule.category} ${ruleName(rule)}`.toLowerCase().includes(needle)) : rules;
+                  const previewRule = rules.find(rule => rule.id === previewRuleId) ?? null;
+                  const previewStat = previewRule ? ruleStats.get(previewRule.id) : undefined;
+                  const ruleChip = (category: string) => (
+                    <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category), whiteSpace: "nowrap" }}>{t(category)}</span>
+                  );
+                  return (
+                    <>
+                      {/* ---- stat tiles + actions ---- */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr)) 248px", gap: 14, alignItems: "stretch" }}>
+                        <div style={{ ...statTile, minHeight: 128 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <TileBadge bg="rgba(22,163,74,0.12)">✓</TileBadge>
+                            <div><p style={tileLabel}>{t("Active rules")}</p><strong style={{ ...tileValue, margin: "1px 0" }}>{rules.length}</strong><span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Rules running")}</span></div>
                           </div>
-                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 12 }} disabled={busy === `rule-${item.keyword}`} onClick={() => void createSuggestedRule(item)}>{t("Create rule")}</button> : null}
+                        </div>
+                        <div style={{ ...statTile, minHeight: 128 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <TileBadge bg="rgba(124,58,237,0.12)">✦</TileBadge>
+                            <div><p style={tileLabel}>{t("Suggested rules")}</p><strong style={{ ...tileValue, margin: "1px 0" }}>{suggestedRules.length}</strong><span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Ready to review")}</span></div>
+                          </div>
+                          {suggestedRules.length ? <a href="#bank-suggested-rules" style={{ ...attentionLink, marginTop: "auto", paddingTop: 8, fontSize: 12, textDecoration: "none" }}>{t("Review")} {suggestedRules.length} {t("suggestions")} →</a> : null}
+                        </div>
+                        <div style={{ ...statTile, minHeight: 128 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <TileBadge bg="rgba(37,99,235,0.12)">⚡</TileBadge>
+                            <div><p style={tileLabel}>{t("Auto-applied")}</p><strong style={{ ...tileValue, margin: "1px 0" }}>{autoAppliedCount}</strong><span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Transactions auto-categorised")} · {periodLabel}</span></div>
+                          </div>
+                          <button type="button" onClick={() => setTab("transactions")} style={{ ...attentionLink, marginTop: "auto", paddingTop: 8, fontSize: 12 }}>{t("View activity")} →</button>
+                        </div>
+                        <div style={{ ...statTile, minHeight: 128 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <TileBadge bg="rgba(245,158,11,0.14)">!</TileBadge>
+                            <div><p style={tileLabel}>{t("Needs review")}</p><strong style={{ ...tileValue, margin: "1px 0" }}>{attention.uncategorised}</strong><span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Recent transactions")}</span></div>
+                          </div>
+                          <button type="button" onClick={() => showAttention("uncategorised")} style={{ ...attentionLink, marginTop: "auto", paddingTop: 8, fontSize: 12 }}>{t("View transactions")} →</button>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center" }}>
+                          <button type="button" disabled={!isOwner} onClick={() => setNewRuleOpen(value => !value)} style={{ ...bankBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb", padding: "9px 14px" }}>＋ {t("New rule")}</button>
+                          <button type="button" disabled={!isOwner || !suggestedRules.length || busy === "rule-bulk"} onClick={() => void createAllSuggestedRules()} style={{ ...bankBtn, padding: "8px 14px", fontSize: 12.5, opacity: suggestedRules.length ? 1 : 0.5 }}>✦ {t("Bulk create suggested rules")}</button>
+                          <a href="#bank-suggested-rules" style={{ ...bankBtn, padding: "8px 14px", fontSize: 12.5, textDecoration: "none", textAlign: "center", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{t("Review")} <span style={{ ...countBadge, background: "rgba(245,158,11,0.18)", color: "#b45309" }}>{suggestedRules.length}</span> {t("suggestions")}</a>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+
+                      {newRuleOpen && isOwner ? (
+                        <div style={{ ...bankCard, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "12px 18px", borderColor: "rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.05)" }}>
+                          <strong style={{ fontSize: 13 }}>{t("New rule")}</strong>
+                          <span style={{ fontSize: 12.5, opacity: 0.75 }}>{t("If merchant contains")}</span>
+                          <input type="text" value={newRuleKeyword} autoFocus placeholder={t("keyword")} onChange={event => setNewRuleKeyword(event.target.value)}
+                            onKeyDown={event => { if (event.key === "Enter") void createRuleFromForm(); if (event.key === "Escape") setNewRuleOpen(false); }}
+                            style={{ ...pickerInput, flex: "0 1 200px", fontWeight: 700 }} />
+                          <span style={{ fontSize: 12.5, opacity: 0.75 }}>→</span>
+                          <select value={newRuleCategory} onChange={event => setNewRuleCategory(event.target.value)} style={{ ...pickerInput, flex: "0 1 200px" }} aria-label={t("Category")}>
+                            <option value="">{t("Category")}…</option>
+                            {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                          </select>
+                          {newRuleCategory && categoryTax[newRuleCategory] ? <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("VAT")}: {t(vatLabel(categoryTax[newRuleCategory]))}</span> : null}
+                          <span style={{ flex: 1 }} />
+                          <button type="button" style={bankBtnSm} onClick={() => setNewRuleOpen(false)}>{t("Cancel")}</button>
+                          <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "rule-new" || newRuleKeyword.trim().length < 2 || !newRuleCategory} onClick={() => void createRuleFromForm()}>{busy === "rule-new" ? t("Saving…") : t("Create rule")}</button>
+                        </div>
+                      ) : null}
+
+                      {/* ---- rules table + suggestions ---- */}
+                      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 312px", gap: 14, alignItems: "start" }}>
+                        <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 18px", flexWrap: "wrap" }}>
+                            <strong style={{ fontSize: 14.5 }}>{t("Rules")} ({rules.length})</strong>
+                            <span style={{ flex: 1 }} />
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "5px 10px", flex: "0 1 200px", minWidth: 120 }}>
+                              <span aria-hidden="true" style={{ opacity: 0.5, fontSize: 12 }}>🔍</span>
+                              <input type="search" value={ruleSearch} onChange={event => setRuleSearch(event.target.value)} placeholder={t("Search rules")} aria-label={t("Search rules")}
+                                style={{ border: 0, outline: "none", background: "transparent", color: "inherit", fontSize: 12.5, width: "100%" }} />
+                            </span>
+                          </div>
+                          <div style={{ overflowX: "auto" }}>
+                            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, tableLayout: "fixed", minWidth: 720 }}>
+                              <thead>
+                                <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                                  <th style={{ ...rulesTh, width: 154, paddingLeft: 18 }}>{t("Rule name")}</th>
+                                  <th style={rulesTh}>{t("Condition")}</th>
+                                  <th style={{ ...rulesTh, width: 108 }}>{t("Category")}</th>
+                                  <th style={{ ...rulesTh, width: 124 }}>{t("VAT / Tax code")}</th>
+                                  <th style={{ ...rulesTh, width: 112 }}>{t("Applies to")}</th>
+                                  <th style={{ ...rulesTh, width: 74 }}>{t("Status")}</th>
+                                  <th style={{ ...rulesTh, width: 94 }}>{t("Last used")}</th>
+                                  <th style={{ ...rulesTh, width: 34 }} aria-label={t("Actions")} />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {shownRules.length === 0 ? (
+                                  <tr><td colSpan={8} style={{ ...rulesTd, opacity: 0.65 }}>{rules.length === 0 ? t("No rules yet — set a category on a transaction and tick the rule box.") : t("No rules match your search.")}</td></tr>
+                                ) : shownRules.map(rule => {
+                                  const stat = ruleStats.get(rule.id);
+                                  const active = previewRuleId === rule.id;
+                                  return (
+                                    <tr key={rule.id} onClick={() => setPreviewRuleId(active ? null : rule.id)}
+                                      style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", cursor: "pointer", background: active ? "rgba(37,99,235,0.08)" : undefined, boxShadow: active ? "inset 3px 0 0 #2563eb" : undefined }}>
+                                      <td style={{ ...rulesTd, paddingLeft: 18, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ruleName(rule)}>{ruleName(rule)}</td>
+                                      <td style={{ ...rulesTd, lineHeight: 1.3, overflow: "hidden" }}>
+                                        <span style={{ opacity: 0.65, display: "block", fontSize: 11.5, whiteSpace: "nowrap" }}>{t("If merchant contains")}</span>
+                                        <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rule.keyword.toUpperCase()}</strong>
+                                      </td>
+                                      <td style={rulesTd}>{ruleChip(rule.category)}</td>
+                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{categoryTax[rule.category] ? t(vatLabel(categoryTax[rule.category])) : `— (${t("No VAT")})`}</td>
+                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{appliesTo(stat?.txType ?? "")}</td>
+                                      <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 9px", background: "rgba(22,163,74,0.12)", color: "#16a34a" }}>{t("Active")}</span></td>
+                                      <td style={{ ...rulesTd, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
+                                      <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
+                                        {isOwner ? <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`} onClick={event => { event.stopPropagation(); void deleteRule(rule); }} aria-label={t("Delete this rule?")} title={t("Delete this rule?")}>✕</button> : null}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div style={{ padding: "10px 18px", fontSize: 11.5, opacity: 0.6, borderTop: "1px solid rgba(120,120,140,0.1)" }}>
+                            {t("Showing")} {shownRules.length} / {rules.length} · {t("Click a rule to preview what it matches.")}
+                          </div>
+                        </div>
+
+                        <div id="bank-suggested-rules" style={{ ...bankCard, padding: "14px 16px", scrollMarginTop: 90 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                            <strong style={{ fontSize: 14.5 }}>{t("Suggested rules")} ({suggestedRules.length})</strong>
+                          </div>
+                          {suggestedRules.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("No suggestions right now — categorise a few more transactions.")}</p> : null}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {suggestedRules.map(item => (
+                              <div key={item.keyword} style={{ border: "1px solid rgba(120,120,140,0.16)", borderRadius: 12, padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                                <span aria-hidden="true" style={{ ...avatarStyle, width: 30, height: 30, fontSize: 10.5, background: `${avatarColor(item.merchant)}22`, color: avatarColor(item.merchant), flexShrink: 0 }}>{initials(item.merchant)}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <strong style={{ fontSize: 12.5, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant} {t("Rule")}</strong>
+                                    {ruleChip(item.category)}
+                                  </div>
+                                  <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{t("If merchant contains")} "{item.keyword}"</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                                    <span style={{ fontSize: 11, opacity: 0.6 }}>{item.count} {t("matches").toLowerCase()} · {money(item.total, currency0)}</span>
+                                    <span style={{ flex: 1 }} />
+                                    {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 12 }} disabled={busy === `rule-${item.keyword}`} onClick={() => void createSuggestedRule(item)}>{t("Create rule")}</button> : null}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {isOwner && suggestedRules.length > 1 ? (
+                            <button type="button" disabled={busy === "rule-bulk"} onClick={() => void createAllSuggestedRules()} style={{ ...bankBtn, width: "100%", marginTop: 10, padding: "9px 12px", fontSize: 12.5, color: "#7c3aed", borderColor: "rgba(124,58,237,0.3)" }}>
+                              ✦ {busy === "rule-bulk" ? t("Saving…") : `${t("Bulk create")} ${suggestedRules.length} ${t("suggested rules")}`} ›
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* ---- rule preview bar ---- */}
+                      {previewRule ? (
+                        <div style={{ ...bankCard, display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", overflowX: "auto" }}>
+                          <span aria-hidden="true" style={{ ...avatarStyle, width: 40, height: 40, fontSize: 13, background: `${avatarColor(previewRule.keyword)}22`, color: avatarColor(previewRule.keyword) }}>{initials(previewRule.keyword)}</span>
+                          <div style={{ minWidth: 160, whiteSpace: "nowrap" }}>
+                            <div style={{ fontSize: 11.5, opacity: 0.6 }}>{t("Rule preview")}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <strong style={{ fontSize: 13.5 }}>{ruleName(previewRule)}</strong>
+                              <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "2px 8px", background: "rgba(22,163,74,0.12)", color: "#16a34a" }}>{t("Active")}</span>
+                            </div>
+                          </div>
+                          <span style={{ width: 1, alignSelf: "stretch", background: "rgba(120,120,140,0.18)" }} />
+                          <span style={{ fontSize: 12.5, opacity: 0.8, whiteSpace: "nowrap" }}>{t("If merchant contains")} <strong>{previewRule.keyword.toUpperCase()}</strong></span>
+                          <span style={{ width: 1, alignSelf: "stretch", background: "rgba(120,120,140,0.18)" }} />
+                          <div><strong style={{ fontSize: 17, display: "block" }}>{previewStat?.count ?? 0}</strong><span style={{ fontSize: 11, opacity: 0.6 }}>{t("Matching transactions")}</span></div>
+                          <span style={{ width: 1, alignSelf: "stretch", background: "rgba(120,120,140,0.18)" }} />
+                          <div><strong style={{ fontSize: 17, display: "block" }}>{money(previewStat?.total ?? 0, currency0)}</strong><span style={{ fontSize: 11, opacity: 0.6 }}>{t("Total amount")}</span></div>
+                          <span style={{ width: 1, alignSelf: "stretch", background: "rgba(120,120,140,0.18)" }} />
+                          <div><strong style={{ fontSize: 14, display: "block" }}>{appliesTo(previewStat?.txType ?? "")}</strong><span style={{ fontSize: 11, opacity: 0.6 }}>{t("Applies to")}</span></div>
+                          <span style={{ flex: 1 }} />
+                          <button type="button" onClick={() => { setTxSearch(previewRule.keyword); setTxAttention("none"); setTxFlow("out"); setTab("transactions"); }} style={{ ...attentionLink, fontSize: 12.5, whiteSpace: "nowrap" }}>{t("View matching transactions")} →</button>
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
               </>
             ) : null}
 
@@ -2057,18 +2340,18 @@ function BankPageContent() {
                     <div style={drawerLabel}>{t("Receipt / attachment")}</div>
                     <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
                       {drawerTx.receiptPath ? (
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 11.5 }}>✓ {t("Receipt matched")}</span>
-                            <span style={{ flex: 1 }} />
-                            {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <FileBadge name={drawerTx.receiptName} size={30} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: "#16a34a", fontWeight: 700, fontSize: 11.5 }}>✓ {t("Receipt matched")}</div>
+                            <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{drawerTx.receiptName || t("View invoice")} ↗</button>
                           </div>
-                          <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, marginTop: 3, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drawerTx.receiptName || t("View invoice")} ↗</button>
+                          {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
                         </div>
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: drawerTx.receiptNotNeeded ? "inherit" : "#dc2626", fontWeight: 700, opacity: drawerTx.receiptNotNeeded ? 0.6 : 1 }}>{drawerTx.receiptNotNeeded ? t("No receipt needed") : `! ${t("Missing receipt")}`}</span>
-                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button> : null}
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={13} color="#2563eb" /> {t("Attach")}</button> : null}
                         </div>
                       )}
                     </div>
@@ -2157,6 +2440,8 @@ const attentionLink: React.CSSProperties = { border: 0, background: "transparent
 const drawerStyle: React.CSSProperties = { position: "sticky", top: 12, alignSelf: "start", maxHeight: "calc(100vh - 24px)", minWidth: 0, background: "var(--surface, #fff)", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" };
 const drawerLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.65, marginBottom: 4 };
 const cardFootLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" };
+const rulesTh: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, padding: "9px 12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+const rulesTd: React.CSSProperties = { padding: "10px 12px", verticalAlign: "middle" };
 const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, padding: "9px 18px" };
 const tdStyle: React.CSSProperties = { padding: "9px 18px", verticalAlign: "middle" };
 const pickerInput: React.CSSProperties = { flex: 1, minWidth: 120, fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" };
@@ -2169,6 +2454,56 @@ function TileIcon({ bg, children }: { bg: string; children: React.ReactNode }) {
   );
 }
 
+// Receipt attachments: the file type decides the badge (PDF / image / document /
+// generic file) so a row shows at a glance what is attached; "attach" is the
+// empty state — an outlined paperclip that invites an upload.
+type ReceiptKind = "pdf" | "image" | "doc" | "file";
+function receiptKind(name: string): ReceiptKind {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (ext === "pdf") return "pdf";
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"].includes(ext)) return "image";
+  if (["doc", "docx", "xls", "xlsx", "csv", "txt", "rtf", "odt", "pages", "numbers"].includes(ext)) return "doc";
+  return "file";
+}
+const RECEIPT_KIND_META: Record<ReceiptKind, { label: string; color: string; bg: string }> = {
+  pdf: { label: "PDF", color: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+  image: { label: "IMG", color: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+  doc: { label: "DOC", color: "#0e7a55", bg: "rgba(14,122,85,0.12)" },
+  file: { label: "FILE", color: "#6b7280", bg: "rgba(107,114,128,0.14)" }
+};
+function FileBadge({ name, size = 26 }: { name: string; size?: number }) {
+  const kind = receiptKind(name);
+  const meta = RECEIPT_KIND_META[kind];
+  const s = size;
+  return (
+    <span aria-hidden="true" title={name} style={{ position: "relative", width: s, height: s, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={meta.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" fill={meta.bg} />
+        <path d="M14 2v5h5" />
+        {kind === "image" ? <><circle cx="9.5" cy="12" r="1.3" fill={meta.color} stroke="none" /><path d="M7.5 18l3-3.5 2 2.2 2-2.7 2.5 4z" fill={meta.color} stroke="none" /></> : null}
+        {kind === "doc" ? <><path d="M8.5 12.5h7" /><path d="M8.5 15.5h7" /><path d="M8.5 18.5h4" /></> : null}
+      </svg>
+      {kind === "pdf" || kind === "file" ? (
+        <span style={{ position: "absolute", left: "50%", bottom: Math.round(s * 0.1), transform: "translateX(-50%)", fontSize: Math.max(6, Math.round(s * 0.27)), fontWeight: 800, letterSpacing: 0.3, color: "#fff", background: meta.color, borderRadius: 3, padding: "0 3px", lineHeight: 1.4 }}>{meta.label}</span>
+      ) : null}
+    </span>
+  );
+}
+function AttachIcon({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.5 3.5 0 0 1 5 5l-9 9a1.5 1.5 0 0 1-2.1-2.1l8.3-8.3" />
+    </svg>
+  );
+}
+function ReceiptGlyph({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z" />
+      <path d="M9 8h6M9 11.5h6M9 15h4" />
+    </svg>
+  );
+}
 function TileBadge({ bg, children }: { bg: string; children: React.ReactNode }) {
   return (
     <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
