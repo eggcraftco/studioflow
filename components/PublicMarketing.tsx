@@ -903,6 +903,7 @@ function PublicFooter() {
             <h3>{t("footer.product")}</h3>
             <nav aria-label={t("footer.product")}>
               <Link href="/features">{t("nav.features")}</Link>
+              <Link href="/chatgpt">{t("nav.chatgpt")}</Link>
               <Link href="/pricing">{t("nav.pricing")}</Link>
               <Link href="/guide">{t("nav.guide")}</Link>
               <Link href="/faq">{t("nav.faq")}</Link>
@@ -2064,8 +2065,9 @@ const IMPORT_STEPS: PublicSiteTranslationKey[] = [
 export function ChatGPTAppShowcase({
   title,
   revealOnScroll = true,
-  featured = false
-}: { title?: string; revealOnScroll?: boolean; featured?: boolean }) {
+  featured = false,
+  showMoreLink = false
+}: { title?: string; revealOnScroll?: boolean; featured?: boolean; showMoreLink?: boolean }) {
   const { t } = usePublicSiteLanguage();
   const currency = useLocaleCurrency();
   const queries: { key: PublicSiteTranslationKey; icon: ReactNode }[] = [
@@ -2316,6 +2318,13 @@ export function ChatGPTAppShowcase({
           </div>
         </div>
       </div>
+      {showMoreLink ? (
+        <div className="public-shell gpt-section-more">
+          <Link href="/chatgpt" className="public-button ghost large">
+            {t("aiPage.learnMore")}<span className="public-button-arrow" aria-hidden="true">→</span>
+          </Link>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2650,7 +2659,7 @@ function PublicHomePageContent() {
 
       {/* The ChatGPT app sits directly under the platform strip: it is part of
           "where NivaDesk runs", and it was getting lost further down the page. */}
-      <ChatGPTAppShowcase featured />
+      <ChatGPTAppShowcase featured showMoreLink />
 
       <StudioAccentBand />
 
@@ -2768,7 +2777,7 @@ function PublicFeaturesPageContent() {
         </div>
       </section>
 
-      <ChatGPTAppShowcase featured />
+      <ChatGPTAppShowcase featured showMoreLink />
 
       <section className="public-section public-features-demo-section">
         <div className="public-shell">
@@ -3244,6 +3253,253 @@ function PublicFaqPageContent() {
         </section>
       ))}
     </>
+  );
+}
+
+// The ChatGPT/AI page groups the app's real MCP tools: orders, notes, finance
+// and banking. Each line maps to a tool that actually ships.
+const AI_TOOL_GROUPS: {
+  key: string;
+  tone: string;
+  titleKey: PublicSiteTranslationKey;
+  items: PublicSiteTranslationKey[];
+  icon: ReactNode;
+}[] = [
+  {
+    key: "orders",
+    tone: "sage",
+    titleKey: "aiPage.g1.title",
+    items: ["aiPage.g1.i1", "aiPage.g1.i2", "aiPage.g1.i3", "aiPage.g1.i4"],
+    icon: <><rect x="5" y="3.5" width="10" height="13" rx="2" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></>
+  },
+  {
+    key: "notes",
+    tone: "gold",
+    titleKey: "aiPage.g2.title",
+    items: ["aiPage.g2.i1", "aiPage.g2.i2", "aiPage.g2.i3", "aiPage.g2.i4"],
+    icon: <><path d="M4.5 16.5 5.6 12l7.6-7.6 3 3L8.6 15z" /><path d="M12.4 5.2l3 3" /></>
+  },
+  {
+    key: "finance",
+    tone: "sky",
+    titleKey: "aiPage.g3.title",
+    items: ["aiPage.g3.i1", "aiPage.g3.i2", "aiPage.g3.i3", "aiPage.g3.i4"],
+    icon: <><path d="M4 15V9M9 15V5M14 15v-4" /><path d="M3 17.5h14" /></>
+  },
+  {
+    key: "banking",
+    tone: "violet",
+    titleKey: "aiPage.g4.title",
+    items: ["aiPage.g4.i1", "aiPage.g4.i2", "aiPage.g4.i3", "aiPage.g4.i4"],
+    icon: <><path d="M3.5 8 10 4l6.5 4" /><path d="M5.5 8v6M9 8v6M14.5 8v6M3.5 16.5h13" /></>
+  }
+];
+
+const AI_ASK_GROUPS: { key: string; labelKey: PublicSiteTranslationKey; items: PublicSiteTranslationKey[] }[] = [
+  { key: "orders", labelKey: "aiPage.ask.l1", items: ["aiPage.ask.q1", "aiPage.ask.q2", "aiPage.ask.q3", "aiPage.ask.q4"] },
+  { key: "money", labelKey: "aiPage.ask.l2", items: ["aiPage.ask.q5", "aiPage.ask.q6", "aiPage.ask.q7", "aiPage.ask.q8"] },
+  { key: "notes", labelKey: "aiPage.ask.l3", items: ["aiPage.ask.q9", "aiPage.ask.q10", "aiPage.ask.q11"] }
+];
+
+const AI_RECEIPT_STEPS: PublicSiteTranslationKey[] = ["aiPage.receipts.s1", "aiPage.receipts.s2", "aiPage.receipts.s3"];
+
+const AI_HONESTY: { titleKey: PublicSiteTranslationKey; bodyKey: PublicSiteTranslationKey; tone: string; icon: ReactNode }[] = [
+  {
+    titleKey: "aiPage.ai.c1.title",
+    bodyKey: "aiPage.ai.c1.body",
+    tone: "sky",
+    icon: <path d="M10 2.4l1.7 4.6 4.6 1.7-4.6 1.7L10 15.4l-1.7-4.7L3.7 8.7l4.6-1.7z" />
+  },
+  {
+    titleKey: "aiPage.ai.c2.title",
+    bodyKey: "aiPage.ai.c2.body",
+    tone: "gold",
+    icon: <><rect x="3.5" y="4.5" width="13" height="11" rx="2" /><circle cx="10" cy="10" r="2.6" /></>
+  },
+  {
+    titleKey: "aiPage.ai.c3.title",
+    bodyKey: "aiPage.ai.c3.body",
+    tone: "sage",
+    icon: <><path d="M4 10.5l3.2 3.2L16 5" /><path d="M4 15.5h12" opacity="0" /></>
+  }
+];
+
+const AI_SETUP_STEPS: PublicSiteTranslationKey[] = ["aiPage.setup.s1", "aiPage.setup.s2", "aiPage.setup.s3"];
+
+const AI_TRUST_KEYS: PublicSiteTranslationKey[] = ["chatgptApp.safeBadge1", "chatgptApp.safeBadge2", "chatgptApp.safeBadge3"];
+
+function PublicChatGPTPageContent() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <>
+      <section className="public-page-hero ai-hero">
+        <div className="public-shell">
+          <span className="gpt-eyebrow ai-hero-eyebrow">
+            <span className="gpt-eyebrow-logo"><GptMark /></span>
+            {t("chatgptApp.eyebrow")}
+          </span>
+          <h1>{t("aiPage.hero.title")}</h1>
+          <p>{t("aiPage.hero.body")}</p>
+          <div className="public-hero-actions ai-hero-actions">
+            <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
+            <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
+          </div>
+          <ul className="ai-hero-trust">
+            {AI_TRUST_KEYS.map(key => (
+              <li key={key}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10 3l5 2v4.2c0 3-2.2 5.4-5 6.3-2.8-.9-5-3.3-5-6.3V5z" /><path d="M7.8 9.8 9.5 11.5l3-3.2" />
+                </svg>
+                {t(key)}
+              </li>
+            ))}
+          </ul>
+          <p className="ai-hero-note">{t("aiPage.hero.note")}</p>
+        </div>
+      </section>
+
+      <ChatGPTAppShowcase featured />
+
+      <section className="public-section ai-tools-section public-scroll-reveal">
+        <div className="public-shell">
+          <div className="public-section-header">
+            <span className="public-eyebrow">{t("aiPage.tools.eyebrow")}</span>
+            <h2>{t("aiPage.tools.title")}</h2>
+            <p>{t("aiPage.tools.body")}</p>
+          </div>
+          <div className="ai-tool-grid public-scroll-stagger">
+            {AI_TOOL_GROUPS.map(group => (
+              <article className="ai-tool-card" key={group.key}>
+                <span className="ai-tool-icon" data-tone={group.tone}>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{group.icon}</svg>
+                </span>
+                <h3>{t(group.titleKey)}</h3>
+                <ul>
+                  {group.items.map(item => (
+                    <li key={item}>
+                      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M5 10.5l3.2 3.2L15.5 6" />
+                      </svg>
+                      {t(item)}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section ai-ask-section public-scroll-reveal">
+        <div className="public-shell">
+          <div className="public-section-header">
+            <span className="public-eyebrow">{t("aiPage.ask.eyebrow")}</span>
+            <h2>{t("aiPage.ask.title")}</h2>
+            <p>{t("aiPage.ask.body")}</p>
+          </div>
+          <div className="ai-ask-grid">
+            {AI_ASK_GROUPS.map(group => (
+              <div className="ai-ask-column" key={group.key}>
+                <span className="ai-ask-label">{t(group.labelKey)}</span>
+                <ul>
+                  {group.items.map(item => (
+                    <li key={item}>
+                      <span className="ai-ask-quote" aria-hidden="true">
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 5.5h12v8H9l-4 3v-3H4z" />
+                        </svg>
+                      </span>
+                      {t(item)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section public-section-soft ai-receipts-section public-scroll-reveal">
+        <div className="public-shell ai-receipts-grid">
+          <div className="ai-receipts-copy">
+            <span className="public-eyebrow">{t("aiPage.receipts.eyebrow")}</span>
+            <h2>{t("aiPage.receipts.title")}</h2>
+            <p>{t("aiPage.receipts.body")}</p>
+            <p className="ai-receipts-note">{t("aiPage.receipts.note")}</p>
+          </div>
+          <ol className="ai-receipt-steps">
+            {AI_RECEIPT_STEPS.map((key, index) => (
+              <li key={key}>
+                <span className="ai-step-no">{index + 1}</span>
+                <span>{t(key)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="public-section ai-honesty-section public-scroll-reveal">
+        <div className="public-shell">
+          <div className="public-section-header">
+            <span className="public-eyebrow">{t("aiPage.ai.eyebrow")}</span>
+            <h2>{t("aiPage.ai.title")}</h2>
+            <p>{t("aiPage.ai.body")}</p>
+          </div>
+          <div className="ai-honesty-grid public-scroll-stagger">
+            {AI_HONESTY.map(card => (
+              <article className="ai-honesty-card" key={card.titleKey}>
+                <span className="ai-tool-icon" data-tone={card.tone}>
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{card.icon}</svg>
+                </span>
+                <h3>{t(card.titleKey)}</h3>
+                <p>{t(card.bodyKey)}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="public-section public-section-soft ai-setup-section public-scroll-reveal">
+        <div className="public-shell">
+          <div className="public-section-header">
+            <span className="public-eyebrow">{t("aiPage.setup.eyebrow")}</span>
+            <h2>{t("aiPage.setup.title")}</h2>
+          </div>
+          <ol className="ai-setup-steps">
+            {AI_SETUP_STEPS.map((key, index) => (
+              <li key={key}>
+                <span className="ai-step-no">{index + 1}</span>
+                <span>{t(key)}</span>
+              </li>
+            ))}
+          </ol>
+          <p className="ai-setup-note">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="9" width="10" height="7" rx="1.6" /><path d="M7.2 9V7.2a2.8 2.8 0 015.6 0V9" />
+            </svg>
+            {t("aiPage.setup.note")}
+          </p>
+        </div>
+      </section>
+
+      <section className="public-section public-cta-band public-scroll-reveal">
+        <div className="public-shell public-cta-inner">
+          <div>
+            <span className="public-eyebrow">{t("aiPage.cta.eyebrow")}</span>
+            <h2>{t("aiPage.cta.title")}</h2>
+          </div>
+          <HeroActions />
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function PublicChatGPTPage() {
+  return (
+    <PublicShell>
+      <PublicChatGPTPageContent />
+    </PublicShell>
   );
 }
 

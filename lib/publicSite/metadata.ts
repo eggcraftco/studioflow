@@ -15,6 +15,7 @@ type PublicMetadataKey =
   | "subprocessors"
   | "dataProcessingAgreement"
   | "acceptableUse"
+  | "chatgpt"
   | "changelog"
   | "guide"
   | "contact"
@@ -29,6 +30,12 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
     description:
       "NivaDesk is studio management software for creative studios and makers. Track orders, clients, schedules, invoices and files in one place, on web, Mac, iPhone and Android.",
     path: "/"
+  },
+  chatgpt: {
+    title: "NivaDesk for ChatGPT | Run Your Studio From a Chat",
+    description:
+      "Connect your NivaDesk workspace to ChatGPT: ask about orders, notes, finances and bank spending, create orders from your old spreadsheets, and file receipts against bank transactions. Included on every plan.",
+    path: "/chatgpt"
   },
   features: {
     title: "NivaDesk Features | Orders, Clients, Scheduling & Files",
