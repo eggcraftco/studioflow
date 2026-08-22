@@ -3876,7 +3876,29 @@ const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 
 // Bank spending feed (GoCardless Bank Account Data / Open Banking, read-only).
 const { createBankFeedFunctions } = require("./bankFeed");
-const bankFeedExports = createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner });
+const bankFeedExports = createBankFeedFunctions({
+  admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner,
+  // Workspace notification + push when a waiting receipt finds its transaction.
+  notifyCompany: async (companyId, payload) => {
+    const notificationId = String(payload.id || `bank_${Date.now()}`);
+    const ref = notificationCollectionRef(companyId).doc(notificationId);
+    const data = {
+      companyId,
+      type: payload.type || "bank_receipt_matched",
+      title: payload.title || "NivaDesk",
+      message: payload.message || "",
+      route: payload.route || "bank",
+      transactionId: payload.transactionId || "",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+      actioned: false,
+      source: payload.source || "bankFeed"
+    };
+    await ref.set(data, { merge: true });
+    const pushResult = await sendPushNotificationToCompany(companyId, { ...data, notificationId, createdAt: new Date().toISOString() });
+    await ref.set({ pushSent: pushResult.sent > 0, pushResult, pushSentAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  }
+});
 const { _internal: bankFeedInternal, ...bankFeedCallables } = bankFeedExports;
 Object.assign(exports, bankFeedCallables);
 
@@ -17761,6 +17783,13 @@ async function nvChatGPTGetBankSpendingSummary(context, args = {}) {
     return { merchant: item.merchant, monthsCharged: item.months.size, typicalAmount: nvRound2(sorted[Math.floor(sorted.length / 2)]) };
   }).sort((a, b) => b.typicalAmount - a.typicalAmount).slice(0, 12);
 
+  // Receipts sent before their payment reached the feed (auto-attached later).
+  let waitingReceipts = [];
+  try {
+    const waitingSnap = await admin.firestore().collection("companies").doc(context.companyId).collection("bankReceiptInbox").where("status", "==", "waiting").limit(20).get();
+    waitingReceipts = waitingSnap.docs.map((doc) => ({ fileName: nvCleanString(doc.get("fileName"), 120), amount: Number(doc.get("amount")) || 0, date: nvCleanString(doc.get("date"), 10) }));
+  } catch { /* optional */ }
+
   return {
     action: "get_bank_spending_summary",
     ok: true,
@@ -17774,6 +17803,7 @@ async function nvChatGPTGetBankSpendingSummary(context, args = {}) {
     changeVsPreviousPercent: prevSpent ? Math.round((spentTotal - prevSpent) / prevSpent * 100) : null,
     transactionCount: rows.length,
     spendingWithoutReceipt: rows.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length,
+    receiptsWaitingForBank: waitingReceipts,
     categories,
     topMerchants,
     recurringSubscriptions: recurring,
@@ -17926,13 +17956,27 @@ async function nvChatGPTAttachBankReceipt(context, args = {}) {
     };
   }
   if (!candidates.length) {
-    await admin.storage().bucket().file(inboxPath).delete({ ignoreNotFound: true });
+    // Fresh purchases reach the bank feed days later: keep the file waiting and
+    // let the next sync attach it, instead of discarding what the user sent.
+    let queued = false;
+    if (parsed.amount > 0) {
+      try {
+        await bankFeedInternal.queueInboxReceipt(companyId, { storagePath: inboxPath, fileName, parsed, source: "chatgpt" });
+        queued = true;
+      } catch (error) {
+        console.warn("attach_bank_receipt queue failed:", error?.message || error);
+      }
+    }
+    if (!queued) await admin.storage().bucket().file(inboxPath).delete({ ignoreNotFound: true });
     return {
       action: "attach_bank_receipt",
       ok: true,
       attached: false,
+      waiting: queued,
       readFromDocument: { amount: parsed.amount || null, date: parsed.date || null, ocr: ocrUsed },
-      message: "No bank transaction matches this document (amount/date). It may not have reached the bank feed yet, or the amount differs — ask the user which transaction it belongs to, then search_bank_transactions and call again with transactionId."
+      message: queued
+        ? "No bank transaction matches this document yet (the payment usually reaches the bank feed 1-3 days later). The receipt is saved in the workspace's waiting list and NivaDesk will attach it automatically when the matching transaction arrives; the user will get a notification. Tell the user this. If they already know the transaction, search_bank_transactions and call again with transactionId and this inboxPath: " + inboxPath
+        : "No bank transaction matches this document and no amount could be read from it, so it was not kept. Ask the user which transaction it belongs to, then search_bank_transactions and call again with transactionId."
     };
   }
   return {

@@ -458,6 +458,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Receipts waiting for their bank transaction — owner-readable, server-written.
+    match /companies/{companyId}/bankReceiptInbox/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
     // Categorisation rules — owner-readable, written only via callables.
     match /companies/{companyId}/bankRules/{document=**} {
       allow read: if canReadBankFeed(companyId);
@@ -548,6 +554,7 @@ service cloud.firestore {
         && collectionId != 'bankTransactions'
         && collectionId != 'bankTokens'
         && collectionId != 'bankRules'
+        && collectionId != 'bankReceiptInbox'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && canReadCompany(companyId);
@@ -567,6 +574,7 @@ service cloud.firestore {
         && collectionId != 'bankTransactions'
         && collectionId != 'bankTokens'
         && collectionId != 'bankRules'
+        && collectionId != 'bankReceiptInbox'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && canWriteCompanyData(companyId);

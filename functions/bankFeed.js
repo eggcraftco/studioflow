@@ -33,8 +33,10 @@ const REDIRECT_URL = "https://nivadesk.app/bank";
 // younger than this is served from Firestore instead of re-fetching.
 const MIN_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner }) {
+function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany }) {
   const db = () => admin.firestore();
+  const receiptInboxRef = (companyId) =>
+    db().collection("companies").doc(companyId).collection("bankReceiptInbox");
 
   const connectionsRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankConnections");
@@ -326,6 +328,15 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       if (ok) {
         synced += 1;
         await doc.ref.set({ lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      }
+    }
+
+    if (imported > 0) {
+      try {
+        const matched = await matchWaitingReceipts(companyId);
+        if (matched) console.log("bank sync matched waiting receipts", companyId, matched);
+      } catch (error) {
+        console.warn("matchWaitingReceipts failed:", companyId, error?.message || error);
       }
     }
 
@@ -764,6 +775,104 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true };
   });
 
+  // ---- Waiting receipts -------------------------------------------------
+  // A receipt photographed right after paying usually reaches the bank feed
+  // 1-3 days later, so "no match" must not mean "throw the file away". The file
+  // stays in _inbox with a bankReceiptInbox doc holding what OCR read; every
+  // sync that imports rows re-scores the waiting receipts and attaches the
+  // ones with a single confident match, then notifies the workspace.
+
+  const WAITING_MATCH_MIN_SCORE = 75;   // amount + date (or amount + merchant words)
+  const WAITING_MATCH_MIN_LEAD = 20;    // clear winner over the runner-up
+
+  async function queueInboxReceipt(companyId, { storagePath, fileName, parsed, source }) {
+    const inboxPrefix = `companies/${companyId}/bank_receipts/_inbox/`;
+    if (!storagePath.startsWith(inboxPrefix)) throw new HttpsError("invalid-argument", "storagePath must be an inbox upload.");
+    const existing = await receiptInboxRef(companyId).where("storagePath", "==", storagePath).limit(1).get();
+    const ref = existing.empty ? receiptInboxRef(companyId).doc() : existing.docs[0].ref;
+    await ref.set({
+      storagePath,
+      fileName: cleanText(fileName, 200) || "receipt.jpg",
+      amount: Number(parsed?.amount) || 0,
+      date: cleanText(parsed?.date, 10),
+      words: Array.isArray(parsed?.words) ? parsed.words.slice(0, 30).map((word) => cleanText(word, 40)) : [],
+      source: cleanText(source, 20) || "web",
+      status: "waiting",
+      attempts: 0,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastTriedAt: null
+    }, { merge: true });
+    return ref.id;
+  }
+
+  async function matchWaitingReceipts(companyId) {
+    const snap = await receiptInboxRef(companyId).where("status", "==", "waiting").limit(50).get();
+    if (snap.empty) return 0;
+    let matched = 0;
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const parsed = { amount: Number(data.amount) || 0, date: cleanText(data.date, 10), words: Array.isArray(data.words) ? data.words : [] };
+      if (!parsed.amount) { await doc.ref.set({ lastTriedAt: admin.firestore.FieldValue.serverTimestamp(), attempts: admin.firestore.FieldValue.increment(1) }, { merge: true }); continue; }
+      const candidates = await scoreReceiptCandidates(companyId, parsed);
+      const top = candidates[0];
+      const second = candidates[1];
+      const confident = top && top.score >= WAITING_MATCH_MIN_SCORE && !top.hasReceipt && (!second || top.score - second.score >= WAITING_MATCH_MIN_LEAD);
+      if (!confident) {
+        await doc.ref.set({ lastTriedAt: admin.firestore.FieldValue.serverTimestamp(), attempts: admin.firestore.FieldValue.increment(1) }, { merge: true });
+        continue;
+      }
+      try {
+        const assigned = await assignInboxReceipt(companyId, data.storagePath, top.transactionId, data.fileName);
+        await doc.ref.delete();
+        matched += 1;
+        if (typeof notifyCompany === "function") {
+          const tx = assigned.transaction || {};
+          const amount = Math.abs(Number(tx.amount) || 0).toFixed(2);
+          await notifyCompany(companyId, {
+            id: `bankReceipt_${top.transactionId}`,
+            type: "bank_receipt_matched",
+            title: "Receipt matched",
+            message: `${cleanText(data.fileName, 80)} → ${cleanText(tx.counterparty || tx.description, 80)} · ${cleanText(tx.currency, 8) || "GBP"} ${amount} · ${cleanText(tx.bookingDate, 10)}`,
+            route: "bank",
+            transactionId: top.transactionId,
+            source: "scheduledBankSync"
+          });
+        }
+      } catch (error) {
+        console.warn("waiting receipt attach failed:", doc.id, error?.message || error);
+      }
+    }
+    return matched;
+  }
+
+  // Web: keep an OCR'd upload waiting for the bank instead of discarding it.
+  const bankQueueInboxReceipt = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const storagePath = cleanText(request.data?.storagePath, 500);
+    const fileName = cleanText(request.data?.fileName, 200) || "receipt.jpg";
+    const parsed = {
+      amount: Number(request.data?.amount) || 0,
+      date: cleanText(request.data?.date, 10),
+      words: Array.isArray(request.data?.words) ? request.data.words : []
+    };
+    const id = await queueInboxReceipt(companyId, { storagePath, fileName, parsed, source: "web" });
+    return { ok: true, id };
+  });
+
+  // Web: drop a waiting receipt (file + doc).
+  const bankDeleteInboxReceipt = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const id = cleanText(request.data?.id, 120);
+    if (!id) throw new HttpsError("invalid-argument", "id is required.");
+    const ref = receiptInboxRef(companyId).doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return { ok: true };
+    const storagePath = cleanText(doc.get("storagePath"), 500);
+    if (storagePath) { try { await admin.storage().bucket().file(storagePath).delete(); } catch { /* already gone */ } }
+    await ref.delete();
+    return { ok: true };
+  });
+
   // Moves an inbox upload into the transaction's receipt slot and stamps the doc.
   async function assignInboxReceipt(companyId, storagePath, transactionId, fileName) {
     const txRef = transactionsRef(companyId).doc(transactionId);
@@ -776,6 +885,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
 
     const previousPath = cleanText((txDoc.data() || {}).receiptPath, 500);
     await txRef.set({ receiptPath: destination, receiptName: safeName }, { merge: true });
+    try {
+      const queued = await receiptInboxRef(companyId).where("storagePath", "==", storagePath).limit(1).get();
+      for (const queuedDoc of queued.docs) await queuedDoc.ref.delete();
+    } catch (error) {
+      console.warn("receipt inbox cleanup failed:", error?.message || error);
+    }
     if (previousPath) {
       try { await admin.storage().bucket().file(previousPath).delete(); } catch { /* already gone */ }
     }
@@ -797,8 +912,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankDeleteRule,
     bankMatchReceipt,
     bankAssignInboxReceipt,
+    bankQueueInboxReceipt,
+    bankDeleteInboxReceipt,
     scheduledBankSync,
-    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt }
+    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts }
   };
 }
 

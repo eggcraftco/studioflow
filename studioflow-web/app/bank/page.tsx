@@ -66,6 +66,9 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
 type BankRule = { id: string; keyword: string; category: string };
+// A receipt uploaded before its payment reached the bank feed; the server
+// re-scores it after every sync and attaches it when a confident match lands.
+type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
 
 // Pandle's UK tax codes; the label is what the owner sees on a transaction.
 const VAT_CODES: Array<{ code: string; label: string }> = [
@@ -152,6 +155,9 @@ function BankPageContent() {
   const [orderOptions, setOrderOptions] = useState<OrderOptionItem[] | null>(null);
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [rules, setRules] = useState<BankRule[]>([]);
+  const [waitingReceipts, setWaitingReceipts] = useState<WaitingReceipt[]>([]);
+  // Waiting receipt being assigned by hand → shows a transaction picker.
+  const [assignWaitingId, setAssignWaitingId] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [showRecurring, setShowRecurring] = useState(true);
   const [txPage, setTxPage] = useState(1);
@@ -287,12 +293,35 @@ function BankPageContent() {
       },
       () => setRules([])
     );
+    const unsubWaiting = onSnapshot(
+      collection(db, "companies", companyId, "bankReceiptInbox"),
+      snap => {
+        setWaitingReceipts(snap.docs
+          .map(docSnap => {
+            const data = docSnap.data() as Record<string, unknown>;
+            const created = data.createdAt as { toDate?: () => Date } | undefined;
+            return {
+              id: docSnap.id,
+              storagePath: String(data.storagePath || ""),
+              fileName: String(data.fileName || "receipt"),
+              amount: Number(data.amount) || 0,
+              date: String(data.date || ""),
+              source: String(data.source || "web"),
+              createdAt: created?.toDate ? created.toDate() : null,
+              attempts: Number(data.attempts) || 0
+            };
+          })
+          .filter(item => item.storagePath)
+          .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)));
+      },
+      () => setWaitingReceipts([])
+    );
     const unsubPandle = onSnapshot(doc(db, "companies", companyId, "pandleConnection", "main"), snap => {
       const mappings = (snap.data()?.mappings as Array<{ category: string; taxCode: string }> | undefined) ?? [];
       const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
       setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
     }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubPandle(); };
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubWaiting(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -481,6 +510,48 @@ function BankPageContent() {
     }
   }
 
+  // "Keep waiting": the receipt stays in the inbox and the server attaches it
+  // once the payment shows up in the feed.
+  async function keepReceiptWaiting() {
+    if (!ocrInboxPath) return;
+    setBusy("ocr-queue");
+    setError(null);
+    try {
+      await call("bankQueueInboxReceipt", { storagePath: ocrInboxPath, fileName: ocrFileName, amount: ocrParsed?.amount ?? 0, date: ocrParsed?.date ?? "" });
+      setStatus(t("Receipt saved — it will be attached when the payment reaches the bank."));
+      setOcrInboxPath(null);
+      setOcrCandidates(null);
+      setOcrParsed(null);
+    } catch (queueError) {
+      setError(queueError instanceof Error ? queueError.message : "Could not save the receipt.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function assignWaitingReceipt(item: WaitingReceipt, transactionId: string) {
+    setBusy(`waiting-${item.id}`);
+    setError(null);
+    try {
+      await call("bankAssignInboxReceipt", { storagePath: item.storagePath, transactionId, fileName: item.fileName });
+      setStatus(t("Invoice attached."));
+      setAssignWaitingId(null);
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not attach the invoice.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function deleteWaitingReceipt(item: WaitingReceipt) {
+    if (!window.confirm(t("Remove this waiting receipt?"))) return;
+    setBusy(`waiting-${item.id}`);
+    try {
+      await call("bankDeleteInboxReceipt", { id: item.id });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not remove the receipt.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function cancelReceiptMatch() {
     if (ocrInboxPath) {
       try { await deleteObject(storageRef(storage, ocrInboxPath)); } catch { /* already gone */ }
@@ -681,9 +752,10 @@ function BankPageContent() {
       duplicates: duplicateIds.size,
       priceChanged: priceChanged.length,
       cancelled: cancelled.length,
-      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length
+      waitingReceipts: waitingReceipts.length,
+      total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length + waitingReceipts.length
     };
-  }, [visibleTransactions, recurring, duplicateIds]);
+  }, [visibleTransactions, recurring, duplicateIds, waitingReceipts]);
   // Heuristic category suggestions for uncategorised spending on the page.
   const suggestions = useMemo(() => {
     const map = new Map<string, ReturnType<typeof suggestCategory>>();
@@ -1036,7 +1108,14 @@ function BankPageContent() {
               <button type="button" className="finance-payments-delete" onClick={() => void cancelReceiptMatch()} aria-label={t("Close")}>✕</button>
             </div>
             {ocrCandidates.length === 0 ? (
-              <p style={{ fontSize: 12.5, opacity: 0.75, margin: "10px 0 0" }}>{t("No matching transaction found — you can attach it manually from the Receipt column on a row.")}</p>
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <p style={{ fontSize: 12.5, opacity: 0.75, margin: 0, flex: 1, minWidth: 240 }}>{t("No matching transaction yet — card payments usually reach the bank feed 1–3 days later.")}</p>
+                {isOwner && (ocrParsed?.amount ?? 0) > 0 ? (
+                  <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "ocr-queue"} onClick={() => void keepReceiptWaiting()}>
+                    ⏳ {busy === "ocr-queue" ? t("Saving…") : t("Keep waiting for the bank")}
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                 {ocrCandidates.map(candidate => (
@@ -1057,6 +1136,11 @@ function BankPageContent() {
                     </button>
                   </div>
                 ))}
+                {isOwner && (ocrParsed?.amount ?? 0) > 0 ? (
+                  <button type="button" style={{ ...attentionLink, fontSize: 12, alignSelf: "flex-start", marginTop: 2 }} disabled={busy === "ocr-queue"} onClick={() => void keepReceiptWaiting()}>
+                    ⏳ {t("None of these — keep waiting for the bank")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -1184,6 +1268,7 @@ function BankPageContent() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 1, fontSize: 11.5, opacity: 0.85 }}>
                         {attention.uncategorised ? <span>• {attention.uncategorised} {t("uncategorised")}</span> : null}
                         {attention.noReceipt ? <span>• {attention.noReceipt} {t("missing receipts")}</span> : null}
+                        {attention.waitingReceipts ? <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>• {attention.waitingReceipts} {t("receipts waiting for the bank")} →</button> : null}
                         {attention.duplicates ? <span>• {attention.duplicates} {t("possible duplicates")}</span> : null}
                         {suggestedRules.length ? <span>• {suggestedRules.length} {t("rule suggestions")}</span> : null}
                       </div>
@@ -1298,6 +1383,11 @@ function BankPageContent() {
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("No receipt needed")}</div>
                       </div>
                     </div>
+                    {waitingReceipts.length ? (
+                      <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12, color: "#b45309", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        ⏳ {waitingReceipts.length} {t("receipts waiting for the bank")} →
+                      </button>
+                    ) : null}
                     <div style={{ marginTop: "auto", paddingTop: 14 }}>
                     <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(37,99,235,0.06)" }}>
                       <strong style={{ fontSize: 12.5, display: "block" }}>{t("Keep your records complete.")}</strong>
@@ -1856,6 +1946,56 @@ function BankPageContent() {
                     ) : null}
                   </div>
                 </div>
+                {waitingReceipts.length ? (
+                  <div style={{ ...bankCard, borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.05)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <TileBadge bg="rgba(245,158,11,0.16)">⏳</TileBadge>
+                      <strong style={{ fontSize: 14.5 }}>{t("Waiting for the bank")} ({waitingReceipts.length})</strong>
+                      <span style={{ flex: 1 }} />
+                      <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {waitingReceipts.map(item => {
+                        const ageDays = item.createdAt ? Math.floor((Date.now() - item.createdAt.getTime()) / 86400000) : 0;
+                        const stale = ageDays >= 14;
+                        const picking = assignWaitingId === item.id;
+                        return (
+                          <div key={item.id} style={{ border: `1px solid ${stale ? "rgba(220,38,38,0.35)" : "rgba(120,120,140,0.18)"}`, borderRadius: 10, padding: "8px 12px", background: "var(--surface, #fff)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                              <FileBadge name={item.fileName} size={28} />
+                              <div style={{ flex: 1, minWidth: 180 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.fileName}</div>
+                                <div style={{ fontSize: 11, opacity: 0.65 }}>
+                                  {item.amount ? money(item.amount, currency0) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {stale ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
+                                </div>
+                              </div>
+                              {isOwner ? (
+                                <span style={{ display: "inline-flex", gap: 6 }}>
+                                  <button type="button" style={bankBtnSm} disabled={busy === `waiting-${item.id}`} onClick={() => setAssignWaitingId(picking ? null : item.id)}>{picking ? t("Cancel") : t("Assign to a transaction")}</button>
+                                  <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `waiting-${item.id}`} onClick={() => void deleteWaitingReceipt(item)}>{t("Remove")}</button>
+                                </span>
+                              ) : null}
+                            </div>
+                            {picking ? (
+                              <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", borderTop: "1px solid rgba(120,120,140,0.14)", paddingTop: 6 }}>
+                                {sortedTransactions.filter(tx => tx.amount < 0).slice(0, 40).map(tx => (
+                                  <button key={tx.id} type="button" disabled={busy === `waiting-${item.id}`} onClick={() => void assignWaitingReceipt(item, tx.id)}
+                                    style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" }}>
+                                    <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                                    <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.counterparty || tx.description}</strong>
+                                    <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
+                                    {tx.receiptPath ? <FileBadge name={tx.receiptName} size={16} /> : null}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 <div style={{ ...bankCard, padding: 0, overflow: "hidden" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 14.5 }}>{t("Receipts")}</strong>
