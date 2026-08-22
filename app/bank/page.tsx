@@ -936,7 +936,11 @@ function BankPageContent() {
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: drawerTx ? 440 : 0, transition: "padding-right 160ms" }}>
+      {/* With a transaction open the page becomes two columns: the list keeps a
+          comfortable width on the left and the details panel sits beside it,
+          starting under the app header instead of covering it. */}
+      <div className={drawerTx ? "bank-layout bank-layout--drawer" : "bank-layout"} style={{ maxWidth: drawerTx ? 1320 : 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 18, alignItems: "start", transition: "max-width 160ms" }}>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ---- Header ------------------------------------------------------ */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
@@ -1346,10 +1350,10 @@ function BankPageContent() {
                 {/* Filter bar: period, queue chips, search — then the category totals
                     for whatever the filters currently leave on screen. */}
                 <div style={{ ...bankCard, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "3px 6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "3px 4px" }}>
                       <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
-                      <strong style={{ fontSize: 12.5, minWidth: 96, textAlign: "center" }}>📅 {periodLabel}</strong>
+                      <strong style={{ fontSize: 12.5, minWidth: 84, textAlign: "center", whiteSpace: "nowrap" }}>📅 {periodLabel}</strong>
                       <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
                     </span>
                     <span style={{ width: 1, height: 22, background: "rgba(120,120,140,0.2)", margin: "0 2px" }} />
@@ -1367,7 +1371,7 @@ function BankPageContent() {
                             setTxAttention("none");
                             setTxFlow(key as "all" | "in" | "out");
                           }}
-                          style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "5px 12px",
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "5px 10px", whiteSpace: "nowrap",
                             border: active ? "1px solid transparent" : "1px solid rgba(120,120,140,0.22)",
                             background: active ? (dot || "#2563eb") : "transparent",
                             color: active ? "#fff" : "inherit" }}>
@@ -1377,7 +1381,7 @@ function BankPageContent() {
                       );
                     })}
                     <span style={{ flex: 1 }} />
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "5px 10px", minWidth: 190 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "5px 10px", flex: "1 1 96px", minWidth: 96, maxWidth: 230 }}>
                       <span aria-hidden="true" style={{ opacity: 0.5, fontSize: 12 }}>🔍</span>
                       <input type="search" value={txSearch} onChange={event => setTxSearch(event.target.value)} placeholder={t("Search transactions")}
                         aria-label={t("Search transactions")}
@@ -1391,7 +1395,7 @@ function BankPageContent() {
                       </button>
                     ) : null}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))", gap: 10 }}>
                     {categoryBreakdown.rows.slice(0, 5).map(row => {
                       const isUn = row.name === "__uncategorized__";
                       return (
@@ -1442,7 +1446,7 @@ function BankPageContent() {
                     </div>
                   ) : null}
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700, fontSize: 12.5 }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: drawerTx ? 640 : 700, fontSize: 12.5, tableLayout: "fixed" }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
                           {isOwner && selectMode ? (
@@ -1451,13 +1455,13 @@ function BankPageContent() {
                             </th>
                           ) : null}
                           <th style={thStyle}>{t("Merchant")}</th>
-                          <th style={{ ...thStyle, cursor: "pointer", width: 128 }} onClick={() => setSortAsc(value => !value)}>
+                          <th style={{ ...thStyle, cursor: "pointer", width: drawerTx ? 108 : 128 }} onClick={() => setSortAsc(value => !value)}>
                             {t("Date")} {sortAsc ? "↑" : "↓"}
                           </th>
-                          <th style={{ ...thStyle, width: 150 }}>{t("Category")}</th>
-                          <th style={{ ...thStyle, width: 88 }}>{t("Method")}</th>
-                          <th style={{ ...thStyle, width: 120 }}>{t("Receipt")}</th>
-                          <th style={{ ...thStyle, textAlign: "right", width: 118 }}>{t("Amount")}</th>
+                          <th style={{ ...thStyle, width: drawerTx ? 132 : 150 }}>{t("Category")}</th>
+                          <th style={{ ...thStyle, width: drawerTx ? 78 : 88 }}>{t("Method")}</th>
+                          <th style={{ ...thStyle, width: drawerTx ? 100 : 120 }}>{t("Receipt")}</th>
+                          <th style={{ ...thStyle, textAlign: "right", width: drawerTx ? 104 : 118 }}>{t("Amount")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1474,7 +1478,7 @@ function BankPageContent() {
                                   </td>
                                 ) : null}
                                 <td style={{ ...tdStyle, cursor: "pointer" }} onClick={() => openDrawer(transaction)} title={t("Open details")}>
-                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10, maxWidth: 280 }}>
+                                  <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                                     <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(transaction.counterparty || transaction.description || "x")}22`, color: avatarColor(transaction.counterparty || transaction.description || "x"), flexShrink: 0 }}>
                                       {initials(transaction.counterparty || transaction.description)}
                                     </span>
@@ -1500,7 +1504,7 @@ function BankPageContent() {
                                   </span>
                                 </td>
                                 <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75, cursor: "pointer" }} onClick={() => openDrawer(transaction)}>
-                                  {new Date(transaction.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}
+                                  {new Date(transaction.bookingDate).toLocaleDateString(undefined, drawerTx ? { day: "2-digit", month: "short" } : { day: "2-digit", month: "short", year: "numeric" })}
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
                                 <td style={tdStyle}>
@@ -1984,7 +1988,7 @@ function BankPageContent() {
 
       {/* ================= TRANSACTION DRAWER ================= */}
       {drawerTx ? (
-        <aside style={drawerStyle} aria-label={t("Transaction details")}>
+        <aside className="bank-drawer" style={drawerStyle} aria-label={t("Transaction details")}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px", borderBottom: "1px solid rgba(120,120,140,0.16)" }}>
             <button type="button" className="finance-payments-delete" onClick={() => setDrawerTxId(null)} aria-label={t("Close")}>✕</button>
             <div style={{ flex: 1 }}>
@@ -2117,6 +2121,7 @@ function BankPageContent() {
           ) : null}
         </aside>
       ) : null}
+      </div>
     </AppShell>
   );
 }
@@ -2149,7 +2154,7 @@ const countBadge: React.CSSProperties = { fontSize: 11, fontWeight: 800, backgro
 const recurringRow: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid rgba(120,120,140,0.1)" };
 const avatarStyle: React.CSSProperties = { width: 30, height: 30, borderRadius: 999, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800 };
 const attentionLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 11.5, cursor: "pointer", padding: 0, textAlign: "left" };
-const drawerStyle: React.CSSProperties = { position: "fixed", top: 0, right: 0, bottom: 0, width: 420, maxWidth: "100vw", background: "var(--surface, #fff)", borderLeft: "1px solid rgba(120,120,140,0.2)", boxShadow: "-12px 0 30px rgba(0,0,0,0.08)", display: "flex", flexDirection: "column", zIndex: 60 };
+const drawerStyle: React.CSSProperties = { position: "sticky", top: 12, alignSelf: "start", maxHeight: "calc(100vh - 24px)", minWidth: 0, background: "var(--surface, #fff)", border: "1px solid rgba(120,120,140,0.18)", borderRadius: 14, boxShadow: "0 8px 24px rgba(0,0,0,0.06)", display: "flex", flexDirection: "column", overflow: "hidden" };
 const drawerLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, opacity: 0.65, marginBottom: 4 };
 const cardFootLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" };
 const thStyle: React.CSSProperties = { textAlign: "left", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55, padding: "9px 18px" };
