@@ -427,7 +427,7 @@ struct BankSpendingView: View {
                     if !canViewFeed {
                         Text(fmt.t("Bank connections are managed by the workspace owner.")).font(.system(size: 13)).foregroundColor(.secondary)
                     } else {
-                        BankTabBar(model: model, fmt: fmt, isPhone: isPhone)
+                        BankTabBar(model: model, fmt: fmt, isPhone: isPhone, label: derived.periodLabel)
                         BankConnectionBar(connections: firebaseManager.bankConnections, fmt: fmt, background: cardBackground, isOwner: isOwner, model: model)
                         if firebaseManager.bankTransactions.isEmpty {
                             BankEmptyState(fmt: fmt, hasBank: !firebaseManager.bankConnections.filter(\.isLinked).isEmpty, background: cardBackground)
@@ -565,6 +565,7 @@ private struct BankTabBar: View {
     @ObservedObject var model: BankScreenModel
     let fmt: BankFormat
     let isPhone: Bool
+    let label: String
 
     var body: some View {
         if isPhone {
@@ -590,16 +591,17 @@ private struct BankTabBar: View {
                 .pickerStyle(.segmented).frame(maxWidth: 520)
                 .onChange(of: model.tab) { _ in model.selectedTxId = nil }
                 Spacer()
-                if model.tab != .transactions { BankPeriodControl(model: model, fmt: fmt) }
+                BankPeriodControl(model: model, fmt: fmt, label: label)
             }
         }
-        if isPhone && model.tab != .transactions { BankPeriodControl(model: model, fmt: fmt) }
+        if isPhone { BankPeriodControl(model: model, fmt: fmt, label: label) }
     }
 }
 
 private struct BankPeriodControl: View {
     @ObservedObject var model: BankScreenModel
     let fmt: BankFormat
+    let label: String
 
     var body: some View {
         HStack(spacing: 8) {
@@ -611,6 +613,7 @@ private struct BankPeriodControl: View {
             .pickerStyle(.segmented).frame(maxWidth: 220)
             .onChange(of: model.period) { _ in model.page = 1 }
             Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+            Text(label).font(.system(size: 12.5, weight: .bold)).lineLimit(1).frame(minWidth: 96)
             Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
         }
     }
@@ -1165,8 +1168,6 @@ private struct BankTransactionsSection: View {
 
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                BankPeriodStepper(model: model, fmt: fmt, label: d.periodLabel)
-                if !isPhone { Divider().frame(height: 20) }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         filterChip(fmt.t("All"), active: model.txAttention == .none && model.txFlow == .all, color: .accentColor) { model.txAttention = .none; model.txFlow = .all; model.page = 1 }
@@ -1253,27 +1254,6 @@ private struct BankTransactionsSection: View {
             .background(active ? color : Color.gray.opacity(0.13)).foregroundColor(active ? .white : .primary)
             .clipShape(Capsule())
         }.buttonStyle(.plain)
-    }
-}
-
-private struct BankPeriodStepper: View {
-    @ObservedObject var model: BankScreenModel
-    let fmt: BankFormat
-    let label: String
-    var body: some View {
-        HStack(spacing: 2) {
-            Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
-            Menu {
-                Button(fmt.t("Weekly")) { model.period = .week; model.page = 1 }
-                Button(fmt.t("Monthly")) { model.period = .month; model.page = 1 }
-                Button(fmt.t("Yearly")) { model.period = .year; model.page = 1 }
-            } label: {
-                Label(label, systemImage: "calendar").font(.system(size: 12.5, weight: .bold)).lineLimit(1)
-            }.menuStyle(.borderlessButton).fixedSize()
-            Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
-        }
-        .padding(.horizontal, 6).padding(.vertical, 3)
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.gray.opacity(0.25)))
     }
 }
 

@@ -1184,7 +1184,6 @@ function BankPageContent() {
                 ))}
               </div>
               <span style={{ flex: 1 }} />
-              {tab !== "transactions" ? (<>
               <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
                 {(["week", "month", "year"] as const).map(option => (
                   <button key={option} type="button" role="tab" aria-selected={view === option}
@@ -1199,7 +1198,6 @@ function BankPageContent() {
                 <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
                 <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
               </span>
-              </>) : null}
             </div>
 
             {/* ---- Connected account bar ---------------------------------- */}
@@ -1510,12 +1508,6 @@ function BankPageContent() {
                     for whatever the filters currently leave on screen. */}
                 <div style={{ ...bankCard, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: "3px 4px" }}>
-                      <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
-                      <strong style={{ fontSize: 12.5, minWidth: 84, textAlign: "center", whiteSpace: "nowrap" }}>📅 {periodLabel}</strong>
-                      <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
-                    </span>
-                    <span style={{ width: 1, height: 22, background: "rgba(120,120,140,0.2)", margin: "0 2px" }} />
                     {([
                       ["all", t("All"), ""],
                       ["attention", t("Needs attention"), "#f59e0b"],

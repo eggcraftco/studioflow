@@ -462,10 +462,8 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
             }
             return@LazyColumn
         }
-        if (tab != BankTab.Transactions) {
-            item {
-                PeriodRow(view, periodLabel, isCurrentPeriod, t, onView = { view = it; page = 1 }, onStep = ::stepPeriod)
-            }
+        item {
+            PeriodRow(view, periodLabel, isCurrentPeriod, t, onView = { view = it; page = 1 }, onStep = ::stepPeriod)
         }
 
         when (tab) {
@@ -586,7 +584,6 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
             BankTab.Transactions -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PeriodRow(view, periodLabel, isCurrentPeriod, t, onView = { view = it; page = 1 }, onStep = ::stepPeriod)
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(
                                 BankFlow.All to t("All"), BankFlow.Attention to t("Needs attention"),
