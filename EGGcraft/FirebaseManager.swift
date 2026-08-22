@@ -969,6 +969,9 @@ class FirebaseManager: ObservableObject {
     private var activityNotificationsListenerRegistration: ListenerRegistration?
     private var bankTransactionsListenerRegistration: ListenerRegistration?
     private var bankConnectionsListenerRegistration: ListenerRegistration?
+    private var bankRulesListenerRegistration: ListenerRegistration?
+    private var bankInboxListenerRegistration: ListenerRegistration?
+    private var bankPandleListenerRegistration: ListenerRegistration?
     private var bankFeedCompanyId: String = ""
     private var activityNotificationsCompanyId: String = ""
     private var locallyReadActivityNotificationIds: Set<String> = []
@@ -991,6 +994,10 @@ class FirebaseManager: ObservableObject {
     // Bank feed (read-only mirror of the web feature; owner-only per rules).
     @Published var bankTransactions: [StudioBankTransaction] = []
     @Published var bankConnections: [StudioBankConnection] = []
+    @Published var bankRules: [StudioBankRule] = []
+    @Published var bankWaitingReceipts: [StudioBankWaitingReceipt] = []
+    /// Category → default VAT code (Pandle mapping when saved, else the built-in defaults).
+    @Published var bankCategoryTax: [String: String] = bankDefaultCategoryTax
     @Published var currentWorkspaceRole: String = "owner"
     @Published var currentWorkspaceAssignedProjectsOnly: Bool = false
     @Published var currentWorkspaceManageProjectAssignments: Bool = false
@@ -3237,17 +3244,48 @@ class FirebaseManager: ObservableObject {
                 let items = (snapshot?.documents ?? []).map { StudioBankConnection(id: $0.documentID, data: $0.data()) }
                 DispatchQueue.main.async { self?.bankConnections = items }
             }
+        bankRulesListenerRegistration = base.collection("bankRules")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let items = (snapshot?.documents ?? []).map { StudioBankRule(id: $0.documentID, data: $0.data()) }
+                DispatchQueue.main.async { self?.bankRules = items }
+            }
+        bankInboxListenerRegistration = base.collection("bankReceiptInbox")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let items = (snapshot?.documents ?? []).map { StudioBankWaitingReceipt(id: $0.documentID, data: $0.data()) }
+                    .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+                DispatchQueue.main.async { self?.bankWaitingReceipts = items }
+            }
+        bankPandleListenerRegistration = base.collection("pandleConnection").document("main")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                var map = bankDefaultCategoryTax
+                if let mappings = snapshot?.data()?["mappings"] as? [[String: Any]], !mappings.isEmpty {
+                    map = [:]
+                    for item in mappings {
+                        if let category = item["category"] as? String, let tax = item["taxCode"] as? String { map[category] = tax }
+                    }
+                }
+                DispatchQueue.main.async { self?.bankCategoryTax = map }
+            }
     }
 
     func stopBankFeedRealtime(clearData: Bool = false) {
         bankTransactionsListenerRegistration?.remove()
         bankConnectionsListenerRegistration?.remove()
+        bankRulesListenerRegistration?.remove()
+        bankInboxListenerRegistration?.remove()
+        bankPandleListenerRegistration?.remove()
         bankTransactionsListenerRegistration = nil
         bankConnectionsListenerRegistration = nil
+        bankRulesListenerRegistration = nil
+        bankInboxListenerRegistration = nil
+        bankPandleListenerRegistration = nil
         bankFeedCompanyId = ""
         if clearData {
             bankTransactions = []
             bankConnections = []
+            bankRules = []
+            bankWaitingReceipts = []
+            bankCategoryTax = bankDefaultCategoryTax
         }
     }
 
