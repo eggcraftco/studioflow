@@ -15,15 +15,58 @@ data class StudioBankTransaction(
     val category: String,
     val categoryAuto: String,
     val txType: String,
+    val status: String,
     val hasReceipt: Boolean,
+    val receiptPath: String,
+    val receiptName: String,
+    val receiptNotNeeded: Boolean,
+    val linkedOrderId: String,
     val linkedOrderLabel: String,
+    val vatCode: String,
+    val note: String,
     val pandleConfirmed: Boolean
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
     val year: Int get() = bookingDate.take(4).toIntOrNull() ?: 0
     val month: Int get() = bookingDate.drop(5).take(2).toIntOrNull() ?: 0
+    val isSpending: Boolean get() = amount < 0
 }
+
+/** Categorisation rule: "merchant contains keyword → category". */
+data class StudioBankRule(val id: String, val keyword: String, val category: String)
+
+/**
+ * A receipt uploaded before its payment reached the feed; the server attaches it
+ * after a sync (or "Match now") once a single confident match exists.
+ */
+data class StudioBankWaitingReceipt(
+    val id: String,
+    val storagePath: String,
+    val fileName: String,
+    val amount: Double,
+    val date: String,
+    val source: String,
+    val createdAtMillis: Long?
+) {
+    val ageDays: Int get() = createdAtMillis?.let { ((System.currentTimeMillis() - it) / 86_400_000L).toInt().coerceAtLeast(0) } ?: 0
+}
+
+fun bankRuleFromDocument(id: String, data: Map<String, Any?>): StudioBankRule = StudioBankRule(
+    id = id,
+    keyword = ((data["keyword"] as? String) ?: "").lowercase(),
+    category = (data["category"] as? String) ?: ""
+)
+
+fun bankWaitingReceiptFromDocument(id: String, data: Map<String, Any?>): StudioBankWaitingReceipt = StudioBankWaitingReceipt(
+    id = id,
+    storagePath = (data["storagePath"] as? String) ?: "",
+    fileName = (data["fileName"] as? String) ?: "receipt",
+    amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
+    date = ((data["date"] as? String) ?: "").take(10),
+    source = (data["source"] as? String) ?: "web",
+    createdAtMillis = (data["createdAt"] as? Timestamp)?.toDate()?.time
+)
 
 data class StudioBankConnection(
     val id: String,
@@ -52,8 +95,15 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         category = (data["category"] as? String) ?: "",
         categoryAuto = (data["categoryAuto"] as? String) ?: "",
         txType = ((data["txType"] as? String) ?: "").uppercase(),
+        status = (data["status"] as? String) ?: "booked",
         hasReceipt = !((data["receiptPath"] as? String).isNullOrBlank()),
+        receiptPath = (data["receiptPath"] as? String) ?: "",
+        receiptName = (data["receiptName"] as? String) ?: "",
+        receiptNotNeeded = (data["receiptNotNeeded"] as? Boolean) ?: false,
+        linkedOrderId = (data["linkedOrderId"] as? String) ?: "",
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?: "",
+        vatCode = ((data["vatCode"] as? String) ?: "").uppercase(),
+        note = (data["note"] as? String) ?: "",
         pandleConfirmed = (pandle?.get("status") as? String) == "confirmed"
     )
 }

@@ -20,6 +20,11 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
+import uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX
+import uk.co.eggcraft.studioflow.data.model.StudioBankRule
+import uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt
+import uk.co.eggcraft.studioflow.data.model.bankRuleFromDocument
+import uk.co.eggcraft.studioflow.data.model.bankWaitingReceiptFromDocument
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.QuickReplyTemplateItem
@@ -70,6 +75,24 @@ data class SupportTicketUnreadSummary(
 data class StudioMessageThreadsBundle(
     val threads: List<StudioMessageThread> = emptyList(),
     val teamMembers: List<StudioMessageTeamMember> = emptyList()
+)
+
+/** Result of an OCR receipt upload: what was read and which transactions could match. */
+data class BankOcrCandidate(
+    val transactionId: String,
+    val score: Int,
+    val amount: Double,
+    val currency: String,
+    val bookingDate: String,
+    val merchant: String
+)
+
+data class BankOcrResult(
+    val inboxPath: String,
+    val fileName: String,
+    val amount: Double,
+    val date: String,
+    val candidates: List<BankOcrCandidate>
 )
 
 class StudioFlowRepository(
@@ -2437,6 +2460,148 @@ class StudioFlowRepository(
             }
         awaitClose { registration.remove() }
     }
+
+    fun bankRulesFlow(workspaceId: String): Flow<List<StudioBankRule>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankRules")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                trySend(snapshot?.documents?.map { bankRuleFromDocument(it.id, it.data.orEmpty()) } ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /** Receipts uploaded before their payment reached the feed (server attaches them later). */
+    fun bankWaitingReceiptsFlow(workspaceId: String): Flow<List<StudioBankWaitingReceipt>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankReceiptInbox")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                val items = snapshot?.documents?.map { bankWaitingReceiptFromDocument(it.id, it.data.orEmpty()) }
+                    ?.filter { it.storagePath.isNotBlank() }
+                    ?.sortedByDescending { it.createdAtMillis ?: 0L } ?: emptyList()
+                trySend(items)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /** Category → default VAT code (Pandle mapping when saved, else the built-in defaults). */
+    fun bankCategoryTaxFlow(workspaceId: String): Flow<Map<String, String>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(BANK_DEFAULT_CATEGORY_TAX); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("pandleConnection").document("main")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(BANK_DEFAULT_CATEGORY_TAX); return@addSnapshotListener }
+                val mappings = snapshot?.get("mappings") as? List<*>
+                val map = mappings?.mapNotNull { entry ->
+                    val row = entry as? Map<*, *> ?: return@mapNotNull null
+                    val category = row["category"] as? String ?: return@mapNotNull null
+                    val tax = row["taxCode"] as? String ?: return@mapNotNull null
+                    category to tax
+                }?.toMap()
+                trySend(if (map.isNullOrEmpty()) BANK_DEFAULT_CATEGORY_TAX else map)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    // ---- Bank owner actions (all owner-checked server-side) ----
+
+    private suspend fun bankCall(name: String, workspaceId: String, data: Map<String, Any?> = emptyMap()): Map<*, *> {
+        val payload = data.toMutableMap()
+        payload["companyId"] = workspaceId
+        val result = functions.getHttpsCallable(name).call(payload).await()
+        return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
+    }
+
+    private fun bankSafeFileName(name: String): String =
+        name.map { if (it.isLetterOrDigit() || it in "._-") it else '_' }.joinToString("").take(120).ifBlank { "receipt" }
+
+    suspend fun bankUpdateTransaction(workspaceId: String, transactionId: String, category: String, vatCode: String, note: String) {
+        bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "category" to category, "vatCode" to vatCode, "note" to note))
+    }
+
+    suspend fun bankSetReceiptNotNeeded(workspaceId: String, transactionId: String, value: Boolean) {
+        bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "receiptNotNeeded" to value))
+    }
+
+    suspend fun bankLinkOrder(workspaceId: String, transactionId: String, orderId: String) {
+        val payload = mutableMapOf<String, Any?>("transactionId" to transactionId)
+        if (orderId.isNotBlank()) payload["orderId"] = orderId
+        bankCall("bankLinkTransactionToOrder", workspaceId, payload)
+    }
+
+    suspend fun bankSync(workspaceId: String): Int =
+        ((bankCall("bankSyncTransactions", workspaceId, mapOf("force" to true))["imported"] as? Number)?.toInt()) ?: 0
+
+    suspend fun bankSaveRule(workspaceId: String, keyword: String, category: String) {
+        bankCall("bankSaveRule", workspaceId, mapOf("keyword" to keyword.lowercase(), "category" to category))
+    }
+
+    suspend fun bankDeleteRule(workspaceId: String, ruleId: String) {
+        bankCall("bankDeleteRule", workspaceId, mapOf("ruleId" to ruleId))
+    }
+
+    suspend fun bankAttachReceipt(workspaceId: String, transactionId: String, bytes: ByteArray, fileName: String, contentType: String) {
+        val path = "companies/$workspaceId/bank_receipts/$transactionId/${System.currentTimeMillis()}_${bankSafeFileName(fileName)}"
+        val metadata = StorageMetadata.Builder().setContentType(contentType).build()
+        storage.reference.child(path).putBytes(bytes, metadata).await()
+        bankCall("bankSetTransactionReceipt", workspaceId, mapOf("transactionId" to transactionId, "storagePath" to path, "fileName" to fileName))
+    }
+
+    suspend fun bankRemoveReceipt(workspaceId: String, transactionId: String) {
+        bankCall("bankSetTransactionReceipt", workspaceId, mapOf("transactionId" to transactionId, "storagePath" to "", "fileName" to ""))
+    }
+
+    suspend fun bankReceiptUrl(path: String): String = storage.reference.child(path).downloadUrl.await().toString()
+
+    /** Uploads to the OCR inbox and returns the parsed total/date plus scored candidates. */
+    suspend fun bankMatchReceipt(workspaceId: String, bytes: ByteArray, fileName: String, contentType: String): BankOcrResult {
+        val path = "companies/$workspaceId/bank_receipts/_inbox/${System.currentTimeMillis()}_${bankSafeFileName(fileName)}"
+        val metadata = StorageMetadata.Builder().setContentType(contentType).build()
+        storage.reference.child(path).putBytes(bytes, metadata).await()
+        val raw = bankCall("bankMatchReceipt", workspaceId, mapOf("storagePath" to path))
+        val parsed = raw["parsed"] as? Map<*, *>
+        val candidates = (raw["candidates"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            val id = row["transactionId"] as? String ?: return@mapNotNull null
+            BankOcrCandidate(
+                transactionId = id,
+                score = (row["score"] as? Number)?.toInt() ?: 0,
+                amount = (row["amount"] as? Number)?.toDouble() ?: 0.0,
+                currency = (row["currency"] as? String) ?: "GBP",
+                bookingDate = (row["bookingDate"] as? String) ?: "",
+                merchant = ((row["counterparty"] as? String).orEmpty().ifBlank { (row["description"] as? String).orEmpty() })
+            )
+        }
+        return BankOcrResult(
+            inboxPath = path,
+            fileName = fileName,
+            amount = (parsed?.get("amount") as? Number)?.toDouble() ?: 0.0,
+            date = (parsed?.get("date") as? String) ?: "",
+            candidates = candidates
+        )
+    }
+
+    suspend fun bankAssignInboxReceipt(workspaceId: String, inboxPath: String, transactionId: String, fileName: String) {
+        bankCall("bankAssignInboxReceipt", workspaceId, mapOf("storagePath" to inboxPath, "transactionId" to transactionId, "fileName" to fileName))
+    }
+
+    suspend fun bankQueueInboxReceipt(workspaceId: String, inboxPath: String, fileName: String, amount: Double, date: String) {
+        bankCall("bankQueueInboxReceipt", workspaceId, mapOf("storagePath" to inboxPath, "fileName" to fileName, "amount" to amount, "date" to date))
+    }
+
+    suspend fun bankDiscardInboxUpload(inboxPath: String) {
+        runCatching { storage.reference.child(inboxPath).delete().await() }
+    }
+
+    suspend fun bankDeleteWaitingReceipt(workspaceId: String, id: String) {
+        bankCall("bankDeleteInboxReceipt", workspaceId, mapOf("id" to id))
+    }
+
+    suspend fun bankMatchWaitingReceipts(workspaceId: String): Int =
+        ((bankCall("bankMatchWaitingReceipts", workspaceId)["matched"] as? Number)?.toInt()) ?: 0
 
     fun bankConnectionsFlow(workspaceId: String): Flow<List<StudioBankConnection>> = callbackFlow {
         if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }

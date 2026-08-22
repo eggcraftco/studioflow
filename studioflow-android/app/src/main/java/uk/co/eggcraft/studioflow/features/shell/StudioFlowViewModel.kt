@@ -47,6 +47,15 @@ sealed class PendingActivityNavigation {
     data class Support(val ticketId: String, val ticketType: String) : PendingActivityNavigation()
 }
 
+/** One tick of the bank feed listeners (combine needs a single carrier type). */
+private data class BankFeedBundle(
+    val transactions: List<uk.co.eggcraft.studioflow.data.model.StudioBankTransaction>,
+    val connections: List<uk.co.eggcraft.studioflow.data.model.StudioBankConnection>,
+    val rules: List<uk.co.eggcraft.studioflow.data.model.StudioBankRule>,
+    val waiting: List<uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt>,
+    val categoryTax: Map<String, String>
+)
+
 data class StudioFlowUiState(
     val loading: Boolean = true,
     val signingIn: Boolean = false,
@@ -91,6 +100,9 @@ data class StudioFlowUiState(
     val keepNotes: List<StudioKeepNote> = emptyList(),
     val bankTransactions: List<uk.co.eggcraft.studioflow.data.model.StudioBankTransaction> = emptyList(),
     val bankConnections: List<uk.co.eggcraft.studioflow.data.model.StudioBankConnection> = emptyList(),
+    val bankRules: List<uk.co.eggcraft.studioflow.data.model.StudioBankRule> = emptyList(),
+    val bankWaitingReceipts: List<uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt> = emptyList(),
+    val bankCategoryTax: Map<String, String> = uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX,
     val keepNotesSearch: String = "",
     val keepNotesSection: String = "notes",
     val keepCollaborationInvites: List<StudioKeepCollaborationInvite> = emptyList(),
@@ -2009,15 +2021,33 @@ class StudioFlowViewModel @JvmOverloads constructor(
             bankFeedJob = viewModelScope.launch {
                 kotlinx.coroutines.flow.combine(
                     repository.bankTransactionsFlow(workspace.id),
-                    repository.bankConnectionsFlow(workspace.id)
-                ) { transactions, connections -> transactions to connections }
+                    repository.bankConnectionsFlow(workspace.id),
+                    repository.bankRulesFlow(workspace.id),
+                    repository.bankWaitingReceiptsFlow(workspace.id),
+                    repository.bankCategoryTaxFlow(workspace.id)
+                ) { transactions, connections, rules, waiting, categoryTax ->
+                    BankFeedBundle(transactions, connections, rules, waiting, categoryTax)
+                }
                     .catch { }
-                    .collect { (transactions, connections) ->
-                        mutableState.update { it.copy(bankTransactions = transactions, bankConnections = connections) }
+                    .collect { bundle ->
+                        mutableState.update {
+                            it.copy(
+                                bankTransactions = bundle.transactions,
+                                bankConnections = bundle.connections,
+                                bankRules = bundle.rules,
+                                bankWaitingReceipts = bundle.waiting,
+                                bankCategoryTax = bundle.categoryTax
+                            )
+                        }
                     }
             }
         } else {
-            mutableState.update { it.copy(bankTransactions = emptyList(), bankConnections = emptyList()) }
+            mutableState.update {
+                it.copy(
+                    bankTransactions = emptyList(), bankConnections = emptyList(), bankRules = emptyList(),
+                    bankWaitingReceipts = emptyList(), bankCategoryTax = uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX
+                )
+            }
         }
         if (workspace.isOwner) {
             teamJob = viewModelScope.launch {
