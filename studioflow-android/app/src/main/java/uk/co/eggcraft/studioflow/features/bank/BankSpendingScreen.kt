@@ -345,12 +345,26 @@ private fun ConnectionPill(connection: StudioBankConnection, t: (String) -> Stri
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(connection.providerName.ifBlank { t("Bank") }.uppercase(), fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                    Box(Modifier.size(6.dp).background(if (connection.isLinked) Color(0xFF16A34A) else Color(0xFFF59E0B), CircleShape))
-                    Text(if (connection.isLinked) t("Connected") else t("Waiting for bank consent…"), fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                        color = if (connection.isLinked) Color(0xFF16A34A) else Color(0xFFB45309))
+                    val stateColor = when {
+                        !connection.isLinked -> Color(0xFFF59E0B)
+                        connection.needsReconnect -> Color(0xFFDC2626)
+                        connection.isSyncFailing -> Color(0xFFB45309)
+                        else -> Color(0xFF16A34A)
+                    }
+                    val stateLabel = when {
+                        !connection.isLinked -> t("Waiting for bank consent…")
+                        connection.needsReconnect -> t("Reconnect needed")
+                        connection.isSyncFailing -> t("Sync failing")
+                        else -> t("Connected")
+                    }
+                    Box(Modifier.size(6.dp).background(stateColor, CircleShape))
+                    Text(stateLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = stateColor)
                 }
                 connection.lastSyncedAtMillis?.let {
                     Text("${t("Last sync")} ${SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(it))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (connection.needsReconnect) {
+                    Text(t("The bank stopped sharing data — reconnect on the web to resume the feed."), fontSize = 11.sp, color = Color(0xFFDC2626))
                 }
             }
         }

@@ -52,6 +52,8 @@ struct StudioBankConnection: Identifiable, Equatable {
     let status: String
     let accountCount: Int
     let lastSyncedAt: Date?
+    /// Server-written consent health: "ok", "needs_reconsent" or "error".
+    let syncState: String
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -60,9 +62,12 @@ struct StudioBankConnection: Identifiable, Equatable {
         status = (data["status"] as? String) ?? ""
         accountCount = (data["accounts"] as? [Any])?.count ?? 0
         lastSyncedAt = (data["lastSyncedAt"] as? Timestamp)?.dateValue()
+        syncState = (data["syncState"] as? String) ?? "ok"
     }
 
     var isLinked: Bool { status == "linked" }
+    var needsReconnect: Bool { isLinked && syncState == "needs_reconsent" }
+    var isSyncFailing: Bool { isLinked && syncState != "ok" }
 }
 
 // TrueLayer transaction_category → short badge (mirrors the web TX_TYPE_META).
@@ -403,13 +408,21 @@ struct BankConnectionPill: View {
                 HStack(spacing: 6) {
                     Text(connection.providerName.isEmpty ? t("Bank", lang: lang) : connection.providerName.uppercased())
                         .font(.system(size: 13, weight: .bold))
-                    Circle().fill(connection.isLinked ? Color.green : Color.orange).frame(width: 6, height: 6)
-                    Text(connection.isLinked ? t("Connected", lang: lang) : t("Waiting for bank consent…", lang: lang))
-                        .font(.system(size: 11, weight: .bold)).foregroundColor(connection.isLinked ? .green : .orange)
+                    let stateColor: Color = !connection.isLinked ? .orange : connection.needsReconnect ? .red : connection.isSyncFailing ? .orange : .green
+                    let stateLabel = !connection.isLinked ? t("Waiting for bank consent…", lang: lang)
+                        : connection.needsReconnect ? t("Reconnect needed", lang: lang)
+                        : connection.isSyncFailing ? t("Sync failing", lang: lang)
+                        : t("Connected", lang: lang)
+                    Circle().fill(stateColor).frame(width: 6, height: 6)
+                    Text(stateLabel).font(.system(size: 11, weight: .bold)).foregroundColor(stateColor)
                 }
                 if let synced = connection.lastSyncedAt {
                     Text("\(t("Last sync", lang: lang)) \(synced.formatted(date: .numeric, time: .shortened))")
                         .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if connection.needsReconnect {
+                    Text(t("The bank stopped sharing data — reconnect on the web to resume the feed.", lang: lang))
+                        .font(.system(size: 11)).foregroundColor(.red)
                 }
             }
         }

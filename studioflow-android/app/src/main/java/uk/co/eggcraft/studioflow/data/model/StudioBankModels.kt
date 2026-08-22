@@ -31,9 +31,13 @@ data class StudioBankConnection(
     val providerLogo: String,
     val status: String,
     val accountCount: Int,
-    val lastSyncedAtMillis: Long?
+    val lastSyncedAtMillis: Long?,
+    /** Server-written consent health: "ok", "needs_reconsent" or "error". */
+    val syncState: String = "ok"
 ) {
     val isLinked: Boolean get() = status == "linked"
+    val needsReconnect: Boolean get() = isLinked && syncState == "needs_reconsent"
+    val isSyncFailing: Boolean get() = isLinked && syncState != "ok"
 }
 
 fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBankTransaction {
@@ -61,6 +65,7 @@ fun bankConnectionFromDocument(id: String, data: Map<String, Any?>): StudioBankC
         providerLogo = (data["providerLogo"] as? String) ?: "",
         status = (data["status"] as? String) ?: "",
         accountCount = (data["accounts"] as? List<*>)?.size ?: 0,
-        lastSyncedAtMillis = (data["lastSyncedAt"] as? Timestamp)?.toDate()?.time
+        lastSyncedAtMillis = (data["lastSyncedAt"] as? Timestamp)?.toDate()?.time,
+        syncState = (data["syncState"] as? String) ?: "ok"
     )
 }

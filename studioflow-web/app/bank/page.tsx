@@ -27,6 +27,9 @@ type BankConnection = {
   status: string;
   accounts: BankAccountInfo[];
   lastSyncedAt: Date | null;
+  // Server-written health of the consent: "ok" | "needs_reconsent" | "error".
+  syncState: string;
+  lastSyncError: string;
 };
 type BankTransaction = {
   id: string;
@@ -250,7 +253,9 @@ function BankPageContent() {
             providerLogo: String(data.providerLogo || ""),
             status: String(data.status || ""),
             accounts: Array.isArray(data.accounts) ? (data.accounts as BankAccountInfo[]) : [],
-            lastSyncedAt: toDate(data.lastSyncedAt)
+            lastSyncedAt: toDate(data.lastSyncedAt),
+            syncState: String(data.syncState || "ok"),
+            lastSyncError: String(data.lastSyncError || "")
           };
         }));
       }
@@ -765,9 +770,11 @@ function BankPageContent() {
       priceChanged: priceChanged.length,
       cancelled: cancelled.length,
       waitingReceipts: waitingReceipts.length,
+      brokenConnections: connections.filter(item => item.status === "linked" && item.syncState !== "ok").length,
       total: uncategorised.length + noReceipt.length + duplicateIds.size + priceChanged.length + cancelled.length + waitingReceipts.length
+        + connections.filter(item => item.status === "linked" && item.syncState !== "ok").length
     };
-  }, [visibleTransactions, recurring, duplicateIds, waitingReceipts]);
+  }, [visibleTransactions, recurring, duplicateIds, waitingReceipts, connections]);
   // Heuristic category suggestions for uncategorised spending on the page.
   const suggestions = useMemo(() => {
     const map = new Map<string, ReturnType<typeof suggestCategory>>();
@@ -1204,18 +1211,32 @@ function BankPageContent() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={connection.providerLogo} alt="" width={34} height={34} style={{ borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)" }} />
                     ) : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <strong style={{ fontSize: 13.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{connection.providerName || t("Bank")}</strong>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: connection.status === "linked" ? "#16a34a" : "#b45309" }}>
-                          <span style={{ width: 6, height: 6, borderRadius: 999, background: connection.status === "linked" ? "#16a34a" : "#f59e0b", display: "inline-block" }} />
-                          {connection.status === "linked" ? t("Connected") : t("Waiting for bank consent…")}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, opacity: 0.6 }}>
-                        {connection.lastSyncedAt ? `${t("Last sync")} ${connection.lastSyncedAt.toLocaleString()}` : ""}
-                      </div>
-                    </div>
+                    {(() => {
+                      const unhealthy = connection.status === "linked" && connection.syncState !== "ok";
+                      const reconsent = connection.syncState === "needs_reconsent";
+                      const color = connection.status !== "linked" ? "#b45309" : reconsent ? "#dc2626" : unhealthy ? "#b45309" : "#16a34a";
+                      const label = connection.status !== "linked" ? t("Waiting for bank consent…") : reconsent ? t("Reconnect needed") : unhealthy ? t("Sync failing") : t("Connected");
+                      return (
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <strong style={{ fontSize: 13.5, textTransform: "uppercase", letterSpacing: 0.3 }}>{connection.providerName || t("Bank")}</strong>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color }}>
+                              <span style={{ width: 6, height: 6, borderRadius: 999, background: color, display: "inline-block" }} />
+                              {label}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, opacity: 0.6 }}>
+                            {connection.lastSyncedAt ? `${t("Last sync")} ${connection.lastSyncedAt.toLocaleString()}` : ""}
+                            {unhealthy && connection.lastSyncError ? <span title={connection.lastSyncError}> · {reconsent ? t("The bank stopped sharing data — reconnect to resume the feed.") : connection.lastSyncError.slice(0, 80)}</span> : null}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {isOwner && connection.status === "linked" && connection.syncState === "needs_reconsent" ? (
+                      <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={{ ...bankBtnSm, background: "#dc2626", color: "#fff", borderColor: "#dc2626" }}>
+                        ⟳ {busy === "connect" ? t("Opening your bank…") : t("Reconnect")}
+                      </button>
+                    ) : null}
                     {isOwner ? (
                       <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
                         onClick={() => void removeConnection(connection)} aria-label={t("Disconnect")} title={t("Disconnect")}
@@ -1280,6 +1301,7 @@ function BankPageContent() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 1, fontSize: 11.5, opacity: 0.85 }}>
                         {attention.uncategorised ? <span>• {attention.uncategorised} {t("uncategorised")}</span> : null}
                         {attention.noReceipt ? <span>• {attention.noReceipt} {t("missing receipts")}</span> : null}
+                        {attention.brokenConnections ? <span style={{ color: "#dc2626", fontWeight: 700 }}>• {attention.brokenConnections} {t("bank connection needs reconnecting")}</span> : null}
                         {attention.waitingReceipts ? <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>• {attention.waitingReceipts} {t("receipts waiting for the bank")} →</button> : null}
                         {attention.duplicates ? <span>• {attention.duplicates} {t("possible duplicates")}</span> : null}
                         {suggestedRules.length ? <span>• {suggestedRules.length} {t("rule suggestions")}</span> : null}

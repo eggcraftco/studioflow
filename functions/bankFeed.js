@@ -288,8 +288,80 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     // Registers the workspace for the scheduled background sync.
     await db().collection("companies").doc(companyId).set({ bankFeedEnabled: true }, { merge: true });
 
-    return { status: "linked", accounts, imported };
+    // Reconnecting the same bank: retire older connections that cover the same
+    // accounts so the page does not show two HSBC rows. Transactions are keyed
+    // by account id, so they were merged already; just re-point connectionId.
+    let replaced = 0;
+    try {
+      const accountIds = new Set(accounts.map((account) => account.id));
+      const others = await connectionsRef(companyId).where("status", "==", "linked").get();
+      for (const other of others.docs) {
+        if (other.id === state) continue;
+        const otherAccounts = Array.isArray(other.get("accounts")) ? other.get("accounts") : [];
+        if (!otherAccounts.some((account) => accountIds.has(account?.id))) continue;
+        let cursor = null;
+        for (let page = 0; page < 20; page += 1) {
+          let queryRef = transactionsRef(companyId).where("connectionId", "==", other.id).orderBy("__name__").limit(400);
+          if (cursor) queryRef = queryRef.startAfter(cursor);
+          const txSnap = await queryRef.get();
+          if (txSnap.empty) break;
+          const batch = db().batch();
+          txSnap.docs.forEach((txDoc) => batch.set(txDoc.ref, { connectionId: state }, { merge: true }));
+          await batch.commit();
+          cursor = txSnap.docs[txSnap.docs.length - 1];
+          if (txSnap.size < 400) break;
+        }
+        await tokensRef(companyId).doc(other.id).delete().catch(() => {});
+        await other.ref.delete();
+        replaced += 1;
+      }
+    } catch (error) {
+      console.warn("bankFinalizeRequisition replace failed:", error?.message || error);
+    }
+
+    return { status: "linked", accounts, imported, replaced };
   });
+
+  // The bank can stop serving data while our stored consent still says
+  // "linked" (90-day Open Banking consent lapses, bank-side revocation,
+  // re-authentication demanded). Classify the failure so the clients can show
+  // "Reconnect needed" instead of a green Connected dot, and tell the owner once.
+  function classifySyncError(error) {
+    const message = String(error?.message || error || "");
+    const status = Number(error?.tlStatus) || 0;
+    if (status === 429) return { kind: "rate_limited", message };
+    if (status === 401 || status === 403 || /access denied|access_denied|invalid_grant|consent|unauthori[sz]ed|reconnect/i.test(message)) {
+      return { kind: "needs_reconsent", message: message.slice(0, 300) };
+    }
+    return { kind: "error", message: message.slice(0, 300) };
+  }
+
+  async function recordSyncFailure(companyId, doc, failure) {
+    const data = doc.data() || {};
+    const failures = (Number(data.syncFailures) || 0) + 1;
+    // One-off blips stay "ok"; a consent problem flips straight away, anything
+    // else after two consecutive failures.
+    const nextState = failure.kind === "needs_reconsent" ? "needs_reconsent" : failures >= 2 ? "error" : (data.syncState || "ok");
+    await doc.ref.set({
+      syncState: nextState,
+      syncFailures: failures,
+      lastSyncError: failure.message,
+      lastSyncErrorAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    if (nextState !== "ok" && data.syncState !== nextState && typeof notifyCompany === "function") {
+      const bank = cleanText(data.providerName, 80) || "Bank";
+      await notifyCompany(companyId, {
+        id: `bankSync_${doc.id}`,
+        type: "bank_connection_attention",
+        title: nextState === "needs_reconsent" ? "Bank connection needs reconnecting" : "Bank sync is failing",
+        message: nextState === "needs_reconsent"
+          ? `${bank}: the bank stopped sharing data (consent expired or revoked). Open Banking and reconnect to keep the feed flowing.`
+          : `${bank}: the last ${failures} syncs failed (${failure.message.slice(0, 120)}).`,
+        route: "bank",
+        source: "bankSync"
+      }).catch((error) => console.warn("bank sync notification failed:", error?.message || error));
+    }
+  }
 
   // Shared by the manual Refresh callable and the scheduled background sync.
   async function syncCompanyConnections(companyId, { force = false } = {}) {
@@ -310,6 +382,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
         continue;
       }
       let ok = false;
+      let failure = null; // { kind: "needs_reconsent" | "error" | "rate_limited", message }
       try {
         const accessToken = await accessTokenForConnection(companyId, doc.id);
         const accounts = Array.isArray(data.accounts) ? data.accounts : [];
@@ -320,14 +393,24 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
           } catch (error) {
             console.warn("bank sync account failed:", account.id, error?.message || error);
             if (error?.tlStatus === 429) skipped += 1;
+            if (!failure || failure.kind === "rate_limited") failure = classifySyncError(error);
           }
         }
       } catch (error) {
         console.warn("bank sync connection failed:", doc.id, error?.message || error);
+        failure = classifySyncError(error);
       }
       if (ok) {
         synced += 1;
-        await doc.ref.set({ lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        await doc.ref.set({
+          lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+          syncState: "ok",
+          syncFailures: 0,
+          lastSyncError: admin.firestore.FieldValue.delete(),
+          lastSyncErrorAt: admin.firestore.FieldValue.delete()
+        }, { merge: true });
+      } else if (failure && failure.kind !== "rate_limited") {
+        await recordSyncFailure(companyId, doc, failure);
       }
     }
 
