@@ -4862,6 +4862,9 @@ function SupportTicketsSection({
       const summary = await getSupportTicketUnreadSummary(workspace);
       onSupportUnreadChanged(supportUnreadTotal(summary));
       setUnreadTicketIds(supportUnreadTicketIds(summary));
+      // This call runs on mount for everyone, so it is what makes the Website
+      // tab visible without first opening the NivaDesk Support tab.
+      if (summary?.isSupportAdmin) setIsSupportAdmin(true);
     } catch {
       // Keep the currently visible count if unread summary is temporarily unavailable.
     }
@@ -4929,6 +4932,11 @@ function SupportTicketsSection({
     void loadTickets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id, ticketMode]);
+
+  useEffect(() => {
+    void refreshSupportUnreadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id]);
 
   async function loadTickets() {
     setLoadingTickets(true);

@@ -74,6 +74,7 @@ export type TicketMutationResult = {
 
 export type SupportTicketUnreadSummary = {
   ok?: boolean;
+  isSupportAdmin?: boolean;
   totalUnread?: number;
   unreadCount?: number;
   appSupportUnread?: number;
