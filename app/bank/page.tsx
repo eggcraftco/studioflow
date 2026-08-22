@@ -541,6 +541,18 @@ function BankPageContent() {
       setBusy(null);
     }
   }
+  async function matchWaitingNow() {
+    setBusy("waiting-match");
+    setError(null);
+    try {
+      const result = await call<{ matched: number }>("bankMatchWaitingReceipts", {});
+      setStatus(result.matched ? `${result.matched} ${t("receipts attached.")}` : t("No confident match yet — the payment may not have reached the bank."));
+    } catch (matchError) {
+      setError(matchError instanceof Error ? matchError.message : "Could not match the receipts.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function deleteWaitingReceipt(item: WaitingReceipt) {
     if (!window.confirm(t("Remove this waiting receipt?"))) return;
     setBusy(`waiting-${item.id}`);
@@ -1953,6 +1965,7 @@ function BankPageContent() {
                       <strong style={{ fontSize: 14.5 }}>{t("Waiting for the bank")} ({waitingReceipts.length})</strong>
                       <span style={{ flex: 1 }} />
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
+                      {isOwner ? <button type="button" style={bankBtnSm} disabled={busy === "waiting-match"} onClick={() => void matchWaitingNow()}>⟳ {busy === "waiting-match" ? t("Matching…") : t("Match now")}</button> : null}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {waitingReceipts.map(item => {
