@@ -8,6 +8,23 @@ import FirebaseFirestore
 
 // MARK: - Extra models
 
+/// Owner-defined payee: merges the bank names that mean the same vendor and can
+/// mark the payment as repeating even when the dates wander (payroll, rent paid
+/// by hand). Automatic detection can never infer either of those.
+struct StudioBankVendor: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let keys: [String]
+    let cadence: BankRecurringCadence
+
+    init(id: String, data: [String: Any]) {
+        self.id = id
+        name = (data["name"] as? String) ?? ""
+        keys = ((data["keys"] as? [Any]) ?? []).compactMap { ($0 as? String)?.lowercased() }
+        cadence = BankRecurringCadence(rawValue: (data["cadence"] as? String) ?? "monthly") ?? .monthly
+    }
+}
+
 struct StudioBankRule: Identifiable, Equatable {
     let id: String
     let keyword: String
@@ -68,6 +85,8 @@ struct BankRecurringSpend: Identifiable, Equatable {
     var id: String { key }
     let key: String
     let merchant: String
+    /// Set when the group comes from an owner-defined vendor rather than detection.
+    let vendorId: String?
     let cadence: BankRecurringCadence
     let typicalAmount: Double
     let currency: String
@@ -78,8 +97,10 @@ struct BankRecurringSpend: Identifiable, Equatable {
     let monthlyEquivalent: Double
     let priceChange: (previous: Double, current: Double)?
 
+    var manual: Bool { vendorId != nil }
+
     static func == (a: BankRecurringSpend, b: BankRecurringSpend) -> Bool {
-        a.key == b.key && a.typicalAmount == b.typicalAmount && a.occurrences == b.occurrences && a.active == b.active && a.lastDate == b.lastDate
+        a.key == b.key && a.typicalAmount == b.typicalAmount && a.occurrences == b.occurrences && a.active == b.active && a.lastDate == b.lastDate && a.vendorId == b.vendorId
     }
 }
 
@@ -156,29 +177,47 @@ private func bankMonthlyFactor(_ cadence: BankRecurringCadence) -> Double {
 
 // MARK: - Recurring
 
-func bankDetectRecurring(_ transactions: [StudioBankTransaction]) -> [BankRecurringSpend] {
+/// merchant key → vendor, so aliases collapse into one group everywhere.
+func bankVendorKeyMap(_ vendors: [StudioBankVendor]) -> [String: StudioBankVendor] {
+    var map: [String: StudioBankVendor] = [:]
+    for vendor in vendors { for key in vendor.keys { map[key] = vendor } }
+    return map
+}
+
+func bankDetectRecurring(_ transactions: [StudioBankTransaction], vendors: [StudioBankVendor] = []) -> [BankRecurringSpend] {
+    let byKey = bankVendorKeyMap(vendors)
     var groups: [String: [(tx: StudioBankTransaction, time: Double)]] = [:]
     for tx in transactions where tx.amount < 0 && !tx.bookingDate.isEmpty {
-        let key = bankRecurringMerchantKey(tx)
-        guard key.count >= 3 else { continue }
+        let rawKey = bankRecurringMerchantKey(tx)
+        guard rawKey.count >= 3 else { continue }
+        // Aliases collapse: every bank name the owner grouped shares one bucket.
+        let key = byKey[rawKey]?.id ?? rawKey
         groups[key, default: []].append((tx, bankParseDay(tx.bookingDate)))
     }
     var results: [BankRecurringSpend] = []
     let now = Date().timeIntervalSince1970
-    for (key, entries) in groups where entries.count >= 3 {
+    for (key, entries) in groups {
+        let vendor = vendors.first { $0.id == key }
+        // An owner-marked vendor is taken at its word: one payment is enough and
+        // the gap/amount tests are skipped, because payroll is paid by hand.
+        guard entries.count >= (vendor != nil ? 1 : 3) else { continue }
         let sorted = entries.sorted { $0.time < $1.time }
         var unique: [(tx: StudioBankTransaction, time: Double)] = []
         for entry in sorted where unique.last?.time != entry.time { unique.append(entry) }
-        guard unique.count >= 3 else { continue }
+        guard unique.count >= (vendor != nil ? 1 : 3) else { continue }
         let intervals = (1..<unique.count).map { (unique[$0].time - unique[$0 - 1].time) / bankDayMs }
-        guard let cadence = bankCadence(forInterval: bankMedian(intervals)) else { continue }
+        guard let cadence = vendor?.cadence ?? bankCadence(forInterval: bankMedian(intervals)) else { continue }
         let expected = bankCadenceDays(cadence)
-        let agreeing = intervals.filter { bankCadence(forInterval: $0) == cadence }.count
-        guard Double(agreeing) / Double(intervals.count) >= 0.6 else { continue }
+        if vendor == nil {
+            let agreeing = intervals.filter { bankCadence(forInterval: $0) == cadence }.count
+            guard Double(agreeing) / Double(intervals.count) >= 0.6 else { continue }
+        }
         let amounts = unique.map { abs($0.tx.amount) }
         let typical = bankMedian(amounts)
-        let stable = amounts.filter { abs($0 - typical) <= typical * 0.3 }.count
-        guard Double(stable) / Double(amounts.count) >= 0.6 else { continue }
+        if vendor == nil {
+            let stable = amounts.filter { abs($0 - typical) <= typical * 0.3 }.count
+            guard Double(stable) / Double(amounts.count) >= 0.6 else { continue }
+        }
         let last = unique[unique.count - 1]
         let previousTypical = bankMedian(Array(amounts.dropLast()))
         let lastAmount = amounts[amounts.count - 1]
@@ -186,14 +225,16 @@ func bankDetectRecurring(_ transactions: [StudioBankTransaction]) -> [BankRecurr
             ? (previousTypical, lastAmount) : nil
         results.append(BankRecurringSpend(
             key: key,
-            merchant: last.tx.counterparty.isEmpty ? last.tx.description : last.tx.counterparty,
+            merchant: vendor.map { $0.name.isEmpty ? last.tx.merchant : $0.name } ?? (last.tx.counterparty.isEmpty ? last.tx.description : last.tx.counterparty),
+            vendorId: vendor?.id,
             cadence: cadence,
             typicalAmount: typical,
             currency: last.tx.currency.isEmpty ? "GBP" : last.tx.currency,
             occurrences: unique.count,
             lastDate: last.tx.bookingDate,
             nextExpected: bankIsoDay(last.time + expected * bankDayMs),
-            active: now - last.time <= expected * bankDayMs * 1.6,
+            // Hand-paid vendors get a longer grace period before they read as stopped.
+            active: now - last.time <= expected * bankDayMs * (vendor != nil ? 2.4 : 1.6),
             monthlyEquivalent: typical * bankMonthlyFactor(cadence),
             priceChange: priceChange
         ))

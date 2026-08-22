@@ -37,6 +37,13 @@ data class StudioBankTransaction(
 data class StudioBankRule(val id: String, val keyword: String, val category: String)
 
 /**
+ * A payee the owner grouped by hand: every merchant key in [keys] counts as the
+ * same payment, and the feed treats it as recurring on [cadence] even when the
+ * automatic detector would not.
+ */
+data class StudioBankVendor(val id: String, val name: String, val keys: List<String>, val cadence: BankCadence)
+
+/**
  * A receipt uploaded before its payment reached the feed; the server attaches it
  * after a sync (or "Match now") once a single confident match exists.
  */
@@ -56,6 +63,17 @@ fun bankRuleFromDocument(id: String, data: Map<String, Any?>): StudioBankRule = 
     id = id,
     keyword = ((data["keyword"] as? String) ?: "").lowercase(),
     category = (data["category"] as? String) ?: ""
+)
+
+fun bankVendorFromDocument(id: String, data: Map<String, Any?>): StudioBankVendor = StudioBankVendor(
+    id = id,
+    name = (data["name"] as? String) ?: "",
+    keys = (data["keys"] as? List<*>)?.mapNotNull { (it as? String)?.trim()?.lowercase()?.ifBlank { null } } ?: emptyList(),
+    cadence = when ((data["cadence"] as? String)?.lowercase()) {
+        "weekly" -> BankCadence.Weekly
+        "yearly" -> BankCadence.Yearly
+        else -> BankCadence.Monthly
+    }
 )
 
 fun bankWaitingReceiptFromDocument(id: String, data: Map<String, Any?>): StudioBankWaitingReceipt = StudioBankWaitingReceipt(

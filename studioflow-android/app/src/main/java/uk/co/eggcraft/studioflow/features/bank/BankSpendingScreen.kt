@@ -342,7 +342,8 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     val incomingTotal = visible.filter { it.amount > 0 }.sumOf { it.amount }
     val incomingCount = visible.count { it.amount > 0 }
     val delta = if (previousSpent > 0) (spentTotal - previousSpent) / previousSpent * 100 else null
-    val recurring = remember(transactions) { bankDetectRecurring(transactions) }
+    val vendors = state.bankVendors
+    val recurring = remember(transactions, vendors) { bankDetectRecurring(transactions, vendors) }
     val recurringKeys = remember(recurring) { recurring.map { it.key }.toSet() }
     val duplicates = remember(visible) { bankDetectDuplicates(visible) }
     val activeRecurring = recurring.filter { it.active }
@@ -659,7 +660,10 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                         HorizontalDivider()
                         if (recurring.isEmpty()) Text(t("No recurring payments detected yet."), Modifier.padding(20.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         recurring.forEach { item ->
-                            RecurringRow(item, t, locale, fmt) { search = item.key; flow = BankFlow.Spending; tab = BankTab.Transactions }
+                            RecurringRow(item, t, locale, fmt) {
+                                search = if (item.manual) item.merchant else item.key
+                                flow = BankFlow.Spending; tab = BankTab.Transactions
+                            }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
                     }
@@ -851,8 +855,27 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 tx = selectedTx, t = t, locale = locale, fmt = fmt, isOwner = isOwner,
                 categoryTax = categoryTax, rules = rules, orders = state.orders,
                 suggestion = suggestions[selectedTx.id], orderSuggestion = orderSuggestions[selectedTx.id],
-                isRecurring = recurringKeys.contains(bankRecurringMerchantKey(selectedTx)),
-                busy = busy,
+                isRecurring = recurringKeys.contains(bankRecurringMerchantKey(selectedTx)) ||
+                    vendors.any { it.keys.contains(bankRecurringMerchantKey(selectedTx)) },
+                vendors = vendors, busy = busy,
+                onMarkRecurring = { vendorId, cadence ->
+                    run("vendor-${selectedTx.id}") {
+                        repository.bankSaveVendor(
+                            workspaceId,
+                            vendorId,
+                            if (vendorId.isBlank()) selectedTx.merchant else "",
+                            bankRecurringMerchantKey(selectedTx),
+                            cadence
+                        )
+                        if (vendorId.isBlank()) t("Marked as recurring.") else t("Merged with the other payments.")
+                    }
+                },
+                onUnmarkRecurring = { vendorId ->
+                    run("vendor-${selectedTx.id}") {
+                        repository.bankDeleteVendor(workspaceId, vendorId, bankRecurringMerchantKey(selectedTx))
+                        t("No longer treated as recurring.")
+                    }
+                },
                 onSave = { category, vat, note, orderId, createRule, keyword ->
                     run("drawer") {
                         repository.bankUpdateTransaction(workspaceId, selectedTx.id, category, vat, note)
@@ -1116,6 +1139,7 @@ private fun RecurringRow(item: BankRecurringSpend, t: (String) -> String, locale
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(item.merchant, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (item.manual) Chip(t("Marked by you"), BLUE)
                 if (!item.active) Chip(t("Possibly cancelled"), AMBER)
                 item.priceChange?.let { (previous, current) ->
                     Chip("${if (current > previous) "↑" else "↓"} ${fmt(previous, item.currency)} → ${fmt(current, item.currency)}", if (current > previous) RED else GREEN)
@@ -1315,7 +1339,9 @@ private fun TransactionDetailSheet(
     categoryTax: Map<String, String>, rules: List<StudioBankRule>, orders: List<uk.co.eggcraft.studioflow.data.model.StudioOrder>,
     suggestion: uk.co.eggcraft.studioflow.data.model.BankCategorySuggestion?,
     orderSuggestion: uk.co.eggcraft.studioflow.data.model.BankOrderLinkSuggestion?,
-    isRecurring: Boolean, busy: String?,
+    isRecurring: Boolean,
+    vendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor>, busy: String?,
+    onMarkRecurring: (String, String) -> Unit, onUnmarkRecurring: (String) -> Unit,
     onSave: (String, String, String, String, Boolean, String) -> Unit,
     onAttach: () -> Unit, onOpenReceipt: () -> Unit, onRemoveReceipt: () -> Unit, onToggleNotNeeded: (Boolean) -> Unit
 ) {
@@ -1326,6 +1352,10 @@ private fun TransactionDetailSheet(
     var ruleKeyword by remember(tx.id) { mutableStateOf(bankSuggestRuleKeyword(tx)) }
     var vatMenu by remember { mutableStateOf(false) }
     var orderMenu by remember { mutableStateOf(false) }
+    var cadenceMenu by remember { mutableStateOf(false) }
+    var vendorMenu by remember { mutableStateOf(false) }
+    val merchantKey = remember(tx.id) { bankRecurringMerchantKey(tx) }
+    val vendor = vendors.firstOrNull { it.keys.contains(merchantKey) }
     val rankedOrders = remember(tx.id, orders) { bankRankOrders(tx, orders).take(40).map { it.first } }
     val canSuggestRule = tx.isSpending && isOwner && category.isNotBlank() &&
         rules.none { "${tx.counterparty} ${tx.description}".lowercase().contains(it.keyword) }
@@ -1442,9 +1472,54 @@ private fun TransactionDetailSheet(
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("${t("Recurring")}: ${if (isRecurring) t("Part of a recurring payment") else t("This transaction doesn't appear to repeat.")}",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (vendor != null) {
+                Text("${t("Recurring")}: ${t("Marked as recurring")} · ${t(cadenceLabel(vendor.cadence))}",
+                    fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)
+                Text("${t("Grouped as")} “${vendor.name.ifBlank { tx.merchant }}”",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isOwner) {
+                    TextButton(onClick = { onUnmarkRecurring(vendor.id) }, enabled = busy == null, contentPadding = PaddingValues(0.dp)) {
+                        Text(t("Stop treating as recurring"), fontSize = 12.sp, color = RED)
+                    }
+                }
+            } else {
+                Text("${t("Recurring")}: ${if (isRecurring) t("Part of a recurring payment") else t("This transaction doesn't appear to repeat.")}",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isOwner && tx.isSpending) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box {
+                            AssistChip(onClick = { cadenceMenu = true },
+                                label = { Text(t("Mark as recurring"), fontSize = 12.sp) },
+                                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp)) })
+                            DropdownMenu(expanded = cadenceMenu, onDismissRequest = { cadenceMenu = false }) {
+                                listOf("weekly" to "Weekly", "monthly" to "Monthly", "yearly" to "Yearly").forEach { (value, label) ->
+                                    DropdownMenuItem(text = { Text(t(label), fontSize = 13.sp) },
+                                        onClick = { cadenceMenu = false; onMarkRecurring("", value) })
+                                }
+                            }
+                        }
+                        if (vendors.isNotEmpty()) {
+                            Box {
+                                AssistChip(onClick = { vendorMenu = true }, label = { Text(t("Same payee as"), fontSize = 12.sp) })
+                                DropdownMenu(expanded = vendorMenu, onDismissRequest = { vendorMenu = false }) {
+                                    vendors.forEach { item ->
+                                        DropdownMenuItem(text = { Text(item.name.ifBlank { item.keys.first() }, fontSize = 13.sp) },
+                                            onClick = {
+                                                vendorMenu = false
+                                                onMarkRecurring(item.id, when (item.cadence) {
+                                                    BankCadence.Weekly -> "weekly"
+                                                    BankCadence.Yearly -> "yearly"
+                                                    else -> "monthly"
+                                                })
+                                            })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         Text("${t("Activity & sync")}: ${if (tx.pandleConfirmed) "✓ ${t("Confirmed in Pandle")}" else t("Not synced to Pandle yet")}",
             fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

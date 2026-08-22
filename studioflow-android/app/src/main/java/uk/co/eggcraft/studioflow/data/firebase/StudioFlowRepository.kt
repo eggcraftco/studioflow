@@ -2472,6 +2472,20 @@ class StudioFlowRepository(
         awaitClose { registration.remove() }
     }
 
+    /** Payees the owner grouped/marked as recurring by hand. */
+    fun bankVendorsFlow(workspaceId: String): Flow<List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankVendors")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                trySend(snapshot?.documents?.map {
+                    uk.co.eggcraft.studioflow.data.model.bankVendorFromDocument(it.id, it.data.orEmpty())
+                }?.filter { it.keys.isNotEmpty() } ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
     /** Receipts uploaded before their payment reached the feed (server attaches them later). */
     fun bankWaitingReceiptsFlow(workspaceId: String): Flow<List<StudioBankWaitingReceipt>> = callbackFlow {
         if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
@@ -2537,6 +2551,16 @@ class StudioFlowRepository(
 
     suspend fun bankSaveRule(workspaceId: String, keyword: String, category: String) {
         bankCall("bankSaveRule", workspaceId, mapOf("keyword" to keyword.lowercase(), "category" to category))
+    }
+
+    /** Marks a payee as recurring, or merges this merchant key into an existing vendor. */
+    suspend fun bankSaveVendor(workspaceId: String, vendorId: String, name: String, key: String, cadence: String) {
+        bankCall("bankSaveVendor", workspaceId, mapOf("vendorId" to vendorId, "name" to name, "keys" to listOf(key), "cadence" to cadence))
+    }
+
+    /** Drops one merchant key from a vendor, or the whole vendor when it was the last one. */
+    suspend fun bankDeleteVendor(workspaceId: String, vendorId: String, key: String) {
+        bankCall("bankDeleteVendor", workspaceId, mapOf("vendorId" to vendorId, "key" to key))
     }
 
     suspend fun bankDeleteRule(workspaceId: String, ruleId: String) {

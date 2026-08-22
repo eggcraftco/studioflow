@@ -273,7 +273,7 @@ struct BankDerived {
         uncategorised.count + missingReceipt.count + duplicateIds.count + priceChanged + cancelledRecurring.count + waiting + brokenConnections
     }
 
-    static func make(transactions: [StudioBankTransaction], rules: [StudioBankRule], orders: [Siparis], model: BankScreenModel, lang: String) -> BankDerived {
+    static func make(transactions: [StudioBankTransaction], rules: [StudioBankRule], vendors: [StudioBankVendor], orders: [Siparis], model: BankScreenModel, lang: String) -> BankDerived {
         let calendar = Calendar.current
         let now = Date()
         let iso = DateFormatter(); iso.dateFormat = "yyyy-MM-dd"; iso.locale = Locale(identifier: "en_US_POSIX")
@@ -314,7 +314,7 @@ struct BankDerived {
         let previous = transactions.filter { inPrevious($0.bookingDate) && $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
         let spent = visible.filter(\.isSpending).reduce(0) { $0 + abs($1.amount) }
         let incoming = visible.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
-        let recurring = bankDetectRecurring(transactions)
+        let recurring = bankDetectRecurring(transactions, vendors: vendors)
         let duplicates = bankDetectDuplicates(visible)
 
         var byCategory: [String: Double] = [:]
@@ -414,7 +414,7 @@ struct BankSpendingView: View {
 
     var body: some View {
         let derived = BankDerived.make(transactions: firebaseManager.bankTransactions, rules: firebaseManager.bankRules,
-                                       orders: firebaseManager.siparisler, model: model, lang: seciliDil)
+                                       vendors: firebaseManager.bankVendors, orders: firebaseManager.siparisler, model: model, lang: seciliDil)
         let selected = firebaseManager.bankTransactions.first { $0.id == model.selectedTxId }
         HStack(spacing: 0) {
             ScrollView {
@@ -459,14 +459,16 @@ struct BankSpendingView: View {
             if !isPhone, let tx = selected {
                 Divider()
                 BankTransactionDetail(tx: tx, d: derived, model: model, fmt: fmt, isOwner: isOwner, categoryTax: firebaseManager.bankCategoryTax,
-                                      orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: false)
+                                      orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, vendors: firebaseManager.bankVendors,
+                                      showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: false)
                     .frame(width: 380)
             }
         }
         .sheet(isPresented: Binding(get: { isPhone && selected != nil }, set: { if !$0 { model.selectedTxId = nil } })) {
             if let tx = selected {
                 BankTransactionDetail(tx: tx, d: derived, model: model, fmt: fmt, isOwner: isOwner, categoryTax: firebaseManager.bankCategoryTax,
-                                      orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: true)
+                                      orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, vendors: firebaseManager.bankVendors,
+                                      showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: true)
                     .environmentObject(firebaseManager)
             }
         }
@@ -1268,6 +1270,7 @@ struct BankTransactionDetail: View {
     let categoryTax: [String: String]
     let orders: [Siparis]
     let rules: [StudioBankRule]
+    let vendors: [StudioBankVendor]
     @Binding var showFileImporter: Bool
     @Binding var photoItem: PhotosPickerItem?
     let asSheet: Bool
@@ -1380,9 +1383,41 @@ struct BankTransactionDetail: View {
             }
             if tx.isSpending {
                 Section {
-                    LabeledContent(fmt.t("Recurring")) {
-                        Text(d.recurringKeys.contains(bankRecurringMerchantKey(tx)) ? fmt.t("Part of a recurring payment") : fmt.t("This transaction doesn't appear to repeat."))
-                            .font(.system(size: 11.5)).foregroundColor(.secondary).multilineTextAlignment(.trailing)
+                    let key = bankRecurringMerchantKey(tx)
+                    let vendor = vendors.first { $0.keys.contains(key) }
+                    if let vendor {
+                        LabeledContent(fmt.t("Recurring")) {
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("\(fmt.t("Marked as recurring")) · \(fmt.t(vendor.cadence == .weekly ? "Weekly" : vendor.cadence == .yearly ? "Yearly" : "Monthly"))")
+                                    .font(.system(size: 11.5, weight: .semibold)).foregroundColor(.green)
+                                Text("\(fmt.t("Grouped as")) “\(vendor.name)”").font(.system(size: 11)).foregroundColor(.secondary)
+                            }
+                        }
+                        if isOwner {
+                            Button(role: .destructive) { saveVendor(id: vendor.id, cadence: nil, remove: true) } label: { Text(fmt.t("Stop treating as recurring")).font(.system(size: 12)) }
+                        }
+                    } else if d.recurringKeys.contains(key) {
+                        LabeledContent(fmt.t("Recurring")) {
+                            Text(fmt.t("Part of a recurring payment")).font(.system(size: 11.5)).foregroundColor(.green)
+                        }
+                    } else {
+                        LabeledContent(fmt.t("Recurring")) {
+                            Text(fmt.t("This transaction doesn't appear to repeat.")).font(.system(size: 11.5)).foregroundColor(.secondary).multilineTextAlignment(.trailing)
+                        }
+                        if isOwner {
+                            Menu {
+                                Button(fmt.t("Weekly")) { saveVendor(id: "", cadence: .weekly, remove: false) }
+                                Button(fmt.t("Monthly")) { saveVendor(id: "", cadence: .monthly, remove: false) }
+                                Button(fmt.t("Yearly")) { saveVendor(id: "", cadence: .yearly, remove: false) }
+                            } label: { Label(fmt.t("Mark as recurring"), systemImage: "arrow.triangle.2.circlepath") }
+                            if !vendors.isEmpty {
+                                Menu {
+                                    ForEach(vendors) { item in
+                                        Button(item.name) { saveVendor(id: item.id, cadence: item.cadence, remove: false) }
+                                    }
+                                } label: { Label(fmt.t("Same payee as"), systemImage: "person.2") }
+                            }
+                        }
                     }
                     LabeledContent(fmt.t("Activity & sync")) {
                         Text(tx.pandleConfirmed ? "✓ \(fmt.t("Confirmed in Pandle"))" : fmt.t("Not synced to Pandle yet")).font(.system(size: 11.5)).foregroundColor(tx.pandleConfirmed ? .green : .secondary)
@@ -1469,6 +1504,20 @@ struct BankTransactionDetail: View {
         }
     }
 
+    /// Marks this payee as recurring, merges it into an existing vendor, or drops it.
+    private func saveVendor(id: String, cadence: BankRecurringCadence?, remove: Bool) {
+        guard let manager = model.manager else { return }
+        let key = bankRecurringMerchantKey(tx), name = tx.merchant, fmt = self.fmt
+        model.run("vendor-\(tx.id)") {
+            if remove {
+                try await manager.bankDeleteVendor(vendorId: id, key: key)
+                return fmt.t("No longer treated as recurring.")
+            }
+            try await manager.bankSaveVendor(vendorId: id, name: id.isEmpty ? name : "", key: key, cadence: (cadence ?? .monthly).rawValue)
+            return id.isEmpty ? fmt.t("Marked as recurring.") : fmt.t("Merged with the other payments.")
+        }
+    }
+
     private func openReceipt() {
         guard let manager = model.manager else { return }
         let path = tx.receiptPath
@@ -1526,7 +1575,8 @@ private struct BankRecurringRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.merchant).font(.system(size: 13, weight: .bold)).lineLimit(1)
-                    if !item.active { BankChip(text: fmt.t("Possibly cancelled"), color: .orange) }
+                    if item.manual { BankChip(text: fmt.t("Marked by you"), color: .accentColor) }
+                if !item.active { BankChip(text: fmt.t("Possibly cancelled"), color: .orange) }
                     if let change = item.priceChange {
                         BankChip(text: "\(change.current > change.previous ? "↑" : "↓") \(fmt.money(change.previous, item.currency)) → \(fmt.money(change.current, item.currency))", color: change.current > change.previous ? .red : .green)
                     }

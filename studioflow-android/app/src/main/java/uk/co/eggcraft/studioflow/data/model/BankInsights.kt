@@ -43,8 +43,12 @@ data class BankRecurringSpend(
     val nextExpected: String,
     val active: Boolean,
     val monthlyEquivalent: Double,
-    val priceChange: Pair<Double, Double>?   // previous → current
-)
+    val priceChange: Pair<Double, Double>?,  // previous → current
+    val vendorId: String = ""                // set when the owner marked this payee
+) {
+    /** True when this row exists because the owner said so, not because the detector found a pattern. */
+    val manual: Boolean get() = vendorId.isNotBlank()
+}
 
 data class BankCategorySuggestion(val category: String, val confidence: Double, val fromHistory: Boolean, val keyword: String)
 
@@ -97,29 +101,48 @@ private fun monthlyFactor(cadence: BankCadence): Double = when (cadence) {
     BankCadence.Weekly -> 4.345; BankCadence.Monthly -> 1.0; BankCadence.Yearly -> 1.0 / 12
 }
 
-fun bankDetectRecurring(transactions: List<StudioBankTransaction>): List<BankRecurringSpend> {
+/** merchant key → the vendor the owner filed it under. */
+fun bankVendorKeyMap(vendors: List<StudioBankVendor>): Map<String, StudioBankVendor> {
+    val map = mutableMapOf<String, StudioBankVendor>()
+    for (vendor in vendors) for (key in vendor.keys) if (key.isNotBlank()) map[key] = vendor
+    return map
+}
+
+/**
+ * Owner-marked payees ([vendors]) always show up: their aliases collapse into one
+ * row, a single payment is enough, and the cadence is the one the owner picked.
+ * Everything else still has to earn its place through the gap/amount gates.
+ */
+fun bankDetectRecurring(transactions: List<StudioBankTransaction>, vendors: List<StudioBankVendor> = emptyList()): List<BankRecurringSpend> {
+    val byKey = bankVendorKeyMap(vendors)
     val groups = transactions.filter { it.isSpending && it.bookingDate.isNotBlank() }
-        .groupBy { bankRecurringMerchantKey(it) }
+        .groupBy { tx -> bankRecurringMerchantKey(tx).let { byKey[it]?.id ?: it } }
         .filterKeys { it.length >= 3 }
 
     val results = mutableListOf<BankRecurringSpend>()
     val now = System.currentTimeMillis()
     for ((key, entries) in groups) {
-        if (entries.size < 3) continue
+        val vendor = vendors.firstOrNull { it.id == key }
+        val minimum = if (vendor != null) 1 else 3
+        if (entries.size < minimum) continue
         val sorted = entries.sortedBy { parseDay(it.bookingDate) }
         val unique = mutableListOf<StudioBankTransaction>()
         for (tx in sorted) if (unique.isEmpty() || parseDay(unique.last().bookingDate) != parseDay(tx.bookingDate)) unique.add(tx)
-        if (unique.size < 3) continue
+        if (unique.size < minimum) continue
 
         val intervals = (1 until unique.size).map { (parseDay(unique[it].bookingDate) - parseDay(unique[it - 1].bookingDate)).toDouble() / DAY_MS }
-        val cadence = cadenceFor(median(intervals)) ?: continue
-        val agreeing = intervals.count { cadenceFor(it) == cadence }
-        if (agreeing.toDouble() / intervals.size < 0.6) continue
+        val cadence = vendor?.cadence ?: cadenceFor(median(intervals)) ?: continue
+        if (vendor == null) {
+            val agreeing = intervals.count { cadenceFor(it) == cadence }
+            if (agreeing.toDouble() / intervals.size < 0.6) continue
+        }
 
         val amounts = unique.map { abs(it.amount) }
         val typical = median(amounts)
-        val stable = amounts.count { abs(it - typical) <= typical * 0.3 }
-        if (stable.toDouble() / amounts.size < 0.6) continue
+        if (vendor == null) {
+            val stable = amounts.count { abs(it - typical) <= typical * 0.3 }
+            if (stable.toDouble() / amounts.size < 0.6) continue
+        }
 
         val last = unique.last()
         val lastTime = parseDay(last.bookingDate)
@@ -132,16 +155,17 @@ fun bankDetectRecurring(transactions: List<StudioBankTransaction>): List<BankRec
         results.add(
             BankRecurringSpend(
                 key = key,
-                merchant = last.merchant,
+                merchant = vendor?.name?.ifBlank { last.merchant } ?: last.merchant,
                 cadence = cadence,
                 typicalAmount = typical,
                 currency = last.currency.ifBlank { "GBP" },
                 occurrences = unique.size,
                 lastDate = last.bookingDate,
                 nextExpected = isoDay(lastTime + (expected * DAY_MS).toLong()),
-                active = now - lastTime <= (expected * DAY_MS * 1.6).toLong(),
+                active = now - lastTime <= (expected * DAY_MS * (if (vendor != null) 2.4 else 1.6)).toLong(),
                 monthlyEquivalent = typical * monthlyFactor(cadence),
-                priceChange = priceChange
+                priceChange = priceChange,
+                vendorId = vendor?.id ?: ""
             )
         )
     }

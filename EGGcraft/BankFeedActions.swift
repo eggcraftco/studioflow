@@ -160,6 +160,18 @@ extension FirebaseManager {
         return (result["matched"] as? NSNumber)?.intValue ?? 0
     }
 
+    // MARK: Vendors
+
+    /// Marks a payee as recurring, or merges this merchant key into an existing vendor.
+    func bankSaveVendor(vendorId: String, name: String, key: String, cadence: String) async throws {
+        try await bankCall("bankSaveVendor", ["vendorId": vendorId, "name": name, "keys": [key], "cadence": cadence])
+    }
+
+    /// Drops one merchant key from a vendor, or the whole vendor when it was the last one.
+    func bankDeleteVendor(vendorId: String, key: String) async throws {
+        try await bankCall("bankDeleteVendor", ["vendorId": vendorId, "key": key])
+    }
+
     // MARK: Rules
 
     func bankSaveRule(keyword: String, category: String) async throws {
