@@ -1849,7 +1849,7 @@ function BankPageContent() {
                           const category = effectiveCategory(tx);
                           return (
                             <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => { setTab("transactions"); openDrawer(tx); }}>{tx.counterparty || tx.description}</td>
+                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => openDrawer(tx)}>{tx.counterparty || tx.description}</td>
                               <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
                               <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
                               <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
