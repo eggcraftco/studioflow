@@ -1036,7 +1036,7 @@ function BankPageContent() {
               <button type="button" className="finance-payments-delete" onClick={() => void cancelReceiptMatch()} aria-label={t("Close")}>✕</button>
             </div>
             {ocrCandidates.length === 0 ? (
-              <p style={{ fontSize: 12.5, opacity: 0.75, margin: "10px 0 0" }}>{t("No matching transaction found — you can attach it manually with the 📎 button on a row.")}</p>
+              <p style={{ fontSize: 12.5, opacity: 0.75, margin: "10px 0 0" }}>{t("No matching transaction found — you can attach it manually from the Receipt column on a row.")}</p>
             ) : (
               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
                 {ocrCandidates.map(candidate => (
@@ -1044,7 +1044,7 @@ function BankPageContent() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {candidate.counterparty || candidate.description || "—"}
-                        {candidate.hasReceipt ? <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.6 }}>📎</span> : null}
+                        {candidate.hasReceipt ? <span style={{ marginLeft: 6, opacity: 0.6, verticalAlign: "middle" }}><AttachIcon size={11} /></span> : null}
                       </div>
                       <div style={{ fontSize: 10.5, opacity: 0.6 }}>{candidate.bookingDate}</div>
                     </div>
@@ -1281,7 +1281,7 @@ function BankPageContent() {
 
                   <div style={{ ...bankCard, display: "flex", flexDirection: "column" }}>
                     <div style={cardHead}>
-                      <TileBadge bg="rgba(37,99,235,0.1)">📎</TileBadge>
+                      <TileBadge bg="rgba(37,99,235,0.1)"><ReceiptGlyph size={15} color="#2563eb" /></TileBadge>
                       <strong style={cardTitle}>{t("Receipts summary")}</strong>
                     </div>
                     <div style={{ display: "flex", alignItems: "stretch", textAlign: "center", padding: "10px 0" }}>
@@ -1605,19 +1605,20 @@ function BankPageContent() {
                                     <span style={{ opacity: 0.4 }}>—</span>
                                   ) : transaction.receiptPath ? (
                                     <button type="button" onClick={() => void openReceipt(transaction)} title={transaction.receiptName || t("View invoice")}
-                                      style={{ ...attentionLink, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                                      ✓ {t("Matched")}
+                                      style={{ ...attentionLink, color: "#16a34a", display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12 }}>
+                                      <FileBadge name={transaction.receiptName} size={24} /> {t("Matched")}
                                     </button>
                                   ) : transaction.receiptNotNeeded ? (
-                                    <span style={{ opacity: 0.55, fontSize: 12 }}>{t("Not needed")}</span>
+                                    <span style={{ opacity: 0.55, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}><ReceiptGlyph size={15} /> {t("Not needed")}</span>
                                   ) : isOwner ? (
                                     <button type="button" disabled={busy === `receipt-${transaction.id}`} title={t("Attach invoice")}
                                       onClick={() => { setPendingAttachTxId(transaction.id); document.getElementById("bank-receipt-input")?.click(); }}
-                                      style={{ ...attentionLink, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                                      ! {t("Missing")}
+                                      style={{ ...attentionLink, color: "#dc2626", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                                      <span style={{ width: 24, height: 24, borderRadius: 7, border: "1.5px dashed rgba(220,38,38,0.55)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><AttachIcon size={13} color="#dc2626" /></span>
+                                      {t("Missing")}
                                     </button>
                                   ) : (
-                                    <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700 }}>! {t("Missing")}</span>
+                                    <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><AttachIcon size={14} color="#dc2626" /> {t("Missing")}</span>
                                   )}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: transaction.amount < 0 ? "#dc2626" : "#16a34a" }}>
@@ -1889,16 +1890,21 @@ function BankPageContent() {
                               <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
                               <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
                               <td style={tdStyle}>
-                                {tx.receiptPath ? <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}<div style={{ fontSize: 10.5, opacity: 0.65, fontWeight: 500 }}>{tx.receiptName}</div></span>
+                                {tx.receiptPath ? (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                                    <FileBadge name={tx.receiptName} size={28} />
+                                    <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched")}<div style={{ fontSize: 10.5, opacity: 0.65, fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.receiptName}</div></span>
+                                  </span>
+                                )
                                   : tx.receiptNotNeeded ? <span style={{ opacity: 0.6 }}>{t("No receipt needed")}</span>
                                   : <span style={{ color: "#dc2626", fontWeight: 700 }}>! {t("Missing receipt")}</span>}
                               </td>
                               <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                                 {tx.receiptPath ? (
-                                  <button type="button" className="finance-payments-delete" onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}>📎</button>
+                                  <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}><ReceiptGlyph size={14} /> {t("View")} ↗</button>
                                 ) : isOwner ? (
                                   <span style={{ display: "inline-flex", gap: 6 }}>
-                                    <button type="button" style={bankBtnSm} disabled={busy === `receipt-${tx.id}`} onClick={() => { setPendingAttachTxId(tx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button>
+                                    <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6, color: "#2563eb", borderColor: "rgba(37,99,235,0.35)" }} disabled={busy === `receipt-${tx.id}`} onClick={() => { setPendingAttachTxId(tx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={14} color="#2563eb" /> {t("Attach")}</button>
                                     <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} disabled={busy === `receipt-${tx.id}`} onClick={() => void setReceiptNotNeeded(tx, !tx.receiptNotNeeded)}>{tx.receiptNotNeeded ? t("Needs receipt") : t("No receipt needed")}</button>
                                   </span>
                                 ) : null}
@@ -2194,18 +2200,18 @@ function BankPageContent() {
                     <div style={drawerLabel}>{t("Receipt / attachment")}</div>
                     <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)" }}>
                       {drawerTx.receiptPath ? (
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "#16a34a", fontWeight: 700, fontSize: 11.5 }}>✓ {t("Receipt matched")}</span>
-                            <span style={{ flex: 1 }} />
-                            {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <FileBadge name={drawerTx.receiptName} size={30} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: "#16a34a", fontWeight: 700, fontSize: 11.5 }}>✓ {t("Receipt matched")}</div>
+                            <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{drawerTx.receiptName || t("View invoice")} ↗</button>
                           </div>
-                          <button type="button" onClick={() => void openReceipt(drawerTx)} style={{ ...attentionLink, fontSize: 11.5, marginTop: 3, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{drawerTx.receiptName || t("View invoice")} ↗</button>
+                          {isOwner ? <button type="button" className="finance-payments-delete" onClick={() => void removeReceipt(drawerTx)} aria-label={t("Remove invoice")} style={{ fontSize: 10 }}>✕</button> : null}
                         </div>
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: drawerTx.receiptNotNeeded ? "inherit" : "#dc2626", fontWeight: 700, opacity: drawerTx.receiptNotNeeded ? 0.6 : 1 }}>{drawerTx.receiptNotNeeded ? t("No receipt needed") : `! ${t("Missing receipt")}`}</span>
-                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}>{t("Attach")}</button> : null}
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={13} color="#2563eb" /> {t("Attach")}</button> : null}
                         </div>
                       )}
                     </div>
@@ -2308,6 +2314,56 @@ function TileIcon({ bg, children }: { bg: string; children: React.ReactNode }) {
   );
 }
 
+// Receipt attachments: the file type decides the badge (PDF / image / document /
+// generic file) so a row shows at a glance what is attached; "attach" is the
+// empty state — an outlined paperclip that invites an upload.
+type ReceiptKind = "pdf" | "image" | "doc" | "file";
+function receiptKind(name: string): ReceiptKind {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (ext === "pdf") return "pdf";
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"].includes(ext)) return "image";
+  if (["doc", "docx", "xls", "xlsx", "csv", "txt", "rtf", "odt", "pages", "numbers"].includes(ext)) return "doc";
+  return "file";
+}
+const RECEIPT_KIND_META: Record<ReceiptKind, { label: string; color: string; bg: string }> = {
+  pdf: { label: "PDF", color: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+  image: { label: "IMG", color: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+  doc: { label: "DOC", color: "#0e7a55", bg: "rgba(14,122,85,0.12)" },
+  file: { label: "FILE", color: "#6b7280", bg: "rgba(107,114,128,0.14)" }
+};
+function FileBadge({ name, size = 26 }: { name: string; size?: number }) {
+  const kind = receiptKind(name);
+  const meta = RECEIPT_KIND_META[kind];
+  const s = size;
+  return (
+    <span aria-hidden="true" title={name} style={{ position: "relative", width: s, height: s, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={meta.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" fill={meta.bg} />
+        <path d="M14 2v5h5" />
+        {kind === "image" ? <><circle cx="9.5" cy="12" r="1.3" fill={meta.color} stroke="none" /><path d="M7.5 18l3-3.5 2 2.2 2-2.7 2.5 4z" fill={meta.color} stroke="none" /></> : null}
+        {kind === "doc" ? <><path d="M8.5 12.5h7" /><path d="M8.5 15.5h7" /><path d="M8.5 18.5h4" /></> : null}
+      </svg>
+      {kind === "pdf" || kind === "file" ? (
+        <span style={{ position: "absolute", left: "50%", bottom: Math.round(s * 0.1), transform: "translateX(-50%)", fontSize: Math.max(6, Math.round(s * 0.27)), fontWeight: 800, letterSpacing: 0.3, color: "#fff", background: meta.color, borderRadius: 3, padding: "0 3px", lineHeight: 1.4 }}>{meta.label}</span>
+      ) : null}
+    </span>
+  );
+}
+function AttachIcon({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9-9a3.5 3.5 0 0 1 5 5l-9 9a1.5 1.5 0 0 1-2.1-2.1l8.3-8.3" />
+    </svg>
+  );
+}
+function ReceiptGlyph({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z" />
+      <path d="M9 8h6M9 11.5h6M9 15h4" />
+    </svg>
+  );
+}
 function TileBadge({ bg, children }: { bg: string; children: React.ReactNode }) {
   return (
     <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 8, background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
