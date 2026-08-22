@@ -15,7 +15,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
-import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
@@ -159,6 +159,7 @@ function BankPageContent() {
   const [pendingAttachTxId, setPendingAttachTxId] = useState<string | null>(null);
   const [rules, setRules] = useState<BankRule[]>([]);
   const [waitingReceipts, setWaitingReceipts] = useState<WaitingReceipt[]>([]);
+  const [vendors, setVendors] = useState<BankVendor[]>([]);
   // Waiting receipt being assigned by hand → shows a transaction picker.
   const [assignWaitingId, setAssignWaitingId] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
@@ -298,6 +299,21 @@ function BankPageContent() {
       },
       () => setRules([])
     );
+    const unsubVendors = onSnapshot(
+      collection(db, "companies", companyId, "bankVendors"),
+      snap => {
+        setVendors(snap.docs.map(docSnap => {
+          const data = docSnap.data() as Record<string, unknown>;
+          return {
+            id: docSnap.id,
+            name: String(data.name || ""),
+            keys: Array.isArray(data.keys) ? (data.keys as string[]) : [],
+            cadence: (["weekly", "monthly", "yearly"].includes(String(data.cadence)) ? String(data.cadence) : "monthly") as BankVendor["cadence"]
+          };
+        }));
+      },
+      () => setVendors([])
+    );
     const unsubWaiting = onSnapshot(
       collection(db, "companies", companyId, "bankReceiptInbox"),
       snap => {
@@ -326,7 +342,7 @@ function BankPageContent() {
       const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
       setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
     }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubWaiting(); unsubPandle(); };
+    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubVendors(); unsubWaiting(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -753,7 +769,8 @@ function BankPageContent() {
   }, [visibleTransactions]);
 
   // Subscriptions & other recurring charges detected from the feed.
-  const recurring = useMemo<RecurringSpend[]>(() => detectRecurringSpends(transactions), [transactions]);
+  const recurring = useMemo<RecurringSpend[]>(() => detectRecurringSpends(transactions, vendors), [transactions, vendors]);
+  const vendorByKey = useMemo(() => vendorKeyMap(vendors), [vendors]);
   const duplicateIds = useMemo(() => detectPossibleDuplicates(visibleTransactions), [visibleTransactions]);
   // What the owner should act on in this period — drives the Needs Attention tile.
   const attention = useMemo(() => {
@@ -930,6 +947,36 @@ function BankPageContent() {
       await call("bankUpdateTransaction", { transactionId: tx.id, receiptNotNeeded: value });
     } catch (flagError) {
       setError(flagError instanceof Error ? flagError.message : "Could not update the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  // Vendors: merge the bank names that mean one payee, and let the owner say
+  // "this repeats" for payments the detector cannot recognise (payroll, rent).
+  async function markRecurring(tx: BankTransaction, cadence: "weekly" | "monthly" | "yearly", vendorId?: string) {
+    setBusy(`vendor-${tx.id}`);
+    setError(null);
+    try {
+      await call("bankSaveVendor", {
+        vendorId: vendorId ?? "",
+        name: vendorId ? "" : (tx.counterparty || tx.description).slice(0, 120),
+        keys: [recurringMerchantKey(tx)],
+        cadence
+      });
+      setStatus(vendorId ? t("Merged with the other payments.") : t("Marked as recurring."));
+    } catch (vendorError) {
+      setError(vendorError instanceof Error ? vendorError.message : "Could not save the vendor.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function unmarkRecurring(tx: BankTransaction, vendorId: string) {
+    setBusy(`vendor-${tx.id}`);
+    try {
+      await call("bankDeleteVendor", { vendorId, key: recurringMerchantKey(tx) });
+      setStatus(t("No longer treated as recurring."));
+    } catch (vendorError) {
+      setError(vendorError instanceof Error ? vendorError.message : "Could not update the vendor.");
     } finally {
       setBusy(null);
     }
@@ -1888,7 +1935,10 @@ function BankPageContent() {
                                   ) : null}
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>/{t(item.cadence === "weekly" ? "week" : item.cadence === "yearly" ? "year" : "month")}</span></td>
-                                <td style={{ ...tdStyle, opacity: 0.75 }}>{t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×</td>
+                                <td style={{ ...tdStyle, opacity: 0.75 }}>
+                                  {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×
+                                  {item.manual ? <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(37,99,235,0.12)", color: "#2563eb" }}>{t("Marked by you")}</span> : null}
+                                </td>
                                 <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
                                 <td style={tdStyle}>
                                   {rule ? <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ {t(rule.category)}</span>
@@ -2410,10 +2460,49 @@ function BankPageContent() {
             ) : null}
             {drawerTx.amount < 0 ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
-                <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
-                  <div style={{ fontWeight: 700, marginBottom: 2 }}>↻ {t("Recurring")}</div>
-                  {recurringKeys.has(recurringMerchantKey(drawerTx)) ? <span style={{ color: "#16a34a" }}>{t("Part of a recurring payment")}</span> : <span style={{ opacity: 0.65 }}>{t("This transaction doesn't appear to repeat.")}</span>}
-                </div>
+                {(() => {
+                  const key = recurringMerchantKey(drawerTx);
+                  const vendor = vendorByKey.get(key);
+                  const detected = recurringKeys.has(key) || recurring.some(item => item.vendorId && item.vendorId === vendor?.id);
+                  return (
+                    <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>↻ {t("Recurring")}</div>
+                      {vendor ? (
+                        <div>
+                          <span style={{ color: "#16a34a" }}>{t("Marked as recurring")} · {t(vendor.cadence === "weekly" ? "Weekly" : vendor.cadence === "yearly" ? "Yearly" : "Monthly")}</span>
+                          <div style={{ fontSize: 11, opacity: 0.65 }}>{t("Grouped as")} “{vendor.name}”</div>
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, marginTop: 4 }} disabled={busy === `vendor-${drawerTx.id}`} onClick={() => void unmarkRecurring(drawerTx, vendor.id)}>{t("Stop treating as recurring")}</button> : null}
+                        </div>
+                      ) : detected ? (
+                        <span style={{ color: "#16a34a" }}>{t("Part of a recurring payment")}</span>
+                      ) : (
+                        <div>
+                          <span style={{ opacity: 0.65 }}>{t("This transaction doesn't appear to repeat.")}</span>
+                          {isOwner ? (
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                              <select value="" disabled={busy === `vendor-${drawerTx.id}`}
+                                onChange={event => { if (event.target.value) void markRecurring(drawerTx, event.target.value as "weekly" | "monthly" | "yearly"); }}
+                                style={{ ...pickerInput, flex: "0 1 190px", fontSize: 11.5, padding: "4px 6px" }} aria-label={t("Mark as recurring")}>
+                                <option value="">↻ {t("Mark as recurring")}…</option>
+                                <option value="weekly">{t("Weekly")}</option>
+                                <option value="monthly">{t("Monthly")}</option>
+                                <option value="yearly">{t("Yearly")}</option>
+                              </select>
+                              {vendors.length ? (
+                                <select value="" disabled={busy === `vendor-${drawerTx.id}`}
+                                  onChange={event => { const target = vendors.find(item => item.id === event.target.value); if (target) void markRecurring(drawerTx, target.cadence, target.id); }}
+                                  style={{ ...pickerInput, flex: "0 1 190px", fontSize: 11.5, padding: "4px 6px" }} aria-label={t("Same payee as")}>
+                                  <option value="">{t("Same payee as")}…</option>
+                                  {vendors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                                </select>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
                   <div style={{ fontWeight: 700, marginBottom: 2 }}>⇄ {t("Activity & sync")}</div>
                   {drawerTx.pandleStatus === "confirmed" ? <span style={{ color: "#16a34a" }}>✓ {t("Confirmed in Pandle")}</span> : <span style={{ opacity: 0.65 }}>{t("Not synced to Pandle yet")}</span>}

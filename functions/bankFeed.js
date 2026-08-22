@@ -37,6 +37,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankReceiptInbox");
+  const vendorsRef = (companyId) =>
+    db().collection("companies").doc(companyId).collection("bankVendors");
 
   const connectionsRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankConnections");
@@ -706,6 +708,67 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true, ruleId: ruleRef.id };
   });
 
+  // ---- Vendors -----------------------------------------------------------
+  // Two things the automatic detection cannot know on its own: that several
+  // bank names are the same payee (a salary paid from two accounts), and that a
+  // payment repeats even though its dates wander (payroll paid when convenient).
+  // A vendor doc carries both: the merchant keys that belong together, and the
+  // owner's "this repeats, monthly" decision.
+
+  const CADENCES = ["weekly", "monthly", "yearly"];
+
+  const bankSaveVendor = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const vendorId = cleanText(request.data?.vendorId, 120);
+    const name = cleanText(request.data?.name, 120);
+    const cadence = CADENCES.includes(cleanText(request.data?.cadence, 10)) ? cleanText(request.data?.cadence, 10) : "monthly";
+    const keys = Array.from(new Set((Array.isArray(request.data?.keys) ? request.data.keys : [])
+      .map((key) => cleanText(key, 120).toLowerCase())
+      .filter((key) => key.length >= 2))).slice(0, 20);
+    if (!keys.length) throw new HttpsError("invalid-argument", "At least one merchant key is required.");
+
+    // A key belongs to one vendor only: pull it out of any other doc first.
+    const existing = await vendorsRef(companyId).get();
+    for (const doc of existing.docs) {
+      if (doc.id === vendorId) continue;
+      const current = Array.isArray(doc.get("keys")) ? doc.get("keys") : [];
+      const remaining = current.filter((key) => !keys.includes(key));
+      if (remaining.length === current.length) continue;
+      if (remaining.length) await doc.ref.set({ keys: remaining }, { merge: true });
+      else await doc.ref.delete();
+    }
+
+    const ref = vendorId ? vendorsRef(companyId).doc(vendorId) : vendorsRef(companyId).doc();
+    const previous = vendorId ? (await ref.get()).data() || {} : {};
+    const merged = Array.from(new Set([...(Array.isArray(previous.keys) ? previous.keys : []), ...keys])).slice(0, 20);
+    await ref.set({
+      name: name || previous.name || merged[0],
+      keys: merged,
+      cadence,
+      manual: true,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: previous.createdAt || admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { ok: true, vendorId: ref.id, keys: merged };
+  });
+
+  const bankDeleteVendor = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const vendorId = cleanText(request.data?.vendorId, 120);
+    if (!vendorId) throw new HttpsError("invalid-argument", "vendorId is required.");
+    // Dropping a single key leaves the rest of the vendor intact.
+    const key = cleanText(request.data?.key, 120).toLowerCase();
+    const ref = vendorsRef(companyId).doc(vendorId);
+    const doc = await ref.get();
+    if (!doc.exists) return { ok: true };
+    if (key) {
+      const remaining = (Array.isArray(doc.get("keys")) ? doc.get("keys") : []).filter((item) => item !== key);
+      if (remaining.length) { await ref.set({ keys: remaining }, { merge: true }); return { ok: true, keys: remaining }; }
+    }
+    await ref.delete();
+    return { ok: true };
+  });
+
   const bankDeleteRule = onCall({ region: REGION, timeoutSeconds: 300 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const ruleId = cleanText(request.data?.ruleId, 120);
@@ -1001,6 +1064,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankUpdateTransaction,
     bankSaveRule,
     bankDeleteRule,
+    bankSaveVendor,
+    bankDeleteVendor,
     bankMatchReceipt,
     bankAssignInboxReceipt,
     bankQueueInboxReceipt,

@@ -458,6 +458,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Vendor grouping / manual "this repeats" marks — owner-readable, server-written.
+    match /companies/{companyId}/bankVendors/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
     // Receipts waiting for their bank transaction — owner-readable, server-written.
     match /companies/{companyId}/bankReceiptInbox/{document=**} {
       allow read: if canReadBankFeed(companyId);
@@ -555,6 +561,7 @@ service cloud.firestore {
         && collectionId != 'bankTokens'
         && collectionId != 'bankRules'
         && collectionId != 'bankReceiptInbox'
+        && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && canReadCompany(companyId);
@@ -575,6 +582,7 @@ service cloud.firestore {
         && collectionId != 'bankTokens'
         && collectionId != 'bankRules'
         && collectionId != 'bankReceiptInbox'
+        && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && canWriteCompanyData(companyId);
