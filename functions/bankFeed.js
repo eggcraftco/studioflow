@@ -679,17 +679,17 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const amount = totalCandidates.length > 0 ? Math.max(...totalCandidates) : (amounts.length > 0 ? Math.max(...amounts.map((item) => item.value)) : 0);
 
     // Date: dd/mm/yyyy, dd-mm-yy, yyyy-mm-dd, "14 Aug 2026" styles.
+    // Invoice numbers like INV-2026-08-4492 look like ISO dates; only accept a
+    // match that is not part of a longer digit run and has a real month/day.
     let date = "";
-    const iso = lower.match(/(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})/);
-    const dmy = lower.match(/(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2}|\d{2})(?!\d)/);
+    const valid = (y, m, d) => Number(m) >= 1 && Number(m) <= 12 && Number(d) >= 1 && Number(d) <= 31 ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : "";
     const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-    const textual = lower.match(new RegExp(`(\\d{1,2})\\s*(${monthNames.join("|")})[a-z]*\\s*(20\\d{2})`));
-    if (iso) date = `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
-    else if (textual) date = `${textual[3]}-${String(monthNames.indexOf(textual[2]) + 1).padStart(2, "0")}-${textual[1].padStart(2, "0")}`;
-    else if (dmy) {
-      const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
-      date = `${year}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
-    }
+    const textual = lower.match(new RegExp(`(?<!\\d)(\\d{1,2})\\s*(${monthNames.join("|")})[a-z]*\\.?,?\\s*(20\\d{2})(?!\\d)`));
+    const iso = lower.match(/(?<!\d)(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)/);
+    const dmy = lower.match(/(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2}|\d{2})(?!\d)/);
+    if (textual) date = valid(textual[3], monthNames.indexOf(textual[2]) + 1, textual[1]);
+    if (!date && iso) date = valid(iso[1], iso[2], iso[3]);
+    if (!date && dmy) date = valid(dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3], dmy[2], dmy[1]);
 
     // Merchant guess: meaningful words from the first few lines.
     const words = new Set();
@@ -859,6 +859,14 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true, id };
   });
 
+  // Web: try to match the waiting receipts right now (after a manual sync,
+  // or when the owner knows the payment has landed).
+  const bankMatchWaitingReceipts = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const matched = await matchWaitingReceipts(companyId);
+    return { ok: true, matched };
+  });
+
   // Web: drop a waiting receipt (file + doc).
   const bankDeleteInboxReceipt = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
     const { companyId } = await requireOwner(request);
@@ -913,6 +921,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankMatchReceipt,
     bankAssignInboxReceipt,
     bankQueueInboxReceipt,
+    bankMatchWaitingReceipts,
     bankDeleteInboxReceipt,
     scheduledBankSync,
     _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts }
