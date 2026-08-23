@@ -447,6 +447,8 @@ export const PUBLIC_SITE_EN = {
   "planBridge.included": "Included",
   "planBridge.popular": "Popular",
   "planBridge.notIncluded": "Not included",
+  "planBridge.helpAssistant.title": "In-app help assistant",
+  "planBridge.helpAssistant.body": "Ask how something works and get an answer from the NivaDesk guide without leaving the app. It never reads your workspace data — your own orders and figures come from the ChatGPT app.",
   "planBridge.orderRecords.title": "Order records",
   "planBridge.orderRecords.body": "Create and manage core order details, status, dates and production context.",
   "planBridge.customerRecords.title": "Customer records",
@@ -8539,7 +8541,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Gönderildi. Hem burada hem e-postayla döneceğiz.",
     "chatWidget.privacy": "E-postanızı yalnızca size cevap vermek için kullanırız.",
     "chatWidget.assistantName": "NivaDesk Asistanı",
-    "chatWidget.assistantNote": "Otomatik yanıt — ekipten bir kişi ayrıca dönecek."
+    "chatWidget.assistantNote": "Otomatik yanıt — ekipten bir kişi ayrıca dönecek.",
+    "planBridge.helpAssistant.title": "Uygulama içi yardımcı",
+    "planBridge.helpAssistant.body": "Bir şeyin nasıl çalıştığını sor, uygulamadan çıkmadan NivaDesk kılavuzundan cevap al. Çalışma alanı verini asla okumaz — kendi siparişlerin ve rakamların ChatGPT app'ten gelir."
   },
   "Deutsch": {
     "nav.chatgpt": "ChatGPT-App",
@@ -8624,7 +8628,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Gesendet. Wir antworten hier und per E-Mail.",
     "chatWidget.privacy": "Wir nutzen deine E-Mail nur, um dir zu antworten.",
     "chatWidget.assistantName": "NivaDesk-Assistent",
-    "chatWidget.assistantNote": "Automatische Antwort — jemand aus dem Team meldet sich noch."
+    "chatWidget.assistantNote": "Automatische Antwort — jemand aus dem Team meldet sich noch.",
+    "planBridge.helpAssistant.title": "Hilfe-Assistent in der App",
+    "planBridge.helpAssistant.body": "Frag, wie etwas funktioniert, und erhalte die Antwort aus dem NivaDesk-Handbuch, ohne die App zu verlassen. Er liest nie deine Workspace-Daten — deine Bestellungen und Zahlen kommen aus der ChatGPT-App."
   },
   "Français": {
     "nav.chatgpt": "App ChatGPT",
@@ -8709,7 +8715,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Envoyé. Nous répondrons ici et par e-mail.",
     "chatWidget.privacy": "Votre e-mail sert uniquement à vous répondre.",
     "chatWidget.assistantName": "Assistant NivaDesk",
-    "chatWidget.assistantNote": "Réponse automatique — une personne de l’équipe vous répondra aussi."
+    "chatWidget.assistantNote": "Réponse automatique — une personne de l’équipe vous répondra aussi.",
+    "planBridge.helpAssistant.title": "Assistant d’aide intégré",
+    "planBridge.helpAssistant.body": "Demandez comment fonctionne un élément et obtenez la réponse depuis le guide NivaDesk sans quitter l’app. Il ne lit jamais vos données : vos commandes et vos chiffres viennent de l’app ChatGPT."
   },
   "Italiano": {
     "nav.chatgpt": "App ChatGPT",
@@ -8794,7 +8802,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Inviato. Rispondiamo qui e via email.",
     "chatWidget.privacy": "Usiamo la tua email solo per risponderti.",
     "chatWidget.assistantName": "Assistente NivaDesk",
-    "chatWidget.assistantNote": "Risposta automatica — una persona del team ti risponderà comunque."
+    "chatWidget.assistantNote": "Risposta automatica — una persona del team ti risponderà comunque.",
+    "planBridge.helpAssistant.title": "Assistente di aiuto nell’app",
+    "planBridge.helpAssistant.body": "Chiedi come funziona qualcosa e ottieni la risposta dalla guida NivaDesk senza uscire dall’app. Non legge mai i dati del tuo spazio: i tuoi ordini e i tuoi numeri arrivano dall’app ChatGPT."
   },
   "Español (Spanish)": {
     "nav.chatgpt": "App de ChatGPT",
@@ -8879,7 +8889,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Enviado. Te responderemos aquí y por correo.",
     "chatWidget.privacy": "Usamos tu correo solo para responderte.",
     "chatWidget.assistantName": "Asistente de NivaDesk",
-    "chatWidget.assistantNote": "Respuesta automática: una persona del equipo también te contestará."
+    "chatWidget.assistantNote": "Respuesta automática: una persona del equipo también te contestará.",
+    "planBridge.helpAssistant.title": "Asistente de ayuda en la app",
+    "planBridge.helpAssistant.body": "Pregunta cómo funciona algo y recibe la respuesta desde la guía de NivaDesk sin salir de la app. Nunca lee los datos de tu espacio: tus pedidos y cifras vienen de la app de ChatGPT."
   },
   "Português": {
     "nav.chatgpt": "App ChatGPT",
@@ -8964,7 +8976,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Enviado. Respondemos aqui e por email.",
     "chatWidget.privacy": "Usamos o teu email apenas para te responder.",
     "chatWidget.assistantName": "Assistente NivaDesk",
-    "chatWidget.assistantNote": "Resposta automática — alguém da equipa também vai responder."
+    "chatWidget.assistantNote": "Resposta automática — alguém da equipa também vai responder.",
+    "planBridge.helpAssistant.title": "Assistente de ajuda na app",
+    "planBridge.helpAssistant.body": "Pergunta como funciona algo e recebe a resposta do guia NivaDesk sem sair da app. Nunca lê os dados do teu espaço — as tuas encomendas e números vêm da app ChatGPT."
   },
   "Русский (Russian)": {
     "nav.chatgpt": "Приложение ChatGPT",
@@ -9049,7 +9063,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "Отправлено. Ответим здесь и на почту.",
     "chatWidget.privacy": "Почта нужна только для ответа вам.",
     "chatWidget.assistantName": "Ассистент NivaDesk",
-    "chatWidget.assistantNote": "Автоматический ответ — специалист из команды тоже напишет."
+    "chatWidget.assistantNote": "Автоматический ответ — специалист из команды тоже напишет.",
+    "planBridge.helpAssistant.title": "Помощник внутри приложения",
+    "planBridge.helpAssistant.body": "Спросите, как что-то работает, и получите ответ из руководства NivaDesk, не выходя из приложения. Он никогда не читает данные рабочего пространства — заказы и цифры приходят из приложения ChatGPT."
   },
   "日本語 (Japanese)": {
     "nav.chatgpt": "ChatGPT アプリ",
@@ -9134,7 +9150,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "送信しました。こことメールの両方で返信します。",
     "chatWidget.privacy": "メールアドレスは返信のためだけに使用します。",
     "chatWidget.assistantName": "NivaDesk アシスタント",
-    "chatWidget.assistantNote": "自動応答です。担当者からも改めてご連絡します。"
+    "chatWidget.assistantNote": "自動応答です。担当者からも改めてご連絡します。",
+    "planBridge.helpAssistant.title": "アプリ内ヘルプアシスタント",
+    "planBridge.helpAssistant.body": "使い方を尋ねると、アプリを離れずに NivaDesk ガイドから回答が返ります。ワークスペースのデータは読みません。ご自身の注文や数字は ChatGPT アプリから確認できます。"
   },
   "中文 (Chinese)": {
     "nav.chatgpt": "ChatGPT 应用",
@@ -9219,7 +9237,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "已发送。我们会在这里和邮件中回复。",
     "chatWidget.privacy": "你的邮箱仅用于回复你。",
     "chatWidget.assistantName": "NivaDesk 助理",
-    "chatWidget.assistantNote": "自动回复——团队成员随后也会回复你。"
+    "chatWidget.assistantNote": "自动回复——团队成员随后也会回复你。",
+    "planBridge.helpAssistant.title": "应用内帮助助理",
+    "planBridge.helpAssistant.body": "在应用里直接询问功能怎么用，答案来自 NivaDesk 指南。它绝不读取你的工作区数据——你的订单和数字来自 ChatGPT 应用。"
   },
   "العربية (Arabic)": {
     "nav.chatgpt": "تطبيق ChatGPT",
@@ -9304,7 +9324,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "تم الإرسال. سنرد هنا وعبر البريد.",
     "chatWidget.privacy": "نستخدم بريدك للرد عليك فقط.",
     "chatWidget.assistantName": "مساعد NivaDesk",
-    "chatWidget.assistantNote": "رد آلي — وسيتابع معك أحد أفراد الفريق."
+    "chatWidget.assistantNote": "رد آلي — وسيتابع معك أحد أفراد الفريق.",
+    "planBridge.helpAssistant.title": "مساعد المساعدة داخل التطبيق",
+    "planBridge.helpAssistant.body": "اسأل عن طريقة عمل أي شيء واحصل على الإجابة من دليل NivaDesk دون مغادرة التطبيق. لا يقرأ بيانات مساحة عملك أبدًا — طلباتك وأرقامك تأتي من تطبيق ChatGPT."
   },
   "हिन्दी (Hindi)": {
     "nav.chatgpt": "ChatGPT ऐप",
@@ -9389,7 +9411,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.sentNote": "भेज दिया गया। हम यहाँ और ईमेल पर जवाब देंगे।",
     "chatWidget.privacy": "आपका ईमेल केवल जवाब देने के लिए इस्तेमाल होता है।",
     "chatWidget.assistantName": "NivaDesk सहायक",
-    "chatWidget.assistantNote": "स्वचालित उत्तर — टीम से कोई व्यक्ति भी जवाब देगा।"
+    "chatWidget.assistantNote": "स्वचालित उत्तर — टीम से कोई व्यक्ति भी जवाब देगा।",
+    "planBridge.helpAssistant.title": "ऐप के भीतर सहायक",
+    "planBridge.helpAssistant.body": "पूछें कि कुछ कैसे काम करता है और ऐप छोड़े बिना NivaDesk गाइड से उत्तर पाएँ। यह आपके वर्कस्पेस का डेटा कभी नहीं पढ़ता — आपके ऑर्डर और आंकड़े ChatGPT ऐप से आते हैं।"
   }
 };
 
