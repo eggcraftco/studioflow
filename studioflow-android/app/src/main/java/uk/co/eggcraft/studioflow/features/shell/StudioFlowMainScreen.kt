@@ -520,6 +520,7 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
+                    onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
@@ -662,6 +663,7 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
+                    onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
@@ -1352,6 +1354,7 @@ private fun StudioSectionContent(
     onRestoreOrder: (StudioOrder) -> Unit,
     focusedCustomerName: String,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    onCreateOrder: () -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
@@ -1456,6 +1459,7 @@ private fun StudioSectionContent(
                 onRestoreOrder = onRestoreOrder,
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                onCreateOrder = onCreateOrder,
                 resetToListKey = ordersResetToListKey
             )
             StudioSection.Schedule -> ScheduleScreen(

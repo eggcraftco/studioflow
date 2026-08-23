@@ -118,6 +118,7 @@ fun OrdersScreen(
     onRestoreOrder: (StudioOrder) -> Unit = {},
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onCreateOrder: () -> Unit = {},
     // Bumped by the top-bar logo: close any open order detail and show the list.
     resetToListKey: Int = 0
 ) {
@@ -275,6 +276,7 @@ fun OrdersScreen(
                         },
                         onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                         onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                        onCreateOrder = onCreateOrder,
                         wideLayout = true,
                         onToggleListVisibility = { saveOrderListVisibility(false, listPaneWidth) },
                         modifier = Modifier
@@ -415,6 +417,7 @@ fun OrdersScreen(
                 },
                 onOpenCustomerFromOrder = onOpenCustomerFromOrder,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                onCreateOrder = onCreateOrder,
                 wideLayout = false,
                 modifier = Modifier.fillMaxSize()
             )
@@ -444,6 +447,7 @@ private fun OrderListPane(
     onDeleteOrder: (StudioOrder) -> Unit,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onCreateOrder: () -> Unit = {},
     wideLayout: Boolean,
     onToggleListVisibility: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -780,6 +784,24 @@ private fun OrderListPane(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            // A genuinely empty workspace used to render nothing at all here, which
+            // left a new user staring at a blank screen with no way in. Matches the
+            // first-run state the iOS/macOS app already shows.
+            if (state.orders.isEmpty() && !state.loading) {
+                item(key = "orders-first-run") {
+                    OrdersFirstRunCard(
+                        creating = state.creatingOrder,
+                        canCreate = state.workspace?.memberAccess?.orders == true,
+                        onCreateOrder = onCreateOrder,
+                        onRunBusinessSetup = {
+                            onUpdateWorkspaceSettings(
+                                mapOf("businessOnboardingCompleted" to false),
+                                t("Business setup reopened.")
+                            )
+                        }
+                    )
+                }
+            }
             items(visibleOrders, key = { it.id }) { order ->
                 OrderListCard(
                     order = order,
@@ -2064,3 +2086,71 @@ private const val OrdersFilterKey = "orders_filter"
 private const val OrdersSortKey = "orders_sort"
 private const val OrdersListWidthKey = "orders_list_width_dp"
 private const val OrdersDayMs = 24L * 60L * 60L * 1000L
+
+/**
+ * First-run state for a workspace with no orders. Web and iOS both show a real
+ * starting point here; Android rendered an empty list and nothing else, so a new
+ * user had no indication of what to do next.
+ */
+@Composable
+private fun OrdersFirstRunCard(
+    creating: Boolean,
+    canCreate: Boolean,
+    onCreateOrder: () -> Unit,
+    onRunBusinessSetup: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = t("Your workspace is ready"),
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = t("Create your first order, or run the business setup again if you want NivaDesk to prepare workflow steps, fields and labels for you."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (canCreate) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = StudioGreen,
+                        modifier = Modifier.clickable(enabled = !creating) { onCreateOrder() }
+                    ) {
+                        Text(
+                            text = if (creating) t("Creating...") else t("Create First Order"),
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = StudioBlue.copy(alpha = 0.12f),
+                    modifier = Modifier.clickable { onRunBusinessSetup() }
+                ) {
+                    Text(
+                        text = t("Run Business Setup"),
+                        color = StudioBlue,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+                    )
+                }
+            }
+        }
+    }
+}
