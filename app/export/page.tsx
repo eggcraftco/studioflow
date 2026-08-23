@@ -117,9 +117,9 @@ export default function ExportPage() {
 
       <section className="card" style={{ padding: 22, marginBottom: 18 }}>
         <div className="pill">Export-first rule</div>
-        <h2 style={{ margin: "12px 0 6px" }}>Exports stay available on Free Demo</h2>
+        <h2 style={{ margin: "12px 0 6px" }}>Exports stay available on Free</h2>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          If a subscription expires, the workspace can fall back to Free Demo, but existing orders and customers can still be downloaded. Uploading files, creating new team data, or advanced features can remain locked by plan.
+          If a subscription expires, the workspace can fall back to Free, but existing orders and customers can still be downloaded. Uploading files, creating new team data, or advanced features can remain locked by plan.
         </p>
       </section>
 

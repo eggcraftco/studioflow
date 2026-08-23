@@ -124,7 +124,7 @@ export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "12. Client Files and message attachment retention",
     paragraphs: [
-      "Client Files and cloud-stored message attachments are not included in Free Demo or Lite access and may require an active Pro, Team, or other eligible paid plan.",
+      "Client Files and cloud-stored message attachments are not included in Free or Lite access and may require an active Pro, Team, or other eligible paid plan.",
       "Ending eligible paid access does not immediately remove these stored files, but it removes in-app access to open, preview, download, upload, rename, or delete them.",
       "Files may be retained for up to 90 days after access ends so a resubscribing workspace can restore access during that period. After 90 days, deletion may occur."
     ]

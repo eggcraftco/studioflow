@@ -45,7 +45,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "steps", items: [
         "Pick your industry: NivaDesk tailors the workflow steps, order fields and labels to your craft.",
         "Review the business description: it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.",
-        "Explore the Free Demo workspace: sample orders and customers let you try everything before adding real data.",
+        "Explore the Free workspace: sample orders and customers let you try everything before adding real data.",
         "Add your first real order with Add Project when you are ready."
       ] },
       { kind: "para", text: "You can change your industry, workflow steps and labels later in Settings, so nothing here is permanent." }
@@ -637,7 +637,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "steps", items: [
         "İş kolunuzu seçin: NivaDesk iş akışı adımlarını, sipariş alanlarını ve etiketleri mesleğinize göre ayarlar.",
         "İş açıklamasını gözden geçirin: mesleğinize uyacak şekilde otomatik dolar ve siparişlerin nasıl kurulacağını belirler. İstediğiniz zaman Settings ▸ Workflow Steps'ten düzenleyebilirsiniz.",
-        "Free Demo çalışma alanını keşfedin: örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
+        "Free çalışma alanını keşfedin: örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
         "Hazır olduğunuzda Add Project ile ilk gerçek siparişinizi ekleyin."
       ] },
       { kind: "para", text: "İş kolunuzu, iş akışı adımlarınızı ve etiketleri sonradan Settings'ten değiştirebilirsiniz; burada hiçbir şey kalıcı değildir." }

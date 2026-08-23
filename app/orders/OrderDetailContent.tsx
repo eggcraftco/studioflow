@@ -1975,9 +1975,9 @@ export function OrderDetailContent({
   );
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
-  // History/Log and Materials cards are open on every plan, including Free Demo.
+  // History/Log and Materials cards are open on every plan, including Free.
   const canUseLiteWorkspaceCards = true;
-  // Materials & Inventory is open on every plan, including Free Demo.
+  // Materials & Inventory is open on every plan, including Free.
   const canUseMaterialsCards = true;
   const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));
   const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));
@@ -2776,11 +2776,18 @@ export function OrderDetailContent({
   }
 
   function toggleCardVisibility(cardId: OrderDetailCardId) {
+    // Step 5 of the first-project tour asks the user to open Financial Info. The
+    // card is usually already visible, so a plain toggle turned it OFF: the tour
+    // then force-showed it for step 6 and, once finished, the card vanished — the
+    // tour ended by hiding the thing it had just explained. Here the step always
+    // opens the card instead of flipping it.
+    const guideOpensFinancial =
+      firstProjectGuideStep === 5 && cardId === "financial";
     const nextLayout = {
       ...cardLayout,
       visibility: {
         ...cardLayout.visibility,
-        [cardId]: !cardLayout.visibility[cardId]
+        [cardId]: guideOpensFinancial ? true : !cardLayout.visibility[cardId]
       }
     };
     void persistLayout(nextLayout);
@@ -7040,6 +7047,26 @@ export function OrderDetailContent({
                 <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
                   {t("Use Customize cards to choose which project cards are visible. Next, open Financial Info.")}
                 </span>
+                {/* This step waits for the user to open Customize cards, so without a
+                    way out the tour blocks anyone who cannot find that control — and
+                    it resumes here on every reload. */}
+                <button
+                  className="button secondary"
+                  type="button"
+                  style={{ width: "fit-content", marginTop: 2 }}
+                  onClick={() => {
+                    const nextGuide: FirstProjectGuideState = {
+                      ...(firstProjectGuide ?? {}),
+                      step: 4,
+                      orderId: order.id,
+                      completed: true
+                    };
+                    updateFirstProjectGuideState(nextGuide);
+                    setFirstProjectGuide(nextGuide);
+                  }}
+                >
+                  {t("Skip")}
+                </button>
               </span>
             ) : null}
             {orderActionsOpen ? (
@@ -7259,12 +7286,7 @@ export function OrderDetailContent({
                     firstProjectGuideStep === 5 && cardId === "financial" ? "first-project-guide-target" : ""
                   ].filter(Boolean).join(" ")}
                   style={firstProjectGuideStep === 5 && cardId === "financial" ? {
-                    position: "relative",
-                    zIndex: 130,
-                    outline: "4px solid #2563eb",
-                    outlineOffset: 4,
                     borderRadius: 18,
-                    boxShadow: "0 0 0 8px rgba(37, 99, 235, 0.16), 0 22px 58px rgba(37, 99, 235, 0.24)",
                     background: "rgba(239, 246, 255, 0.96)",
                     color: "#111827"
                   } : undefined}

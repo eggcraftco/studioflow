@@ -58,7 +58,7 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
   faq: {
     title: "NivaDesk FAQ | Plans, Features & Getting Started",
     description:
-      "Common questions about NivaDesk: plans and pricing, supported platforms, online store integrations, the Free Demo, exporting your data and getting started.",
+      "Common questions about NivaDesk: plans and pricing, supported platforms, online store integrations, the Free, exporting your data and getting started.",
     path: "/faq"
   },
   privacy: {

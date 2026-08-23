@@ -121,7 +121,7 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "Subscriptions may renew automatically unless cancelled before the renewal date. You are responsible for cancelling your subscription through the platform where you purchased it.",
       "Cancelling a subscription usually stops future renewals. It does not always automatically provide a refund for the current billing period.",
-      "If your paid subscription expires, is cancelled, or payment fails, your account may be downgraded to a Free Demo or limited plan. Core order, customer, and available basic financial data may remain available for export after a downgrade, subject to security, abuse prevention, legal, and technical limits.",
+      "If your paid subscription expires, is cancelled, or payment fails, your account may be downgraded to a Free or limited plan. Core order, customer, and available basic financial data may remain available for export after a downgrade, subject to security, abuse prevention, legal, and technical limits.",
       "Client Files and cloud-stored message attachments are paid-plan features. Once the eligible paid period ends, they cannot be opened, previewed, downloaded, uploaded, renamed, or deleted through the app. We may retain them for up to 90 days so access can be restored if the workspace resubscribes during that period; after that period they may be deleted."
     ],
     bullets: [

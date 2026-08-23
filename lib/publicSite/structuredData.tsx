@@ -36,7 +36,7 @@ const softwareApplication = {
   operatingSystem: "Web, macOS, iOS, Android",
   publisher: { "@id": `${BASE_URL}/#organization` },
   offers: [
-    { "@type": "Offer", name: "Free Demo", price: "0", priceCurrency: "GBP" },
+    { "@type": "Offer", name: "Free", price: "0", priceCurrency: "GBP" },
     { "@type": "Offer", name: "NivaDesk Lite", price: "9", priceCurrency: "GBP", description: "£9/month or £90/year" },
     { "@type": "Offer", name: "NivaDesk Pro", price: "19", priceCurrency: "GBP", description: "£19/month or £190/year, includes Client Files with 10 GB storage" },
     { "@type": "Offer", name: "NivaDesk Team", price: "49", priceCurrency: "GBP", description: "£49/month or £490/year, 5 seats included" }
@@ -67,12 +67,12 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
     question: "Is there a free version of NivaDesk?",
     answer:
-      "Yes. Free Demo lets you try NivaDesk with a small sample workspace of up to 5 orders and 3 customers, at no cost and with no card required. Upgrade whenever you're ready."
+      "Yes. The Free plan keeps up to 10 orders and 10 customers at no cost and with no card required, for as long as you like. Upgrade whenever you're ready."
   },
   {
     question: "Which NivaDesk plans are available?",
     answer:
-      "Free Demo (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
+      "Free (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
   },
   {
     question: "Can I pay monthly or yearly?",
@@ -85,19 +85,19 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
       "Yes. You can upgrade or downgrade at any time from the plan screen. Upgrades apply immediately; downgrades take effect at the end of your current billing period."
   },
   {
-    question: "What are the Free Demo limits?",
+    question: "What are the Free plan limits?",
     answer:
-      "Free Demo includes up to 5 orders and 3 customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
+      "Free includes up to 10 orders and 10 customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
   },
   {
     question: "How do I cancel, and does NivaDesk offer refunds?",
     answer:
-      "You can cancel any time from your account; your workspace keeps its paid features until the end of the period you've already paid for, then returns to Free Demo. Refunds follow the Refund & Cancellation policy."
+      "You can cancel any time from your account; your workspace keeps its paid features until the end of the period you've already paid for, then returns to Free. Refunds follow the Refund & Cancellation policy."
   },
   {
     question: "How many users are included?",
     answer:
-      "Free Demo, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
+      "Free, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
   },
   {
     question: "How much file storage do I get?",

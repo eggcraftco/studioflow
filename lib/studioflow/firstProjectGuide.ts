@@ -42,7 +42,8 @@ function parseGuideState(raw: string | null): FirstProjectGuideState | null {
 const SIGNUP_PLATFORM_KEY = "studioflowSignupPlatformV1";
 
 // Cached per device after AppShell reads users/{uid}.signupPlatform from
-// Firestore. Accounts created on a phone never see the guide, even on desktop.
+// Firestore. Kept for callers and diagnostics; eligibility no longer depends on
+// it — see isFirstProjectGuideDeviceEligible below.
 export function rememberSignupPlatformForGuide(platform: string) {
   if (typeof window === "undefined") return;
   const cleaned = platform.trim().toLowerCase();
@@ -50,12 +51,17 @@ export function rememberSignupPlatformForGuide(platform: string) {
   else window.localStorage.removeItem(SIGNUP_PLATFORM_KEY);
 }
 
-// The first-project info-card tour is desktop-only and only for accounts that
-// were created on a computer: it never starts or resumes on phones, and never
-// shows for mobile signups regardless of the current device.
+// The first-project info-card tour points at desktop toolbar controls, so it is
+// gated on the device in front of the user right now: never on a phone, and never
+// in a window too narrow to place the callouts.
+//
+// It used to also refuse whenever the account's stored signupPlatform was
+// "mobile". That brand is permanent, and it was set from the signup window width,
+// so anyone who registered in a half-width desktop window could never see the
+// guide again on any device. The live checks below already express the real
+// requirement precisely, so the stale brand only produced false negatives.
 export function isFirstProjectGuideDeviceEligible(): boolean {
   if (typeof window === "undefined") return false;
-  if (window.localStorage.getItem(SIGNUP_PLATFORM_KEY) === "mobile") return false;
   const ua = window.navigator.userAgent || "";
   if (/iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua)) return false;
   return window.innerWidth >= 768;
