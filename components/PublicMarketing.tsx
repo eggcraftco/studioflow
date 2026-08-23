@@ -3097,7 +3097,10 @@ function PublicSignupPageContent() {
       {
         // Honour a same-site ?next= (e.g. the Shopify connect handshake).
         const nextParam = new URLSearchParams(window.location.search).get("next") || "";
-        router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
+        // Brand-new accounts land on Orders, not the dashboard: with no orders yet
+        // the dashboard is a wall of zeros, and the first-project guide only ever
+        // renders on /orders.
+        router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/orders");
       }
     } catch (signupError) {
       setError(signupErrorMessage(signupError, t));
@@ -3114,7 +3117,7 @@ function PublicSignupPageContent() {
           <h1>{t("signup.signedIn.title")}</h1>
           <p>{t("signup.signedIn.body")}</p>
           <div className="public-hero-actions">
-            <Link href="/dashboard" className="public-button large">{t("cta.openPortal")}</Link>
+            <Link href="/orders" className="public-button large">{t("cta.openPortal")}</Link>
             <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
           </div>
         </div>

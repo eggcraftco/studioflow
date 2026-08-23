@@ -30,8 +30,10 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import {
+  canCreateOrdersForRole,
   canDeleteOrdersForRole,
   canEditOrderStatusForRole,
+  createOrderFromWeb,
   deleteOrderFromWeb,
   mergeOrders,
   restoreOrderFromWeb,
@@ -140,6 +142,8 @@ export default function OrdersPage() {
   const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
+  const [creatingFirstOrder, setCreatingFirstOrder] = useState(false);
+  const [firstOrderError, setFirstOrderError] = useState("");
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set());
   const lastSelectedOrderIdRef = useRef<string | null>(null);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
@@ -711,6 +715,38 @@ export default function OrdersPage() {
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
 
+  // A genuinely empty workspace, as opposed to a filter that matched nothing.
+  const workspaceHasNoOrders =
+    !loadingOrders && orders.length === 0 && orderFilter !== "trash";
+  const canCreateFirstOrder = Boolean(
+    workspace &&
+    workspaceAccessAllows(workspace.memberAccess, "orders") &&
+    canCreateOrdersForRole(workspace.role) &&
+    workspace.entitlements.features.orders_create
+  );
+
+  async function handleCreateFirstOrder() {
+    if (!workspace || creatingFirstOrder) return;
+    setFirstOrderError("");
+    setCreatingFirstOrder(true);
+    try {
+      const result = await createOrderFromWeb(workspace);
+      // The page already listens for this event: it reloads the list, selects the
+      // new order and starts the first-project guide where that is supported.
+      window.dispatchEvent(
+        new CustomEvent("studioflow-order-created", { detail: { orderId: result.orderId || "" } })
+      );
+    } catch (createError) {
+      setFirstOrderError(
+        createError instanceof Error
+          ? createError.message
+          : t("Could not create the project. Please try again.")
+      );
+    } finally {
+      setCreatingFirstOrder(false);
+    }
+  }
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -781,7 +817,25 @@ export default function OrdersPage() {
           {orderActionStatus ? <p className="orders-sidebar-message">{orderActionStatus}</p> : null}
           {orderActionError ? <p className="orders-sidebar-error">{orderActionError}</p> : null}
 
-          {filteredOrders.length === 0 && !loadingOrders ? (
+          {workspaceHasNoOrders ? (
+            <div className="orders-first-run">
+              <h2 className="orders-first-run-title">{t("Create your first order")}</h2>
+              <p className="orders-first-run-copy">
+                {t("An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.")}
+              </p>
+              {canCreateFirstOrder ? (
+                <button
+                  type="button"
+                  className="button orders-first-run-button"
+                  onClick={() => void handleCreateFirstOrder()}
+                  disabled={creatingFirstOrder}
+                >
+                  {creatingFirstOrder ? t("Creating...") : t("Create your first order")}
+                </button>
+              ) : null}
+              {firstOrderError ? <p className="orders-sidebar-error">{firstOrderError}</p> : null}
+            </div>
+          ) : filteredOrders.length === 0 && !loadingOrders ? (
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
           ) : null}
 
@@ -1066,8 +1120,23 @@ export default function OrdersPage() {
 
           {!selectedOrderId && !detailError ? (
             <section className="orders-empty-detail">
-              <CardTitle icon="orders" eyebrow={t("Select order")} title={t("Choose an order from the list")} />
-              <p className="muted-copy">{t("Order details will appear here on wider screens.")}</p>
+              {workspaceHasNoOrders ? (
+                <>
+                  <CardTitle
+                    icon="orders"
+                    eyebrow={t("Getting started")}
+                    title={t("Your workspace is ready")}
+                  />
+                  <p className="muted-copy">
+                    {t("Create your first order and its details will open here.")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <CardTitle icon="orders" eyebrow={t("Select order")} title={t("Choose an order from the list")} />
+                  <p className="muted-copy">{t("Order details will appear here on wider screens.")}</p>
+                </>
+              )}
             </section>
           ) : null}
 

@@ -3358,6 +3358,51 @@ button.toolbar-icon-button,
   color: var(--danger);
 }
 
+/* First run: an empty workspace gets a real starting point instead of a bare
+   "no orders" line. Lives in the list column so it is reachable on phones too,
+   where the detail pane is not rendered at all. */
+.orders-first-run {
+  margin: 6px 14px 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.orders-first-run-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.orders-first-run-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.orders-first-run-button {
+  margin-top: 4px;
+  border-color: rgba(52, 199, 89, 0.22);
+  background: #34c759;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(52, 199, 89, 0.18);
+  min-height: 36px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orders-first-run-button:hover:not(:disabled) {
+  background: #30bd54;
+}
+
 .order-list-context-menu {
   position: fixed;
   z-index: 90;

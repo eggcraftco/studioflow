@@ -3578,6 +3578,99 @@ const PANDLE_TRANSLATIONS: TranslationTable = {
   "Back to Bank Spending": { "Türkçe": "Banka Harcamalarına dön", "Deutsch": "Zurück zu Bankausgaben", "Français": "Retour aux dépenses bancaires", "Italiano": "Torna a Spese bancarie", "Español (Spanish)": "Volver a Gastos bancarios", "Português": "Voltar a Despesas bancárias", "Русский (Russian)": "Назад к банковским расходам", "日本語 (Japanese)": "銀行支出に戻る", "中文 (Chinese)": "返回银行支出", "العربية (Arabic)": "العودة إلى مصروفات البنك", "हिन्दी (Hindi)": "बैंक ख़र्च पर वापस" },
 };
 
+// First-run empty state on the Orders page: shown to a workspace that has no
+// orders at all, in place of the old "choose an order from the list" copy.
+const ORDERS_FIRST_RUN_TRANSLATIONS = translationsFromLanguagePacks({
+  "Türkçe": {
+    "Select your business type": "İş türünüzü seçin",
+    "Create your first order": "İlk siparişini oluştur",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Bir sipariş tek bir işi tutar: müşteri, fiyat, teslim tarihi, fotoğraflar ve dosyalar. Bir tane ekle, NivaDesk'in geri kalanı onun etrafında şekillensin.",
+    "Getting started": "Başlarken",
+    "Your workspace is ready": "Workspace'in hazır",
+    "Create your first order and its details will open here.": "İlk siparişini oluştur, detayları burada açılsın."
+  },
+  "Deutsch": {
+    "Select your business type": "Branche auswählen",
+    "Create your first order": "Ersten Auftrag anlegen",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Ein Auftrag umfasst einen Job: Kunde, Preis, Termin, Fotos und Dateien. Legen Sie einen an, und der Rest von NivaDesk baut sich darum auf.",
+    "Getting started": "Erste Schritte",
+    "Your workspace is ready": "Ihr Workspace ist bereit",
+    "Create your first order and its details will open here.": "Legen Sie Ihren ersten Auftrag an – die Details erscheinen hier."
+  },
+  "Français": {
+    "Select your business type": "Choisissez votre secteur",
+    "Create your first order": "Créer votre première commande",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Une commande regroupe un travail : le client, le prix, l'échéance, les photos et les fichiers. Créez-en une et le reste de NivaDesk s'organise autour.",
+    "Getting started": "Pour commencer",
+    "Your workspace is ready": "Votre espace de travail est prêt",
+    "Create your first order and its details will open here.": "Créez votre première commande, ses détails s'afficheront ici."
+  },
+  "Italiano": {
+    "Select your business type": "Seleziona il tuo settore",
+    "Create your first order": "Crea il tuo primo ordine",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Un ordine contiene un lavoro: cliente, prezzo, scadenza, foto e file. Creane uno e il resto di NivaDesk si costruisce intorno.",
+    "Getting started": "Per iniziare",
+    "Your workspace is ready": "Il tuo workspace è pronto",
+    "Create your first order and its details will open here.": "Crea il tuo primo ordine e i dettagli si apriranno qui."
+  },
+  "Español (Spanish)": {
+    "Select your business type": "Selecciona tu tipo de negocio",
+    "Create your first order": "Crea tu primer pedido",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Un pedido reúne un trabajo: el cliente, el precio, la fecha de entrega, fotos y archivos. Crea uno y el resto de NivaDesk se organiza a su alrededor.",
+    "Getting started": "Primeros pasos",
+    "Your workspace is ready": "Tu espacio de trabajo está listo",
+    "Create your first order and its details will open here.": "Crea tu primer pedido y sus detalles se abrirán aquí."
+  },
+  "Português": {
+    "Select your business type": "Selecione o seu tipo de negócio",
+    "Create your first order": "Crie o seu primeiro pedido",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Um pedido reúne um trabalho: o cliente, o preço, o prazo, fotos e ficheiros. Crie um e o resto do NivaDesk organiza-se à volta dele.",
+    "Getting started": "Começar",
+    "Your workspace is ready": "O seu workspace está pronto",
+    "Create your first order and its details will open here.": "Crie o seu primeiro pedido e os detalhes abrirão aqui."
+  },
+  "Русский (Russian)": {
+    "Select your business type": "Выберите тип бизнеса",
+    "Create your first order": "Создайте первый заказ",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Заказ содержит одну работу: клиента, цену, срок, фотографии и файлы. Создайте его — и остальное в NivaDesk выстроится вокруг.",
+    "Getting started": "Начало работы",
+    "Your workspace is ready": "Ваше рабочее пространство готово",
+    "Create your first order and its details will open here.": "Создайте первый заказ, и его детали откроются здесь."
+  },
+  "日本語 (Japanese)": {
+    "Select your business type": "業種を選択",
+    "Create your first order": "最初の注文を作成",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "注文には1つの案件がまとまります。顧客、金額、納期、写真、ファイル。まず1件作成すると、NivaDesk の他の機能がその周りに揃います。",
+    "Getting started": "はじめに",
+    "Your workspace is ready": "ワークスペースの準備ができました",
+    "Create your first order and its details will open here.": "最初の注文を作成すると、詳細がここに表示されます。"
+  },
+  "中文 (Chinese)": {
+    "Select your business type": "选择您的业务类型",
+    "Create your first order": "创建第一个订单",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "一个订单包含一项工作：客户、价格、交期、照片和文件。先创建一个，NivaDesk 的其他功能会围绕它展开。",
+    "Getting started": "开始使用",
+    "Your workspace is ready": "您的工作区已就绪",
+    "Create your first order and its details will open here.": "创建第一个订单，详情将在此处打开。"
+  },
+  "العربية (Arabic)": {
+    "Select your business type": "اختر نوع نشاطك",
+    "Create your first order": "أنشئ طلبك الأول",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "يجمع الطلب عملاً واحداً: العميل والسعر والموعد النهائي والصور والملفات. أنشئ طلباً وسيتشكل باقي NivaDesk حوله.",
+    "Getting started": "البداية",
+    "Your workspace is ready": "مساحة عملك جاهزة",
+    "Create your first order and its details will open here.": "أنشئ طلبك الأول وستظهر تفاصيله هنا."
+  },
+  "हिन्दी (Hindi)": {
+    "Select your business type": "अपना व्यवसाय प्रकार चुनें",
+    "Create your first order": "अपना पहला ऑर्डर बनाएं",
+    "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "एक ऑर्डर में एक काम रहता है: ग्राहक, कीमत, समय-सीमा, तस्वीरें और फ़ाइलें। एक बनाइए और NivaDesk का बाकी हिस्सा उसके चारों ओर बन जाएगा।",
+    "Getting started": "शुरुआत करें",
+    "Your workspace is ready": "आपका वर्कस्पेस तैयार है",
+    "Create your first order and its details will open here.": "अपना पहला ऑर्डर बनाएं, उसका विवरण यहां खुलेगा।"
+  }
+});
+
 const TRANSLATIONS: TranslationTable = {
   ...WEB_TRANSLATIONS,
   ...SESSION_LOCK_TRANSLATIONS,
@@ -3586,6 +3679,7 @@ const TRANSLATIONS: TranslationTable = {
   ...PAGE_TOP_EXTRA_TRANSLATIONS,
   ...MISSING_UI_TRANSLATIONS,
   ...MISSING_UI_TRANSLATIONS_MORE,
+  ...ORDERS_FIRST_RUN_TRANSLATIONS,
   ...NOTES_TRANSLATIONS,
   ...MESSAGES_TRANSLATIONS,
   ...SETTINGS_MENU_TRANSLATIONS,

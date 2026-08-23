@@ -488,6 +488,7 @@ function WorkspaceOnboardingScreen({
               disabled={saving}
               onChange={(event) => onBusinessTypeChange(event.target.value)}
             >
+              <option value="">{t("Select your business type")}</option>
               {WORKSPACE_ONBOARDING_BUSINESS_TYPES.map((type) => (
                 <option key={type} value={type}>
                   {t(type)}
@@ -519,7 +520,7 @@ function WorkspaceOnboardingScreen({
             <button
               className="workspace-onboarding-primary"
               type="button"
-              disabled={saving}
+              disabled={saving || !businessType}
               onClick={onSmart}
             >
               {saving ? t("Saving...") : t("Smart Customize")}
@@ -527,7 +528,7 @@ function WorkspaceOnboardingScreen({
             <button
               className="workspace-onboarding-secondary"
               type="button"
-              disabled={saving}
+              disabled={saving || !businessType}
               onClick={onStandard}
             >
               {t("Use Standard Template")}
@@ -791,10 +792,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
-  const [onboardingBusinessType, setOnboardingBusinessType] =
-    useState("Photography Studio");
+  // No business type is preselected: a pre-filled choice was silently accepted by
+  // anyone clicking straight through, so a jeweller ended up with the photography
+  // workflow. The setup buttons stay disabled until a type is chosen.
+  const [onboardingBusinessType, setOnboardingBusinessType] = useState("");
   const [onboardingPrompt, setOnboardingPrompt] = useState(
-    workspaceOnboardingPromptSeed("Photography Studio"),
+    workspaceOnboardingPromptSeed(""),
   );
   const [onboardingPromptEdited, setOnboardingPromptEdited] = useState(false);
   const [onboardingSaving, setOnboardingSaving] = useState(false);
@@ -1316,14 +1319,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!showWorkspaceOnboarding) return;
     setOnboardingError("");
-    setOnboardingBusinessType((current) => current || "Photography Studio");
     setOnboardingPrompt((current) =>
       onboardingPromptEdited && current.trim()
         ? current
-        : workspaceOnboardingPromptSeed(
-            onboardingBusinessType || "Photography Studio",
-            language,
-          ),
+        : workspaceOnboardingPromptSeed(onboardingBusinessType, language),
     );
   }, [showWorkspaceOnboarding, onboardingBusinessType, onboardingPromptEdited, language]);
 
