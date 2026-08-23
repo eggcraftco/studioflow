@@ -54,9 +54,12 @@ async function ensurePersonalWorkspace(currentUser: User) {
     // First bootstrap of a brand-new account: remember which device class it
     // was created on. The first-project guide opens only for desktop signups.
     if (!userSnapshot.exists() && !cleanText(userData.signupPlatform)) {
+      // Device class only — a narrow window is not a phone. This used to also
+      // treat innerWidth < 768 as mobile, which permanently branded anyone who
+      // signed up in a half-width desktop window and, because the brand is
+      // sticky, hid the first-project guide from them on every device after.
       const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
-      const isPhone = /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua) ||
-        (typeof window !== "undefined" && window.innerWidth < 768);
+      const isPhone = /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua);
       userPayload.signupPlatform = isPhone ? "mobile" : "desktop";
     }
     await setDoc(userRef, userPayload, { merge: true });
