@@ -3403,6 +3403,44 @@ button.toolbar-icon-button,
   background: #30bd54;
 }
 
+/* First-project tour: whatever the current step is pointing at.
+   Both class names were applied in the markup but never had a rule behind them,
+   so each site inlined its own slightly different ring — and the toolbar button
+   in step 1, the very first thing the tour asks you to click, was left with no
+   highlight at all. One rule now drives every step. */
+.studio-guide-target,
+.first-project-guide-target {
+  position: relative;
+  z-index: 130;
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 6px rgba(37, 99, 235, 0.16),
+    0 16px 40px rgba(37, 99, 235, 0.22);
+  animation: studio-guide-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes studio-guide-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 6px rgba(37, 99, 235, 0.16),
+      0 16px 40px rgba(37, 99, 235, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 11px rgba(37, 99, 235, 0.08),
+      0 16px 40px rgba(37, 99, 235, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-guide-target,
+  .first-project-guide-target {
+    animation: none;
+  }
+}
+
 .order-list-context-menu {
   position: fixed;
   z-index: 90;
@@ -19957,6 +19995,19 @@ html[dir="rtl"] .login-public-shell {
 .support-chat-msg.is-visitor p {
   background: rgba(47, 111, 109, 0.10);
   border-color: rgba(47, 111, 109, 0.20);
+}
+
+.support-chat-msg.is-assistant p {
+  background: rgba(59, 130, 246, 0.07);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.support-chat-ai-note {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--public-muted);
 }
 
 .support-chat-note,

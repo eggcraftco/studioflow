@@ -7286,12 +7286,7 @@ export function OrderDetailContent({
                     firstProjectGuideStep === 5 && cardId === "financial" ? "first-project-guide-target" : ""
                   ].filter(Boolean).join(" ")}
                   style={firstProjectGuideStep === 5 && cardId === "financial" ? {
-                    position: "relative",
-                    zIndex: 130,
-                    outline: "4px solid #2563eb",
-                    outlineOffset: 4,
                     borderRadius: 18,
-                    boxShadow: "0 0 0 8px rgba(37, 99, 235, 0.16), 0 22px 58px rgba(37, 99, 235, 0.24)",
                     background: "rgba(239, 246, 255, 0.96)",
                     color: "#111827"
                   } : undefined}
