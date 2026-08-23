@@ -7040,6 +7040,26 @@ export function OrderDetailContent({
                 <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
                   {t("Use Customize cards to choose which project cards are visible. Next, open Financial Info.")}
                 </span>
+                {/* This step waits for the user to open Customize cards, so without a
+                    way out the tour blocks anyone who cannot find that control — and
+                    it resumes here on every reload. */}
+                <button
+                  className="button secondary"
+                  type="button"
+                  style={{ width: "fit-content", marginTop: 2 }}
+                  onClick={() => {
+                    const nextGuide: FirstProjectGuideState = {
+                      ...(firstProjectGuide ?? {}),
+                      step: 4,
+                      orderId: order.id,
+                      completed: true
+                    };
+                    updateFirstProjectGuideState(nextGuide);
+                    setFirstProjectGuide(nextGuide);
+                  }}
+                >
+                  {t("Skip")}
+                </button>
               </span>
             ) : null}
             {orderActionsOpen ? (
