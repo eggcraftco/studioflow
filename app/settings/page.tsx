@@ -74,7 +74,9 @@ import {
   type StudioSupportTicket,
   type StudioSupportTicketMessage,
   type StudioSupportTicketStatus,
-  type StudioSupportTicketType
+  type StudioSupportTicketType,
+  getWebsiteAssistantConfig,
+  setWebsiteAssistant
 } from "@/lib/studioflow/supportTickets";
 
 type SettingsSectionId =
@@ -2005,6 +2007,42 @@ function QuickReplySettingsSection({
   const [contributions, setContributions] = useState<QuickReplyContributionItem[]>([]);
   const [contributionSaving, setContributionSaving] = useState(false);
   const canEditCore = canEditQuickReplySettingsForRole(workspace.role);
+  // The same key can also power the assistant on the public website. Only a
+  // NivaDesk support admin sees this, and only they can switch it on.
+  const [assistant, setAssistant] = useState<{ visible: boolean; enabled: boolean; hasKey: boolean }>({ visible: false, enabled: false, hasKey: false });
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const config = await getWebsiteAssistantConfig();
+      if (cancelled) return;
+      setAssistant({
+        visible: Boolean(config.visible),
+        enabled: Boolean(config.enabled),
+        hasKey: Boolean(config.hasKey)
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [workspace.id]);
+
+  async function toggleWebsiteAssistant(next: boolean) {
+    setAssistantBusy(true);
+    setAssistantError("");
+    try {
+      const result = await setWebsiteAssistant({ enabled: next, companyId: workspace.id });
+      setAssistant(current => ({
+        visible: true,
+        enabled: Boolean(result.enabled),
+        hasKey: next ? Boolean(result.hasKey) : current.hasKey
+      }));
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAssistantBusy(false);
+    }
+  }
   const canEditPersonal = canEditPersonalQuickReplySettingsForRole(workspace.role);
   const canContribute = canContributeQuickReplyKnowledgeForRole(workspace.role);
   const [menuEnabled, setMenuEnabled] = useState(workspace.quickReplyMenuEnabled);
@@ -2238,9 +2276,32 @@ function QuickReplySettingsSection({
                       onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
                       placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
                     />
-                    <span>{t("Stored server-side and never shared with workspace members.")}</span>
+                    <span>{t("Stored server-side and never shared with workspace members. If the website assistant is switched on below, the same key answers questions from the nivadesk.app chat widget.")}</span>
                   </div>
                 </div>
+                {assistant.visible ? (
+                  <div className="quick-reply-settings-panel">
+                    <CardTitle icon="notes" eyebrow={t("NivaDesk only")} title={t("Website assistant")} />
+                    <p className="muted-copy">{t("Let this OpenAI key answer first questions in the nivadesk.app chat widget. The assistant only answers from public NivaDesk facts, never from this workspace's Quick Reply knowledge base, and hands over to a person when it is unsure. Every question still reaches Support / Tickets and your email.")}</p>
+                    <div className="quick-reply-key-row">
+                      <span className={assistant.enabled ? "studio-pill success" : "studio-pill"}>
+                        {assistant.enabled ? t("Website assistant is on") : t("Website assistant is off")}
+                      </span>
+                      {assistant.enabled && !assistant.hasKey ? (
+                        <span className="studio-pill">{t("No API key configured")}</span>
+                      ) : null}
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={assistantBusy}
+                        onClick={() => void toggleWebsiteAssistant(!assistant.enabled)}
+                      >
+                        {assistantBusy ? t("Saving...") : (assistant.enabled ? t("Turn off") : t("Turn on"))}
+                      </button>
+                    </div>
+                    {assistantError ? <p className="layout-error">{assistantError}</p> : null}
+                  </div>
+                ) : null}
                 <div className="quick-reply-key-row">
                   <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
                     {clearOpenAIKey ? t("Key will be cleared") : settings.hasOpenAIKey ? t("API key configured") : t("No API key configured")}

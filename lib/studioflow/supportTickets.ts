@@ -336,3 +336,32 @@ export async function assignNivaDeskSupportTicket(input: {
     throw new Error(supportError(error));
   }
 }
+
+export type WebsiteAssistantConfig = {
+  ok?: boolean;
+  visible?: boolean;
+  enabled?: boolean;
+  companyId?: string;
+  hasKey?: boolean;
+};
+
+export async function getWebsiteAssistantConfig() {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, WebsiteAssistantConfig>(functions, "getWebsiteAssistantConfig");
+    const result = await callable({});
+    return result.data || {};
+  } catch {
+    // A workspace that cannot read the config simply does not see the control.
+    return {} as WebsiteAssistantConfig;
+  }
+}
+
+export async function setWebsiteAssistant(input: { enabled: boolean; companyId: string }) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, WebsiteAssistantConfig>(functions, "setWebsiteAssistant");
+    const result = await callable({ ...input });
+    return result.data || {};
+  } catch (error) {
+    throw new Error(supportError(error));
+  }
+}
