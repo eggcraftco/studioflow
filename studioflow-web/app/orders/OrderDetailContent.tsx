@@ -2776,11 +2776,18 @@ export function OrderDetailContent({
   }
 
   function toggleCardVisibility(cardId: OrderDetailCardId) {
+    // Step 5 of the first-project tour asks the user to open Financial Info. The
+    // card is usually already visible, so a plain toggle turned it OFF: the tour
+    // then force-showed it for step 6 and, once finished, the card vanished — the
+    // tour ended by hiding the thing it had just explained. Here the step always
+    // opens the card instead of flipping it.
+    const guideOpensFinancial =
+      firstProjectGuideStep === 5 && cardId === "financial";
     const nextLayout = {
       ...cardLayout,
       visibility: {
         ...cardLayout.visibility,
-        [cardId]: !cardLayout.visibility[cardId]
+        [cardId]: guideOpensFinancial ? true : !cardLayout.visibility[cardId]
       }
     };
     void persistLayout(nextLayout);
