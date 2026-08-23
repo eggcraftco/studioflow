@@ -5,6 +5,7 @@ export type WebsiteChatMessage = {
   id: string;
   message: string;
   fromVisitor: boolean;
+  fromAssistant?: boolean;
   authorName: string;
   createdAtMillis: number;
 };

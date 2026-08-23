@@ -19959,6 +19959,19 @@ html[dir="rtl"] .login-public-shell {
   border-color: rgba(47, 111, 109, 0.20);
 }
 
+.support-chat-msg.is-assistant p {
+  background: rgba(59, 130, 246, 0.07);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.support-chat-ai-note {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--public-muted);
+}
+
 .support-chat-note,
 .support-chat-privacy {
   margin: 0;

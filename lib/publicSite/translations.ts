@@ -495,6 +495,8 @@ export const PUBLIC_SITE_EN = {
   "chatWidget.send": "Send",
   "chatWidget.sending": "Sending…",
   "chatWidget.sentNote": "Sent. We'll reply here and by email.",
+  "chatWidget.assistantName": "NivaDesk Assistant",
+  "chatWidget.assistantNote": "Automatic answer — a person from the team will follow up.",
   "chatWidget.privacy": "We use your email only to answer you.",
   "nav.chatgpt": "ChatGPT app",
   "aiPage.learnMore": "See everything it can do",
@@ -8535,7 +8537,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Gönder",
     "chatWidget.sending": "Gönderiliyor…",
     "chatWidget.sentNote": "Gönderildi. Hem burada hem e-postayla döneceğiz.",
-    "chatWidget.privacy": "E-postanızı yalnızca size cevap vermek için kullanırız."
+    "chatWidget.privacy": "E-postanızı yalnızca size cevap vermek için kullanırız.",
+    "chatWidget.assistantName": "NivaDesk Asistanı",
+    "chatWidget.assistantNote": "Otomatik yanıt — ekipten bir kişi ayrıca dönecek."
   },
   "Deutsch": {
     "nav.chatgpt": "ChatGPT-App",
@@ -8618,7 +8622,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Senden",
     "chatWidget.sending": "Wird gesendet…",
     "chatWidget.sentNote": "Gesendet. Wir antworten hier und per E-Mail.",
-    "chatWidget.privacy": "Wir nutzen deine E-Mail nur, um dir zu antworten."
+    "chatWidget.privacy": "Wir nutzen deine E-Mail nur, um dir zu antworten.",
+    "chatWidget.assistantName": "NivaDesk-Assistent",
+    "chatWidget.assistantNote": "Automatische Antwort — jemand aus dem Team meldet sich noch."
   },
   "Français": {
     "nav.chatgpt": "App ChatGPT",
@@ -8701,7 +8707,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Envoyer",
     "chatWidget.sending": "Envoi…",
     "chatWidget.sentNote": "Envoyé. Nous répondrons ici et par e-mail.",
-    "chatWidget.privacy": "Votre e-mail sert uniquement à vous répondre."
+    "chatWidget.privacy": "Votre e-mail sert uniquement à vous répondre.",
+    "chatWidget.assistantName": "Assistant NivaDesk",
+    "chatWidget.assistantNote": "Réponse automatique — une personne de l’équipe vous répondra aussi."
   },
   "Italiano": {
     "nav.chatgpt": "App ChatGPT",
@@ -8784,7 +8792,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Invia",
     "chatWidget.sending": "Invio…",
     "chatWidget.sentNote": "Inviato. Rispondiamo qui e via email.",
-    "chatWidget.privacy": "Usiamo la tua email solo per risponderti."
+    "chatWidget.privacy": "Usiamo la tua email solo per risponderti.",
+    "chatWidget.assistantName": "Assistente NivaDesk",
+    "chatWidget.assistantNote": "Risposta automatica — una persona del team ti risponderà comunque."
   },
   "Español (Spanish)": {
     "nav.chatgpt": "App de ChatGPT",
@@ -8867,7 +8877,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Enviar",
     "chatWidget.sending": "Enviando…",
     "chatWidget.sentNote": "Enviado. Te responderemos aquí y por correo.",
-    "chatWidget.privacy": "Usamos tu correo solo para responderte."
+    "chatWidget.privacy": "Usamos tu correo solo para responderte.",
+    "chatWidget.assistantName": "Asistente de NivaDesk",
+    "chatWidget.assistantNote": "Respuesta automática: una persona del equipo también te contestará."
   },
   "Português": {
     "nav.chatgpt": "App ChatGPT",
@@ -8950,7 +8962,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Enviar",
     "chatWidget.sending": "A enviar…",
     "chatWidget.sentNote": "Enviado. Respondemos aqui e por email.",
-    "chatWidget.privacy": "Usamos o teu email apenas para te responder."
+    "chatWidget.privacy": "Usamos o teu email apenas para te responder.",
+    "chatWidget.assistantName": "Assistente NivaDesk",
+    "chatWidget.assistantNote": "Resposta automática — alguém da equipa também vai responder."
   },
   "Русский (Russian)": {
     "nav.chatgpt": "Приложение ChatGPT",
@@ -9033,7 +9047,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "Отправить",
     "chatWidget.sending": "Отправляем…",
     "chatWidget.sentNote": "Отправлено. Ответим здесь и на почту.",
-    "chatWidget.privacy": "Почта нужна только для ответа вам."
+    "chatWidget.privacy": "Почта нужна только для ответа вам.",
+    "chatWidget.assistantName": "Ассистент NivaDesk",
+    "chatWidget.assistantNote": "Автоматический ответ — специалист из команды тоже напишет."
   },
   "日本語 (Japanese)": {
     "nav.chatgpt": "ChatGPT アプリ",
@@ -9116,7 +9132,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "送信",
     "chatWidget.sending": "送信中…",
     "chatWidget.sentNote": "送信しました。こことメールの両方で返信します。",
-    "chatWidget.privacy": "メールアドレスは返信のためだけに使用します。"
+    "chatWidget.privacy": "メールアドレスは返信のためだけに使用します。",
+    "chatWidget.assistantName": "NivaDesk アシスタント",
+    "chatWidget.assistantNote": "自動応答です。担当者からも改めてご連絡します。"
   },
   "中文 (Chinese)": {
     "nav.chatgpt": "ChatGPT 应用",
@@ -9199,7 +9217,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "发送",
     "chatWidget.sending": "发送中…",
     "chatWidget.sentNote": "已发送。我们会在这里和邮件中回复。",
-    "chatWidget.privacy": "你的邮箱仅用于回复你。"
+    "chatWidget.privacy": "你的邮箱仅用于回复你。",
+    "chatWidget.assistantName": "NivaDesk 助理",
+    "chatWidget.assistantNote": "自动回复——团队成员随后也会回复你。"
   },
   "العربية (Arabic)": {
     "nav.chatgpt": "تطبيق ChatGPT",
@@ -9282,7 +9302,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "إرسال",
     "chatWidget.sending": "جارٍ الإرسال…",
     "chatWidget.sentNote": "تم الإرسال. سنرد هنا وعبر البريد.",
-    "chatWidget.privacy": "نستخدم بريدك للرد عليك فقط."
+    "chatWidget.privacy": "نستخدم بريدك للرد عليك فقط.",
+    "chatWidget.assistantName": "مساعد NivaDesk",
+    "chatWidget.assistantNote": "رد آلي — وسيتابع معك أحد أفراد الفريق."
   },
   "हिन्दी (Hindi)": {
     "nav.chatgpt": "ChatGPT ऐप",
@@ -9365,7 +9387,9 @@ const FILL_TRANSLATIONS_17: Partial<Record<StudioLanguage, Partial<Record<Public
     "chatWidget.send": "भेजें",
     "chatWidget.sending": "भेजा जा रहा है…",
     "chatWidget.sentNote": "भेज दिया गया। हम यहाँ और ईमेल पर जवाब देंगे।",
-    "chatWidget.privacy": "आपका ईमेल केवल जवाब देने के लिए इस्तेमाल होता है।"
+    "chatWidget.privacy": "आपका ईमेल केवल जवाब देने के लिए इस्तेमाल होता है।",
+    "chatWidget.assistantName": "NivaDesk सहायक",
+    "chatWidget.assistantNote": "स्वचालित उत्तर — टीम से कोई व्यक्ति भी जवाब देगा।"
   }
 };
 

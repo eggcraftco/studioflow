@@ -123,9 +123,13 @@ export default function SupportChatWidget() {
               <p className="support-chat-intro">{t("chatWidget.intro")}</p>
             ) : (
               messages.map(item => (
-                <div className={item.fromVisitor ? "support-chat-msg is-visitor" : "support-chat-msg"} key={item.id}>
-                  <span>{item.authorName}</span>
+                <div
+                  className={`support-chat-msg${item.fromVisitor ? " is-visitor" : ""}${item.fromAssistant ? " is-assistant" : ""}`}
+                  key={item.id}
+                >
+                  <span>{item.fromAssistant ? t("chatWidget.assistantName") : item.authorName}</span>
                   <p>{item.message}</p>
+                  {item.fromAssistant ? <em className="support-chat-ai-note">{t("chatWidget.assistantNote")}</em> : null}
                 </div>
               ))
             )}
