@@ -33,6 +33,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { swiftOrderNetProfit } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -1949,6 +1950,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+      <AppHelpAssistant workspace={workspace} language={language} t={t} />
       <NotificationsDrawer
         open={notifDrawerOpen}
         workspace={workspace}

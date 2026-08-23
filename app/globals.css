@@ -3403,6 +3403,44 @@ button.toolbar-icon-button,
   background: #30bd54;
 }
 
+/* First-project tour: whatever the current step is pointing at.
+   Both class names were applied in the markup but never had a rule behind them,
+   so each site inlined its own slightly different ring — and the toolbar button
+   in step 1, the very first thing the tour asks you to click, was left with no
+   highlight at all. One rule now drives every step. */
+.studio-guide-target,
+.first-project-guide-target {
+  position: relative;
+  z-index: 130;
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 6px rgba(37, 99, 235, 0.16),
+    0 16px 40px rgba(37, 99, 235, 0.22);
+  animation: studio-guide-pulse 1.9s ease-in-out infinite;
+}
+
+@keyframes studio-guide-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 6px rgba(37, 99, 235, 0.16),
+      0 16px 40px rgba(37, 99, 235, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 0 0 11px rgba(37, 99, 235, 0.08),
+      0 16px 40px rgba(37, 99, 235, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-guide-target,
+  .first-project-guide-target {
+    animation: none;
+  }
+}
+
 .order-list-context-menu {
   position: fixed;
   z-index: 90;
@@ -19844,6 +19882,149 @@ html[dir="rtl"] .login-public-shell {
 }
 
 
+
+
+/* In-app help assistant ("How do I…?") ----------------------------------- */
+.app-help-bubble {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 55;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 17px 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.app-help-bubble svg { width: 19px; height: 19px; color: var(--accent, #2f6f6d); }
+
+.app-help-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 74px;
+  z-index: 56;
+  width: min(380px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+}
+
+.app-help-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-help-head strong { display: block; font-size: 15px; font-weight: 800; color: var(--text); }
+.app-help-head span { font-size: 12px; color: var(--muted); }
+
+.app-help-head button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 0;
+}
+
+.app-help-head button svg { width: 17px; height: 17px; }
+
+.app-help-thread {
+  flex: 1;
+  min-height: 90px;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-help-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.app-help-turn { display: flex; flex-direction: column; gap: 8px; }
+
+.app-help-question {
+  align-self: flex-end;
+  max-width: 88%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(47, 111, 109, 0.12);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.app-help-answer p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.app-help-sources {
+  margin-top: 6px !important;
+  font-size: 11px !important;
+  color: var(--muted) !important;
+}
+
+.app-help-action {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent, #2f6f6d);
+  text-decoration: none;
+}
+
+.app-help-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.app-help-form textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg, #fff);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  resize: vertical;
+}
+
+.app-help-error { margin: 0; font-size: 12px; color: #c0392b; }
+
+@media (max-width: 560px) {
+  .app-help-bubble { right: 14px; bottom: 76px; padding: 10px 14px; font-size: 13px; }
+  .app-help-panel { right: 12px; left: 12px; bottom: 130px; width: auto; }
+}
 
 /* Support chat widget ---------------------------------------------------- */
 .support-chat-bubble {
