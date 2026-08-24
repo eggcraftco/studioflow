@@ -7452,6 +7452,9 @@ struct SiparisDetayView: View {
         }
         guard key != estimateRecordKey else { return }
         estimateRecordKey = key
+        // Dropped before the round trip: keeping it rendered the previous
+        // revision's items — and its customer's signature — under the new number.
+        estimateRecord = nil
         guard let orderId = siparis.id, let current = currentEstimateSummary else { return }
 
         #if canImport(FirebaseFunctions)
@@ -7688,12 +7691,6 @@ struct SiparisDetayView: View {
                         )
                     }
                 }
-                if !estimateNotice.isEmpty {
-                    Text(estimateNotice)
-                        .font(.system(size: 12)).foregroundColor(.gray)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
                 Divider().background(Color.primary.opacity(0.1))
 
                 // Printing is reading: anyone who can see the card can take a
@@ -7728,6 +7725,13 @@ struct SiparisDetayView: View {
                         createEstimateRevision()
                     }
                 }
+            }
+            // Outside the branch: the notice used to live only in the populated
+            // half, so the empty state's refusals and confirmations were mute.
+            if !estimateNotice.isEmpty {
+                Text(estimateNotice)
+                    .font(.system(size: 12)).foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .task(id: estimateFetchKey) { loadEstimateRecord() }

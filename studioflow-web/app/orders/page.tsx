@@ -333,12 +333,24 @@ export default function OrdersPage() {
   async function refreshSelectedOrder() {
     if (!workspace || !selectedOrderId || !user) return;
     const uid = user.uid;
-    const [loadedOrder, loadedOrders] = await Promise.all([
-      loadOrderDetail(workspace.id, selectedOrderId, workspace.entitlements.features.client_files, workspace),
-      loadRecentOrders(workspace.id, workspace, uid)
-    ]);
-    setSelectedOrder(loadedOrder);
-    setOrders(loadedOrders);
+    const requestedOrder = selectedOrderId;
+    // These were awaited together, so a slow or failing whole-workspace list
+    // query took the detail refresh down with it — the open order silently kept
+    // showing stale data after an action that had already succeeded.
+    const detail = loadOrderDetail(
+      workspace.id,
+      requestedOrder,
+      workspace.entitlements.features.client_files,
+      workspace
+    ).then(loadedOrder => {
+      // The selection can move while this is in flight; never write a stale order
+      // over whatever the live listener has since delivered.
+      setSelectedOrder(current => (current && current.id !== requestedOrder ? current : loadedOrder));
+    });
+    const list = loadRecentOrders(workspace.id, workspace, uid)
+      .then(setOrders)
+      .catch(() => undefined);
+    await Promise.all([detail, list]);
   }
 
   function applyOptimisticOrderPatch(patch: Partial<OrderDetail>) {
