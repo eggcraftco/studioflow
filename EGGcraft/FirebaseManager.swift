@@ -891,6 +891,11 @@ struct StudioActivityNotification: Identifiable, Codable, Equatable {
 
 class FirebaseManager: ObservableObject {
     
+    // A plan limit rejected by the server used to be printed to the console only, so
+    // the user watched an order or edit quietly fail to appear. The order list screen
+    // observes this and shows the Plan limit alert.
+    @Published var planLimitNotice: String = ""
+
     @Published var siparisler: [Siparis] = [] {
         didSet {
             // Keep the home-screen widgets in sync with every order change.
@@ -1384,9 +1389,45 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    // Fields the model declares with a default value. Codable still demands the key,
+    // so an order created by the web, the ChatGPT app or an older release — which
+    // simply never wrote one of them — would otherwise fail to decode and fall back
+    // to the recovery path below.
+    private static let siparisDefaultFieldValues: [String: Any] = [
+        "paymentMethod": "Card",
+        // Plans without advanced finance never receive these from the server, which
+        // is deliberate — but the model still requires the keys, so fill the neutral
+        // zero here instead of falling back to the recovery decoder for every order.
+        "paymentFee": 0.0,
+        "deliveryCost": 0.0,
+        "taxType": "",
+        "taxRate": 0.0,
+        "invBool1": false,
+        "invBool2": false,
+        "invBool3": false,
+        "invBool4": false,
+        "invNotes": "",
+        "taxAmount": 0.0,
+        "priority": "Normal",
+        "risk": "None",
+        "riskReason": "-",
+        "invoiceNumber": "",
+        "assignedToUid": "",
+        "assignedToEmail": "",
+        "isDeleted": false
+    ]
+
     private func decodeSiparisDocument(_ document: QueryDocumentSnapshot) -> Siparis? {
+        var raw = document.data()
+        if raw["companyId"] == nil {
+            raw["companyId"] = currentCompanyId
+        }
+        for (key, value) in Self.siparisDefaultFieldValues where raw[key] == nil {
+            raw[key] = value
+        }
+
         do {
-            return try document.data(as: Siparis.self)
+            return try Firestore.Decoder().decode(Siparis.self, from: raw, in: document.reference)
         } catch {
             let data = document.data()
             var siparis = Siparis()
@@ -1987,6 +2028,7 @@ class FirebaseManager: ObservableObject {
             .call(payload) { result, error in
                 if let error {
                     print("Workflow order create failed: \(error.localizedDescription)")
+                    self.reportPlanLimitIfNeeded(error)
                     return
                 }
 
@@ -1997,6 +2039,19 @@ class FirebaseManager: ObservableObject {
             }
         #else
         print("Firebase Functions is not available for workflow order create.")
+        #endif
+    }
+
+    private func reportPlanLimitIfNeeded(_ error: Error) {
+        #if canImport(FirebaseFunctions)
+        let nsError = error as NSError
+        guard nsError.domain == FunctionsErrorDomain,
+              nsError.code == FunctionsErrorCode.failedPrecondition.rawValue else { return }
+        let message = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.planLimitNotice = message
+        }
         #endif
     }
 
@@ -2013,6 +2068,11 @@ class FirebaseManager: ObservableObject {
         if shouldSaveOrdersThroughCallable {
             saveSiparisThroughCallable(guncelSiparis, documentId: id)
             upsertLocalSiparis(guncelSiparis)
+            // Same reason as the create path above: without this the workspace's
+            // Customers list never fills up on plans that save through the callable.
+            withHistorySuspended {
+                musteriKontrolVeOlustur(siparis: guncelSiparis, oncekiSiparis: oncekiSiparis)
+            }
             return
         }
 
@@ -2087,6 +2147,7 @@ class FirebaseManager: ObservableObject {
             .call(payload) { result, error in
                 if let error {
                     print("Workflow order save failed: \(error.localizedDescription)")
+                    self.reportPlanLimitIfNeeded(error)
                     return
                 }
 

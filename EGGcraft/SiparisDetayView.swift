@@ -1263,6 +1263,7 @@ struct SiparisDetayView: View {
     @AppStorage("phoneOrderCompactViewV1") private var phoneOrderCompactView: Bool = false
     @State private var phoneKartSirasi: [KartTipi] = []
     @State private var macOSHitboxHack: CGFloat = 0
+    @State private var hasHealedOrphanCardsOnce: Bool = false
     @State private var calismaAlaniIcerikBoyutu: CGSize = .zero
     
     @AppStorage("showCardPreview") private var showCardPreview = true; @AppStorage("showCardSummary") private var showCardSummary = true; @AppStorage("showCardCustomer") private var showCardCustomer = true; @AppStorage("showCardDelivery") private var showCardDelivery = true; @AppStorage("showCardCommunication") private var showCardCommunication = true; @AppStorage("showCardNotes") private var showCardNotes = true; @AppStorage("showCardFinancial") private var showCardFinancial = true; @AppStorage("showCardStatus") private var showCardStatus = true; @AppStorage("showCardShipping") private var showCardShipping = true
@@ -1856,7 +1857,7 @@ struct SiparisDetayView: View {
             }
         }
         .buttonStyle(.plain)
-        .help(t(canToggleCardLayoutLock ? (cardLayoutAppearsLocked ? "Unlock cards" : "Lock cards") : "Card layout customisation is locked on Free Demo.", lang: seciliDil))
+        .help(t(canToggleCardLayoutLock ? (cardLayoutAppearsLocked ? "Unlock cards" : "Lock cards") : "Card layout customisation is locked on the Free plan.", lang: seciliDil))
         .accessibilityLabel(t(cardLayoutAppearsLocked ? "Cards Locked" : "Cards Unlocked", lang: seciliDil))
     }
 
@@ -2017,7 +2018,7 @@ struct SiparisDetayView: View {
             }
         }
         .background(orderDetailAutosaveObservers)
-        .onAppear { loadMacFirstProjectGuideState(forceReload: true); yukleSutunGenislikleri(); yukleHafiza(); enforceCardLayoutLockForCurrentPlan(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla(); enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: true); arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded() }
+        .onAppear { loadMacFirstProjectGuideState(forceReload: true); yukleSutunGenislikleri(); yukleHafiza(); enforceCardLayoutLockForCurrentPlan(); ensureSharedWorkspaceSnapshot(); loadWorkspaceProfiles(); loadWorkspaceUserProfiles(); migrateSharedWorkspaceProfilesIntoCurrentUserIfNeeded(); startWorkspaceProfilesCloudListener(); startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); refreshSharedClientFilesInbox(); if siparis.taxRate == 0 { siparis.taxRate = defaultTaxRate }; otomatikKesintiHesapla(); enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: true); arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded(); scheduleOrphanCardRepairOnce() }
         .onOpenURL { url in
             let scheme = url.scheme?.lowercased() ?? ""
             if scheme == "studioflow" || scheme == "nivadesk" {
@@ -2073,7 +2074,7 @@ struct SiparisDetayView: View {
         .alert(t("Cards are locked", lang: seciliDil), isPresented: $showCardLayoutLockedByPlanAlert) {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
         } message: {
-            Text(t("Card layout customisation is locked on Free Demo. You can use the cards, but moving, resizing and colour/layout changes are available from Lite and above.", lang: seciliDil))
+            Text(t("Card layout customisation is locked on the Free plan. You can use the cards, but moving, resizing and colour/layout changes are available from Lite and above.", lang: seciliDil))
         }
         .sheet(item: $pdfShareItem) { item in
             #if os(iOS)
@@ -3379,7 +3380,47 @@ struct SiparisDetayView: View {
         }
     }
 
+    // A card that is switched on but sits in no column would silently stay
+    // invisible. That happens after the first-project guide, which rebuilds the
+    // layout with only the two cards it teaches, so anything the user turns on
+    // afterwards has nowhere to appear.
+    private func ensureCardPlacedInWorkspace(_ kart: KartTipi) {
+        guard !kartYerlesimi.flatMap({ $0 }).contains(kart) else { return }
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+
+        let candidateColumns = Array(kartYerlesimi.indices.prefix(3))
+        let hedef = candidateColumns.min { kartYerlesimi[$0].count < kartYerlesimi[$1].count } ?? 0
+        kartYerlesimi[hedef].append(kart)
+        normalizePhoneKartSirasi()
+        kaydetKartYerlesimi()
+    }
+
+    // Any card that is switched on but sits in no column would stay invisible with
+    // no way for the user to bring it back. Runs after every path that can replace
+    // the layout or the visibility flags — including a workspace profile arriving
+    // from the cloud after the local layout was already loaded.
+    private func healOrphanedVisibleCards() {
+        for kart in alphabeticalWorkspaceBlockCards where isCardVisible(kart) {
+            ensureCardPlacedInWorkspace(kart)
+        }
+    }
+
+    // The workspace profile arrives from the cloud a moment after the local layout
+    // is loaded, so the repair has to wait for it. Deliberately one-shot: repairing
+    // from inside the profile-apply path feeds the layout back into the sync and
+    // spins the workspace.
+    private func scheduleOrphanCardRepairOnce() {
+        guard !hasHealedOrphanCardsOnce else { return }
+        hasHealedOrphanCardsOnce = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            healOrphanedVisibleCards()
+        }
+    }
+
     private func setCardVisible(_ kart: KartTipi, _ visible: Bool, animated: Bool = true) {
+        if visible {
+            ensureCardPlacedInWorkspace(kart)
+        }
         let update = {
             switch kart {
             case .preview: showCardPreview = visible
@@ -4756,6 +4797,8 @@ struct SiparisDetayView: View {
             }
             kaydetKartYerlesimi()
         }
+
+        healOrphanedVisibleCards()
 
 
         if !kartYerlesimi.flatMap({ $0 }).contains(.clientFiles) {
@@ -8926,7 +8969,18 @@ struct SiparisDetayView: View {
             items[i].lineTotal = ((items[i].quantity * items[i].unitPrice) * 100).rounded() / 100
         }
         siparis.lineItems = items
+
+        // A row the user has only just added is still blank. Driving the order
+        // total from it would wipe the outstanding balance and flip the order to
+        // "fully paid" before they have typed a price, so leave the balance alone
+        // until at least one row carries a value.
+        guard siparis.lineItemsTotal > 0 else { return }
+
         siparis.remainingAmount = max(0, siparis.lineItemsTotal - siparis.paidAmount)
+        // Fees and tax are derived from the order total, so they have to follow the
+        // items in the same pass. Without this they keep showing the figures from
+        // the previous total until the order is closed and opened again.
+        otomatikKesintiHesapla()
     }
 
     private func addLineItem() {
