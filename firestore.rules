@@ -696,6 +696,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Customer portal token lookup. The document id is sha256 of the token and
+    // no client ever reads it — getPortalForVisitor resolves it server-side, so
+    // the collection stays unreachable even to a signed-in workspace member.
+    match /portalLinks/{document=**} {
+      allow read, write: if false;
+    }
+
     match /shopifySessions/{document=**} {
       // Embedded-app session storage written by the app server only.
       allow read, write: if false;

@@ -215,16 +215,17 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
     Schedule("schedule", "cardSchedule", "Schedule & Alerts"),
     HistoryLog("historyLog", "cardHistoryLog", "History / Log"),
     RepairIntake("repairIntake", "cardSummary", "Repair Intake & Item"),
-    Estimate("estimate", "cardFinancial", "Estimate & Approval");
+    Estimate("estimate", "cardFinancial", "Estimate & Approval"),
+    CustomerPortal("customerPortal", "cardCustomer", "Customer Portal");
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, RepairIntake, Estimate, Summary, WorkTime, Shipping, Schedule, Notes),
+            listOf(Preview, RepairIntake, Estimate, CustomerPortal, Summary, WorkTime, Shipping, Schedule, Notes),
             listOf(Customer, InvoiceItems, Materials, Delivery),
             listOf(Financial, Priority, Todo, Status, HistoryLog, ClientFiles)
         )
         val DefaultOrder: List<OrderDetailCardId> = listOf(
-            Preview, RepairIntake, Estimate, Summary, WorkTime, Shipping, Schedule, Notes,
+            Preview, RepairIntake, Estimate, CustomerPortal, Summary, WorkTime, Shipping, Schedule, Notes,
             Customer, InvoiceItems, Materials, Delivery,
             Financial, Priority, Todo, Status, HistoryLog, ClientFiles
         )
@@ -1098,6 +1099,33 @@ data class StudioScheduleReminder(
 // One revision of what the customer was quoted. The full document and the
 // approval evidence live in a subcollection no client can read; this is the row
 // the card shows.
+// The customer's own view of this order: one link, no login. Which parts they see
+// is a per-order choice, enforced on the server — the portal projection reads only
+// what these flags allow, so internal notes, costs, supplier and profit are never
+// read rather than filtered out.
+data class StudioPortalVisibility(
+    val status: Boolean = true,
+    val estimate: Boolean = true,
+    val payments: Boolean = true,
+    val photos: Boolean = true,
+    val expectedDate: Boolean = true
+)
+
+data class StudioPortalAutoUpdates(
+    val enabled: Boolean = true,
+    val email: Boolean = true,
+    // No SMS provider is connected yet; the preference is stored so it starts
+    // working the day one is.
+    val sms: Boolean = false
+)
+
+data class StudioCustomerPortal(
+    val token: String = "",
+    val active: Boolean = false,
+    val visibility: StudioPortalVisibility = StudioPortalVisibility(),
+    val autoUpdates: StudioPortalAutoUpdates = StudioPortalAutoUpdates()
+)
+
 data class StudioEstimateSummary(
     val id: String = "",
     val number: String = "",
@@ -1230,6 +1258,7 @@ data class StudioOrder(
     val orderType: String = "custom",
     val repairIntake: StudioRepairIntake? = null,
     val estimates: List<StudioEstimateSummary> = emptyList(),
+    val customerPortal: StudioCustomerPortal = StudioCustomerPortal(),
     val estimateStatus: String = "",
     val invoiceNumber: String,
     val clientFileCount: Int,
@@ -1286,6 +1315,29 @@ data class StudioOrder(
             val customFields = stringMap(document.get("customFields"))
             val repairIntake = parseRepairIntake(document.get("repairIntake"))
             val estimates = parseEstimates(document.get("estimates"))
+            val portalFlag = { source: Any?, key: String, fallback: Boolean ->
+                ((source as? Map<*, *>)?.get(key) as? Boolean) ?: fallback
+            }
+            val portalVisibilityRaw = document.get("portalVisibility")
+            val portalAutoRaw = document.get("portalAutoUpdates")
+            val customerPortal = StudioCustomerPortal(
+                token = document.getString("portalToken").orEmpty(),
+                // A token id with no revoke stamp is what makes a link live; the
+                // plaintext is only there so the workspace can copy it again.
+                active = document.getString("portalTokenId").orEmpty().isNotBlank(),
+                visibility = StudioPortalVisibility(
+                    status = portalFlag(portalVisibilityRaw, "status", true),
+                    estimate = portalFlag(portalVisibilityRaw, "estimate", true),
+                    payments = portalFlag(portalVisibilityRaw, "payments", true),
+                    photos = portalFlag(portalVisibilityRaw, "photos", true),
+                    expectedDate = portalFlag(portalVisibilityRaw, "expectedDate", true)
+                ),
+                autoUpdates = StudioPortalAutoUpdates(
+                    enabled = portalFlag(portalAutoRaw, "enabled", true),
+                    email = portalFlag(portalAutoRaw, "email", true),
+                    sms = portalFlag(portalAutoRaw, "sms", false)
+                )
+            )
             return StudioOrder(
                 id = document.id,
                 companyId = document.getString("companyId").orEmpty(),
@@ -1343,6 +1395,7 @@ data class StudioOrder(
                 orderType = if (document.getString("orderType") == "repair") "repair" else "custom",
                 repairIntake = repairIntake,
                 estimates = estimates,
+                customerPortal = customerPortal,
                 estimateStatus = document.getString("estimateStatus").orEmpty(),
                 invoiceNumber = document.getString("invoiceNumber") ?: "",
                 clientFileCount = clientFiles.size,

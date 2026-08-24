@@ -766,6 +766,7 @@ enum KartTipi: String, Codable, Equatable, Identifiable, CaseIterable {
     case invoiceItems = "invoiceItems"
     case repairIntake = "repairIntake"
     case estimate = "estimate"
+    case customerPortal = "customerPortal"
     var id: String { self.rawValue }
 }
 
@@ -1273,6 +1274,7 @@ struct SiparisDetayView: View {
         case .invoiceItems: return "cardCustomer"
         case .repairIntake: return "cardSummary"
         case .estimate: return "cardFinancial"
+        case .customerPortal: return "cardCustomer"
         case .communication, .customerNotes: return nil
         }
     }
@@ -1293,6 +1295,8 @@ struct SiparisDetayView: View {
     @State private var estimateRecordKey: String = ""
     @State private var estimateBusy: Bool = false
     @State private var estimateNotice: String = ""
+    @State private var portalBusy: Bool = false
+    @State private var portalNotice: String = ""
     @State private var isHoveringDrop = false
     @State private var isUploading = false
     @State private var isClientFileImporterPresented = false
@@ -1409,7 +1413,7 @@ struct SiparisDetayView: View {
     @AppStorage("kartYukseklikleriJSON") private var kartYukseklikleriJSON = "{}"
     
     @State private var kartYerlesimi: [[KartTipi]] = [
-        [.preview, .repairIntake, .estimate, .summary, .workTime, .shipping, .schedule, .notes],
+        [.preview, .repairIntake, .estimate, .customerPortal, .summary, .workTime, .shipping, .schedule, .notes],
         [.customer, .invoiceItems, .materials, .delivery],
         [.financial, .priority, .todo, .status, .historyLog, .clientFiles, .customerNotes]
     ]
@@ -1437,6 +1441,7 @@ struct SiparisDetayView: View {
     @AppStorage("showCardInvoiceItems") private var showCardInvoiceItems = true
     @AppStorage("showCardRepairIntake") private var showCardRepairIntake = true
     @AppStorage("showCardEstimate") private var showCardEstimate = true
+    @AppStorage("showCardCustomerPortal") private var showCardCustomerPortal = true
     @State private var showInvoiceFooterEditor = false
     @AppStorage("showCardSchedule") private var showCardSchedule = true
     @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
@@ -2672,7 +2677,8 @@ struct SiparisDetayView: View {
             .schedule,
             .historyLog,
             .repairIntake,
-            .estimate
+            .estimate,
+            .customerPortal
         ]
 
         return cards
@@ -2716,6 +2722,7 @@ struct SiparisDetayView: View {
         case .invoiceItems: return resolvedItemsHeading
         case .repairIntake: return t("Repair Intake & Item", lang: seciliDil)
         case .estimate: return t("Estimate & Approval", lang: seciliDil)
+        case .customerPortal: return t("Customer Portal", lang: seciliDil)
         }
     }
 
@@ -2741,6 +2748,7 @@ struct SiparisDetayView: View {
         case .invoiceItems: return "list.bullet.rectangle"
         case .repairIntake: return "shippingbox"
         case .estimate: return "signature"
+        case .customerPortal: return "person.crop.circle.badge.checkmark"
         }
     }
 
@@ -2770,6 +2778,7 @@ struct SiparisDetayView: View {
         case .invoiceItems: return .green
         case .repairIntake: return studioWarningOrange
         case .estimate: return .green
+        case .customerPortal: return .blue
         }
     }
 
@@ -3045,6 +3054,7 @@ struct SiparisDetayView: View {
         case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
         case .invoiceItems: return siparis.hasLineItems
         case .estimate: return !(siparis.estimates ?? []).isEmpty
+        case .customerPortal: return !siparis.portalTokenId.isEmpty
         case .repairIntake:
             let intake = siparis.repairIntake
             return siparis.orderType == "repair"
@@ -3059,6 +3069,10 @@ struct SiparisDetayView: View {
         case .summary:
             let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
             return design.isEmpty ? t(siparis.status, lang: seciliDil) : "\(design) • \(t(siparis.status, lang: seciliDil))"
+        case .customerPortal:
+            return siparis.portalTokenId.isEmpty
+                ? t("Customer Portal", lang: seciliDil)
+                : t("Portal active", lang: seciliDil)
         case .estimate:
             guard let current = currentEstimateSummary else { return t("Estimate & Approval", lang: seciliDil) }
             return "\(current.number) · \(t(estimateStatusLabel(current.status), lang: seciliDil))"
@@ -3588,6 +3602,7 @@ struct SiparisDetayView: View {
         case .invoiceItems: return showCardInvoiceItems
         case .repairIntake: return showCardRepairIntake
         case .estimate: return showCardEstimate
+        case .customerPortal: return showCardCustomerPortal
         }
     }
 
@@ -3663,6 +3678,7 @@ struct SiparisDetayView: View {
             case .invoiceItems: showCardInvoiceItems = visible
             case .repairIntake: showCardRepairIntake = visible
             case .estimate: showCardEstimate = visible
+            case .customerPortal: showCardCustomerPortal = visible
             }
             yenileCalismaAlaniHitbox(delay: 0.01)
             persistWorkspaceCustomizationChange()
@@ -3789,7 +3805,8 @@ struct SiparisDetayView: View {
                 KartTipi.priority.rawValue: showCardPriority,
                 KartTipi.invoiceItems.rawValue: showCardInvoiceItems,
                 KartTipi.repairIntake.rawValue: showCardRepairIntake,
-                KartTipi.estimate.rawValue: showCardEstimate
+                KartTipi.estimate.rawValue: showCardEstimate,
+                KartTipi.customerPortal.rawValue: showCardCustomerPortal
             ]
         )
     }
@@ -3925,6 +3942,7 @@ struct SiparisDetayView: View {
         showCardInvoiceItems = snapshot.visibility[KartTipi.invoiceItems.rawValue] ?? true
         showCardRepairIntake = snapshot.visibility[KartTipi.repairIntake.rawValue] ?? true
         showCardEstimate = snapshot.visibility[KartTipi.estimate.rawValue] ?? true
+        showCardCustomerPortal = snapshot.visibility[KartTipi.customerPortal.rawValue] ?? true
 
         kartYerlesimi = snapshot.kartYerlesimi.isEmpty ? kartYerlesimi : snapshot.kartYerlesimi
         while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
@@ -5173,6 +5191,7 @@ struct SiparisDetayView: View {
             switch kart {
             case .repairIntake: repairIntakeKarti(colIndex: colIndex)
             case .estimate: estimateKarti(colIndex: colIndex)
+            case .customerPortal: customerPortalKarti(colIndex: colIndex)
             case .preview: previewKarti(colIndex: colIndex)
             case .summary: summaryKarti(colIndex: colIndex)
             case .customer:
@@ -7965,6 +7984,229 @@ struct SiparisDetayView: View {
 
     // The customer's own item, taken in for repair. Never stock: the server stamps
     // customerOwned so nothing downstream can mistake it for inventory.
+    // The customer's own page for this order: one link, no login at the far end.
+    // What they see is chosen here and enforced on the server.
+    private func customerPortalKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Customer Portal", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .customerPortal),
+            kartTipi: .customerPortal,
+            yukseklik: bindingYukseklik(for: .customerPortal),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .customerPortal),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.customerPortal, false) },
+            onColorChange: { setKartColor(kart: .customerPortal, color: $0) }
+        ) {
+            let active = !siparis.portalTokenId.isEmpty
+            let shows = siparis.portalVisibility ?? CustomerPortalVisibility()
+            let auto = siparis.portalAutoUpdates ?? CustomerPortalAutoUpdates()
+
+            HStack(spacing: 8) {
+                Text(t("Portal Access", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold)).foregroundColor(.gray)
+                Spacer()
+                Text(t(active ? "Active" : "Off", lang: seciliDil))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(active ? .green : .gray)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background((active ? Color.green : Color.gray).opacity(0.15))
+                    .cornerRadius(999)
+            }
+
+            if active, !portalLinkURL.isEmpty {
+                HStack(spacing: 8) {
+                    Text(portalLinkURL)
+                        .font(.system(size: 11)).foregroundColor(.blue)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button(t("Copy Link", lang: seciliDil)) { copyPortalLink() }
+                        .font(.system(size: 11))
+                    Button(t("Open Portal", lang: seciliDil)) { openPortalLink() }
+                        .font(.system(size: 11))
+                }
+            } else {
+                Text(t("No portal link yet. Create one and send it to your customer — they can open it without signing in.", lang: seciliDil))
+                    .font(.system(size: 11)).foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if canEditOrderDetails {
+                HStack(spacing: 8) {
+                    Button(t(active ? "Create a fresh link" : "Create portal link", lang: seciliDil)) {
+                        createPortalLink()
+                    }
+                    .font(.system(size: 11))
+                    .disabled(portalBusy)
+                    if active {
+                        Button(t("Turn off", lang: seciliDil)) { revokePortalLink() }
+                            .font(.system(size: 11))
+                            .disabled(portalBusy)
+                    }
+                    Spacer()
+                }
+            }
+
+            if !portalNotice.isEmpty {
+                Text(portalNotice).font(.system(size: 11)).foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            Text(t("Customer Sees", lang: seciliDil))
+                .font(.system(size: 12, weight: .bold)).foregroundColor(.gray)
+            portalSeesRow(t("Repair status", lang: seciliDil), shows.status) { var next = shows; next.status.toggle(); savePortalPreferences(next, auto) }
+            portalSeesRow(t("Estimate & approval", lang: seciliDil), shows.estimate) { var next = shows; next.estimate.toggle(); savePortalPreferences(next, auto) }
+            portalSeesRow(t("Payment & invoices", lang: seciliDil), shows.payments) { var next = shows; next.payments.toggle(); savePortalPreferences(next, auto) }
+            portalSeesRow(t("Photos & updates", lang: seciliDil), shows.photos) { var next = shows; next.photos.toggle(); savePortalPreferences(next, auto) }
+            portalSeesRow(t("Expected completion", lang: seciliDil), shows.expectedDate) { var next = shows; next.expectedDate.toggle(); savePortalPreferences(next, auto) }
+
+            Text(t("Internal notes, costs, supplier and profit are never shown, whatever is switched on here.", lang: seciliDil))
+                .font(.system(size: 10)).foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            HStack(spacing: 8) {
+                Text(t("Automatic Updates", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold)).foregroundColor(.gray)
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { auto.enabled },
+                    set: { newValue in var next = auto; next.enabled = newValue; savePortalPreferences(shows, next) }
+                ))
+                .labelsHidden()
+                .disabled(!canEditOrderDetails)
+            }
+            Text(t("Sent when the order's status moves — estimate ready, work started, ready for collection.", lang: seciliDil))
+                .font(.system(size: 10)).foregroundColor(.gray)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Text(t("Email", lang: seciliDil)).font(.system(size: 11)).foregroundColor(.gray)
+                Button(t(auto.email ? "ON" : "OFF", lang: seciliDil)) {
+                    var next = auto; next.email.toggle(); savePortalPreferences(shows, next)
+                }
+                .font(.system(size: 10, weight: .bold))
+                .disabled(!canEditOrderDetails || !auto.enabled)
+                Text(t("SMS", lang: seciliDil)).font(.system(size: 11)).foregroundColor(.gray)
+                Text(t("OFF", lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(.gray)
+                Spacer()
+            }
+            Text(t("SMS is not connected yet — email only for now.", lang: seciliDil))
+                .font(.system(size: 10)).foregroundColor(.gray)
+        }
+    }
+
+    @ViewBuilder
+    private func portalSeesRow(_ title: String, _ isOn: Bool, _ toggle: @escaping () -> Void) -> some View {
+        Button(action: { if canEditOrderDetails { toggle() } }) {
+            HStack(spacing: 8) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "minus.circle")
+                    .foregroundColor(isOn ? .green : .gray)
+                    .font(.system(size: 13))
+                Text(title).font(.system(size: 12)).foregroundColor(.primary)
+                Spacer()
+            }
+            .opacity(isOn ? 1 : 0.6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canEditOrderDetails)
+    }
+
+    private var portalLinkURL: String {
+        siparis.portalToken.isEmpty ? "" : "https://nivadesk.app/track/\(siparis.portalToken)"
+    }
+
+    private func copyPortalLink() {
+        guard !portalLinkURL.isEmpty else { return }
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(portalLinkURL, forType: .string)
+        #else
+        UIPasteboard.general.string = portalLinkURL
+        #endif
+        portalNotice = t("Link copied. Send it to your customer.", lang: seciliDil)
+    }
+
+    private func openPortalLink() {
+        guard let url = URL(string: portalLinkURL) else { return }
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        UIApplication.shared.open(url)
+        #endif
+    }
+
+    @MainActor private func createPortalLink() {
+        guard let orderId = siparis.id, !orderId.isEmpty else { return }
+        portalBusy = true
+        portalNotice = ""
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = ["companyId": siparis.companyId, "orderId": orderId]
+        Functions.functions(region: "europe-west2").httpsCallable("createOrderPortalLink").call(payload) { _, error in
+            DispatchQueue.main.async {
+                self.portalBusy = false
+                self.portalNotice = error == nil
+                    ? t("Portal link created.", lang: self.seciliDil)
+                    : (error?.localizedDescription ?? "")
+            }
+        }
+        #else
+        portalBusy = false
+        #endif
+    }
+
+    @MainActor private func revokePortalLink() {
+        guard let orderId = siparis.id, !orderId.isEmpty else { return }
+        portalBusy = true
+        portalNotice = ""
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = ["companyId": siparis.companyId, "orderId": orderId]
+        Functions.functions(region: "europe-west2").httpsCallable("revokeOrderPortalLink").call(payload) { _, error in
+            DispatchQueue.main.async {
+                self.portalBusy = false
+                self.portalNotice = error == nil
+                    ? t("Portal turned off. The customer's link no longer opens.", lang: self.seciliDil)
+                    : (error?.localizedDescription ?? "")
+            }
+        }
+        #else
+        portalBusy = false
+        #endif
+    }
+
+    @MainActor private func savePortalPreferences(_ visibility: CustomerPortalVisibility, _ auto: CustomerPortalAutoUpdates) {
+        guard let orderId = siparis.id, !orderId.isEmpty, canEditOrderDetails else { return }
+        // Optimistic so the row responds at once; the listener confirms it.
+        siparis.portalVisibility = visibility
+        siparis.portalAutoUpdates = auto
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = [
+            "companyId": siparis.companyId,
+            "orderId": orderId,
+            "visibility": [
+                "status": visibility.status,
+                "estimate": visibility.estimate,
+                "payments": visibility.payments,
+                "photos": visibility.photos,
+                "expectedDate": visibility.expectedDate
+            ],
+            "autoUpdates": ["enabled": auto.enabled, "email": auto.email, "sms": auto.sms]
+        ]
+        Functions.functions(region: "europe-west2").httpsCallable("saveOrderPortalSettings").call(payload) { _, error in
+            if let error {
+                DispatchQueue.main.async { self.portalNotice = error.localizedDescription }
+            }
+        }
+        #endif
+    }
+
     private func repairIntakeKarti(colIndex: Int) -> some View {
         DetayKarti(
             title: t("Repair Intake & Item", lang: seciliDil),
@@ -13288,6 +13530,7 @@ struct DetayKarti<Content: View>: View {
         switch kartTipi {
         case .repairIntake: return 430
         case .estimate: return 460
+        case .customerPortal: return 420
         case .preview: return previewMinBoyu
         case .financial: return 430
         case .schedule: return 390

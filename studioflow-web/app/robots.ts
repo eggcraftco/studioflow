@@ -16,6 +16,7 @@ const APP_ROUTES = [
   "/schedule",
   "/f/",
   "/e/",
+  "/track/",
   "/chatgptMcp",
   "/chatgptOAuthApprove",
   "/chatgptOAuthAuthorizationServer",

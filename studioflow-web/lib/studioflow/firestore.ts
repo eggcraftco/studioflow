@@ -515,7 +515,22 @@ export type OrderDetail = {
   // The index the order carries. Full line items and the approval evidence live
   // in a subcollection no client can read; these rows are what the card shows.
   estimates: EstimateSummary[];
+  customerPortal: CustomerPortalDetail;
   estimateStatus: string;
+};
+
+export type CustomerPortalDetail = {
+  token: string;
+  active: boolean;
+  createdAtMs: number;
+  visibility: {
+    status: boolean;
+    estimate: boolean;
+    payments: boolean;
+    photos: boolean;
+    expectedDate: boolean;
+  };
+  autoUpdates: { enabled: boolean; email: boolean; sms: boolean };
 };
 
 export type EstimateSummary = {
@@ -1713,6 +1728,35 @@ function mapLineItems(value: unknown): LineItemDetail[] {
   });
 }
 
+function mapCustomerPortal(data: Record<string, unknown>): CustomerPortalDetail {
+  const flag = (source: unknown, key: string, fallback: boolean) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return fallback;
+    const value = (source as Record<string, unknown>)[key];
+    return typeof value === "boolean" ? value : fallback;
+  };
+  const visibility = data.portalVisibility;
+  const autoUpdates = data.portalAutoUpdates;
+  return {
+    token: stringValue(data.portalToken, ""),
+    // A token id with no revoke stamp is what makes a link live; the plaintext
+    // is only there so the workspace can copy it again.
+    active: Boolean(stringValue(data.portalTokenId, "")),
+    createdAtMs: numberValue(data.portalCreatedAtMs),
+    visibility: {
+      status: flag(visibility, "status", true),
+      estimate: flag(visibility, "estimate", true),
+      payments: flag(visibility, "payments", true),
+      photos: flag(visibility, "photos", true),
+      expectedDate: flag(visibility, "expectedDate", true)
+    },
+    autoUpdates: {
+      enabled: flag(autoUpdates, "enabled", true),
+      email: flag(autoUpdates, "email", true),
+      sms: flag(autoUpdates, "sms", false)
+    }
+  };
+}
+
 function mapEstimates(value: unknown): EstimateSummary[] {
   return collectionItemsValue(value).map((item, index) => {
     const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -1877,6 +1921,7 @@ function mapOrderDetailSnapshot(
     orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
     repairIntake: mapRepairIntake(data.repairIntake),
     estimates: mapEstimates(data.estimates),
+    customerPortal: mapCustomerPortal(data),
     estimateStatus: stringValue(data.estimateStatus, "")
   };
 }

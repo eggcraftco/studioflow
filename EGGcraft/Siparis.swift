@@ -97,6 +97,26 @@ struct RepairIntake: Codable, Equatable {
     var customerOwned: Bool = true
 }
 
+// The customer's own view of this order: one link, no login. Which parts they
+// see is a per-order choice, enforced on the server — the portal projection reads
+// only what these flags allow, so internal notes, costs, supplier and profit are
+// never read rather than filtered out.
+struct CustomerPortalVisibility: Codable, Equatable {
+    var status: Bool = true
+    var estimate: Bool = true
+    var payments: Bool = true
+    var photos: Bool = true
+    var expectedDate: Bool = true
+}
+
+struct CustomerPortalAutoUpdates: Codable, Equatable {
+    var enabled: Bool = true
+    var email: Bool = true
+    // No SMS provider is connected yet; the preference is stored so it starts
+    // working the day one is.
+    var sms: Bool = false
+}
+
 // One revision of what the customer was quoted. The full document and the
 // approval evidence live in a subcollection the client cannot read; this is the
 // row the card shows. Times are epoch milliseconds, not Date: the whole array is
@@ -278,6 +298,12 @@ struct Siparis: Identifiable, Codable {
     // Estimate revisions, newest first. Server-written: the client only reads.
     var estimates: [OrderEstimateSummary]?
     var estimateStatus: String = ""
+    // Plaintext lives on the order — a document only workspace members can read —
+    // so Copy Link keeps working. The public lookup collection holds only its hash.
+    var portalToken: String = ""
+    var portalTokenId: String = ""
+    var portalVisibility: CustomerPortalVisibility?
+    var portalAutoUpdates: CustomerPortalAutoUpdates?
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
     // Trash / soft-delete: when true the order is hidden from all normal views and

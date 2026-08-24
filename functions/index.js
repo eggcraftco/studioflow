@@ -4910,6 +4910,7 @@ const ORDER_DETAIL_CARD_IDS = [
   "preview",
   "repairIntake",
   "estimate",
+  "customerPortal",
   "summary",
   "customer",
   "invoiceItems",
@@ -4928,7 +4929,7 @@ const ORDER_DETAIL_CARD_IDS = [
 ];
 
 const DEFAULT_ORDER_DETAIL_CARD_COLUMNS = [
-  ["preview", "repairIntake", "estimate", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["preview", "repairIntake", "estimate", "customerPortal", "summary", "workTime", "shipping", "schedule", "notes"],
   ["customer", "invoiceItems", "materials", "delivery"],
   ["financial", "priority", "todo", "status", "historyLog", "clientFiles", "customerNotes"]
 ];
@@ -21173,6 +21174,449 @@ const ESTIMATE_DECIDE_PER_HOUR = 10;
 const ESTIMATE_DECIDE_TOKEN_PER_HOUR = 5;
 const ESTIMATE_MAX_LINE_ITEMS = 60;
 const ESTIMATE_SIGNATURE_MAX_BYTES = 300 * 1024;
+
+// ---------------------------------------------------------------------------
+// Customer portal
+//
+// A sessionless page the customer opens from a link the workspace sends them:
+// where their item is, what was quoted, what is left to pay, and the photos the
+// workspace chose to share. Same shape as the estimate link — the plaintext
+// token is returned once and only its hash is stored, so a leaked database
+// cannot be turned back into working links.
+//
+// What it must NEVER carry is as much of the design as what it does: internal
+// notes, supplier names, cost prices, profit and team messages are not filtered
+// out of a full order here, they are simply never read.
+// ---------------------------------------------------------------------------
+
+const PORTAL_VIEW_PER_HOUR = 240;
+const PORTAL_VIEW_TOKEN_PER_HOUR = 120;
+
+// The three moments worth a message. Anything else is noise to a customer who
+// only wants to know whether to come in yet.
+function portalStatusMessage(status = "", context = {}) {
+  const raw = String(status || "").trim().toLowerCase();
+  const item = context.itemName ? ` — ${context.itemName}` : "";
+  if (/approval|approve|quote|estimate|teklif|onay/.test(raw)) {
+    return {
+      subject: `Your estimate is ready${item}`,
+      line: "Your estimate is ready. You can review and approve it from the link below."
+    };
+  }
+  if (/ready|collect|pickup|pick up|complete|completed|hazır|hazir|teslim/.test(raw)) {
+    return {
+      subject: `Ready for collection${item}`,
+      line: "Good news — your item is ready for collection."
+    };
+  }
+  if (/workshop|progress|working|repair|bench|atölye|atolye|üretim|uretim/.test(raw)) {
+    return {
+      subject: `We've started work${item}`,
+      line: "We have started work on your item."
+    };
+  }
+  return null;
+}
+
+// Sent from the NivaDesk mailbox with the workspace as the visible sender name
+// and its own address as reply-to, so a customer replying reaches the business
+// and not us. Best effort: the order write must never fail because mail did.
+async function sendPortalStatusEmail({ toEmail, businessName, replyTo, subject, line, portalUrl, footerNote }) {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  if (!password) {
+    console.warn("sendPortalStatusEmail: NIVADESK_SMTP_PASSWORD is not set; skipping.");
+    return false;
+  }
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass: password }
+  });
+
+  const safeBusiness = String(businessName || "NivaDesk");
+  const linkBlock = portalUrl ? `\n\nTrack your order: ${portalUrl}` : "";
+  const text = `${line}${linkBlock}\n\n${safeBusiness}${footerNote ? `\n${footerNote}` : ""}`;
+  const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:#1c1c1e;">
+    <p>${escapeHtmlForEmail(line)}</p>
+    ${portalUrl ? `<p><a href="${escapeHtmlForEmail(portalUrl)}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Track your order</a></p>` : ""}
+    <p style="color:#6b7280;">${escapeHtmlForEmail(safeBusiness)}</p>
+    ${footerNote ? `<p style="color:#9ca3af;font-size:12px;white-space:pre-wrap;">${escapeHtmlForEmail(footerNote)}</p>` : ""}
+  </div>`;
+
+  await transporter.sendMail({
+    from: `"${safeBusiness}" <${user}>`,
+    replyTo: replyTo || undefined,
+    to: toEmail,
+    subject,
+    text,
+    html
+  });
+  return true;
+}
+
+function escapeHtmlForEmail(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function portalLinksCollection() {
+  return admin.firestore().collection("portalLinks");
+}
+
+function cleanPortalVisibility(value) {
+  const incoming = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const flag = (key, fallback = true) => (typeof incoming[key] === "boolean" ? incoming[key] : fallback);
+  return {
+    status: flag("status"),
+    estimate: flag("estimate"),
+    payments: flag("payments"),
+    photos: flag("photos"),
+    expectedDate: flag("expectedDate")
+  };
+}
+
+function cleanPortalAutoUpdates(value) {
+  const incoming = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const flag = (key, fallback) => (typeof incoming[key] === "boolean" ? incoming[key] : fallback);
+  return {
+    enabled: flag("enabled", true),
+    email: flag("email", true),
+    // No SMS provider is connected. The preference is stored so the choice
+    // survives, but nothing sends until one exists — see sendPortalStatusEmail.
+    sms: flag("sms", false)
+  };
+}
+
+async function portalWorkspaceSettings(companyId) {
+  const snap = await companySettingsDocRef(String(companyId)).get();
+  return snap.exists ? snap.data() || {} : {};
+}
+
+// The stages shown to the customer are the workspace's own order statuses, not a
+// jeweller's. A tailor's board reads the same way to their customer as a
+// watchmaker's does to theirs.
+function portalStatusStages(settings = {}, orderData = {}) {
+  const configured = parseStringArrayJSON(settings.activeStatusesJSON, []);
+  const stages = (Array.isArray(configured) ? configured : [])
+    .map((item) => cleanOrderText(item, "", 60))
+    .filter(Boolean)
+    .filter((item) => !["cancelled", "canceled"].includes(item.toLowerCase()));
+  const list = stages.length > 0 ? stages : ["New", "In Progress", "Done"];
+  const current = cleanOrderText(orderData.status, "", 60);
+  const currentIndex = list.findIndex((item) => item.toLowerCase() === current.toLowerCase());
+  return list.map((title, index) => ({
+    title,
+    state: currentIndex < 0
+      ? (index === 0 ? "current" : "upcoming")
+      : index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming"
+  }));
+}
+
+function portalExpectedDateMs(orderData = {}) {
+  const due = orderData.deliveryDueDate;
+  if (due) {
+    const parsed = due && typeof due.toDate === "function" ? due.toDate() : new Date(String(due));
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+  }
+  const placed = orderData.paymentDate && typeof orderData.paymentDate.toDate === "function"
+    ? orderData.paymentDate.toDate()
+    : null;
+  const days = Number(orderData.deliveryTime) || 0;
+  if (placed && days > 0) return placed.getTime() + days * 86400000;
+  return 0;
+}
+
+// Built field by field from the order, never by removing things from it: a field
+// added to orders later cannot leak here by default.
+function portalPublicView(orderData = {}, settings = {}, link = {}) {
+  const visibility = cleanPortalVisibility(orderData.portalVisibility);
+  const currency = cleanFinancialCurrency(settings.seciliParaBirimi, "£");
+  const view = {
+    reference: cleanOrderText(orderData.invoiceNumber, "", 60) || cleanOrderText(link.orderId, "", 60),
+    itemName: cleanOrderText(orderData.designName, "", 160) || cleanOrderText(orderData.watchRef, "", 160),
+    customerFirstName: (cleanOrderText(orderData.customerName, "", 160).split(" ")[0] || ""),
+    businessName: String(settings.appSubtitle || "NivaDesk"),
+    logoUrl: String(settings.appLogoUrl || ""),
+    footerNote: String(settings.invoiceFooterNote || ""),
+    currency,
+    shows: visibility,
+    stages: [],
+    currentStatus: "",
+    expectedDateMs: 0,
+    estimate: null,
+    payments: null,
+    photos: []
+  };
+
+  if (visibility.status) {
+    view.stages = portalStatusStages(settings, orderData);
+    view.currentStatus = cleanOrderText(orderData.status, "", 60);
+  }
+
+  if (visibility.expectedDate) {
+    view.expectedDateMs = portalExpectedDateMs(orderData);
+  }
+
+  if (visibility.estimate) {
+    const rows = Array.isArray(orderData.estimates) ? orderData.estimates : [];
+    const current = rows.find((row) => row && row.status !== "superseded") || rows[0] || null;
+    if (current) {
+      view.estimate = {
+        number: cleanOrderText(current.number, "", 60),
+        total: Number(current.total) || 0,
+        status: cleanOrderText(current.status, "", 40)
+      };
+    }
+  }
+
+  if (visibility.payments) {
+    const paid = Number(orderData.paidAmount) || 0;
+    const remaining = Number(orderData.remainingAmount) || 0;
+    view.payments = { paid, remaining, total: roundLineMoney(paid + remaining) };
+  }
+
+  if (visibility.photos) {
+    const files = Array.isArray(orderData.clientFiles) ? orderData.clientFiles : [];
+    view.photos = files
+      .filter((file) => file && String(file.contentType || "").toLowerCase().startsWith("image"))
+      .map((file) => String(file.downloadURL || ""))
+      .filter(Boolean)
+      .slice(0, 12);
+  }
+
+  return view;
+}
+
+async function portalLinkForVisitor(token) {
+  const raw = String(token || "").trim();
+  if (!raw || raw.length > 200) throw new HttpsError("invalid-argument", "A portal link is required.");
+  const linkRef = portalLinksCollection().doc(nvSha256(raw));
+  const linkSnap = await linkRef.get();
+  if (!linkSnap.exists) throw new HttpsError("not-found", "This link is no longer available.");
+  const link = linkSnap.data() || {};
+  if (Number(link.revokedAtMs || 0) > 0) {
+    throw new HttpsError("failed-precondition", "This link has been turned off by the business.");
+  }
+  const orderRef = orderDocRef(String(link.orderId || ""));
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) throw new HttpsError("not-found", "This link is no longer available.");
+  const orderData = orderSnap.data() || {};
+  if (orderData.isDeleted === true) {
+    throw new HttpsError("failed-precondition", "This link is no longer available.");
+  }
+  if (String(orderData.portalTokenId || "") !== linkSnap.id) {
+    throw new HttpsError("failed-precondition", "This link has been replaced by a newer one.");
+  }
+  return { linkRef, link, orderRef, orderData };
+}
+
+async function requirePortalStaff(request) {
+  const context = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(context.companyData, context.uid, "orders");
+  const role = workspaceOrderRole(context.companyData, context.uid);
+  if (!canFullyEditOrder(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot change the customer portal.");
+  }
+  return context;
+}
+
+exports.createOrderPortalLink = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, email, companyId } = await requirePortalStaff(request);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+  await websiteChatCheckRate("portalMint", uid, 60);
+
+  const orderRef = orderDocRef(orderId);
+  const token = nvRandomToken(24);
+  const tokenId = nvSha256(token);
+  const now = Date.now();
+
+  await admin.firestore().runTransaction(async (tx) => {
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+    const orderData = orderSnap.data() || {};
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+
+    // Minting a new link retires the old one, so a link handed to the wrong
+    // person stops working the moment a replacement is made.
+    const previousId = String(orderData.portalTokenId || "");
+    if (previousId && previousId !== tokenId) {
+      tx.set(portalLinksCollection().doc(previousId), { revokedAtMs: now }, { merge: true });
+    }
+
+    tx.set(portalLinksCollection().doc(tokenId), {
+      orderId,
+      companyId,
+      createdAtMs: now,
+      createdByUid: uid,
+      revokedAtMs: 0,
+      viewCount: 0
+    });
+
+    const history = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    tx.update(orderRef, {
+      portalTokenId: tokenId,
+      // The plaintext lives here, on the order — a document only workspace
+      // members can read — so Copy Link keeps working without minting a new
+      // link every time. The public lookup collection holds the hash alone.
+      portalToken: token,
+      portalCreatedAtMs: now,
+      portalRevokedAtMs: 0,
+      portalVisibility: cleanPortalVisibility(orderData.portalVisibility),
+      portalAutoUpdates: cleanPortalAutoUpdates(orderData.portalAutoUpdates),
+      historyLog: [
+        webHistoryEntry("Customer portal link created", "-", "active", uid, email),
+        ...history
+      ].slice(0, 120)
+    });
+  });
+
+  return { ok: true, url: `https://nivadesk.app/track/${token}`, token };
+});
+
+exports.revokeOrderPortalLink = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, email, companyId } = await requirePortalStaff(request);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const orderRef = orderDocRef(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+  const orderData = orderSnap.data() || {};
+  if (orderCompanyId(orderData) !== companyId) {
+    throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+  }
+  const now = Date.now();
+  const tokenId = String(orderData.portalTokenId || "");
+  if (tokenId) {
+    await portalLinksCollection().doc(tokenId).set({ revokedAtMs: now }, { merge: true });
+  }
+  const history = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+  await orderRef.update({
+    portalTokenId: "",
+    portalToken: "",
+    portalRevokedAtMs: now,
+    historyLog: [
+      webHistoryEntry("Customer portal link revoked", "active", "off", uid, email),
+      ...history
+    ].slice(0, 120)
+  });
+  return { ok: true };
+});
+
+exports.saveOrderPortalSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requirePortalStaff(request);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const orderRef = orderDocRef(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+  const orderData = orderSnap.data() || {};
+  if (orderCompanyId(orderData) !== companyId) {
+    throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+  }
+
+  const visibility = cleanPortalVisibility(request.data && request.data.visibility);
+  const autoUpdates = cleanPortalAutoUpdates(request.data && request.data.autoUpdates);
+  await orderRef.update({ portalVisibility: visibility, portalAutoUpdates: autoUpdates });
+  return { ok: true, visibility, autoUpdates };
+});
+
+exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request) => {
+  const token = String(request.data && request.data.token || "").trim();
+  await websiteChatCheckRate("portalView", websiteChatClientIp(request), PORTAL_VIEW_PER_HOUR);
+  await websiteChatCheckRate("portalViewTok", token, PORTAL_VIEW_TOKEN_PER_HOUR);
+
+  const { linkRef, link, orderData } = await portalLinkForVisitor(token);
+  await linkRef.set(
+    { viewCount: Number(link.viewCount || 0) + 1, viewedAtMs: Date.now() },
+    { merge: true }
+  );
+  const settings = await portalWorkspaceSettings(link.companyId);
+  return { ok: true, portal: portalPublicView(orderData, settings, link) };
+});
+
+// Fires on the status the workspace already sets. Nothing new to remember: move
+// the order to "Ready to Collect" and the customer hears about it.
+exports.notifyCustomerOnStatusChange = onDocumentWritten(
+  { document: "siparisler/{orderId}", region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] },
+  async (event) => {
+    const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
+    const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
+    if (!after || after.isDeleted === true) return;
+
+    const status = cleanOrderText(after.status, "", 60);
+    if (!status) return;
+    if (before && cleanOrderText(before.status, "", 60) === status) return;
+
+    const auto = cleanPortalAutoUpdates(after.portalAutoUpdates);
+    if (!auto.enabled) return;
+    // Nothing sends over SMS: no provider is connected. The preference is kept
+    // so it starts working the day one is, without anyone re-configuring orders.
+    if (!auto.email) return;
+
+    const toEmail = cleanOrderText(after.emailAddress, "", 240);
+    if (!toEmail || !toEmail.includes("@")) return;
+    // A repeated status (a correction, a sync echo) must not re-send.
+    if (cleanOrderText(after.portalLastNotifiedStatus, "", 60).toLowerCase() === status.toLowerCase()) return;
+
+    const orderId = String(event.params.orderId || "");
+    const companyId = orderCompanyId(after);
+    if (!companyId) return;
+
+    const settings = await portalWorkspaceSettings(companyId);
+    const itemName = cleanOrderText(after.designName, "", 160);
+    const message = portalStatusMessage(status, { itemName });
+    if (!message) {
+      // Not a milestone worth a message, but remember it so the next real one is
+      // still recognised as a change.
+      await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
+      return;
+    }
+
+    // The link only goes in the message when the workspace has actually made one.
+    const portalToken = cleanOrderText(after.portalToken, "", 200);
+    const portalUrl = portalToken && String(after.portalTokenId || "")
+      ? `https://nivadesk.app/track/${portalToken}`
+      : "";
+
+    try {
+      await sendPortalStatusEmail({
+        toEmail,
+        businessName: String(settings.appSubtitle || "NivaDesk"),
+        // Replies reach the business, not us. Falls back to no reply-to rather
+        // than pointing a customer at the NivaDesk support inbox.
+        replyTo: cleanOrderText(settings.invoiceReplyToEmail, "", 240),
+        subject: message.subject,
+        line: message.line,
+        portalUrl,
+        footerNote: String(settings.invoiceFooterNote || "")
+      });
+    } catch (error) {
+      console.warn("notifyCustomerOnStatusChange: mail failed", { orderId, error: String(error) });
+    }
+
+    const history = Array.isArray(after.historyLog) ? after.historyLog : [];
+    await orderDocRef(orderId).update({
+      portalLastNotifiedStatus: status,
+      historyLog: [
+        webHistoryEntry("Customer notified", "-", status, "", "automatic"),
+        ...history
+      ].slice(0, 120)
+    }).catch(() => undefined);
+  }
+);
 
 function estimateLinksCollection() {
   return admin.firestore().collection("estimateLinks");

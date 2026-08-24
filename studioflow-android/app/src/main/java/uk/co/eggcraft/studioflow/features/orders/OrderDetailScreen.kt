@@ -181,6 +181,8 @@ import uk.co.eggcraft.studioflow.data.model.StudioEstimateRecord
 import uk.co.eggcraft.studioflow.data.model.parseEstimateRecord
 import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
+import uk.co.eggcraft.studioflow.data.model.StudioPortalAutoUpdates
+import uk.co.eggcraft.studioflow.data.model.StudioPortalVisibility
 import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioQuickReminderTemplate
@@ -688,6 +690,7 @@ fun OrderDetailScreen(
 // "Used" cards only: compact mode hides cards with no real content.
 private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): Boolean = when (cardId) {
     OrderDetailCardId.Summary -> true
+    OrderDetailCardId.CustomerPortal -> order.customerPortal.active
     OrderDetailCardId.Preview -> order.designLink.isNotBlank() || order.designName.isNotBlank()
     OrderDetailCardId.RepairIntake -> order.orderType == "repair" ||
         order.repairIntake?.let { it.fields.isNotEmpty() || it.condition.isNotEmpty() || it.requestedWork.isNotEmpty() } == true
@@ -711,6 +714,7 @@ private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): 
 @Composable
 private fun phoneCompactSummary(order: StudioOrder, cardId: OrderDetailCardId, t: (String) -> String): String = when (cardId) {
     OrderDetailCardId.Summary -> listOf(order.designName, t(order.status)).filter { it.isNotBlank() }.joinToString(" • ")
+    OrderDetailCardId.CustomerPortal -> if (order.customerPortal.active) t("Portal active") else t("Customer Portal")
     OrderDetailCardId.Preview -> order.designName.ifBlank { t("Preview") }
     OrderDetailCardId.RepairIntake -> order.repairIntake?.fields?.get("itemType").orEmpty().ifBlank { t("Repair Intake & Item") }
     OrderDetailCardId.Estimate -> order.estimates.firstOrNull()?.number.orEmpty().ifBlank { t("Estimate & Approval") }
@@ -3096,6 +3100,10 @@ private fun OrderDetailCardContent(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     when (cardId) {
+        OrderDetailCardId.CustomerPortal -> CustomerPortalCard(
+            order = order,
+            canEdit = canEditWorkflow
+        )
         OrderDetailCardId.RepairIntake -> RepairIntakeCard(
             order = order,
             workspaceSettings = workspaceSettings,
@@ -3721,6 +3729,227 @@ private fun EstimateDetailRow(label: String, value: String) {
 
 // The customer's own item, taken in for repair. Never stock: the server stamps
 // customerOwned so nothing downstream can mistake it for inventory.
+@Composable
+private fun CustomerPortalCard(
+    order: StudioOrder,
+    canEdit: Boolean
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+    val functions = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+
+    val portal = order.customerPortal
+    var busy by remember(order.id) { mutableStateOf(false) }
+    var notice by remember(order.id) { mutableStateOf("") }
+    // Optimistic so a tap responds at once; the order listener confirms it.
+    var shows by remember(order.id, portal.visibility) { mutableStateOf(portal.visibility) }
+    var auto by remember(order.id, portal.autoUpdates) { mutableStateOf(portal.autoUpdates) }
+    val portalUrl = if (portal.token.isBlank()) "" else "https://nivadesk.app/track/${portal.token}"
+
+    fun savePreferences(nextShows: StudioPortalVisibility, nextAuto: StudioPortalAutoUpdates) {
+        shows = nextShows
+        auto = nextAuto
+        scope.launch {
+            runCatching {
+                functions.getHttpsCallable("saveOrderPortalSettings").call(
+                    mapOf(
+                        "companyId" to order.companyId,
+                        "orderId" to order.id,
+                        "visibility" to mapOf(
+                            "status" to nextShows.status,
+                            "estimate" to nextShows.estimate,
+                            "payments" to nextShows.payments,
+                            "photos" to nextShows.photos,
+                            "expectedDate" to nextShows.expectedDate
+                        ),
+                        "autoUpdates" to mapOf(
+                            "enabled" to nextAuto.enabled,
+                            "email" to nextAuto.email,
+                            "sms" to nextAuto.sms
+                        )
+                    )
+                ).await()
+            }.onFailure { notice = t("The portal settings could not be saved.") }
+        }
+    }
+
+    DetailCard(title = t("Customer Portal")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = t("Portal Access"),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = if (portal.active) t("Active") else t("Off"),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (portal.active) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (portal.active && portalUrl.isNotBlank()) {
+            Text(
+                text = portalUrl,
+                style = MaterialTheme.typography.bodySmall,
+                color = StudioBlue,
+                maxLines = 1
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("portal", portalUrl))
+                    notice = t("Link copied. Send it to your customer.")
+                }) { Text(t("Copy Link")) }
+                TextButton(onClick = {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
+                    uriHandler.openUri(portalUrl)
+                }) { Text(t("Open Portal")) }
+            }
+        } else {
+            Text(
+                text = t("No portal link yet. Create one and send it to your customer — they can open it without signing in."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (canEdit) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true; notice = ""
+                        scope.launch {
+                            val ok = runCatching {
+                                functions.getHttpsCallable("createOrderPortalLink")
+                                    .call(mapOf("companyId" to order.companyId, "orderId" to order.id)).await()
+                            }.isSuccess
+                            busy = false
+                            notice = if (ok) t("Portal link created.") else t("The portal link could not be created.")
+                        }
+                    }
+                ) { Text(if (portal.active) t("Create a fresh link") else t("Create portal link")) }
+                if (portal.active) {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = {
+                            busy = true; notice = ""
+                            scope.launch {
+                                val ok = runCatching {
+                                    functions.getHttpsCallable("revokeOrderPortalLink")
+                                        .call(mapOf("companyId" to order.companyId, "orderId" to order.id)).await()
+                                }.isSuccess
+                                busy = false
+                                notice = if (ok) t("Portal turned off. The customer's link no longer opens.")
+                                    else t("The portal link could not be turned off.")
+                            }
+                        }
+                    ) { Text(t("Turn off")) }
+                }
+            }
+        }
+
+        if (notice.isNotBlank()) {
+            Text(
+                text = notice,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        HorizontalDivider()
+
+        Text(
+            text = t("Customer Sees"),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        PortalSeesRow(t("Repair status"), shows.status, canEdit) { savePreferences(shows.copy(status = !shows.status), auto) }
+        PortalSeesRow(t("Estimate & approval"), shows.estimate, canEdit) { savePreferences(shows.copy(estimate = !shows.estimate), auto) }
+        PortalSeesRow(t("Payment & invoices"), shows.payments, canEdit) { savePreferences(shows.copy(payments = !shows.payments), auto) }
+        PortalSeesRow(t("Photos & updates"), shows.photos, canEdit) { savePreferences(shows.copy(photos = !shows.photos), auto) }
+        PortalSeesRow(t("Expected completion"), shows.expectedDate, canEdit) { savePreferences(shows.copy(expectedDate = !shows.expectedDate), auto) }
+        Text(
+            text = t("Internal notes, costs, supplier and profit are never shown, whatever is switched on here."),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        HorizontalDivider()
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = t("Automatic Updates"),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Switch(
+                checked = auto.enabled,
+                enabled = canEdit,
+                onCheckedChange = { savePreferences(shows, auto.copy(enabled = it)) }
+            )
+        }
+        Text(
+            text = t("Sent when the order's status moves — estimate ready, work started, ready for collection."),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(t("Email"), style = MaterialTheme.typography.bodySmall)
+            TextButton(
+                enabled = canEdit && auto.enabled,
+                onClick = { savePreferences(shows, auto.copy(email = !auto.email)) }
+            ) { Text(if (auto.email) t("ON") else t("OFF"), fontWeight = FontWeight.ExtraBold) }
+            Text(t("SMS"), style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = t("OFF"),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = t("SMS is not connected yet — email only for now."),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PortalSeesRow(title: String, isOn: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onToggle() }
+            .padding(vertical = 3.dp)
+    ) {
+        Icon(
+            imageVector = if (isOn) Icons.Filled.CheckCircle else Icons.Filled.Close,
+            contentDescription = null,
+            tint = if (isOn) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isOn) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 @Composable
 private fun RepairIntakeCard(
     order: StudioOrder,
@@ -10064,6 +10293,7 @@ private fun OrderDetailCardLayout.withCardAutoHeight(
 private fun defaultCardHeight(cardId: OrderDetailCardId): Int {
     return when (cardId) {
         OrderDetailCardId.Preview -> 430
+        OrderDetailCardId.CustomerPortal -> 480
         OrderDetailCardId.Summary -> 260
         OrderDetailCardId.RepairIntake -> 520
         OrderDetailCardId.Estimate -> 520
@@ -10091,6 +10321,7 @@ private fun defaultRenderedCardHeight(cardId: OrderDetailCardId): Int {
 private fun minimumRenderedCardHeight(cardId: OrderDetailCardId?): Int {
     return when (cardId) {
         OrderDetailCardId.Preview -> 300
+        OrderDetailCardId.CustomerPortal -> 360
         OrderDetailCardId.Summary -> 250
         OrderDetailCardId.RepairIntake -> 360
         OrderDetailCardId.Estimate -> 340
@@ -10142,6 +10373,7 @@ private fun orderDetailCardIdForTitle(title: String): OrderDetailCardId? {
 private fun orderDetailCardIcon(cardId: OrderDetailCardId?): ImageVector {
     return when (cardId) {
         OrderDetailCardId.Preview -> Icons.Filled.PhotoLibrary
+        OrderDetailCardId.CustomerPortal -> Icons.Filled.Person
         OrderDetailCardId.RepairIntake -> Icons.Filled.Inventory2
         OrderDetailCardId.Estimate -> Icons.Filled.Description
         OrderDetailCardId.Summary -> Icons.Filled.Description
@@ -10166,6 +10398,7 @@ private fun orderDetailCardIcon(cardId: OrderDetailCardId?): ImageVector {
 private fun orderDetailCardAccent(cardId: OrderDetailCardId?): Color {
     return when (cardId) {
         OrderDetailCardId.Preview -> StudioBlue
+        OrderDetailCardId.CustomerPortal -> StudioBlue
         OrderDetailCardId.RepairIntake -> Color(0xFFE08A2E)
         OrderDetailCardId.Estimate -> Color(0xFF1D9E75)
         OrderDetailCardId.Summary -> Color(0xFF5B6CFF)
