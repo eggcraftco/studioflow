@@ -18,18 +18,25 @@ const APPLE_PLAN_PRODUCTS = {
 
 // Google Play subscriptions use a subscription product id + a base plan id.
 // Keys are "<subscriptionId>|<basePlanId>" and map to the shared internal item key.
-// NOTE: These ids are placeholders mirroring the Apple scheme — confirm/replace the
-// exact values when the subscriptions are created in Google Play Console, then redeploy.
+// Verified against Google Play Console on 24 Aug 2026.
 const GOOGLE_PLAY_PRODUCTS = {
   "nivadesk_lite|lite-monthly": "lite_monthly",
-  "nivadesk_lite|lite-yearly": "lite_yearly",
+  "nivadesk_lite|lite-annual": "lite_yearly",
   "nivadesk_pro|pro-monthly": "pro_monthly",
-  "nivadesk_pro|pro-yearly": "pro_yearly",
+  "nivadesk_pro|pro-annual": "pro_yearly",
   "nivadesk_team|team-monthly": "team_monthly",
-  "nivadesk_team|team-yearly": "team_yearly",
+  "nivadesk_team|team-annual": "team_yearly",
   "nivadesk_storage_100gb|storage-100gb-monthly": "storage_100gb",
-  "nivadesk_storage_100gb|storage-100gb-yearly": "storage_100gb_yearly",
+  "nivadesk_storage_100gb|storage-100gb-annual": "storage_100gb_yearly",
   "nivadesk_storage_200gb|storage-200gb-monthly": "storage_200gb",
+  "nivadesk_storage_200gb|storage-200gb-annual": "storage_200gb_yearly",
+  // Legacy "-yearly" base plans. They were created with a monthly billing period by
+  // mistake and are deactivated in Play Console (24 Aug 2026); no new purchases can
+  // use them, but keep the mapping so any pre-existing purchase token still resolves.
+  "nivadesk_lite|lite-yearly": "lite_yearly",
+  "nivadesk_pro|pro-yearly": "pro_yearly",
+  "nivadesk_team|team-yearly": "team_yearly",
+  "nivadesk_storage_100gb|storage-100gb-yearly": "storage_100gb_yearly",
   "nivadesk_storage_200gb|storage-200gb-yearly": "storage_200gb_yearly"
 };
 

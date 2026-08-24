@@ -62,24 +62,25 @@ class StudioGooglePlayBillingManager(
     private val onError: (String) -> Unit = {}
 ) {
     companion object {
-        // Mirror of the backend GOOGLE_PLAY_PRODUCTS map. Confirm these ids when the
-        // subscriptions are created in Google Play Console, then update both sides.
+        // Mirror of the backend GOOGLE_PLAY_PRODUCTS map. The annual base plans are
+        // "-annual", not "-yearly": the original "-yearly" plans were created with a
+        // monthly billing period by mistake and are now deactivated in Play Console.
         val PLAN_OFFERS: List<Triple<StudioBillingPlan, String, Pair<String, String>>> = listOf(
             Triple(StudioBillingPlan.LifetimeLite, "month", "nivadesk_lite" to "lite-monthly"),
-            Triple(StudioBillingPlan.LifetimeLite, "year", "nivadesk_lite" to "lite-yearly"),
+            Triple(StudioBillingPlan.LifetimeLite, "year", "nivadesk_lite" to "lite-annual"),
             Triple(StudioBillingPlan.ProMonthly, "month", "nivadesk_pro" to "pro-monthly"),
-            Triple(StudioBillingPlan.ProMonthly, "year", "nivadesk_pro" to "pro-yearly"),
+            Triple(StudioBillingPlan.ProMonthly, "year", "nivadesk_pro" to "pro-annual"),
             Triple(StudioBillingPlan.TeamMonthly, "month", "nivadesk_team" to "team-monthly"),
-            Triple(StudioBillingPlan.TeamMonthly, "year", "nivadesk_team" to "team-yearly")
+            Triple(StudioBillingPlan.TeamMonthly, "year", "nivadesk_team" to "team-annual")
         )
 
         // Storage add-on subscriptions. Mirror of the backend GOOGLE_PLAY_PRODUCTS
         // storage entries: Triple<storageGB, interval, subscriptionId to basePlanId>.
         val STORAGE_OFFERS: List<Triple<Int, String, Pair<String, String>>> = listOf(
             Triple(100, "month", "nivadesk_storage_100gb" to "storage-100gb-monthly"),
-            Triple(100, "year", "nivadesk_storage_100gb" to "storage-100gb-yearly"),
+            Triple(100, "year", "nivadesk_storage_100gb" to "storage-100gb-annual"),
             Triple(200, "month", "nivadesk_storage_200gb" to "storage-200gb-monthly"),
-            Triple(200, "year", "nivadesk_storage_200gb" to "storage-200gb-yearly")
+            Triple(200, "year", "nivadesk_storage_200gb" to "storage-200gb-annual")
         )
 
         private val SUBSCRIPTION_IDS: List<String> =
