@@ -137,6 +137,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import uk.co.eggcraft.studioflow.BuildConfig
 import uk.co.eggcraft.studioflow.R
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
@@ -842,7 +843,7 @@ private fun GeneralSettingsDetail(
                     GeneralMenuRow(
                         icon = Icons.Filled.Info,
                         title = t("About"),
-                        subtitle = t("NivaDesk 1.0.0"),
+                        subtitle = "NivaDesk ${BuildConfig.VERSION_NAME}",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = { selected = "about" }
                     )
@@ -4123,7 +4124,7 @@ private fun AboutDetail() {
                     .fillMaxWidth()
                     .height(72.dp)
             )
-            Text(t("Version") + " 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Version") + " " + BuildConfig.VERSION_NAME, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("An EGGcraft brand for studio workspace management."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 t("User guide"),

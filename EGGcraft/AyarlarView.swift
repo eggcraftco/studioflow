@@ -13,6 +13,18 @@ import UIKit
 
 struct CompanyNumberSettingDTO: Identifiable, Codable, Equatable { var id = UUID(); var title: String; var value: String }
 
+// Read from the bundle rather than typed in: the About screen said 1.0.0 while
+// the app shipped 1.3, because a literal has to be remembered at every release.
+enum NivaDeskAppVersion {
+    static var display: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? ""
+        let build = info?["CFBundleVersion"] as? String ?? ""
+        if short.isEmpty { return build }
+        return build.isEmpty ? short : "\(short) (\(build))"
+    }
+}
+
 struct AyarlarView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -3654,7 +3666,7 @@ struct AyarlarView: View {
                     .frame(maxWidth: 220, maxHeight: 58, alignment: .leading)
                     .padding(.bottom, 5)
                     .accessibilityLabel("NivaDesk")
-                Text(t("Version", lang: seciliDil) + " 1.0.0")
+                Text(t("Version", lang: seciliDil) + " " + NivaDeskAppVersion.display)
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
                 Text(t("An EGGcraft brand for studio workspace management.", lang: seciliDil))

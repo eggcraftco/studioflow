@@ -51,6 +51,9 @@ android {
 
     buildFeatures {
         compose = true
+        // So Settings ▸ About can read the version from the build rather than a
+        // hardcoded string, which had drifted to 1.0.0 while the app shipped 0.1.8.
+        buildConfig = true
     }
 }
 
