@@ -4956,6 +4956,10 @@ export function OrderDetailContent({
       setEstimateRecord(null);
       return;
     }
+    // Cleared before every fetch. Leaving the old record in place for the length
+    // of the round trip rendered the PREVIOUS revision's items — and its
+    // customer's signature — under the new estimate's number.
+    setEstimateRecord(null);
     let cancelled = false;
     loadOrderEstimateRecord(workspace, order.id, currentEstimateId)
       .then(result => {
@@ -4977,14 +4981,22 @@ export function OrderDetailContent({
   // A revision is a new estimate, never an edit. Seeded from the order's own
   // invoice lines so the jeweller is not retyping what is already there.
   async function createEstimateRevision() {
-    const lines = order.lineItems.length > 0
-      ? order.lineItems.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal
-        }))
-      : [{ name: "Repair work", quantity: 1, unitPrice: 0, lineTotal: 0 }];
+    // Same rule the server filters by, applied here so the refusal is a sentence
+    // rather than a rejected call. The old placeholder line silently minted a
+    // real, permanent £0 "Repair work" estimate and burned a workspace number.
+    const usable = order.lineItems.filter(
+      item => item.name.trim() || Math.abs(item.lineTotal) > 0.005
+    );
+    if (usable.length === 0) {
+      setEstimateNotice("Add an invoice item first — the estimate is built from them.");
+      return;
+    }
+    const lines = usable.map(item => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineTotal: item.lineTotal
+    }));
     setEstimateBusy(true);
     setEstimateNotice("");
     try {
@@ -4997,8 +5009,11 @@ export function OrderDetailContent({
       });
       // The previous revision's link is revoked with it.
       setEstimateLinkUrl("");
-      await onReloadOrder();
+      // The estimate exists the moment the callable resolves. Reporting the
+      // reload's failure as "the estimate could not be created" sent people back
+      // to click Create again, minting a second revision every time.
       setEstimateNotice("New estimate created from the invoice lines.");
+      await onReloadOrder().catch(() => undefined);
     } catch (failure) {
       setEstimateNotice(failure instanceof Error ? failure.message : "The estimate could not be created.");
     } finally {
@@ -5030,7 +5045,7 @@ export function OrderDetailContent({
           ? "Link copied. Send it to your customer."
           : "Link created — copy it below and send it to your customer.");
       }
-      await onReloadOrder();
+      await onReloadOrder().catch(() => undefined);
     } catch (failure) {
       setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be created.");
     } finally {
@@ -5067,8 +5082,9 @@ export function OrderDetailContent({
     setEstimateBusy(true);
     try {
       await revokeOrderEstimateLink(workspace, order.id, currentEstimate.id);
-      await onReloadOrder();
+      setEstimateLinkUrl("");
       setEstimateNotice("Link revoked.");
+      await onReloadOrder().catch(() => undefined);
     } catch (failure) {
       setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be revoked.");
     } finally {
@@ -5147,6 +5163,11 @@ export function OrderDetailContent({
           <section key={cardId} className="card order-detail-card">
             {renderCardTitle(cardId)}
             <div className="app-card-panel estimate-card">
+              {/* Outside the branch chain on purpose: the notice used to live only
+                  in the populated branch, so the outcome of the very first
+                  "Create estimate" click — success or refusal — had nowhere to
+                  render, and the card just blinked. */}
+              {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
               {!canSeeFinance ? (
                 <p className="estimate-card-note">Hidden on this workspace role.</p>
               ) : !currentEstimate ? (
@@ -5246,8 +5267,6 @@ export function OrderDetailContent({
                       </div>
                     </div>
                   ) : null}
-
-                  {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
 
                   {/* Printing is reading. Anyone allowed to see the card can take
                       the estimate as paper; only editors can send or revise it. */}
