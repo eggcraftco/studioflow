@@ -280,6 +280,16 @@ service firebase.storage {
       allow delete: if isOwner(companyId);
     }
 
+    // Customer signatures on approved estimates. Written only by the Admin SDK
+    // (the visitor has no Firebase session at all), readable by the workspace
+    // so the evidence can be opened and printed. Not filed under client_files,
+    // whose read is plan-gated: a workspace must always be able to see what its
+    // own customer signed.
+    match /companies/{companyId}/signatures/{orderId}/{fileName} {
+      allow read: if canReadWorkspace(companyId);
+      allow write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

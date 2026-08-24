@@ -4904,6 +4904,7 @@ Object.assign(exports, createPandleFunctions({ admin, onCall, HttpsError, uidIsC
 const ORDER_DETAIL_CARD_IDS = [
   "preview",
   "repairIntake",
+  "estimate",
   "summary",
   "customer",
   "invoiceItems",
@@ -4922,7 +4923,7 @@ const ORDER_DETAIL_CARD_IDS = [
 ];
 
 const DEFAULT_ORDER_DETAIL_CARD_COLUMNS = [
-  ["preview", "repairIntake", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["preview", "repairIntake", "estimate", "summary", "workTime", "shipping", "schedule", "notes"],
   ["customer", "invoiceItems", "materials", "delivery"],
   ["financial", "priority", "todo", "status", "historyLog", "clientFiles", "customerNotes"]
 ];
@@ -20891,6 +20892,688 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
 
 // Assigns a unique, sequential invoice number (YYYY-NNNN) to an order using a
 // per-company counter in a transaction, so numbers never collide across devices
+
+// ---------------------------------------------------------------------------
+// Estimate → Approval → Signature
+//
+// A repair grows: "£280" becomes "£340 once we replace that claw". The customer
+// has to agree to the new number, and months later somebody may have to show
+// what exactly was agreed and when. So an estimate is a legal record, not a
+// field on the order:
+//
+//   siparisler/{orderId}.estimates[]                 small index, for the card
+//   siparisler/{orderId}/estimateRecords/{id}        the record itself
+//   estimateLinks/{sha256(token)}                    the customer's link
+//
+// Subcollections under siparisler fall to the deny-all catch-all in
+// firestore.rules, so a record can only ever be touched by the Admin SDK here.
+// A revision never overwrites: the old estimate becomes "superseded" and keeps
+// its own frozen line items and totals.
+//
+// Times in the index array are epoch milliseconds, not Timestamps, on purpose:
+// FirebaseManager.firestoreArray decodes a whole array with `try?`, so a single
+// element it cannot read blanks the field on Mac and iPhone alike.
+// ---------------------------------------------------------------------------
+
+const ESTIMATE_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const ESTIMATE_VIEW_PER_HOUR = 60;
+const ESTIMATE_VIEW_TOKEN_PER_HOUR = 120;
+const ESTIMATE_DECIDE_PER_HOUR = 10;
+const ESTIMATE_DECIDE_TOKEN_PER_HOUR = 5;
+const ESTIMATE_MAX_LINE_ITEMS = 60;
+const ESTIMATE_SIGNATURE_MAX_BYTES = 300 * 1024;
+
+function estimateLinksCollection() {
+  return admin.firestore().collection("estimateLinks");
+}
+
+function estimateRecordsCollection(orderId) {
+  return orderDocRef(orderId).collection("estimateRecords");
+}
+
+// Money is recomputed here and frozen. Never trust a total from a client: the
+// three platforms already disagree about whether custom receivables count, and
+// a signed document must not inherit that.
+function estimateTotals(lineItems, taxRate, taxType) {
+  const rate = Number(taxRate) || 0;
+  const isMargin = String(taxType || "") === "Profit";
+  const gross = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  const total = roundLineMoney(gross);
+  const taxAmount = isMargin || rate <= 0.0001 ? 0 : roundLineMoney((total * rate) / 100);
+  const subtotal = isMargin ? total : roundLineMoney(total - taxAmount);
+  return { subtotal, taxAmount, total };
+}
+
+function estimateLineItemsFromInput(value) {
+  const incoming = Array.isArray(value) ? value.slice(0, ESTIMATE_MAX_LINE_ITEMS) : [];
+  return incoming
+    .map((item) => {
+      const quantity = Math.max(0, Number(item && item.quantity) || 0);
+      const unitPrice = roundLineMoney(item && item.unitPrice);
+      const lineTotal = item && item.lineTotal != null
+        ? roundLineMoney(item.lineTotal)
+        : roundLineMoney(quantity * unitPrice);
+      return {
+        id: cleanOrderText(item && item.id, "", 60) || crypto.randomUUID(),
+        name: cleanOrderText(item && item.name, "", 200),
+        quantity,
+        unitPrice,
+        lineTotal
+      };
+    })
+    .filter((item) => item.name || Math.abs(item.lineTotal) > 0.005);
+}
+
+// Canonical JSON of everything the customer agreed to. Stored at creation and
+// checked again at the moment of approval, so tampering in between is provable.
+function estimateDocumentHash(record) {
+  return nvSha256(JSON.stringify({
+    number: record.number,
+    version: record.version,
+    lineItems: (record.lineItems || []).map((item) => [item.name, item.quantity, item.unitPrice, item.lineTotal]),
+    subtotal: record.subtotal,
+    taxRate: record.taxRate,
+    taxType: record.taxType,
+    taxAmount: record.taxAmount,
+    total: record.total,
+    terms: record.terms || "",
+    validUntilMs: record.validUntilMs || 0
+  }));
+}
+
+// The row the order carries for the card: small enough to sit beside historyLog
+// without threatening the 1 MB document limit.
+function estimateIndexEntry(record, linkState) {
+  return {
+    id: record.estimateId,
+    number: record.number,
+    version: record.version,
+    status: record.status,
+    total: record.total,
+    subtotal: record.subtotal,
+    taxAmount: record.taxAmount,
+    taxRate: record.taxRate,
+    taxType: record.taxType,
+    itemCount: (record.lineItems || []).length,
+    createdAtMs: record.createdAtMs || 0,
+    sentAtMs: record.sentAtMs || 0,
+    viewedAtMs: record.viewedAtMs || 0,
+    decidedAtMs: record.approval ? record.approval.decidedAtMs : 0,
+    decidedBy: record.approval ? record.approval.approvedByName : "",
+    decisionMethod: record.approval ? record.approval.method : "",
+    hasSignature: Boolean(record.approval && record.approval.signatureStoragePath),
+    supersedesId: record.supersedesId || "",
+    supersededById: record.supersededById || "",
+    linkState: linkState || "none"
+  };
+}
+
+function estimateIndexReplace(existing, entry) {
+  const rows = Array.isArray(existing) ? existing.filter((row) => row && row.id !== entry.id) : [];
+  return [entry, ...rows].slice(0, 40);
+}
+
+// Everything the visitor is allowed to see. Hand-built: never spread a document
+// that also holds costs, margins, staff emails or the rest of the workspace.
+function estimatePublicView(record, settings, link) {
+  return {
+    number: record.number,
+    version: record.version,
+    status: record.status,
+    currency: record.currency || "GBP",
+    lineItems: (record.lineItems || []).map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineTotal: item.lineTotal
+    })),
+    subtotal: record.subtotal,
+    taxRate: record.taxRate,
+    taxType: record.taxType,
+    taxAmount: record.taxAmount,
+    total: record.total,
+    terms: record.terms || "",
+    notes: record.notes || "",
+    validUntilMs: record.validUntilMs || 0,
+    createdAtMs: record.createdAtMs || 0,
+    businessName: String(settings.appSubtitle || "NivaDesk"),
+    logoUrl: String(settings.appLogoUrl || ""),
+    footerNote: String(settings.invoiceFooterNote || ""),
+    customerFirstName: String(record.customerNameSnapshot || "").split(" ")[0] || "",
+    replacesNumber: record.replacesNumber || "",
+    alreadyDecided: Boolean(record.approval),
+    decision: record.approval ? record.approval.decision : "",
+    decidedAtMs: record.approval ? record.approval.decidedAtMs : 0,
+    decidedByName: record.approval ? record.approval.approvedByName : "",
+    expiresAtMs: Number(link && link.expiresAtMs) || 0
+  };
+}
+
+// A drawn signature arrives as a data URL from a stranger. Trust the bytes, not
+// the label: check the PNG magic number and the size before it reaches Storage.
+function estimateSignatureBuffer(base64) {
+  const raw = String(base64 || "").trim();
+  if (!raw) return null;
+  const payload = raw.includes(",") ? raw.slice(raw.indexOf(",") + 1) : raw;
+  let buffer;
+  try {
+    buffer = Buffer.from(payload, "base64");
+  } catch {
+    throw new HttpsError("invalid-argument", "The signature could not be read.");
+  }
+  if (buffer.length < 200) throw new HttpsError("invalid-argument", "Please sign before approving.");
+  if (buffer.length > ESTIMATE_SIGNATURE_MAX_BYTES) {
+    throw new HttpsError("invalid-argument", "That signature is too large.");
+  }
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (!buffer.subarray(0, 8).equals(png)) {
+    throw new HttpsError("invalid-argument", "The signature must be a PNG image.");
+  }
+  return buffer;
+}
+
+// Lookup is by hashed token as the document id, so there is no comparison to
+// get wrong and the plaintext is never stored anywhere.
+async function estimateLinkForVisitor(token) {
+  const raw = String(token || "").trim();
+  if (!raw || raw.length > 200) throw new HttpsError("invalid-argument", "This link is not valid.");
+  const linkRef = estimateLinksCollection().doc(nvSha256(raw));
+  const linkSnap = await linkRef.get();
+  if (!linkSnap.exists) throw new HttpsError("not-found", "This link is no longer available.");
+  const link = linkSnap.data() || {};
+  const now = Date.now();
+  if (Number(link.revokedAtMs) > 0) throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
+  if (Number(link.expiresAtMs) > 0 && Number(link.expiresAtMs) <= now) {
+    throw new HttpsError("failed-precondition", "This link has expired. Please ask for a new one.");
+  }
+  const orderRef = orderDocRef(String(link.orderId || ""));
+  const recordRef = estimateRecordsCollection(String(link.orderId || "")).doc(String(link.estimateId || ""));
+  const [orderSnap, recordSnap] = await Promise.all([orderRef.get(), recordRef.get()]);
+  if (!orderSnap.exists || !recordSnap.exists) throw new HttpsError("not-found", "This estimate is no longer available.");
+  return {
+    linkRef,
+    link,
+    orderRef,
+    orderData: orderSnap.data() || {},
+    recordRef,
+    record: recordSnap.data() || {}
+  };
+}
+
+// Mirrors the bank-feed notifyCompany lambda, using the same two primitives.
+// Money stays out of the text: companies/{cid}/notifications is readable by
+// every workspace member, and only application code filters recipients.
+async function notifyEstimateDecision(companyId, payload = {}) {
+  const notificationId = `estimate_${payload.orderId || "order"}_${Date.now()}`;
+  const ref = notificationCollectionRef(companyId).doc(notificationId);
+  const approved = payload.decision === "approved";
+  const data = {
+    companyId,
+    type: "estimate_decision",
+    title: approved ? "Estimate approved" : "Estimate declined",
+    message: `${payload.approvedByName || "The customer"} ${approved ? "approved" : "declined"} ${payload.number || "an estimate"}.`,
+    route: "orders",
+    orderId: String(payload.orderId || ""),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+    actioned: false,
+    source: "estimate"
+  };
+  await ref.set(data, { merge: true });
+  const pushResult = await sendPushNotificationToCompany(companyId, {
+    ...data,
+    notificationId,
+    createdAt: new Date().toISOString()
+  });
+  await ref.set({ pushSent: pushResult.sent > 0, pushResult }, { merge: true });
+}
+
+async function estimateWorkspaceSettings(companyId) {
+  const snap = await admin.firestore().collection("companies").doc(String(companyId)).get();
+  return snap.exists ? snap.data() || {} : {};
+}
+
+
+// Staff: create a revision. Never edits an existing estimate — the previous one
+// is marked superseded and keeps its own numbers, because that is the whole
+// point of having a record.
+exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, email, companyId, companyRef } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const lineItems = estimateLineItemsFromInput(request.data && request.data.lineItems);
+  if (lineItems.length === 0) throw new HttpsError("invalid-argument", "Add at least one line to the estimate.");
+
+  const taxRate = cleanTaxRate(request.data && request.data.taxRate);
+  const taxType = cleanOrderText(request.data && request.data.taxType, "", 40);
+  const notes = cleanOrderText(request.data && request.data.notes, "", 2000);
+  const terms = cleanOrderText(request.data && request.data.terms, "", 4000);
+  const validUntilMs = Math.max(0, Number(request.data && request.data.validUntilMs) || 0);
+  const supersedesId = cleanOrderText(request.data && request.data.supersedesId, "", 80);
+
+  const orderRef = orderDocRef(orderId);
+  const estimateId = crypto.randomUUID();
+  const now = Date.now();
+
+  const result = await admin.firestore().runTransaction(async (tx) => {
+    const [companySnap, orderSnap] = await Promise.all([tx.get(companyRef), tx.get(orderRef)]);
+    if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+    const orderData = orderSnap.data() || {};
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+
+    let supersededRecord = null;
+    let supersededRef = null;
+    if (supersedesId) {
+      supersededRef = estimateRecordsCollection(orderId).doc(supersedesId);
+      const supersededSnap = await tx.get(supersededRef);
+      if (supersededSnap.exists) supersededRecord = supersededSnap.data() || {};
+    }
+
+    // Estimates get their own counter. Borrowing assignInvoiceNumber would burn
+    // a real invoice number on a quote that may never be accepted.
+    const companyData = companySnap.exists ? companySnap.data() || {} : {};
+    const year = new Date().getFullYear();
+    let counter = Number(companyData.estimateCounter || 0);
+    let counterYear = Number(companyData.estimateCounterYear || 0);
+    if (counterYear !== year) { counter = 0; counterYear = year; }
+    counter += 1;
+    const number = `EST-${year}-${String(counter).padStart(4, "0")}`;
+
+    const totals = estimateTotals(lineItems, taxRate, taxType);
+    const settings = companyData;
+    const record = {
+      estimateId,
+      orderId,
+      companyId,
+      number,
+      version: supersededRecord ? Number(supersededRecord.version || 1) + 1 : 1,
+      status: "draft",
+      currency: String(settings.currencySymbol || "GBP"),
+      lineItems,
+      subtotal: totals.subtotal,
+      taxRate,
+      taxType,
+      taxAmount: totals.taxAmount,
+      total: totals.total,
+      terms,
+      notes,
+      validUntilMs,
+      customerNameSnapshot: cleanOrderText(orderData.customerName, "", 240),
+      customerEmailSnapshot: cleanOrderText(orderData.emailAddress, "", 240),
+      workspaceNameSnapshot: String(settings.appSubtitle || ""),
+      workspaceLogoUrlSnapshot: String(settings.appLogoUrl || ""),
+      footerNoteSnapshot: String(settings.invoiceFooterNote || ""),
+      replacesNumber: supersededRecord ? String(supersededRecord.number || "") : "",
+      createdAtMs: now,
+      createdByUid: uid,
+      createdByEmail: email,
+      sentAtMs: 0,
+      viewedAtMs: 0,
+      viewCount: 0,
+      supersedesId: supersedesId || "",
+      supersededById: "",
+      supersededAtMs: 0,
+      approval: null
+    };
+    record.documentSha256 = estimateDocumentHash(record);
+
+    tx.set(estimateRecordsCollection(orderId).doc(estimateId), record);
+    tx.set(companyRef, { estimateCounter: counter, estimateCounterYear: counterYear }, { merge: true });
+
+    let index = estimateIndexReplace(orderData.estimates, estimateIndexEntry(record, "none"));
+    const history = [webHistoryEntry("Estimate created", "-", `${number} · ${totals.total}`, uid, email)];
+
+    if (supersededRecord && supersededRef) {
+      tx.update(supersededRef, { status: "superseded", supersededById: estimateId, supersededAtMs: now });
+      const supersededEntry = estimateIndexEntry(
+        { ...supersededRecord, status: "superseded", supersededById: estimateId },
+        "revoked"
+      );
+      index = estimateIndexReplace(index, supersededEntry);
+      history.push(webHistoryEntry("Estimate superseded", String(supersededRecord.number || ""), number, uid, email));
+      // The old price must stop being approvable the moment a new one exists.
+      if (supersededRecord.linkTokenId) {
+        tx.set(
+          estimateLinksCollection().doc(String(supersededRecord.linkTokenId)),
+          { revokedAtMs: now },
+          { merge: true }
+        );
+      }
+    }
+
+    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    tx.update(orderRef, {
+      estimates: index,
+      estimateStatus: record.status,
+      estimateTotal: record.total,
+      estimateNumber: record.number,
+      historyLog: [...history, ...existingHistory].slice(0, 120)
+    });
+
+    return { number, version: record.version, total: record.total };
+  });
+
+  console.log("createOrderEstimate", { companyId, orderId, estimateId, uid, number: result.number });
+  return { ok: true, estimateId, ...result };
+});
+
+// Staff: mint the customer's link. The plaintext token is returned once and
+// never stored — the document id is its hash.
+exports.sendOrderEstimate = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, email, companyId } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  const estimateId = cleanOrderText(request.data && request.data.estimateId, "", 80);
+  if (!orderId || !estimateId) throw new HttpsError("invalid-argument", "orderId and estimateId are required.");
+
+  await websiteChatCheckRate("estimateMint", uid, 60);
+
+  const orderRef = orderDocRef(orderId);
+  const recordRef = estimateRecordsCollection(orderId).doc(estimateId);
+  const token = nvRandomToken(32);
+  const tokenId = nvSha256(token);
+  const now = Date.now();
+
+  const expiresAtMs = await admin.firestore().runTransaction(async (tx) => {
+    const [orderSnap, recordSnap] = await Promise.all([tx.get(orderRef), tx.get(recordRef)]);
+    if (!orderSnap.exists || !recordSnap.exists) throw new HttpsError("not-found", "Estimate not found.");
+    const orderData = orderSnap.data() || {};
+    if (orderCompanyId(orderData) !== companyId) {
+      throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+    }
+    const record = recordSnap.data() || {};
+    if (record.approval) throw new HttpsError("failed-precondition", "This estimate has already been decided.");
+    if (record.status === "superseded") throw new HttpsError("failed-precondition", "This estimate has been replaced.");
+
+    const validUntil = Number(record.validUntilMs) || 0;
+    const expires = validUntil > 0 ? Math.min(now + ESTIMATE_LINK_TTL_MS, validUntil) : now + ESTIMATE_LINK_TTL_MS;
+
+    // A fresh link retires the previous one, so only one price is live.
+    if (record.linkTokenId) {
+      tx.set(estimateLinksCollection().doc(String(record.linkTokenId)), { revokedAtMs: now }, { merge: true });
+    }
+
+    tx.set(estimateLinksCollection().doc(tokenId), {
+      companyId,
+      orderId,
+      estimateId,
+      createdByUid: uid,
+      createdAtMs: now,
+      expiresAtMs: expires,
+      viewedAtMs: 0,
+      viewCount: 0,
+      consumedAtMs: 0,
+      revokedAtMs: 0
+    });
+
+    tx.update(recordRef, { status: "sent", sentAtMs: now, sentByUid: uid, linkTokenId: tokenId });
+
+    const index = estimateIndexReplace(
+      orderData.estimates,
+      estimateIndexEntry({ ...record, status: "sent", sentAtMs: now }, "active")
+    );
+    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    tx.update(orderRef, {
+      estimates: index,
+      estimateStatus: "sent",
+      historyLog: [webHistoryEntry("Estimate sent", "-", String(record.number || ""), uid, email), ...existingHistory].slice(0, 120)
+    });
+
+    return expires;
+  });
+
+  console.log("sendOrderEstimate", { companyId, orderId, estimateId, uid });
+  return { ok: true, url: `https://nivadesk.app/e/${token}`, token, expiresAtMs };
+});
+
+exports.revokeOrderEstimateLink = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  const estimateId = cleanOrderText(request.data && request.data.estimateId, "", 80);
+  if (!orderId || !estimateId) throw new HttpsError("invalid-argument", "orderId and estimateId are required.");
+
+  const orderRef = orderDocRef(orderId);
+  const recordRef = estimateRecordsCollection(orderId).doc(estimateId);
+  const [orderSnap, recordSnap] = await Promise.all([orderRef.get(), recordRef.get()]);
+  if (!orderSnap.exists || !recordSnap.exists) throw new HttpsError("not-found", "Estimate not found.");
+  const orderData = orderSnap.data() || {};
+  if (orderCompanyId(orderData) !== companyId) {
+    throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+  }
+  const record = recordSnap.data() || {};
+  if (record.linkTokenId) {
+    await estimateLinksCollection().doc(String(record.linkTokenId)).set({ revokedAtMs: Date.now() }, { merge: true });
+  }
+  const index = estimateIndexReplace(orderData.estimates, estimateIndexEntry(record, "revoked"));
+  await orderRef.update({ estimates: index });
+  console.log("revokeOrderEstimateLink", { companyId, orderId, estimateId, uid });
+  return { ok: true };
+});
+
+// Staff: the full record, for the PDF and the history sheet.
+exports.getOrderEstimateRecord = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, false);
+  const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
+  const estimateId = cleanOrderText(request.data && request.data.estimateId, "", 80);
+  if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+  const orderSnap = await orderDocRef(orderId).get();
+  if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
+  if (orderCompanyId(orderSnap.data() || {}) !== companyId) {
+    throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+  }
+
+  if (!estimateId) {
+    const snap = await estimateRecordsCollection(orderId).orderBy("createdAtMs", "desc").limit(40).get();
+    return { ok: true, records: snap.docs.map((doc) => doc.data()) };
+  }
+  const recordSnap = await estimateRecordsCollection(orderId).doc(estimateId).get();
+  if (!recordSnap.exists) throw new HttpsError("not-found", "Estimate not found.");
+  return { ok: true, record: recordSnap.data() };
+});
+
+
+// Public: the customer opens their link. No sign-in, so nothing here trusts the
+// request for anything but the token — companyId and orderId come off the link.
+exports.getEstimateForVisitor = onCall({ region: "europe-west2" }, async (request) => {
+  const token = String(request.data && request.data.token || "").trim();
+  await websiteChatCheckRate("estimateView", websiteChatClientIp(request), ESTIMATE_VIEW_PER_HOUR);
+  await websiteChatCheckRate("estimateViewTok", token, ESTIMATE_VIEW_TOKEN_PER_HOUR);
+
+  const { linkRef, link, orderRef, orderData, recordRef, record } = await estimateLinkForVisitor(token);
+  if (record.status === "superseded") {
+    throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
+  }
+
+  // Viewing stays repeatable — people reopen and forward these links — but the
+  // first open is worth recording, and only once.
+  if (!record.approval && Number(record.viewedAtMs || 0) === 0) {
+    const now = Date.now();
+    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    const index = estimateIndexReplace(
+      orderData.estimates,
+      estimateIndexEntry({ ...record, status: "viewed", viewedAtMs: now }, "active")
+    );
+    await Promise.all([
+      recordRef.update({ status: "viewed", viewedAtMs: now, viewCount: Number(record.viewCount || 0) + 1 }),
+      linkRef.set({ viewedAtMs: now, viewCount: Number(link.viewCount || 0) + 1 }, { merge: true }),
+      orderRef.update({
+        estimates: index,
+        estimateStatus: "viewed",
+        historyLog: [
+          webHistoryEntry("Estimate viewed", "-", String(record.number || ""), "", "customer"),
+          ...existingHistory
+        ].slice(0, 120)
+      })
+    ]);
+    record.status = "viewed";
+    record.viewedAtMs = now;
+  } else {
+    await linkRef.set({ viewCount: Number(link.viewCount || 0) + 1 }, { merge: true });
+  }
+
+  const settings = await estimateWorkspaceSettings(link.companyId);
+  return { ok: true, estimate: estimatePublicView(record, settings, link) };
+});
+
+// Public: approve or decline. One decision, ever.
+exports.postEstimateDecision = onCall({ region: "europe-west2" }, async (request) => {
+  const data = request.data || {};
+  const token = String(data.token || "").trim();
+  await websiteChatCheckRate("estimateDecide", websiteChatClientIp(request), ESTIMATE_DECIDE_PER_HOUR);
+  await websiteChatCheckRate("estimateDecideTok", token, ESTIMATE_DECIDE_TOKEN_PER_HOUR);
+
+  const decision = String(data.decision || "").trim().toLowerCase() === "declined" ? "declined" : "approved";
+  const approvedByName = cleanSupportText(data.approvedByName, 160);
+  if (!approvedByName) throw new HttpsError("invalid-argument", "Please type your name.");
+  const approvedByEmail = websiteChatVisitorEmail(data.approvedByEmail);
+  const declineReason = cleanSupportText(data.declineReason, 1000);
+
+  const context = await estimateLinkForVisitor(token);
+  const { linkRef, link, orderRef, recordRef, record } = context;
+
+  // Idempotent: a double tap on a flaky phone shows the confirmation again
+  // rather than an error, and never rewrites the evidence already stored.
+  if (record.approval) {
+    return {
+      ok: true,
+      alreadyDecided: true,
+      decision: record.approval.decision,
+      decidedAtMs: record.approval.decidedAtMs,
+      decidedByName: record.approval.approvedByName
+    };
+  }
+  if (record.status !== "sent" && record.status !== "viewed") {
+    throw new HttpsError("failed-precondition", "This estimate can no longer be decided.");
+  }
+  if (estimateDocumentHash(record) !== String(record.documentSha256 || "")) {
+    throw new HttpsError("failed-precondition", "This estimate has changed. Please ask for a fresh link.");
+  }
+
+  // Signature first: a failed upload must not leave a decision half-written.
+  let signatureStoragePath = "";
+  let signatureSha256 = "";
+  let signatureBytes = 0;
+  let signatureDownloadUrl = "";
+  if (decision === "approved") {
+    const buffer = estimateSignatureBuffer(data.signaturePngBase64);
+    if (!buffer) throw new HttpsError("invalid-argument", "Please sign before approving.");
+    signatureStoragePath = `companies/${link.companyId}/signatures/${link.orderId}/${link.estimateId}.png`;
+    signatureSha256 = nvSha256(buffer.toString("base64"));
+    signatureBytes = buffer.length;
+    // The Admin SDK bypasses Storage rules; a visitor never touches the bucket.
+    // An object written this way has no download token of its own, and all three
+    // PDF renderers need to fetch the image, so mint one here. That URL is an
+    // unauthenticated link — it is kept in the record and handed only to signed-in
+    // members through getOrderEstimateRecord, never to the public page.
+    const downloadToken = crypto.randomUUID();
+    const bucket = admin.storage().bucket();
+    await bucket.file(signatureStoragePath).save(buffer, {
+      contentType: "image/png",
+      resumable: false,
+      metadata: { metadata: { firebaseStorageDownloadTokens: downloadToken } }
+    });
+    signatureDownloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(signatureStoragePath)}?alt=media&token=${downloadToken}`;
+  }
+
+  const now = Date.now();
+  const rawRequest = request.rawRequest || {};
+  const approval = {
+    decision,
+    method: "customer_portal",
+    decidedAtMs: now,
+    decidedAtServer: admin.firestore.Timestamp.now(),
+    // Self-declared: the customer typed this, we did not verify it.
+    approvedByName,
+    approvedByEmail,
+    declineReason: decision === "declined" ? declineReason : "",
+    ip: websiteChatClientIp(request),
+    userAgentTruncated: String(rawRequest.headers?.["user-agent"] || "").slice(0, 200),
+    linkTokenId: linkRef.id,
+    documentSha256AtDecision: String(record.documentSha256 || ""),
+    signatureStoragePath,
+    signatureSha256,
+    signatureBytes,
+    signatureDownloadUrl
+  };
+
+  const applied = await admin.firestore().runTransaction(async (tx) => {
+    const [linkSnap, recordSnap, orderSnap] = await Promise.all([tx.get(linkRef), tx.get(recordRef), tx.get(orderRef)]);
+    const linkNow = linkSnap.exists ? linkSnap.data() || {} : {};
+    const recordNow = recordSnap.exists ? recordSnap.data() || {} : {};
+    if (recordNow.approval) return { raced: true, approval: recordNow.approval };
+    if (Number(linkNow.consumedAtMs) > 0) return { raced: true, approval: recordNow.approval || approval };
+    if (Number(linkNow.revokedAtMs) > 0) {
+      throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
+    }
+
+    const orderData = orderSnap.exists ? orderSnap.data() || {} : {};
+    const nextStatus = decision === "approved" ? "approved" : "declined";
+    tx.update(recordRef, { status: nextStatus, approval });
+    tx.set(linkRef, { consumedAtMs: now }, { merge: true });
+
+    const index = estimateIndexReplace(
+      orderData.estimates,
+      estimateIndexEntry({ ...recordNow, status: nextStatus, approval }, "used")
+    );
+    const existingHistory = Array.isArray(orderData.historyLog) ? orderData.historyLog : [];
+    tx.update(orderRef, {
+      estimates: index,
+      estimateStatus: nextStatus,
+      historyLog: [
+        webHistoryEntry(
+          decision === "approved" ? "Estimate approved" : "Estimate declined",
+          String(recordNow.number || record.number || ""),
+          approvedByName,
+          "",
+          "customer"
+        ),
+        ...existingHistory
+      ].slice(0, 120)
+    });
+    return { raced: false, approval };
+  });
+
+  if (applied.raced) {
+    return {
+      ok: true,
+      alreadyDecided: true,
+      decision: applied.approval.decision,
+      decidedAtMs: applied.approval.decidedAtMs,
+      decidedByName: applied.approval.approvedByName
+    };
+  }
+
+  // Tell the workspace, without putting the money in a notification every
+  // member can read.
+  await safeSupportNotification("notifyEstimateDecision", () => notifyEstimateDecision(String(link.companyId), {
+    orderId: String(link.orderId || ""),
+    decision,
+    approvedByName,
+    number: String(record.number || "")
+  }));
+
+  console.log("postEstimateDecision", { companyId: link.companyId, orderId: link.orderId, estimateId: link.estimateId, decision });
+  return { ok: true, alreadyDecided: false, decision, decidedAtMs: now, decidedByName: approvedByName };
+});
+
+// Links expire; the records they point at never do. This only ever deletes the
+// link documents and the rate-limit windows behind them.
+exports.purgeExpiredEstimateLinks = onSchedule(
+  { schedule: "every 24 hours", region: "europe-west2", timeZone: "Europe/London" },
+  async () => {
+    const cutoff = Date.now();
+    const snap = await estimateLinksCollection().where("expiresAtMs", "<=", cutoff).limit(400).get();
+    if (snap.empty) return;
+    const batch = admin.firestore().batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    console.log("purgeExpiredEstimateLinks", { deleted: snap.size });
+  }
+);
+
 // or platforms. Idempotent: returns the existing number if already assigned.
 exports.assignInvoiceNumber = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef } = await requireWorkspaceForBilling(request, false);

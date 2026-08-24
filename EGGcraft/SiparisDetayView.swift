@@ -617,6 +617,7 @@ enum KartTipi: String, Codable, Equatable, Identifiable {
     case customerNotes = "customerNotes", materials = "materials", priority = "priority"
     case invoiceItems = "invoiceItems"
     case repairIntake = "repairIntake"
+    case estimate = "estimate"
     var id: String { self.rawValue }
 }
 
@@ -2515,7 +2516,8 @@ struct SiparisDetayView: View {
             .shipping,
             .schedule,
             .historyLog,
-            .repairIntake
+            .repairIntake,
+            .estimate
         ]
 
         return cards

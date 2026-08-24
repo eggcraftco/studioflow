@@ -214,16 +214,17 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
     Shipping("shipping", "cardShipping", "Shipping & Tracking"),
     Schedule("schedule", "cardSchedule", "Schedule & Alerts"),
     HistoryLog("historyLog", "cardHistoryLog", "History / Log"),
-    RepairIntake("repairIntake", "cardSummary", "Repair Intake & Item");
+    RepairIntake("repairIntake", "cardSummary", "Repair Intake & Item"),
+    Estimate("estimate", "cardFinancial", "Estimate & Approval");
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, RepairIntake, Summary, WorkTime, Shipping, Schedule, Notes),
+            listOf(Preview, RepairIntake, Estimate, Summary, WorkTime, Shipping, Schedule, Notes),
             listOf(Customer, InvoiceItems, Materials, Delivery),
             listOf(Financial, Priority, Todo, Status, HistoryLog, ClientFiles)
         )
         val DefaultOrder: List<OrderDetailCardId> = listOf(
-            Preview, RepairIntake, Summary, WorkTime, Shipping, Schedule, Notes,
+            Preview, RepairIntake, Estimate, Summary, WorkTime, Shipping, Schedule, Notes,
             Customer, InvoiceItems, Materials, Delivery,
             Financial, Priority, Todo, Status, HistoryLog, ClientFiles
         )

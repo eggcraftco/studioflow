@@ -8,6 +8,7 @@ export const ORDER_WORKSPACE_LAYOUT_KEY = "__workspaceLayoutV1";
 export const ORDER_DETAIL_CARD_IDS = [
   "preview",
   "repairIntake",
+  "estimate",
   "summary",
   "customer",
   "invoiceItems",
@@ -44,7 +45,7 @@ const DEFAULT_VISIBILITY = ORDER_DETAIL_CARD_IDS.reduce((output, cardId) => {
 }, {} as Record<OrderDetailCardId, boolean>);
 
 export const DEFAULT_ORDER_DETAIL_CARD_COLUMNS: OrderDetailCardId[][] = [
-  ["preview", "repairIntake", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["preview", "repairIntake", "estimate", "summary", "workTime", "shipping", "schedule", "notes"],
   ["customer", "invoiceItems", "materials", "delivery"],
   ["financial", "priority", "todo", "status", "historyLog", "clientFiles"]
 ];

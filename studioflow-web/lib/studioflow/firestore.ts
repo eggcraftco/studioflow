@@ -512,6 +512,33 @@ export type OrderDetail = {
   // is recorded below and is deliberately not stock.
   orderType: string;
   repairIntake: RepairIntakeDetail | null;
+  // The index the order carries. Full line items and the approval evidence live
+  // in a subcollection no client can read; these rows are what the card shows.
+  estimates: EstimateSummary[];
+  estimateStatus: string;
+};
+
+export type EstimateSummary = {
+  id: string;
+  number: string;
+  version: number;
+  status: string;
+  total: number;
+  subtotal: number;
+  taxAmount: number;
+  taxRate: number;
+  taxType: string;
+  itemCount: number;
+  createdAtMs: number;
+  sentAtMs: number;
+  viewedAtMs: number;
+  decidedAtMs: number;
+  decidedBy: string;
+  decisionMethod: string;
+  hasSignature: boolean;
+  supersedesId: string;
+  supersededById: string;
+  linkState: string;
 };
 
 export type RepairIntakeDetail = {
@@ -1686,6 +1713,34 @@ function mapLineItems(value: unknown): LineItemDetail[] {
   });
 }
 
+function mapEstimates(value: unknown): EstimateSummary[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `estimate-${index}`),
+      number: stringValue(entry.number, ""),
+      version: numberValue(entry.version, 1),
+      status: stringValue(entry.status, "draft"),
+      total: numberValue(entry.total),
+      subtotal: numberValue(entry.subtotal),
+      taxAmount: numberValue(entry.taxAmount),
+      taxRate: numberValue(entry.taxRate),
+      taxType: stringValue(entry.taxType, ""),
+      itemCount: numberValue(entry.itemCount),
+      createdAtMs: numberValue(entry.createdAtMs),
+      sentAtMs: numberValue(entry.sentAtMs),
+      viewedAtMs: numberValue(entry.viewedAtMs),
+      decidedAtMs: numberValue(entry.decidedAtMs),
+      decidedBy: stringValue(entry.decidedBy, ""),
+      decisionMethod: stringValue(entry.decisionMethod, ""),
+      hasSignature: entry.hasSignature === true,
+      supersedesId: stringValue(entry.supersedesId, ""),
+      supersededById: stringValue(entry.supersededById, ""),
+      linkState: stringValue(entry.linkState, "none")
+    };
+  });
+}
+
 function mapRepairIntake(value: unknown): RepairIntakeDetail | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const entry = value as Record<string, unknown>;
@@ -1820,7 +1875,9 @@ function mapOrderDetailSnapshot(
     lineItems: mapLineItems(data.lineItems),
     invoiceNumber: stringValue(data.invoiceNumber, ""),
     orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
-    repairIntake: mapRepairIntake(data.repairIntake)
+    repairIntake: mapRepairIntake(data.repairIntake),
+    estimates: mapEstimates(data.estimates),
+    estimateStatus: stringValue(data.estimateStatus, "")
   };
 }
 

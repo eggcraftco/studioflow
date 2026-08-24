@@ -194,6 +194,18 @@ service cloud.firestore {
           && safeBasicCustomFieldsCreate(request.resource.data));
     }
 
+    // An estimate is evidence: who agreed to what, and when. It is written by
+    // the callables and must survive every client save path, including the Mac
+    // app writing the order document straight to Firestore.
+    function serverOnlyEstimateFields() {
+      return ['estimates', 'estimateStatus', 'estimateTotal', 'estimateNumber'];
+    }
+
+    function noEstimateFieldWrite() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(serverOnlyEstimateFields());
+    }
+
     function validOrderFinanceUpdate(companyId) {
       return hasAdvancedFinancePlan(companyId)
         || !request.resource.data.diff(resource.data).affectedKeys().hasAny(advancedFinanceFields());
@@ -622,7 +634,8 @@ service cloud.firestore {
           )
         )
         && validOrderFinanceUpdate(resource.data.companyId)
-        && validBasicCustomFieldsUpdate(resource.data.companyId);
+        && validBasicCustomFieldsUpdate(resource.data.companyId)
+        && noEstimateFieldWrite();
 
       allow delete: if resource.data.companyId is string
         && canWriteCompanyData(resource.data.companyId)
@@ -675,6 +688,13 @@ service cloud.firestore {
       // Shopify App Store integration: shop↔workspace links, settings and the
       // OAuth access tokens. Strictly server-side (Admin SDK); clients read
       // integration state only through verified callables.
+      allow read, write: if false;
+    }
+
+    // The customer's link. Minted, read and retired by the Admin SDK only: the
+    // document id is the hash of the token, so nothing here is guessable and
+    // nothing client-side ever needs to see it.
+    match /estimateLinks/{document=**} {
       allow read, write: if false;
     }
 

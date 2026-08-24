@@ -7,6 +7,14 @@ import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle"
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
+import {
+  createOrderEstimate,
+  estimateStatusLabel,
+  loadOrderEstimateRecord,
+  revokeOrderEstimateLink,
+  sendOrderEstimate,
+  type EstimateRecord
+} from "@/lib/studioflow/estimates";
 import { studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -1131,6 +1139,7 @@ function emptyRepairIntakeDraft(): RepairIntakeDraft {
 const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   repairIntake: "Repair Intake & Item",
+  estimate: "Estimate & Approval",
   summary: "Order Summary",
   customer: "Customer & Communication",
   invoiceItems: "Invoice Items",
@@ -1151,6 +1160,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
 const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
   repairIntake: "cardSummary",
+  estimate: "cardFinancial",
   summary: "cardSummary",
   customer: "cardCustomer",
   invoiceItems: "cardCustomer",
@@ -1288,6 +1298,7 @@ function communicationChannelPatch(channel: string, value: string): DetailsPatch
 const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
   repairIntake: 460,
+  estimate: 520,
   summary: 210,
   customer: 200,
   invoiceItems: 220,
@@ -2538,6 +2549,7 @@ export function OrderDetailContent({
     const icons: Record<OrderDetailCardId, CardIcon> = {
       preview: "photo",
       repairIntake: "shippingBox",
+      estimate: "finance",
       summary: "docText",
       customer: "customer",
       invoiceItems: "docText",
@@ -4843,6 +4855,100 @@ export function OrderDetailContent({
     }, "Repair intake");
   }
 
+  // --- Estimate & approval -------------------------------------------------
+  // The card shows the current revision. Older ones stay in the list and are
+  // never edited: an approved estimate is evidence of what was agreed.
+  const estimates = order.estimates;
+  const currentEstimate = estimates.find(row => row.status !== "superseded") ?? estimates[0] ?? null;
+  const currentEstimateId = currentEstimate?.id ?? "";
+  const currentEstimateStatus = currentEstimate?.status ?? "";
+  const [estimateRecord, setEstimateRecord] = useState<EstimateRecord | null>(null);
+  const [estimateBusy, setEstimateBusy] = useState(false);
+  const [estimateNotice, setEstimateNotice] = useState("");
+
+  useEffect(() => {
+    if (!currentEstimateId) {
+      setEstimateRecord(null);
+      return;
+    }
+    let cancelled = false;
+    loadOrderEstimateRecord(workspace, order.id, currentEstimateId)
+      .then(result => {
+        if (!cancelled) setEstimateRecord(result?.record ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setEstimateRecord(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, order.id, currentEstimateId, currentEstimateStatus]);
+
+  // A revision is a new estimate, never an edit. Seeded from the order's own
+  // invoice lines so the jeweller is not retyping what is already there.
+  async function createEstimateRevision() {
+    const lines = order.lineItems.length > 0
+      ? order.lineItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal
+        }))
+      : [{ name: "Repair work", quantity: 1, unitPrice: 0, lineTotal: 0 }];
+    setEstimateBusy(true);
+    setEstimateNotice("");
+    try {
+      await createOrderEstimate(workspace, {
+        orderId: order.id,
+        lineItems: lines,
+        taxRate: order.taxRate ?? 0,
+        taxType: order.taxType ?? "",
+        supersedesId: currentEstimate && currentEstimate.status !== "superseded" ? currentEstimate.id : undefined
+      });
+      await onReloadOrder();
+      setEstimateNotice("New estimate created from the invoice lines.");
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The estimate could not be created.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
+  async function shareEstimateLink() {
+    if (!currentEstimate) return;
+    setEstimateBusy(true);
+    setEstimateNotice("");
+    try {
+      const result = await sendOrderEstimate(workspace, order.id, currentEstimate.id);
+      const url = result?.url || "";
+      if (url) {
+        // There is no outbound email to customers yet, so the jeweller sends the
+        // link themselves — usually on the thread they are already in.
+        await navigator.clipboard?.writeText(url).catch(() => undefined);
+        setEstimateNotice("Link copied. Send it to your customer.");
+      }
+      await onReloadOrder();
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be created.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
+  async function revokeEstimateLink() {
+    if (!currentEstimate) return;
+    setEstimateBusy(true);
+    try {
+      await revokeOrderEstimateLink(workspace, order.id, currentEstimate.id);
+      await onReloadOrder();
+      setEstimateNotice("Link revoked.");
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be revoked.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
   // Photos taken at intake ride on the existing client-file pipeline, tagged so
   // they show here as well as in Client Files: one upload path, not four.
   const intakePhotos = useMemo(
@@ -4857,6 +4963,146 @@ export function OrderDetailContent({
     if (!cardLayout.visibility[cardId] && !forcedByGuide) return null;
 
     switch (cardId) {
+      case "estimate": {
+        const record = estimateRecord;
+        const approval = record?.approval ?? null;
+        const approved = approval?.decision === "approved";
+        const statusTone = currentEstimate?.status === "approved"
+          ? "is-approved"
+          : currentEstimate?.status === "declined"
+            ? "is-declined"
+            : currentEstimate?.status === "superseded"
+              ? "is-superseded"
+              : "is-pending";
+        const lines = record?.lineItems ?? [];
+        const marginScheme = (record?.taxType ?? order.taxType) === "Profit";
+        const showVat = !marginScheme && (record?.taxRate ?? 0) > 0.0001;
+        const linkLive = currentEstimate?.linkState === "active";
+
+        return (
+          <section key={cardId} className="card order-detail-card">
+            {renderCardTitle(cardId)}
+            <div className="app-card-panel estimate-card">
+              {!canSeeFinance ? (
+                <p className="estimate-card-note">Hidden on this workspace role.</p>
+              ) : !currentEstimate ? (
+                <>
+                  <p className="estimate-card-note">
+                    No estimate yet. Create one from the invoice lines, send the link, and the customer&apos;s
+                    approval is recorded here.
+                  </p>
+                  {canInlineEditFullDetails ? (
+                    <button type="button" className="estimate-card-primary" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
+                      {estimateBusy ? "Working…" : "Create estimate"}
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className="estimate-card-head">
+                    <strong>Estimate {currentEstimate.number || `#${currentEstimate.version}`}</strong>
+                    <span className={`estimate-card-chip ${statusTone}`}>{estimateStatusLabel(currentEstimate.status)}</span>
+                  </div>
+
+                  {lines.length > 0 ? (
+                    <div className="estimate-card-lines">
+                      <div className="estimate-card-line is-head">
+                        <span>Item</span>
+                        <span>Amount</span>
+                      </div>
+                      {lines.map((line, index) => (
+                        <div key={`${line.name}-${index}`} className="estimate-card-line">
+                          <span>{line.name}{line.quantity > 1 ? ` (${line.quantity})` : ""}</span>
+                          <span>{money(line.lineTotal, hideNumbers)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="estimate-card-totals">
+                    <div className="estimate-card-line">
+                      <span>Subtotal</span>
+                      <span>{money(currentEstimate.subtotal, hideNumbers)}</span>
+                    </div>
+                    {showVat ? (
+                      <div className="estimate-card-line">
+                        <span>VAT ({record?.taxRate ?? 0}%)</span>
+                        <span>{money(currentEstimate.taxAmount, hideNumbers)}</span>
+                      </div>
+                    ) : null}
+                    <div className="estimate-card-line is-total">
+                      <span>Total</span>
+                      <span>{money(currentEstimate.total, hideNumbers)}</span>
+                    </div>
+                  </div>
+
+                  {approval ? (
+                    <div className="estimate-card-approval">
+                      <span className="estimate-card-approval-title">Approval Details</span>
+                      <div className="estimate-card-line">
+                        <span>{approved ? "Approved by" : "Declined by"}</span>
+                        <strong>{approval.approvedByName}</strong>
+                      </div>
+                      <div className="estimate-card-line">
+                        <span>{approved ? "Approved at" : "Declined at"}</span>
+                        <strong>{formatDateTime(new Date(approval.decidedAtMs))}</strong>
+                      </div>
+                      <div className="estimate-card-line">
+                        <span>Approval Method</span>
+                        <strong>Customer Portal</strong>
+                      </div>
+                      {approval.signatureDownloadUrl ? (
+                        <div className="estimate-card-signature">
+                          <span>Customer Signature</span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={approval.signatureDownloadUrl} alt="Customer signature" />
+                        </div>
+                      ) : null}
+                      {approval.declineReason ? (
+                        <p className="estimate-card-note">{approval.declineReason}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
+
+                  {canInlineEditFullDetails ? (
+                    <div className="estimate-card-actions">
+                      {!approval && currentEstimate.status !== "superseded" ? (
+                        <button type="button" onClick={() => void shareEstimateLink()} disabled={estimateBusy}>
+                          {linkLive ? "Copy link again" : "Send to customer"}
+                        </button>
+                      ) : null}
+                      {linkLive && !approval ? (
+                        <button type="button" onClick={() => void revokeEstimateLink()} disabled={estimateBusy}>
+                          Revoke link
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
+                        Create new estimate
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {estimates.length > 1 ? (
+                    <div className="estimate-card-history">
+                      <span className="estimate-card-approval-title">Estimate History</span>
+                      {estimates.map(row => (
+                        <div key={row.id} className="estimate-card-line">
+                          <span>{row.number || `#${row.version}`}</span>
+                          <span>
+                            {money(row.total, hideNumbers)} · {estimateStatusLabel(row.status)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </section>
+        );
+      }
       case "repairIntake": {
         const bulletList = (title: string, lines: string[]) => (
           lines.length > 0 ? (
