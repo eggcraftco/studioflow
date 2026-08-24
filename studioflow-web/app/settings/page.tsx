@@ -74,7 +74,9 @@ import {
   type StudioSupportTicket,
   type StudioSupportTicketMessage,
   type StudioSupportTicketStatus,
-  type StudioSupportTicketType
+  type StudioSupportTicketType,
+  getWebsiteAssistantConfig,
+  setWebsiteAssistant
 } from "@/lib/studioflow/supportTickets";
 
 type SettingsSectionId =
@@ -2005,6 +2007,42 @@ function QuickReplySettingsSection({
   const [contributions, setContributions] = useState<QuickReplyContributionItem[]>([]);
   const [contributionSaving, setContributionSaving] = useState(false);
   const canEditCore = canEditQuickReplySettingsForRole(workspace.role);
+  // The same key can also power the assistant on the public website. Only a
+  // NivaDesk support admin sees this, and only they can switch it on.
+  const [assistant, setAssistant] = useState<{ visible: boolean; enabled: boolean; hasKey: boolean }>({ visible: false, enabled: false, hasKey: false });
+  const [assistantBusy, setAssistantBusy] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const config = await getWebsiteAssistantConfig();
+      if (cancelled) return;
+      setAssistant({
+        visible: Boolean(config.visible),
+        enabled: Boolean(config.enabled),
+        hasKey: Boolean(config.hasKey)
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [workspace.id]);
+
+  async function toggleWebsiteAssistant(next: boolean) {
+    setAssistantBusy(true);
+    setAssistantError("");
+    try {
+      const result = await setWebsiteAssistant({ enabled: next, companyId: workspace.id });
+      setAssistant(current => ({
+        visible: true,
+        enabled: Boolean(result.enabled),
+        hasKey: next ? Boolean(result.hasKey) : current.hasKey
+      }));
+    } catch (error) {
+      setAssistantError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAssistantBusy(false);
+    }
+  }
   const canEditPersonal = canEditPersonalQuickReplySettingsForRole(workspace.role);
   const canContribute = canContributeQuickReplyKnowledgeForRole(workspace.role);
   const [menuEnabled, setMenuEnabled] = useState(workspace.quickReplyMenuEnabled);
@@ -2238,9 +2276,32 @@ function QuickReplySettingsSection({
                       onChange={event => { if (!showMaskedOpenAIKey) setApiKeyInput(event.target.value); }}
                       placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
                     />
-                    <span>{t("Stored server-side and never shared with workspace members.")}</span>
+                    <span>{t("Stored server-side and never shared with workspace members. If the website assistant is switched on below, the same key answers questions from the nivadesk.app chat widget.")}</span>
                   </div>
                 </div>
+                {assistant.visible ? (
+                  <div className="quick-reply-settings-panel">
+                    <CardTitle icon="notes" eyebrow={t("NivaDesk only")} title={t("Website assistant")} />
+                    <p className="muted-copy">{t("Let this OpenAI key answer first questions in the nivadesk.app chat widget. The assistant only answers from public NivaDesk facts, never from this workspace's Quick Reply knowledge base, and hands over to a person when it is unsure. Every question still reaches Support / Tickets and your email.")}</p>
+                    <div className="quick-reply-key-row">
+                      <span className={assistant.enabled ? "studio-pill success" : "studio-pill"}>
+                        {assistant.enabled ? t("Website assistant is on") : t("Website assistant is off")}
+                      </span>
+                      {assistant.enabled && !assistant.hasKey ? (
+                        <span className="studio-pill">{t("No API key configured")}</span>
+                      ) : null}
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={assistantBusy}
+                        onClick={() => void toggleWebsiteAssistant(!assistant.enabled)}
+                      >
+                        {assistantBusy ? t("Saving...") : (assistant.enabled ? t("Turn off") : t("Turn on"))}
+                      </button>
+                    </div>
+                    {assistantError ? <p className="layout-error">{assistantError}</p> : null}
+                  </div>
+                ) : null}
                 <div className="quick-reply-key-row">
                   <span className={settings.hasOpenAIKey && !clearOpenAIKey ? "studio-pill success" : "studio-pill"}>
                     {clearOpenAIKey ? t("Key will be cleared") : settings.hasOpenAIKey ? t("API key configured") : t("No API key configured")}
@@ -4847,7 +4908,13 @@ function SupportTicketsSection({
   const [canSeeWorkspaceQueue, setCanSeeWorkspaceQueue] = useState(false);
   const t = (text: string) => studioT(text, language);
   const isWorkspaceMode = ticketMode === "workspace";
+  // Website chats arrive through the same NivaDesk support inbox, so they use
+  // the appSupport callables and are split out by ticketType for display.
+  const isWebsiteMode = ticketMode === "website";
   const canUpdateStatus = isWorkspaceMode ? canSeeWorkspaceQueue : isSupportAdmin;
+  const visibleTickets = isWorkspaceMode
+    ? tickets
+    : tickets.filter(ticket => (String(ticket.ticketType || "") === "website") === isWebsiteMode);
   const categories = isWorkspaceMode ? WORKSPACE_SUPPORT_CATEGORY_OPTIONS : APP_SUPPORT_CATEGORY_OPTIONS;
   const currentUserUid = auth.currentUser?.uid ?? "";
 
@@ -4856,6 +4923,9 @@ function SupportTicketsSection({
       const summary = await getSupportTicketUnreadSummary(workspace);
       onSupportUnreadChanged(supportUnreadTotal(summary));
       setUnreadTicketIds(supportUnreadTicketIds(summary));
+      // This call runs on mount for everyone, so it is what makes the Website
+      // tab visible without first opening the NivaDesk Support tab.
+      if (summary?.isSupportAdmin) setIsSupportAdmin(true);
     } catch {
       // Keep the currently visible count if unread summary is temporarily unavailable.
     }
@@ -4923,6 +4993,11 @@ function SupportTicketsSection({
     void loadTickets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id, ticketMode]);
+
+  useEffect(() => {
+    void refreshSupportUnreadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.id]);
 
   async function loadTickets() {
     setLoadingTickets(true);
@@ -5082,9 +5157,23 @@ function SupportTicketsSection({
               <small>{t("For app bugs, sync issues, billing, account or feature requests.")}</small>
             </span>
           </button>
+          {isSupportAdmin ? (
+            <button
+              className={isWebsiteMode ? "settings-section-button active" : "settings-section-button"}
+              type="button"
+              onClick={() => setTicketMode("website")}
+              style={{ textAlign: "left" }}
+            >
+              <span>
+                <strong>{t("Website Chats")}</strong>
+                <small>{t("Questions people send from the nivadesk.app chat widget.")}</small>
+              </span>
+            </button>
+          ) : null}
         </div>
       </section>
 
+      {isWebsiteMode ? null : (
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="notes" eyebrow={isWorkspaceMode ? t("Workspace Ticket") : t("NivaDesk Support")} title={t("New Ticket")} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -5120,20 +5209,23 @@ function SupportTicketsSection({
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
+      )}
 
       <section className="card app-card">
         <CardTitle
           icon="notes"
-          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : t("NivaDesk Support Inbox")}
+          eyebrow={isWorkspaceMode ? t("Workspace Inbox") : (isWebsiteMode ? t("Website Chats") : t("NivaDesk Support Inbox"))}
           title={isWorkspaceMode
             ? (canSeeWorkspaceQueue ? t("Workspace Tickets") : t("My Workspace Tickets"))
-            : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets"))}
+            : (isWebsiteMode
+              ? t("Questions from the website")
+              : (isSupportAdmin ? t("NivaDesk Support Inbox") : t("My NivaDesk Support Tickets")))}
         />
         {supportUnreadCount > 0 ? <p className="muted-copy" style={{ marginTop: -4 }}>{supportUnreadCount} {t("unread ticket update")}</p> : null}
         {loadingTickets ? <p className="muted-copy">{t("Loading tickets...")}</p> : null}
-        {!loadingTickets && tickets.length === 0 ? <p className="muted-copy">{t("No tickets yet.")}</p> : null}
+        {!loadingTickets && visibleTickets.length === 0 ? <p className="muted-copy">{isWebsiteMode ? t("No website questions yet.") : t("No tickets yet.")}</p> : null}
         <div style={{ display: "grid", gap: 12 }}>
-          {tickets.map(ticket => {
+          {visibleTickets.map(ticket => {
             const isSelected = selectedTicketId === ticket.id;
             const ticketMessages = messagesByTicketId[ticket.id] ?? [];
             const isUnread = supportTicketIsUnread(ticket, currentUserUid) || unreadTicketIds.includes(ticket.id);

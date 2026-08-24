@@ -1343,7 +1343,7 @@ type AdminInsights = {
 };
 
 const ADMIN_PLAN_LABELS: Record<string, string> = {
-  demo: "Free Demo",
+  demo: "Free",
   lifetime_lite: "Lite",
   pro_monthly: "Pro",
   team_monthly: "Team"
@@ -1685,7 +1685,7 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
       <div className="site-stats-grid">
         {adminKpiTile("Active Subscriptions", data.subscriptions.paidTotal.toLocaleString(), "paid plan assigned")}
         {adminKpiTile("New Subscriptions (30d)", data.subscriptions.paidNew30d.toLocaleString(), "paid workspaces created")}
-        {adminKpiTile("Free Demo Workspaces", data.subscriptions.freeDemo.toLocaleString())}
+        {adminKpiTile("Free Workspaces", data.subscriptions.freeDemo.toLocaleString())}
         {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
         {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
         {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}

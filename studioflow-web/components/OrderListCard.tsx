@@ -440,6 +440,10 @@ export function OrderListCard({
         selectionActive ? "selection-active" : "",
         showFirstProjectGuideProjectBubble ? "first-project-guide-target" : ""
       ].filter(Boolean).join(" ")}
+      style={showFirstProjectGuideProjectBubble ? {
+        outline: "3px solid #2563eb",
+        boxShadow: "0 0 0 6px rgba(37, 99, 235, 0.18), 0 18px 45px rgba(37, 99, 235, 0.22)"
+      } : undefined}
       onClick={event => onSelect?.(event)}
       onKeyDown={event => {
         if (event.key === "Enter" || event.key === " ") {

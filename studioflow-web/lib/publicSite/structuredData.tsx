@@ -85,19 +85,19 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
       "Yes. You can upgrade or downgrade at any time from the plan screen. Upgrades apply immediately; downgrades take effect at the end of your current billing period."
   },
   {
-    question: "What are the Free Demo limits?",
+    question: "What are the Free plan limits?",
     answer:
-      "Free Demo includes up to 5 orders and 3 customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
+      "Free includes up to 10 orders and 10 customers, basic finance summaries, personal notes and the ChatGPT App. Client Files, advanced finance and team messaging require a paid plan."
   },
   {
     question: "How do I cancel, and does NivaDesk offer refunds?",
     answer:
-      "You can cancel any time from your account; your workspace keeps its paid features until the end of the period you've already paid for, then returns to Free Demo. Refunds follow the Refund & Cancellation policy."
+      "You can cancel any time from your account; your workspace keeps its paid features until the end of the period you've already paid for, then returns to Free. Refunds follow the Refund & Cancellation policy."
   },
   {
     question: "How many users are included?",
     answer:
-      "Free Demo, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
+      "Free, Lite and Pro are single-user workspaces. Team includes 5 seats so you can collaborate with your studio, and the owner can add more seats (£5/month each) up to 10 users in total."
   },
   {
     question: "How much file storage do I get?",

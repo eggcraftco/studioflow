@@ -3115,6 +3115,809 @@ exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADES
   return { ok: true, ticketId: ticketRef.id, message: "Ticket sent. We will review it as soon as possible." };
 });
 
+// MARK: - Website visitor chat (public site widget)
+//
+// Visitors on nivadesk.app are not signed in, so these three callables are the
+// only unauthenticated support entry points. A visitor is identified by the
+// random token handed back when the thread is created: it is stored on the
+// ticket, never returned by supportTicketFromDoc, and required on every later
+// call, so a ticket id alone reveals nothing.
+//
+// The thread is a normal supportTickets doc with ticketType "website", so the
+// existing inbox, replies, assignment, unread counters and notifications work
+// on it unchanged.
+
+const WEBSITE_CHAT_COMPANY_ID = "__website__";
+const WEBSITE_CHAT_MAX_MESSAGE = 4000;
+const WEBSITE_CHAT_NEW_PER_HOUR = 5;
+const WEBSITE_CHAT_MESSAGES_PER_HOUR = 40;
+
+function websiteChatToken() {
+  return require("crypto").randomBytes(24).toString("hex");
+}
+
+function websiteChatClientIp(request = {}) {
+  const raw = request.rawRequest || {};
+  const forwarded = String(raw.headers?.["x-forwarded-for"] || "").split(",")[0].trim();
+  return forwarded || String(raw.ip || "").trim() || "unknown";
+}
+
+function websiteChatRateKey(prefix, value) {
+  const hash = require("crypto").createHash("sha256").update(String(value || "unknown")).digest("hex").slice(0, 32);
+  return `${prefix}_${hash}`;
+}
+
+// Fixed one-hour windows: cheap, and a visitor who genuinely needs more can
+// keep writing in the thread they already opened.
+async function websiteChatCheckRate(prefix, value, limit) {
+  const ref = admin.firestore().collection("websiteChatRateLimits").doc(websiteChatRateKey(prefix, value));
+  const windowStart = Math.floor(Date.now() / 3600000) * 3600000;
+  const allowed = await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? (snap.data() || {}) : {};
+    const count = Number(data.windowStart) === windowStart ? Number(data.count || 0) : 0;
+    if (count >= limit) return false;
+    tx.set(ref, { windowStart, count: count + 1, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return true;
+  });
+  if (!allowed) {
+    throw new HttpsError("resource-exhausted", "Too many messages from this connection. Please try again later, or email contact@nivadesk.co.uk.");
+  }
+}
+
+function websiteChatVisitorEmail(value) {
+  const email = cleanSupportText(value, 240).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) ? email : "";
+}
+
+async function websiteChatTicketForVisitor(ticketId, visitorToken) {
+  const id = cleanSupportText(ticketId, 160);
+  const token = cleanSupportText(visitorToken, 120);
+  if (!id || !token) {
+    throw new HttpsError("invalid-argument", "ticketId and visitorToken are required.");
+  }
+  const ref = admin.firestore().collection("supportTickets").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "Conversation not found.");
+  }
+  const data = snap.data() || {};
+  if (String(data.ticketType || "") !== "website" || String(data.visitorToken || "") !== token) {
+    throw new HttpsError("permission-denied", "This conversation cannot be opened with that link.");
+  }
+  return { ref, data };
+}
+
+async function emailNivadeskSupportForWebsiteChat(ticketId, payload = {}, isReply = false) {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  if (!password) {
+    console.warn("emailNivadeskSupportForWebsiteChat: NIVADESK_SMTP_PASSWORD secret is not set; skipping email.");
+    return;
+  }
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+  const inbox = String(process.env.NIVADESK_SUPPORT_INBOX || NIVADESK_SUPPORT_INBOX).trim();
+  const to = Array.from(new Set([inbox, ...SUPPORT_ADMIN_EMAILS].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean))).join(", ");
+
+  const visitorName = String(payload.createdByName || "Website visitor");
+  const visitorEmail = String(payload.createdByEmail || "");
+  const message = String(payload.lastMessagePreview || payload.message || "");
+  const page = String(payload.visitorPage || "");
+  const language = String(payload.language || "");
+
+  const transporter = nodemailer.createTransport({
+    host, port, secure: port === 465, auth: { user, pass: password }
+  });
+
+  const subject = isReply
+    ? `[NivaDesk Website] New reply from ${visitorName}`
+    : `[NivaDesk Website] New chat from ${visitorName}`;
+  const text = [
+    isReply ? "New reply in a website chat" : "New website chat",
+    "",
+    `From:     ${visitorName}${visitorEmail ? ` <${visitorEmail}>` : ""}`,
+    `Page:     ${page || "-"}`,
+    `Language: ${language || "-"}`,
+    `Ticket:   ${ticketId}`,
+    "",
+    "Message:",
+    message,
+    "",
+    "Answer it in NivaDesk under Settings > Support / Tickets > Website."
+  ].join("\n");
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;color:#111827;line-height:1.5">
+      <h2 style="margin:0 0 12px;font-size:17px">${isReply ? "New reply in a website chat" : "New website chat"}</h2>
+      <table style="border-collapse:collapse;margin-bottom:14px">
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">From</td><td><strong>${escapeSupportEmailHtml(visitorName)}</strong>${visitorEmail ? ` &lt;${escapeSupportEmailHtml(visitorEmail)}&gt;` : ""}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Page</td><td>${escapeSupportEmailHtml(page || "-")}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Language</td><td>${escapeSupportEmailHtml(language || "-")}</td></tr>
+        <tr><td style="padding:2px 12px 2px 0;color:#6b7280">Ticket</td><td>${escapeSupportEmailHtml(ticketId)}</td></tr>
+      </table>
+      <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">${escapeSupportEmailHtml(message)}</div>
+      <p style="margin:14px 0 0;color:#6b7280">Answer it in NivaDesk under Settings &rsaquo; Support / Tickets &rsaquo; Website.</p>
+    </div>`;
+
+  try {
+    const info = await transporter.sendMail({
+      from: `NivaDesk Website <${user}>`,
+      to,
+      replyTo: visitorEmail || undefined,
+      subject,
+      text,
+      html
+    });
+    console.log("websiteChatEmail sent", JSON.stringify({
+      to,
+      from: user,
+      ticketId,
+      messageId: info?.messageId || "",
+      accepted: info?.accepted || [],
+      rejected: info?.rejected || [],
+      response: String(info?.response || "").slice(0, 200)
+    }));
+  } catch (error) {
+    console.error("websiteChatEmail FAILED", JSON.stringify({
+      to,
+      from: user,
+      host,
+      port,
+      ticketId,
+      error: error?.message || String(error)
+    }));
+    throw error;
+  }
+}
+
+// Sent to the visitor when the team answers, so the reply reaches them even if
+// they never come back to the site.
+async function emailWebsiteChatVisitorReply(ticketId, ticketData = {}, message = "") {
+  const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
+  const visitorEmail = websiteChatVisitorEmail(ticketData.visitorEmail || ticketData.createdByEmail || "");
+  if (!password || !visitorEmail) return;
+
+  const host = String(process.env.NIVADESK_SMTP_HOST || "smtp.hostinger.com").trim();
+  const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
+  const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
+  const inbox = String(process.env.NIVADESK_SUPPORT_INBOX || NIVADESK_SUPPORT_INBOX).trim();
+
+  const transporter = nodemailer.createTransport({
+    host, port, secure: port === 465, auth: { user, pass: password }
+  });
+
+  const body = String(message || ticketData.lastMessagePreview || "");
+  const text = [
+    `Hi${ticketData.visitorName ? ` ${ticketData.visitorName}` : ""},`,
+    "",
+    "You asked us a question on nivadesk.app. Here is our reply:",
+    "",
+    body,
+    "",
+    "You can reply straight to this email, and we'll pick it up.",
+    "",
+    "— NivaDesk Support"
+  ].join("\n");
+  const html = `
+    <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:14px;color:#111827;line-height:1.6">
+      <p style="margin:0 0 12px">Hi${ticketData.visitorName ? ` ${escapeSupportEmailHtml(String(ticketData.visitorName))}` : ""},</p>
+      <p style="margin:0 0 12px">You asked us a question on nivadesk.app. Here is our reply:</p>
+      <div style="white-space:pre-wrap;padding:12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">${escapeSupportEmailHtml(body)}</div>
+      <p style="margin:14px 0 0;color:#6b7280">You can reply straight to this email, and we&rsquo;ll pick it up.</p>
+      <p style="margin:10px 0 0">&mdash; NivaDesk Support</p>
+    </div>`;
+
+  await transporter.sendMail({
+    from: `NivaDesk Support <${user}>`,
+    to: visitorEmail,
+    replyTo: inbox,
+    subject: "Re: your question on nivadesk.app",
+    text,
+    html
+  });
+}
+
+// MARK: - Website assistant (phase 2 of the site chat)
+//
+// The assistant runs on the OpenAI key a workspace already stores for Quick
+// Reply, rather than a separate deployment secret: one key to manage, and the
+// owner can switch it off from Settings at any time.
+//
+// It is deliberately narrow. It answers only from the facts below — never from
+// the workspace's own Quick Reply knowledge base, which is about that studio's
+// customers, not about NivaDesk — and hands over to a person whenever it is
+// not sure. Every question still reaches the team by email either way.
+
+function websiteAssistantConfigRef() {
+  return admin.firestore().collection("appConfig").doc("websiteAssistant");
+}
+
+const WEBSITE_ASSISTANT_FACTS = [
+  "NivaDesk is studio management software for creative and custom-order businesses: orders, customers, scheduling, invoices, client files, notes, to-dos, team roles, dashboards and bank spending.",
+  "Platforms: web (nivadesk.app), macOS, iPhone, iPad and Android. The same workspace syncs across all of them. There is no Windows app yet.",
+  "Plans: Free Demo (free, a small sample workspace), Lite £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
+  "Every plan includes the NivaDesk ChatGPT app. It connects a workspace to ChatGPT through OAuth so the owner can ask about orders, notes, finances and bank spending in plain language, create orders from existing records, and attach receipts to bank transactions.",
+  "Banking: business bank accounts connect through Open Banking. NivaDesk shows spending by category, recurring payments, receipts matched to transactions and VAT treatment. Bank access is owner-only unless the owner grants a member the Bank Spending permission.",
+  "Billing is monthly or yearly through Stripe, on Apple and Google in-app purchase where applicable. Plans can be changed or cancelled at any time.",
+  "Data: workspaces are hosted on Google Cloud in Europe. Owners can export their orders to CSV and can delete their account and data.",
+  "Support email: contact@nivadesk.co.uk."
+].join("\n");
+
+function websiteAssistantSystemPrompt(language) {
+  return [
+    "You are the assistant on the NivaDesk marketing website (nivadesk.app). You are talking to a visitor who is not signed in.",
+    "",
+    "Rules:",
+    "1. Answer ONLY from the facts below. If the answer is not in them, say you are not sure and that a person from the team will reply here and by email. Never guess a price, a limit, a date or a feature.",
+    "2. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it.",
+    "3. Keep it short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
+    `4. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
+    "5. Never ask for passwords, card details or API keys. If a visitor needs account help, tell them the team will pick it up.",
+    "6. You cannot look inside anyone's workspace or account, and you cannot change anything. Say so plainly if asked.",
+    "",
+    "Facts:",
+    WEBSITE_ASSISTANT_FACTS
+  ].join("\n");
+}
+
+async function websiteAssistantKey() {
+  const configSnap = await websiteAssistantConfigRef().get();
+  const config = configSnap.exists ? (configSnap.data() || {}) : {};
+  if (config.enabled !== true) return { key: "", reason: "disabled" };
+
+  const companyId = String(config.companyId || "").trim();
+  if (!companyId) return { key: "", reason: "missing_company" };
+
+  const settingsSnap = await companySettingsDocRef(companyId).get();
+  const settingsData = settingsSnap.exists ? (settingsSnap.data() || {}) : {};
+  const key = await secureQuickReplyOpenAIKey(companyId, settingsData);
+  return { key: String(key || "").trim(), reason: key ? "ok" : "missing_key", companyId };
+}
+
+// Returns the reply text, or "" when the assistant should stay quiet and leave
+// the question for a person.
+async function websiteAssistantReply(ticketData = {}, history = []) {
+  const { key, reason } = await websiteAssistantKey();
+  if (!key) {
+    if (reason !== "disabled") console.warn("websiteAssistant skipped:", reason);
+    return "";
+  }
+
+  const messages = [{ role: "system", content: websiteAssistantSystemPrompt(ticketData.language) }];
+  for (const item of history.slice(-10)) {
+    const text = cleanSupportMultiline(item.message, 2000);
+    if (!text) continue;
+    messages.push({ role: item.fromVisitor ? "user" : "assistant", content: text });
+  }
+  if (messages.length < 2) return "";
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages,
+        temperature: 0.2,
+        max_tokens: 400
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error("websiteAssistant OpenAI error", response.status, payload?.error?.message || "");
+      return "";
+    }
+    return cleanSupportMultiline(payload?.choices?.[0]?.message?.content || "", 3000);
+  } catch (error) {
+    console.error("websiteAssistant request failed", error?.message || error);
+    return "";
+  }
+}
+
+// Writes the assistant's answer into the thread as a support-side message so it
+// shows up in the widget and in every app's inbox exactly like a human reply.
+async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
+  const snap = await ticketRef.collection("messages").limit(30).get();
+  const history = snap.docs
+    .map((doc) => {
+      const item = doc.data() || {};
+      return {
+        message: String(item.message || ""),
+        fromVisitor: String(item.authorRole || "") === "visitor",
+        createdAtMillis: supportTimestampMillis(item.createdAt)
+      };
+    })
+    .sort((a, b) => a.createdAtMillis - b.createdAtMillis);
+
+  const reply = await websiteAssistantReply(ticketData, history);
+  if (!reply) return false;
+
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  await ticketRef.collection("messages").add({
+    ticketId: ticketRef.id,
+    message: reply,
+    attachments: [],
+    authorUid: "",
+    authorEmail: "",
+    authorName: "NivaDesk Assistant",
+    authorRole: "assistant",
+    createdAt: now,
+    source: "websiteAssistant",
+    supportSchemaVersion: 2
+  });
+  await ticketRef.set({
+    updatedAt: now,
+    lastMessageAt: now,
+    lastMessageByUid: "",
+    lastMessageByEmail: "",
+    lastMessageByName: "NivaDesk Assistant",
+    lastMessageByRole: "assistant",
+    lastMessagePreview: supportLastMessagePreview(reply),
+    assistantRepliedAt: now
+  }, { merge: true });
+  return true;
+}
+
+// MARK: - In-app help assistant ("how do I…?")
+//
+// Answers questions about using NivaDesk, from the same user guide that powers
+// /guide — the guide stays the single source of truth and is exported to
+// assistant/guideCorpus.json by assistant/buildGuideCorpus.js.
+//
+// Deliberately blind to workspace data: it cannot read orders, customers or
+// money, and it says so and points at the ChatGPT app when asked. Anything the
+// guide does not cover goes to Contact NivaDesk Support instead of a guess.
+//
+// Paid plans only. Free Demo workspaces get the public website widget.
+
+const APP_ASSISTANT_QUESTIONS_PER_DAY = 40;
+let appAssistantCorpusCache = null;
+let appAssistantNotesCache = null;
+
+// Corrections and details that should reach people who ask, without being
+// published on nivadesk.app/guide. The public guide stays the marketing-facing
+// document; this is the operator's own notebook for the assistant.
+function appAssistantNotes() {
+  if (!appAssistantNotesCache) {
+    try {
+      appAssistantNotesCache = require("./assistant/assistantNotes.json").notes || [];
+    } catch (error) {
+      console.warn("appAssistant: notes file missing", error?.message || error);
+      appAssistantNotesCache = [];
+    }
+  }
+  return appAssistantNotesCache;
+}
+
+function appAssistantCorpus() {
+  if (!appAssistantCorpusCache) {
+    try {
+      appAssistantCorpusCache = require("./assistant/guideCorpus.json").sections || [];
+    } catch (error) {
+      console.error("appAssistant: guide corpus missing", error?.message || error);
+      appAssistantCorpusCache = [];
+    }
+  }
+  return appAssistantCorpusCache;
+}
+
+const APP_ASSISTANT_STOPWORDS = new Set([
+  "the", "and", "for", "with", "how", "what", "where", "when", "does", "can", "you",
+  "your", "this", "that", "from", "into", "have", "has", "are", "was", "will", "would",
+  "there", "their", "about", "which", "who", "why", "not", "but", "all", "any", "get"
+]);
+
+function appAssistantTokens(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !APP_ASSISTANT_STOPWORDS.has(word));
+}
+
+// Keyword overlap picks the few sections that could answer an English question.
+// It cannot match a Turkish (or German, or Japanese) question against an English
+// guide, so a weak match falls back to sending the whole guide — at ~24 KB that
+// is still a small request, and a wrong "not covered by the guide" is far worse
+// than a few thousand extra tokens.
+const APP_ASSISTANT_FULL_CORPUS_BUDGET = 60000;
+
+function appAssistantRelevantSections(question, limit = 4) {
+  const corpus = appAssistantCorpus();
+  const tokens = appAssistantTokens(question);
+  const scored = corpus.map((section) => {
+    const haystack = `${section.path} ${section.title} ${section.text}`.toLowerCase();
+    let score = 0;
+    for (const token of new Set(tokens)) {
+      if (!haystack.includes(token)) continue;
+      score += 1;
+      if (section.title.toLowerCase().includes(token)) score += 2;
+      if (section.path.toLowerCase().includes(token)) score += 1;
+    }
+    return { section, score };
+  });
+
+  const matched = scored
+    .filter((item) => item.score >= 2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.section);
+
+  if (matched.length >= 2) return matched;
+
+  let used = 0;
+  const all = [];
+  for (const section of corpus) {
+    used += section.text.length;
+    if (used > APP_ASSISTANT_FULL_CORPUS_BUDGET) break;
+    all.push(section);
+  }
+  return all;
+}
+
+function appAssistantSystemPrompt(language, sections) {
+  const excerpts = sections.length
+    ? sections.map((section) => `## ${section.path}\n${section.text}`).join("\n\n")
+    : "(no matching guide section)";
+  return [
+    "You are the in-app help assistant inside NivaDesk, a studio management app. The person asking is signed in and is trying to work out how to use the app.",
+    "",
+    "Rules:",
+    "1. Answer only from the guide excerpts below. Say where to find it in the app (menu, card, button) in plain steps.",
+    "2. You CANNOT see this person's workspace: no orders, customers, invoices, files or money. Never state or guess any of their data.",
+    "3. If they ask about their own data (\"which orders are overdue\", \"how much did I make\"), explain you cannot see workspace data, and tell them the NivaDesk ChatGPT app can answer that from their real workspace. Then set needsChatGPT.",
+    "4. If the excerpts do not cover the question, say so plainly and offer to pass it to NivaDesk Support. Do not invent menus, buttons, prices or limits.",
+    "4b. Only name a button, menu or field that appears in the excerpts. If the excerpts describe what a screen does but not the exact steps, say what it covers and stop there — a plausible-sounding button that does not exist sends people hunting for it.",
+    "5. When the answer sends them to an order card, add one line: if they cannot see that card, it is switched off under Actions ▸ Customize ▸ Workspace Blocks.",
+    "6. Keep it short: a couple of sentences, or up to four numbered steps.",
+    `7. Reply in the language the person writes in. Their app language is "${language || "English"}".`,
+    "",
+    "Reply as JSON only, no prose around it:",
+    '{"answer": "...", "needsChatGPT": false, "needsSupport": false}',
+    "",
+    "Guide excerpts:",
+    excerpts,
+    "",
+    "Internal notes (accurate, not published on the website — use them the same way as the guide):",
+    appAssistantNotes().map((note) => `## ${note.title}\n${note.text}`).join("\n\n") || "(none)"
+  ].join("\n");
+}
+
+async function appAssistantDailyGuard(uid) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  const ref = admin.firestore().collection("appAssistantUsage").doc(`${uid}_${stamp}`);
+  const allowed = await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const count = snap.exists ? Number(snap.data()?.count || 0) : 0;
+    if (count >= APP_ASSISTANT_QUESTIONS_PER_DAY) return false;
+    tx.set(ref, { count: count + 1, day: stamp, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return true;
+  });
+  if (!allowed) {
+    throw new HttpsError("resource-exhausted", "You have reached today's limit for the help assistant. Contact NivaDesk Support for anything urgent.");
+  }
+}
+
+exports.askAppAssistant = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to use the help assistant.");
+    }
+
+    const { companyData } = await requireWorkspaceForBilling(request, false);
+    const plan = billingPlanFromCompanyData(companyData);
+    if (plan === "demo") {
+      throw new HttpsError("failed-precondition", "The in-app help assistant is available on Lite, Pro and Team. On Free Demo you can ask us from the chat on nivadesk.app.");
+    }
+
+    const question = cleanSupportMultiline(request.data?.question, 1000);
+    if (!question) {
+      throw new HttpsError("invalid-argument", "Please write a question.");
+    }
+
+    const { key } = await websiteAssistantKey();
+    if (!key) {
+      throw new HttpsError("failed-precondition", "The help assistant is not switched on yet.");
+    }
+
+    await appAssistantDailyGuard(uid);
+
+    const sections = appAssistantRelevantSections(question);
+    const language = cleanSupportText(request.data?.language || "English", 80);
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: appAssistantSystemPrompt(language, sections) },
+          { role: "user", content: question }
+        ],
+        temperature: 0.2,
+        max_tokens: 400,
+        response_format: { type: "json_object" }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error("appAssistant OpenAI error", response.status, payload?.error?.message || "");
+      throw new HttpsError("internal", "The assistant could not answer just now. Please try again, or contact NivaDesk Support.");
+    }
+
+    let parsed = {};
+    try {
+      parsed = JSON.parse(payload?.choices?.[0]?.message?.content || "{}");
+    } catch {
+      parsed = { answer: String(payload?.choices?.[0]?.message?.content || "") };
+    }
+
+    const answer = cleanSupportMultiline(parsed.answer, 3000);
+    return {
+      ok: true,
+      answer: answer || "I could not find that in the guide. Send it to NivaDesk Support and a person will help.",
+      needsChatGPT: parsed.needsChatGPT === true,
+      needsSupport: parsed.needsSupport === true || !answer,
+      // Shown under the answer so the person can open the same page in the guide.
+      // When the whole guide was sent there is nothing meaningful to cite.
+      sources: sections.length > 6 ? [] : sections.map((section) => ({ id: section.id, path: section.path }))
+    };
+  } catch (error) {
+    throw supportCallableInternalError("askAppAssistant", error);
+  }
+});
+
+exports.getAppAssistantAvailability = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    if (!request.auth?.uid) return { ok: true, available: false, reason: "signed_out" };
+    const { companyData } = await requireWorkspaceForBilling(request, false);
+    const plan = billingPlanFromCompanyData(companyData);
+    if (plan === "demo") return { ok: true, available: false, reason: "plan" };
+    const { key } = await websiteAssistantKey();
+    if (!key) return { ok: true, available: false, reason: "not_configured" };
+    return { ok: true, available: true, reason: "ok" };
+  } catch (error) {
+    console.error("getAppAssistantAvailability", error?.message || error);
+    return { ok: true, available: false, reason: "error" };
+  }
+});
+
+exports.setWebsiteAssistant = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
+    }
+    if (!isSupportAdminRequest(request)) {
+      throw new HttpsError("permission-denied", "Only NivaDesk support admins can change the website assistant.");
+    }
+    const enabled = request.data?.enabled === true;
+    const companyId = cleanSupportText(request.data?.companyId, 160);
+    if (enabled && !companyId) {
+      throw new HttpsError("invalid-argument", "companyId is required to enable the assistant.");
+    }
+
+    await websiteAssistantConfigRef().set({
+      enabled,
+      companyId: enabled ? companyId : "",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByEmail: supportUserEmail(request)
+    }, { merge: true });
+
+    // Report whether that workspace actually has a key, so Settings can say so
+    // instead of the owner finding out from a silent bot.
+    let hasKey = false;
+    if (enabled) {
+      const { key } = await websiteAssistantKey();
+      hasKey = Boolean(key);
+    }
+    return { ok: true, enabled, companyId: enabled ? companyId : "", hasKey };
+  } catch (error) {
+    throw supportCallableInternalError("setWebsiteAssistant", error);
+  }
+});
+
+exports.getWebsiteAssistantConfig = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in.");
+    }
+    if (!isSupportAdminRequest(request)) {
+      return { ok: true, visible: false, enabled: false, companyId: "", hasKey: false };
+    }
+    const snap = await websiteAssistantConfigRef().get();
+    const config = snap.exists ? (snap.data() || {}) : {};
+    const { key } = await websiteAssistantKey();
+    return {
+      ok: true,
+      visible: true,
+      enabled: config.enabled === true,
+      companyId: String(config.companyId || ""),
+      hasKey: Boolean(key)
+    };
+  } catch (error) {
+    throw supportCallableInternalError("getWebsiteAssistantConfig", error);
+  }
+});
+
+exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
+  try {
+    const ip = websiteChatClientIp(request);
+    await websiteChatCheckRate("new", ip, WEBSITE_CHAT_NEW_PER_HOUR);
+
+    const message = cleanSupportMultiline(request.data?.message, WEBSITE_CHAT_MAX_MESSAGE);
+    if (!message) {
+      throw new HttpsError("invalid-argument", "Please write a message.");
+    }
+    const visitorEmail = websiteChatVisitorEmail(request.data?.email);
+    if (!visitorEmail) {
+      throw new HttpsError("invalid-argument", "Please add an email address so we can reply.");
+    }
+    // Honeypot: the widget renders a hidden field no human fills in.
+    if (cleanSupportText(request.data?.company, 120)) {
+      return { ok: true, ticketId: "", visitorToken: "" };
+    }
+
+    const visitorName = cleanSupportText(request.data?.name, 120) || visitorEmail.split("@")[0];
+    const visitorToken = websiteChatToken();
+    const ticketRef = admin.firestore().collection("supportTickets").doc();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    const payload = {
+      ticketType: "website",
+      companyId: WEBSITE_CHAT_COMPANY_ID,
+      companyName: "Website visitor",
+      createdByUid: "",
+      createdByEmail: visitorEmail,
+      createdByName: visitorName,
+      createdByPhotoURL: "",
+      visitorEmail,
+      visitorName,
+      visitorToken,
+      visitorPage: cleanSupportText(request.data?.page, 300),
+      visitorId: cleanSupportText(request.data?.visitorId, 120),
+      title: supportLastMessagePreview(message).slice(0, 80) || "Website question",
+      message,
+      category: "question",
+      priority: "normal",
+      status: "open",
+      platform: "web",
+      appVersion: "website",
+      deviceInfo: cleanSupportText(request.data?.deviceInfo, 240),
+      language: cleanSupportText(request.data?.language || "English", 80),
+      createdAt: now,
+      updatedAt: now,
+      lastMessageAt: now,
+      lastMessageByUid: "",
+      lastMessageByEmail: visitorEmail,
+      lastMessageByName: visitorName,
+      lastMessageByRole: "visitor",
+      lastMessagePreview: supportLastMessagePreview(message),
+      readBy: {},
+      supportAdminEmails: Array.from(SUPPORT_ADMIN_EMAILS),
+      supportSchemaVersion: 2
+    };
+
+    await ticketRef.set(payload);
+    await ticketRef.collection("messages").add({
+      ticketId: ticketRef.id,
+      message,
+      attachments: [],
+      authorUid: "",
+      authorEmail: visitorEmail,
+      authorName: visitorName,
+      authorRole: "visitor",
+      createdAt: now,
+      source: "website",
+      supportSchemaVersion: 2
+    });
+
+    await safeSupportNotification("notifySupportAdminsForTicket(createWebsiteChat)", () =>
+      notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ticketRef.id, payload, "new_ticket")
+    );
+    await safeSupportNotification("emailNivadeskSupportForWebsiteChat(new)", () =>
+      emailNivadeskSupportForWebsiteChat(ticketRef.id, payload, false)
+    );
+    // The assistant answers on top of the notification, never instead of it:
+    // the team still gets every question.
+    await safeSupportNotification("appendWebsiteAssistantReply(createWebsiteChat)", () =>
+      appendWebsiteAssistantReply(ticketRef, payload)
+    );
+
+    return { ok: true, ticketId: ticketRef.id, visitorToken };
+  } catch (error) {
+    throw supportCallableInternalError("createWebsiteChat", error);
+  }
+});
+
+exports.postWebsiteChatMessage = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
+  try {
+    await websiteChatCheckRate("msg", websiteChatClientIp(request), WEBSITE_CHAT_MESSAGES_PER_HOUR);
+
+    const message = cleanSupportMultiline(request.data?.message, WEBSITE_CHAT_MAX_MESSAGE);
+    if (!message) {
+      throw new HttpsError("invalid-argument", "Please write a message.");
+    }
+    const { ref, data } = await websiteChatTicketForVisitor(request.data?.ticketId, request.data?.visitorToken);
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    await ref.collection("messages").add({
+      ticketId: ref.id,
+      message,
+      attachments: [],
+      authorUid: "",
+      authorEmail: String(data.visitorEmail || ""),
+      authorName: String(data.visitorName || "Website visitor"),
+      authorRole: "visitor",
+      createdAt: now,
+      source: "website",
+      supportSchemaVersion: 2
+    });
+
+    const nextStatus = ["resolved", "closed"].includes(String(data.status || "open")) ? "open" : String(data.status || "open");
+    await ref.set({
+      updatedAt: now,
+      lastMessageAt: now,
+      lastMessageByUid: "",
+      lastMessageByEmail: String(data.visitorEmail || ""),
+      lastMessageByName: String(data.visitorName || "Website visitor"),
+      lastMessageByRole: "visitor",
+      lastMessagePreview: supportLastMessagePreview(message),
+      status: nextStatus
+    }, { merge: true });
+
+    const nextData = { ...data, lastMessagePreview: supportLastMessagePreview(message) };
+    await safeSupportNotification("notifySupportAdminsForTicket(postWebsiteChatMessage)", () =>
+      notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ref.id, nextData, "reply")
+    );
+    await safeSupportNotification("emailNivadeskSupportForWebsiteChat(reply)", () =>
+      emailNivadeskSupportForWebsiteChat(ref.id, nextData, true)
+    );
+    // Once a person has joined the thread the assistant steps back, so the
+    // visitor is not answered twice by two different voices.
+    const humanReplied = String(data.lastMessageByRole || "") === "supportAdmin"
+      || String(data.lastMessageByRole || "") === "user";
+    if (!humanReplied) {
+      await safeSupportNotification("appendWebsiteAssistantReply(postWebsiteChatMessage)", () =>
+        appendWebsiteAssistantReply(ref, { ...data, ...nextData })
+      );
+    }
+
+    return { ok: true, ticketId: ref.id };
+  } catch (error) {
+    throw supportCallableInternalError("postWebsiteChatMessage", error);
+  }
+});
+
+exports.getWebsiteChatThread = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const { ref, data } = await websiteChatTicketForVisitor(request.data?.ticketId, request.data?.visitorToken);
+    const snap = await ref.collection("messages").limit(200).get();
+    const messages = snap.docs
+      .map((doc) => {
+        const item = doc.data() || {};
+        const role = String(item.authorRole || "");
+        // The visitor must be able to tell a machine answer from a person's,
+        // so the assistant is never labelled as the support team.
+        const authorName = role === "visitor"
+          ? String(item.authorName || "")
+          : (role === "assistant" ? "NivaDesk Assistant" : "NivaDesk Support");
+        return {
+          id: doc.id,
+          message: String(item.message || ""),
+          fromVisitor: role === "visitor",
+          fromAssistant: role === "assistant",
+          authorName,
+          createdAtMillis: supportTimestampMillis(item.createdAt)
+        };
+      })
+      .sort((a, b) => a.createdAtMillis - b.createdAtMillis);
+
+    return { ok: true, ticketId: ref.id, status: String(data.status || "open"), messages };
+  } catch (error) {
+    throw supportCallableInternalError("getWebsiteChatThread", error);
+  }
+});
+
 exports.listMySupportTickets = onCall({ region: "europe-west2" }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -3122,16 +3925,27 @@ exports.listMySupportTickets = onCall({ region: "europe-west2" }, async (request
   }
 
   const { companyId } = await requireWorkspaceForBilling(request, false);
-  const query = isSupportAdminRequest(request)
-    ? admin.firestore().collection("supportTickets").limit(200)
-    : admin.firestore().collection("supportTickets").where("companyId", "==", companyId).where("createdByUid", "==", uid).limit(100);
-  const snapshot = await query.get();
+  const isAdmin = isSupportAdminRequest(request);
+  const snapshots = isAdmin
+    ? [await admin.firestore().collection("supportTickets").limit(200).get()]
+    : await Promise.all([
+        admin.firestore().collection("supportTickets").where("companyId", "==", companyId).where("createdByUid", "==", uid).limit(100).get(),
+        // Tickets handed to this person to answer, including website chats.
+        admin.firestore().collection("supportTickets").where("assignedToUid", "==", uid).limit(100).get()
+      ]);
 
-  const tickets = snapshot.docs
+  const seen = new Set();
+  const tickets = snapshots
+    .flatMap((snapshot) => snapshot.docs)
+    .filter((doc) => {
+      if (seen.has(doc.id)) return false;
+      seen.add(doc.id);
+      return true;
+    })
     .map((doc) => supportTicketFromDoc(doc, "appSupport", uid))
     .sort((a, b) => Number(b.lastMessageAtMillis || b.createdAtMillis || 0) - Number(a.lastMessageAtMillis || a.createdAtMillis || 0));
 
-  return { ok: true, tickets, isSupportAdmin: isSupportAdminRequest(request) };
+  return { ok: true, tickets, isSupportAdmin: isAdmin };
 });
 
 exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (request) => {
@@ -3367,7 +4181,14 @@ function supportAuthorPayload(request = {}, authorRole = "user") {
 
 function canAccessAppSupportTicket(ticketData = {}, request = {}) {
   const uid = request.auth?.uid || "";
-  return isSupportAdminRequest(request) || String(ticketData.createdByUid || "") === uid;
+  if (isSupportAdminRequest(request)) return true;
+  if (uid && String(ticketData.createdByUid || "") === uid) return true;
+  // Assignment is how a support admin hands a ticket (including a website
+  // chat, which has no creator uid) to someone else to answer.
+  if (uid && String(ticketData.assignedToUid || "") === uid) return true;
+  const email = supportUserEmail(request);
+  if (email && String(ticketData.assignedToEmail || "").toLowerCase() === email) return true;
+  return false;
 }
 
 function canReplyAppSupportTicket(ticketData = {}, request = {}) {
@@ -3425,7 +4246,7 @@ exports.listSupportTicketMessages = onCall({ region: "europe-west2" }, async (re
   }
 });
 
-exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (request) => {
+exports.addSupportTicketReply = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
   try {
     const uid = request.auth?.uid;
     if (!uid) {
@@ -3494,6 +4315,11 @@ exports.addSupportTicketReply = onCall({ region: "europe-west2" }, async (reques
           lastMessageByName: payload.authorName,
           lastMessageByPhotoURL: payload.authorPhotoURL || ""
         };
+        if (String(ticketData.ticketType || "") === "website") {
+          return isAdmin
+            ? emailWebsiteChatVisitorReply(ticketId, nextTicketData, message)
+            : notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ticketId, nextTicketData, "reply");
+        }
         return isAdmin
           ? notifySupportTicketCreator(String(ticketData.companyId || ""), ticketId, nextTicketData, message)
           : notifySupportAdminsForTicket(String(ticketData.companyId || ""), ticketId, nextTicketData, "reply");
@@ -3655,6 +4481,77 @@ async function addWorkspaceTicketSystemMessage(companyId, ticketId, message) {
   return { ok: true, messageId: messageRef.id };
 }
 
+
+// Hand a NivaDesk-side ticket (a user's support ticket or a website chat) to
+// someone else to answer. Only a support admin can assign; the person assigned
+// gains access through canAccessAppSupportTicket without being added to the
+// hardcoded admin list.
+exports.assignSupportTicket = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "You must be signed in to assign a ticket.");
+    }
+    if (!isSupportAdminRequest(request)) {
+      throw new HttpsError("permission-denied", "Only NivaDesk support admins can assign these tickets.");
+    }
+
+    const ticketId = cleanSupportText(request.data?.ticketId, 160);
+    if (!ticketId) {
+      throw new HttpsError("invalid-argument", "ticketId is required.");
+    }
+
+    const ticketRef = admin.firestore().collection("supportTickets").doc(ticketId);
+    const ticketSnap = await ticketRef.get();
+    if (!ticketSnap.exists) {
+      throw new HttpsError("not-found", "Ticket not found.");
+    }
+
+    const assignedToUid = cleanSupportText(request.data?.assignedToUid || "", 160);
+    const assignedToEmail = cleanSupportText(request.data?.assignedToEmail || "", 240).toLowerCase();
+    const assignedToName = cleanSupportText(request.data?.assignedToName || assignedToEmail || assignedToUid || "", 160);
+
+    // No target clears the assignment and hands the ticket back to the queue.
+    const clearing = !assignedToUid && !assignedToEmail;
+    await ticketRef.set({
+      assignedToUid: clearing ? "" : assignedToUid,
+      assignedToEmail: clearing ? "" : assignedToEmail,
+      assignedToName: clearing ? "" : assignedToName,
+      assignedByUid: clearing ? "" : uid,
+      assignedByEmail: clearing ? "" : supportUserEmail(request),
+      assignedByName: clearing ? "" : cleanSupportText(request.auth?.token?.name || supportUserEmail(request), 160),
+      assignedAt: clearing ? null : admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    if (!clearing) {
+      const ticketData = ticketSnap.data() || {};
+      const isWebsite = String(ticketData.ticketType || "") === "website";
+      await safeSupportNotification("assignSupportTicket notification", () =>
+        queueSupportEmailNotifications([assignedToEmail].filter(Boolean), {
+          subject: isWebsite ? "A website chat was assigned to you" : "A support ticket was assigned to you",
+          body: [
+            `${cleanSupportText(request.auth?.token?.name || supportUserEmail(request), 160)} assigned you a ticket.`,
+            "",
+            `Subject: ${ticketData.title || ticketId}`,
+            `From:    ${ticketData.createdByName || ticketData.visitorName || "-"}`,
+            "",
+            supportLastMessagePreview(ticketData.lastMessagePreview || ticketData.message || "")
+          ].join("\n")
+        }, {
+          companyId: String(ticketData.companyId || ""),
+          ticketId,
+          ticketType: isWebsite ? "website" : "appSupport",
+          notificationType: "support_ticket_assigned"
+        })
+      );
+    }
+
+    return { ok: true, ticketId, assignedToUid: clearing ? "" : assignedToUid, assignedToName: clearing ? "" : assignedToName };
+  } catch (error) {
+    throw supportCallableInternalError("assignSupportTicket", error);
+  }
+});
 
 exports.assignWorkspaceTicket = onCall({ region: "europe-west2" }, async (request) => {
   try {
@@ -3863,6 +4760,7 @@ exports.getSupportTicketUnreadSummary = onCall({ region: "europe-west2" }, async
     return {
       ok: true,
       companyId,
+      isSupportAdmin: isSupportAdminRequest(request),
       supportUnread,
       appSupportUnread: supportUnread,
       workspaceUnread,
@@ -6895,6 +7793,7 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
       !existingSource ||
       existingSource === "new_workspace_default" ||
       existingSource === "signup_free_demo" ||
+      existingSource === "signup_free" ||
       existingName === "My Studio"
     );
 
@@ -7386,6 +8285,7 @@ function importedOrderPayload(item, companyId, uid, email) {
     riskReason: cleanOrderText(raw.riskReason, "-", 500) || "-",
     customFields: backupObject(raw.customFields),
     customToggles: backupObject(raw.customToggles),
+    invoiceNumber: cleanOrderText(raw.invoiceNumber, "", 60),
     historyLog: [
       webHistoryEntry("Order imported", "-", "Imported from backup", uid, email),
       ...backupHistoryLogItems(raw.historyLog)
@@ -10457,6 +11357,7 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     invBool3: false,
     invBool4: false,
     invNotes: "",
+    invoiceNumber: "",
     taxAmount,
     priority: "Normal",
     risk: "None",
@@ -17343,6 +18244,7 @@ function nvOrderDefaults(args = {}, context = {}) {
     customFields: args.customFields && typeof args.customFields === "object" && !Array.isArray(args.customFields) ? args.customFields : {},
     customToggles: args.customToggles && typeof args.customToggles === "object" && !Array.isArray(args.customToggles) ? args.customToggles : {},
     historyLog: history,
+    invoiceNumber: "",
     clientFiles: [],
     todoItems: [],
     workSessions: [],

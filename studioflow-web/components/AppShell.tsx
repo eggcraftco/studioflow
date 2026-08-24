@@ -33,6 +33,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { swiftOrderNetProfit } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -815,20 +816,17 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       setGuideDeviceEligible(false);
       return;
     }
-    // The device in front of the user already decided this above. The stored
-    // signupPlatform is still cached for diagnostics, but it no longer vetoes the
-    // guide: it was set from the signup window width and permanently hid the tour
-    // from anyone who registered in a narrow desktop window.
-    setGuideDeviceEligible(true);
     let cancelled = false;
     getDoc(doc(db, "users", user.uid))
       .then((snap) => {
         if (cancelled) return;
-        rememberSignupPlatformForGuide(
-          String(snap.data()?.signupPlatform ?? "").toLowerCase(),
-        );
+        const platform = String(snap.data()?.signupPlatform ?? "").toLowerCase();
+        rememberSignupPlatformForGuide(platform);
+        setGuideDeviceEligible(platform !== "mobile");
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setGuideDeviceEligible(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -1960,6 +1958,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+      <AppHelpAssistant workspace={workspace} language={language} t={t} />
       <NotificationsDrawer
         open={notifDrawerOpen}
         workspace={workspace}

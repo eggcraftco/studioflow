@@ -1975,9 +1975,9 @@ export function OrderDetailContent({
   );
   const canCustomizeCards = Boolean(workspace.entitlements.features.card_customization);
   const layoutReady = layoutReadyOrderId === order.id;
-  // History/Log and Materials cards are open on every plan, including Free Demo.
+  // History/Log and Materials cards are open on every plan, including Free.
   const canUseLiteWorkspaceCards = true;
-  // Materials & Inventory is open on every plan, including Free Demo.
+  // Materials & Inventory is open on every plan, including Free.
   const canUseMaterialsCards = true;
   const canEditOrderFully = Boolean(canAccessOrders && canEditOrderFullyForRole(workspace.role));
   const canEditOrderStatus = Boolean(canAccessOrders && canEditOrderStatusForRole(workspace.role));

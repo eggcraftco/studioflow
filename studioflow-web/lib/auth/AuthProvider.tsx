@@ -124,7 +124,7 @@ async function ensurePersonalWorkspace(currentUser: User) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     billingPlan: "demo",
-    billingPlanName: "Free Demo",
+    billingPlanName: "Free",
     billingPlanSource: "new_workspace_default",
     billingStorageLimitMB: 50,
     billingTeamMemberLimit: 1

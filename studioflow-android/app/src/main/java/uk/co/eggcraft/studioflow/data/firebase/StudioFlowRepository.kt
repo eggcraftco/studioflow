@@ -64,12 +64,22 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+data class AppAssistantAnswer(
+    val answer: String = "",
+    val needsChatGPT: Boolean = false,
+    val needsSupport: Boolean = false,
+    val sources: List<String> = emptyList()
+)
+
 data class SupportTicketUnreadSummary(
     val totalUnread: Int = 0,
     val supportUnread: Int = 0,
     val workspaceUnread: Int = 0,
     val unreadSupportTicketIds: Set<String> = emptySet(),
-    val unreadWorkspaceTicketIds: Set<String> = emptySet()
+    val unreadWorkspaceTicketIds: Set<String> = emptySet(),
+    // Reported here (not only by the ticket list) so the Website Chats tab can
+    // appear before the NivaDesk support tab has ever been opened.
+    val isSupportAdmin: Boolean = false
 )
 
 data class StudioMessageThreadsBundle(
@@ -1618,6 +1628,30 @@ class StudioFlowRepository(
             .await()
     }
 
+    suspend fun appAssistantAvailable(companyId: String): Boolean {
+        val result = functions.getHttpsCallable("getAppAssistantAvailability")
+            .call(mapOf("companyId" to companyId))
+            .await()
+        val data = result.data as? Map<*, *> ?: return false
+        return data["available"] as? Boolean ?: false
+    }
+
+    suspend fun askAppAssistant(companyId: String, question: String, language: String): AppAssistantAnswer {
+        val result = functions.getHttpsCallable("askAppAssistant")
+            .call(mapOf("companyId" to companyId, "question" to question, "language" to language))
+            .await()
+        val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
+        val sources = (data["sources"] as? List<*>).orEmpty().mapNotNull {
+            (it as? Map<*, *>)?.get("path") as? String
+        }
+        return AppAssistantAnswer(
+            answer = data["answer"] as? String ?: "",
+            needsChatGPT = data["needsChatGPT"] as? Boolean ?: false,
+            needsSupport = data["needsSupport"] as? Boolean ?: false,
+            sources = sources
+        )
+    }
+
     suspend fun getSupportTicketUnreadSummary(workspace: StudioWorkspace): SupportTicketUnreadSummary {
         val result = functions.getHttpsCallable("getSupportTicketUnreadSummary")
             .call(mapOf("companyId" to workspace.id))
@@ -1637,7 +1671,8 @@ class StudioFlowRepository(
             supportUnread = supportUnread,
             workspaceUnread = workspaceUnread,
             unreadSupportTicketIds = supportIds,
-            unreadWorkspaceTicketIds = workspaceIds
+            unreadWorkspaceTicketIds = workspaceIds,
+            isSupportAdmin = data["isSupportAdmin"] as? Boolean ?: false
         )
     }
 

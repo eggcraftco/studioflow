@@ -116,6 +116,10 @@ class StudioFlowViewModel @JvmOverloads constructor(
     application: Application,
     private val repository: StudioFlowRepository = StudioFlowRepository()
 ) : AndroidViewModel(application) {
+    // The in-app help assistant needs the same repository; exposing it read-only
+    // keeps the sheet from constructing a second one.
+    val helpRepository: StudioFlowRepository get() = repository
+
     private val mutableState = MutableStateFlow(StudioFlowUiState())
     private val draftPrefs: SharedPreferences =
         application.getSharedPreferences("studio_message_drafts", Context.MODE_PRIVATE)

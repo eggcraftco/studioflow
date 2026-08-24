@@ -151,6 +151,10 @@ struct StudioManagerApp: App {
                                 .id(authVM.interfaceSessionId)
                                 .environmentObject(authVM)
                                 .environmentObject(firebaseManager)
+                                // Attached here rather than inside ContentView's
+                                // body: that body is already a very deep nested
+                                // generic, and adding to it has crashed on device.
+                                .modifier(AppHelpAssistantHost(companyId: firebaseManager.currentCompanyId, lang: seciliDil))
                                 .safeAreaInset(edge: .top) {
                                     if authVM.isInEmailVerificationGracePeriod {
                                         EmailVerifyReminderBanner(seciliDil: seciliDil)

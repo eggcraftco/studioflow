@@ -448,6 +448,11 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
+    titleKey: "planBridge.helpAssistant.title",
+    bodyKey: "planBridge.helpAssistant.body",
+    planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
     titleKey: "planBridge.basicFinance.title",
     bodyKey: "planBridge.basicFinance.body",
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]

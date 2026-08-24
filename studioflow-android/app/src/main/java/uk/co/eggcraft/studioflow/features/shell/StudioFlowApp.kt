@@ -366,6 +366,11 @@ private fun StudioFlowAppContent(
                 uk.co.eggcraft.studioflow.features.auth.EmailVerifyReminderBanner(onVerified = { emailVerifiedOverride = true })
             }
             Box(Modifier.weight(1f)) {
+                uk.co.eggcraft.studioflow.features.help.AppHelpAssistantLauncher(
+                    repository = viewModel.helpRepository,
+                    companyId = state.workspace?.id.orEmpty(),
+                    language = state.workspaceSettings.selectedLanguage
+                )
                 StudioFlowMainScreen(
             state = state,
             requireDeviceUnlock = requireDeviceUnlock,
