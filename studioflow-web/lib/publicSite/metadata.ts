@@ -24,7 +24,14 @@ type PublicMetadataKey =
 const siteName = "NivaDesk";
 const brandImage = "/brand/nivadesk-logo.png";
 
-const publicMetadata: Record<PublicMetadataKey, { title: string; description: string; path: string }> = {
+// `noindex` keeps a page reachable for people while telling search and AI
+// crawlers not to store it. Used for the user guide: it explains the product
+// menu by menu, which is not something we want mined into search results or
+// AI answers. robots.ts blocks the same paths at the crawl level.
+const publicMetadata: Record<
+  PublicMetadataKey,
+  { title: string; description: string; path: string; noindex?: true }
+> = {
   home: {
     title: "NivaDesk | Studio, Order & Client Management Software",
     description:
@@ -125,7 +132,8 @@ const publicMetadata: Record<PublicMetadataKey, { title: string; description: st
     title: "How to Use NivaDesk | User Guide",
     description:
       "A short tour of every NivaDesk menu: orders, client files, tasks, schedule, team access and settings. Learn what each does and how to use it on Mac, iPhone, iPad, Android and web.",
-    path: "/guide"
+    path: "/guide",
+    noindex: true
   },
   contact: {
     title: "NivaDesk Support and Contact",
@@ -172,9 +180,16 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
       description: page.description,
       images: [brandImage]
     },
-    robots: {
-      index: true,
-      follow: true
-    }
+    robots: page.noindex
+      ? {
+          index: false,
+          follow: false,
+          nocache: true,
+          googleBot: { index: false, follow: false, noimageindex: true }
+        }
+      : {
+          index: true,
+          follow: true
+        }
   };
 }
