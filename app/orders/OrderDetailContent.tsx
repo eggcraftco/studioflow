@@ -22,6 +22,14 @@ import {
   repairIntakePresetById,
   repairIntakePresetIdForBusinessType
 } from "@/lib/studioflow/repairIntakePresets";
+import {
+  createOrderPortalLink,
+  portalUrlForToken,
+  revokeOrderPortalLink,
+  saveOrderPortalSettings,
+  type PortalAutoUpdates,
+  type PortalVisibility
+} from "@/lib/studioflow/customerPortal";
 import { studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -1208,6 +1216,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   repairIntake: "Repair Intake & Item",
   estimate: "Estimate & Approval",
+  customerPortal: "Customer Portal",
   summary: "Order Summary",
   customer: "Customer & Communication",
   invoiceItems: "Invoice Items",
@@ -1229,6 +1238,7 @@ const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
   repairIntake: "cardSummary",
   estimate: "cardFinancial",
+  customerPortal: "cardCustomer",
   summary: "cardSummary",
   customer: "cardCustomer",
   invoiceItems: "cardCustomer",
@@ -1367,6 +1377,7 @@ const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
   repairIntake: 460,
   estimate: 520,
+  customerPortal: 520,
   summary: 210,
   customer: 200,
   invoiceItems: 220,
@@ -2618,6 +2629,7 @@ export function OrderDetailContent({
       preview: "photo",
       repairIntake: "shippingBox",
       estimate: "finance",
+      customerPortal: "customer",
       summary: "docText",
       customer: "customer",
       invoiceItems: "docText",
@@ -4949,6 +4961,67 @@ export function OrderDetailContent({
     }, fieldLabel);
   }
 
+  // --- Customer portal -----------------------------------------------------
+  // One link per order, no login at the other end. What the customer sees is a
+  // per-order choice, and it is enforced on the server: the portal projection
+  // reads only the fields these flags allow, so internal notes, costs, supplier
+  // and profit are not filtered out — they are never read.
+  const portal = order.customerPortal;
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalNotice, setPortalNotice] = useState("");
+  const portalUrl = portalUrlForToken(portal.token);
+
+  async function createPortalLink() {
+    setPortalBusy(true);
+    setPortalNotice("");
+    try {
+      const result = await createOrderPortalLink(workspace, order.id);
+      setPortalNotice(result?.url ? "Portal link created." : "Portal link created.");
+      await onReloadOrder().catch(() => undefined);
+    } catch (failure) {
+      setPortalNotice(failure instanceof Error ? failure.message : "The portal link could not be created.");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  async function turnOffPortalLink() {
+    setPortalBusy(true);
+    setPortalNotice("");
+    try {
+      await revokeOrderPortalLink(workspace, order.id);
+      setPortalNotice("Portal turned off. The customer's link no longer opens.");
+      await onReloadOrder().catch(() => undefined);
+    } catch (failure) {
+      setPortalNotice(failure instanceof Error ? failure.message : "The portal link could not be turned off.");
+    } finally {
+      setPortalBusy(false);
+    }
+  }
+
+  async function savePortalPreferences(
+    visibility: PortalVisibility,
+    autoUpdates: PortalAutoUpdates
+  ) {
+    setPortalNotice("");
+    try {
+      await saveOrderPortalSettings(workspace, order.id, visibility, autoUpdates);
+      await onReloadOrder().catch(() => undefined);
+    } catch (failure) {
+      setPortalNotice(failure instanceof Error ? failure.message : "The portal settings could not be saved.");
+    }
+  }
+
+  async function copyPortalLink() {
+    if (!portalUrl) return;
+    try {
+      await navigator.clipboard?.writeText(portalUrl);
+      setPortalNotice("Link copied. Send it to your customer.");
+    } catch {
+      setPortalNotice("Copying was blocked — select the link and copy it by hand.");
+    }
+  }
+
   // --- Estimate & approval -------------------------------------------------
   // The card shows the current revision. Older ones stay in the list and are
   // never edited: an approved estimate is evidence of what was agreed.
@@ -5322,6 +5395,127 @@ export function OrderDetailContent({
                   ) : null}
                 </>
               )}
+            </div>
+          </section>
+        );
+      }
+      case "customerPortal": {
+        const shows = portal.visibility;
+        const auto = portal.autoUpdates;
+        const canEditPortal = canInlineEditFullDetails;
+        const seesRows: { key: keyof PortalVisibility; label: string }[] = [
+          { key: "status", label: "Repair status" },
+          { key: "estimate", label: "Estimate & approval" },
+          { key: "payments", label: "Payment & invoices" },
+          { key: "photos", label: "Photos & updates" },
+          { key: "expectedDate", label: "Expected completion" }
+        ];
+        const toggleSees = (key: keyof PortalVisibility) =>
+          void savePortalPreferences({ ...shows, [key]: !shows[key] }, auto);
+
+        return (
+          <section key={cardId} className="card order-detail-card">
+            {renderCardTitle(cardId)}
+
+            <div className="app-card-panel portal-card">
+              <div className="portal-section">
+                <div className="portal-section-head">
+                  <span className="portal-section-title">Portal Access</span>
+                  <span className={`portal-chip ${portal.active ? "is-active" : "is-off"}`}>
+                    {portal.active ? "Active" : "Off"}
+                  </span>
+                </div>
+
+                {portal.active && portalUrl ? (
+                  <div className="portal-link-row">
+                    <input type="text" readOnly value={portalUrl} onFocus={event => event.currentTarget.select()} />
+                    <button type="button" onClick={() => void copyPortalLink()}>Copy Link</button>
+                    <a className="portal-open" href={portalUrl} target="_blank" rel="noopener noreferrer">
+                      Open Portal
+                    </a>
+                  </div>
+                ) : (
+                  <p className="portal-empty">
+                    No portal link yet. Create one and send it to your customer — they can open it
+                    without signing in.
+                  </p>
+                )}
+
+                {canEditPortal ? (
+                  <div className="portal-actions">
+                    <button type="button" onClick={() => void createPortalLink()} disabled={portalBusy}>
+                      {portal.active ? "Create a fresh link" : "Create portal link"}
+                    </button>
+                    {portal.active ? (
+                      <button type="button" onClick={() => void turnOffPortalLink()} disabled={portalBusy}>
+                        Turn off
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {portalNotice ? <p className="portal-notice">{portalNotice}</p> : null}
+              </div>
+
+              <div className="portal-section">
+                <span className="portal-section-title">Customer Sees</span>
+                <div className="portal-sees">
+                  {seesRows.map(row => (
+                    <button
+                      key={row.key}
+                      type="button"
+                      className={`portal-sees-row ${shows[row.key] ? "is-on" : "is-off"}`}
+                      disabled={!canEditPortal}
+                      onClick={() => toggleSees(row.key)}
+                    >
+                      <span className="portal-tick" aria-hidden="true">{shows[row.key] ? "\u2713" : "\u2013"}</span>
+                      <span>{row.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="portal-hint">
+                  Internal notes, costs, supplier and profit are never shown, whatever is switched on here.
+                </p>
+              </div>
+
+              <div className="portal-section">
+                <div className="portal-section-head">
+                  <span className="portal-section-title">Automatic Updates</span>
+                  <button
+                    type="button"
+                    className={`portal-switch ${auto.enabled ? "is-on" : ""}`}
+                    disabled={!canEditPortal}
+                    aria-pressed={auto.enabled}
+                    onClick={() => void savePortalPreferences(shows, { ...auto, enabled: !auto.enabled })}
+                  >
+                    <span />
+                  </button>
+                </div>
+                <p className="portal-hint">
+                  Sent when the order&apos;s status moves — estimate ready, work started, ready for collection.
+                </p>
+                <div className="portal-channels">
+                  <span>Email</span>
+                  <button
+                    type="button"
+                    className={`portal-pill ${auto.email ? "is-on" : "is-off"}`}
+                    disabled={!canEditPortal || !auto.enabled}
+                    onClick={() => void savePortalPreferences(shows, { ...auto, email: !auto.email })}
+                  >
+                    {auto.email ? "ON" : "OFF"}
+                  </button>
+                  <span>SMS</span>
+                  <button
+                    type="button"
+                    className="portal-pill is-off"
+                    disabled
+                    title="No SMS provider is connected yet"
+                  >
+                    OFF
+                  </button>
+                </div>
+                <p className="portal-hint">SMS is not connected yet — email only for now.</p>
+              </div>
             </div>
           </section>
         );

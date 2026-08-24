@@ -9,6 +9,7 @@ export const ORDER_DETAIL_CARD_IDS = [
   "preview",
   "repairIntake",
   "estimate",
+  "customerPortal",
   "summary",
   "customer",
   "invoiceItems",
@@ -45,7 +46,7 @@ const DEFAULT_VISIBILITY = ORDER_DETAIL_CARD_IDS.reduce((output, cardId) => {
 }, {} as Record<OrderDetailCardId, boolean>);
 
 export const DEFAULT_ORDER_DETAIL_CARD_COLUMNS: OrderDetailCardId[][] = [
-  ["preview", "repairIntake", "estimate", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["preview", "repairIntake", "estimate", "customerPortal", "summary", "workTime", "shipping", "schedule", "notes"],
   ["customer", "invoiceItems", "materials", "delivery"],
   ["financial", "priority", "todo", "status", "historyLog", "clientFiles"]
 ];
