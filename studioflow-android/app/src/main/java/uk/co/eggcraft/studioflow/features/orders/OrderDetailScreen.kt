@@ -176,6 +176,8 @@ import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
+import uk.co.eggcraft.studioflow.data.model.StudioEstimateRecord
+import uk.co.eggcraft.studioflow.data.model.parseEstimateRecord
 import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
@@ -3102,7 +3104,8 @@ private fun OrderDetailCardContent(
         OrderDetailCardId.Estimate -> EstimateCard(
             order = order,
             workspaceSettings = workspaceSettings,
-            canSeeFinancial = canSeeFinancial
+            canSeeFinancial = canSeeFinancial,
+            canEdit = canEditWorkflow
         )
         OrderDetailCardId.Preview -> DesktopPreviewCard(
             order = order,
@@ -3426,10 +3429,29 @@ private fun DesktopPreviewCard(
 // only: estimates are created and decided on the server, and a revision never
 // edits its predecessor.
 @Composable
-private fun EstimateCard(order: StudioOrder, workspaceSettings: StudioWorkspaceSettings, canSeeFinancial: Boolean) {
+private fun EstimateCard(
+    order: StudioOrder,
+    workspaceSettings: StudioWorkspaceSettings,
+    canSeeFinancial: Boolean,
+    canEdit: Boolean
+) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val current = order.estimates.firstOrNull { it.status != "superseded" } ?: order.estimates.firstOrNull()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val exportEstimate = rememberEstimateExporter(workspaceSettings)
+
+    // Keyed so it refires after Send or Revoke changes the status, and not on
+    // every recomposition.
+    var record by remember(order.id, current?.id) { mutableStateOf<StudioEstimateRecord?>(null) }
+    var busy by remember(order.id) { mutableStateOf(false) }
+    var notice by remember(order.id) { mutableStateOf("") }
+    LaunchedEffect(order.id, current?.id, current?.status, current?.linkState) {
+        record = current?.id?.let {
+            runCatching { loadEstimateRecord(order.companyId, order.id, it) }.getOrNull()
+        }
+    }
 
     DetailCard(title = t("Estimate & Approval")) {
         if (!canSeeFinancial) {
@@ -3442,10 +3464,34 @@ private fun EstimateCard(order: StudioOrder, workspaceSettings: StudioWorkspaceS
         }
         if (current == null) {
             Text(
-                text = t("No estimate yet. Create one on the web portal and the customer's approval appears here."),
+                text = t("No estimate yet."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (canEdit) {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        if (order.lineItems.isEmpty()) {
+                            notice = t("Add invoice items first — the estimate is built from them.")
+                            return@TextButton
+                        }
+                        busy = true; notice = ""
+                        scope.launch {
+                            val ok = runCatching { createEstimateForOrder(order, null) }.isSuccess
+                            busy = false
+                            notice = if (ok) t("New estimate created from the invoice items.") else t("The estimate could not be created.")
+                        }
+                    }
+                ) { Text(t("Create estimate")) }
+            }
+            if (notice.isNotBlank()) {
+                Text(
+                    text = notice,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             return@DetailCard
         }
 
@@ -3472,6 +3518,11 @@ private fun EstimateCard(order: StudioOrder, workspaceSettings: StudioWorkspaceS
         }
 
         Spacer(modifier = Modifier.height(10.dp))
+        // Line items come from the record, never from the order document.
+        record?.lineItems?.forEach { line ->
+            EstimateAmountRow(line.name.ifBlank { "-" }, line.lineTotal, workspaceSettings)
+        }
+        if (!record?.lineItems.isNullOrEmpty()) Spacer(modifier = Modifier.height(4.dp))
         EstimateAmountRow(t("Subtotal"), current.subtotal, workspaceSettings)
         if (current.taxType != "Profit" && current.taxRate > 0.0001) {
             EstimateAmountRow("${t("VAT")} (${current.taxRate.toInt()}%)", current.taxAmount, workspaceSettings)
@@ -3488,7 +3539,93 @@ private fun EstimateCard(order: StudioOrder, workspaceSettings: StudioWorkspaceS
             )
             EstimateDetailRow(t(if (current.status == "declined") "Declined at" else "Approved at"), stamp)
             EstimateDetailRow(t("Approval Method"), t("Customer Portal"))
-            if (current.hasSignature) EstimateDetailRow(t("Customer Signature"), t("Signed"))
+            val signatureUrl = record?.approval?.signatureDownloadUrl.orEmpty()
+            if (signatureUrl.isNotBlank()) {
+                Text(
+                    text = t("Customer Signature"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                AsyncImage(
+                    model = signatureUrl,
+                    contentDescription = t("Customer Signature"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .background(Color.White, RoundedCornerShape(8.dp))
+                        .padding(4.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else if (current.hasSignature) {
+                EstimateDetailRow(t("Customer Signature"), t("Signed"))
+            }
+        }
+
+        if (notice.isNotBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = notice,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        // Printing is reading: anyone who can see the card can take a copy.
+        TextButton(onClick = { exportEstimate(order, record) }, enabled = record != null) {
+            Text(t("View Estimate PDF"))
+        }
+
+        if (canEdit) {
+            if (current.decidedAtMs == 0L && current.status != "superseded") {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true; notice = ""
+                        scope.launch {
+                            val url = runCatching { sendEstimateForOrder(order, current.id) }.getOrNull().orEmpty()
+                            busy = false
+                            if (url.isNotBlank()) {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NivaDesk", url))
+                                notice = t("Link copied. Send it to your customer.")
+                            } else {
+                                notice = t("The link could not be created.")
+                            }
+                        }
+                    }
+                ) { Text(t(if (current.linkState == "active") "Copy link again" else "Send to customer")) }
+            }
+            if (current.linkState == "active" && current.decidedAtMs == 0L) {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        busy = true
+                        scope.launch {
+                            runCatching { revokeEstimateLinkForOrder(order, current.id) }
+                            busy = false
+                            notice = t("Link revoked.")
+                        }
+                    }
+                ) { Text(t("Revoke link")) }
+            }
+            TextButton(
+                enabled = !busy,
+                onClick = {
+                    if (order.lineItems.isEmpty()) {
+                        notice = t("Add invoice items first — the estimate is built from them.")
+                        return@TextButton
+                    }
+                    busy = true; notice = ""
+                    scope.launch {
+                        val ok = runCatching {
+                            createEstimateForOrder(order, current.id.takeIf { current.status != "superseded" })
+                        }.isSuccess
+                        busy = false
+                        notice = if (ok) t("New estimate created from the invoice items.") else t("The estimate could not be created.")
+                    }
+                }
+            ) { Text(t("Create new estimate")) }
         }
 
         val history = order.estimates.filter { it.id != current.id }
@@ -10540,6 +10677,49 @@ internal fun maskFileUrl(raw: String): String {
 
 // Creates a short, clean nivadesk.app link (company id + token hidden) via a
 // server-side mapping. Falls back to the path-based masked URL on any failure.
+// The estimate card talks to the server directly rather than threading four new
+// callbacks down through the screen: order.companyId is all the auth needs.
+internal suspend fun loadEstimateRecord(companyId: String, orderId: String, estimateId: String): StudioEstimateRecord? {
+    val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+        .getHttpsCallable("getOrderEstimateRecord")
+        .call(mapOf("companyId" to companyId, "orderId" to orderId, "estimateId" to estimateId))
+        .await()
+    return parseEstimateRecord((result.getData() as? Map<*, *>)?.get("record"))
+}
+
+internal suspend fun createEstimateForOrder(order: StudioOrder, supersedesId: String?): Unit {
+    val lines = order.lineItems.map {
+        mapOf("name" to it.name, "quantity" to it.quantity, "unitPrice" to it.unitPrice, "lineTotal" to it.lineTotal)
+    }
+    val payload = mutableMapOf<String, Any>(
+        "companyId" to order.companyId,
+        "orderId" to order.id,
+        "lineItems" to lines,
+        "taxRate" to order.taxRate,
+        "taxType" to order.taxType
+    )
+    if (!supersedesId.isNullOrBlank()) payload["supersedesId"] = supersedesId
+    com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+        .getHttpsCallable("createOrderEstimate").call(payload).await()
+}
+
+// Returns the customer's link. There is no outbound email to customers, so the
+// caller copies it and the jeweller sends it themselves.
+internal suspend fun sendEstimateForOrder(order: StudioOrder, estimateId: String): String {
+    val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+        .getHttpsCallable("sendOrderEstimate")
+        .call(mapOf("companyId" to order.companyId, "orderId" to order.id, "estimateId" to estimateId))
+        .await()
+    return (result.getData() as? Map<*, *>)?.get("url") as? String ?: ""
+}
+
+internal suspend fun revokeEstimateLinkForOrder(order: StudioOrder, estimateId: String) {
+    com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+        .getHttpsCallable("revokeOrderEstimateLink")
+        .call(mapOf("companyId" to order.companyId, "orderId" to order.id, "estimateId" to estimateId))
+        .await()
+}
+
 internal suspend fun createSharedFileLink(rawUrl: String): String {
     if (rawUrl.isBlank()) return rawUrl
     return try {
@@ -11429,6 +11609,94 @@ private suspend fun buildInvoiceFile(context: Context, order: StudioOrder, setti
  * picker so the user can store it anywhere (Downloads, Drive, a Chromebook folder, etc.).
  * Falls back to the share sheet if no document picker is available.
  */
+/**
+ * Builds the estimate PDF. Deliberately never calls assignInvoiceNumber:
+ * estimates carry their own counter, and burning a real invoice number on a
+ * quote that may never be accepted is exactly what that counter avoids.
+ */
+private suspend fun buildEstimateFile(
+    context: Context,
+    order: StudioOrder,
+    settings: StudioWorkspaceSettings,
+    estimate: StudioEstimateRecord
+): File {
+    val bitmaps = withContext(kotlinx.coroutines.Dispatchers.IO) {
+        fun fetch(url: String): android.graphics.Bitmap? {
+            if (url.isBlank()) return null
+            return runCatching {
+                val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    instanceFollowRedirects = true
+                }
+                conn.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+            }.getOrNull()
+        }
+        fetch(settings.appLogoUrl.trim()) to fetch(estimate.approval?.signatureDownloadUrl.orEmpty())
+    }
+    return withContext(kotlinx.coroutines.Dispatchers.IO) {
+        createInvoicePdfFile(
+            context, order, settings, estimate.number, bitmaps.first,
+            estimate = estimate, signature = bitmaps.second
+        )
+    }
+}
+
+@Composable
+private fun rememberEstimateExporter(
+    settings: StudioWorkspaceSettings
+): (StudioOrder, StudioEstimateRecord?) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingFile by remember { mutableStateOf<File?>(null) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        val file = pendingFile
+        pendingFile = null
+        if (uri == null || file == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    }
+                }.isSuccess
+            }
+            Toast.makeText(context, if (ok) "Estimate saved." else "Could not save estimate.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    return { order, estimate ->
+        scope.launch {
+            if (estimate == null) {
+                Toast.makeText(context, "The estimate is still loading.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            try {
+                val file = buildEstimateFile(context, order, settings, estimate)
+                pendingFile = file
+                try {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
+                    saveLauncher.launch(file.name)
+                } catch (e: Exception) {
+                    pendingFile = null
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Estimate PDF"))
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Estimate failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+
 @Composable
 private fun rememberInvoiceExporter(settings: StudioWorkspaceSettings): (StudioOrder) -> Unit {
     val context = LocalContext.current
@@ -11561,7 +11829,11 @@ private fun createInvoicePdfFile(
     order: StudioOrder,
     settings: StudioWorkspaceSettings,
     invoiceNumber: String,
-    logo: android.graphics.Bitmap?
+    logo: android.graphics.Bitmap?,
+    // When set, this prints as an estimate: the figures frozen on the record,
+    // not the order's current ones, plus the approval and the signature.
+    estimate: StudioEstimateRecord? = null,
+    signature: android.graphics.Bitmap? = null
 ): File {
     val pageWidth = 595
     val pageHeight = 842
@@ -11630,10 +11902,20 @@ private fun createInvoicePdfFile(
         }
 
     // INVOICE title + meta (right column)
-    drawRight("INVOICE", rightX, headerTop + 26f, titlePaint)
-    drawRight("Invoice No: ${invoiceNumber.ifBlank { "-" }}", rightX, headerTop + 46f, mutedPaint)
-    val dateStr = order.paymentDate?.let { pdfDate(it) } ?: pdfDate(Date())
+    drawRight(if (estimate != null) "ESTIMATE" else "INVOICE", rightX, headerTop + 26f, titlePaint)
+    drawRight(
+        if (estimate != null) "Estimate No: ${estimate.number.ifBlank { "-" }}"
+        else "Invoice No: ${invoiceNumber.ifBlank { "-" }}",
+        rightX, headerTop + 46f, mutedPaint
+    )
+    val dateStr = when {
+        estimate != null && estimate.createdAtMs > 0L -> pdfDate(Date(estimate.createdAtMs))
+        else -> order.paymentDate?.let { pdfDate(it) } ?: pdfDate(Date())
+    }
     drawRight("Date: $dateStr", rightX, headerTop + 62f, mutedPaint)
+    if (estimate != null && estimate.validUntilMs > 0L) {
+        drawRight("Valid until: ${pdfDate(Date(estimate.validUntilMs))}", rightX, headerTop + 78f, mutedPaint)
+    }
 
     y = maxOf(y, headerTop + 80f)
     canvas.drawLine(margin, y, rightX, y, linePaint)
@@ -11688,19 +11970,30 @@ private fun createInvoicePdfFile(
 
     // Line item table. Same rule as the HTML/web/Mac invoices: line items drive
     // the invoice total (VAT recomputed on it); paid/remaining stay off the invoice.
-    val isMargin = order.taxType == "Profit"
-    val isZero = order.taxRate <= 0.0001
-    val orderValue = if (order.hasLineItems) order.lineItemsTotal else order.paidAmount + order.remainingAmount
-    val vat = if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
-    val subtotal = if (isMargin) orderValue else orderValue - vat
+    val printedTaxRate = estimate?.taxRate ?: order.taxRate
+    val isMargin = (estimate?.taxType ?: order.taxType) == "Profit"
+    val isZero = printedTaxRate <= 0.0001
+    val orderValue = estimate?.total
+        ?: if (order.hasLineItems) order.lineItemsTotal else order.paidAmount + order.remainingAmount
+    val vat = estimate?.taxAmount
+        ?: if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
+    val subtotal = estimate?.subtotal ?: if (isMargin) orderValue else orderValue - vat
 
     val tableHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F4F6.toInt() }
     canvas.drawRect(margin, y, rightX, y + 24f, tableHeaderBg)
     canvas.drawText("Description", margin + 10f, y + 16f, labelPaint)
     drawRight("Amount", rightX - 10f, y + 16f, labelPaint)
     y += 24f
-    if (order.hasLineItems) {
-        order.lineItems.forEach { item ->
+    val printedLines = estimate?.lineItems?.map { Triple(it.name, it.quantity, it.lineTotal to it.unitPrice) }
+        ?: order.lineItems.map { Triple(it.name, it.quantity, it.lineTotal to it.unitPrice) }
+    if (if (estimate != null) printedLines.isNotEmpty() else order.hasLineItems) {
+        printedLines.forEach { entry ->
+            val item = object {
+                val name = entry.first
+                val quantity = entry.second
+                val lineTotal = entry.third.first
+                val unitPrice = entry.third.second
+            }
             canvas.drawText(item.name.ifBlank { "-" }, margin + 10f, y + 18f, bodyPaint)
             drawRight(money(item.lineTotal), rightX - 10f, y + 18f, bodyPaint)
             y += 20f
@@ -11733,15 +12026,53 @@ private fun createInvoicePdfFile(
     when {
         isMargin -> { canvas.drawText("VAT under margin scheme (not shown separately)", totalsLeft, y, mutedPaint); y += 18f }
         isZero -> totalRow("VAT (Zero-rated / Export)", money(0.0), bodyPaint)
-        else -> totalRow("VAT (${order.taxRate.toInt()}%)", money(vat), bodyPaint)
+        else -> totalRow("VAT (${printedTaxRate.toInt()}%)", money(vat), bodyPaint)
     }
     canvas.drawLine(totalsLeft, y - 4f, rightX, y - 4f, linePaint)
     y += 8f
     totalRow("TOTAL", money(orderValue), totalPaint, totalPaint)
     y += 18f
 
+    val approval = estimate?.approval
+    if (approval != null && approval.decidedAtMs > 0L) {
+        y += 8f
+        val stamp = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
+            .format(Date(approval.decidedAtMs))
+        val declined = approval.decision == "declined"
+        canvas.drawText(if (declined) "DECLINED" else "APPROVED", margin + 2f, y + 14f, labelPaint)
+        y += 26f
+        canvas.drawText("${if (declined) "Declined by" else "Approved by"}: ${approval.approvedByName.ifBlank { "-" }}", margin + 2f, y, bodyPaint)
+        y += 16f
+        if (approval.approvedByEmail.isNotBlank()) {
+            canvas.drawText("Email: ${approval.approvedByEmail}", margin + 2f, y, bodyPaint); y += 16f
+        }
+        canvas.drawText("${if (declined) "Declined at" else "Approved at"}: $stamp", margin + 2f, y, bodyPaint)
+        y += 16f
+        canvas.drawText("Approval method: Customer Portal", margin + 2f, y, bodyPaint)
+        y += 16f
+        if (approval.declineReason.isNotBlank()) {
+            pdfWrappedLines(approval.declineReason, bodyPaint, rightX - margin).forEach { line ->
+                canvas.drawText(line, margin + 2f, y, bodyPaint); y += 14f
+            }
+        }
+        if (signature != null) {
+            canvas.drawText("Customer signature:", margin + 2f, y, mutedPaint)
+            y += 8f
+            val dest = android.graphics.RectF(margin + 2f, y, margin + 162f, y + 62f)
+            canvas.drawBitmap(signature, null, dest, null)
+            y += 70f
+        }
+    }
+
+    if (estimate != null && estimate.terms.isNotBlank()) {
+        y += 6f
+        pdfWrappedLines(estimate.terms, mutedPaint, rightX - margin).forEach { line ->
+            canvas.drawText(line, margin + 2f, y, mutedPaint); y += 13f
+        }
+    }
+
     // Per-order invoice note (customer-facing "Notes" box)
-    val invoiceNote = order.invoiceNote.trim()
+    val invoiceNote = if (estimate != null) "" else order.invoiceNote.trim()
     if (invoiceNote.isNotBlank()) {
         y += 8f
         val boxTop = y

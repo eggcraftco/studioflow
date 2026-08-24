@@ -913,6 +913,48 @@ data class StudioEstimateSummary(
     val linkState: String = "none"
 )
 
+// The authoritative estimate, fetched from getOrderEstimateRecord. The summary
+// is a display index on the order document that any workspace member can write
+// to; this comes from a subcollection no client can reach, so it is what the
+// card and the PDF show.
+data class StudioEstimateLine(
+    val id: String = "",
+    val name: String = "",
+    val quantity: Double = 0.0,
+    val unitPrice: Double = 0.0,
+    val lineTotal: Double = 0.0
+)
+
+data class StudioEstimateApproval(
+    val decision: String = "",
+    val method: String = "",
+    val decidedAtMs: Long = 0L,
+    val approvedByName: String = "",
+    val approvedByEmail: String = "",
+    val declineReason: String = "",
+    val signatureDownloadUrl: String = ""
+)
+
+data class StudioEstimateRecord(
+    val estimateId: String = "",
+    val number: String = "",
+    val version: Int = 1,
+    val status: String = "draft",
+    val currency: String = "",
+    val lineItems: List<StudioEstimateLine> = emptyList(),
+    val subtotal: Double = 0.0,
+    val taxRate: Double = 0.0,
+    val taxType: String = "",
+    val taxAmount: Double = 0.0,
+    val total: Double = 0.0,
+    val terms: String = "",
+    val notes: String = "",
+    val validUntilMs: Long = 0L,
+    val createdAtMs: Long = 0L,
+    val replacesNumber: String = "",
+    val approval: StudioEstimateApproval? = null
+)
+
 data class StudioRepairIntake(
     // Keyed by the field id the workspace configured (itemType, metal, hallmark…).
     val fields: Map<String, String> = emptyMap(),
@@ -1261,6 +1303,51 @@ private fun parseLineItems(value: Any?): List<StudioLineItem> {
             lineTotal = doubleAny(item["lineTotal"], 0.0)
         )
     }
+}
+
+// Callable payloads arrive untyped: a whole quantity comes back as an Integer,
+// so every number is read through Number rather than cast straight to Double.
+fun parseEstimateRecord(value: Any?): StudioEstimateRecord? {
+    val map = value as? Map<*, *> ?: return null
+    val approvalMap = map["approval"] as? Map<*, *>
+    return StudioEstimateRecord(
+        estimateId = stringAny(map["estimateId"], ""),
+        number = stringAny(map["number"], ""),
+        version = (map["version"] as? Number)?.toInt() ?: 1,
+        status = stringAny(map["status"], "draft"),
+        currency = stringAny(map["currency"], ""),
+        lineItems = (map["lineItems"] as? List<*>).orEmpty().mapNotNull { raw ->
+            val item = raw as? Map<*, *> ?: return@mapNotNull null
+            StudioEstimateLine(
+                id = stringAny(item["id"], ""),
+                name = stringAny(item["name"], ""),
+                quantity = (item["quantity"] as? Number)?.toDouble() ?: 0.0,
+                unitPrice = (item["unitPrice"] as? Number)?.toDouble() ?: 0.0,
+                lineTotal = (item["lineTotal"] as? Number)?.toDouble() ?: 0.0
+            )
+        },
+        subtotal = (map["subtotal"] as? Number)?.toDouble() ?: 0.0,
+        taxRate = (map["taxRate"] as? Number)?.toDouble() ?: 0.0,
+        taxType = stringAny(map["taxType"], ""),
+        taxAmount = (map["taxAmount"] as? Number)?.toDouble() ?: 0.0,
+        total = (map["total"] as? Number)?.toDouble() ?: 0.0,
+        terms = stringAny(map["terms"], ""),
+        notes = stringAny(map["notes"], ""),
+        validUntilMs = (map["validUntilMs"] as? Number)?.toLong() ?: 0L,
+        createdAtMs = (map["createdAtMs"] as? Number)?.toLong() ?: 0L,
+        replacesNumber = stringAny(map["replacesNumber"], ""),
+        approval = approvalMap?.let {
+            StudioEstimateApproval(
+                decision = stringAny(it["decision"], ""),
+                method = stringAny(it["method"], ""),
+                decidedAtMs = (it["decidedAtMs"] as? Number)?.toLong() ?: 0L,
+                approvedByName = stringAny(it["approvedByName"], ""),
+                approvedByEmail = stringAny(it["approvedByEmail"], ""),
+                declineReason = stringAny(it["declineReason"], ""),
+                signatureDownloadUrl = stringAny(it["signatureDownloadUrl"], "")
+            )
+        }
+    )
 }
 
 private fun parseEstimates(value: Any?): List<StudioEstimateSummary> {
