@@ -1841,6 +1841,7 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: false,
     teamAccessEnabled: false,
     messagesEnabled: false,
+    smsNotificationsEnabled: false,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: false,
     auditLogEnabled: false,
@@ -1870,6 +1871,7 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: false,
     teamAccessEnabled: false,
     messagesEnabled: false,
+    smsNotificationsEnabled: false,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: false,
     auditLogEnabled: false,
@@ -1899,6 +1901,9 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: true,
     teamAccessEnabled: false,
     messagesEnabled: false,
+    // Branded SMS is a Pro-and-above feature: every message costs real money at
+    // the carrier, so it cannot ride along on a free tier.
+    smsNotificationsEnabled: true,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: true,
     auditLogEnabled: true,
@@ -1932,6 +1937,9 @@ const PLAN_ENTITLEMENTS = {
     shareSheetEnabled: true,
     teamAccessEnabled: true,
     messagesEnabled: true,
+    // Branded SMS is a Pro-and-above feature: every message costs real money at
+    // the carrier, so it cannot ride along on a free tier.
+    smsNotificationsEnabled: true,
     chatgptAppEnabled: true,
     advancedFinanceEnabled: true,
     auditLogEnabled: true,
@@ -21189,6 +21197,383 @@ const ESTIMATE_SIGNATURE_MAX_BYTES = 300 * 1024;
 // out of a full order here, they are simply never read.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Messaging provider layer
+//
+// Nothing above this line knows what a Twilio is. Callers ask a provider to
+// send a message and to explain a delivery callback; swapping to Bird or Telnyx
+// means writing one more object down here, not touching a single call site.
+//
+// Deliberately built on the REST API rather than a vendor SDK: an SDK is a
+// dependency that would leak vendor types into the layer meant to hide them.
+// ---------------------------------------------------------------------------
+
+const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
+const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
+
+// GSM-7 fits 160 characters in one segment, 153 per segment once concatenated.
+// Anything outside the alphabet forces UCS-2: 70, then 67. Billing is per
+// segment, so this is what a message actually costs, not its character count.
+const GSM7_ALPHABET = new Set(
+  ("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?" +
+   "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà").split("")
+);
+const GSM7_EXTENDED = new Set("^{}\\[~]|€".split(""));
+
+function smsSegmentCount(body = "") {
+  const text = String(body || "");
+  if (!text) return 0;
+  let isGsm = true;
+  let gsmLength = 0;
+  for (const char of text) {
+    if (GSM7_EXTENDED.has(char)) { gsmLength += 2; continue; }
+    if (GSM7_ALPHABET.has(char)) { gsmLength += 1; continue; }
+    isGsm = false;
+    break;
+  }
+  if (isGsm) {
+    if (gsmLength <= 160) return 1;
+    return Math.ceil(gsmLength / 153);
+  }
+  const units = Array.from(text).length;
+  if (units <= 70) return 1;
+  return Math.ceil(units / 67);
+}
+
+// E.164 or nothing. A carrier will not tell you a number was malformed in a way
+// worth acting on, so a bad number is refused here instead of billed.
+function cleanE164Phone(value = "", defaultCallingCode = "44") {
+  let raw = String(value || "").trim().replace(/[\s()\-.]/g, "");
+  if (!raw) return "";
+  if (raw.startsWith("00")) raw = `+${raw.slice(2)}`;
+  if (raw.startsWith("0")) raw = `+${defaultCallingCode}${raw.slice(1)}`;
+  if (!raw.startsWith("+")) raw = `+${raw}`;
+  return /^\+[1-9]\d{7,14}$/.test(raw) ? raw : "";
+}
+
+const twilioMessagingProvider = {
+  id: "twilio",
+  displayName: "Twilio",
+
+  isConfigured() {
+    return Boolean(
+      String(process.env.TWILIO_ACCOUNT_SID || "").trim() &&
+      String(process.env.TWILIO_AUTH_TOKEN || "").trim()
+    );
+  },
+
+  async sendSMS({ to, from, body, statusCallback }) {
+    const sid = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
+    const token = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+    if (!sid || !token) throw new Error("Twilio credentials are not configured.");
+
+    const form = new URLSearchParams();
+    form.set("To", to);
+    form.set("From", from);
+    form.set("Body", body);
+    if (statusCallback) form.set("StatusCallback", statusCallback);
+
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form.toString()
+      }
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload && payload.message ? String(payload.message) : `HTTP ${response.status}`;
+      const error = new Error(detail);
+      error.providerCode = payload && payload.code ? String(payload.code) : "";
+      throw error;
+    }
+    return {
+      providerId: String(payload.sid || ""),
+      status: String(payload.status || "queued"),
+      segments: Number(payload.num_segments) || smsSegmentCount(body),
+      // Twilio returns price as null until the message is billed; the webhook
+      // fills it in later rather than us guessing here.
+      priceUsd: payload.price === null || payload.price === undefined ? null : Math.abs(Number(payload.price) || 0)
+    };
+  },
+
+  // Twilio signs the callback with the full URL plus every POST parameter sorted
+  // by key. An unsigned callback is an open endpoint anyone can use to mark
+  // messages delivered, so this is not optional.
+  verifyWebhook({ url, params, signature }) {
+    const token = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
+    if (!token || !signature) return false;
+    const sorted = Object.keys(params || {}).sort();
+    let data = String(url || "");
+    for (const key of sorted) data += key + String(params[key]);
+    const expected = crypto.createHmac("sha1", token).update(Buffer.from(data, "utf-8")).digest("base64");
+    const a = Buffer.from(expected);
+    const b = Buffer.from(String(signature));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  },
+
+  parseWebhook(params = {}) {
+    const raw = String(params.MessageStatus || params.SmsStatus || "").toLowerCase();
+    const status = ["queued", "sending", "sent", "delivered", "undelivered", "failed"].includes(raw)
+      ? raw
+      : "sent";
+    return {
+      providerId: String(params.MessageSid || params.SmsSid || ""),
+      status,
+      errorCode: String(params.ErrorCode || ""),
+      priceUsd: params.Price === undefined || params.Price === null || params.Price === ""
+        ? null
+        : Math.abs(Number(params.Price) || 0)
+    };
+  }
+};
+
+const MESSAGING_PROVIDERS = { twilio: twilioMessagingProvider };
+
+function activeMessagingProvider() {
+  const wanted = String(process.env.NIVADESK_SMS_PROVIDER || "twilio").trim().toLowerCase();
+  return MESSAGING_PROVIDERS[wanted] || twilioMessagingProvider;
+}
+
+function messageLogCollection() {
+  return admin.firestore().collection("messageLog");
+}
+
+// Every message is written down before it is sent, so a crash between the two
+// leaves a record that something was attempted rather than silence.
+async function recordOutboundMessage(entry = {}) {
+  const ref = messageLogCollection().doc();
+  await ref.set({
+    companyId: String(entry.companyId || ""),
+    orderId: String(entry.orderId || ""),
+    orderReference: String(entry.orderReference || ""),
+    customerName: String(entry.customerName || ""),
+    channel: "sms",
+    trigger: String(entry.trigger || ""),
+    toNumber: String(entry.toNumber || ""),
+    senderId: String(entry.senderId || ""),
+    body: String(entry.body || ""),
+    provider: String(entry.provider || ""),
+    providerId: String(entry.providerId || ""),
+    status: String(entry.status || "queued"),
+    errorCode: "",
+    errorMessage: String(entry.errorMessage || ""),
+    segments: Number(entry.segments) || 0,
+    priceUsd: entry.priceUsd === null || entry.priceUsd === undefined ? null : Number(entry.priceUsd),
+    createdAtMs: Date.now(),
+    deliveredAtMs: 0
+  });
+  return ref;
+}
+
+// Rolled up per calendar month on the company document so a workspace can be
+// shown what it has spent without reading every message it ever sent.
+async function addSmsUsage(companyId, segments, priceUsd) {
+  if (!companyId) return;
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const ref = admin.firestore().collection("companies").doc(String(companyId));
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() || {} : {};
+    const sameMonth = String(data.smsUsageMonth || "") === monthKey;
+    tx.set(ref, {
+      smsUsageMonth: monthKey,
+      smsSegmentsThisMonth: (sameMonth ? Number(data.smsSegmentsThisMonth) || 0 : 0) + (Number(segments) || 0),
+      smsSpendUsdThisMonth: (sameMonth ? Number(data.smsSpendUsdThisMonth) || 0 : 0) + (Number(priceUsd) || 0),
+      smsMessagesThisMonth: (sameMonth ? Number(data.smsMessagesThisMonth) || 0 : 0) + 1
+    }, { merge: true });
+  }).catch(() => undefined);
+}
+
+function cleanSmsSenderId(value = "") {
+  // Alphanumeric sender IDs are 11 characters, letters/digits/space only. The
+  // carrier silently rejects anything else, so it is normalised here.
+  return String(value || "").trim().replace(/[^A-Za-z0-9 ]/g, "").slice(0, 11).trim();
+}
+
+// Which events are worth a text is the workspace's call — a busy bench may want
+// only "ready for collection", a quiet one may want all of them.
+const SMS_TRIGGER_KEYS = ["estimateReady", "workStarted", "readyForCollection"];
+
+function cleanSmsTriggers(value) {
+  const incoming = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const output = {};
+  for (const key of SMS_TRIGGER_KEYS) {
+    output[key] = typeof incoming[key] === "boolean" ? incoming[key] : true;
+  }
+  return output;
+}
+
+function workspaceSmsConfig(settings = {}) {
+  return {
+    senderId: cleanSmsSenderId(settings.smsSenderId),
+    // Ofcom's July 2026 rules put KYC on the aggregator, and Twilio requires UK
+    // sender-ID pre-registration. This mirrors that state; it is not a claim
+    // NivaDesk makes on its own.
+    senderStatus: ["unset", "pending", "verified"].includes(String(settings.smsSenderStatus || ""))
+      ? String(settings.smsSenderStatus)
+      : "unset",
+    defaultCallingCode: String(settings.smsDefaultCallingCode || "44").replace(/\D/g, "") || "44",
+    triggers: cleanSmsTriggers(settings.smsTriggers)
+  };
+}
+
+// The one call site everything else uses. Refuses rather than half-sends: a
+// message with no verified sender, no credentials or no plan is not attempted.
+async function sendWorkspaceSMS({ companyData, settings, companyId, orderId, orderReference, customerName, toNumber, trigger, body }) {
+  const provider = activeMessagingProvider();
+  const entitlements = billingEntitlementsForCompany(companyData || {});
+  if (entitlements.smsNotificationsEnabled !== true) {
+    return { sent: false, reason: "plan" };
+  }
+  if (!provider.isConfigured()) return { sent: false, reason: "provider_not_configured" };
+
+  const config = workspaceSmsConfig(settings || {});
+  if (!config.senderId) return { sent: false, reason: "no_sender_id" };
+  if (config.senderStatus !== "verified") return { sent: false, reason: "sender_not_verified" };
+
+  const to = cleanE164Phone(toNumber, config.defaultCallingCode);
+  if (!to) return { sent: false, reason: "invalid_number" };
+
+  const segments = smsSegmentCount(body);
+  const logRef = await recordOutboundMessage({
+    companyId, orderId, orderReference, customerName,
+    trigger, toNumber: to, senderId: config.senderId, body,
+    provider: provider.id, status: "queued", segments
+  });
+
+  try {
+    const result = await provider.sendSMS({
+      to,
+      from: config.senderId,
+      body,
+      statusCallback: `https://europe-west2-eggcraft-studio.cloudfunctions.net/smsDeliveryWebhook`
+    });
+    await logRef.set({
+      providerId: result.providerId,
+      status: result.status,
+      segments: result.segments || segments,
+      priceUsd: result.priceUsd
+    }, { merge: true });
+    await addSmsUsage(companyId, result.segments || segments, result.priceUsd || 0);
+    return { sent: true, providerId: result.providerId };
+  } catch (error) {
+    await logRef.set({
+      status: "failed",
+      errorMessage: String(error && error.message ? error.message : error),
+      errorCode: String((error && error.providerCode) || "")
+    }, { merge: true });
+    return { sent: false, reason: "provider_error", error: String(error) };
+  }
+}
+
+// Twilio posts here as a message moves. "Sent" is not "delivered": without this
+// the log would claim success for messages a carrier silently dropped.
+exports.smsDeliveryWebhook = onRequest(
+  { region: "europe-west2", secrets: [TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN] },
+  async (request, response) => {
+    if (request.method !== "POST") {
+      response.status(405).send("Method not allowed");
+      return;
+    }
+    const provider = activeMessagingProvider();
+    const params = request.body && typeof request.body === "object" ? request.body : {};
+    const url = `https://${request.get("host")}${request.originalUrl}`;
+    if (!provider.verifyWebhook({ url, params, signature: request.get("X-Twilio-Signature") })) {
+      console.warn("smsDeliveryWebhook: rejected an unsigned or mis-signed callback");
+      response.status(403).send("Invalid signature");
+      return;
+    }
+
+    const update = provider.parseWebhook(params);
+    if (!update.providerId) {
+      response.status(200).send("");
+      return;
+    }
+    const matches = await messageLogCollection()
+      .where("providerId", "==", update.providerId)
+      .limit(1)
+      .get()
+      .catch(() => null);
+    if (matches && !matches.empty) {
+      const doc = matches.docs[0];
+      const patch = { status: update.status, errorCode: update.errorCode };
+      if (update.status === "delivered") patch.deliveredAtMs = Date.now();
+      if (update.priceUsd !== null) {
+        patch.priceUsd = update.priceUsd;
+        const already = Number((doc.data() || {}).priceUsd) || 0;
+        const difference = update.priceUsd - already;
+        if (Math.abs(difference) > 0.0000001) {
+          await addSmsUsage(String((doc.data() || {}).companyId || ""), 0, difference);
+        }
+      }
+      await doc.ref.set(patch, { merge: true });
+    }
+    response.status(200).send("");
+  }
+);
+
+exports.getWorkspaceSmsSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const settings = await portalWorkspaceSettings(companyId);
+  const config = workspaceSmsConfig(settings);
+  const entitlements = billingEntitlementsForCompany(companyData);
+  const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+  const company = companySnap.exists ? companySnap.data() || {} : {};
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const sameMonth = String(company.smsUsageMonth || "") === monthKey;
+  return {
+    ok: true,
+    senderId: config.senderId,
+    senderStatus: config.senderStatus,
+    defaultCallingCode: config.defaultCallingCode,
+    triggers: config.triggers,
+    available: entitlements.smsNotificationsEnabled === true,
+    providerConfigured: activeMessagingProvider().isConfigured(),
+    usage: {
+      month: monthKey,
+      messages: sameMonth ? Number(company.smsMessagesThisMonth) || 0 : 0,
+      segments: sameMonth ? Number(company.smsSegmentsThisMonth) || 0 : 0,
+      spendUsd: sameMonth ? Number(company.smsSpendUsdThisMonth) || 0 : 0
+    }
+  };
+});
+
+exports.saveWorkspaceSmsSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can change SMS settings.");
+  }
+  const entitlements = billingEntitlementsForCompany(companyData);
+  if (entitlements.smsNotificationsEnabled !== true) {
+    throw new HttpsError("failed-precondition", "SMS notifications are available on NivaDesk Pro and above.");
+  }
+
+  const requestedSender = cleanSmsSenderId(request.data && request.data.senderId);
+  const current = workspaceSmsConfig(await portalWorkspaceSettings(companyId));
+
+  // A workspace cannot mark its own sender verified. Ofcom's July 2026 rules put
+  // Know Your Customer on the aggregator, and Twilio requires UK sender IDs to
+  // be pre-registered — so this state mirrors that process rather than asserting
+  // anything itself. Changing the name drops it back to pending, because the
+  // registration was for the old name.
+  const senderStatus = requestedSender === current.senderId ? current.senderStatus : (requestedSender ? "pending" : "unset");
+
+  const updates = {
+    smsSenderId: requestedSender,
+    smsSenderStatus: senderStatus,
+    smsTriggers: cleanSmsTriggers(request.data && request.data.triggers),
+    smsDefaultCallingCode: String((request.data && request.data.defaultCallingCode) || current.defaultCallingCode).replace(/\D/g, "").slice(0, 4) || "44",
+    settingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+  await companySettingsDocRef(companyId).set(updates, { merge: true });
+  return { ok: true, senderId: requestedSender, senderStatus, triggers: updates.smsTriggers };
+});
+
 const PORTAL_VIEW_PER_HOUR = 240;
 const PORTAL_VIEW_TOKEN_PER_HOUR = 120;
 
@@ -21199,20 +21584,26 @@ function portalStatusMessage(status = "", context = {}) {
   const item = context.itemName ? ` — ${context.itemName}` : "";
   if (/approval|approve|quote|estimate|teklif|onay/.test(raw)) {
     return {
+      trigger: "estimateReady",
       subject: `Your estimate is ready${item}`,
-      line: "Your estimate is ready. You can review and approve it from the link below."
+      line: "Your estimate is ready. You can review and approve it from the link below.",
+      sms: "Your repair estimate is ready."
     };
   }
   if (/ready|collect|pickup|pick up|complete|completed|hazır|hazir|teslim/.test(raw)) {
     return {
+      trigger: "readyForCollection",
       subject: `Ready for collection${item}`,
-      line: "Good news — your item is ready for collection."
+      line: "Good news — your item is ready for collection.",
+      sms: "Great news — your item is ready for collection."
     };
   }
   if (/workshop|progress|working|repair|bench|atölye|atolye|üretim|uretim/.test(raw)) {
     return {
+      trigger: "workStarted",
       subject: `We've started work${item}`,
-      line: "We have started work on your item."
+      line: "We have started work on your item.",
+      sms: "We have started work on your item."
     };
   }
   return null;
@@ -21550,7 +21941,11 @@ exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request)
 // Fires on the status the workspace already sets. Nothing new to remember: move
 // the order to "Ready to Collect" and the customer hears about it.
 exports.notifyCustomerOnStatusChange = onDocumentWritten(
-  { document: "siparisler/{orderId}", region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] },
+  {
+    document: "siparisler/{orderId}",
+    region: "europe-west2",
+    secrets: [NIVADESK_SMTP_PASSWORD, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN]
+  },
   async (event) => {
     const before = event.data?.before?.exists ? event.data.before.data() || {} : null;
     const after = event.data?.after?.exists ? event.data.after.data() || {} : null;
@@ -21562,12 +21957,12 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
 
     const auto = cleanPortalAutoUpdates(after.portalAutoUpdates);
     if (!auto.enabled) return;
-    // Nothing sends over SMS: no provider is connected. The preference is kept
-    // so it starts working the day one is, without anyone re-configuring orders.
-    if (!auto.email) return;
+    if (!auto.email && !auto.sms) return;
 
     const toEmail = cleanOrderText(after.emailAddress, "", 240);
-    if (!toEmail || !toEmail.includes("@")) return;
+    const toPhone = cleanOrderText(after.whatsappNumber, "", 40);
+    // Neither channel has anywhere to go.
+    if ((!auto.email || !toEmail.includes("@")) && (!auto.sms || !toPhone)) return;
     // A repeated status (a correction, a sync echo) must not re-send.
     if (cleanOrderText(after.portalLastNotifiedStatus, "", 60).toLowerCase() === status.toLowerCase()) return;
 
@@ -21575,7 +21970,12 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const companyId = orderCompanyId(after);
     if (!companyId) return;
 
-    const settings = await portalWorkspaceSettings(companyId);
+    const [settings, companySnap] = await Promise.all([
+      portalWorkspaceSettings(companyId),
+      admin.firestore().collection("companies").doc(companyId).get()
+    ]);
+    const companyData = companySnap.exists ? companySnap.data() || {} : {};
+    const config = workspaceSmsConfig(settings);
     const itemName = cleanOrderText(after.designName, "", 160);
     const message = portalStatusMessage(status, { itemName });
     if (!message) {
@@ -21590,6 +21990,35 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const portalUrl = portalToken && String(after.portalTokenId || "")
       ? `https://nivadesk.app/track/${portalToken}`
       : "";
+
+    // Branded, one-way, and strictly a service message about an order this
+    // customer already has with this business — never a promotion, which is what
+    // keeps it out of direct-marketing rules.
+    if (auto.sms && config.triggers[message.trigger] !== false) {
+      const senderName = config.senderId || String(settings.appSubtitle || "");
+      const smsBody = [
+        senderName ? `${senderName}: ${message.sms}` : message.sms,
+        portalUrl
+      ].filter(Boolean).join(" ");
+      await sendWorkspaceSMS({
+        companyData,
+        settings,
+        companyId,
+        orderId,
+        orderReference: cleanOrderText(after.invoiceNumber, "", 60),
+        customerName: cleanOrderText(after.customerName, "", 160),
+        toNumber: cleanOrderText(after.whatsappNumber, "", 40),
+        trigger: message.trigger,
+        body: smsBody
+      }).catch((error) => {
+        console.warn("notifyCustomerOnStatusChange: sms failed", { orderId, error: String(error) });
+      });
+    }
+
+    if (!auto.email || !toEmail.includes("@")) {
+      await orderDocRef(orderId).update({ portalLastNotifiedStatus: status }).catch(() => undefined);
+      return;
+    }
 
     try {
       await sendPortalStatusEmail({
