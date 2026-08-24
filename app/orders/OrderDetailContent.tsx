@@ -1204,17 +1204,6 @@ function isClientFilePdf(file: ClientFileDetail) {
 // Falls back to these when the workspace has not renamed the intake rows.
 
 
-type RepairIntakeDraft = {
-  fields: Record<string, string>;
-  condition: string;
-  requestedWork: string;
-  customerInstructions: string;
-};
-
-function emptyRepairIntakeDraft(): RepairIntakeDraft {
-  return { fields: {}, condition: "", requestedWork: "", customerInstructions: "" };
-}
-
 const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   repairIntake: "Repair Intake & Item",
@@ -4021,6 +4010,28 @@ export function OrderDetailContent({
     }
   }
 
+  // Row titles are workspace settings, not order data: renaming "Metal" to
+  // "Alloy" renames it everywhere. The id is left alone so the value survives.
+  async function renameRepairIntakeRow(rowId: string, newTitle: string) {
+    if (!blockHeadingSettings) return;
+    const cleaned = newTitle.trim();
+    if (!cleaned) return;
+    const currentRows = repairIntakeFieldRows;
+    if (!currentRows.some(row => row.id === rowId)) return;
+    const updatedRows = currentRows.map(row => ({
+      id: row.id,
+      title: row.id === rowId ? cleaned : row.title
+    }));
+    const updated = { ...blockHeadingSettings, repairIntakeFields: updatedRows };
+    setBlockHeadingSettings(updated);
+    try {
+      const saved = await saveWorkspaceBlockHeadings(workspace, "repairIntake", updated);
+      setBlockHeadingSettings(saved);
+    } catch {
+      // Optimistic state stays; the next companySettings snapshot re-syncs.
+    }
+  }
+
   async function saveDetailsPatch(patch: DetailsPatch, fieldLabel: string) {
     if (!canInlineEditFullDetails) {
       setInlineError("Your workspace role cannot edit full order details.");
@@ -4904,39 +4915,38 @@ export function OrderDetailContent({
   }, [blockHeadingSettings]);
 
   const repairIntake = order.repairIntake;
-  const [repairIntakeEditing, setRepairIntakeEditing] = useState(false);
-  const [repairIntakeDraft, setRepairIntakeDraft] = useState<RepairIntakeDraft>(() => emptyRepairIntakeDraft());
-
-  function beginRepairIntakeEdit() {
-    setRepairIntakeDraft({
-      fields: { ...(repairIntake?.fields ?? {}) },
-      condition: (repairIntake?.condition ?? []).join("\n"),
-      requestedWork: (repairIntake?.requestedWork ?? []).join("\n"),
-      customerInstructions: repairIntake?.customerInstructions ?? ""
-    });
-    setRepairIntakeEditing(true);
-  }
-
-  async function saveRepairIntake() {
-    const toLines = (value: string) => value.split("\n").map(line => line.trim()).filter(Boolean);
-    const fields: Record<string, string> = {};
+  // Edited in place, one value at a time, the way the Mac card works — rather
+  // than an Edit mode whose button sat on top of the card's own menu.
+  async function saveRepairIntakePatch(
+    change: {
+      fields?: Record<string, string>;
+      condition?: string[];
+      requestedWork?: string[];
+      customerInstructions?: string;
+    },
+    fieldLabel: string
+  ) {
+    const currentFields: Record<string, string> = {};
     for (const row of repairIntakeFieldRows) {
-      const value = (repairIntakeDraft.fields[row.id] ?? "").trim();
-      if (value) fields[row.id] = value;
+      const value = (repairIntake?.fields?.[row.id] ?? "").trim();
+      if (value) currentFields[row.id] = value;
     }
-    setRepairIntakeEditing(false);
+    const nextFields = { ...currentFields, ...(change.fields ?? {}) };
+    for (const key of Object.keys(nextFields)) {
+      if (!nextFields[key].trim()) delete nextFields[key];
+    }
     await saveDetailsPatch({
       orderType: "repair",
       repairIntake: {
-        fields,
-        condition: toLines(repairIntakeDraft.condition),
-        requestedWork: toLines(repairIntakeDraft.requestedWork),
-        customerInstructions: repairIntakeDraft.customerInstructions.trim(),
+        fields: nextFields,
+        condition: change.condition ?? repairIntake?.condition ?? [],
+        requestedWork: change.requestedWork ?? repairIntake?.requestedWork ?? [],
+        customerInstructions: (change.customerInstructions ?? repairIntake?.customerInstructions ?? "").trim(),
         receivedAt: (repairIntake?.receivedAt ?? new Date()).toISOString(),
         receivedByUid: repairIntake?.receivedByUid || user?.uid || "",
         receivedByName: repairIntake?.receivedByName || user?.displayName || user?.email || ""
       }
-    }, "Repair intake");
+    }, fieldLabel);
   }
 
   // --- Estimate & approval -------------------------------------------------
@@ -5317,170 +5327,119 @@ export function OrderDetailContent({
         );
       }
       case "repairIntake": {
-        // Shown whether or not there is anything in them yet. Hiding the empty
-        // ones left the card looking like it had no Condition or Requested Work
-        // at all, while the same order on Mac showed both waiting to be filled.
-        const bulletList = (title: string, lines: string[]) => (
-          <div className="repair-intake-block">
-            <span className="repair-intake-block-title">{title}</span>
-            {lines.length > 0 ? (
-              <ul className="repair-intake-bullets">
-                {lines.map((line, index) => <li key={`${title}-${index}`}>{line}</li>)}
-              </ul>
-            ) : (
-              <p className="repair-intake-instructions">—</p>
-            )}
-          </div>
-        );
+        // Edited in place like the Mac card: click a value to change it, click a
+        // heading to rename it. There is no Edit mode any more — its button sat
+        // on top of the card's own menu button.
+        const linesText = (values: string[] | undefined) => (values ?? []).join("\n");
+        const toLines = (value: string) =>
+          value.split("\n").map(line => line.trim()).filter(Boolean);
+        const intakeDisabled = !canInlineEditFullDetails;
 
         return (
           <section key={cardId} className="card order-detail-card">
-            <div className="repair-intake-head">
-              {renderCardTitle(cardId)}
-              {canInlineEditFullDetails && !repairIntakeEditing ? (
-                <button type="button" className="repair-intake-edit" onClick={beginRepairIntakeEdit}>Edit</button>
-              ) : null}
-            </div>
+            {renderCardTitle(cardId)}
 
             <div className="app-card-panel repair-intake-panel">
-              {repairIntakeEditing ? (
-                <>
-                  {repairIntakeFieldRows.map(row => (
-                    <label key={row.id} className="repair-intake-edit-row">
-                      <span>{row.title}</span>
-                      <textarea
-                        rows={row.id === "stones" ? 2 : 1}
-                        value={repairIntakeDraft.fields[row.id] ?? ""}
-                        onChange={event => setRepairIntakeDraft(draft => ({
-                          ...draft,
-                          fields: { ...draft.fields, [row.id]: event.target.value }
-                        }))}
-                      />
-                    </label>
-                  ))}
-                  <label className="repair-intake-edit-row is-stacked">
-                    <span>Condition</span>
-                    <textarea
-                      rows={3}
-                      placeholder="One per line"
-                      value={repairIntakeDraft.condition}
-                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, condition: event.target.value }))}
-                    />
-                  </label>
-                  <label className="repair-intake-edit-row is-stacked">
-                    <span>Requested Work</span>
-                    <textarea
-                      rows={3}
-                      placeholder="One per line"
-                      value={repairIntakeDraft.requestedWork}
-                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, requestedWork: event.target.value }))}
-                    />
-                  </label>
-                  <label className="repair-intake-edit-row is-stacked">
-                    <span>Customer Instructions</span>
-                    <textarea
-                      rows={2}
-                      value={repairIntakeDraft.customerInstructions}
-                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, customerInstructions: event.target.value }))}
-                    />
-                  </label>
-                  <div className="repair-intake-edit-actions">
-                    <button type="button" className="repair-intake-cancel" onClick={() => setRepairIntakeEditing(false)}>Cancel</button>
-                    <button type="button" className="repair-intake-save" onClick={() => void saveRepairIntake()}>Save</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="repair-intake-rows">
-                    {/* Every configured row, filled or not. Hiding the empty
-                        ones left a brand-new repair order showing nothing but
-                        the Received footer, while Mac showed the whole set. */}
-                    {repairIntakeFieldRows.map(row => {
-                      const value = repairIntake?.fields?.[row.id] ?? "";
-                      return (
-                        <div key={row.id} className="repair-intake-row">
-                          <span>{row.title}</span>
-                          <strong>
-                            {value
-                              ? value.split("\n").map((line, index) => <span key={index}>{line}</span>)
-                              : "—"}
-                          </strong>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {repairIntakeFieldRows.map(row => (
+                <InlineValueRow
+                  key={row.id}
+                  label={row.title}
+                  labelRaw={row.title}
+                  value={repairIntake?.fields?.[row.id] ?? ""}
+                  disabled={intakeDisabled}
+                  saving={savingInlineField === `Repair intake · ${row.title}`}
+                  onSave={value =>
+                    saveRepairIntakePatch(
+                      { fields: { [row.id]: String(value) } },
+                      `Repair intake · ${row.title}`
+                    )
+                  }
+                  onLabelSave={intakeDisabled ? undefined : value => renameRepairIntakeRow(row.id, value)}
+                />
+              ))}
 
-                  {bulletList("Condition", repairIntake?.condition ?? [])}
-                  {bulletList("Requested Work", repairIntake?.requestedWork ?? [])}
+              <InlineMultilineRow
+                label="Condition"
+                value={linesText(repairIntake?.condition)}
+                placeholder="One per line"
+                disabled={intakeDisabled}
+                onSave={value => saveRepairIntakePatch({ condition: toLines(value) }, "Repair intake · Condition")}
+              />
 
-                  <div className="repair-intake-block">
-                    <span className="repair-intake-block-title">Customer Instructions</span>
-                    <p className="repair-intake-instructions">
-                      {repairIntake?.customerInstructions || "—"}
-                    </p>
+              <InlineMultilineRow
+                label="Requested Work"
+                value={linesText(repairIntake?.requestedWork)}
+                placeholder="One per line"
+                disabled={intakeDisabled}
+                onSave={value => saveRepairIntakePatch({ requestedWork: toLines(value) }, "Repair intake · Requested Work")}
+              />
+
+              <InlineMultilineRow
+                label="Customer Instructions"
+                value={repairIntake?.customerInstructions ?? ""}
+                disabled={intakeDisabled}
+                onSave={value => saveRepairIntakePatch({ customerInstructions: value }, "Repair intake · Customer Instructions")}
+              />
+
+              {canSeeIntakePhotos ? (
+                <div className="repair-intake-block">
+                  <div className="repair-intake-photos-head">
+                    <span className="repair-intake-block-title">Intake Photos</span>
+                    {canInlineEditFullDetails ? (
+                      <button
+                        type="button"
+                        className="repair-intake-photo-add"
+                        onClick={() => clientFileInputRef.current?.click()}
+                      >
+                        Add photos
+                      </button>
+                    ) : null}
                   </div>
-
-                  {canSeeIntakePhotos ? (
-                    <div className="repair-intake-block">
-                      <div className="repair-intake-photos-head">
-                        <span className="repair-intake-block-title">Intake Photos</span>
-                        {canInlineEditFullDetails ? (
-                          <button
-                            type="button"
-                            className="repair-intake-photo-add"
-                            onClick={() => clientFileInputRef.current?.click()}
-                          >
-                            Add photos
-                          </button>
-                        ) : null}
-                      </div>
-                      {intakePhotos.length > 0 ? (
-                        <div className="repair-intake-photos">
-                          {/* Four across at most; the grid reflows as the card is
-                              widened. Opening one hands off to the client-files
-                              viewer rather than dumping the raw URL in a tab. */}
-                          {intakePhotos.slice(0, 4).map(photo => (
-                            <button
-                              key={photo.id}
-                              type="button"
-                              className="repair-intake-photo"
-                              onClick={() => setPreviewingClientFileId(photo.id)}
-                              title={photo.note || photo.fileName}
-                            >
-                              {photo.downloadURL
-                                ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
-                                : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
-                            </button>
-                          ))}
-                          {intakePhotos.length > 4 ? (
-                            <button
-                              type="button"
-                              className="repair-intake-photo is-more"
-                              onClick={() => setPreviewingClientFileId(intakePhotos[4].id)}
-                              title={`${intakePhotos.length - 4} more`}
-                            >
-                              <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="repair-intake-instructions">—</p>
-                      )}
+                  {intakePhotos.length > 0 ? (
+                    <div className="repair-intake-photos">
+                      {/* Four across at most; the grid reflows as the card is
+                          widened. Opening one hands off to the client-files
+                          viewer rather than dumping the raw URL in a tab. */}
+                      {intakePhotos.slice(0, 4).map(photo => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          className="repair-intake-photo"
+                          onClick={() => setPreviewingClientFileId(photo.id)}
+                          title={photo.note || photo.fileName}
+                        >
+                          {photo.downloadURL
+                            ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
+                            : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+                        </button>
+                      ))}
+                      {intakePhotos.length > 4 ? (
+                        <button
+                          type="button"
+                          className="repair-intake-photo is-more"
+                          onClick={() => setPreviewingClientFileId(intakePhotos[4].id)}
+                          title={`${intakePhotos.length - 4} more`}
+                        >
+                          <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
+                  ) : (
+                    <p className="repair-intake-instructions">—</p>
+                  )}
+                </div>
+              ) : null}
 
-                  <div className="repair-intake-footer">
-                    <div className="repair-intake-row">
-                      <span>Received</span>
-                      <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt) : "—"}</strong>
-                    </div>
-                    <div className="repair-intake-row">
-                      <span>Received By</span>
-                      <strong>{repairIntake?.receivedByName || "—"}</strong>
-                    </div>
-                  </div>
-                </>
-              )}
+              <div className="repair-intake-footer">
+                <div className="repair-intake-row">
+                  <span>Received</span>
+                  <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt) : "—"}</strong>
+                </div>
+                <div className="repair-intake-row">
+                  <span>Received By</span>
+                  <strong>{repairIntake?.receivedByName || "—"}</strong>
+                </div>
+              </div>
             </div>
           </section>
         );
@@ -9316,6 +9275,76 @@ function InlineEditableLabel({
         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
       </svg>
     </button>
+  );
+}
+
+// Multi-line sibling of InlineValueRow: click the text to edit, blur to save.
+// Used for the intake lists, which are one item per line.
+function InlineMultilineRow({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onSave
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  disabled: boolean;
+  onSave: (value: string) => Promise<void> | void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const cancellingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  async function submit() {
+    setEditing(false);
+    if (draft === value) return;
+    await onSave(draft);
+  }
+
+  return (
+    <div className="repair-intake-block">
+      <span className="repair-intake-block-title">{label}</span>
+      {editing && !disabled ? (
+        <textarea
+          className="repair-intake-inline-editor"
+          autoFocus
+          rows={3}
+          placeholder={placeholder}
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          onBlur={() => {
+            if (cancellingRef.current) return;
+            void submit();
+          }}
+          onKeyDown={event => {
+            if (event.key !== "Escape") return;
+            cancellingRef.current = true;
+            setDraft(value);
+            setEditing(false);
+            window.setTimeout(() => {
+              cancellingRef.current = false;
+            }, 0);
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="repair-intake-inline-display"
+          disabled={disabled}
+          onClick={() => setEditing(true)}
+        >
+          {value.trim()
+            ? value.split("\n").map((line, index) => <span key={index}>{line}</span>)
+            : <span className="repair-intake-inline-empty">—</span>}
+        </button>
+      )}
+    </div>
   );
 }
 
