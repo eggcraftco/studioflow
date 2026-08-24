@@ -8832,6 +8832,49 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   overflow-wrap: anywhere;
 }
 
+.repair-intake-inline-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: text;
+}
+
+.repair-intake-inline-display:hover:not(:disabled) {
+  background: rgba(23, 25, 35, 0.04);
+  border-color: rgba(23, 25, 35, 0.1);
+}
+
+.repair-intake-inline-display:disabled {
+  cursor: default;
+}
+
+.repair-intake-inline-empty {
+  opacity: 0.55;
+}
+
+.repair-intake-inline-editor {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border, rgba(23, 25, 35, 0.18));
+  background: var(--app-surface, transparent);
+  color: inherit;
+  resize: vertical;
+}
+
 .repair-intake-photos-head {
   display: flex;
   align-items: center;
