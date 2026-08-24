@@ -508,6 +508,21 @@ export type OrderDetail = {
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
   invoiceNumber: string;
+  // "custom" or "repair". A repair order carries the customer's own item, which
+  // is recorded below and is deliberately not stock.
+  orderType: string;
+  repairIntake: RepairIntakeDetail | null;
+};
+
+export type RepairIntakeDetail = {
+  fields: Record<string, string>;
+  condition: string[];
+  requestedWork: string[];
+  customerInstructions: string;
+  receivedAt: Date | null;
+  receivedByUid: string;
+  receivedByName: string;
+  customerOwned: boolean;
 };
 
 const ACTIVE_CLOSED_STATUSES = new Set(["done", "completed", "cancelled", "canceled"]);
@@ -1671,6 +1686,32 @@ function mapLineItems(value: unknown): LineItemDetail[] {
   });
 }
 
+function mapRepairIntake(value: unknown): RepairIntakeDetail | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const fields: Record<string, string> = {};
+  const rawFields = entry.fields && typeof entry.fields === "object" && !Array.isArray(entry.fields)
+    ? entry.fields as Record<string, unknown>
+    : {};
+  for (const [key, raw] of Object.entries(rawFields)) {
+    const text = stringValue(raw, "");
+    if (text) fields[key] = text;
+  }
+  const lines = (raw: unknown) => collectionItemsValue(raw)
+    .map(item => (typeof item === "string" ? item : stringValue((item as Record<string, unknown>)?.text, "")))
+    .filter(Boolean);
+  return {
+    fields,
+    condition: lines(entry.condition),
+    requestedWork: lines(entry.requestedWork),
+    customerInstructions: stringValue(entry.customerInstructions, ""),
+    receivedAt: dateValue(entry.receivedAt),
+    receivedByUid: stringValue(entry.receivedByUid, ""),
+    receivedByName: stringValue(entry.receivedByName, ""),
+    customerOwned: true
+  };
+}
+
 function mapOrderDetailSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   companyId: string,
@@ -1777,7 +1818,9 @@ function mapOrderDetailSnapshot(
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),
     lineItems: mapLineItems(data.lineItems),
-    invoiceNumber: stringValue(data.invoiceNumber, "")
+    invoiceNumber: stringValue(data.invoiceNumber, ""),
+    orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
+    repairIntake: mapRepairIntake(data.repairIntake)
   };
 }
 

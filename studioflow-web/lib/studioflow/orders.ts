@@ -76,6 +76,16 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     customFields?: Record<string, string>;
     specialNotes?: Record<string, string>;
     lineItems?: { id: string; name: string; quantity: number; unitPrice: number; lineTotal: number }[];
+    orderType?: string;
+    repairIntake?: {
+      fields?: Record<string, string>;
+      condition?: string[];
+      requestedWork?: string[];
+      customerInstructions?: string;
+      receivedAt?: string;
+      receivedByUid?: string;
+      receivedByName?: string;
+    };
   };
   finance?: {
     orderValue?: number;

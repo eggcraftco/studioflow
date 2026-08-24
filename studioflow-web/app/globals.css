@@ -8272,6 +8272,228 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
+.app-summary-order-type {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.app-summary-order-type > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.app-summary-order-type select {
+  padding: 5px 9px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 9px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Repair Intake & Item — the record of a customer's own item, handed in for
+   service. Laid out as label/value rows, then the two lists a jeweller writes
+   at the counter, then the photos taken while the customer is still there. */
+.repair-intake-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.repair-intake-edit {
+  flex: none;
+  padding: 5px 14px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repair-intake-edit:hover {
+  border-color: rgba(23, 25, 35, 0.3);
+}
+
+.repair-intake-panel {
+  gap: 14px;
+}
+
+.repair-intake-rows {
+  display: grid;
+  gap: 9px;
+}
+
+.repair-intake-row {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 13px;
+}
+
+.repair-intake-row > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-row > strong {
+  display: grid;
+  gap: 2px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-block {
+  display: grid;
+  gap: 6px;
+}
+
+.repair-intake-block-title {
+  font-size: 13px;
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-bullets {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repair-intake-bullets li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-bullets li::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e5484d;
+}
+
+.repair-intake-instructions {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-photos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.repair-intake-photo-more {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(23, 25, 35, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repair-intake-photos {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.repair-intake-photo {
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid rgba(23, 25, 35, 0.1);
+  border-radius: 10px;
+  background: rgba(23, 25, 35, 0.04);
+}
+
+.repair-intake-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.repair-intake-photo-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  opacity: 0.4;
+}
+
+.repair-intake-footer {
+  display: grid;
+  gap: 9px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.repair-intake-edit-row {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.repair-intake-edit-row.is-stacked {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.repair-intake-edit-row > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-edit-row textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 9px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.repair-intake-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.repair-intake-cancel,
+.repair-intake-save {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repair-intake-save {
+  border-color: transparent;
+  background: #171923;
+  color: #ffffff;
+}
+
 .app-card-divider {
   height: 1px;
   margin: 2px 0;

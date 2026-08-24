@@ -1104,8 +1104,33 @@ function isClientFilePdf(file: ClientFileDetail) {
   return file.fileName.toLowerCase().endsWith(".pdf") || file.contentType.toLowerCase().includes("pdf");
 }
 
+// Falls back to these when the workspace has not renamed the intake rows.
+const DEFAULT_REPAIR_INTAKE_FIELDS = [
+  { id: "itemType", title: "Item Type" },
+  { id: "metal", title: "Metal" },
+  { id: "hallmark", title: "Hallmark" },
+  { id: "itemSize", title: "Size" },
+  { id: "stones", title: "Stones" },
+  { id: "weight", title: "Weight" },
+  { id: "serialReference", title: "Serial / Reference" }
+];
+
+const INTAKE_PHOTO_SOURCE = "intake_photo";
+
+type RepairIntakeDraft = {
+  fields: Record<string, string>;
+  condition: string;
+  requestedWork: string;
+  customerInstructions: string;
+};
+
+function emptyRepairIntakeDraft(): RepairIntakeDraft {
+  return { fields: {}, condition: "", requestedWork: "", customerInstructions: "" };
+}
+
 const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
+  repairIntake: "Repair Intake & Item",
   summary: "Order Summary",
   customer: "Customer & Communication",
   invoiceItems: "Invoice Items",
@@ -1125,6 +1150,7 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
 
 const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
+  repairIntake: "cardSummary",
   summary: "cardSummary",
   customer: "cardCustomer",
   invoiceItems: "cardCustomer",
@@ -1261,6 +1287,7 @@ function communicationChannelPatch(channel: string, value: string): DetailsPatch
 
 const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
+  repairIntake: 460,
   summary: 210,
   customer: 200,
   invoiceItems: 220,
@@ -2510,6 +2537,7 @@ export function OrderDetailContent({
   function cardIcon(cardId: OrderDetailCardId): CardIcon {
     const icons: Record<OrderDetailCardId, CardIcon> = {
       preview: "photo",
+      repairIntake: "shippingBox",
       summary: "docText",
       customer: "customer",
       invoiceItems: "docText",
@@ -3691,6 +3719,20 @@ export function OrderDetailContent({
         nextPatch.remainingAmount = Math.max(0, Math.round((itemsTotal - order.paidAmount) * 100) / 100);
       }
     }
+    if (typeof patch.orderType === "string") nextPatch.orderType = patch.orderType;
+    if (patch.repairIntake && typeof patch.repairIntake === "object") {
+      const incoming = patch.repairIntake;
+      nextPatch.repairIntake = {
+        fields: { ...(incoming.fields ?? {}) },
+        condition: [...(incoming.condition ?? [])],
+        requestedWork: [...(incoming.requestedWork ?? [])],
+        customerInstructions: incoming.customerInstructions ?? "",
+        receivedAt: incoming.receivedAt ? new Date(incoming.receivedAt) : (order.repairIntake?.receivedAt ?? new Date()),
+        receivedByUid: incoming.receivedByUid ?? order.repairIntake?.receivedByUid ?? "",
+        receivedByName: incoming.receivedByName ?? order.repairIntake?.receivedByName ?? "",
+        customerOwned: true
+      };
+    }
     if (typeof patch.watchRef === "string") nextPatch.watchRef = patch.watchRef;
     if (typeof patch.designLink === "string") nextPatch.designLink = patch.designLink;
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
@@ -4754,6 +4796,60 @@ export function OrderDetailContent({
     );
   }
 
+  // --- Repair intake -------------------------------------------------------
+  // A repair order holds the customer's own item. It is recorded here, never in
+  // stock: `customerOwned` is stamped server-side so nothing downstream can
+  // mistake a customer's ring for inventory.
+  const repairIntakeFieldRows = useMemo(() => {
+    const configured = blockHeadingSettings?.repairIntakeFields
+      ?.map(field => ({ id: field.id.trim(), title: field.title.trim() }))
+      .filter(field => field.id && field.title) ?? [];
+    return configured.length > 0 ? configured : DEFAULT_REPAIR_INTAKE_FIELDS;
+  }, [blockHeadingSettings]);
+
+  const repairIntake = order.repairIntake;
+  const [repairIntakeEditing, setRepairIntakeEditing] = useState(false);
+  const [repairIntakeDraft, setRepairIntakeDraft] = useState<RepairIntakeDraft>(() => emptyRepairIntakeDraft());
+
+  function beginRepairIntakeEdit() {
+    setRepairIntakeDraft({
+      fields: { ...(repairIntake?.fields ?? {}) },
+      condition: (repairIntake?.condition ?? []).join("\n"),
+      requestedWork: (repairIntake?.requestedWork ?? []).join("\n"),
+      customerInstructions: repairIntake?.customerInstructions ?? ""
+    });
+    setRepairIntakeEditing(true);
+  }
+
+  async function saveRepairIntake() {
+    const toLines = (value: string) => value.split("\n").map(line => line.trim()).filter(Boolean);
+    const fields: Record<string, string> = {};
+    for (const row of repairIntakeFieldRows) {
+      const value = (repairIntakeDraft.fields[row.id] ?? "").trim();
+      if (value) fields[row.id] = value;
+    }
+    setRepairIntakeEditing(false);
+    await saveDetailsPatch({
+      orderType: "repair",
+      repairIntake: {
+        fields,
+        condition: toLines(repairIntakeDraft.condition),
+        requestedWork: toLines(repairIntakeDraft.requestedWork),
+        customerInstructions: repairIntakeDraft.customerInstructions.trim(),
+        receivedAt: (repairIntake?.receivedAt ?? new Date()).toISOString(),
+        receivedByUid: repairIntake?.receivedByUid || user?.uid || "",
+        receivedByName: repairIntake?.receivedByName || user?.displayName || user?.email || ""
+      }
+    }, "Repair intake");
+  }
+
+  // Photos taken at intake ride on the existing client-file pipeline, tagged so
+  // they show here as well as in Client Files: one upload path, not four.
+  const intakePhotos = useMemo(
+    () => order.clientFiles.filter(file => file.source === INTAKE_PHOTO_SOURCE || (file.contentType || "").startsWith("image/")),
+    [order.clientFiles]
+  );
+
   function renderCard(cardId: OrderDetailCardId) {
     const forcedByGuide =
       (guideForcesCustomerVisible && cardId === "customer") ||
@@ -4761,6 +4857,147 @@ export function OrderDetailContent({
     if (!cardLayout.visibility[cardId] && !forcedByGuide) return null;
 
     switch (cardId) {
+      case "repairIntake": {
+        // Only a repair order carries a customer's item; a custom order has none.
+        if (order.orderType !== "repair" && !repairIntake) return null;
+
+        const bulletList = (title: string, lines: string[]) => (
+          lines.length > 0 ? (
+            <div className="repair-intake-block">
+              <span className="repair-intake-block-title">{title}</span>
+              <ul className="repair-intake-bullets">
+                {lines.map((line, index) => <li key={`${title}-${index}`}>{line}</li>)}
+              </ul>
+            </div>
+          ) : null
+        );
+
+        return (
+          <section key={cardId} className="card order-detail-card">
+            <div className="repair-intake-head">
+              {renderCardTitle(cardId)}
+              {canInlineEditFullDetails && !repairIntakeEditing ? (
+                <button type="button" className="repair-intake-edit" onClick={beginRepairIntakeEdit}>Edit</button>
+              ) : null}
+            </div>
+
+            <div className="app-card-panel repair-intake-panel">
+              {repairIntakeEditing ? (
+                <>
+                  {repairIntakeFieldRows.map(row => (
+                    <label key={row.id} className="repair-intake-edit-row">
+                      <span>{row.title}</span>
+                      <textarea
+                        rows={row.id === "stones" ? 2 : 1}
+                        value={repairIntakeDraft.fields[row.id] ?? ""}
+                        onChange={event => setRepairIntakeDraft(draft => ({
+                          ...draft,
+                          fields: { ...draft.fields, [row.id]: event.target.value }
+                        }))}
+                      />
+                    </label>
+                  ))}
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Condition</span>
+                    <textarea
+                      rows={3}
+                      placeholder="One per line"
+                      value={repairIntakeDraft.condition}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, condition: event.target.value }))}
+                    />
+                  </label>
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Requested Work</span>
+                    <textarea
+                      rows={3}
+                      placeholder="One per line"
+                      value={repairIntakeDraft.requestedWork}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, requestedWork: event.target.value }))}
+                    />
+                  </label>
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Customer Instructions</span>
+                    <textarea
+                      rows={2}
+                      value={repairIntakeDraft.customerInstructions}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, customerInstructions: event.target.value }))}
+                    />
+                  </label>
+                  <div className="repair-intake-edit-actions">
+                    <button type="button" className="repair-intake-cancel" onClick={() => setRepairIntakeEditing(false)}>Cancel</button>
+                    <button type="button" className="repair-intake-save" onClick={() => void saveRepairIntake()}>Save</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="repair-intake-rows">
+                    {repairIntakeFieldRows.map(row => {
+                      const value = repairIntake?.fields?.[row.id] ?? "";
+                      if (!value) return null;
+                      return (
+                        <div key={row.id} className="repair-intake-row">
+                          <span>{row.title}</span>
+                          <strong>
+                            {value.split("\n").map((line, index) => <span key={index}>{line}</span>)}
+                          </strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {bulletList("Condition", repairIntake?.condition ?? [])}
+                  {bulletList("Requested Work", repairIntake?.requestedWork ?? [])}
+
+                  {repairIntake?.customerInstructions ? (
+                    <div className="repair-intake-block">
+                      <span className="repair-intake-block-title">Customer Instructions</span>
+                      <p className="repair-intake-instructions">{repairIntake.customerInstructions}</p>
+                    </div>
+                  ) : null}
+
+                  {intakePhotos.length > 0 ? (
+                    <div className="repair-intake-block">
+                      <div className="repair-intake-photos-head">
+                        <span className="repair-intake-block-title">Intake Photos</span>
+                        {intakePhotos.length > 4 ? (
+                          <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
+                        ) : null}
+                      </div>
+                      <div className="repair-intake-photos">
+                        {intakePhotos.slice(0, 4).map(photo => (
+                          <a
+                            key={photo.id}
+                            className="repair-intake-photo"
+                            href={photo.downloadURL || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={photo.note || photo.fileName}
+                          >
+                            {photo.downloadURL
+                              ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
+                              : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="repair-intake-footer">
+                    <div className="repair-intake-row">
+                      <span>Received</span>
+                      <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt) : "—"}</strong>
+                    </div>
+                    <div className="repair-intake-row">
+                      <span>Received By</span>
+                      <strong>{repairIntake?.receivedByName || "—"}</strong>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        );
+      }
       case "preview":
         return (
           <section key={cardId} className="card order-detail-card is-preview-card">
@@ -4900,6 +5137,21 @@ export function OrderDetailContent({
                     <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue2)}`}>{summaryValue2}</b>
                   </div>
                 </div>
+              </div>
+              <div className="app-card-divider" />
+              <div className="app-summary-order-type">
+                <span>Order Type</span>
+                {canInlineEditFullDetails ? (
+                  <select
+                    value={order.orderType === "repair" ? "repair" : "custom"}
+                    onChange={event => void saveDetailsPatch({ orderType: event.target.value }, "Order type")}
+                  >
+                    <option value="custom">Custom Order</option>
+                    <option value="repair">Repair / Service</option>
+                  </select>
+                ) : (
+                  <strong>{order.orderType === "repair" ? "Repair / Service" : "Custom Order"}</strong>
+                )}
               </div>
               <div className="app-card-divider" />
               <div className="app-summary-bottom">

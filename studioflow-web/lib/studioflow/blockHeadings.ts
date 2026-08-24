@@ -49,6 +49,9 @@ export type BlockHeadingSettings = {
   communicationShowCustomerNotes: boolean;
   communicationChannelLabels: string[];
   specialNoteSections: HeadingItem[];
+  // Rows on the Repair Intake card: ids stay put, titles are the workspace's to
+  // rename ("Ring Size" for a jeweller, "Case Size" for a watchmaker).
+  repairIntakeFields: HeadingItem[];
 };
 
 type BlockHeadingCallableResult = {
@@ -66,6 +69,7 @@ export const WEB_BLOCK_HEADING_CARD_IDS = new Set<OrderDetailCardId>([
   "notes",
   "materials",
   "schedule",
+  "repairIntake",
   // invoiceItems uses the dialog only to edit the workspace company invoice numbers
   // (VAT/EORI/company no.) — it has no renamable headings.
   "invoiceItems"

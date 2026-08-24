@@ -4903,6 +4903,7 @@ Object.assign(exports, createPandleFunctions({ admin, onCall, HttpsError, uidIsC
 
 const ORDER_DETAIL_CARD_IDS = [
   "preview",
+  "repairIntake",
   "summary",
   "customer",
   "invoiceItems",
@@ -4921,7 +4922,7 @@ const ORDER_DETAIL_CARD_IDS = [
 ];
 
 const DEFAULT_ORDER_DETAIL_CARD_COLUMNS = [
-  ["preview", "summary", "workTime", "shipping", "schedule", "notes"],
+  ["preview", "repairIntake", "summary", "workTime", "shipping", "schedule", "notes"],
   ["customer", "invoiceItems", "materials", "delivery"],
   ["financial", "priority", "todo", "status", "historyLog", "clientFiles", "customerNotes"]
 ];
@@ -5783,7 +5784,8 @@ const BLOCK_HEADING_FIELDS_BY_CARD = {
     "showMaterialsNotesSupplier",
     "materialsNotesSupplierLabel"
   ],
-  schedule: ["scheduleQuickRemindersJSON"]
+  schedule: ["scheduleQuickRemindersJSON"],
+  repairIntake: ["repairIntakeFieldsJSON"]
 };
 
 const PRIMARY_SPECIAL_NOTE_ID = "00000000-0000-0000-0000-000000000101";
@@ -5916,7 +5918,18 @@ function defaultHeadingSettings() {
     communicationShowChannel: true,
     communicationShowCustomerNotes: true,
     communicationChannelLabels: ["Instagram", "WhatsApp", "TikTok"],
-    specialNoteSections: [{ id: PRIMARY_SPECIAL_NOTE_ID, title: "Special Notes" }]
+    specialNoteSections: [{ id: PRIMARY_SPECIAL_NOTE_ID, title: "Special Notes" }],
+    // Rows on the Repair Intake card. Ids are stable, titles are the workspace's
+    // to rename: a jeweller says "Ring Size", a watchmaker says "Case Size".
+    repairIntakeFields: [
+      { id: "itemType", title: "Item Type" },
+      { id: "metal", title: "Metal" },
+      { id: "hallmark", title: "Hallmark" },
+      { id: "itemSize", title: "Size" },
+      { id: "stones", title: "Stones" },
+      { id: "weight", title: "Weight" },
+      { id: "serialReference", title: "Serial / Reference" }
+    ]
   };
 }
 
@@ -5955,7 +5968,8 @@ function blockHeadingSettingsFromData(data = {}) {
     communicationShowChannel: blockHeadingBoolean(data.communicationShowChannel, defaults.communicationShowChannel),
     communicationShowCustomerNotes: blockHeadingBoolean(data.communicationShowCustomerNotes, defaults.communicationShowCustomerNotes),
     communicationChannelLabels: parseStringArrayJSON(data.communicationChannelLabelsJSON, defaults.communicationChannelLabels),
-    specialNoteSections: parseHeadingItemsJSON(data.specialNoteSectionsJSON, defaults.specialNoteSections)
+    specialNoteSections: parseHeadingItemsJSON(data.specialNoteSectionsJSON, defaults.specialNoteSections),
+    repairIntakeFields: parseHeadingItemsJSON(data.repairIntakeFieldsJSON, defaults.repairIntakeFields)
   };
 }
 
@@ -6018,6 +6032,7 @@ function blockHeadingUpdatesForCard(cardId, settings = {}) {
     updates.specialNoteSectionsJSON = encodeHeadingItems(hasPrimary ? notes : [defaults.specialNoteSections[0], ...notes]);
   }
 
+  if (allow("repairIntakeFieldsJSON")) updates.repairIntakeFieldsJSON = encodeHeadingItems(settings.repairIntakeFields, defaults.repairIntakeFields);
   if (allow("scheduleQuickRemindersJSON")) updates.scheduleQuickRemindersJSON = encodeScheduleReminders(settings.scheduleQuickReminders, defaults.scheduleQuickReminders);
 
   updates.workflowSettingsUpdatedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -9588,6 +9603,56 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     }
   }
 
+  if (hasOwnField(patch, "orderType")) {
+    const nextType = String(patch.orderType || "").trim().toLowerCase() === "repair" ? "repair" : "custom";
+    if ((orderData.orderType || "custom") !== nextType) {
+      updates.orderType = nextType;
+      pushHistoryChange(historyEntries, "Order type changed", orderData.orderType || "custom", nextType, uid, email);
+      changed = true;
+    }
+  }
+
+  // The customer's own item, handed in for repair. Deliberately not inventory:
+  // customerOwned is stamped here so nothing downstream can mistake it for stock.
+  if (hasOwnField(patch, "repairIntake")) {
+    const incoming = patch.repairIntake && typeof patch.repairIntake === "object" && !Array.isArray(patch.repairIntake)
+      ? patch.repairIntake
+      : {};
+    const cleanList = (value) => (Array.isArray(value) ? value : [])
+      .map((entry) => cleanOrderText(entry, "", 300))
+      .filter(Boolean)
+      .slice(0, 60);
+    const fields = {};
+    const incomingFields = incoming.fields && typeof incoming.fields === "object" && !Array.isArray(incoming.fields)
+      ? incoming.fields
+      : {};
+    for (const [key, value] of Object.entries(incomingFields).slice(0, 60)) {
+      const fieldId = cleanOrderText(key, "", 60);
+      if (!fieldId) continue;
+      fields[fieldId] = cleanOrderText(value, "", 600);
+    }
+    const sanitized = {
+      fields,
+      condition: cleanList(incoming.condition),
+      requestedWork: cleanList(incoming.requestedWork),
+      customerInstructions: cleanOrderText(incoming.customerInstructions, "", 2000),
+      receivedAt: nvTimestampFromInput(incoming.receivedAt, new Date()),
+      receivedByUid: cleanOrderText(incoming.receivedByUid, "", 128),
+      receivedByName: cleanOrderText(incoming.receivedByName, "", 160),
+      customerOwned: true
+    };
+    const comparable = (value) => JSON.stringify({
+      ...value,
+      receivedAt: value.receivedAt && value.receivedAt.toMillis ? value.receivedAt.toMillis() : value.receivedAt
+    });
+    const previous = orderData.repairIntake && typeof orderData.repairIntake === "object" ? orderData.repairIntake : null;
+    if (!previous || comparable(previous) !== comparable(sanitized)) {
+      updates.repairIntake = sanitized;
+      pushHistoryChange(historyEntries, "Repair intake updated", previous ? "updated" : "added", `${Object.keys(fields).length} fields`, uid, email);
+      changed = true;
+    }
+  }
+
   const currentFields = orderData.customFields && typeof orderData.customFields === "object" && !Array.isArray(orderData.customFields)
     ? { ...orderData.customFields }
     : {};
@@ -9795,7 +9860,9 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
     "customFields",
     "specialNotes",
     "lineItems",
-    "invoiceNote"
+    "invoiceNote",
+    "orderType",
+    "repairIntake"
   ]);
 
   const unknownFields = Object.keys(patch).filter((field) => !knownFields.has(field));
@@ -11845,7 +11912,10 @@ const SWIFT_ORDER_FIELDS = [
   "shippingCity",
   "shippingPostalCode",
   "shippingCountry",
-  "shippingPhone"
+  "shippingPhone",
+  // Repair intake: the order type and the record of the customer's own item.
+  "orderType",
+  "repairIntake"
 ];
 
 const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount", "payments"]);
