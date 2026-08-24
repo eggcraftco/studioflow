@@ -17526,6 +17526,30 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   font-weight: 700;
 }
 
+.guide-locked {
+  max-width: 640px;
+  padding: 28px;
+  border: 1px solid var(--public-border);
+  border-radius: 18px;
+  background: var(--public-surface);
+}
+
+.guide-locked h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.guide-locked p {
+  margin: 0 0 12px;
+  color: var(--public-muted);
+  line-height: 1.6;
+}
+
+.guide-locked .public-hero-actions {
+  margin-top: 20px;
+}
+
 .guide-nav-title {
   font-size: 12px;
   font-weight: 900;

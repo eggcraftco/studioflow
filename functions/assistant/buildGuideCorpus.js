@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 //
-// Turns the web app's user guide (studioflow-web/lib/publicSite/guide.ts) into a
-// flat JSON corpus the in-app assistant can search.
+// Turns the web app's user guide (studioflow-web/lib/publicSite/guide.ts) into
+// JSON for the server:
+//
+//   guideCorpus.json  flat sections the in-app assistant searches
+//   guideTree.json    the structured tree the getUserGuide callable serves
+//
+// The guide is a paid-plan feature, so the page no longer imports it directly:
+// the web bundle would hand every word to anyone who opened /guide.
 //
 // The guide stays the single source of truth: run this after editing it.
 //   node functions/assistant/buildGuideCorpus.js
@@ -10,37 +16,44 @@ const fs = require("fs");
 const path = require("path");
 
 const SOURCE = path.join(__dirname, "..", "..", "studioflow-web", "lib", "publicSite", "guide.ts");
+const TRANSLATIONS = path.join(__dirname, "..", "..", "studioflow-web", "lib", "publicSite", "guideTranslations.ts");
 const TARGET = path.join(__dirname, "guideCorpus.json");
+const TREE_TARGET = path.join(__dirname, "guideTree.json");
 
 const source = fs.readFileSync(SOURCE, "utf8");
 
-// Only the English tree: the assistant answers in the visitor's language from
-// English source material, which is what the guide page itself falls back to.
-const startMarker = "const TREE_EN: GuideNode[] = [";
-const start = source.indexOf(startMarker);
-if (start < 0) throw new Error("TREE_EN not found in guide.ts");
-
-// Walk brackets to find the end of the array literal. Start from the bracket
-// after the "=", not the one in the "GuideNode[]" type annotation.
-const arrayStart = source.indexOf("[", source.indexOf("=", start));
-let depth = 0;
-let end = -1;
-for (let i = arrayStart; i < source.length; i += 1) {
-  const ch = source[i];
-  if (ch === "[") depth += 1;
-  else if (ch === "]") {
-    depth -= 1;
-    if (depth === 0) { end = i + 1; break; }
+// Reads a plain data literal (`const NAME... = [` or `= {`) out of a TypeScript
+// module by walking brackets, then evaluates it. The literals here are strings,
+// arrays and objects only, so this avoids pulling in the TypeScript toolchain.
+function readLiteral(text, marker, open, close, label) {
+  const start = text.indexOf(marker);
+  if (start < 0) throw new Error(`${label} not found`);
+  // Start from the bracket after the "=", not one inside the type annotation.
+  const literalStart = text.indexOf(open, text.indexOf("=", start));
+  let depth = 0;
+  let literalEnd = -1;
+  for (let i = literalStart; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) { literalEnd = i + 1; break; }
+    }
   }
+  if (literalEnd < 0) throw new Error(`Could not find the end of ${label}`);
+  // eslint-disable-next-line no-new-func
+  return new Function(`return ${text.slice(literalStart, literalEnd)};`)();
 }
-if (end < 0) throw new Error("Could not find the end of TREE_EN");
 
-const literal = source.slice(arrayStart, end);
-
-// The literal is plain data (strings, arrays, objects) with unquoted keys, so a
-// Function wrapper evaluates it without pulling in the TypeScript toolchain.
-// eslint-disable-next-line no-new-func
-const tree = new Function(`return ${literal};`)();
+const tree = readLiteral(source, "const TREE_EN: GuideNode[] = [", "[", "]", "TREE_EN");
+const treeTr = readLiteral(source, "const TREE_TR: GuideNode[] = [", "[", "]", "TREE_TR");
+const dict = readLiteral(
+  fs.readFileSync(TRANSLATIONS, "utf8"),
+  "export const GUIDE_T",
+  "{",
+  "}",
+  "GUIDE_T"
+);
 
 function nodeText(node) {
   const parts = [];
@@ -72,3 +85,15 @@ walk(tree, []);
 
 fs.writeFileSync(TARGET, JSON.stringify({ builtFrom: "studioflow-web/lib/publicSite/guide.ts", sections }, null, 1));
 console.log(`guideCorpus.json: ${sections.length} sections, ${Math.round(fs.statSync(TARGET).size / 1024)} KB`);
+
+// English and Turkish are written trees; every other language is localized from
+// the English tree string by string, the same way the page used to do it.
+fs.writeFileSync(
+  TREE_TARGET,
+  JSON.stringify({
+    builtFrom: "studioflow-web/lib/publicSite/guide.ts",
+    trees: { English: tree, "Türkçe": treeTr },
+    dict
+  })
+);
+console.log(`guideTree.json: ${Object.keys(dict).length} localized languages, ${Math.round(fs.statSync(TREE_TARGET).size / 1024)} KB`);

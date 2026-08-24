@@ -954,7 +954,16 @@ export const PUBLIC_SITE_EN = {
   "login.footnoteOr": "or",
   "login.footnotePricing": "view pricing",
   "login.errorLoginFailed": "Login failed.",
-  "login.errorGoogleFailed": "Google login failed."
+  "login.errorGoogleFailed": "Google login failed.",
+
+  "guide.loading": "Loading the guide\u2026",
+  "guide.locked.title": "The full guide comes with a paid plan",
+  "guide.locked.body": "The step-by-step walkthrough of every menu is part of Lite, Pro and Team.",
+  "guide.locked.signedOut.title": "Sign in to read the guide",
+  "guide.locked.signedOut.body": "The step-by-step walkthrough of every menu is part of Lite, Pro and Team. Sign in with a workspace on one of those plans to read it.",
+  "guide.locked.ask": "In the meantime, ask the chat at the bottom of this page: it answers the basics about what NivaDesk does and what it costs.",
+  "guide.locked.plansCta": "See plans",
+  "guide.locked.signInCta": "Sign in"
 } as const;
 
 export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
@@ -983,6 +992,14 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "nav.security": "Güvenlik",
   "nav.changelog": "Neler yeni",
   "nav.guide": "Kullanım kılavuzu",
+  "guide.loading": "Kılavuz yükleniyor\u2026",
+  "guide.locked.title": "Kılavuzun tamamı ücretli planlarda",
+  "guide.locked.body": "Her menüyü adım adım anlatan kılavuz Lite, Pro ve Team planlarının parçasıdır.",
+  "guide.locked.signedOut.title": "Kılavuzu okumak için giriş yapın",
+  "guide.locked.signedOut.body": "Her menüyü adım adım anlatan kılavuz Lite, Pro ve Team planlarının parçasıdır. Bu planlardan birine sahip bir çalışma alanıyla giriş yapın.",
+  "guide.locked.ask": "Bu arada sayfanın altındaki sohbete sorabilirsiniz: NivaDesk'in ne yaptığı ve ne kadar tuttuğu gibi temel soruları yanıtlar.",
+  "guide.locked.plansCta": "Planları gör",
+  "guide.locked.signInCta": "Giriş yap",
   "nav.subprocessors": "Subprocessors",
   "nav.dataProcessingAgreement": "DPA",
   "nav.acceptableUse": "Kabul edilebilir kullanım",
@@ -2467,6 +2484,14 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
 // without touching the large existing objects.
 const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
   Deutsch: {
+    "guide.loading": "Handbuch wird geladen…",
+    "guide.locked.title": "Das vollständige Handbuch gehört zu den bezahlten Tarifen",
+    "guide.locked.body": "Die Schritt-für-Schritt-Erklärung zu jedem Menü ist Teil von Lite, Pro und Team.",
+    "guide.locked.signedOut.title": "Melden Sie sich an, um das Handbuch zu lesen",
+    "guide.locked.signedOut.body": "Die Schritt-für-Schritt-Erklärung zu jedem Menü ist Teil von Lite, Pro und Team. Melden Sie sich mit einem Arbeitsbereich in einem dieser Tarife an.",
+    "guide.locked.ask": "Fragen Sie in der Zwischenzeit den Chat unten auf dieser Seite: Er beantwortet die Grundlagen dazu, was NivaDesk kann und was es kostet.",
+    "guide.locked.plansCta": "Tarife ansehen",
+    "guide.locked.signInCta": "Anmelden",
     "cta.startFree": "Kostenlos starten",
     "cta.login": "Anmelden",
     "cta.openPortal": "Portal öffnen",
@@ -2526,6 +2551,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "Bestell-, Kunden- und Backup-Exporte bleiben verfügbar – auch nachdem ein Workspace auf Free/Demo zurückfällt."
   },
   "Français": {
+    "guide.loading": "Chargement du guide…",
+    "guide.locked.title": "Le guide complet est inclus dans les formules payantes",
+    "guide.locked.body": "Le pas à pas de chaque menu fait partie de Lite, Pro et Team.",
+    "guide.locked.signedOut.title": "Connectez-vous pour lire le guide",
+    "guide.locked.signedOut.body": "Le pas à pas de chaque menu fait partie de Lite, Pro et Team. Connectez-vous avec un espace de travail sur l'une de ces formules.",
+    "guide.locked.ask": "En attendant, posez votre question au chat en bas de cette page : il répond aux bases sur ce que fait NivaDesk et son prix.",
+    "guide.locked.plansCta": "Voir les formules",
+    "guide.locked.signInCta": "Se connecter",
     "cta.startFree": "Commencer gratuitement",
     "cta.login": "Connexion",
     "cta.openPortal": "Ouvrir le portail",
@@ -2585,6 +2618,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "Les exports de commandes, clients et sauvegardes restent disponibles, même après le retour d'un espace à Free/Demo."
   },
   "Italiano": {
+    "guide.loading": "Caricamento della guida…",
+    "guide.locked.title": "La guida completa è inclusa nei piani a pagamento",
+    "guide.locked.body": "La spiegazione passo passo di ogni menu fa parte di Lite, Pro e Team.",
+    "guide.locked.signedOut.title": "Accedi per leggere la guida",
+    "guide.locked.signedOut.body": "La spiegazione passo passo di ogni menu fa parte di Lite, Pro e Team. Accedi con uno spazio di lavoro su uno di questi piani.",
+    "guide.locked.ask": "Intanto puoi chiedere alla chat in fondo a questa pagina: risponde alle domande di base su cosa fa NivaDesk e quanto costa.",
+    "guide.locked.plansCta": "Vedi i piani",
+    "guide.locked.signInCta": "Accedi",
     "cta.startFree": "Inizia gratis",
     "cta.login": "Accedi",
     "cta.openPortal": "Apri il portale",
@@ -2644,6 +2685,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "Le esportazioni di ordini, clienti e backup restano disponibili, anche dopo che uno spazio torna a Free/Demo."
   },
   "Español (Spanish)": {
+    "guide.loading": "Cargando la guía…",
+    "guide.locked.title": "La guía completa viene con los planes de pago",
+    "guide.locked.body": "El recorrido paso a paso por cada menú forma parte de Lite, Pro y Team.",
+    "guide.locked.signedOut.title": "Inicia sesión para leer la guía",
+    "guide.locked.signedOut.body": "El recorrido paso a paso por cada menú forma parte de Lite, Pro y Team. Inicia sesión con un espacio de trabajo en uno de esos planes.",
+    "guide.locked.ask": "Mientras tanto, pregunta en el chat al final de esta página: responde lo básico sobre qué hace NivaDesk y cuánto cuesta.",
+    "guide.locked.plansCta": "Ver planes",
+    "guide.locked.signInCta": "Iniciar sesión",
     "cta.startFree": "Empezar gratis",
     "cta.login": "Iniciar sesión",
     "cta.openPortal": "Abrir portal",
@@ -2703,6 +2752,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "Las exportaciones de pedidos, clientes y copias de seguridad siguen disponibles, incluso tras volver un espacio a Free/Demo."
   },
   "Português": {
+    "guide.loading": "A carregar o guia…",
+    "guide.locked.title": "O guia completo faz parte dos planos pagos",
+    "guide.locked.body": "O passo a passo de cada menu faz parte do Lite, Pro e Team.",
+    "guide.locked.signedOut.title": "Inicie sessão para ler o guia",
+    "guide.locked.signedOut.body": "O passo a passo de cada menu faz parte do Lite, Pro e Team. Inicie sessão com um espaço de trabalho num desses planos.",
+    "guide.locked.ask": "Entretanto, pergunte no chat no fim desta página: responde ao básico sobre o que o NivaDesk faz e quanto custa.",
+    "guide.locked.plansCta": "Ver planos",
+    "guide.locked.signInCta": "Iniciar sessão",
     "cta.startFree": "Começar grátis",
     "cta.login": "Entrar",
     "cta.openPortal": "Abrir portal",
@@ -2762,6 +2819,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "As exportações de encomendas, clientes e backups continuam disponíveis, mesmo depois de um espaço voltar a Free/Demo."
   },
   "Русский (Russian)": {
+    "guide.loading": "Загрузка руководства…",
+    "guide.locked.title": "Полное руководство входит в платные тарифы",
+    "guide.locked.body": "Пошаговый разбор каждого меню входит в тарифы Lite, Pro и Team.",
+    "guide.locked.signedOut.title": "Войдите, чтобы прочитать руководство",
+    "guide.locked.signedOut.body": "Пошаговый разбор каждого меню входит в тарифы Lite, Pro и Team. Войдите в рабочее пространство на одном из этих тарифов.",
+    "guide.locked.ask": "А пока спросите в чате внизу страницы: он отвечает на базовые вопросы о том, что умеет NivaDesk и сколько это стоит.",
+    "guide.locked.plansCta": "Смотреть тарифы",
+    "guide.locked.signInCta": "Войти",
     "cta.startFree": "Начать бесплатно",
     "cta.login": "Войти",
     "cta.openPortal": "Открыть портал",
@@ -2821,6 +2886,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "Экспорт заказов, клиентов и резервных копий остаётся доступным даже после возврата пространства на Free/Demo."
   },
   "日本語 (Japanese)": {
+    "guide.loading": "ガイドを読み込んでいます…",
+    "guide.locked.title": "完全なガイドは有料プランに含まれます",
+    "guide.locked.body": "各メニューを順を追って説明するガイドは Lite、Pro、Team に含まれます。",
+    "guide.locked.signedOut.title": "ガイドを読むにはサインインしてください",
+    "guide.locked.signedOut.body": "各メニューを順を追って説明するガイドは Lite、Pro、Team に含まれます。いずれかのプランのワークスペースでサインインしてください。",
+    "guide.locked.ask": "それまでは、このページ下部のチャットでお尋ねください。NivaDesk で何ができるか、料金はいくらかといった基本にお答えします。",
+    "guide.locked.plansCta": "プランを見る",
+    "guide.locked.signInCta": "サインイン",
     "cta.startFree": "無料で始める",
     "cta.login": "ログイン",
     "cta.openPortal": "ポータルを開く",
@@ -2880,6 +2953,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "注文・顧客・バックアップのエクスポートは、ワークスペースがFree/Demoに戻った後も利用可能です。"
   },
   "中文 (Chinese)": {
+    "guide.loading": "正在加载指南…",
+    "guide.locked.title": "完整指南包含在付费方案中",
+    "guide.locked.body": "逐个菜单的分步说明包含在 Lite、Pro 和 Team 方案中。",
+    "guide.locked.signedOut.title": "登录后即可阅读指南",
+    "guide.locked.signedOut.body": "逐个菜单的分步说明包含在 Lite、Pro 和 Team 方案中。请使用这些方案的工作区登录。",
+    "guide.locked.ask": "在此期间，可以在本页底部的聊天中提问：它会回答 NivaDesk 能做什么、价格多少等基本问题。",
+    "guide.locked.plansCta": "查看方案",
+    "guide.locked.signInCta": "登录",
     "cta.startFree": "免费开始",
     "cta.login": "登录",
     "cta.openPortal": "打开门户",
@@ -2939,6 +3020,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "订单、客户和备份导出始终可用，即使工作空间回退到 Free/Demo 之后。"
   },
   "العربية (Arabic)": {
+    "guide.loading": "جارٍ تحميل الدليل…",
+    "guide.locked.title": "الدليل الكامل يأتي مع الخطط المدفوعة",
+    "guide.locked.body": "الشرح خطوة بخطوة لكل قائمة جزء من خطط Lite وPro وTeam.",
+    "guide.locked.signedOut.title": "سجّل الدخول لقراءة الدليل",
+    "guide.locked.signedOut.body": "الشرح خطوة بخطوة لكل قائمة جزء من خطط Lite وPro وTeam. سجّل الدخول بمساحة عمل على إحدى هذه الخطط.",
+    "guide.locked.ask": "في هذه الأثناء، اسأل الدردشة في أسفل هذه الصفحة: تجيب عن الأساسيات حول ما يفعله NivaDesk وكم يكلّف.",
+    "guide.locked.plansCta": "عرض الخطط",
+    "guide.locked.signInCta": "تسجيل الدخول",
     "cta.startFree": "ابدأ مجانًا",
     "cta.login": "تسجيل الدخول",
     "cta.openPortal": "فتح البوابة",
@@ -2998,6 +3087,14 @@ const FILL_TRANSLATIONS: Partial<Record<StudioLanguage, Partial<Record<PublicSit
     "capability.export.body": "تبقى عمليات تصدير الطلبات والعملاء والنسخ الاحتياطية متاحة، حتى بعد عودة مساحة العمل إلى Free/Demo."
   },
   "हिन्दी (Hindi)": {
+    "guide.loading": "गाइड लोड हो रही है…",
+    "guide.locked.title": "पूरी गाइड सशुल्क प्लान के साथ आती है",
+    "guide.locked.body": "हर मेन्यू की चरण-दर-चरण जानकारी Lite, Pro और Team का हिस्सा है।",
+    "guide.locked.signedOut.title": "गाइड पढ़ने के लिए साइन इन करें",
+    "guide.locked.signedOut.body": "हर मेन्यू की चरण-दर-चरण जानकारी Lite, Pro और Team का हिस्सा है। इनमें से किसी प्लान वाले वर्कस्पेस से साइन इन करें।",
+    "guide.locked.ask": "तब तक, इस पेज के नीचे दिए चैट से पूछें: यह बताता है कि NivaDesk क्या करता है और इसकी कीमत क्या है।",
+    "guide.locked.plansCta": "प्लान देखें",
+    "guide.locked.signInCta": "साइन इन करें",
     "cta.startFree": "मुफ़्त शुरू करें",
     "cta.login": "लॉगिन",
     "cta.openPortal": "पोर्टल खोलें",

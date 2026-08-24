@@ -3335,7 +3335,9 @@ function websiteAssistantConfigRef() {
 const WEBSITE_ASSISTANT_FACTS = [
   "NivaDesk is studio management software for creative and custom-order businesses: orders, customers, scheduling, invoices, client files, notes, to-dos, team roles, dashboards and bank spending.",
   "Platforms: web (nivadesk.app), macOS, iPhone, iPad and Android. The same workspace syncs across all of them. There is no Windows app yet.",
-  "Plans: Free Demo (free, a small sample workspace), Lite £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
+  "Plans: Free (permanent, no card, room for 10 orders and 10 customers), Lite £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
+  "Every paid plan starts with a 14-day free trial. A card is needed to start it and nothing is charged until the trial ends. Cancel inside the 14 days and the workspace falls back to Free: the orders and customers already saved stay readable and exportable, but no new ones can be added until a plan is picked again.",
+  "The step-by-step user guide at nivadesk.app/guide and the in-app help assistant are part of Lite, Pro and Team. On Free, this chat is the place to ask: answer what NivaDesk does, what it costs and whether it fits, and leave the menu-by-menu detail to the guide.",
   "Every plan includes the NivaDesk ChatGPT app. It connects a workspace to ChatGPT through OAuth so the owner can ask about orders, notes, finances and bank spending in plain language, create orders from existing records, and attach receipts to bank transactions.",
   "Banking: business bank accounts connect through Open Banking. NivaDesk shows spending by category, recurring payments, receipts matched to transactions and VAT treatment. Bank access is owner-only unless the owner grants a member the Bank Spending permission.",
   "Billing is monthly or yearly through Stripe, on Apple and Google in-app purchase where applicable. Plans can be changed or cancelled at any time.",
@@ -3468,7 +3470,7 @@ async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
 // money, and it says so and points at the ChatGPT app when asked. Anything the
 // guide does not cover goes to Contact NivaDesk Support instead of a guess.
 //
-// Paid plans only. Free Demo workspaces get the public website widget.
+// Paid plans only. Free workspaces get the public website widget.
 
 const APP_ASSISTANT_QUESTIONS_PER_DAY = 40;
 let appAssistantCorpusCache = null;
@@ -3608,7 +3610,7 @@ exports.askAppAssistant = onCall({ region: "europe-west2" }, async (request) => 
     const { companyData } = await requireWorkspaceForBilling(request, false);
     const plan = billingPlanFromCompanyData(companyData);
     if (plan === "demo") {
-      throw new HttpsError("failed-precondition", "The in-app help assistant is available on Lite, Pro and Team. On Free Demo you can ask us from the chat on nivadesk.app.");
+      throw new HttpsError("failed-precondition", "The in-app help assistant is available on Lite, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.");
     }
 
     const question = cleanSupportMultiline(request.data?.question, 1000);
@@ -3679,6 +3681,75 @@ exports.getAppAssistantAvailability = onCall({ region: "europe-west2" }, async (
   } catch (error) {
     console.error("getAppAssistantAvailability", error?.message || error);
     return { ok: true, available: false, reason: "error" };
+  }
+});
+
+// The user guide itself, served only to a paid workspace. The page used to
+// import the guide straight into the web bundle, which handed the whole thing
+// to anyone who opened /guide — search engines included. Now the content lives
+// here and the page asks for it after the plan check below.
+let userGuideCache = null;
+
+function userGuideData() {
+  if (!userGuideCache) {
+    try {
+      userGuideCache = require("./assistant/guideTree.json");
+    } catch (error) {
+      console.error("getUserGuide: guide tree missing", error?.message || error);
+      userGuideCache = { trees: {}, dict: {} };
+    }
+  }
+  return userGuideCache;
+}
+
+// English and Turkish are written trees; every other language is localized from
+// the English tree string by string, falling back to English where a line has
+// no translation yet.
+function userGuideTree(language) {
+  const { trees = {}, dict = {} } = userGuideData();
+  const lang = String(language || "English");
+  if (trees[lang]) return trees[lang];
+  const english = trees.English || [];
+  const words = dict[lang];
+  if (!words) return english;
+  const tr = (value) => words[value] ?? value;
+  const localize = (nodes) =>
+    nodes.map((node) => ({
+      id: node.id,
+      title: tr(node.title),
+      blocks: (node.blocks || []).map((block) =>
+        block.kind === "bullets" || block.kind === "steps"
+          ? { kind: block.kind, items: (block.items || []).map(tr) }
+          : { kind: block.kind, text: tr(block.text) }
+      ),
+      children: node.children ? localize(node.children) : undefined
+    }));
+  return localize(english);
+}
+
+exports.getUserGuide = onCall({ region: "europe-west2" }, async (request) => {
+  try {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Sign in to read the user guide.");
+    }
+
+    const { companyData } = await requireWorkspaceForBilling(request, false);
+    const plan = billingPlanFromCompanyData(companyData);
+    if (plan === "demo") {
+      throw new HttpsError(
+        "failed-precondition",
+        "The full user guide is part of Lite, Pro and Team. On the Free plan you can ask the chat on nivadesk.app."
+      );
+    }
+
+    const tree = userGuideTree(request.data?.language);
+    if (!tree.length) {
+      throw new HttpsError("internal", "The user guide could not be loaded just now.");
+    }
+    return { ok: true, tree };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw supportCallableInternalError("getUserGuide", error);
   }
 });
 
