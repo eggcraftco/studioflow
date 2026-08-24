@@ -1139,6 +1139,12 @@ struct SiparisDetayView: View {
     @State private var isHoveringLink = false
     @State private var isImagePickerPresented = false
     @State private var pdfShareItem: ShareableFileURL?
+    // The authoritative estimate, fetched once per (order, estimate, status,
+    // link) rather than from the card body, which SwiftUI re-evaluates freely.
+    @State private var estimateRecord: OrderEstimateRecord?
+    @State private var estimateRecordKey: String = ""
+    @State private var estimateBusy: Bool = false
+    @State private var estimateNotice: String = ""
     @State private var isHoveringDrop = false
     @State private var isUploading = false
     @State private var isClientFileImporterPresented = false
@@ -7426,6 +7432,130 @@ struct SiparisDetayView: View {
         return rows.first(where: { $0.status != "superseded" }) ?? rows.first
     }
 
+    private var estimateFetchKey: String {
+        guard let orderId = siparis.id, let current = currentEstimateSummary else { return "" }
+        return "\(orderId)|\(current.id)|\(current.status)|\(current.linkState)"
+    }
+
+    // The card shows what the server holds, not the index on the order document:
+    // that index is writable by any workspace member, and this is evidence.
+    @MainActor private func loadEstimateRecord() {
+        let key = estimateFetchKey
+        guard !key.isEmpty else {
+            estimateRecord = nil
+            estimateRecordKey = ""
+            return
+        }
+        guard key != estimateRecordKey else { return }
+        estimateRecordKey = key
+        guard let orderId = siparis.id, let current = currentEstimateSummary else { return }
+
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = [
+            "companyId": siparis.companyId,
+            "orderId": orderId,
+            "estimateId": current.id
+        ]
+        Functions.functions(region: "europe-west2").httpsCallable("getOrderEstimateRecord").call(payload) { result, error in
+            DispatchQueue.main.async {
+                if error != nil {
+                    self.estimateRecord = nil
+                    return
+                }
+                let data = result?.data as? [String: Any]
+                self.estimateRecord = OrderEstimateRecord(dictionary: data?["record"] as? [String: Any])
+            }
+        }
+        #else
+        estimateRecord = nil
+        #endif
+    }
+
+    // Three server calls the card offers. None of them decide anything locally:
+    // the number, the totals and the status are all the server's to set.
+    @MainActor private func createEstimateRevision() {
+        guard let orderId = siparis.id, !orderId.isEmpty else { return }
+        let lines = (siparis.lineItems ?? []).map { item -> [String: Any] in
+            ["name": item.name, "quantity": item.quantity, "unitPrice": item.unitPrice, "lineTotal": item.lineTotal]
+        }
+        guard !lines.isEmpty else {
+            estimateNotice = t("Add invoice items first — the estimate is built from them.", lang: seciliDil)
+            return
+        }
+        let current = currentEstimateSummary
+        var payload: [String: Any] = [
+            "companyId": siparis.companyId,
+            "orderId": orderId,
+            "lineItems": lines,
+            "taxRate": siparis.taxRate,
+            "taxType": siparis.taxType
+        ]
+        if let current, current.status != "superseded" { payload["supersedesId"] = current.id }
+
+        estimateBusy = true
+        estimateNotice = ""
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2").httpsCallable("createOrderEstimate").call(payload) { _, error in
+            DispatchQueue.main.async {
+                self.estimateBusy = false
+                self.estimateNotice = error == nil
+                    ? t("New estimate created from the invoice items.", lang: self.seciliDil)
+                    : (error?.localizedDescription ?? "")
+            }
+        }
+        #else
+        estimateBusy = false
+        #endif
+    }
+
+    @MainActor private func sendEstimateLink() {
+        guard let orderId = siparis.id, let current = currentEstimateSummary else { return }
+        estimateBusy = true
+        estimateNotice = ""
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = ["companyId": siparis.companyId, "orderId": orderId, "estimateId": current.id]
+        Functions.functions(region: "europe-west2").httpsCallable("sendOrderEstimate").call(payload) { result, error in
+            DispatchQueue.main.async {
+                self.estimateBusy = false
+                if let error {
+                    self.estimateNotice = error.localizedDescription
+                    return
+                }
+                // There is no outbound email to customers, so the link goes on
+                // the clipboard and the jeweller sends it themselves.
+                let url = (result?.data as? [String: Any])?["url"] as? String ?? ""
+                if !url.isEmpty {
+                    #if os(macOS)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(url, forType: .string)
+                    #else
+                    UIPasteboard.general.string = url
+                    #endif
+                }
+                self.estimateNotice = t("Link copied. Send it to your customer.", lang: self.seciliDil)
+            }
+        }
+        #else
+        estimateBusy = false
+        #endif
+    }
+
+    @MainActor private func revokeEstimateLink() {
+        guard let orderId = siparis.id, let current = currentEstimateSummary else { return }
+        estimateBusy = true
+        #if canImport(FirebaseFunctions)
+        let payload: [String: Any] = ["companyId": siparis.companyId, "orderId": orderId, "estimateId": current.id]
+        Functions.functions(region: "europe-west2").httpsCallable("revokeOrderEstimateLink").call(payload) { _, error in
+            DispatchQueue.main.async {
+                self.estimateBusy = false
+                self.estimateNotice = error == nil ? t("Link revoked.", lang: self.seciliDil) : (error?.localizedDescription ?? "")
+            }
+        }
+        #else
+        estimateBusy = false
+        #endif
+    }
+
     private func estimateStatusLabel(_ status: String) -> String {
         switch status {
         case "sent": return "Sent"
@@ -7483,6 +7613,21 @@ struct SiparisDetayView: View {
 
                 Divider().background(Color.primary.opacity(0.1))
 
+                // Line items come from the record, never from the order document.
+                if let lines = estimateRecord?.lineItems, !lines.isEmpty {
+                    ForEach(lines) { item in
+                        HStack(spacing: 10) {
+                            Text(item.name.isEmpty ? "-" : item.name)
+                                .font(.system(size: 13))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                            Text(privacyCurrency(item.lineTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                    }
+                    Divider().background(Color.primary.opacity(0.1))
+                }
+
                 estimateAmountRow(t("Subtotal", lang: seciliDil), current.subtotal)
                 if current.taxType != "Profit" && current.taxRate > 0.0001 {
                     estimateAmountRow("\(t("VAT", lang: seciliDil)) (\(Int(current.taxRate))%)", current.taxAmount)
@@ -7500,7 +7645,20 @@ struct SiparisDetayView: View {
                         estimateMomentText(current.decidedAtMs)
                     )
                     estimateDetailRow(t("Approval Method", lang: seciliDil), t("Customer Portal", lang: seciliDil))
-                    if current.hasSignature {
+                    if let signature = estimateRecord?.approval?.signatureDownloadUrl, !signature.isEmpty {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(t("Customer Signature", lang: seciliDil))
+                                .font(.system(size: 13)).foregroundColor(.gray)
+                            AsyncImage(url: URL(string: signature)) { image in
+                                image.resizable().scaledToFit()
+                            } placeholder: {
+                                Color.primary.opacity(0.05)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: 70, alignment: .leading)
+                            .background(Color.white)
+                            .cornerRadius(6)
+                        }
+                    } else if current.hasSignature {
                         estimateDetailRow(t("Customer Signature", lang: seciliDil), t("Signed", lang: seciliDil))
                     }
                 }
@@ -7517,13 +7675,64 @@ struct SiparisDetayView: View {
                         )
                     }
                 }
+                if !estimateNotice.isEmpty {
+                    Text(estimateNotice)
+                        .font(.system(size: 12)).foregroundColor(.gray)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider().background(Color.primary.opacity(0.1))
+
+                // Printing is reading: anyone who can see the card can take a
+                // copy. Sending and revising need edit rights.
+                estimateActionButton(t("View Estimate PDF", lang: seciliDil), disabled: estimateRecord == nil) {
+                    exportToEstimatePDF()
+                }
+
+                if canEditOrderDetails {
+                    if current.decidedAtMs == 0 && current.status != "superseded" {
+                        estimateActionButton(
+                            t(current.linkState == "active" ? "Copy link again" : "Send to customer", lang: seciliDil),
+                            disabled: estimateBusy
+                        ) { sendEstimateLink() }
+                    }
+                    if current.linkState == "active" && current.decidedAtMs == 0 {
+                        estimateActionButton(t("Revoke link", lang: seciliDil), disabled: estimateBusy) {
+                            revokeEstimateLink()
+                        }
+                    }
+                    estimateActionButton(t("Create new estimate", lang: seciliDil), disabled: estimateBusy) {
+                        createEstimateRevision()
+                    }
+                }
             } else {
-                Text(t("No estimate yet. Create one on the web portal and the customer's approval appears here.", lang: seciliDil))
+                Text(t("No estimate yet.", lang: seciliDil))
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
                     .fixedSize(horizontal: false, vertical: true)
+                if canEditOrderDetails {
+                    estimateActionButton(t("Create estimate", lang: seciliDil), disabled: estimateBusy) {
+                        createEstimateRevision()
+                    }
+                }
             }
         }
+        .task(id: estimateFetchKey) { loadEstimateRecord() }
+    }
+
+    @ViewBuilder
+    private func estimateActionButton(_ title: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(Color.primary.opacity(0.06))
+                .cornerRadius(7)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
     }
 
     @ViewBuilder
@@ -11521,6 +11730,88 @@ struct SiparisDetayView: View {
         #endif
     }
 
+    // The estimate as paper. Deliberately does NOT call assignInvoiceNumber:
+    // estimates carry their own counter, and burning a real invoice number on a
+    // quote that may never be accepted is exactly what that counter avoids.
+    @MainActor private func exportToEstimatePDF() {
+        guard let record = estimateRecord else {
+            estimateNotice = t("The estimate is still loading.", lang: seciliDil)
+            return
+        }
+
+        // ImageRenderer cannot fetch remote images, so the logo and the customer's
+        // signature both have to be bytes before anything is drawn.
+        let group = DispatchGroup()
+        var logoImage: PlatformImage?
+        var signatureImage: PlatformImage?
+
+        let logoURLString = appLogoUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let logoURL = URL(string: logoURLString), !logoURLString.isEmpty {
+            group.enter()
+            URLSession.shared.dataTask(with: logoURL) { data, _, _ in
+                logoImage = data.flatMap { PlatformImage(data: $0) }
+                group.leave()
+            }.resume()
+        }
+
+        let signatureURLString = record.approval?.signatureDownloadUrl ?? ""
+        if let signatureURL = URL(string: signatureURLString), !signatureURLString.isEmpty {
+            group.enter()
+            URLSession.shared.dataTask(with: signatureURL) { data, _, _ in
+                signatureImage = data.flatMap { PlatformImage(data: $0) }
+                group.leave()
+            }.resume()
+        }
+
+        group.notify(queue: .main) {
+            self.finishEstimateExport(record: record, logoImage: logoImage, signatureImage: signatureImage)
+        }
+    }
+
+    @MainActor private func finishEstimateExport(record: OrderEstimateRecord, logoImage: PlatformImage?, signatureImage: PlatformImage?) {
+        let nums = (try? JSONDecoder().decode([CompanyNumberSettingDTO].self, from: Data(companyNumbersJSON.utf8))) ?? []
+        let estimateView = OrderInvoicePDFView(
+            siparis: siparis,
+            logoImage: logoImage,
+            businessName: appSubtitle,
+            companyNumbers: nums,
+            invoiceNumber: record.number,
+            sembol: seciliParaBirimi,
+            ondalik: seciliOndalik,
+            seciliDil: seciliDil,
+            footerNote: invoiceFooterNote,
+            showAddress: pdfShowAddress,
+            showShippingAddress: pdfShowShippingAddress,
+            estimate: record,
+            signatureImage: signatureImage
+        )
+
+        let safeName = safePDFFileName("Estimate_\(record.number)")
+        let renderer = ImageRenderer(content: estimateView)
+
+        #if os(macOS)
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.isExtensionHidden = false
+        savePanel.title = t("Save Estimate PDF", lang: seciliDil)
+        savePanel.nameFieldStringValue = safeName
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                renderPDF(renderer: renderer, to: url)
+            }
+        }
+        #else
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(safeName)
+            .appendingPathExtension("pdf")
+        renderPDF(renderer: renderer, to: url)
+        DispatchQueue.main.async {
+            self.pdfShareItem = ShareableFileURL(url: url)
+        }
+        #endif
+    }
+
     @MainActor private func exportHistoryLogPDF() {
         var logoImage: PlatformImage? = nil
         if !appLogoUrl.isEmpty,
@@ -13466,6 +13757,20 @@ struct OrderInvoicePDFView: View {
     var showAddress: Bool = true
     var showShippingAddress: Bool = true
     var itemsHeading: String = ""
+    // When set, this prints as an estimate instead of an invoice, using the
+    // figures frozen on the record rather than the order's current ones.
+    var estimate: OrderEstimateRecord? = nil
+    // ImageRenderer cannot fetch a remote image, so the signature arrives
+    // already downloaded.
+    var signatureImage: PlatformImage? = nil
+
+    private var isEstimate: Bool { estimate != nil }
+    private var printedDocumentDate: Date {
+        if let estimate, estimate.createdAtMs > 0 { return Date(timeIntervalSince1970: estimate.createdAtMs / 1000) }
+        return siparis.paymentDate
+    }
+    private var printedLineItems: [LineItem] { estimate?.lineItems ?? (siparis.lineItems ?? []) }
+    private var hasPrintedLineItems: Bool { isEstimate ? !printedLineItems.isEmpty : siparis.hasLineItems }
 
     // Column header for the items table — customizable per workspace, else "Description".
     private var resolvedItemsColumnHeading: String {
@@ -13494,17 +13799,47 @@ struct OrderInvoicePDFView: View {
     // Invoice total: when the user added named line items, the invoice bills
     // exactly those items — the order's paid/remaining figures stay off the
     // invoice entirely. Orders without line items keep the classic order value.
-    private var orderValue: Double { siparis.hasLineItems ? siparis.lineItemsTotal : siparis.salesTotal }
-    private var isMarginScheme: Bool { siparis.taxType == "Profit" }
-    private var isZeroRated: Bool { siparis.taxRate <= 0.0001 }
+    private var orderValue: Double {
+        if let estimate { return estimate.total }
+        return siparis.hasLineItems ? siparis.lineItemsTotal : siparis.salesTotal
+    }
+    private var printedTaxRate: Double { estimate?.taxRate ?? siparis.taxRate }
+    private var isMarginScheme: Bool { (estimate?.taxType ?? siparis.taxType) == "Profit" }
+    private var isZeroRated: Bool { printedTaxRate <= 0.0001 }
     private var vatAmount: Double {
+        // An estimate prints the amount frozen on the record; nothing is
+        // recomputed, or the paper drifts from what the customer agreed to.
+        if let estimate { return estimate.taxAmount }
         // Line-item invoices recompute VAT on the item total with the order's
         // rate (same total*rate/100 convention as the Finance card); otherwise
         // the stored order-level tax amount is used as before.
-        siparis.hasLineItems ? (orderValue * siparis.taxRate) / 100.0 : siparis.taxAmount
+        return siparis.hasLineItems ? (orderValue * siparis.taxRate) / 100.0 : siparis.taxAmount
     }
-    private var subtotal: Double { isMarginScheme ? orderValue : orderValue - vatAmount }
-    private func money(_ v: Double) -> String { "\(sembol)\(formatFiyat(v, ondalik: ondalik))" }
+    private var subtotal: Double {
+        if let estimate { return estimate.subtotal }
+        return isMarginScheme ? orderValue : orderValue - vatAmount
+    }
+    // The record freezes its currency: printing today's workspace symbol on an
+    // estimate agreed last year would be wrong.
+    private func money(_ v: Double) -> String {
+        let symbol = (estimate?.currency).flatMap { $0.isEmpty ? nil : $0 } ?? sembol
+        return "\(symbol)\(formatFiyat(v, ondalik: ondalik))"
+    }
+
+    private func estimateStampText(_ ms: Double) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yy HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: ms / 1000))
+    }
+
+    @ViewBuilder
+    private func estimatePdfRow(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label).font(.system(size: 11)).foregroundColor(.gray)
+            Spacer()
+            Text(value.isEmpty ? "-" : value).font(.system(size: 11, weight: .semibold))
+        }
+    }
 
     private func totalRow(_ label: String, _ value: String, bold: Bool = false, color: Color = .primary) -> some View {
         HStack {
@@ -13533,9 +13868,13 @@ struct OrderInvoicePDFView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
-                    Text(t("INVOICE", lang: seciliDil)).font(.system(size: 32, weight: .heavy)).foregroundColor(.gray.opacity(0.35))
-                    Text("\(t("Invoice No", lang: seciliDil)): \(invoiceNumber)").font(.system(size: 12, weight: .semibold))
-                    Text("\(t("Date", lang: seciliDil)): \(siparis.paymentDate.formatted(date: .abbreviated, time: .omitted))").font(.system(size: 12)).foregroundColor(.gray)
+                    Text(t(isEstimate ? "ESTIMATE" : "INVOICE", lang: seciliDil)).font(.system(size: 32, weight: .heavy)).foregroundColor(.gray.opacity(0.35))
+                    Text("\(t(isEstimate ? "Estimate No" : "Invoice No", lang: seciliDil)): \(estimate?.number ?? invoiceNumber)").font(.system(size: 12, weight: .semibold))
+                    Text("\(t("Date", lang: seciliDil)): \(printedDocumentDate.formatted(date: .abbreviated, time: .omitted))").font(.system(size: 12)).foregroundColor(.gray)
+                    if let estimate, estimate.validUntilMs > 0 {
+                        Text("\(t("Valid Until", lang: seciliDil)): \(Date(timeIntervalSince1970: estimate.validUntilMs / 1000).formatted(date: .abbreviated, time: .omitted))")
+                            .font(.system(size: 12)).foregroundColor(.gray)
+                    }
                 }
             }
             Divider()
@@ -13560,8 +13899,8 @@ struct OrderInvoicePDFView: View {
             VStack(spacing: 0) {
                 HStack { Text(resolvedItemsColumnHeading).font(.system(size: 11, weight: .bold)); Spacer(); Text(t("Amount", lang: seciliDil)).font(.system(size: 11, weight: .bold)) }
                     .padding(.vertical, 9).padding(.horizontal, 12).background(Color.black.opacity(0.06))
-                if siparis.hasLineItems {
-                    ForEach(Array((siparis.lineItems ?? []).enumerated()), id: \.element.id) { _, item in
+                if hasPrintedLineItems {
+                    ForEach(Array(printedLineItems.enumerated()), id: \.element.id) { _, item in
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(item.name.isEmpty ? "-" : item.name).font(.system(size: 12, weight: .semibold))
@@ -13594,14 +13933,53 @@ struct OrderInvoicePDFView: View {
                     } else if isZeroRated {
                         totalRow(t("VAT (Zero-rated / Export)", lang: seciliDil), money(0))
                     } else {
-                        totalRow("\(t("VAT", lang: seciliDil)) (\(Int(siparis.taxRate))%)", money(vatAmount))
+                        totalRow("\(t("VAT", lang: seciliDil)) (\(Int(printedTaxRate))%)", money(vatAmount))
                     }
                     Divider().frame(width: 240)
                     totalRow(t("TOTAL", lang: seciliDil), money(orderValue), bold: true)
                 }.frame(width: 270)
             }
+
+            // What the customer agreed to, printed with the document it belongs
+            // to — the point of the whole feature.
+            if let approval = estimate?.approval, approval.decidedAtMs > 0 {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t(approval.decision == "declined" ? "Declined" : "Approved", lang: seciliDil).uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.gray)
+                    estimatePdfRow(t(approval.decision == "declined" ? "Declined by" : "Approved by", lang: seciliDil), approval.approvedByName)
+                    if !approval.approvedByEmail.isEmpty {
+                        estimatePdfRow(t("Email", lang: seciliDil), approval.approvedByEmail)
+                    }
+                    estimatePdfRow(
+                        t(approval.decision == "declined" ? "Declined at" : "Approved at", lang: seciliDil),
+                        estimateStampText(approval.decidedAtMs)
+                    )
+                    estimatePdfRow(t("Approval Method", lang: seciliDil), t("Customer Portal", lang: seciliDil))
+                    if !approval.declineReason.isEmpty {
+                        Text(approval.declineReason).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let signatureImage {
+                        Text(t("Customer Signature", lang: seciliDil)).font(.system(size: 10)).foregroundColor(.gray)
+                        Image(platformImage: signatureImage)
+                            .resizable().scaledToFit()
+                            .frame(maxWidth: 180, maxHeight: 64, alignment: .leading)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.black.opacity(0.12), lineWidth: 1))
+                .padding(.top, 10)
+            }
+
+            if let estimate, !estimate.terms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(estimate.terms).font(.system(size: 10)).foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+            }
+
             Spacer()
-            if let note = siparis.invoiceNote, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let note = siparis.invoiceNote, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !isEstimate {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Image(systemName: "note.text").font(.system(size: 11))

@@ -124,6 +124,89 @@ struct OrderEstimateSummary: Codable, Equatable, Identifiable {
     var linkState: String = "none"
 }
 
+// The authoritative estimate, fetched from getOrderEstimateRecord. The summary
+// above is a display index on the order document and a workspace member can
+// write to it; this comes from a subcollection no client can touch, so it is
+// what the card and the PDF show.
+//
+// Deliberately not Codable: it never goes back to Firestore, it arrives as the
+// untyped dictionary a callable hands back, and hand-parsing means one odd
+// field cannot blank the whole record the way a decoding failure would.
+struct OrderEstimateApproval: Equatable {
+    var decision: String = ""
+    var method: String = ""
+    var decidedAtMs: Double = 0
+    var approvedByName: String = ""
+    var approvedByEmail: String = ""
+    var declineReason: String = ""
+    var signatureDownloadUrl: String = ""
+
+    init(dictionary: [String: Any]) {
+        decision = dictionary["decision"] as? String ?? ""
+        method = dictionary["method"] as? String ?? ""
+        decidedAtMs = (dictionary["decidedAtMs"] as? NSNumber)?.doubleValue ?? 0
+        approvedByName = dictionary["approvedByName"] as? String ?? ""
+        approvedByEmail = dictionary["approvedByEmail"] as? String ?? ""
+        declineReason = dictionary["declineReason"] as? String ?? ""
+        signatureDownloadUrl = dictionary["signatureDownloadUrl"] as? String ?? ""
+    }
+}
+
+struct OrderEstimateRecord: Equatable {
+    var estimateId: String = ""
+    var number: String = ""
+    var version: Int = 1
+    var status: String = "draft"
+    var currency: String = ""
+    var lineItems: [LineItem] = []
+    var subtotal: Double = 0
+    var taxRate: Double = 0
+    var taxType: String = ""
+    var taxAmount: Double = 0
+    var total: Double = 0
+    var terms: String = ""
+    var notes: String = ""
+    var validUntilMs: Double = 0
+    var createdAtMs: Double = 0
+    var replacesNumber: String = ""
+    var customerNameSnapshot: String = ""
+    var approval: OrderEstimateApproval?
+
+    init?(dictionary: [String: Any]?) {
+        guard let dictionary else { return nil }
+        estimateId = dictionary["estimateId"] as? String ?? ""
+        number = dictionary["number"] as? String ?? ""
+        version = (dictionary["version"] as? NSNumber)?.intValue ?? 1
+        status = dictionary["status"] as? String ?? "draft"
+        currency = dictionary["currency"] as? String ?? ""
+        // Whole quantities come back as integers, so read every number through
+        // NSNumber rather than casting straight to Double.
+        lineItems = (dictionary["lineItems"] as? [[String: Any]] ?? []).map { raw in
+            var item = LineItem()
+            item.id = raw["id"] as? String ?? UUID().uuidString
+            item.name = raw["name"] as? String ?? ""
+            item.quantity = (raw["quantity"] as? NSNumber)?.doubleValue ?? 0
+            item.unitPrice = (raw["unitPrice"] as? NSNumber)?.doubleValue ?? 0
+            item.lineTotal = (raw["lineTotal"] as? NSNumber)?.doubleValue ?? 0
+            return item
+        }
+        subtotal = (dictionary["subtotal"] as? NSNumber)?.doubleValue ?? 0
+        taxRate = (dictionary["taxRate"] as? NSNumber)?.doubleValue ?? 0
+        taxType = dictionary["taxType"] as? String ?? ""
+        taxAmount = (dictionary["taxAmount"] as? NSNumber)?.doubleValue ?? 0
+        total = (dictionary["total"] as? NSNumber)?.doubleValue ?? 0
+        terms = dictionary["terms"] as? String ?? ""
+        notes = dictionary["notes"] as? String ?? ""
+        validUntilMs = (dictionary["validUntilMs"] as? NSNumber)?.doubleValue ?? 0
+        createdAtMs = (dictionary["createdAtMs"] as? NSNumber)?.doubleValue ?? 0
+        replacesNumber = dictionary["replacesNumber"] as? String ?? ""
+        customerNameSnapshot = dictionary["customerNameSnapshot"] as? String ?? ""
+        if let rawApproval = dictionary["approval"] as? [String: Any] {
+            approval = OrderEstimateApproval(dictionary: rawApproval)
+        }
+    }
+}
+
 struct Siparis: Identifiable, Codable {
     @DocumentID var id: String?
     
