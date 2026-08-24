@@ -394,9 +394,28 @@ extension PushNotificationManager {
             storeMessageThreadRoute(from: userInfo)
         } else if type == "delivery" || type == "tracking" {
             storeOrderDeliveryRoute(from: userInfo)
+        } else if type == "estimate_decision" {
+            storeOrderCardRoute(from: userInfo, card: "estimate")
         } else {
             storeSupportTicketRoute(from: userInfo)
         }
+    }
+
+    /// A customer has approved or declined an estimate: open that order and land
+    /// on the card carrying the decision. Without this the push fell through to
+    /// the support-ticket branch and tapping it did nothing.
+    func storeOrderCardRoute(from userInfo: [AnyHashable: Any], card: String) {
+        let orderId = stringValue(userInfo["orderId"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !orderId.isEmpty else { return }
+
+        let defaults = UserDefaults.standard
+        defaults.set(orderId, forKey: "pendingOpenOrderId")
+        defaults.set(card, forKey: "pendingOpenOrderCard")
+        defaults.set(Date().timeIntervalSince1970, forKey: "pendingOpenOrderRequestedAt")
+        defaults.set("Orders", forKey: "studioRequestedStartTab")
+        defaults.synchronize()
+
+        NotificationCenter.default.post(name: .studioOrderRouteRequested, object: nil)
     }
 
     /// Delivery/tracking push tapped: open that order and land on its

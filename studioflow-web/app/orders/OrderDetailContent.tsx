@@ -878,22 +878,46 @@ function openOrderPdfPrint(
   window.setTimeout(() => popup.print(), 250);
 }
 
-function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
+// Prints an invoice, or — when an estimate record is passed — the same document
+// as an estimate. An estimate prints the figures that were frozen when it was
+// created and agreed to; nothing here recomputes them, or the paper would drift
+// from what the customer actually approved.
+function invoiceHtml(
+  order: OrderDetail,
+  settings: WorkspaceSettingsOverview | null | undefined,
+  estimate?: EstimateRecord | null
+) {
   const money = (value: number) => orderPdfMoney(value, settings, false);
+  const isEstimate = Boolean(estimate);
+  const documentTitle = isEstimate ? "ESTIMATE" : "INVOICE";
+  const documentNumberLabel = isEstimate ? "Estimate No" : "Invoice No";
+  const documentNumber = isEstimate ? estimate!.number : (order.invoiceNumber || "-");
   // Invoice total: when the user added named line items, the invoice bills
   // exactly those items — the order's paid/remaining figures stay off the
   // invoice entirely. Orders without line items keep the classic order value.
-  const hasLineItems = order.lineItems.length > 0;
-  const lineItemsTotal = order.lineItems.reduce((acc, it) => acc + it.lineTotal, 0);
-  const orderValue = hasLineItems
-    ? lineItemsTotal
-    : order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
-  const isMarginScheme = order.taxType === "Profit";
-  const isZeroRated = (order.taxRate ?? 0) <= 0.0001;
+  const printedLines = isEstimate ? estimate!.lineItems : order.lineItems;
+  const hasLineItems = printedLines.length > 0;
+  const lineItemsTotal = printedLines.reduce((acc, it) => acc + it.lineTotal, 0);
+  const orderValue = isEstimate
+    ? estimate!.total
+    : hasLineItems
+      ? lineItemsTotal
+      : order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+  const taxRate = isEstimate ? estimate!.taxRate : (order.taxRate ?? 0);
+  const isMarginScheme = (isEstimate ? estimate!.taxType : order.taxType) === "Profit";
+  const isZeroRated = taxRate <= 0.0001;
   // Line-item invoices recompute VAT on the item total with the order's rate
   // (same total*rate/100 convention as the Finance card).
-  const vatAmount = hasLineItems ? (orderValue * (order.taxRate ?? 0)) / 100 : order.taxAmount;
-  const subtotal = isMarginScheme ? orderValue : orderValue - vatAmount;
+  const vatAmount = isEstimate
+    ? estimate!.taxAmount
+    : hasLineItems
+      ? (orderValue * taxRate) / 100
+      : order.taxAmount;
+  const subtotal = isEstimate
+    ? estimate!.subtotal
+    : isMarginScheme
+      ? orderValue
+      : orderValue - vatAmount;
   const businessName = settings?.appSubtitle || "NivaDesk";
   const logoUrl = settings?.appLogoUrl || "";
   const footerNote = settings?.invoiceFooterNote || "";
@@ -909,8 +933,8 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
   const shipRecipient = order.shippingName || order.customerName || "";
   const itemsHeading = "Description";
   const fmtQty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(2));
-  const itemRows = order.lineItems.length > 0
-    ? order.lineItems.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#6b7280;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
+  const itemRows = printedLines.length > 0
+    ? printedLines.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#6b7280;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
     : `<tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr>`;
 
   let vatRow = "";
@@ -919,10 +943,10 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
   } else if (isZeroRated) {
     vatRow = `<div class="trow"><span>VAT (Zero-rated / Export)</span><strong>${money(0)}</strong></div>`;
   } else {
-    vatRow = `<div class="trow"><span>VAT (${Math.round(order.taxRate || 0)}%)</span><strong>${money(vatAmount)}</strong></div>`;
+    vatRow = `<div class="trow"><span>VAT (${Math.round(taxRate)}%)</span><strong>${money(vatAmount)}</strong></div>`;
   }
 
-  return `<!doctype html><html><head><meta charset="utf-8"/><title>Invoice ${escapeHtml(order.invoiceNumber || "")}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(isEstimate ? "Estimate" : "Invoice")} ${escapeHtml(documentNumber)}</title>
   <style>
     @page { size: A4; margin: 18mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1e; margin: 0; }
@@ -959,8 +983,8 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
         <div class="nums">${numbers}</div>
       </div>
       <div class="inv">
-        <div class="title">INVOICE</div>
-        <div class="meta">Invoice No: ${escapeHtml(order.invoiceNumber || "-")}</div>
+        <div class="title">${documentTitle}</div>
+        <div class="meta">${documentNumberLabel}: ${escapeHtml(documentNumber)}</div>
         <div class="meta">Date: ${escapeHtml(orderDate)}</div>
       </div>
     </header>
@@ -995,12 +1019,20 @@ function invoiceHtml(order: OrderDetail, settings: WorkspaceSettingsOverview | n
   </div></body></html>`;
 }
 
-function openInvoicePrint(order: OrderDetail, settings: WorkspaceSettingsOverview | null | undefined) {
+function openInvoicePrint(
+  order: OrderDetail,
+  settings: WorkspaceSettingsOverview | null | undefined,
+  estimate?: EstimateRecord | null
+) {
   const popup = window.open("", "_blank", "width=900,height=1100");
-  if (!popup) throw new Error("The Invoice window could not be opened. Please allow pop-ups for this page.");
+  if (!popup) {
+    throw new Error(
+      `The ${estimate ? "Estimate" : "Invoice"} window could not be opened. Please allow pop-ups for this page.`
+    );
+  }
   popup.opener = null;
   popup.document.open();
-  popup.document.write(invoiceHtml(order, settings));
+  popup.document.write(invoiceHtml(order, settings, estimate));
   popup.document.close();
   popup.focus();
   window.setTimeout(() => popup.print(), 300);
@@ -1123,7 +1155,6 @@ const DEFAULT_REPAIR_INTAKE_FIELDS = [
   { id: "serialReference", title: "Serial / Reference" }
 ];
 
-const INTAKE_PHOTO_SOURCE = "intake_photo";
 
 type RepairIntakeDraft = {
   fields: Record<string, string>;
@@ -4935,6 +4966,20 @@ export function OrderDetailContent({
     }
   }
 
+  // The estimate as paper — the same renderer as the invoice, printing the
+  // figures frozen on the record rather than the order's current ones.
+  function openEstimatePdf() {
+    if (!estimateRecord) {
+      setEstimateNotice("The estimate is still loading.");
+      return;
+    }
+    try {
+      openInvoicePrint(order, moneySettings, estimateRecord);
+    } catch (printFailure) {
+      setEstimateNotice(printFailure instanceof Error ? printFailure.message : "The estimate could not be opened.");
+    }
+  }
+
   async function revokeEstimateLink() {
     if (!currentEstimate) return;
     setEstimateBusy(true);
@@ -4949,21 +4994,28 @@ export function OrderDetailContent({
     }
   }
 
-  // Photos taken at intake ride on the existing client-file pipeline, tagged so
-  // they show here as well as in Client Files: one upload path, not four.
-  //
-  // Which means they inherit its permission too. An owner who has taken client
-  // files away from a member meant it — showing the same images (and their real
-  // download URLs) through a different card would quietly undo that.
+  // Photos taken at intake ride on the existing client-file pipeline rather than
+  // getting a fourth upload path of their own — which means they inherit its
+  // permission too. An owner who has taken client files away from a member meant
+  // it; showing the same images and their download URLs through another card
+  // would quietly undo that.
   const canSeeIntakePhotos = useMemo(
     () => workspaceAccessAllows(workspace.memberAccess, "clientFiles"),
     [workspace.memberAccess]
   );
   const intakePhotos = useMemo(
-    () => (canSeeIntakePhotos
-      ? order.clientFiles.filter(file => file.source === INTAKE_PHOTO_SOURCE || (file.contentType || "").startsWith("image/"))
-      : []),
-    [order.clientFiles, canSeeIntakePhotos]
+    () => {
+      if (!canSeeIntakePhotos) return [];
+      return order.clientFiles.filter(file => {
+        if (!isClientFileImage(file)) return false;
+        // The preview card mirrors the design mock-up into client files. It is a
+        // picture of what we are making, not of what the customer handed over,
+        // so it does not belong in the intake evidence.
+        if (file.downloadURL && file.downloadURL === order.designLink) return false;
+        return true;
+      });
+    },
+    [order.clientFiles, order.designLink, canSeeIntakePhotos]
   );
 
   function renderCard(cardId: OrderDetailCardId) {
@@ -5075,6 +5127,14 @@ export function OrderDetailContent({
                   ) : null}
 
                   {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
+
+                  {/* Printing is reading. Anyone allowed to see the card can take
+                      the estimate as paper; only editors can send or revise it. */}
+                  <div className="estimate-card-actions">
+                    <button type="button" onClick={openEstimatePdf} disabled={!estimateRecord}>
+                      View Estimate PDF
+                    </button>
+                  </div>
 
                   {canInlineEditFullDetails ? (
                     <div className="estimate-card-actions">

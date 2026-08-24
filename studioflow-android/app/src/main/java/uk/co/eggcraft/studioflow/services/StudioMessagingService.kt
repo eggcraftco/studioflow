@@ -47,6 +47,12 @@ class StudioMessagingService : FirebaseMessagingService() {
                 putExtra("studio_order_id", orderId)
                 putExtra("studio_order_card", "shipping")
             }
+            // A customer approving or declining an estimate opens that order on
+            // the card carrying the decision.
+            if (orderId.isNotBlank() && pushType == "estimate_decision") {
+                putExtra("studio_order_id", orderId)
+                putExtra("studio_order_card", "estimate")
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
