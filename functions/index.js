@@ -21025,6 +21025,54 @@ function estimateIndexReplace(existing, entry) {
   return [entry, ...rows].slice(0, 40);
 }
 
+// What a signed-in member gets. Hand-built rather than the raw document for two
+// reasons: the stored record holds a Firestore Timestamp that would reach four
+// clients in four shapes, and it holds the approver's IP and user agent, which
+// staff have no reason to read off a card. Numbers go out as numbers and times
+// as epoch milliseconds, so Swift and Kotlin parse them the same way.
+function estimateStaffView(record = {}) {
+  const approval = record.approval && typeof record.approval === "object" ? record.approval : null;
+  return {
+    estimateId: String(record.estimateId || ""),
+    number: String(record.number || ""),
+    version: Number(record.version) || 1,
+    status: String(record.status || "draft"),
+    currency: String(record.currency || "GBP"),
+    lineItems: (Array.isArray(record.lineItems) ? record.lineItems : []).map((item) => ({
+      id: String(item.id || ""),
+      name: String(item.name || ""),
+      quantity: Number(item.quantity) || 0,
+      unitPrice: Number(item.unitPrice) || 0,
+      lineTotal: Number(item.lineTotal) || 0
+    })),
+    subtotal: Number(record.subtotal) || 0,
+    taxRate: Number(record.taxRate) || 0,
+    taxType: String(record.taxType || ""),
+    taxAmount: Number(record.taxAmount) || 0,
+    total: Number(record.total) || 0,
+    terms: String(record.terms || ""),
+    notes: String(record.notes || ""),
+    validUntilMs: Number(record.validUntilMs) || 0,
+    createdAtMs: Number(record.createdAtMs) || 0,
+    sentAtMs: Number(record.sentAtMs) || 0,
+    viewedAtMs: Number(record.viewedAtMs) || 0,
+    replacesNumber: String(record.replacesNumber || ""),
+    supersededById: String(record.supersededById || ""),
+    customerNameSnapshot: String(record.customerNameSnapshot || ""),
+    approval: approval
+      ? {
+          decision: String(approval.decision || ""),
+          method: String(approval.method || ""),
+          decidedAtMs: Number(approval.decidedAtMs) || 0,
+          approvedByName: String(approval.approvedByName || ""),
+          approvedByEmail: String(approval.approvedByEmail || ""),
+          declineReason: String(approval.declineReason || ""),
+          signatureDownloadUrl: String(approval.signatureDownloadUrl || "")
+        }
+      : null
+  };
+}
+
 // Everything the visitor is allowed to see. Hand-built: never spread a document
 // that also holds costs, margins, staff emails or the rest of the workspace.
 function estimatePublicView(record, settings, link) {
@@ -21385,11 +21433,11 @@ exports.getOrderEstimateRecord = onCall({ region: "europe-west2" }, async (reque
 
   if (!estimateId) {
     const snap = await estimateRecordsCollection(orderId).orderBy("createdAtMs", "desc").limit(40).get();
-    return { ok: true, records: snap.docs.map((doc) => doc.data()) };
+    return { ok: true, records: snap.docs.map((doc) => estimateStaffView(doc.data())) };
   }
   const recordSnap = await estimateRecordsCollection(orderId).doc(estimateId).get();
   if (!recordSnap.exists) throw new HttpsError("not-found", "Estimate not found.");
-  return { ok: true, record: recordSnap.data() };
+  return { ok: true, record: estimateStaffView(recordSnap.data()) };
 });
 
 
