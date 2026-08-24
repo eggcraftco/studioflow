@@ -529,6 +529,154 @@ struct CustomStepDTO: Codable, Identifiable, Equatable { var id = UUID(); var ti
 // rename the label without orphaning the value already saved against it.
 struct RepairIntakeFieldDTO: Codable, Identifiable, Equatable { var id: String; var title: String }
 
+// What a workspace takes in for repair, service or making depends entirely on
+// the trade. A jeweller records Metal and Hallmark; a phone shop records IMEI
+// and whether the passcode was handed over.
+//
+// Mirrored verbatim in functions/index.js, studioflow-web/lib/studioflow/
+// repairIntakePresets.ts and StudioModels.kt. The field ids are what intake
+// values are stored under, so they must never drift between platforms — only
+// the titles are the workspace's to rename.
+struct RepairIntakePresetDTO: Identifiable, Equatable {
+    var id: String
+    var label: String
+    var fields: [RepairIntakeFieldDTO]
+}
+
+enum RepairIntakePresets {
+    static let all: [RepairIntakePresetDTO] = [
+        RepairIntakePresetDTO(id: "general", label: "General Intake", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand / Maker"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference"),
+            RepairIntakeFieldDTO(id: "colour", title: "Colour"),
+            RepairIntakeFieldDTO(id: "accessories", title: "Accessories Included")
+        ]),
+        RepairIntakePresetDTO(id: "jewellery", label: "Jewellery & Goldsmith", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+            RepairIntakeFieldDTO(id: "metal", title: "Metal"),
+            RepairIntakeFieldDTO(id: "hallmark", title: "Hallmark"),
+            RepairIntakeFieldDTO(id: "itemSize", title: "Size"),
+            RepairIntakeFieldDTO(id: "stones", title: "Stones"),
+            RepairIntakeFieldDTO(id: "weight", title: "Weight"),
+            RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference")
+        ]),
+        RepairIntakePresetDTO(id: "watch", label: "Watch & Clock", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference"),
+            RepairIntakeFieldDTO(id: "caseSize", title: "Case Size"),
+            RepairIntakeFieldDTO(id: "strap", title: "Bracelet / Strap"),
+            RepairIntakeFieldDTO(id: "movement", title: "Movement")
+        ]),
+        RepairIntakePresetDTO(id: "electronics", label: "Electronics & Devices", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Device Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "serialReference", title: "Serial / IMEI"),
+            RepairIntakeFieldDTO(id: "passcode", title: "Passcode Provided"),
+            RepairIntakeFieldDTO(id: "accessories", title: "Accessories Included"),
+            RepairIntakeFieldDTO(id: "warranty", title: "Warranty Status")
+        ]),
+        RepairIntakePresetDTO(id: "tailoring", label: "Tailoring & Alterations", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Garment Type"),
+            RepairIntakeFieldDTO(id: "fabric", title: "Fabric"),
+            RepairIntakeFieldDTO(id: "itemSize", title: "Size"),
+            RepairIntakeFieldDTO(id: "colour", title: "Colour"),
+            RepairIntakeFieldDTO(id: "measurements", title: "Measurements"),
+            RepairIntakeFieldDTO(id: "trim", title: "Trim / Buttons")
+        ]),
+        RepairIntakePresetDTO(id: "shoeLeather", label: "Shoe & Leather", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand"),
+            RepairIntakeFieldDTO(id: "material", title: "Material"),
+            RepairIntakeFieldDTO(id: "itemSize", title: "Size"),
+            RepairIntakeFieldDTO(id: "colour", title: "Colour"),
+            RepairIntakeFieldDTO(id: "sole", title: "Sole Type")
+        ]),
+        RepairIntakePresetDTO(id: "furniture", label: "Furniture & Upholstery", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+            RepairIntakeFieldDTO(id: "material", title: "Material"),
+            RepairIntakeFieldDTO(id: "dimensions", title: "Dimensions"),
+            RepairIntakeFieldDTO(id: "finish", title: "Finish"),
+            RepairIntakeFieldDTO(id: "fabric", title: "Fabric"),
+            RepairIntakeFieldDTO(id: "age", title: "Age / Period")
+        ]),
+        RepairIntakePresetDTO(id: "bicycle", label: "Bicycle & E-Bike", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Bike Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "frameNumber", title: "Frame Number"),
+            RepairIntakeFieldDTO(id: "wheelSize", title: "Wheel Size"),
+            RepairIntakeFieldDTO(id: "battery", title: "Battery / Motor")
+        ]),
+        RepairIntakePresetDTO(id: "automotive", label: "Automotive", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Vehicle Type"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Make"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "registration", title: "Registration"),
+            RepairIntakeFieldDTO(id: "vin", title: "VIN"),
+            RepairIntakeFieldDTO(id: "mileage", title: "Mileage")
+        ]),
+        RepairIntakePresetDTO(id: "instrument", label: "Musical Instruments", fields: [
+            RepairIntakeFieldDTO(id: "itemType", title: "Instrument"),
+            RepairIntakeFieldDTO(id: "brandMaker", title: "Brand"),
+            RepairIntakeFieldDTO(id: "model", title: "Model"),
+            RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference"),
+            RepairIntakeFieldDTO(id: "finish", title: "Finish"),
+            RepairIntakeFieldDTO(id: "accessories", title: "Case / Accessories")
+        ])
+    ]
+
+    // businessType is free text the workspace can edit after onboarding, so the
+    // exact onboarding labels are matched first and the rest falls back to a
+    // keyword sweep that also covers the Turkish words a user is likely to type.
+    private static let byBusinessType: [String: String] = [
+        "jewellery studio": "jewellery",
+        "tailor / alteration studio": "tailoring",
+        "repair service": "general"
+    ]
+
+    private static let keywords: [(presetId: String, terms: [String])] = [
+        ("jewellery", ["jewel", "goldsmith", "silversmith", "kuyum", "mucevher", "mücevher", "altin", "altın"]),
+        ("watch", ["watch", "clock", "horolog", "saat"]),
+        ("electronics", ["electronic", "phone", "mobile", "computer", "laptop", "device", "elektronik", "telefon", "bilgisayar"]),
+        ("tailoring", ["tailor", "alteration", "garment", "seamstress", "terzi", "dikis", "dikiş"]),
+        ("shoeLeather", ["shoe", "cobbler", "leather", "ayakkabi", "ayakkabı", "deri", "saraciye"]),
+        ("furniture", ["furniture", "upholster", "carpent", "joinery", "mobilya", "doseme", "döşeme", "marangoz"]),
+        ("bicycle", ["bicycle", "bike", "cycle", "bisiklet"]),
+        ("automotive", ["automotive", "vehicle", "garage", "motor", "car ", "oto", "araba", "arac", "araç"]),
+        ("instrument", ["instrument", "guitar", "piano", "luthier", "muzik", "müzik", "enstruman", "enstrüman"])
+    ]
+
+    static func preset(id: String) -> RepairIntakePresetDTO? {
+        all.first { $0.id == id.trimmingCharacters(in: .whitespaces) }
+    }
+
+    static func presetId(forBusinessType businessType: String) -> String {
+        let raw = businessType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if raw.isEmpty { return "general" }
+        if let exact = byBusinessType[raw] { return exact }
+        for entry in keywords where entry.terms.contains(where: { raw.contains($0) }) {
+            return entry.presetId
+        }
+        return "general"
+    }
+
+    static func fields(forBusinessType businessType: String) -> [RepairIntakeFieldDTO] {
+        (preset(id: presetId(forBusinessType: businessType)) ?? all[0]).fields
+    }
+
+    // Which preset a stored row set came from, by exact id sequence. A renamed
+    // title still counts as that preset, because ids are what identify a row.
+    static func matchingPresetId(for fields: [RepairIntakeFieldDTO]) -> String {
+        let signature = fields.map(\.id).joined(separator: "|")
+        return all.first { $0.fields.map(\.id).joined(separator: "|") == signature }?.id ?? ""
+    }
+}
+
 private func statusCustomToggleStorageKey(for toggle: CustomStepDTO) -> String {
     "statusToggle::\(toggle.id.uuidString.lowercased())"
 }
@@ -1434,18 +1582,11 @@ struct SiparisDetayView: View {
             let cleaned = decoded.filter { !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             if !cleaned.isEmpty { return cleaned }
         }
-        return SiparisDetayView.defaultRepairIntakeFields
+        // Nothing configured yet means the workspace has never touched these rows,
+        // so the trade it signed up as picks them — a phone shop should not start
+        // on Hallmark and Stones.
+        return RepairIntakePresets.fields(forBusinessType: businessType)
     }
-
-    static let defaultRepairIntakeFields: [RepairIntakeFieldDTO] = [
-        RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
-        RepairIntakeFieldDTO(id: "metal", title: "Metal"),
-        RepairIntakeFieldDTO(id: "hallmark", title: "Hallmark"),
-        RepairIntakeFieldDTO(id: "itemSize", title: "Size"),
-        RepairIntakeFieldDTO(id: "stones", title: "Stones"),
-        RepairIntakeFieldDTO(id: "weight", title: "Weight"),
-        RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference")
-    ]
 
     var communicationChannelLabels: [String] { normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON) }
     private var orderExtraNoteSectionsKey: String { "orderExtraNoteSectionsJSON" }
@@ -7838,6 +7979,32 @@ struct SiparisDetayView: View {
             onHide: { setCardVisibleWithUndo(.repairIntake, false) },
             onColorChange: { setKartColor(kart: .repairIntake, color: $0) }
         ) {
+            // Different trades take in different things. The rows can still be
+            // renamed one by one; this just swaps the whole set for a closer start.
+            if canEditOrderDetails {
+                HStack(spacing: 8) {
+                    Text(t("Intake template", lang: seciliDil))
+                        .font(.system(size: 12)).foregroundColor(.gray)
+                    Menu {
+                        ForEach(RepairIntakePresets.all) { preset in
+                            Button {
+                                applyRepairIntakePreset(preset)
+                            } label: {
+                                let suggested = preset.id == RepairIntakePresets.presetId(forBusinessType: businessType)
+                                Text(t(preset.label, lang: seciliDil) + (suggested ? " ★" : ""))
+                            }
+                        }
+                    } label: {
+                        Text(currentRepairIntakePresetLabel)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    Spacer()
+                }
+                .padding(.bottom, 2)
+            }
+
             ForEach(repairIntakeFieldsList) { field in
                 DetailField(
                     label: t(field.title, lang: seciliDil),
@@ -7936,6 +8103,23 @@ struct SiparisDetayView: View {
                 siparis.repairIntake = intake
             }
         )
+    }
+
+    private var currentRepairIntakePresetLabel: String {
+        let matched = RepairIntakePresets.matchingPresetId(for: repairIntakeFieldsList)
+        guard let preset = RepairIntakePresets.preset(id: matched) else {
+            return t("Custom rows", lang: seciliDil)
+        }
+        return t(preset.label, lang: seciliDil)
+    }
+
+    // Ids carry the stored values, so switching template keeps anything already
+    // recorded under a row the new set also has.
+    private func applyRepairIntakePreset(_ preset: RepairIntakePresetDTO) {
+        guard let data = try? JSONEncoder().encode(preset.fields),
+              let json = String(data: data, encoding: .utf8) else { return }
+        repairIntakeFieldsJSON = json
+        syncCardLabel(key: "repairIntakeFieldsJSON", value: json)
     }
 
     private func renameRepairIntakeField(_ fieldId: String, to newTitle: String) {

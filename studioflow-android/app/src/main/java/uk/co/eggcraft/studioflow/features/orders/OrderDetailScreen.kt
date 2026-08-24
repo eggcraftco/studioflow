@@ -3099,7 +3099,8 @@ private fun OrderDetailCardContent(
             order = order,
             workspaceSettings = workspaceSettings,
             canEditWorkflow = canEditWorkflow,
-            onUpdateOrderFields = onUpdateOrderFields
+            onUpdateOrderFields = onUpdateOrderFields,
+            onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
         )
         OrderDetailCardId.Estimate -> EstimateCard(
             order = order,
@@ -3722,12 +3723,20 @@ private fun RepairIntakeCard(
     order: StudioOrder,
     workspaceSettings: StudioWorkspaceSettings,
     canEditWorkflow: Boolean,
-    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit = { _, _ -> }
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val intake = order.repairIntake
-    val rows = workspaceSettings.repairIntakeFields.filter { it.id.isNotBlank() && it.title.isNotBlank() }
+    val configuredRows = workspaceSettings.repairIntakeFields.filter { it.id.isNotBlank() && it.title.isNotBlank() }
+    // Nothing configured yet means the workspace has never touched these rows, so
+    // the trade it signed up as picks them — a phone shop should not start on
+    // Hallmark and Stones.
+    val rows = configuredRows.ifEmpty {
+        uk.co.eggcraft.studioflow.data.model.StudioRepairIntakePresets
+            .fieldsForBusinessType(workspaceSettings.businessType)
+    }
 
     fun commit(
         fields: Map<String, String> = intake?.fields.orEmpty(),
@@ -3757,6 +3766,49 @@ private fun RepairIntakeCard(
     }
 
     DetailCard(title = t("Repair Intake & Item")) {
+        // Different trades take in different things. Rows can still be renamed
+        // one by one in Settings; this swaps the whole set for a closer start.
+        if (canEditWorkflow) {
+            var templateMenuOpen by remember { mutableStateOf(false) }
+            val presets = uk.co.eggcraft.studioflow.data.model.StudioRepairIntakePresets
+            val suggestedId = presets.presetIdForBusinessType(workspaceSettings.businessType)
+            val currentId = presets.matchingPresetId(rows)
+            val currentLabel = presets.preset(currentId)?.label?.let(t) ?: t("Custom rows")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = t("Intake template"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box {
+                    TextButton(onClick = { templateMenuOpen = true }) { Text(currentLabel) }
+                    DropdownMenu(expanded = templateMenuOpen, onDismissRequest = { templateMenuOpen = false }) {
+                        presets.all.forEach { preset ->
+                            DropdownMenuItem(
+                                text = { Text(t(preset.label) + if (preset.id == suggestedId) " ★" else "") },
+                                onClick = {
+                                    templateMenuOpen = false
+                                    // Ids carry the stored values, so switching
+                                    // template keeps anything already recorded
+                                    // under a row the new set also has.
+                                    val json = org.json.JSONArray().apply {
+                                        preset.fields.forEach { field ->
+                                            put(org.json.JSONObject().put("id", field.id).put("title", field.title))
+                                        }
+                                    }.toString()
+                                    onUpdateWorkspaceSettings(
+                                        mapOf("repairIntakeFieldsJSON" to json),
+                                        "Intake template saved."
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         rows.forEach { row ->
             OrderTextRow(
                 label = t(row.title),

@@ -366,6 +366,189 @@ data class OrderDetailCardLayout(
     }
 }
 
+// What a workspace takes in for repair, service or making depends entirely on the
+// trade. A jeweller records Metal and Hallmark; a phone shop records IMEI and
+// whether the passcode was handed over.
+//
+// Mirrored verbatim in functions/index.js, studioflow-web/lib/studioflow/
+// repairIntakePresets.ts and EGGcraft/SiparisDetayView.swift. The field ids are
+// what intake values are stored under, so they must never drift between
+// platforms — only the titles are the workspace's to rename.
+data class StudioRepairIntakePreset(
+    val id: String,
+    val label: String,
+    val fields: List<StudioHeadingItem>
+)
+
+object StudioRepairIntakePresets {
+    val all: List<StudioRepairIntakePreset> = listOf(
+    StudioRepairIntakePreset(
+        id = "general",
+        label = "General Intake",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Item Type"),
+            StudioHeadingItem("brandMaker", "Brand / Maker"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("serialReference", "Serial / Reference"),
+            StudioHeadingItem("colour", "Colour"),
+            StudioHeadingItem("accessories", "Accessories Included")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "jewellery",
+        label = "Jewellery & Goldsmith",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Item Type"),
+            StudioHeadingItem("metal", "Metal"),
+            StudioHeadingItem("hallmark", "Hallmark"),
+            StudioHeadingItem("itemSize", "Size"),
+            StudioHeadingItem("stones", "Stones"),
+            StudioHeadingItem("weight", "Weight"),
+            StudioHeadingItem("serialReference", "Serial / Reference")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "watch",
+        label = "Watch & Clock",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Item Type"),
+            StudioHeadingItem("brandMaker", "Brand"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("serialReference", "Serial / Reference"),
+            StudioHeadingItem("caseSize", "Case Size"),
+            StudioHeadingItem("strap", "Bracelet / Strap"),
+            StudioHeadingItem("movement", "Movement")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "electronics",
+        label = "Electronics & Devices",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Device Type"),
+            StudioHeadingItem("brandMaker", "Brand"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("serialReference", "Serial / IMEI"),
+            StudioHeadingItem("passcode", "Passcode Provided"),
+            StudioHeadingItem("accessories", "Accessories Included"),
+            StudioHeadingItem("warranty", "Warranty Status")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "tailoring",
+        label = "Tailoring & Alterations",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Garment Type"),
+            StudioHeadingItem("fabric", "Fabric"),
+            StudioHeadingItem("itemSize", "Size"),
+            StudioHeadingItem("colour", "Colour"),
+            StudioHeadingItem("measurements", "Measurements"),
+            StudioHeadingItem("trim", "Trim / Buttons")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "shoeLeather",
+        label = "Shoe & Leather",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Item Type"),
+            StudioHeadingItem("brandMaker", "Brand"),
+            StudioHeadingItem("material", "Material"),
+            StudioHeadingItem("itemSize", "Size"),
+            StudioHeadingItem("colour", "Colour"),
+            StudioHeadingItem("sole", "Sole Type")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "furniture",
+        label = "Furniture & Upholstery",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Item Type"),
+            StudioHeadingItem("material", "Material"),
+            StudioHeadingItem("dimensions", "Dimensions"),
+            StudioHeadingItem("finish", "Finish"),
+            StudioHeadingItem("fabric", "Fabric"),
+            StudioHeadingItem("age", "Age / Period")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "bicycle",
+        label = "Bicycle & E-Bike",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Bike Type"),
+            StudioHeadingItem("brandMaker", "Brand"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("frameNumber", "Frame Number"),
+            StudioHeadingItem("wheelSize", "Wheel Size"),
+            StudioHeadingItem("battery", "Battery / Motor")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "automotive",
+        label = "Automotive",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Vehicle Type"),
+            StudioHeadingItem("brandMaker", "Make"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("registration", "Registration"),
+            StudioHeadingItem("vin", "VIN"),
+            StudioHeadingItem("mileage", "Mileage")
+        )
+    ),
+    StudioRepairIntakePreset(
+        id = "instrument",
+        label = "Musical Instruments",
+        fields = listOf(
+            StudioHeadingItem("itemType", "Instrument"),
+            StudioHeadingItem("brandMaker", "Brand"),
+            StudioHeadingItem("model", "Model"),
+            StudioHeadingItem("serialReference", "Serial / Reference"),
+            StudioHeadingItem("finish", "Finish"),
+            StudioHeadingItem("accessories", "Case / Accessories")
+        )
+    )
+    )
+
+    // businessType is free text the workspace can edit after onboarding, so the
+    // exact onboarding labels are matched first and the rest falls back to a
+    // keyword sweep that also covers the Turkish words a user is likely to type.
+    private val byBusinessType = mapOf(
+        "jewellery studio" to "jewellery",
+        "tailor / alteration studio" to "tailoring",
+        "repair service" to "general"
+    )
+
+    private val keywords: List<Pair<String, List<String>>> = listOf(
+        "jewellery" to listOf("jewel", "goldsmith", "silversmith", "kuyum", "mucevher", "mücevher", "altin", "altın"),
+        "watch" to listOf("watch", "clock", "horolog", "saat"),
+        "electronics" to listOf("electronic", "phone", "mobile", "computer", "laptop", "device", "elektronik", "telefon", "bilgisayar"),
+        "tailoring" to listOf("tailor", "alteration", "garment", "seamstress", "terzi", "dikis", "dikiş"),
+        "shoeLeather" to listOf("shoe", "cobbler", "leather", "ayakkabi", "ayakkabı", "deri", "saraciye"),
+        "furniture" to listOf("furniture", "upholster", "carpent", "joinery", "mobilya", "doseme", "döşeme", "marangoz"),
+        "bicycle" to listOf("bicycle", "bike", "cycle", "bisiklet"),
+        "automotive" to listOf("automotive", "vehicle", "garage", "motor", "car ", "oto", "araba", "arac", "araç"),
+        "instrument" to listOf("instrument", "guitar", "piano", "luthier", "muzik", "müzik", "enstruman", "enstrüman")
+    )
+
+    fun preset(id: String): StudioRepairIntakePreset? = all.firstOrNull { it.id == id.trim() }
+
+    fun presetIdForBusinessType(businessType: String?): String {
+        val raw = businessType?.trim()?.lowercase().orEmpty()
+        if (raw.isEmpty()) return "general"
+        byBusinessType[raw]?.let { return it }
+        keywords.firstOrNull { entry -> entry.second.any { raw.contains(it) } }?.let { return it.first }
+        return "general"
+    }
+
+    fun fieldsForBusinessType(businessType: String?): List<StudioHeadingItem> =
+        (preset(presetIdForBusinessType(businessType)) ?: all.first()).fields
+
+    // Which preset a stored row set came from, by exact id sequence. A renamed
+    // title still counts as that preset, because ids are what identify a row.
+    fun matchingPresetId(fields: List<StudioHeadingItem>): String {
+        val signature = fields.joinToString("|") { it.id }
+        return all.firstOrNull { it.fields.joinToString("|") { field -> field.id } == signature }?.id.orEmpty()
+    }
+}
+
 data class StudioWorkspaceSettings(
     val appTheme: String = "Light",
     val appSubtitle: String = "Bespoke Hand-Paint...",
