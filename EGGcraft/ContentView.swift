@@ -6988,7 +6988,17 @@ struct ContentView: View {
     private var canAccessNotes: Bool { workspaceAccessAllows("notes") }
     private var canAccessSettings: Bool { workspaceAccessAllows("settings") }
     // Bank feed data is owner-only at the Firestore rules level, so the tab is too.
-    private var canAccessBankSpending: Bool { authVM.isCompanyOwner || (workspaceAccessAllows("bankFeed") && canSeeFinancialData) }
+    // The bank feed is a Pro-and-above feature, so it stays hidden on Free Demo and
+    // Lite even for the workspace owner. Both the desktop tab bar and the phone
+    // navigation menu read this.
+    private var bankSpendingAvailableOnPlan: Bool {
+        authVM.currentBillingPlan.accessLevel >= StudioBillingPlan.proMonthly.accessLevel
+    }
+
+    private var canAccessBankSpending: Bool {
+        guard bankSpendingAvailableOnPlan else { return false }
+        return authVM.isCompanyOwner || (workspaceAccessAllows("bankFeed") && canSeeFinancialData)
+    }
 
     private var canEditCurrentWorkspace: Bool {
         ["owner", "admin", "member"].contains(currentWorkspaceRoleNormalized) && canAccessOrders
@@ -8451,7 +8461,12 @@ struct ContentView: View {
                 if canAccessBankSpending {
                     BankSpendingView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
                 } else {
-                    restrictedAccessView(title: t("Bank Spending hidden", lang: seciliDil), message: t("Bank connections are managed by the workspace owner.", lang: seciliDil))
+                    restrictedAccessView(
+                        title: t("Bank Spending hidden", lang: seciliDil),
+                        message: bankSpendingAvailableOnPlan
+                            ? t("Bank connections are managed by the workspace owner.", lang: seciliDil)
+                            : t("Bank connections are available from NivaDesk Pro.", lang: seciliDil)
+                    )
                 }
             } else if aktifSekme == "Dashboard" {
                 if canAccessDashboard {
@@ -8584,6 +8599,12 @@ struct ContentView: View {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
         } message: {
             Text(sharedClientFileImportErrorMessage)
+        }
+        .onChange(of: firebaseManager.planLimitNotice) { _, notice in
+            let cleaned = notice.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { return }
+            presentPlanAccessAlert(title: t("Plan limit", lang: seciliDil), message: cleaned)
+            firebaseManager.planLimitNotice = ""
         }
         .alert(planAccessAlertTitle.isEmpty ? t("Plan limit", lang: seciliDil) : planAccessAlertTitle, isPresented: $showPlanAccessAlert) {
             Button(t("OK", lang: seciliDil), role: .cancel) { }
@@ -8880,7 +8901,7 @@ struct ContentView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.purple)
-                Text(t("Free Demo", lang: seciliDil))
+                Text(t("Free", lang: seciliDil))
                     .font(.system(size: 10.5, weight: .semibold))
                     .foregroundColor(.primary)
                 Text("·")
@@ -8916,7 +8937,7 @@ struct ContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(t("You're on the Free Demo plan.", lang: seciliDil))
+                Text(t("You're on the Free plan.", lang: seciliDil))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(.primary)
                 Text(t("Choose a plan in Plan & Access to unlock more orders, storage and team features.", lang: seciliDil))
@@ -10662,20 +10683,18 @@ struct ContentView: View {
             guard firebaseManager.siparisler.isEmpty else { return }
         }
         if !macFirstProjectGuideActive {
-            // Accounts created on a phone never get the info-card guide,
-            // even when they later sign in from a computer.
+            // The guide points at desktop toolbar controls, and this build only ever
+            // runs on a Mac — so the device in front of the user already satisfies the
+            // real requirement. It used to also refuse whenever the account's stored
+            // signupPlatform was "mobile"; that brand is permanent and was written from
+            // the signup window, so anyone who first registered on a phone (or in a
+            // narrow desktop window) could never see the guide on a Mac afterwards.
+            // The web guide dropped the same stale check for the same reason.
             let uid = (authVM.currentUserId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !uid.isEmpty else { return }
-            Firestore.firestore().collection("users").document(uid).getDocument { snapshot, _ in
-                let platform = ((snapshot?.data()?["signupPlatform"] as? String) ?? "").lowercased()
-                guard platform != "mobile" else { return }
-                DispatchQueue.main.async {
-                    guard !macFirstProjectGuideActive, !macFirstProjectGuideCompleted else { return }
-                    macFirstProjectGuideActive = true
-                    macFirstProjectGuideStep = 0
-                    saveMacFirstProjectGuideState()
-                }
-            }
+            macFirstProjectGuideActive = true
+            macFirstProjectGuideStep = 0
+            saveMacFirstProjectGuideState()
         }
         #endif
     }
@@ -13429,6 +13448,16 @@ struct AccountProfileView: View {
                 }
             }
 
+            // Shown only when App Store Connect really carries a free-trial offer
+            // for this product, so the wording can never promise more than the
+            // store will grant.
+            if let trialText = product?.introductoryOfferText {
+                Text(trialText)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(.green)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button {
                 Task { await purchaseStoreKitPlan(plan, interval: interval) }
             } label: {
@@ -13890,7 +13919,7 @@ struct AccountProfileView: View {
     private func planSummaryText(_ plan: StudioBillingPlan) -> String {
         switch plan {
         case .demo:
-            return "Try the core order workflow with safe limits before upgrading."
+            return "Run the core order workflow for free, or trial a paid plan for 14 days."
         case .lifetimeLite:
             return "One-time access for solo local order management and personal scheduling."
         case .proMonthly:
@@ -13903,7 +13932,7 @@ struct AccountProfileView: View {
     private func planBestForText(_ plan: StudioBillingPlan) -> String {
         switch plan {
         case .demo:
-            return "Best for testing the app with a small sample workspace."
+            return "Keep a small studio running for free, with room for 10 orders and 10 customers."
         case .lifetimeLite:
             return "Best for solo makers who want local order tracking without team tools."
         case .proMonthly:

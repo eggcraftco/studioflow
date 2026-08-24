@@ -1829,9 +1829,12 @@ exports.setSharedPersonalNoteEditingPresence = onCall({ region: "europe-west2" }
 const PLAN_ENTITLEMENTS = {
   demo: {
     plan: "demo",
-    displayName: "Free Demo",
-    orderLimit: 5,
-    customerLimit: 3,
+    // Free is now a permanent tier rather than a trial shop window, so it has to
+    // hold enough work for a real week. The 14-day trial is sold separately and
+    // falls back here when it ends.
+    displayName: "Free",
+    orderLimit: 10,
+    customerLimit: 10,
     storageLimitMB: 50,
     teamMemberLimit: 1,
     clientFilesEnabled: false,
@@ -1969,9 +1972,30 @@ function normalizeBillingPlan(value, fallback = "demo") {
   return fallback;
 }
 
+// A trial that has run out must stop unlocking the paid plan even if the store or
+// Stripe webhook that should have converted or cancelled it is late. Only trials are
+// checked here: manual and complimentary grants carry no trial end and stay as they are.
+function trialHasExpired(data = {}) {
+  const status = String(data.billingStatus || "").trim().toLowerCase();
+  if (status !== "trialing") return false;
+  // Stripe, the App Store and Play all report the trial's end as the first period
+  // end, so that is the field the webhooks actually persist. billingTrialEndsAt is
+  // read first so a future explicit value wins.
+  const raw = data.billingTrialEndsAt || data.billingCurrentPeriodEnd;
+  const endsAt = raw && typeof raw.toMillis === "function"
+    ? raw.toMillis()
+    : (Number.isFinite(Number(raw)) ? Number(raw) : null);
+  if (!endsAt) return false;
+  // A short grace window keeps a workspace open while a late renewal webhook lands.
+  const graceMs = 36 * 60 * 60 * 1000;
+  return Date.now() > endsAt + graceMs;
+}
+
 function billingPlanFromCompanyData(data = {}) {
   // Fail closed: missing or invalid billing data must never unlock paid/team features.
-  return normalizeBillingPlan(data.billingPlan, "demo");
+  const plan = normalizeBillingPlan(data.billingPlan, "demo");
+  if (plan !== "demo" && trialHasExpired(data)) return "demo";
+  return plan;
 }
 
 function billingEntitlementsForCompany(data = {}) {
@@ -6908,8 +6932,8 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
     memberRoles: { [uid]: "owner" },
     members: { [uid]: ownerMember },
     billingPlan: "demo",
-    billingPlanName: "Free Demo",
-    billingPlanSource: "signup_free_demo",
+    billingPlanName: "Free",
+    billingPlanSource: "signup_free",
     billingStatus: "free",
     billingProviderRawStatus: "free",
     billingStorageLimitMB: 50,
@@ -10835,10 +10859,24 @@ const SWIFT_ORDER_FIELDS = [
   "historyLog",
   "clientFiles",
   "todoItems",
-  "workSessions"
+  "workSessions",
+  // Invoice, shipping and payment data the Swift apps show on every plan. These
+  // were missing from the allowlist, so on plans that save through this callable
+  // (Free Demo / Lite) an invoice line the user typed never reached Firestore and
+  // the next snapshot wiped it off their screen.
+  "lineItems",
+  "invoiceNote",
+  "invoiceNumber",
+  "payments",
+  "shippingName",
+  "shippingStreetAddress",
+  "shippingCity",
+  "shippingPostalCode",
+  "shippingCountry",
+  "shippingPhone"
 ];
 
-const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount"]);
+const SWIFT_ADVANCED_FINANCE_FIELDS = new Set(["paymentFee", "deliveryCost", "taxType", "taxRate", "taxAmount", "payments"]);
 
 function preserveBasicPlanCustomFinancialFields(incoming = {}, existing = {}) {
   const next = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? { ...incoming } : {};

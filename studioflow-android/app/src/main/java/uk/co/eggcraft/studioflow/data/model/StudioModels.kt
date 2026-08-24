@@ -9,11 +9,21 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.ceil
 
-enum class StudioBillingPlan(val raw: String, val title: String, val teamMemberLimit: Int, val storageLimitMb: Int) {
-    Demo("demo", "Free Demo", 1, 50),
-    LifetimeLite("lifetime_lite", "NivaDesk Lite", 1, 250),
-    ProMonthly("pro_monthly", "NivaDesk Pro", 1, 10240),
-    TeamMonthly("team_monthly", "NivaDesk Team", 5, 51200);
+enum class StudioBillingPlan(
+    val raw: String,
+    val title: String,
+    val teamMemberLimit: Int,
+    val storageLimitMb: Int,
+    val accessLevel: Int
+) {
+    Demo("demo", "Free", 1, 50, 0),
+    LifetimeLite("lifetime_lite", "NivaDesk Lite", 1, 250, 1),
+    ProMonthly("pro_monthly", "NivaDesk Pro", 1, 10240, 2),
+    TeamMonthly("team_monthly", "NivaDesk Team", 5, 51200, 3);
+
+    // The bank feed is sold from Pro upwards, so it is hidden rather than shown
+    // locked on Free and Lite.
+    val allowsBankFeed: Boolean get() = accessLevel >= ProMonthly.accessLevel
 
     companion object {
         fun fromRaw(value: String?): StudioBillingPlan {

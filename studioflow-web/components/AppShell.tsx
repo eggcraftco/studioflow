@@ -555,7 +555,7 @@ function WorkspaceOnboardingScreen({
   );
 }
 
-// First-launch guidance: new sign-ups land on the Free Demo plan and often
+// First-launch guidance: new sign-ups land on the Free plan and often
 // don't discover Settings → Plan & Access on their own. Mirrors iOS/Android:
 // the X never fully hides the banner — it collapses to a one-line strip that
 // expands back on click. Collapsed state is stored per companyId so it never
@@ -610,7 +610,7 @@ function DemoPlanBanner({
         }}
       >
         <span aria-hidden="true">✨</span>
-        <span>{t("Free Demo")}</span>
+        <span>{t("Free")}</span>
         <span style={{ opacity: 0.55 }}>·</span>
         <span style={{ color: "#2563eb" }}>{t("View plans")}</span>
         <span aria-hidden="true" style={{ opacity: 0.55 }}>⌄</span>
@@ -649,7 +649,7 @@ function DemoPlanBanner({
       </span>
       <span style={{ flex: 1, minWidth: 220 }}>
         <strong style={{ display: "block", fontSize: 12.5 }}>
-          {t("You're on the Free Demo plan.")}
+          {t("You're on the Free plan.")}
         </strong>
         <span style={{ fontSize: 11, opacity: 0.7 }}>
           {t("Choose a plan in Plan & Access to unlock more orders, storage and team features.")}
@@ -1604,6 +1604,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   item.href === "/admin" &&
                   !isNivaDeskAdminEmail(user?.email)
                 )
+                  return null;
+                if (
+                  "href" in item &&
+                  item.href === "/bank" &&
+                  workspace?.entitlements.features.bank_feed !== true
+                )
+                  // The bank feed is Pro and above, so it is hidden rather than
+                  // shown locked on Free and Lite.
                   return null;
                 if ("href" in item) {
                   const accessKey = NAV_ACCESS_BY_HREF[item.href];

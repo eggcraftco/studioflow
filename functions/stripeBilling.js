@@ -1450,11 +1450,24 @@ function createStripeBillingFunctions({
 
     if (item.mode === "subscription") {
       sessionPayload.subscription_data = { metadata };
+      // Every paid plan is sold with a 14-day trial, but only once per workspace:
+      // without this guard a workspace could cancel and re-subscribe for a fresh
+      // free fortnight every time. Add-ons (storage, seats) never carry a trial.
+      const hasUsedTrial = Boolean(companyData.billingTrialUsedAt)
+        || Boolean(String(companyData.billingSubscriptionId || "").trim());
+      if (item.type === "plan" && !hasUsedTrial) {
+        sessionPayload.subscription_data.trial_period_days = 14;
+      }
     } else {
       sessionPayload.payment_intent_data = { metadata };
     }
 
     const session = await stripe.checkout.sessions.create(sessionPayload);
+    if (sessionPayload.subscription_data?.trial_period_days) {
+      await companyRef.set({
+        billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
     await companyRef.collection("billing").doc("stripePendingCheckout").set({
       sessionId: session.id,
       itemKey: item.key,

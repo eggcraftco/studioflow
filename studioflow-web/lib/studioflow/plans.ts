@@ -16,7 +16,8 @@ export type FeatureKey =
   | "order_notes"
   | "dashboard_summary"
   | "financial_summary"
-  | "messages";
+  | "messages"
+  | "bank_feed";
 
 export type PlanEntitlements = {
   plan: StudioBillingPlan;
@@ -36,10 +37,13 @@ export type PlanEntitlements = {
 export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   demo: {
     plan: "demo",
-    title: "Free Demo",
-    purchaseModel: "Demo",
-    orderLimit: 5,
-    customerLimit: 3,
+    // Free is a permanent tier now, not a trial window: the 14-day trial is sold
+    // separately and drops back here. Keep in step with PLAN_ENTITLEMENTS.demo in
+    // functions/index.js and StudioBillingPlan.demo in the Swift app.
+    title: "Free",
+    purchaseModel: "Free",
+    orderLimit: 10,
+    customerLimit: 10,
     storageLimitMB: 50,
     teamMemberLimit: 1,
     features: {
@@ -58,7 +62,8 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       order_notes: true,
       dashboard_summary: true,
       financial_summary: true,
-      messages: false
+      messages: false,
+      bank_feed: false,
     }
   },
   lifetime_lite: {
@@ -85,7 +90,8 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       order_notes: true,
       dashboard_summary: true,
       financial_summary: true,
-      messages: false
+      messages: false,
+      bank_feed: false,
     }
   },
   pro_monthly: {
@@ -112,7 +118,8 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       order_notes: true,
       dashboard_summary: true,
       financial_summary: true,
-      messages: false
+      messages: false,
+      bank_feed: true,
     }
   },
   team_monthly: {
@@ -143,7 +150,8 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
       order_notes: true,
       dashboard_summary: true,
       financial_summary: true,
-      messages: true
+      messages: true,
+      bank_feed: true,
     }
   }
 };

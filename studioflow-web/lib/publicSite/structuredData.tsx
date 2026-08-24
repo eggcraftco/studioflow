@@ -36,7 +36,7 @@ const softwareApplication = {
   operatingSystem: "Web, macOS, iOS, Android",
   publisher: { "@id": `${BASE_URL}/#organization` },
   offers: [
-    { "@type": "Offer", name: "Free Demo", price: "0", priceCurrency: "GBP" },
+    { "@type": "Offer", name: "Free", price: "0", priceCurrency: "GBP" },
     { "@type": "Offer", name: "NivaDesk Lite", price: "9", priceCurrency: "GBP", description: "£9/month or £90/year" },
     { "@type": "Offer", name: "NivaDesk Pro", price: "19", priceCurrency: "GBP", description: "£19/month or £190/year, includes Client Files with 10 GB storage" },
     { "@type": "Offer", name: "NivaDesk Team", price: "49", priceCurrency: "GBP", description: "£49/month or £490/year, 5 seats included" }
@@ -67,12 +67,12 @@ const FAQ_ENTRIES: { question: string; answer: string }[] = [
   {
     question: "Is there a free version of NivaDesk?",
     answer:
-      "Yes. Free Demo lets you try NivaDesk with a small sample workspace of up to 5 orders and 3 customers, at no cost and with no card required. Upgrade whenever you're ready."
+      "Yes. The Free plan keeps up to 10 orders and 10 customers at no cost and with no card required, for as long as you like. Upgrade whenever you're ready."
   },
   {
     question: "Which NivaDesk plans are available?",
     answer:
-      "Free Demo (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
+      "Free (free), Lite (£9/month or £90/year), Pro (£19/month or £190/year) and Team (£49/month or £490/year). Each step adds more capability, from unlimited orders to Client Files, advanced finance and team collaboration."
   },
   {
     question: "Can I pay monthly or yearly?",

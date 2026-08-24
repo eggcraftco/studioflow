@@ -1128,7 +1128,7 @@ struct AyarlarView: View {
 
 
     private var canManageNivaDeskSupportTickets: Bool {
-        supportTicketDestination == "appSupport" && isNivaDeskSupportAdmin
+        (supportTicketDestination == "appSupport" || supportTicketDestination == "website") && isNivaDeskSupportAdmin
     }
 
     private var canManageCurrentSupportTickets: Bool {
@@ -1143,11 +1143,18 @@ struct AyarlarView: View {
         if supportTicketDestination == "workspace" {
             return canManageWorkspaceTickets ? t("Workspace Ticket Inbox", lang: seciliDil) : t("My Workspace Tickets", lang: seciliDil)
         }
+        if supportTicketDestination == "website" {
+            return t("Questions from the website", lang: seciliDil)
+        }
         return canManageNivaDeskSupportTickets ? t("NivaDesk Support Inbox", lang: seciliDil) : t("My NivaDesk Support Tickets", lang: seciliDil)
     }
 
     private var currentSupportTickets: [StudioSupportTicket] {
-        supportTicketDestination == "workspace" ? firebaseManager.workspaceTickets : firebaseManager.supportTickets
+        if supportTicketDestination == "workspace" { return firebaseManager.workspaceTickets }
+        // Website chats arrive in the same NivaDesk support list; each tab shows
+        // only its own kind so the two queues never mix.
+        let wantsWebsite = supportTicketDestination == "website"
+        return firebaseManager.supportTickets.filter { ($0.ticketType == "website") == wantsWebsite }
     }
 
     private func supportTicketMatchesAssignmentFilter(_ ticket: StudioSupportTicket) -> Bool {
@@ -1421,6 +1428,7 @@ struct AyarlarView: View {
                         category: $supportTicketCategory,
                         workspaceCategories: workspaceTicketCategories,
                         appCategories: appSupportTicketCategories,
+                        showsWebsite: isNivaDeskSupportAdmin,
                         isPhone: isPhoneLayout,
                         lang: seciliDil
                     )
@@ -1526,6 +1534,7 @@ struct AyarlarView: View {
                 }
             }
 
+            if supportTicketDestination != "website" {
             SettingsCard(title: supportTicketDestination == "workspace" ? t("New Workspace Ticket", lang: seciliDil) : t("New NivaDesk Support Ticket", lang: seciliDil), iconName: supportTicketDestination == "workspace" ? "person.2.badge.gearshape.fill" : "lifepreserver.fill") {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(supportTicketDestination == "workspace" ? t("Send a request to your workspace owner or admins.", lang: seciliDil) : t("Tell us what happened. Your workspace, account and platform details will be attached automatically so we can investigate faster.", lang: seciliDil))
@@ -1641,6 +1650,7 @@ struct AyarlarView: View {
                         .disabled(firebaseManager.isSubmittingSupportTicket)
                     }
                 }
+            }
             }
 
             SettingsCard(title: currentSupportUnreadCount > 0 ? "\(supportTicketListTitle) \(currentSupportUnreadCount)" : supportTicketListTitle, iconName: canManageCurrentSupportTickets ? "tray.and.arrow.down.fill" : "tray.full.fill") {
@@ -2255,6 +2265,7 @@ struct AyarlarView: View {
         @Binding var category: String
         let workspaceCategories: [(key: String, title: String)]
         let appCategories: [(key: String, title: String)]
+        let showsWebsite: Bool
         let isPhone: Bool
         let lang: String
 
@@ -2263,14 +2274,22 @@ struct AyarlarView: View {
                 VStack(spacing: 10) {
                     card(key: "workspace", title: t("Contact Workspace Owner", lang: lang), subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: lang), icon: "person.2.badge.gearshape.fill")
                     card(key: "appSupport", title: t("Contact NivaDesk Support", lang: lang), subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: lang), icon: "lifepreserver.fill")
+                    if showsWebsite {
+                        card(key: "website", title: t("Website Chats", lang: lang), subtitle: t("Questions people send from the nivadesk.app chat widget.", lang: lang), icon: "bubble.left.and.bubble.right.fill")
+                    }
                 }
             } else {
-                HStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     card(key: "workspace", title: t("Contact Workspace Owner", lang: lang), subtitle: t("Use this for project questions, task requests, missing customer details or internal workflow issues.", lang: lang), icon: "person.2.badge.gearshape.fill")
-                        .frame(minWidth: 320)
+                        .frame(maxWidth: .infinity)
                     card(key: "appSupport", title: t("Contact NivaDesk Support", lang: lang), subtitle: t("Use this for app bugs, sync issues, billing, account problems or feature requests.", lang: lang), icon: "lifepreserver.fill")
-                        .frame(minWidth: 320)
+                        .frame(maxWidth: .infinity)
+                    if showsWebsite {
+                        card(key: "website", title: t("Website Chats", lang: lang), subtitle: t("Questions people send from the nivadesk.app chat widget.", lang: lang), icon: "bubble.left.and.bubble.right.fill")
+                            .frame(maxWidth: .infinity)
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
         }
 
@@ -8800,7 +8819,7 @@ struct LandingStatsAdminView: View {
 
 // MARK: - NivaDesk admin: cross-workspace Admin Insights (drill-in pages)
 
-private let aiPlanLabels: [String: String] = ["demo": "Free Demo", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
+private let aiPlanLabels: [String: String] = ["demo": "Free", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
 private let aiPlanColors: [String: Color] = ["demo": .purple, "lifetime_lite": .blue, "pro_monthly": .green, "team_monthly": .orange]
 private let aiPlanOrder = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
 
@@ -9327,7 +9346,7 @@ private struct AISubscriptionsDetailView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), spacing: 10)], spacing: 10) {
                         AIKpiTile(label: t("Active Subscriptions", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "paidTotal"))")
                         AIKpiTile(label: t("New Subscriptions (30d)", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "paidNew30d"))")
-                        AIKpiTile(label: t("Free Demo Workspaces", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "freeDemo"))")
+                        AIKpiTile(label: t("Free Plan Workspaces", lang: seciliDil), value: "\(aiInt(data, "subscriptions", "freeDemo"))")
                     }
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 14, alignment: .top)], alignment: .leading, spacing: 14) {

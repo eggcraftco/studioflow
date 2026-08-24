@@ -246,7 +246,7 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
 
     var displayName: String {
         switch self {
-        case .demo: return "Free Demo"
+        case .demo: return "Free"
         case .lifetimeLite: return "NivaDesk Lite"
         case .proMonthly: return "NivaDesk Pro"
         case .teamMonthly: return "NivaDesk Team"
@@ -255,7 +255,7 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
 
     var purchaseModel: String {
         switch self {
-        case .demo: return "Demo"
+        case .demo: return "Free"
         case .lifetimeLite: return "Monthly or Annual Subscription"
         case .proMonthly, .teamMonthly: return "Monthly or Annual Subscription"
         }
@@ -286,10 +286,12 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
     var entitlements: StudioPlanEntitlements {
         switch self {
         case .demo:
+            // Free is a permanent tier, not a trial window, so it has to hold a real
+            // week of work. Keep these in step with PLAN_ENTITLEMENTS.demo on the server.
             return StudioPlanEntitlements(
                 plan: self,
-                orderLimit: 5,
-                customerLimit: 3,
+                orderLimit: 10,
+                customerLimit: 10,
                 storageLimitMB: 50,
                 teamMemberLimit: 1,
                 clientFilesEnabled: false,
@@ -452,6 +454,10 @@ struct StudioStoreProductSummary: Identifiable, Equatable {
     var title: String
     var displayPrice: String
     var detail: String
+    // Free-trial wording is taken from the offer configured in App Store Connect
+    // rather than hard-coded, so the app can never advertise a trial the store
+    // would not actually grant.
+    var introductoryOfferText: String? = nil
 }
 
 enum StudioStoreBillingInterval: String, CaseIterable, Identifiable, Hashable {
@@ -510,6 +516,24 @@ final class StudioStoreKitManager: ObservableObject {
     ]
 
     @Published var products: [StudioStoreProductSummary] = []
+
+    #if canImport(StoreKit)
+    // "14 days free, then £19.00" — only when the store really offers a free trial.
+    static func freeTrialText(for product: Product) -> String? {
+        guard let offer = product.subscription?.introductoryOffer,
+              offer.paymentMode == .freeTrial else { return nil }
+        let count = offer.period.value
+        let unit: String
+        switch offer.period.unit {
+        case .day: unit = count == 1 ? "day" : "days"
+        case .week: unit = count == 1 ? "week" : "weeks"
+        case .month: unit = count == 1 ? "month" : "months"
+        case .year: unit = count == 1 ? "year" : "years"
+        @unknown default: return nil
+        }
+        return "\(count) \(unit) free, then \(product.displayPrice)"
+    }
+    #endif
     @Published var isLoadingProducts: Bool = false
     @Published var isPurchasing: Bool = false
     @Published var message: String = ""
@@ -564,7 +588,8 @@ final class StudioStoreKitManager: ObservableObject {
                         id: product.id,
                         title: product.displayName,
                         displayPrice: product.displayPrice,
-                        detail: product.description
+                        detail: product.description,
+                        introductoryOfferText: Self.freeTrialText(for: product)
                     )
                 }
             if products.isEmpty {

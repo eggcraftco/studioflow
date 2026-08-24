@@ -42,7 +42,8 @@ const FEATURE_LABELS: Record<FeatureKey, string> = {
   order_notes: "Order notes",
   dashboard_summary: "Dashboard summary",
   financial_summary: "Financial summaries",
-  messages: "Messages"
+  messages: "Messages",
+  bank_feed: "Bank feed and spending"
 };
 
 const ADD_ONS: {
@@ -339,7 +340,7 @@ export default function PlanPage() {
                 <div className="pill">Important rule</div>
                 <h2 style={{ margin: "12px 0 6px" }}>Expired subscriptions fall back to Free/Demo</h2>
                 <p style={{ color: "var(--muted)", margin: 0, maxWidth: 760 }}>
-                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free Demo access. Existing orders, customers and permitted basic data remain viewable and exportable.
+                  If a Lite, Pro or Team subscription expires, the workspace falls back to Free access. Existing orders, customers and permitted basic data remain viewable and exportable.
                 </p>
                 <p style={{ color: "var(--muted)", margin: "10px 0 0", maxWidth: 760, fontSize: 13 }}>
                   Client Files and message attachment files require an active eligible paid plan. When paid access ends, opening, previewing, downloading, uploading and deleting those cloud files stops at the end of the billing period. Download files you need before your subscription ends. Stored files may be retained for up to 90 days to restore access if you resubscribe.

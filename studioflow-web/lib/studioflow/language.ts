@@ -373,18 +373,18 @@ const WEB_TRANSLATIONS: TranslationTable = {
     "العربية (Arabic)": "استخدم قائمة النقاط الثلاث لإخفاء البطاقة أو تعديل العناوين أو التصدير أو تغيير اللون.",
     "हिन्दी (Hindi)": "तीन-डॉट मेनू से कार्ड छिपाएं, headings edit करें, export करें या रंग बदलें।"
   },
-  "Cards stay locked on Free Demo. Card moving, resizing and colours are available from NivaDesk Lite.": {
-    Türkçe: "Free Demo'da kartlar kilitli kalır. Kart taşıma, boyutlandırma ve renkler NivaDesk Lite ve üstünde kullanılabilir.",
-    Deutsch: "In Free Demo bleiben Karten gesperrt. Verschieben, Größenänderung und Farben gibt es ab NivaDesk Lite.",
-    Français: "En Free Demo, les cartes restent verrouillées. Déplacement, taille et couleurs sont disponibles avec NivaDesk Lite.",
-    Italiano: "Nel Free Demo le schede restano bloccate. Spostamento, ridimensionamento e colori sono disponibili da NivaDesk Lite.",
-    "Español (Spanish)": "En Free Demo las tarjetas permanecen bloqueadas. Mover, redimensionar y colores están disponibles desde NivaDesk Lite.",
-    Português: "No Free Demo os cartões ficam bloqueados. Mover, redimensionar e cores estão disponíveis no NivaDesk Lite.",
-    "Русский (Russian)": "В Free Demo карты остаются заблокированы. Перемещение, размер и цвета доступны с NivaDesk Lite.",
-    "日本語 (Japanese)": "Free Demoではカードはロックされます。移動、サイズ変更、色変更はNivaDesk Liteから利用できます。",
-    "中文 (Chinese)": "Free Demo 中卡片保持锁定。移动、调整大小和颜色功能从 NivaDesk Lite 开始提供。",
-    "العربية (Arabic)": "في Free Demo تبقى البطاقات مقفلة. التحريك وتغيير الحجم والألوان متاحة من NivaDesk Lite.",
-    "हिन्दी (Hindi)": "Free Demo में कार्ड लॉक रहते हैं। मूव, resize और रंग NivaDesk Lite से उपलब्ध हैं।"
+  "Cards stay locked on Free. Card moving, resizing and colours are available from NivaDesk Lite.": {
+    Türkçe: "Free'da kartlar kilitli kalır. Kart taşıma, boyutlandırma ve renkler NivaDesk Lite ve üstünde kullanılabilir.",
+    Deutsch: "In Free bleiben Karten gesperrt. Verschieben, Größenänderung und Farben gibt es ab NivaDesk Lite.",
+    Français: "En Free, les cartes restent verrouillées. Déplacement, taille et couleurs sont disponibles avec NivaDesk Lite.",
+    Italiano: "Nel Free le schede restano bloccate. Spostamento, ridimensionamento e colori sono disponibili da NivaDesk Lite.",
+    "Español (Spanish)": "En Free las tarjetas permanecen bloqueadas. Mover, redimensionar y colores están disponibles desde NivaDesk Lite.",
+    Português: "No Free os cartões ficam bloqueados. Mover, redimensionar e cores estão disponíveis no NivaDesk Lite.",
+    "Русский (Russian)": "В Free карты остаются заблокированы. Перемещение, размер и цвета доступны с NivaDesk Lite.",
+    "日本語 (Japanese)": "Freeではカードはロックされます。移動、サイズ変更、色変更はNivaDesk Liteから利用できます。",
+    "中文 (Chinese)": "Free 中卡片保持锁定。移动、调整大小和颜色功能从 NivaDesk Lite 开始提供。",
+    "العربية (Arabic)": "في Free تبقى البطاقات مقفلة. التحريك وتغيير الحجم والألوان متاحة من NivaDesk Lite.",
+    "हिन्दी (Hindi)": "Free में कार्ड लॉक रहते हैं। मूव, resize और रंग NivaDesk Lite से उपलब्ध हैं।"
   },
   "Timeline zoom": {
     Türkçe: "Zaman çizelgesi yakınlaştırma",
@@ -3693,12 +3693,12 @@ for (const [key, langs] of Object.entries(MAC_TRANSLATIONS)) {
   TRANSLATIONS[key] = { ...(TRANSLATIONS[key] || {}), ...(langs as Partial<Record<StudioLanguage, string>>) };
 }
 
-// Free Demo plan banner + collapsible verify strip (mirrors iOS/Android)
+// Free plan banner + collapsible verify strip (mirrors iOS/Android)
 Object.assign(TRANSLATIONS, {
-  "You're on the Free Demo plan.": { "Türkçe": "Ücretsiz Demo planındasınız.", "Deutsch": "Sie nutzen den kostenlosen Demo-Plan.", "Français": "Vous êtes sur le plan Démo gratuit.", "Italiano": "Stai usando il piano Demo gratuito.", "Español (Spanish)": "Estás en el plan Demo gratuito.", "Português": "Está no plano Demo gratuito.", "Русский (Russian)": "Вы используете бесплатный демо-план.", "日本語 (Japanese)": "無料デモプランをご利用中です。", "中文 (Chinese)": "您正在使用免费演示计划。", "العربية (Arabic)": "أنت على الخطة التجريبية المجانية.", "हिन्दी (Hindi)": "आप निःशुल्क डेमो प्लान पर हैं।" },
+  "You're on the Free plan.": { "Türkçe": "Ücretsiz Demo planındasınız.", "Deutsch": "Sie nutzen den kostenlosen Demo-Plan.", "Français": "Vous êtes sur le plan Démo gratuit.", "Italiano": "Stai usando il piano Demo gratuito.", "Español (Spanish)": "Estás en el plan Demo gratuito.", "Português": "Está no plano Demo gratuito.", "Русский (Russian)": "Вы используете бесплатный демо-план.", "日本語 (Japanese)": "無料デモプランをご利用中です。", "中文 (Chinese)": "您正在使用免费演示计划。", "العربية (Arabic)": "أنت على الخطة التجريبية المجانية.", "हिन्दी (Hindi)": "आप निःशुल्क डेमो प्लान पर हैं।" },
   "Choose a plan in Plan & Access to unlock more orders, storage and team features.": { "Türkçe": "Daha fazla sipariş, depolama ve ekip özelliği için Plan & Access'ten bir plan seçin.", "Deutsch": "Wählen Sie in Plan & Access einen Plan für mehr Aufträge, Speicher und Team-Funktionen.", "Français": "Choisissez un plan dans Plan & Access pour débloquer plus de commandes, de stockage et de fonctions d'équipe.", "Italiano": "Scegli un piano in Plan & Access per sbloccare più ordini, spazio e funzioni team.", "Español (Spanish)": "Elige un plan en Plan & Access para desbloquear más pedidos, almacenamiento y funciones de equipo.", "Português": "Escolha um plano em Plan & Access para desbloquear mais pedidos, armazenamento e recursos de equipa.", "Русский (Russian)": "Выберите план в Plan & Access, чтобы открыть больше заказов, хранилища и командных функций.", "日本語 (Japanese)": "Plan & Access でプランを選ぶと、より多くの注文・ストレージ・チーム機能が使えます。", "中文 (Chinese)": "在 Plan & Access 中选择计划，解锁更多订单、存储和团队功能。", "العربية (Arabic)": "اختر خطة من Plan & Access لفتح مزيد من الطلبات والتخزين وميزات الفريق.", "हिन्दी (Hindi)": "अधिक ऑर्डर, स्टोरेज और टीम सुविधाओं के लिए Plan & Access में एक प्लान चुनें।" },
   "View plans": { "Türkçe": "Planları gör", "Deutsch": "Pläne ansehen", "Français": "Voir les plans", "Italiano": "Vedi i piani", "Español (Spanish)": "Ver planes", "Português": "Ver planos", "Русский (Russian)": "Смотреть планы", "日本語 (Japanese)": "プランを見る", "中文 (Chinese)": "查看计划", "العربية (Arabic)": "عرض الخطط", "हिन्दी (Hindi)": "प्लान देखें" },
-  "Free Demo": { "Türkçe": "Ücretsiz Demo", "Deutsch": "Kostenlose Demo", "Français": "Démo gratuite", "Italiano": "Demo gratuita", "Español (Spanish)": "Demo gratuita", "Português": "Demo gratuita", "Русский (Russian)": "Бесплатное демо", "日本語 (Japanese)": "無料デモ", "中文 (Chinese)": "免费演示", "العربية (Arabic)": "تجربة مجانية", "हिन्दी (Hindi)": "निःशुल्क डेमो" },
+  "Free": { "Türkçe": "Ücretsiz Demo", "Deutsch": "Kostenlose Demo", "Français": "Démo gratuite", "Italiano": "Demo gratuita", "Español (Spanish)": "Demo gratuita", "Português": "Demo gratuita", "Русский (Russian)": "Бесплатное демо", "日本語 (Japanese)": "無料デモ", "中文 (Chinese)": "免费演示", "العربية (Arabic)": "تجربة مجانية", "हिन्दी (Hindi)": "निःशुल्क डेमो" },
   "Verify email": { "Türkçe": "E-postayı doğrula", "Deutsch": "E-Mail bestätigen", "Français": "Vérifier l'e-mail", "Italiano": "Verifica email", "Español (Spanish)": "Verificar correo", "Português": "Verificar email", "Русский (Russian)": "Подтвердить почту", "日本語 (Japanese)": "メールを確認", "中文 (Chinese)": "验证邮箱", "العربية (Arabic)": "تأكيد البريد", "हिन्दी (Hindi)": "ईमेल सत्यापित करें" },
   "Verify your email to keep your account.": { "Türkçe": "Hesabını korumak için e-postanı doğrula.", "Deutsch": "Bestätigen Sie Ihre E-Mail, um Ihr Konto zu behalten.", "Français": "Vérifiez votre e-mail pour conserver votre compte.", "Italiano": "Verifica la tua email per mantenere il tuo account.", "Español (Spanish)": "Verifica tu correo para mantener tu cuenta.", "Português": "Verifique o seu email para manter a sua conta.", "Русский (Russian)": "Подтвердите почту, чтобы сохранить аккаунт.", "日本語 (Japanese)": "アカウントを維持するにはメールを確認してください。", "中文 (Chinese)": "验证您的邮箱以保留账户。", "العربية (Arabic)": "أكِّد بريدك الإلكتروني للاحتفاظ بحسابك.", "हिन्दी (Hindi)": "अपना खाता बनाए रखने के लिए अपना ईमेल सत्यापित करें।" },
   "Unverified accounts with no data are removed after 30 days.": { "Türkçe": "Verisi olmayan doğrulanmamış hesaplar 30 gün sonra silinir.", "Deutsch": "Unbestätigte Konten ohne Daten werden nach 30 Tagen entfernt.", "Français": "Les comptes non vérifiés sans données sont supprimés après 30 jours.", "Italiano": "Gli account non verificati senza dati vengono rimossi dopo 30 giorni.", "Español (Spanish)": "Las cuentas sin verificar y sin datos se eliminan tras 30 días.", "Português": "Contas não verificadas sem dados são removidas após 30 dias.", "Русский (Russian)": "Неподтверждённые аккаунты без данных удаляются через 30 дней.", "日本語 (Japanese)": "データのない未確認アカウントは30日後に削除されます。", "中文 (Chinese)": "无数据的未验证账户将在30天后被删除。", "العربية (Arabic)": "تُحذف الحسابات غير المؤكدة بلا بيانات بعد 30 يومًا.", "हिन्दी (Hindi)": "बिना डेटा वाले असत्यापित खाते 30 दिनों के बाद हटा दिए जाते हैं।" },

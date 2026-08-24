@@ -3487,6 +3487,11 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
     var unreadWorkspaceTicketIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val isWorkspaceMode = selectedType == "workspace"
+    // Website chats arrive inside the NivaDesk support list, so each tab shows
+    // only its own kind instead of mixing the two queues.
+    val isWebsiteMode = selectedType == "website"
+    val visibleTickets = if (isWorkspaceMode) tickets else tickets.filter { (it.ticketType == "website") == isWebsiteMode }
+    var showsWebsiteTab by remember { mutableStateOf(false) }
     val categoryOptions = if (isWorkspaceMode) {
         listOf("project", "task", "approval", "customer", "internal", "other")
     } else {
@@ -3511,6 +3516,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 .onSuccess { summary ->
                     unreadSupportTicketIds = summary.unreadSupportTicketIds
                     unreadWorkspaceTicketIds = summary.unreadWorkspaceTicketIds
+                    if (summary.isSupportAdmin) showsWebsiteTab = true
                 }
         }
     }
@@ -3545,6 +3551,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
             }.onSuccess { result ->
                 tickets = result.tickets
                 canManageTickets = result.canManage
+                if (!isWorkspaceMode && result.canManage) showsWebsiteTab = true
                 loading = false
                 loadUnreadSummary()
             }.onFailure { error ->
@@ -3574,6 +3581,10 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
         loadTickets()
     }
 
+    LaunchedEffect(workspace.id) {
+        loadUnreadSummary()
+    }
+
     DetailColumn {
         DetailCard(t("Support / Tickets"), Icons.Filled.Email) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -3589,9 +3600,17 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                         SupportTicketTypeCard(
                             title = t("Contact NivaDesk Support"),
                             subtitle = "App bugs, sync, billing, account or feature requests.",
-                            selected = !isWorkspaceMode,
+                            selected = selectedType == "appSupport",
                             onClick = { selectedType = "appSupport" }
                         )
+                        if (showsWebsiteTab) {
+                            SupportTicketTypeCard(
+                                title = t("Website Chats"),
+                                subtitle = "Questions people send from the nivadesk.app chat widget.",
+                                selected = isWebsiteMode,
+                                onClick = { selectedType = "website" }
+                            )
+                        }
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -3605,14 +3624,24 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                         SupportTicketTypeCard(
                             title = t("Contact NivaDesk Support"),
                             subtitle = "App bugs, sync, billing, account or feature requests.",
-                            selected = !isWorkspaceMode,
+                            selected = selectedType == "appSupport",
                             onClick = { selectedType = "appSupport" },
                             modifier = Modifier.weight(1f)
                         )
+                        if (showsWebsiteTab) {
+                            SupportTicketTypeCard(
+                                title = t("Website Chats"),
+                                subtitle = "Questions people send from the nivadesk.app chat widget.",
+                                selected = isWebsiteMode,
+                                onClick = { selectedType = "website" },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
 
+            if (!isWebsiteMode) {
             SupportFormFieldMenus(
                 category = category,
                 categories = categoryOptions,
@@ -3680,6 +3709,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                     Text(t(t("Refresh")))
                 }
             }
+            }
 
             if (statusMessage.isNotBlank()) Pill(statusMessage, StudioGreen)
             if (errorMessage.isNotBlank()) Pill(errorMessage, DangerRed)
@@ -3689,7 +3719,8 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
             title = if (isWorkspaceMode) {
                 if (canManageTickets) "Workspace Ticket Inbox" else "My Workspace Tickets"
             } else {
-                if (canManageTickets) "NivaDesk Support Inbox" else "My NivaDesk Support Tickets"
+                if (isWebsiteMode) t("Questions from the website")
+                else if (canManageTickets) "NivaDesk Support Inbox" else "My NivaDesk Support Tickets"
             },
             icon = Icons.Filled.Info
         ) {
@@ -3699,7 +3730,7 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
             if (tickets.isEmpty() && !loading) {
                 Text(t("No tickets yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            tickets.forEach { ticket ->
+            visibleTickets.forEach { ticket ->
                 val isUnread = if (ticket.isWorkspaceTicket) {
                     unreadWorkspaceTicketIds.contains(ticket.id)
                 } else {
@@ -4974,11 +5005,11 @@ private object MaterialThemeColorFallback {
 }
 
 private fun planOrderLimitText(plan: StudioBillingPlan): String {
-    return if (plan == StudioBillingPlan.Demo) "5 orders" else "Unlimited orders"
+    return if (plan == StudioBillingPlan.Demo) "10 orders" else "Unlimited orders"
 }
 
 private fun planCustomerLimitText(plan: StudioBillingPlan): String {
-    return if (plan == StudioBillingPlan.Demo) "3 customers" else "Unlimited customers"
+    return if (plan == StudioBillingPlan.Demo) "10 customers" else "Unlimited customers"
 }
 
 private fun planStorageLimitText(plan: StudioBillingPlan): String {
@@ -6328,7 +6359,7 @@ private fun AdminInsightsDetail() {
         loading = false
     }
 
-    val planLabels = mapOf("demo" to "Free Demo", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+    val planLabels = mapOf("demo" to "Free", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
     val planColors = mapOf(
         "demo" to Color(0xFF8A5CF6),
         "lifetime_lite" to Color(0xFF0A84FF),
@@ -6445,7 +6476,7 @@ private fun AdminInsightsDetail() {
 
 // --- NivaDesk admin: top-level Insights hub with left sidebar ---------------
 
-private val aiHubPlanLabels = mapOf("demo" to "Free Demo", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+private val aiHubPlanLabels = mapOf("demo" to "Free", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
 private val aiHubPlanColors = mapOf(
     "demo" to Color(0xFF8A5CF6),
     "lifetime_lite" to Color(0xFF0A84FF),
@@ -6710,7 +6741,7 @@ private fun AIHubSubscriptionsPage(t: (String) -> String) {
                 AIHubTiles(listOf(
                     Triple(t("Active Subscriptions"), insightsInt(data, "subscriptions", "paidTotal").toString(), ""),
                     Triple(t("New Subscriptions (30d)"), insightsInt(data, "subscriptions", "paidNew30d").toString(), ""),
-                    Triple(t("Free Demo Workspaces"), insightsInt(data, "subscriptions", "freeDemo").toString(), "")
+                    Triple(t("Free Plan Workspaces"), insightsInt(data, "subscriptions", "freeDemo").toString(), "")
                 ))
                 AIHubCard(t("Recent Subscriptions")) {
                     insightsList(insightsMap(data)["recent"]).forEach { item ->

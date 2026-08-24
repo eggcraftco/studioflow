@@ -297,9 +297,12 @@ fun StudioFlowMainScreen(
         if (item == StudioSection.Insights) {
             adminAllowsSection
         } else if (item == StudioSection.BankSpending) {
-            // Bank feed reads are owner-only in Firestore rules.
-            state.workspace?.isOwner == true ||
-                (state.workspace?.memberAccess?.bankFeed == true && (state.workspace?.canSeeFinancialData ?: true))
+            // Bank feed reads are owner-only in Firestore rules, and the feature
+            // itself starts at Pro.
+            (state.workspace?.billingPlan?.allowsBankFeed ?: false) && (
+                state.workspace?.isOwner == true ||
+                    (state.workspace?.memberAccess?.bankFeed == true && (state.workspace?.canSeeFinancialData ?: true))
+            )
         } else {
             planAllowsSection && menuAllowsSection &&
                 (state.workspace?.memberAccess?.allows(item.accessKey) ?: true)
@@ -845,7 +848,7 @@ private fun DemoPlanUpgradeBanner(
             ) {
                 Text("✨", fontSize = 10.sp)
                 Spacer(modifier = Modifier.width(5.dp))
-                Text(t("Free Demo"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(t("Free"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 Text("  ·  ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(t("View plans"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(4.dp))
@@ -864,7 +867,7 @@ private fun DemoPlanUpgradeBanner(
             ) {
                 Text("✨", fontSize = 16.sp)
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(t("You're on the Free Demo plan."), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(t("You're on the Free plan."), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Text(
                         t("Choose a plan in Plan & Access to unlock more orders, storage and team features."),
                         fontSize = 11.sp,
