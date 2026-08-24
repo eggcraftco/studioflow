@@ -8564,6 +8564,15 @@ async function deleteWorkspaceCollectionDocuments(collectionName, companyId) {
   let deleted = 0;
 
   for (const documentSnapshot of snapshot.docs) {
+    // Deleting a document leaves its subcollections behind. Orders carry
+    // estimateRecords, which hold the customer's name and email and the
+    // approver's name, email and IP — exactly the data a deletion is meant to
+    // remove. Take the whole tree for those.
+    if (collectionName === "siparisler") {
+      await db.recursiveDelete(documentSnapshot.ref);
+      deleted += 1;
+      continue;
+    }
     batch.delete(documentSnapshot.ref);
     count += 1;
     deleted += 1;
@@ -8812,7 +8821,10 @@ exports.purgeDeletedOrders = onSchedule(
       const deletedAt = doc.data()?.deletedAt;
       const deletedMs = deletedAt && typeof deletedAt.toMillis === "function" ? deletedAt.toMillis() : null;
       if (deletedMs !== null && deletedMs <= cutoffMs) {
-        await doc.ref.delete().catch((error) =>
+        // Recursive: an order carries estimateRecords, and a plain delete would
+        // leave the customer's details sitting in an orphaned subcollection
+        // under a document that no longer exists.
+        await db.recursiveDelete(doc.ref).catch((error) =>
           console.warn("purgeDeletedOrders delete failed:", doc.id, error?.message || error)
         );
         purged += 1;
