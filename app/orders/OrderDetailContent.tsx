@@ -15,6 +15,13 @@ import {
   sendOrderEstimate,
   type EstimateRecord
 } from "@/lib/studioflow/estimates";
+import {
+  REPAIR_INTAKE_PRESETS,
+  matchingRepairIntakePresetId,
+  repairIntakeFieldsForBusinessType,
+  repairIntakePresetById,
+  repairIntakePresetIdForBusinessType
+} from "@/lib/studioflow/repairIntakePresets";
 import { studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -1195,15 +1202,6 @@ function isClientFilePdf(file: ClientFileDetail) {
 }
 
 // Falls back to these when the workspace has not renamed the intake rows.
-const DEFAULT_REPAIR_INTAKE_FIELDS = [
-  { id: "itemType", title: "Item Type" },
-  { id: "metal", title: "Metal" },
-  { id: "hallmark", title: "Hallmark" },
-  { id: "itemSize", title: "Size" },
-  { id: "stones", title: "Stones" },
-  { id: "weight", title: "Weight" },
-  { id: "serialReference", title: "Serial / Reference" }
-];
 
 
 type RepairIntakeDraft = {
@@ -4897,7 +4895,12 @@ export function OrderDetailContent({
     const configured = blockHeadingSettings?.repairIntakeFields
       ?.map(field => ({ id: field.id.trim(), title: field.title.trim() }))
       .filter(field => field.id && field.title) ?? [];
-    return configured.length > 0 ? configured : DEFAULT_REPAIR_INTAKE_FIELDS;
+    // Nothing configured yet means the workspace has never opened the editor, so
+    // the trade it signed up as picks the rows — a phone shop should not start
+    // on Hallmark and Stones.
+    return configured.length > 0
+      ? configured
+      : repairIntakeFieldsForBusinessType(blockHeadingSettings?.businessType);
   }, [blockHeadingSettings]);
 
   const repairIntake = order.repairIntake;
@@ -5384,14 +5387,18 @@ export function OrderDetailContent({
               ) : (
                 <>
                   <div className="repair-intake-rows">
+                    {/* Every configured row, filled or not. Hiding the empty
+                        ones left a brand-new repair order showing nothing but
+                        the Received footer, while Mac showed the whole set. */}
                     {repairIntakeFieldRows.map(row => {
                       const value = repairIntake?.fields?.[row.id] ?? "";
-                      if (!value) return null;
                       return (
                         <div key={row.id} className="repair-intake-row">
                           <span>{row.title}</span>
                           <strong>
-                            {value.split("\n").map((line, index) => <span key={index}>{line}</span>)}
+                            {value
+                              ? value.split("\n").map((line, index) => <span key={index}>{line}</span>)
+                              : "—"}
                           </strong>
                         </div>
                       );
@@ -8819,10 +8826,45 @@ function BlockHeadingsModal({
         return renderList("Special Note Fields", "specialNoteSections", "Special Note", true);
       case "schedule":
         return renderList("Quick reminders", "scheduleQuickReminders", "Custom reminder");
-      case "repairIntake":
+      case "repairIntake": {
         // "Ring Size" to a jeweller is "Case Size" to a watchmaker. Without this
         // the dialog opened empty and still offered a Save that reported success.
-        return renderList("Repair intake rows", "repairIntakeFields", "Intake Row");
+        const currentPresetId = matchingRepairIntakePresetId(listItems("repairIntakeFields"));
+        const suggestedPresetId = repairIntakePresetIdForBusinessType(settings.businessType);
+        return (
+          <>
+            <section className="block-heading-section">
+              <div className="compact-row-head">
+                <strong>Start from a trade</strong>
+              </div>
+              <p className="muted-copy">
+                Different trades take in different things. Pick the closest one to replace the rows
+                below — you can still rename, add and remove any of them afterwards.
+              </p>
+              <select
+                className="input"
+                value={currentPresetId}
+                disabled={saving || !canSave}
+                onChange={event => {
+                  const preset = repairIntakePresetById(event.target.value);
+                  if (!preset) return;
+                  // Ids carry the stored values, so switching preset keeps
+                  // anything already recorded under a row the new set also has.
+                  updateList("repairIntakeFields", preset.fields.map(field => ({ ...field })));
+                }}
+              >
+                {currentPresetId ? null : <option value="">Custom rows</option>}
+                {REPAIR_INTAKE_PRESETS.map(preset => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}{preset.id === suggestedPresetId ? " — suggested for your business" : ""}
+                  </option>
+                ))}
+              </select>
+            </section>
+            {renderList("Repair intake rows", "repairIntakeFields", "Intake Row")}
+          </>
+        );
+      }
       case "invoiceItems":
         return (
           <CompanyNumbersEditor
