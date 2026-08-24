@@ -5052,10 +5052,29 @@ function normalizeOrderDetailCardColumns(value, fallbackOrder = ORDER_DETAIL_CAR
     return layoutColumnsFromCardOrder(fallbackOrder);
   }
 
+  // Must stay identical to the web and Android merges: a card added after this
+  // layout was saved goes where the default layout puts it, not onto the tail of
+  // the last column. Three implementations disagreeing means the platforms keep
+  // rewriting each other's shared snapshot.
   for (const cardId of ORDER_DETAIL_CARD_IDS) {
-    if (!seen.has(cardId)) {
-      columns[columns.length - 1].push(cardId);
+    if (seen.has(cardId)) continue;
+    const defaultColumnIndex = DEFAULT_ORDER_DETAIL_CARD_COLUMNS.findIndex((column) => column.includes(cardId));
+    const targetIndex = defaultColumnIndex >= 0 && defaultColumnIndex < columns.length
+      ? defaultColumnIndex
+      : columns.length - 1;
+    const target = columns[targetIndex];
+    const defaultColumn = defaultColumnIndex >= 0 ? DEFAULT_ORDER_DETAIL_CARD_COLUMNS[defaultColumnIndex] : [];
+    let insertAt = target.length;
+    const precedingNeighbours = defaultColumn.slice(0, defaultColumn.indexOf(cardId));
+    if (precedingNeighbours.length > 0) {
+      insertAt = precedingNeighbours.reduce((position, neighbour) => {
+        const found = target.indexOf(neighbour);
+        return found >= 0 ? Math.max(position, found + 1) : position;
+      }, 0);
+    } else if (defaultColumn.length > 0) {
+      insertAt = 0;
     }
+    target.splice(insertAt, 0, cardId);
   }
 
   while (columns.length < 3) columns.push([]);

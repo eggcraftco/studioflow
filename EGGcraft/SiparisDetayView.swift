@@ -605,7 +605,7 @@ extension Notification.Name {
     static let phoneCardMoveRequested = Notification.Name("phoneCardMoveRequested")
 }
 
-enum KartTipi: String, Codable, Equatable, Identifiable {
+enum KartTipi: String, Codable, Equatable, Identifiable, CaseIterable {
     case preview = "preview", summary = "summary", customer = "customer"
     case delivery = "delivery", communication = "communication", notes = "notes"
     case financial = "financial", status = "status", shipping = "shipping"
@@ -1261,7 +1261,7 @@ struct SiparisDetayView: View {
     @AppStorage("kartYukseklikleriJSON") private var kartYukseklikleriJSON = "{}"
     
     @State private var kartYerlesimi: [[KartTipi]] = [
-        [.preview, .summary, .workTime, .shipping, .schedule, .notes],
+        [.preview, .repairIntake, .estimate, .summary, .workTime, .shipping, .schedule, .notes],
         [.customer, .invoiceItems, .materials, .delivery],
         [.financial, .priority, .todo, .status, .historyLog, .clientFiles, .customerNotes]
     ]
@@ -1279,6 +1279,7 @@ struct SiparisDetayView: View {
     @State private var phoneKartSirasi: [KartTipi] = []
     @State private var macOSHitboxHack: CGFloat = 0
     @State private var hasHealedOrphanCardsOnce: Bool = false
+    @State private var orphanCardRepairAttempts: Int = 0
     @State private var calismaAlaniIcerikBoyutu: CGSize = .zero
     
     @AppStorage("showCardPreview") private var showCardPreview = true; @AppStorage("showCardSummary") private var showCardSummary = true; @AppStorage("showCardCustomer") private var showCardCustomer = true; @AppStorage("showCardDelivery") private var showCardDelivery = true; @AppStorage("showCardCommunication") private var showCardCommunication = true; @AppStorage("showCardNotes") private var showCardNotes = true; @AppStorage("showCardFinancial") private var showCardFinancial = true; @AppStorage("showCardStatus") private var showCardStatus = true; @AppStorage("showCardShipping") private var showCardShipping = true
@@ -3479,8 +3480,17 @@ struct SiparisDetayView: View {
     // spins the workspace.
     private func scheduleOrphanCardRepairOnce() {
         guard !hasHealedOrphanCardsOnce else { return }
-        hasHealedOrphanCardsOnce = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // Healing before the companySettings listener has spoken is wasted
+            // work: the apply that follows replaces the layout wholesale, and the
+            // settle gate drops the upload. So re-arm a bounded number of times
+            // instead of burning the single shot on a timer that fired too early.
+            guard hasSyncedWorkspaceCloudOnce || orphanCardRepairAttempts >= 4 else {
+                orphanCardRepairAttempts += 1
+                scheduleOrphanCardRepairOnce()
+                return
+            }
+            hasHealedOrphanCardsOnce = true
             healOrphanedVisibleCards()
         }
     }
@@ -3720,6 +3730,19 @@ struct SiparisDetayView: View {
         ensureToDoCardInCurrentLayout()
         ensureWorkTimeCardInCurrentLayout()
         ensureHistoryLogCardInCurrentLayout()
+
+        // The five above are hand-written, one per card, and each was added when
+        // that card shipped. The two newest cards were never given one, so a
+        // layout saved before they existed came back without them and they had
+        // nowhere to render. Generic from here on, so the next card cannot repeat
+        // it. No save: applyWorkspaceLayout persists once its state has settled.
+        while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
+        let placed = Set(kartYerlesimi.flatMap { $0 })
+        for kart in KartTipi.allCases where isCardVisible(kart) && !placed.contains(kart) {
+            let candidates = Array(kartYerlesimi.indices.prefix(3))
+            let hedef = candidates.min { kartYerlesimi[$0].count < kartYerlesimi[$1].count } ?? 0
+            kartYerlesimi[hedef].append(kart)
+        }
     }
 
     private func ensureInvoiceItemsCardInCurrentLayout() {

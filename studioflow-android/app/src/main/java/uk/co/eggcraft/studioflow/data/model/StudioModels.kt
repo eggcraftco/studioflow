@@ -299,8 +299,30 @@ data class OrderDetailCardLayout(
                 cleanColumns.addAll(OrderDetailCardId.DefaultColumns.map { it.toMutableList() })
                 seenColumns.addAll(OrderDetailCardId.DefaultOrder)
             } else {
+                // Must stay identical to the web and server merges: a card added
+                // after this layout was saved goes where the default layout puts
+                // it, not onto the tail of the last column.
                 val missing = OrderDetailCardId.DefaultOrder.filterNot { it in seenColumns }
-                if (missing.isNotEmpty()) cleanColumns[cleanColumns.lastIndex] = cleanColumns.last() + missing
+                val working = cleanColumns.map { it.toMutableList() }.toMutableList()
+                for (card in missing) {
+                    val defaultColumnIndex = OrderDetailCardId.DefaultColumns.indexOfFirst { card in it }
+                    val targetIndex = if (defaultColumnIndex in working.indices) defaultColumnIndex else working.lastIndex
+                    if (targetIndex < 0) continue
+                    val target = working[targetIndex]
+                    val defaultColumn = OrderDetailCardId.DefaultColumns.getOrNull(defaultColumnIndex).orEmpty()
+                    val preceding = defaultColumn.take(defaultColumn.indexOf(card).coerceAtLeast(0))
+                    val insertAt = when {
+                        preceding.isNotEmpty() -> preceding.fold(0) { position, neighbour ->
+                            val found = target.indexOf(neighbour)
+                            if (found >= 0) maxOf(position, found + 1) else position
+                        }
+                        defaultColumn.isNotEmpty() -> 0
+                        else -> target.size
+                    }
+                    target.add(insertAt.coerceIn(0, target.size), card)
+                }
+                cleanColumns.clear()
+                cleanColumns.addAll(working)
             }
             while (cleanColumns.size < minimumColumnCount) cleanColumns.add(emptyList())
 

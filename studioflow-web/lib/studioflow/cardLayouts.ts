@@ -117,11 +117,16 @@ function normalizeCardOrder(value: unknown) {
 }
 
 function columnsFromCardOrder(cardOrder: OrderDetailCardId[]) {
-  return [
-    cardOrder.slice(0, 2),
-    cardOrder.slice(2, 7),
-    cardOrder.slice(7)
-  ];
+  // Fixed slice indices silently reshuffle every column each time a card id is
+  // added to the registry. Follow the declared default layout instead.
+  const columns = DEFAULT_ORDER_DETAIL_CARD_COLUMNS.map(column =>
+    column.filter(cardId => cardOrder.includes(cardId))
+  );
+  const placed = new Set(columns.flat());
+  cardOrder.forEach(cardId => {
+    if (!placed.has(cardId)) columns[columns.length - 1].push(cardId);
+  });
+  return columns;
 }
 
 function normalizeCardColumns(value: unknown, fallbackOrder: OrderDetailCardId[]) {
@@ -148,10 +153,30 @@ function normalizeCardColumns(value: unknown, fallbackOrder: OrderDetailCardId[]
     return columnsFromCardOrder(fallbackOrder);
   }
 
+  // A card added after this layout was saved belongs where the default layout
+  // puts it, not dumped at the bottom of the last column — which is how the two
+  // newest cards ended up in slot 7 and 8 of column three for everyone with an
+  // older layout. Insert it after whichever of its default neighbours is already
+  // there, so it lands in its intended place and stays draggable from it.
   ORDER_DETAIL_CARD_IDS.forEach(cardId => {
-    if (!seen.has(cardId)) {
-      columns[columns.length - 1].push(cardId);
+    if (seen.has(cardId)) return;
+    const defaultColumnIndex = DEFAULT_ORDER_DETAIL_CARD_COLUMNS.findIndex(column => column.includes(cardId));
+    const targetIndex = defaultColumnIndex >= 0 && defaultColumnIndex < columns.length
+      ? defaultColumnIndex
+      : columns.length - 1;
+    const target = columns[targetIndex];
+    const defaultColumn = defaultColumnIndex >= 0 ? DEFAULT_ORDER_DETAIL_CARD_COLUMNS[defaultColumnIndex] : [];
+    let insertAt = target.length;
+    const precedingNeighbours = defaultColumn.slice(0, defaultColumn.indexOf(cardId));
+    if (precedingNeighbours.length > 0) {
+      insertAt = precedingNeighbours.reduce((position, neighbour) => {
+        const found = target.indexOf(neighbour);
+        return found >= 0 ? Math.max(position, found + 1) : position;
+      }, 0);
+    } else if (defaultColumn.length > 0) {
+      insertAt = 0;
     }
+    target.splice(insertAt, 0, cardId);
   });
 
   while (columns.length < 3) columns.push([]);
