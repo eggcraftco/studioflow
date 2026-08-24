@@ -4858,9 +4858,6 @@ export function OrderDetailContent({
 
     switch (cardId) {
       case "repairIntake": {
-        // Only a repair order carries a customer's item; a custom order has none.
-        if (order.orderType !== "repair" && !repairIntake) return null;
-
         const bulletList = (title: string, lines: string[]) => (
           lines.length > 0 ? (
             <div className="repair-intake-block">

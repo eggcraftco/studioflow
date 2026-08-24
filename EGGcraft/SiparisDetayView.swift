@@ -2514,7 +2514,8 @@ struct SiparisDetayView: View {
             .status,
             .shipping,
             .schedule,
-            .historyLog
+            .historyLog,
+            .repairIntake
         ]
 
         return cards
@@ -2883,7 +2884,12 @@ struct SiparisDetayView: View {
         case .materials: return siparis.invBool1 || siparis.invBool2 || siparis.invBool3 || siparis.invBool4 || !siparis.invNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
         case .invoiceItems: return siparis.hasLineItems
-        case .repairIntake: return siparis.orderType == "repair"
+        case .repairIntake:
+            let intake = siparis.repairIntake
+            return siparis.orderType == "repair"
+                || !(intake?.fields.isEmpty ?? true)
+                || !(intake?.condition.isEmpty ?? true)
+                || !(intake?.requestedWork.isEmpty ?? true)
         }
     }
 
@@ -3416,7 +3422,7 @@ struct SiparisDetayView: View {
         case .materials: return showCardMaterials
         case .priority: return showCardPriority
         case .invoiceItems: return showCardInvoiceItems
-        case .repairIntake: return showCardRepairIntake && siparis.orderType == "repair"
+        case .repairIntake: return showCardRepairIntake
         }
     }
 

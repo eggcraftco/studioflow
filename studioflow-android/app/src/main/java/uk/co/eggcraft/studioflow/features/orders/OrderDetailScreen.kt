@@ -686,7 +686,8 @@ fun OrderDetailScreen(
 private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): Boolean = when (cardId) {
     OrderDetailCardId.Summary -> true
     OrderDetailCardId.Preview -> order.designLink.isNotBlank() || order.designName.isNotBlank()
-    OrderDetailCardId.RepairIntake -> order.orderType == "repair"
+    OrderDetailCardId.RepairIntake -> order.orderType == "repair" ||
+        order.repairIntake?.let { it.fields.isNotEmpty() || it.condition.isNotEmpty() || it.requestedWork.isNotEmpty() } == true
     OrderDetailCardId.Customer -> order.customerName.isNotBlank()
     OrderDetailCardId.Materials -> order.invBool1 || order.invBool2 || order.invBool3 || order.invBool4 || order.invNotes.isNotBlank()
     OrderDetailCardId.Priority -> order.priority != "Normal" || order.risk != "None"
