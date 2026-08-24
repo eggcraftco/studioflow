@@ -5317,15 +5317,20 @@ export function OrderDetailContent({
         );
       }
       case "repairIntake": {
+        // Shown whether or not there is anything in them yet. Hiding the empty
+        // ones left the card looking like it had no Condition or Requested Work
+        // at all, while the same order on Mac showed both waiting to be filled.
         const bulletList = (title: string, lines: string[]) => (
-          lines.length > 0 ? (
-            <div className="repair-intake-block">
-              <span className="repair-intake-block-title">{title}</span>
+          <div className="repair-intake-block">
+            <span className="repair-intake-block-title">{title}</span>
+            {lines.length > 0 ? (
               <ul className="repair-intake-bullets">
                 {lines.map((line, index) => <li key={`${title}-${index}`}>{line}</li>)}
               </ul>
-            </div>
-          ) : null
+            ) : (
+              <p className="repair-intake-instructions">—</p>
+            )}
+          </div>
         );
 
         return (
@@ -5408,37 +5413,59 @@ export function OrderDetailContent({
                   {bulletList("Condition", repairIntake?.condition ?? [])}
                   {bulletList("Requested Work", repairIntake?.requestedWork ?? [])}
 
-                  {repairIntake?.customerInstructions ? (
-                    <div className="repair-intake-block">
-                      <span className="repair-intake-block-title">Customer Instructions</span>
-                      <p className="repair-intake-instructions">{repairIntake.customerInstructions}</p>
-                    </div>
-                  ) : null}
+                  <div className="repair-intake-block">
+                    <span className="repair-intake-block-title">Customer Instructions</span>
+                    <p className="repair-intake-instructions">
+                      {repairIntake?.customerInstructions || "—"}
+                    </p>
+                  </div>
 
-                  {intakePhotos.length > 0 ? (
+                  {canSeeIntakePhotos ? (
                     <div className="repair-intake-block">
                       <div className="repair-intake-photos-head">
                         <span className="repair-intake-block-title">Intake Photos</span>
-                        {intakePhotos.length > 4 ? (
-                          <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
+                        {canInlineEditFullDetails ? (
+                          <button
+                            type="button"
+                            className="repair-intake-photo-add"
+                            onClick={() => clientFileInputRef.current?.click()}
+                          >
+                            Add photos
+                          </button>
                         ) : null}
                       </div>
-                      <div className="repair-intake-photos">
-                        {intakePhotos.slice(0, 4).map(photo => (
-                          <a
-                            key={photo.id}
-                            className="repair-intake-photo"
-                            href={photo.downloadURL || undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={photo.note || photo.fileName}
-                          >
-                            {photo.downloadURL
-                              ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
-                              : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
-                          </a>
-                        ))}
-                      </div>
+                      {intakePhotos.length > 0 ? (
+                        <div className="repair-intake-photos">
+                          {/* Four across at most; the grid reflows as the card is
+                              widened. Opening one hands off to the client-files
+                              viewer rather than dumping the raw URL in a tab. */}
+                          {intakePhotos.slice(0, 4).map(photo => (
+                            <button
+                              key={photo.id}
+                              type="button"
+                              className="repair-intake-photo"
+                              onClick={() => setPreviewingClientFileId(photo.id)}
+                              title={photo.note || photo.fileName}
+                            >
+                              {photo.downloadURL
+                                ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
+                                : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+                            </button>
+                          ))}
+                          {intakePhotos.length > 4 ? (
+                            <button
+                              type="button"
+                              className="repair-intake-photo is-more"
+                              onClick={() => setPreviewingClientFileId(intakePhotos[4].id)}
+                              title={`${intakePhotos.length - 4} more`}
+                            >
+                              <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="repair-intake-instructions">—</p>
+                      )}
                     </div>
                   ) : null}
 

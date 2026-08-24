@@ -2310,6 +2310,7 @@ struct SiparisDetayView: View {
                 communicationShowCustomerNotes: $communicationShowCustomerNotes,
                 communicationChannelLabelsJSON: $communicationChannelLabelsJSON,
                 specialNoteSectionsJSON: $specialNoteSectionsJSON,
+                repairIntakeFieldsJSON: $repairIntakeFieldsJSON,
                 orderExtraNoteSectionsJSON: Binding(
                     get: { siparis.customFields?[orderExtraNoteSectionsKey] ?? "" },
                     set: { newValue in
@@ -7977,7 +7978,8 @@ struct SiparisDetayView: View {
             onHeightChangeEnd: kaydetKartYukseklikleri,
             onWidthChangeEnd: saveWidths,
             onHide: { setCardVisibleWithUndo(.repairIntake, false) },
-            onColorChange: { setKartColor(kart: .repairIntake, color: $0) }
+            onColorChange: { setKartColor(kart: .repairIntake, color: $0) },
+            onEditHeadings: { headingEditorTarget = .repairIntake }
         ) {
             // Different trades take in different things. The rows can still be
             // renamed one by one; this just swaps the whole set for a closer start.
@@ -8026,6 +8028,11 @@ struct SiparisDetayView: View {
                 lines: repairIntakeLinesBinding(\.requestedWork)
             )
 
+            if canAccessClientFiles {
+                Divider().background(Color.primary.opacity(0.1))
+                repairIntakePhotoStrip
+            }
+
             Divider().background(Color.primary.opacity(0.1))
 
             HStack(spacing: 10) {
@@ -8046,6 +8053,85 @@ struct SiparisDetayView: View {
                 Spacer()
             }
         }
+    }
+
+    // Photos of what the customer actually handed over. They ride on the client
+    // files of this order, so each order has its own set and the permission that
+    // governs client files governs these too. Kept deliberately small: four
+    // thumbnails across, more only as the card widens.
+    private var repairIntakePhotos: [ClientFileItem] {
+        guard canAccessClientFiles else { return [] }
+        return clientFileItems.filter { item in
+            guard item.contentType.lowercased().hasPrefix("image") else { return false }
+            // The preview card mirrors the design mock-up into client files. That
+            // is a picture of what we are making, not of what came in.
+            if !siparis.designLink.isEmpty && item.downloadURL == siparis.designLink { return false }
+            return true
+        }
+    }
+
+    @ViewBuilder
+    private var repairIntakePhotoStrip: some View {
+        let photos = repairIntakePhotos
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(t("Intake Photos", lang: seciliDil))
+                    .font(.system(size: 13)).foregroundColor(.gray)
+                Spacer()
+                if canEditClientFiles {
+                    Button { presentClientFilePicker() } label: {
+                        Label(t("Add photos", lang: seciliDil), systemImage: "plus.circle")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if photos.isEmpty {
+                Text("—").font(.system(size: 13, weight: .semibold))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 56, maximum: 76), spacing: 6, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(photos.prefix(8)) { photo in
+                        Button { clientFilePreviewItem = photo } label: {
+                            repairIntakePhotoThumb(photo, extra: photo.id == photos.prefix(8).last?.id && photos.count > 8 ? photos.count - 8 : 0)
+                        }
+                        .buttonStyle(.plain)
+                        .help(photo.note.isEmpty ? photo.fileName : photo.note)
+                    }
+                }
+                .frame(maxWidth: 320, alignment: .leading)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func repairIntakePhotoThumb(_ photo: ClientFileItem, extra: Int) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+            if let url = URL(string: photo.downloadURL), !photo.downloadURL.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        Image(systemName: "photo").font(.system(size: 14)).foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                Image(systemName: "photo").font(.system(size: 14)).foregroundColor(.secondary)
+            }
+            if extra > 0 {
+                Color.black.opacity(0.45)
+                Text("+\(extra)").font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+            }
+        }
+        .frame(height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var repairIntakeReceivedText: String {
@@ -14632,6 +14718,7 @@ struct BlockHeadingsEditorSheet: View {
     @Binding var communicationShowCustomerNotes: Bool
     @Binding var communicationChannelLabelsJSON: String
     @Binding var specialNoteSectionsJSON: String
+    @Binding var repairIntakeFieldsJSON: String
     var orderExtraNoteSectionsJSON: Binding<String>? = nil
     // When set (the editor is opened from an order), the Spending / Cost and
     // Remaining / Pending heading lists are edited PER-ORDER: loaded from these
@@ -14679,6 +14766,8 @@ struct BlockHeadingsEditorSheet: View {
     @State private var communicationShowChannelDraft: Bool = true
     @State private var communicationShowCustomerNotesDraft: Bool = true
     @State private var communicationChannelLabelsDraft: [String] = ["Instagram", "WhatsApp", "TikTok"]
+    @State private var repairIntakeRowsDraft: [RepairIntakeFieldDTO] = []
+    @AppStorage("businessType") private var editorBusinessType: String = "Custom Art Studio"
 
     private var sheetTitle: String {
         switch kartTipi {
@@ -14690,6 +14779,7 @@ struct BlockHeadingsEditorSheet: View {
         case .materials: return t("Edit Materials Headings", lang: seciliDil)
         case .schedule: return t("Edit Quick Reminder Headings", lang: seciliDil)
         case .communication: return t("Edit Communication Headings", lang: seciliDil)
+        case .repairIntake: return t("Edit Repair Intake Rows", lang: seciliDil)
         default: return t("Edit Block Headings", lang: seciliDil)
         }
     }
@@ -14712,6 +14802,8 @@ struct BlockHeadingsEditorSheet: View {
             return t("Choose the shortcut titles shown in Schedule & Alerts. Date, priority and note are set in the card.", lang: seciliDil)
         case .communication:
             return t("Choose which communication fields are visible and edit the channel button names.", lang: seciliDil)
+        case .repairIntake:
+            return t("Start from a trade template, then add, remove or rename the rows recorded when an item comes in.", lang: seciliDil)
         default:
             return t("Edit headings for this block.", lang: seciliDil)
         }
@@ -14805,6 +14897,12 @@ struct BlockHeadingsEditorSheet: View {
                         Divider().padding(.vertical, 2)
                         EditorSectionTitle(title: t("Channel Button Names", lang: seciliDil), systemImage: "bubble.left.and.bubble.right")
                         communicationChannelEditor
+                    } else if kartTipi == .repairIntake {
+                        EditorSectionTitle(title: t("Start from a trade", lang: seciliDil), systemImage: "square.grid.2x2")
+                        repairIntakeTemplateEditor
+                        Divider().padding(.vertical, 2)
+                        EditorSectionTitle(title: t("Repair intake rows", lang: seciliDil), systemImage: "list.bullet")
+                        repairIntakeRowsEditor
                     } else {
                         unsupportedEditor
                     }
@@ -14949,6 +15047,7 @@ struct BlockHeadingsEditorSheet: View {
         case .summary: preferredHeight = 560
         case .schedule: preferredHeight = 560
         case .communication: preferredHeight = 620
+        case .repairIntake: preferredHeight = 640
         default: preferredHeight = 560
         }
         #if os(iOS)
@@ -14968,6 +15067,7 @@ struct BlockHeadingsEditorSheet: View {
         case .materials: return "shippingbox.circle.fill"
         case .schedule: return "bolt.fill"
         case .communication: return "bubble.left.and.bubble.right"
+        case .repairIntake: return "shippingbox"
         default: return "textformat"
         }
     }
@@ -15612,7 +15712,78 @@ private var notesSupplierEditor: some View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    // Ids are what intake values are stored under, so a rename keeps the value
+    // and only a delete loses it. New rows get a fresh id derived from the title.
+    @ViewBuilder
+    private var repairIntakeTemplateEditor: some View {
+        let suggested = RepairIntakePresets.presetId(forBusinessType: editorBusinessType)
+        let matched = RepairIntakePresets.matchingPresetId(for: repairIntakeRowsDraft)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(RepairIntakePresets.all) { preset in
+                        Button {
+                            repairIntakeRowsDraft = preset.fields
+                        } label: {
+                            Text(t(preset.label, lang: seciliDil) + (preset.id == suggested ? " ★" : ""))
+                        }
+                    }
+                } label: {
+                    Text(RepairIntakePresets.preset(id: matched).map { t($0.label, lang: seciliDil) }
+                        ?? t("Custom rows", lang: seciliDil))
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .fixedSize()
+                Spacer()
+            }
+            Text(t("★ is the template suggested for your business type.", lang: seciliDil))
+                .font(.system(size: 11)).foregroundColor(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var repairIntakeRowsEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if repairIntakeRowsDraft.isEmpty {
+                Text(t("No rows yet.", lang: seciliDil))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            }
+            ForEach(Array(repairIntakeRowsDraft.enumerated()), id: \.element.id) { index, row in
+                HStack(spacing: 8) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .frame(width: 18, alignment: .trailing)
+                    TextField("", text: Binding(
+                        get: { repairIntakeRowsDraft[index].title },
+                        set: { repairIntakeRowsDraft[index].title = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    Button {
+                        repairIntakeRowsDraft.remove(at: index)
+                    } label: {
+                        Image(systemName: "trash").foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Button {
+                let base = "row\(repairIntakeRowsDraft.count + 1)"
+                var candidate = base
+                var suffix = 2
+                while repairIntakeRowsDraft.contains(where: { $0.id == candidate }) {
+                    candidate = base + "-\(suffix)"
+                    suffix += 1
+                }
+                repairIntakeRowsDraft.append(RepairIntakeFieldDTO(id: candidate, title: t("New Row", lang: seciliDil)))
+            } label: {
+                Label(t("Add Row", lang: seciliDil), systemImage: "plus.circle")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private func loadCurrentValues() {
+        repairIntakeRowsDraft = decodedRepairIntakeRows()
         summaryStep1Draft = summaryStep1
         summaryStep2Draft = summaryStep2
         orderItemsHeadingDraft = orderItemsHeading
@@ -15740,7 +15911,29 @@ private var notesSupplierEditor: some View {
         }
     }
 
+    private func decodedRepairIntakeRows() -> [RepairIntakeFieldDTO] {
+        let trimmed = repairIntakeFieldsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty,
+           let data = trimmed.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([RepairIntakeFieldDTO].self, from: data) {
+            let cleanedRows = decoded.filter { !cleaned($0.id).isEmpty && !cleaned($0.title).isEmpty }
+            if !cleanedRows.isEmpty { return cleanedRows }
+        }
+        return RepairIntakePresets.fields(forBusinessType: editorBusinessType)
+    }
+
     private func saveChanges() {
+        if kartTipi == .repairIntake {
+            let rows = repairIntakeRowsDraft
+                .map { RepairIntakeFieldDTO(id: cleaned($0.id), title: cleaned($0.title)) }
+                .filter { !$0.id.isEmpty && !$0.title.isEmpty }
+            if let data = try? JSONEncoder().encode(rows), let json = String(data: data, encoding: .utf8) {
+                repairIntakeFieldsJSON = json
+                syncEditedSettingsToCloud()
+            }
+            return
+        }
+
         if kartTipi == .summary {
             summaryStep1 = cleaned(summaryStep1Draft).isEmpty ? "Design" : cleaned(summaryStep1Draft)
             summaryStep2 = cleaned(summaryStep2Draft).isEmpty ? "Painting" : cleaned(summaryStep2Draft)

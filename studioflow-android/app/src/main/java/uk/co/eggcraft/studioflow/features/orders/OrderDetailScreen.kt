@@ -27,6 +27,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -3099,8 +3100,10 @@ private fun OrderDetailCardContent(
             order = order,
             workspaceSettings = workspaceSettings,
             canEditWorkflow = canEditWorkflow,
+            canManageClientFiles = canManageClientFiles,
             onUpdateOrderFields = onUpdateOrderFields,
-            onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
+            onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+            onUploadClientFile = onUploadClientFile
         )
         OrderDetailCardId.Estimate -> EstimateCard(
             order = order,
@@ -3723,8 +3726,10 @@ private fun RepairIntakeCard(
     order: StudioOrder,
     workspaceSettings: StudioWorkspaceSettings,
     canEditWorkflow: Boolean,
+    canManageClientFiles: Boolean = false,
     onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit,
-    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit = { _, _ -> }
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit = { _, _ -> },
+    onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit = { _, _, _, _ -> }
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -3838,6 +3843,15 @@ private fun RepairIntakeCard(
             onLinesChange = { commit(requestedWork = it) }
         )
 
+        // Photos of what the customer actually handed over. They ride on this
+        // order's client files, so every order has its own set and the client-file
+        // permission governs them too. Four across at most, and small.
+        RepairIntakePhotoStrip(
+            order = order,
+            canManageClientFiles = canManageClientFiles,
+            onUploadClientFile = onUploadClientFile
+        )
+
         Spacer(modifier = Modifier.height(6.dp))
 
         val received = intake?.receivedAtMillis?.takeIf { it > 0L }
@@ -3853,6 +3867,109 @@ private fun RepairIntakeCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun RepairIntakePhotoStrip(
+    order: StudioOrder,
+    canManageClientFiles: Boolean,
+    onUploadClientFile: (StudioOrder, ByteArray, String, String) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val fileOpenScope = rememberCoroutineScope()
+    var previewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
+
+    val photos = order.clientFiles.filter { file ->
+        // The preview card mirrors the design mock-up into client files. That is a
+        // picture of what we are making, not of what came in.
+        isClientFileImage(file.contentType, file.fileName) &&
+            !(file.downloadUrl.isNotBlank() && file.downloadUrl == order.designLink)
+    }
+
+    previewFile?.let { pf ->
+        ClientFilePreviewDialog(
+            file = pf,
+            isCurrentPreview = pf.downloadUrl.isNotBlank() && pf.downloadUrl == order.designLink,
+            onUseAsPreview = { previewFile = null },
+            onDismiss = { previewFile = null },
+            onOpenExternal = {
+                if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
+                    uriHandler.openUri(createSharedFileLink(pf.downloadUrl))
+                }
+            }
+        )
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null && canManageClientFiles) {
+            val fileName = displayNameForUri(context, uri)
+            val contentType = context.contentResolver.getType(uri).orEmpty()
+            val bytes = readBytesForUri(context, uri)
+            if (bytes != null) onUploadClientFile(order, bytes, fileName, contentType)
+        }
+    }
+
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = t("Intake Photos"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        if (canManageClientFiles) {
+            TextButton(onClick = { picker.launch(arrayOf("image/*")) }) { Text(t("Add photos")) }
+        }
+    }
+
+    if (photos.isEmpty()) {
+        Text(
+            text = "—",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold
+        )
+    } else {
+        val shown = photos.take(4)
+        val extra = photos.size - shown.size
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            shown.forEachIndexed { index, photo ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(max = 64.dp)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { previewFile = photo },
+                    contentAlignment = Alignment.Center
+                ) {
+                    coil.compose.AsyncImage(
+                        model = photo.downloadUrl,
+                        contentDescription = photo.fileName,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    if (extra > 0 && index == shown.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("+$extra", color = Color.White, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                }
+            }
+            // Keeps four columns' worth of width so a single photo stays a
+            // thumbnail instead of stretching across the card.
+            repeat(4 - shown.size) { Spacer(modifier = Modifier.weight(1f)) }
+        }
     }
 }
 
