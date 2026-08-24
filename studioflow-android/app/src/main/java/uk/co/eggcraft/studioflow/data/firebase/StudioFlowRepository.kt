@@ -2742,6 +2742,10 @@ private fun workspaceSettings(
             data["specialNoteSectionsJSON"] ?: data["specialNoteSectionsJSONV1"],
             fallback.specialNoteSections
         ),
+        repairIntakeFields = jsonGenericHeadingItems(
+            data["repairIntakeFieldsJSON"],
+            fallback.repairIntakeFields
+        ).ifEmpty { fallback.repairIntakeFields },
         financialExpenseItems = jsonGenericHeadingItems(
             data["financialExpenseItemsJSON"],
             fallback.financialExpenseItems

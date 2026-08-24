@@ -213,16 +213,17 @@ enum class OrderDetailCardId(val raw: String, val accessKey: String, val title: 
     Status("status", "cardStatus", "Production Status"),
     Shipping("shipping", "cardShipping", "Shipping & Tracking"),
     Schedule("schedule", "cardSchedule", "Schedule & Alerts"),
-    HistoryLog("historyLog", "cardHistoryLog", "History / Log");
+    HistoryLog("historyLog", "cardHistoryLog", "History / Log"),
+    RepairIntake("repairIntake", "cardSummary", "Repair Intake & Item");
 
     companion object {
         val DefaultColumns: List<List<OrderDetailCardId>> = listOf(
-            listOf(Preview, Summary, WorkTime, Shipping, Schedule, Notes),
+            listOf(Preview, RepairIntake, Summary, WorkTime, Shipping, Schedule, Notes),
             listOf(Customer, InvoiceItems, Materials, Delivery),
             listOf(Financial, Priority, Todo, Status, HistoryLog, ClientFiles)
         )
         val DefaultOrder: List<OrderDetailCardId> = listOf(
-            Preview, Summary, WorkTime, Shipping, Schedule, Notes,
+            Preview, RepairIntake, Summary, WorkTime, Shipping, Schedule, Notes,
             Customer, InvoiceItems, Materials, Delivery,
             Financial, Priority, Todo, Status, HistoryLog, ClientFiles
         )
@@ -393,6 +394,17 @@ data class StudioWorkspaceSettings(
     val communicationChannelLabels: List<String> = listOf("Instagram", "WhatsApp", "TikTok"),
     val specialNoteSections: List<StudioHeadingItem> = listOf(
         StudioHeadingItem(STUDIO_PRIMARY_SPECIAL_NOTE_ID, "Special Notes")
+    ),
+    // Rows on the Repair Intake card. Ids stay put so a saved value survives a
+    // rename; titles are the workspace's ("Ring Size" here, "Case Size" there).
+    val repairIntakeFields: List<StudioHeadingItem> = listOf(
+        StudioHeadingItem("itemType", "Item Type"),
+        StudioHeadingItem("metal", "Metal"),
+        StudioHeadingItem("hallmark", "Hallmark"),
+        StudioHeadingItem("itemSize", "Size"),
+        StudioHeadingItem("stones", "Stones"),
+        StudioHeadingItem("weight", "Weight"),
+        StudioHeadingItem("serialReference", "Serial / Reference")
     ),
     val financialExpenseItems: List<StudioHeadingItem> = emptyList(),
     val financialRemainingItems: List<StudioHeadingItem> = emptyList(),
@@ -875,6 +887,20 @@ data class StudioScheduleReminder(
     val completedAt: Date?
 )
 
+// The customer's own item, handed in for repair. Never stock: the server stamps
+// customerOwned so nothing downstream can mistake it for inventory.
+data class StudioRepairIntake(
+    // Keyed by the field id the workspace configured (itemType, metal, hallmark…).
+    val fields: Map<String, String> = emptyMap(),
+    val condition: List<String> = emptyList(),
+    val requestedWork: List<String> = emptyList(),
+    val customerInstructions: String = "",
+    val receivedAtMillis: Long = 0L,
+    val receivedByUid: String = "",
+    val receivedByName: String = "",
+    val customerOwned: Boolean = true
+)
+
 data class StudioOrder(
     val id: String,
     val companyId: String,
@@ -929,6 +955,9 @@ data class StudioOrder(
     val historyLog: List<StudioHistoryLogItem>,
     val payments: List<StudioPaymentEntry>,
     val lineItems: List<StudioLineItem> = emptyList(),
+    // "custom" (something we make) or "repair" (the customer's own item, left with us).
+    val orderType: String = "custom",
+    val repairIntake: StudioRepairIntake? = null,
     val invoiceNumber: String,
     val clientFileCount: Int,
     val todoCount: Int,
@@ -982,6 +1011,7 @@ data class StudioOrder(
             val payments = parsePayments(document.get("payments"))
             val lineItems = parseLineItems(document.get("lineItems"))
             val customFields = stringMap(document.get("customFields"))
+            val repairIntake = parseRepairIntake(document.get("repairIntake"))
             return StudioOrder(
                 id = document.id,
                 companyId = document.getString("companyId").orEmpty(),
@@ -1036,6 +1066,8 @@ data class StudioOrder(
                 historyLog = historyLog,
                 payments = payments,
                 lineItems = lineItems,
+                orderType = if (document.getString("orderType") == "repair") "repair" else "custom",
+                repairIntake = repairIntake,
                 invoiceNumber = document.getString("invoiceNumber") ?: "",
                 clientFileCount = clientFiles.size,
                 todoCount = todoItems.size,
@@ -1200,6 +1232,37 @@ private fun parseLineItems(value: Any?): List<StudioLineItem> {
             lineTotal = doubleAny(item["lineTotal"], 0.0)
         )
     }
+}
+
+private fun parseRepairIntake(value: Any?): StudioRepairIntake? {
+    val map = value as? Map<*, *> ?: return null
+    val fields = stringMap(map["fields"])
+    val lines = { raw: Any? ->
+        (raw as? List<*>).orEmpty().mapNotNull { entry ->
+            when (entry) {
+                is String -> entry.trim().ifBlank { null }
+                is Map<*, *> -> stringAny(entry["text"], "").trim().ifBlank { null }
+                else -> null
+            }
+        }
+    }
+    val received = map["receivedAt"]
+    val receivedMillis = when (received) {
+        is com.google.firebase.Timestamp -> received.toDate().time
+        is Date -> received.time
+        is Number -> received.toLong()
+        else -> 0L
+    }
+    return StudioRepairIntake(
+        fields = fields,
+        condition = lines(map["condition"]),
+        requestedWork = lines(map["requestedWork"]),
+        customerInstructions = stringAny(map["customerInstructions"], ""),
+        receivedAtMillis = receivedMillis,
+        receivedByUid = stringAny(map["receivedByUid"], ""),
+        receivedByName = stringAny(map["receivedByName"], ""),
+        customerOwned = true
+    )
 }
 
 private const val SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1"

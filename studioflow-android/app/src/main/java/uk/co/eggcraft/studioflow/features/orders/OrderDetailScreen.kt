@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
@@ -685,6 +686,7 @@ fun OrderDetailScreen(
 private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): Boolean = when (cardId) {
     OrderDetailCardId.Summary -> true
     OrderDetailCardId.Preview -> order.designLink.isNotBlank() || order.designName.isNotBlank()
+    OrderDetailCardId.RepairIntake -> order.orderType == "repair"
     OrderDetailCardId.Customer -> order.customerName.isNotBlank()
     OrderDetailCardId.Materials -> order.invBool1 || order.invBool2 || order.invBool3 || order.invBool4 || order.invNotes.isNotBlank()
     OrderDetailCardId.Priority -> order.priority != "Normal" || order.risk != "None"
@@ -705,6 +707,7 @@ private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): 
 private fun phoneCompactSummary(order: StudioOrder, cardId: OrderDetailCardId, t: (String) -> String): String = when (cardId) {
     OrderDetailCardId.Summary -> listOf(order.designName, t(order.status)).filter { it.isNotBlank() }.joinToString(" • ")
     OrderDetailCardId.Preview -> order.designName.ifBlank { t("Preview") }
+    OrderDetailCardId.RepairIntake -> order.repairIntake?.fields?.get("itemType").orEmpty().ifBlank { t("Repair Intake & Item") }
     OrderDetailCardId.Customer -> order.customerName
     OrderDetailCardId.Materials -> "${listOf(order.invBool1, order.invBool2, order.invBool3, order.invBool4).count { it }}/4"
     OrderDetailCardId.InvoiceItems -> "${order.lineItems.size}"
@@ -3087,6 +3090,12 @@ private fun OrderDetailCardContent(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     when (cardId) {
+        OrderDetailCardId.RepairIntake -> RepairIntakeCard(
+            order = order,
+            workspaceSettings = workspaceSettings,
+            canEditWorkflow = canEditWorkflow,
+            onUpdateOrderFields = onUpdateOrderFields
+        )
         OrderDetailCardId.Preview -> DesktopPreviewCard(
             order = order,
             canEditPreview = canEditWorkflow,
@@ -3096,7 +3105,9 @@ private fun OrderDetailCardContent(
         OrderDetailCardId.Summary -> SummaryCard(
             order = order,
             workspaceSettings = workspaceSettings,
-            canSeeFinancial = canSeeFinancial
+            canSeeFinancial = canSeeFinancial,
+            canEditWorkflow = canEditWorkflow,
+            onUpdateOrderFields = onUpdateOrderFields
         )
         OrderDetailCardId.Customer -> {
             if (canEditWorkflow) {
@@ -3401,6 +3412,143 @@ private fun DesktopPreviewCard(
             }
         }
     }
+}
+
+// The customer's own item, taken in for repair. Never stock: the server stamps
+// customerOwned so nothing downstream can mistake it for inventory.
+@Composable
+private fun RepairIntakeCard(
+    order: StudioOrder,
+    workspaceSettings: StudioWorkspaceSettings,
+    canEditWorkflow: Boolean,
+    onUpdateOrderFields: (StudioOrder, Map<String, Any?>) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val intake = order.repairIntake
+    val rows = workspaceSettings.repairIntakeFields.filter { it.id.isNotBlank() && it.title.isNotBlank() }
+
+    fun commit(
+        fields: Map<String, String> = intake?.fields.orEmpty(),
+        condition: List<String> = intake?.condition.orEmpty(),
+        requestedWork: List<String> = intake?.requestedWork.orEmpty()
+    ) {
+        val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+        isoFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        val receivedAt = java.util.Date(intake?.receivedAtMillis?.takeIf { it > 0L } ?: System.currentTimeMillis())
+        onUpdateOrderFields(
+            order,
+            mapOf(
+                "details" to mapOf(
+                    "orderType" to "repair",
+                    "repairIntake" to mapOf(
+                        "fields" to fields,
+                        "condition" to condition,
+                        "requestedWork" to requestedWork,
+                        "customerInstructions" to intake?.customerInstructions.orEmpty(),
+                        "receivedAt" to isoFormat.format(receivedAt),
+                        "receivedByUid" to intake?.receivedByUid.orEmpty(),
+                        "receivedByName" to intake?.receivedByName.orEmpty()
+                    )
+                )
+            )
+        )
+    }
+
+    DetailCard(title = t("Repair Intake & Item")) {
+        rows.forEach { row ->
+            OrderTextRow(
+                label = t(row.title),
+                value = intake?.fields?.get(row.id).orEmpty(),
+                enabled = canEditWorkflow,
+                onValueChange = { next ->
+                    val fields = intake?.fields.orEmpty().toMutableMap()
+                    if (next.isBlank()) fields.remove(row.id) else fields[row.id] = next
+                    commit(fields = fields)
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        OrderLinesRow(
+            label = t("Condition"),
+            lines = intake?.condition.orEmpty(),
+            enabled = canEditWorkflow,
+            onLinesChange = { commit(condition = it) }
+        )
+
+        OrderLinesRow(
+            label = t("Requested Work"),
+            lines = intake?.requestedWork.orEmpty(),
+            enabled = canEditWorkflow,
+            onLinesChange = { commit(requestedWork = it) }
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val received = intake?.receivedAtMillis?.takeIf { it > 0L }
+        Text(
+            text = t("Received") + ": " + (received?.let {
+                java.text.SimpleDateFormat("d MMM yyyy · HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
+            } ?: "—"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = t("Received By") + ": " + intake?.receivedByName.orEmpty().ifBlank { "—" },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun OrderTextRow(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    var draft by remember(value) { mutableStateOf(value) }
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        label = { Text(label) },
+        enabled = enabled,
+        singleLine = false,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { state -> if (!state.isFocused && draft != value) onValueChange(draft) }
+    )
+    Spacer(modifier = Modifier.height(6.dp))
+}
+
+// The two lists a jeweller writes at the counter, edited as plain lines.
+@Composable
+private fun OrderLinesRow(
+    label: String,
+    lines: List<String>,
+    enabled: Boolean,
+    onLinesChange: (List<String>) -> Unit
+) {
+    val joined = lines.joinToString("\n")
+    var draft by remember(joined) { mutableStateOf(joined) }
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        label = { Text(label) },
+        enabled = enabled,
+        minLines = 3,
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { state ->
+                if (!state.isFocused && draft != joined) {
+                    onLinesChange(draft.split("\n").map { it.trim() }.filter { it.isNotBlank() })
+                }
+            }
+    )
+    Spacer(modifier = Modifier.height(6.dp))
 }
 
 @Composable
@@ -5422,7 +5570,9 @@ private fun HorizontalRule() {
 private fun SummaryCard(
     order: StudioOrder,
     workspaceSettings: StudioWorkspaceSettings,
-    canSeeFinancial: Boolean
+    canSeeFinancial: Boolean,
+    canEditWorkflow: Boolean = false,
+    onUpdateOrderFields: ((StudioOrder, Map<String, Any?>) -> Unit)? = null
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -5431,6 +5581,44 @@ private fun SummaryCard(
     val value1 = summaryStepValue(order, workspaceSettings, step1)
     val value2 = summaryStepValue(order, workspaceSettings, step2)
     DetailCard(title = t("Order Summary")) {
+        // A custom order is something we make; a repair is the customer's own item,
+        // left with us. Choosing Repair is what brings the intake card out.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = t("Order Type"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            val isRepair = order.orderType == "repair"
+            if (canEditWorkflow && onUpdateOrderFields != null) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    onClick = {
+                        onUpdateOrderFields(
+                            order,
+                            mapOf("details" to mapOf("orderType" to if (isRepair) "custom" else "repair"))
+                        )
+                    }
+                ) {
+                    Text(
+                        text = t(if (isRepair) "Repair / Service" else "Custom Order"),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            } else {
+                Text(
+                    text = t(if (isRepair) "Repair / Service" else "Custom Order"),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -9407,6 +9595,7 @@ private fun defaultCardHeight(cardId: OrderDetailCardId): Int {
     return when (cardId) {
         OrderDetailCardId.Preview -> 430
         OrderDetailCardId.Summary -> 260
+        OrderDetailCardId.RepairIntake -> 520
         OrderDetailCardId.Customer -> 620
         OrderDetailCardId.InvoiceItems -> 460
         OrderDetailCardId.Materials -> 430
@@ -9432,6 +9621,7 @@ private fun minimumRenderedCardHeight(cardId: OrderDetailCardId?): Int {
     return when (cardId) {
         OrderDetailCardId.Preview -> 300
         OrderDetailCardId.Summary -> 250
+        OrderDetailCardId.RepairIntake -> 360
         OrderDetailCardId.Customer -> 430
         OrderDetailCardId.InvoiceItems -> 300
         OrderDetailCardId.Materials -> 390
@@ -9480,6 +9670,7 @@ private fun orderDetailCardIdForTitle(title: String): OrderDetailCardId? {
 private fun orderDetailCardIcon(cardId: OrderDetailCardId?): ImageVector {
     return when (cardId) {
         OrderDetailCardId.Preview -> Icons.Filled.PhotoLibrary
+        OrderDetailCardId.RepairIntake -> Icons.Filled.Inventory2
         OrderDetailCardId.Summary -> Icons.Filled.Description
         OrderDetailCardId.Customer -> Icons.Filled.Person
         OrderDetailCardId.InvoiceItems -> Icons.Filled.Description
@@ -9502,6 +9693,7 @@ private fun orderDetailCardIcon(cardId: OrderDetailCardId?): ImageVector {
 private fun orderDetailCardAccent(cardId: OrderDetailCardId?): Color {
     return when (cardId) {
         OrderDetailCardId.Preview -> StudioBlue
+        OrderDetailCardId.RepairIntake -> Color(0xFFE08A2E)
         OrderDetailCardId.Summary -> Color(0xFF5B6CFF)
         OrderDetailCardId.Customer -> Color(0xFF00A3A3)
         OrderDetailCardId.InvoiceItems -> Color(0xFF1D9E75)
