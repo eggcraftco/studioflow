@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { openCookiePreferences } from "@/lib/cookieConsent";
@@ -35,9 +35,9 @@ import {
 import {
   GUIDE_LAST_UPDATED,
   getGuideChrome,
-  getGuideTree,
   type GuideNode
-} from "@/lib/publicSite/guide";
+} from "@/lib/publicSite/guideChrome";
+import { loadUserGuide, type UserGuideResult } from "@/lib/publicSite/userGuide";
 import {
   getPrivacyPolicyLastUpdatedLabel,
   getPrivacyPolicySections,
@@ -3864,30 +3864,56 @@ const GUIDE_NO_RESULTS: Record<string, string> = {
 };
 
 function PublicGuidePageContent() {
-  const { language } = usePublicSiteLanguage();
+  const { language, t } = usePublicSiteLanguage();
+  const { user, loading: authLoading } = useAuth();
   const chrome = getGuideChrome(language);
-  const tree = getGuideTree(language);
 
-  const flat = useState(() => {
+  // The guide is a paid-plan feature, so its content is not in this bundle: it
+  // arrives from getUserGuide, which checks the plan. Signed-out readers skip
+  // the round trip and go straight to the panel.
+  const [state, setState] = useState<UserGuideResult | { status: "loading" }>({ status: "loading" });
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setState({ status: "locked" });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: "loading" });
+    loadUserGuide(String(language)).then(result => {
+      if (!cancelled) setState(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user, language]);
+
+  const tree = useMemo(() => (state.status === "ok" ? state.tree : []), [state]);
+
+  const flat = useMemo(() => {
     const list: GuideNode[] = [];
     tree.forEach(node => {
       list.push(node);
       node.children?.forEach(child => list.push(child));
     });
     return list;
-  })[0];
+  }, [tree]);
 
-  const [selectedId, setSelectedId] = useState(tree[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState("");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
+    if (!flat.length) return;
     const fromHash = decodeURIComponent(window.location.hash.replace("#", ""));
-    if (fromHash && flat.some(node => node.id === fromHash)) {
-      setSelectedId(fromHash);
-    }
+    setSelectedId(current => {
+      if (current && flat.some(node => node.id === current)) return current;
+      if (fromHash && flat.some(node => node.id === fromHash)) return fromHash;
+      return flat[0]?.id ?? "";
+    });
   }, [flat]);
 
-  const selected = flat.find(node => node.id === selectedId) ?? tree[0];
-  const [query, setQuery] = useState("");
+  const selected = flat.find(node => node.id === selectedId) ?? flat[0];
 
   function select(id: string) {
     setSelectedId(id);
@@ -3924,62 +3950,102 @@ function PublicGuidePageContent() {
           <span className="public-eyebrow">{chrome.eyebrow}</span>
           <h1>{chrome.title}</h1>
           <p>{chrome.intro}</p>
-          <p className="public-legal-updated">
-            {chrome.lastUpdated}: {GUIDE_LAST_UPDATED}
-          </p>
+          {state.status === "ok" ? (
+            <p className="public-legal-updated">
+              {chrome.lastUpdated}: {GUIDE_LAST_UPDATED}
+            </p>
+          ) : null}
         </div>
       </section>
 
-      <section className="public-section">
-        <div className="public-shell guide-layout">
-          <nav className="guide-nav" aria-label={chrome.menuLabel}>
-            <input
-              className="guide-search"
-              type="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder={chrome.searchPlaceholder}
-              aria-label={chrome.searchPlaceholder}
-            />
-            <span className="guide-nav-title">{chrome.menuLabel}</span>
-            {groups.map(({ node, visibleKids }) => (
-              <div key={node.id} className="guide-nav-group">
-                <button
-                  type="button"
-                  className={node.id === selectedId ? "guide-nav-item is-active" : "guide-nav-item"}
-                  aria-current={node.id === selectedId ? "true" : undefined}
-                  onClick={() => select(node.id)}
-                >
-                  {node.title}
-                </button>
-                {visibleKids.length > 0 ? (
-                  <div className="guide-nav-children">
-                    {visibleKids.map(child => (
-                      <button
-                        key={child.id}
-                        type="button"
-                        className={child.id === selectedId ? "guide-nav-subitem is-active" : "guide-nav-subitem"}
-                        aria-current={child.id === selectedId ? "true" : undefined}
-                        onClick={() => select(child.id)}
-                      >
-                        {child.title}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-            {groups.length === 0 ? (
-              <p className="guide-nav-empty">{GUIDE_NO_RESULTS[language as string] ?? "No matches"}</p>
-            ) : null}
-          </nav>
+      {state.status === "loading" || authLoading ? (
+        <section className="public-section">
+          <div className="public-shell">
+            <p className="guide-nav-empty">{t("guide.loading")}</p>
+          </div>
+        </section>
+      ) : null}
 
-          <article className="guide-detail" key={selected.id}>
-            <h2>{selected.title}</h2>
-            <GuideBlocks node={selected} />
-          </article>
-        </div>
-      </section>
+      {state.status === "error" ? (
+        <section className="public-section">
+          <div className="public-shell">
+            <p className="guide-nav-empty">{state.message}</p>
+          </div>
+        </section>
+      ) : null}
+
+      {state.status === "locked" ? (
+        <section className="public-section">
+          <div className="public-shell guide-locked">
+            <h2>{user ? t("guide.locked.title") : t("guide.locked.signedOut.title")}</h2>
+            <p>{user ? t("guide.locked.body") : t("guide.locked.signedOut.body")}</p>
+            <p>{t("guide.locked.ask")}</p>
+            <div className="public-hero-actions">
+              <Link className="public-button" href="/pricing">
+                {t("guide.locked.plansCta")}
+              </Link>
+              {user ? null : (
+                <Link className="public-button public-button-ghost" href="/login">
+                  {t("guide.locked.signInCta")}
+                </Link>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {state.status === "ok" && selected ? (
+        <section className="public-section">
+          <div className="public-shell guide-layout">
+            <nav className="guide-nav" aria-label={chrome.menuLabel}>
+              <input
+                className="guide-search"
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder={chrome.searchPlaceholder}
+                aria-label={chrome.searchPlaceholder}
+              />
+              <span className="guide-nav-title">{chrome.menuLabel}</span>
+              {groups.map(({ node, visibleKids }) => (
+                <div key={node.id} className="guide-nav-group">
+                  <button
+                    type="button"
+                    className={node.id === selectedId ? "guide-nav-item is-active" : "guide-nav-item"}
+                    aria-current={node.id === selectedId ? "true" : undefined}
+                    onClick={() => select(node.id)}
+                  >
+                    {node.title}
+                  </button>
+                  {visibleKids.length > 0 ? (
+                    <div className="guide-nav-children">
+                      {visibleKids.map(child => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          className={child.id === selectedId ? "guide-nav-subitem is-active" : "guide-nav-subitem"}
+                          aria-current={child.id === selectedId ? "true" : undefined}
+                          onClick={() => select(child.id)}
+                        >
+                          {child.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {groups.length === 0 ? (
+                <p className="guide-nav-empty">{GUIDE_NO_RESULTS[language as string] ?? "No matches"}</p>
+              ) : null}
+            </nav>
+
+            <article className="guide-detail" key={selected.id}>
+              <h2>{selected.title}</h2>
+              <GuideBlocks node={selected} />
+            </article>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

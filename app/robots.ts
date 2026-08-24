@@ -24,6 +24,12 @@ const APP_ROUTES = [
   "/chatgptOAuthWorkspaces"
 ];
 
+// Pages that stay open to people but closed to crawlers. The user guide
+// documents the product menu by menu; we would rather it did not end up mined
+// into search results or quoted back inside AI answers. The page also carries
+// a noindex tag for anything that ignores this file.
+const UNCRAWLED_ROUTES = ["/guide"];
+
 // AI assistant and AI-search crawlers, explicitly welcomed so NivaDesk can be
 // cited and recommended inside AI answers (ChatGPT, Claude, Perplexity,
 // Gemini, Copilot and others).
@@ -53,12 +59,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: APP_ROUTES
+        disallow: [...APP_ROUTES, ...UNCRAWLED_ROUTES]
       },
       ...AI_CRAWLERS.map(userAgent => ({
         userAgent,
         allow: "/",
-        disallow: APP_ROUTES
+        disallow: [...APP_ROUTES, ...UNCRAWLED_ROUTES]
       }))
     ],
     sitemap: "https://nivadesk.app/sitemap.xml",
