@@ -4951,9 +4951,19 @@ export function OrderDetailContent({
 
   // Photos taken at intake ride on the existing client-file pipeline, tagged so
   // they show here as well as in Client Files: one upload path, not four.
+  //
+  // Which means they inherit its permission too. An owner who has taken client
+  // files away from a member meant it — showing the same images (and their real
+  // download URLs) through a different card would quietly undo that.
+  const canSeeIntakePhotos = useMemo(
+    () => workspaceAccessAllows(workspace.memberAccess, "clientFiles"),
+    [workspace.memberAccess]
+  );
   const intakePhotos = useMemo(
-    () => order.clientFiles.filter(file => file.source === INTAKE_PHOTO_SOURCE || (file.contentType || "").startsWith("image/")),
-    [order.clientFiles]
+    () => (canSeeIntakePhotos
+      ? order.clientFiles.filter(file => file.source === INTAKE_PHOTO_SOURCE || (file.contentType || "").startsWith("image/"))
+      : []),
+    [order.clientFiles, canSeeIntakePhotos]
   );
 
   function renderCard(cardId: OrderDetailCardId) {
@@ -8161,7 +8171,8 @@ type HeadingListKey =
   | "financialExpenseItems"
   | "financialRemainingItems"
   | "specialNoteSections"
-  | "scheduleQuickReminders";
+  | "scheduleQuickReminders"
+  | "repairIntakeFields";
 
 const PRIMARY_SPECIAL_NOTE_ID = "00000000-0000-0000-0000-000000000101";
 
@@ -8608,6 +8619,10 @@ function BlockHeadingsModal({
         return renderList("Special Note Fields", "specialNoteSections", "Special Note", true);
       case "schedule":
         return renderList("Quick reminders", "scheduleQuickReminders", "Custom reminder");
+      case "repairIntake":
+        // "Ring Size" to a jeweller is "Case Size" to a watchmaker. Without this
+        // the dialog opened empty and still offered a Save that reported success.
+        return renderList("Repair intake rows", "repairIntakeFields", "Intake Row");
       case "invoiceItems":
         return (
           <CompanyNumbersEditor

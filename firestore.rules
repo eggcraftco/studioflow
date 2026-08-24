@@ -194,17 +194,16 @@ service cloud.firestore {
           && safeBasicCustomFieldsCreate(request.resource.data));
     }
 
-    // An estimate is evidence: who agreed to what, and when. It is written by
-    // the callables and must survive every client save path, including the Mac
-    // app writing the order document straight to Firestore.
-    function serverOnlyEstimateFields() {
-      return ['estimates', 'estimateStatus', 'estimateTotal', 'estimateNumber'];
-    }
-
-    function noEstimateFieldWrite() {
-      return !request.resource.data.diff(resource.data).affectedKeys()
-        .hasAny(serverOnlyEstimateFields());
-    }
+    // The `estimates` array on an order is a display index, not the record. The
+    // record — line items, totals, who approved and when, the signature — lives
+    // in siparisler/{id}/estimateRecords, which the catch-all at the bottom of
+    // this file denies to every client.
+    //
+    // It is deliberately NOT locked here. The Apple apps replace the whole order
+    // document on save (FirebaseManager.setData(from:), no merge), so any rule
+    // forbidding a change to these keys rejects every Mac and iPhone save — the
+    // model re-encodes the array, and Firestore counts an integer rewritten as a
+    // double as a change. The guard cost real saves and protected only a cache.
 
     function validOrderFinanceUpdate(companyId) {
       return hasAdvancedFinancePlan(companyId)
@@ -634,8 +633,7 @@ service cloud.firestore {
           )
         )
         && validOrderFinanceUpdate(resource.data.companyId)
-        && validBasicCustomFieldsUpdate(resource.data.companyId)
-        && noEstimateFieldWrite();
+        && validBasicCustomFieldsUpdate(resource.data.companyId);
 
       allow delete: if resource.data.companyId is string
         && canWriteCompanyData(resource.data.companyId)

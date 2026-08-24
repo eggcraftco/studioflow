@@ -21090,6 +21090,12 @@ async function estimateLinkForVisitor(token) {
   const recordRef = estimateRecordsCollection(String(link.orderId || "")).doc(String(link.estimateId || ""));
   const [orderSnap, recordSnap] = await Promise.all([orderRef.get(), recordRef.get()]);
   if (!orderSnap.exists || !recordSnap.exists) throw new HttpsError("not-found", "This estimate is no longer available.");
+  // An order in the Trash should not still be taking approvals. Checked here
+  // rather than by revoking the link on delete, because revoking is one-way and
+  // restoring the order from the Trash would leave the customer's link dead.
+  if ((orderSnap.data() || {}).isDeleted === true) {
+    throw new HttpsError("failed-precondition", "This estimate is no longer available.");
+  }
   return {
     linkRef,
     link,

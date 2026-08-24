@@ -1309,6 +1309,11 @@ class FirebaseManager: ObservableObject {
                 applyString("priorityCardLabel")
                 applyString("riskCardLabel")
                 applyString("designNameLabel")
+                // The repair intake rows are renamed in place like the labels
+                // above, so they need the same app-wide read-back. Without it a
+                // rename made on one device only reached the others while the
+                // Settings screen happened to be open.
+                applyString("repairIntakeFieldsJSON")
             }
     }
 
