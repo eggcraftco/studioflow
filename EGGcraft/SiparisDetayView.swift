@@ -2021,6 +2021,10 @@ struct SiparisDetayView: View {
             .onChange(of: siparis.communication) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.communication = oldValue }) }
             .onChange(of: siparis.paymentDate) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.paymentDate = oldValue }) }
             .onChange(of: siparis.notes) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.notes = oldValue }) }
+            // Repair intake used to persist only via onDisappear: type into it, sit
+            // still, and the next snapshot overwrote what was on screen.
+            .onChange(of: siparis.orderType) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.orderType = oldValue }) }
+            .onChange(of: siparis.repairIntake) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.repairIntake = oldValue }) }
             .onChange(of: siparis.customFields ?? [:]) { oldValue, newValue in
                 if shouldAutosaveInlineCustomFields(previous: oldValue, next: newValue) {
                     saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.customFields = oldValue })
@@ -7458,12 +7462,21 @@ struct SiparisDetayView: View {
         ]
         Functions.functions(region: "europe-west2").httpsCallable("getOrderEstimateRecord").call(payload) { result, error in
             DispatchQueue.main.async {
-                if error != nil {
+                if let error {
+                    // Clear the key so the next pass retries. Latching it here left
+                    // the card permanently empty after one dropped connection.
+                    self.estimateRecordKey = ""
                     self.estimateRecord = nil
+                    self.estimateNotice = error.localizedDescription
                     return
                 }
                 let data = result?.data as? [String: Any]
-                self.estimateRecord = OrderEstimateRecord(dictionary: data?["record"] as? [String: Any])
+                guard let record = OrderEstimateRecord(dictionary: data?["record"] as? [String: Any]) else {
+                    self.estimateRecordKey = ""
+                    self.estimateRecord = nil
+                    return
+                }
+                self.estimateRecord = record
             }
         }
         #else
@@ -11907,11 +11920,29 @@ struct SiparisDetayView: View {
 
     private func renderPDF<Content: View>(renderer: ImageRenderer<Content>, to url: URL) {
         renderer.render { size, context in
-            var box = CGRect(origin: .zero, size: size)
+            // The rendered view may be taller than one sheet (a long estimate, a
+            // long item list). Draw it as A4 bands rather than cropping it.
+            let pageHeight: CGFloat = 842
+            let usesSinglePage = size.height <= pageHeight + 0.5
+            var box = CGRect(x: 0, y: 0, width: size.width, height: usesSinglePage ? size.height : pageHeight)
             guard let pdfContext = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
-            pdfContext.beginPDFPage(nil)
-            context(pdfContext)
-            pdfContext.endPDFPage()
+            if usesSinglePage {
+                pdfContext.beginPDFPage(nil)
+                context(pdfContext)
+                pdfContext.endPDFPage()
+            } else {
+                let pageCount = max(1, Int(ceil(size.height / pageHeight)))
+                for pageIndex in 0..<pageCount {
+                    pdfContext.beginPDFPage(nil)
+                    pdfContext.saveGState()
+                    // PDF space is bottom-up: shift the document so the band for
+                    // this page lands inside the media box.
+                    pdfContext.translateBy(x: 0, y: pageHeight - size.height + CGFloat(pageIndex) * pageHeight)
+                    context(pdfContext)
+                    pdfContext.restoreGState()
+                    pdfContext.endPDFPage()
+                }
+            }
             pdfContext.closePDF()
         }
     }
@@ -13998,7 +14029,9 @@ struct OrderInvoicePDFView: View {
             }
             Text(t("Generated with NivaDesk", lang: seciliDil)).font(.system(size: 9)).foregroundColor(.gray.opacity(0.6)).frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(40).frame(width: 595, height: 842).background(Color.white)
+        // Grows past one sheet when the document needs it; renderPDF slices the
+        // result into A4 pages. A fixed height silently cropped long estimates.
+        .padding(40).frame(width: 595).frame(minHeight: 842, alignment: .top).background(Color.white)
     }
 }
 

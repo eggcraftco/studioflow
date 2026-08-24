@@ -2397,6 +2397,11 @@ async function requireWorkspaceForBilling(request, requireOwner = false) {
     throw new HttpsError("unauthenticated", "You must be signed in to read workspace billing limits.");
   }
 
+  // Callers that stamp authorship (estimates, quick replies) destructure `email`
+  // from this helper. Firestore rejects an undefined value outright, so a missing
+  // one here fails the whole write rather than just leaving a blank field.
+  const email = String(request.auth?.token?.email || "");
+
   const requestedCompanyId = String(request.data?.companyId || "").trim();
   const companyId = requestedCompanyId || await activeCompanyIdForUid(uid);
   if (!companyId) {
@@ -2419,7 +2424,7 @@ async function requireWorkspaceForBilling(request, requireOwner = false) {
     throw new HttpsError("permission-denied", "Only the workspace owner can run this billing action.");
   }
 
-  return { uid, companyId, companyRef, companyData };
+  return { uid, email, companyId, companyRef, companyData };
 }
 
 async function countCompanyCollection(collectionName, companyId) {
@@ -8694,8 +8699,11 @@ const WORKFLOW_ORDER_VIEW_FIELDS = [
   "notes", "specialNotes", "invBool1", "invBool2", "invBool3", "invBool4", "invNotes",
   "materialsDefaultToggles", "materialsToggles", "statusNotesSupplier", "customToggles",
   "extraStatuses", "trackingNumber", "courier", "isDispatched", "isDelivered",
-  "clientFiles", "todoItems", "workSessions", "historyLog"
+  "clientFiles", "todoItems", "workSessions", "historyLog",
+  "orderType", "repairIntake"
 ];
+
+const WORKFLOW_ORDER_VIEW_FIELD_SET = new Set(WORKFLOW_ORDER_VIEW_FIELDS);
 
 function workflowOrderViewRef(companyId = "", orderId = "") {
   return admin.firestore().collection("companies").doc(String(companyId || "").trim())
@@ -9616,56 +9624,6 @@ function applyWebFinancePatch({ patch, orderData, updates, historyEntries, uid, 
     }
   }
 
-  if (hasOwnField(patch, "orderType")) {
-    const nextType = String(patch.orderType || "").trim().toLowerCase() === "repair" ? "repair" : "custom";
-    if ((orderData.orderType || "custom") !== nextType) {
-      updates.orderType = nextType;
-      pushHistoryChange(historyEntries, "Order type changed", orderData.orderType || "custom", nextType, uid, email);
-      changed = true;
-    }
-  }
-
-  // The customer's own item, handed in for repair. Deliberately not inventory:
-  // customerOwned is stamped here so nothing downstream can mistake it for stock.
-  if (hasOwnField(patch, "repairIntake")) {
-    const incoming = patch.repairIntake && typeof patch.repairIntake === "object" && !Array.isArray(patch.repairIntake)
-      ? patch.repairIntake
-      : {};
-    const cleanList = (value) => (Array.isArray(value) ? value : [])
-      .map((entry) => cleanOrderText(entry, "", 300))
-      .filter(Boolean)
-      .slice(0, 60);
-    const fields = {};
-    const incomingFields = incoming.fields && typeof incoming.fields === "object" && !Array.isArray(incoming.fields)
-      ? incoming.fields
-      : {};
-    for (const [key, value] of Object.entries(incomingFields).slice(0, 60)) {
-      const fieldId = cleanOrderText(key, "", 60);
-      if (!fieldId) continue;
-      fields[fieldId] = cleanOrderText(value, "", 600);
-    }
-    const sanitized = {
-      fields,
-      condition: cleanList(incoming.condition),
-      requestedWork: cleanList(incoming.requestedWork),
-      customerInstructions: cleanOrderText(incoming.customerInstructions, "", 2000),
-      receivedAt: nvTimestampFromInput(incoming.receivedAt, new Date()),
-      receivedByUid: cleanOrderText(incoming.receivedByUid, "", 128),
-      receivedByName: cleanOrderText(incoming.receivedByName, "", 160),
-      customerOwned: true
-    };
-    const comparable = (value) => JSON.stringify({
-      ...value,
-      receivedAt: value.receivedAt && value.receivedAt.toMillis ? value.receivedAt.toMillis() : value.receivedAt
-    });
-    const previous = orderData.repairIntake && typeof orderData.repairIntake === "object" ? orderData.repairIntake : null;
-    if (!previous || comparable(previous) !== comparable(sanitized)) {
-      updates.repairIntake = sanitized;
-      pushHistoryChange(historyEntries, "Repair intake updated", previous ? "updated" : "added", `${Object.keys(fields).length} fields`, uid, email);
-      changed = true;
-    }
-  }
-
   const currentFields = orderData.customFields && typeof orderData.customFields === "object" && !Array.isArray(orderData.customFields)
     ? { ...orderData.customFields }
     : {};
@@ -10372,6 +10330,78 @@ function applyWebDetailsPatch({ patch, orderData, companyData, updates, historyE
     if (next !== cleanOrderText(orderData.riskReason, "-", 160)) {
       updates.riskReason = next;
       pushHistoryChange(historyEntries, "Risk reason changed", orderData.riskReason, next, uid, email);
+      changed = true;
+    }
+  }
+
+  if (hasOwnField(patch, "orderType")) {
+    const nextType = String(patch.orderType || "").trim().toLowerCase() === "repair" ? "repair" : "custom";
+    if ((orderData.orderType || "custom") !== nextType) {
+      updates.orderType = nextType;
+      pushHistoryChange(historyEntries, "Order type changed", orderData.orderType || "custom", nextType, uid, email);
+      changed = true;
+    }
+  }
+
+  // The customer's own item, handed in for repair. Deliberately not inventory:
+  // customerOwned is stamped here so nothing downstream can mistake it for stock.
+  if (hasOwnField(patch, "repairIntake")) {
+    const incoming = patch.repairIntake && typeof patch.repairIntake === "object" && !Array.isArray(patch.repairIntake)
+      ? patch.repairIntake
+      : {};
+    const previous = orderData.repairIntake && typeof orderData.repairIntake === "object" ? orderData.repairIntake : null;
+    const cleanList = (value) => (Array.isArray(value) ? value : [])
+      .map((entry) => cleanOrderText(entry, "", 300))
+      .filter(Boolean)
+      .slice(0, 60);
+    // Seeded from what is already stored: a client whose cached row list is a
+    // revision behind would otherwise wipe rows it simply does not know about.
+    const fields = {};
+    const previousFields = previous && previous.fields && typeof previous.fields === "object" && !Array.isArray(previous.fields)
+      ? previous.fields
+      : {};
+    for (const [key, value] of Object.entries(previousFields).slice(0, 60)) {
+      const fieldId = cleanOrderText(key, "", 60);
+      if (!fieldId) continue;
+      fields[fieldId] = cleanOrderText(value, "", 600);
+    }
+    const incomingFields = incoming.fields && typeof incoming.fields === "object" && !Array.isArray(incoming.fields)
+      ? incoming.fields
+      : {};
+    for (const [key, value] of Object.entries(incomingFields).slice(0, 60)) {
+      const fieldId = cleanOrderText(key, "", 60);
+      if (!fieldId) continue;
+      fields[fieldId] = cleanOrderText(value, "", 600);
+    }
+    // Android sends no receiver; whoever saved it first is the one who took it in.
+    const receivedByUid = cleanOrderText(incoming.receivedByUid, "", 128)
+      || cleanOrderText(previous && previous.receivedByUid, "", 128)
+      || String(uid || "");
+    const receivedByName = cleanOrderText(incoming.receivedByName, "", 160)
+      || cleanOrderText(previous && previous.receivedByName, "", 160)
+      || String(email || "");
+    const sanitized = {
+      fields,
+      condition: cleanList(incoming.condition),
+      requestedWork: cleanList(incoming.requestedWork),
+      customerInstructions: cleanOrderText(incoming.customerInstructions, "", 2000),
+      receivedAt: nvTimestampFromInput(
+        incoming.receivedAt,
+        previous && previous.receivedAt && typeof previous.receivedAt.toDate === "function"
+          ? previous.receivedAt.toDate()
+          : new Date()
+      ),
+      receivedByUid,
+      receivedByName,
+      customerOwned: true
+    };
+    const comparable = (value) => JSON.stringify({
+      ...value,
+      receivedAt: value.receivedAt && value.receivedAt.toMillis ? value.receivedAt.toMillis() : value.receivedAt
+    });
+    if (!previous || comparable(previous) !== comparable(sanitized)) {
+      updates.repairIntake = sanitized;
+      pushHistoryChange(historyEntries, "Repair intake updated", previous ? "updated" : "added", `${Object.keys(fields).length} fields`, uid, email);
       changed = true;
     }
   }
@@ -12028,6 +12058,10 @@ exports.saveSwiftOrder = onCall({ region: "europe-west2" }, async (request) => {
     for (const field of SWIFT_ORDER_FIELDS) {
       if (!Object.prototype.hasOwnProperty.call(decodedOrder, field)) continue;
       if (canWorkflowEdit && !canEditFullOrder && SWIFT_FINANCE_ORDER_FIELDS.has(field)) continue;
+      // A workflow-only member edits a mirror that never carried these fields, so
+      // the Swift model fills defaults for them. Writing those back would quietly
+      // reset the real values (order type, invoice number) for the whole workspace.
+      if (canWorkflowEdit && !canEditFullOrder && !WORKFLOW_ORDER_VIEW_FIELD_SET.has(field)) continue;
       if (!canEditFinanceFields && SWIFT_FINANCE_ORDER_FIELDS.has(field)) continue;
       if (!advancedFinanceEnabled && SWIFT_ADVANCED_FINANCE_FIELDS.has(field)) continue;
       updates[field] = field === "customFields" && !advancedFinanceEnabled
@@ -12231,7 +12265,9 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     "statusNotesSupplier",
     "notes",
     "customFields",
-    "specialNotes"
+    "specialNotes",
+    "orderType",
+    "repairIntake"
   ]);
   const materialDetailFields = new Set([
     "invBool1",
@@ -21195,16 +21231,31 @@ async function notifyEstimateDecision(companyId, payload = {}) {
 }
 
 async function estimateWorkspaceSettings(companyId) {
-  const snap = await admin.firestore().collection("companies").doc(String(companyId)).get();
+  // The customer-facing page is branded from companySettings — the same doc the
+  // invoice renderers read. The company doc carries none of these fields.
+  const snap = await companySettingsDocRef(String(companyId)).get();
   return snap.exists ? snap.data() || {} : {};
 }
 
+
+// estimateRecords sits under the deny-all rule, so these callables are the only
+// access control there is. Membership alone is not enough: pricing a job and
+// minting a link a customer can sign is a full-edit action.
+async function requireEstimateStaff(request) {
+  const context = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(context.companyData, context.uid, "orders");
+  const role = workspaceOrderRole(context.companyData, context.uid);
+  if (!canFullyEditOrder(role)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot create or send estimates.");
+  }
+  return { ...context, role };
+}
 
 // Staff: create a revision. Never edits an existing estimate — the previous one
 // is marked superseded and keeps its own numbers, because that is the whole
 // point of having a record.
 exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request) => {
-  const { uid, email, companyId, companyRef } = await requireWorkspaceForBilling(request, false);
+  const { uid, email, companyId, companyRef } = await requireEstimateStaff(request);
   const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
   if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
 
@@ -21223,7 +21274,13 @@ exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request)
   const now = Date.now();
 
   const result = await admin.firestore().runTransaction(async (tx) => {
-    const [companySnap, orderSnap] = await Promise.all([tx.get(companyRef), tx.get(orderRef)]);
+    // Branding and currency live in companySettings, not on the company doc —
+    // reading the wrong one froze every estimate at an unbranded "GBP".
+    const [companySnap, orderSnap, settingsSnap] = await Promise.all([
+      tx.get(companyRef),
+      tx.get(orderRef),
+      tx.get(companySettingsDocRef(companyId))
+    ]);
     if (!orderSnap.exists) throw new HttpsError("not-found", "Order not found.");
     const orderData = orderSnap.data() || {};
     if (orderCompanyId(orderData) !== companyId) {
@@ -21249,7 +21306,7 @@ exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request)
     const number = `EST-${year}-${String(counter).padStart(4, "0")}`;
 
     const totals = estimateTotals(lineItems, taxRate, taxType);
-    const settings = companyData;
+    const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
     const record = {
       estimateId,
       orderId,
@@ -21257,7 +21314,7 @@ exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request)
       number,
       version: supersededRecord ? Number(supersededRecord.version || 1) + 1 : 1,
       status: "draft",
-      currency: String(settings.currencySymbol || "GBP"),
+      currency: cleanFinancialCurrency(settings.seciliParaBirimi, "£"),
       lineItems,
       subtotal: totals.subtotal,
       taxRate,
@@ -21329,7 +21386,7 @@ exports.createOrderEstimate = onCall({ region: "europe-west2" }, async (request)
 // Staff: mint the customer's link. The plaintext token is returned once and
 // never stored — the document id is its hash.
 exports.sendOrderEstimate = onCall({ region: "europe-west2" }, async (request) => {
-  const { uid, email, companyId } = await requireWorkspaceForBilling(request, false);
+  const { uid, email, companyId } = await requireEstimateStaff(request);
   const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
   const estimateId = cleanOrderText(request.data && request.data.estimateId, "", 80);
   if (!orderId || !estimateId) throw new HttpsError("invalid-argument", "orderId and estimateId are required.");
@@ -21395,7 +21452,7 @@ exports.sendOrderEstimate = onCall({ region: "europe-west2" }, async (request) =
 });
 
 exports.revokeOrderEstimateLink = onCall({ region: "europe-west2" }, async (request) => {
-  const { uid, companyId } = await requireWorkspaceForBilling(request, false);
+  const { uid, companyId } = await requireEstimateStaff(request);
   const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
   const estimateId = cleanOrderText(request.data && request.data.estimateId, "", 80);
   if (!orderId || !estimateId) throw new HttpsError("invalid-argument", "orderId and estimateId are required.");

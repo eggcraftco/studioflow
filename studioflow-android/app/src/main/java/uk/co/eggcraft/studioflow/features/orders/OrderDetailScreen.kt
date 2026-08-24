@@ -3428,6 +3428,17 @@ private fun DesktopPreviewCard(
 // What the customer was quoted, and the evidence of what they agreed to. Read
 // only: estimates are created and decided on the server, and a revision never
 // edits its predecessor.
+//
+// Survives card disposal so scrolling the card out of view and back does not
+// re-run a billed callable. Process-lifetime only; it holds nothing the user
+// could not already see on the card.
+private val estimateRecordCache = java.util.concurrent.ConcurrentHashMap<String, StudioEstimateRecord>()
+
+private fun cacheEstimateRecord(key: String, record: StudioEstimateRecord) {
+    if (estimateRecordCache.size > 32) estimateRecordCache.clear()
+    estimateRecordCache[key] = record
+}
+
 @Composable
 private fun EstimateCard(
     order: StudioOrder,
@@ -3443,14 +3454,32 @@ private fun EstimateCard(
     val exportEstimate = rememberEstimateExporter(workspaceSettings)
 
     // Keyed so it refires after Send or Revoke changes the status, and not on
-    // every recomposition.
-    var record by remember(order.id, current?.id) { mutableStateOf<StudioEstimateRecord?>(null) }
+    // every recomposition. The phone layout hosts this card in a LazyColumn,
+    // which disposes it on scroll — hence the cache, or the card re-fetched and
+    // visibly re-flowed every time it came back into view.
+    val recordCacheKey = listOf(
+        order.id,
+        current?.id.orEmpty(),
+        current?.status.orEmpty(),
+        current?.linkState.orEmpty()
+    ).joinToString("|")
+    var record by remember(recordCacheKey) { mutableStateOf(estimateRecordCache[recordCacheKey]) }
     var busy by remember(order.id) { mutableStateOf(false) }
     var notice by remember(order.id) { mutableStateOf("") }
-    LaunchedEffect(order.id, current?.id, current?.status, current?.linkState) {
-        record = current?.id?.let {
-            runCatching { loadEstimateRecord(order.companyId, order.id, it) }.getOrNull()
+    LaunchedEffect(recordCacheKey) {
+        if (record != null) return@LaunchedEffect
+        val estimateId = current?.id
+        if (estimateId.isNullOrBlank()) {
+            record = null
+            return@LaunchedEffect
         }
+        val loaded = runCatching { loadEstimateRecord(order.companyId, order.id, estimateId) }.getOrNull()
+        if (loaded != null) {
+            cacheEstimateRecord(recordCacheKey, loaded)
+        } else {
+            notice = t("The estimate details could not be loaded.")
+        }
+        record = loaded
     }
 
     DetailCard(title = t("Estimate & Approval")) {
@@ -11839,8 +11868,9 @@ private fun createInvoicePdfFile(
     val pageHeight = 842
     val margin = 42f
     val document = PdfDocument()
-    val page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create())
-    val canvas = page.canvas
+    var pageNumber = 1
+    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+    var canvas = page.canvas
     canvas.drawColor(0xFFFFFFFF.toInt())
 
     val rightX = pageWidth - margin
@@ -11875,6 +11905,21 @@ private fun createInvoicePdfFile(
     }
 
     var y = margin + 6f
+
+    // A long estimate does not fit one sheet. Without this the item list, the
+    // total and the signature were simply drawn off the bottom of the paper.
+    fun startNextPage() {
+        document.finishPage(page)
+        pageNumber += 1
+        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+        canvas = page.canvas
+        canvas.drawColor(0xFFFFFFFF.toInt())
+        y = margin + 6f
+    }
+
+    fun ensureSpace(needed: Float) {
+        if (y + needed > pageHeight - margin - 26f) startNextPage()
+    }
     val headerTop = y
 
     // Logo + business name (left column)
@@ -11980,6 +12025,7 @@ private fun createInvoicePdfFile(
     val subtotal = estimate?.subtotal ?: if (isMargin) orderValue else orderValue - vat
 
     val tableHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F4F6.toInt() }
+    ensureSpace(70f)
     canvas.drawRect(margin, y, rightX, y + 24f, tableHeaderBg)
     canvas.drawText("Description", margin + 10f, y + 16f, labelPaint)
     drawRight("Amount", rightX - 10f, y + 16f, labelPaint)
@@ -11988,6 +12034,7 @@ private fun createInvoicePdfFile(
         ?: order.lineItems.map { Triple(it.name, it.quantity, it.lineTotal to it.unitPrice) }
     if (if (estimate != null) printedLines.isNotEmpty() else order.hasLineItems) {
         printedLines.forEach { entry ->
+            ensureSpace(52f)
             val item = object {
                 val name = entry.first
                 val quantity = entry.second
@@ -12015,7 +12062,8 @@ private fun createInvoicePdfFile(
     }
     y += 22f
 
-    // Totals (right block)
+    // Totals (right block) — kept whole rather than split across a page break.
+    ensureSpace(90f)
     val totalsLeft = rightX - 250f
     fun totalRow(label: String, value: String, valuePaint: Paint, labelPaintUse: Paint = bodyPaint) {
         canvas.drawText(label, totalsLeft, y, labelPaintUse)
@@ -12035,6 +12083,7 @@ private fun createInvoicePdfFile(
 
     val approval = estimate?.approval
     if (approval != null && approval.decidedAtMs > 0L) {
+        ensureSpace(if (signature != null) 190f else 110f)
         y += 8f
         val stamp = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
             .format(Date(approval.decidedAtMs))
@@ -12093,6 +12142,7 @@ private fun createInvoicePdfFile(
     // Footer note
     val footer = settings.invoiceFooterNote.trim()
     if (footer.isNotBlank()) {
+        ensureSpace(48f)
         canvas.drawLine(margin, y, rightX, y, linePaint)
         y += 18f
         pdfWrappedLines(footer, mutedPaint, rightX - margin).forEach { line ->
@@ -12109,7 +12159,8 @@ private fun createInvoicePdfFile(
     document.finishPage(page)
     val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
     val safeNo = pdfSafeFileName(invoiceNumber.ifBlank { order.displayCustomerName })
-    val file = File(exportDir, "Invoice_${safeNo}.pdf")
+    // The page says ESTIMATE and the toast says Estimate; the file should agree.
+    val file = File(exportDir, "${if (estimate != null) "Estimate" else "Invoice"}_${safeNo}.pdf")
     try {
         file.outputStream().use { document.writeTo(it) }
         return file

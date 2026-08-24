@@ -8412,6 +8412,41 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   color: var(--muted, rgba(23, 25, 35, 0.55));
 }
 
+.estimate-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.estimate-card-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.estimate-card-link-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.14));
+  background: var(--app-surface-muted, rgba(0, 0, 0, 0.03));
+  color: inherit;
+}
+
+.estimate-card-link-row button {
+  font-size: 12px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.14));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 .estimate-card-actions {
   display: flex;
   flex-wrap: wrap;

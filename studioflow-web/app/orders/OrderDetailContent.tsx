@@ -924,7 +924,28 @@ function invoiceHtml(
   const numbers = (settings?.companyNumbers || [])
     .filter(n => (n.value || "").trim())
     .map(n => `<div>${escapeHtml(n.title)}: ${escapeHtml(n.value)}</div>`).join("");
-  const orderDate = order.paymentDate ? order.paymentDate.toLocaleDateString() : "";
+  // An estimate is dated when it was written, not when the order was placed.
+  const documentDate = isEstimate && estimate!.createdAtMs > 0
+    ? new Date(estimate!.createdAtMs)
+    : order.paymentDate;
+  const orderDate = documentDate ? documentDate.toLocaleDateString() : "";
+  const validUntil = isEstimate && estimate!.validUntilMs > 0
+    ? new Date(estimate!.validUntilMs).toLocaleDateString()
+    : "";
+  const approval = isEstimate ? estimate!.approval : null;
+  const approvalMethodLabel = approval
+    ? (approval.method === "portal" ? "Customer Portal" : (approval.method || "Customer Portal"))
+    : "";
+  const approvalBlock = approval
+    ? `<div class="approval ${approval.decision === "approved" ? "ok" : "no"}">
+        <div class="approval-title">${approval.decision === "approved" ? "APPROVED BY CUSTOMER" : "DECLINED BY CUSTOMER"}</div>
+        <div class="approval-row">${escapeHtml(approval.approvedByName || order.customerName || "-")}</div>
+        ${approval.approvedByEmail ? `<div class="approval-row muted">${escapeHtml(approval.approvedByEmail)}</div>` : ""}
+        <div class="approval-row muted">${escapeHtml(approval.decidedAtMs > 0 ? new Date(approval.decidedAtMs).toLocaleString() : "")} &middot; ${escapeHtml(approvalMethodLabel)}</div>
+        ${approval.declineReason ? `<div class="approval-row">Reason: ${escapeHtml(approval.declineReason)}</div>` : ""}
+        ${approval.signatureDownloadUrl ? `<img class="sig" src="${escapeHtml(approval.signatureDownloadUrl)}" alt="Signature" />` : ""}
+      </div>`
+    : "";
   const description = order.designName?.trim() || order.customerName?.trim() || "Order";
   const showAddress = settings?.pdfShowAddress ?? true;
   const showShippingAddress = settings?.pdfShowShippingAddress ?? true;
@@ -975,6 +996,14 @@ function invoiceHtml(
     .paid { color: #16a34a; }
     footer { margin-top: 28px; border-top: 1px solid #e5e7eb; padding-top: 12px; color: #6b7280; font-size: 11px; white-space: pre-wrap; }
     .credit { text-align: center; color: #9ca3af; font-size: 9px; margin-top: 18px; }
+    .approval { margin-top: 22px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 14px 16px; }
+    .approval.ok { border-color: rgba(22,163,74,0.45); }
+    .approval.no { border-color: rgba(220,38,38,0.45); }
+    .approval-title { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; color: #6b7280; }
+    .approval-row { font-size: 12px; margin-top: 5px; }
+    .approval-row.muted { color: #6b7280; font-size: 11px; }
+    .sig { display: block; margin-top: 10px; max-width: 260px; max-height: 90px; object-fit: contain; }
+    .terms { margin-top: 14px; font-size: 10px; color: #6b7280; white-space: pre-wrap; }
   </style></head><body><div class="wrap">
     <header>
       <div class="biz">
@@ -986,6 +1015,7 @@ function invoiceHtml(
         <div class="title">${documentTitle}</div>
         <div class="meta">${documentNumberLabel}: ${escapeHtml(documentNumber)}</div>
         <div class="meta">Date: ${escapeHtml(orderDate)}</div>
+        ${validUntil ? `<div class="meta">Valid Until: ${escapeHtml(validUntil)}</div>` : ""}
       </div>
     </header>
     <hr/>
@@ -1013,7 +1043,9 @@ function invoiceHtml(
       ${vatRow}
       <div class="trow total"><span>TOTAL</span><strong>${money(orderValue)}</strong></div>
     </div>
-    ${order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
+    ${approvalBlock}
+    ${isEstimate && estimate!.terms.trim() ? `<div class="terms">${escapeHtml(estimate!.terms)}</div>` : ""}
+    ${!isEstimate && order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
     <div class="credit">Generated with NivaDesk</div>
   </div></body></html>`;
@@ -1035,7 +1067,25 @@ function openInvoicePrint(
   popup.document.write(invoiceHtml(order, settings, estimate));
   popup.document.close();
   popup.focus();
-  window.setTimeout(() => popup.print(), 300);
+  // The logo and the customer's signature are remote images. Printing on a fixed
+  // timer raced them and produced a document with the signature box empty.
+  let printed = false;
+  const printNow = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      popup.focus();
+      popup.print();
+    } catch {
+      // A closed window is the user's decision, not an error worth surfacing.
+    }
+  };
+  if (popup.document.readyState === "complete") {
+    window.setTimeout(printNow, 150);
+  } else {
+    popup.addEventListener("load", printNow, { once: true });
+    window.setTimeout(printNow, 5000);
+  }
 }
 
 function isoDateFromToday(daysFromToday: number) {
@@ -4896,6 +4946,10 @@ export function OrderDetailContent({
   const [estimateRecord, setEstimateRecord] = useState<EstimateRecord | null>(null);
   const [estimateBusy, setEstimateBusy] = useState(false);
   const [estimateNotice, setEstimateNotice] = useState("");
+  // The plaintext token comes back exactly once — only its hash is stored, and
+  // sending again revokes it. So the URL has to stay on screen, not be assumed
+  // into a clipboard that may have refused it.
+  const [estimateLinkUrl, setEstimateLinkUrl] = useState("");
 
   useEffect(() => {
     if (!currentEstimateId) {
@@ -4908,7 +4962,12 @@ export function OrderDetailContent({
         if (!cancelled) setEstimateRecord(result?.record ?? null);
       })
       .catch(() => {
-        if (!cancelled) setEstimateRecord(null);
+        // Say so. A silent failure left the card looking like an estimate with
+        // no lines and no approval, which is a different and wrong story.
+        if (!cancelled) {
+          setEstimateRecord(null);
+          setEstimateNotice("The estimate details could not be loaded.");
+        }
       });
     return () => {
       cancelled = true;
@@ -4936,6 +4995,8 @@ export function OrderDetailContent({
         taxType: order.taxType ?? "",
         supersedesId: currentEstimate && currentEstimate.status !== "superseded" ? currentEstimate.id : undefined
       });
+      // The previous revision's link is revoked with it.
+      setEstimateLinkUrl("");
       await onReloadOrder();
       setEstimateNotice("New estimate created from the invoice lines.");
     } catch (failure) {
@@ -4955,14 +5016,35 @@ export function OrderDetailContent({
       if (url) {
         // There is no outbound email to customers yet, so the jeweller sends the
         // link themselves — usually on the thread they are already in.
-        await navigator.clipboard?.writeText(url).catch(() => undefined);
-        setEstimateNotice("Link copied. Send it to your customer.");
+        setEstimateLinkUrl(url);
+        let copied = false;
+        try {
+          // The click's user activation has usually expired by now (cold start),
+          // so this is allowed to fail — the link is shown either way.
+          await navigator.clipboard?.writeText(url);
+          copied = true;
+        } catch {
+          copied = false;
+        }
+        setEstimateNotice(copied
+          ? "Link copied. Send it to your customer."
+          : "Link created — copy it below and send it to your customer.");
       }
       await onReloadOrder();
     } catch (failure) {
       setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be created.");
     } finally {
       setEstimateBusy(false);
+    }
+  }
+
+  async function copyEstimateLink() {
+    if (!estimateLinkUrl) return;
+    try {
+      await navigator.clipboard?.writeText(estimateLinkUrl);
+      setEstimateNotice("Link copied. Send it to your customer.");
+    } catch {
+      setEstimateNotice("Copying was blocked — select the link above and copy it by hand.");
     }
   }
 
@@ -5028,7 +5110,6 @@ export function OrderDetailContent({
       case "estimate": {
         const record = estimateRecord;
         const approval = record?.approval ?? null;
-        const approved = approval?.decision === "approved";
         const statusTone = currentEstimate?.status === "approved"
           ? "is-approved"
           : currentEstimate?.status === "declined"
@@ -5037,9 +5118,30 @@ export function OrderDetailContent({
               ? "is-superseded"
               : "is-pending";
         const lines = record?.lineItems ?? [];
-        const marginScheme = (record?.taxType ?? order.taxType) === "Profit";
-        const showVat = !marginScheme && (record?.taxRate ?? 0) > 0.0001;
+        // The record arrives a round-trip after the card paints. Falling back to
+        // the order's own summary keeps the totals from contradicting themselves
+        // on first paint — and forever, if that fetch fails.
+        // `||` not `??`: an absent taxType parses as "", which is not nullish.
+        const marginScheme = (record?.taxType || currentEstimate?.taxType || order.taxType) === "Profit";
+        const effectiveTaxRate = record?.taxRate ?? currentEstimate?.taxRate ?? 0;
+        const showVat = !marginScheme && effectiveTaxRate > 0.0001;
         const linkLive = currentEstimate?.linkState === "active";
+        // Decided-ness is known from the summary alone; the evidence (signature,
+        // email) needs the record. Offering "Send to customer" on a signed
+        // estimate only earned the server's refusal.
+        const decidedFromSummary = Boolean(currentEstimate)
+          && (currentEstimate!.decidedAtMs > 0
+            || currentEstimate!.status === "approved"
+            || currentEstimate!.status === "declined");
+        const decided = Boolean(approval) || decidedFromSummary;
+        const approved = approval
+          ? approval.decision === "approved"
+          : currentEstimate?.status === "approved";
+        const decisionName = approval?.approvedByName || currentEstimate?.decidedBy || "";
+        const decisionAtMs = approval?.decidedAtMs || currentEstimate?.decidedAtMs || 0;
+        const decisionMethod = approval?.method || currentEstimate?.decisionMethod || "portal";
+        const decisionMethodLabel = decisionMethod === "portal" ? "Customer Portal" : decisionMethod;
+        const awaitingEvidence = decided && !approval;
 
         return (
           <section key={cardId} className="card order-detail-card">
@@ -5088,7 +5190,7 @@ export function OrderDetailContent({
                     </div>
                     {showVat ? (
                       <div className="estimate-card-line">
-                        <span>VAT ({record?.taxRate ?? 0}%)</span>
+                        <span>VAT ({effectiveTaxRate}%)</span>
                         <span>{money(currentEstimate.taxAmount, hideNumbers)}</span>
                       </div>
                     ) : null}
@@ -5098,31 +5200,50 @@ export function OrderDetailContent({
                     </div>
                   </div>
 
-                  {approval ? (
+                  {decided ? (
                     <div className="estimate-card-approval">
                       <span className="estimate-card-approval-title">Approval Details</span>
                       <div className="estimate-card-line">
                         <span>{approved ? "Approved by" : "Declined by"}</span>
-                        <strong>{approval.approvedByName}</strong>
+                        <strong>{decisionName || "-"}</strong>
                       </div>
                       <div className="estimate-card-line">
                         <span>{approved ? "Approved at" : "Declined at"}</span>
-                        <strong>{formatDateTime(new Date(approval.decidedAtMs))}</strong>
+                        <strong>{decisionAtMs > 0 ? formatDateTime(new Date(decisionAtMs)) : "-"}</strong>
                       </div>
                       <div className="estimate-card-line">
                         <span>Approval Method</span>
-                        <strong>Customer Portal</strong>
+                        <strong>{decisionMethodLabel}</strong>
                       </div>
-                      {approval.signatureDownloadUrl ? (
+                      {approval?.approvedByEmail ? (
+                        <div className="estimate-card-line">
+                          <span>Email</span>
+                          <strong>{approval.approvedByEmail}</strong>
+                        </div>
+                      ) : null}
+                      {approval?.signatureDownloadUrl ? (
                         <div className="estimate-card-signature">
                           <span>Customer Signature</span>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={approval.signatureDownloadUrl} alt="Customer signature" />
                         </div>
                       ) : null}
-                      {approval.declineReason ? (
+                      {approval?.declineReason ? (
                         <p className="estimate-card-note">{approval.declineReason}</p>
                       ) : null}
+                      {awaitingEvidence && currentEstimate?.hasSignature ? (
+                        <p className="estimate-card-note">Loading the signature…</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {estimateLinkUrl && linkLive && !decided ? (
+                    <div className="estimate-card-link">
+                      <span className="estimate-card-approval-title">Customer Link</span>
+                      <div className="estimate-card-link-row">
+                        <input type="text" readOnly value={estimateLinkUrl} onFocus={event => event.currentTarget.select()} />
+                        <button type="button" onClick={() => void copyEstimateLink()}>Copy link</button>
+                      </div>
                     </div>
                   ) : null}
 
@@ -5138,12 +5259,12 @@ export function OrderDetailContent({
 
                   {canInlineEditFullDetails ? (
                     <div className="estimate-card-actions">
-                      {!approval && currentEstimate.status !== "superseded" ? (
+                      {!decided && currentEstimate.status !== "superseded" ? (
                         <button type="button" onClick={() => void shareEstimateLink()} disabled={estimateBusy}>
-                          {linkLive ? "Copy link again" : "Send to customer"}
+                          {linkLive ? "Create a fresh link" : "Send to customer"}
                         </button>
                       ) : null}
-                      {linkLive && !approval ? (
+                      {linkLive && !decided ? (
                         <button type="button" onClick={() => void revokeEstimateLink()} disabled={estimateBusy}>
                           Revoke link
                         </button>
