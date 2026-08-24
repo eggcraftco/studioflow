@@ -688,6 +688,7 @@ private fun phoneCardHasContent(order: StudioOrder, cardId: OrderDetailCardId): 
     OrderDetailCardId.Preview -> order.designLink.isNotBlank() || order.designName.isNotBlank()
     OrderDetailCardId.RepairIntake -> order.orderType == "repair" ||
         order.repairIntake?.let { it.fields.isNotEmpty() || it.condition.isNotEmpty() || it.requestedWork.isNotEmpty() } == true
+    OrderDetailCardId.Estimate -> order.estimates.isNotEmpty()
     OrderDetailCardId.Customer -> order.customerName.isNotBlank()
     OrderDetailCardId.Materials -> order.invBool1 || order.invBool2 || order.invBool3 || order.invBool4 || order.invNotes.isNotBlank()
     OrderDetailCardId.Priority -> order.priority != "Normal" || order.risk != "None"
@@ -709,6 +710,7 @@ private fun phoneCompactSummary(order: StudioOrder, cardId: OrderDetailCardId, t
     OrderDetailCardId.Summary -> listOf(order.designName, t(order.status)).filter { it.isNotBlank() }.joinToString(" • ")
     OrderDetailCardId.Preview -> order.designName.ifBlank { t("Preview") }
     OrderDetailCardId.RepairIntake -> order.repairIntake?.fields?.get("itemType").orEmpty().ifBlank { t("Repair Intake & Item") }
+    OrderDetailCardId.Estimate -> order.estimates.firstOrNull()?.number.orEmpty().ifBlank { t("Estimate & Approval") }
     OrderDetailCardId.Customer -> order.customerName
     OrderDetailCardId.Materials -> "${listOf(order.invBool1, order.invBool2, order.invBool3, order.invBool4).count { it }}/4"
     OrderDetailCardId.InvoiceItems -> "${order.lineItems.size}"
@@ -3097,6 +3099,11 @@ private fun OrderDetailCardContent(
             canEditWorkflow = canEditWorkflow,
             onUpdateOrderFields = onUpdateOrderFields
         )
+        OrderDetailCardId.Estimate -> EstimateCard(
+            order = order,
+            workspaceSettings = workspaceSettings,
+            canSeeFinancial = canSeeFinancial
+        )
         OrderDetailCardId.Preview -> DesktopPreviewCard(
             order = order,
             canEditPreview = canEditWorkflow,
@@ -3413,6 +3420,133 @@ private fun DesktopPreviewCard(
             }
         }
     }
+}
+
+// What the customer was quoted, and the evidence of what they agreed to. Read
+// only: estimates are created and decided on the server, and a revision never
+// edits its predecessor.
+@Composable
+private fun EstimateCard(order: StudioOrder, workspaceSettings: StudioWorkspaceSettings, canSeeFinancial: Boolean) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val current = order.estimates.firstOrNull { it.status != "superseded" } ?: order.estimates.firstOrNull()
+
+    DetailCard(title = t("Estimate & Approval")) {
+        if (!canSeeFinancial) {
+            Text(
+                text = t("Hidden on this workspace role."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@DetailCard
+        }
+        if (current == null) {
+            Text(
+                text = t("No estimate yet. Create one on the web portal and the customer's approval appears here."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@DetailCard
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = current.number.ifBlank { "#${current.version}" },
+                style = MaterialTheme.typography.titleSmall
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            val tone = when (current.status) {
+                "approved" -> Color(0xFF14804A)
+                "declined" -> Color(0xFFB42318)
+                "superseded" -> MaterialTheme.colorScheme.onSurfaceVariant
+                else -> StudioBlue
+            }
+            Surface(shape = RoundedCornerShape(8.dp), color = tone.copy(alpha = 0.14f)) {
+                Text(
+                    text = t(estimateStatusTitle(current.status)),
+                    color = tone,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        EstimateAmountRow(t("Subtotal"), current.subtotal, workspaceSettings)
+        if (current.taxType != "Profit" && current.taxRate > 0.0001) {
+            EstimateAmountRow("${t("VAT")} (${current.taxRate.toInt()}%)", current.taxAmount, workspaceSettings)
+        }
+        EstimateAmountRow(t("Total"), current.total, workspaceSettings, bold = true)
+
+        if (current.decidedAtMs > 0L) {
+            Spacer(modifier = Modifier.height(10.dp))
+            val stamp = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date(current.decidedAtMs))
+            EstimateDetailRow(
+                t(if (current.status == "declined") "Declined by" else "Approved by"),
+                current.decidedBy.ifBlank { "—" }
+            )
+            EstimateDetailRow(t(if (current.status == "declined") "Declined at" else "Approved at"), stamp)
+            EstimateDetailRow(t("Approval Method"), t("Customer Portal"))
+            if (current.hasSignature) EstimateDetailRow(t("Customer Signature"), t("Signed"))
+        }
+
+        val history = order.estimates.filter { it.id != current.id }
+        if (history.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = t("Estimate History"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            history.forEach { row ->
+                EstimateDetailRow(
+                    row.number.ifBlank { "#${row.version}" },
+                    t(estimateStatusTitle(row.status))
+                )
+            }
+        }
+    }
+}
+
+private fun estimateStatusTitle(status: String): String = when (status) {
+    "sent" -> "Sent"
+    "viewed" -> "Viewed"
+    "approved" -> "Approved"
+    "declined" -> "Declined"
+    "superseded" -> "Superseded"
+    else -> "Draft"
+}
+
+@Composable
+private fun EstimateAmountRow(label: String, value: Double, settings: StudioWorkspaceSettings, bold: Boolean = false) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = pdfMoney(value, settings),
+            style = if (bold) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium
+        )
+    }
+    Spacer(modifier = Modifier.height(5.dp))
+}
+
+@Composable
+private fun EstimateDetailRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Text(text = value, style = MaterialTheme.typography.bodyMedium)
+    }
+    Spacer(modifier = Modifier.height(5.dp))
 }
 
 // The customer's own item, taken in for repair. Never stock: the server stamps
@@ -9597,6 +9731,7 @@ private fun defaultCardHeight(cardId: OrderDetailCardId): Int {
         OrderDetailCardId.Preview -> 430
         OrderDetailCardId.Summary -> 260
         OrderDetailCardId.RepairIntake -> 520
+        OrderDetailCardId.Estimate -> 520
         OrderDetailCardId.Customer -> 620
         OrderDetailCardId.InvoiceItems -> 460
         OrderDetailCardId.Materials -> 430
@@ -9623,6 +9758,7 @@ private fun minimumRenderedCardHeight(cardId: OrderDetailCardId?): Int {
         OrderDetailCardId.Preview -> 300
         OrderDetailCardId.Summary -> 250
         OrderDetailCardId.RepairIntake -> 360
+        OrderDetailCardId.Estimate -> 340
         OrderDetailCardId.Customer -> 430
         OrderDetailCardId.InvoiceItems -> 300
         OrderDetailCardId.Materials -> 390
@@ -9672,6 +9808,7 @@ private fun orderDetailCardIcon(cardId: OrderDetailCardId?): ImageVector {
     return when (cardId) {
         OrderDetailCardId.Preview -> Icons.Filled.PhotoLibrary
         OrderDetailCardId.RepairIntake -> Icons.Filled.Inventory2
+        OrderDetailCardId.Estimate -> Icons.Filled.Description
         OrderDetailCardId.Summary -> Icons.Filled.Description
         OrderDetailCardId.Customer -> Icons.Filled.Person
         OrderDetailCardId.InvoiceItems -> Icons.Filled.Description
@@ -9695,6 +9832,7 @@ private fun orderDetailCardAccent(cardId: OrderDetailCardId?): Color {
     return when (cardId) {
         OrderDetailCardId.Preview -> StudioBlue
         OrderDetailCardId.RepairIntake -> Color(0xFFE08A2E)
+        OrderDetailCardId.Estimate -> Color(0xFF1D9E75)
         OrderDetailCardId.Summary -> Color(0xFF5B6CFF)
         OrderDetailCardId.Customer -> Color(0xFF00A3A3)
         OrderDetailCardId.InvoiceItems -> Color(0xFF1D9E75)

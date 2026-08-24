@@ -97,6 +97,33 @@ struct RepairIntake: Codable, Equatable {
     var customerOwned: Bool = true
 }
 
+// One revision of what the customer was quoted. The full document and the
+// approval evidence live in a subcollection the client cannot read; this is the
+// row the card shows. Times are epoch milliseconds, not Date: the whole array is
+// decoded with try?, so a single element that fails to read would blank the lot.
+struct OrderEstimateSummary: Codable, Equatable, Identifiable {
+    var id: String = ""
+    var number: String = ""
+    var version: Int = 1
+    var status: String = "draft"
+    var total: Double = 0
+    var subtotal: Double = 0
+    var taxAmount: Double = 0
+    var taxRate: Double = 0
+    var taxType: String = ""
+    var itemCount: Int = 0
+    var createdAtMs: Double = 0
+    var sentAtMs: Double = 0
+    var viewedAtMs: Double = 0
+    var decidedAtMs: Double = 0
+    var decidedBy: String = ""
+    var decisionMethod: String = ""
+    var hasSignature: Bool = false
+    var supersedesId: String = ""
+    var supersededById: String = ""
+    var linkState: String = "none"
+}
+
 struct Siparis: Identifiable, Codable {
     @DocumentID var id: String?
     
@@ -165,6 +192,9 @@ struct Siparis: Identifiable, Codable {
     var orderType: String = "custom"
     // Present only on repair orders. Optional so every existing order still decodes.
     var repairIntake: RepairIntake?
+    // Estimate revisions, newest first. Server-written: the client only reads.
+    var estimates: [OrderEstimateSummary]?
+    var estimateStatus: String = ""
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
     // Trash / soft-delete: when true the order is hidden from all normal views and

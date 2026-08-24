@@ -1415,7 +1415,8 @@ class FirebaseManager: ObservableObject {
         "assignedToUid": "",
         "assignedToEmail": "",
         "isDeleted": false,
-        "orderType": "custom"
+        "orderType": "custom",
+        "estimateStatus": ""
     ]
 
     private func decodeSiparisDocument(_ document: QueryDocumentSnapshot) -> Siparis? {

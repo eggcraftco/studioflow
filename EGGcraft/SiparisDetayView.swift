@@ -1124,6 +1124,7 @@ struct SiparisDetayView: View {
         case .priority: return "cardPriority"
         case .invoiceItems: return "cardCustomer"
         case .repairIntake: return "cardSummary"
+        case .estimate: return "cardFinancial"
         case .communication, .customerNotes: return nil
         }
     }
@@ -1280,6 +1281,7 @@ struct SiparisDetayView: View {
     @AppStorage("showCardPriority") private var showCardPriority = true
     @AppStorage("showCardInvoiceItems") private var showCardInvoiceItems = true
     @AppStorage("showCardRepairIntake") private var showCardRepairIntake = true
+    @AppStorage("showCardEstimate") private var showCardEstimate = true
     @State private var showInvoiceFooterEditor = false
     @AppStorage("showCardSchedule") private var showCardSchedule = true
     @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
@@ -2560,6 +2562,7 @@ struct SiparisDetayView: View {
         case .priority: return t("Priority / Risk", lang: seciliDil)
         case .invoiceItems: return resolvedItemsHeading
         case .repairIntake: return t("Repair Intake & Item", lang: seciliDil)
+        case .estimate: return t("Estimate & Approval", lang: seciliDil)
         }
     }
 
@@ -2584,6 +2587,7 @@ struct SiparisDetayView: View {
         case .priority: return "exclamationmark.triangle.fill"
         case .invoiceItems: return "list.bullet.rectangle"
         case .repairIntake: return "shippingbox"
+        case .estimate: return "signature"
         }
     }
 
@@ -2612,6 +2616,7 @@ struct SiparisDetayView: View {
         case .priority: return .red
         case .invoiceItems: return .green
         case .repairIntake: return studioWarningOrange
+        case .estimate: return .green
         }
     }
 
@@ -2886,6 +2891,7 @@ struct SiparisDetayView: View {
         case .materials: return siparis.invBool1 || siparis.invBool2 || siparis.invBool3 || siparis.invBool4 || !siparis.invNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
         case .invoiceItems: return siparis.hasLineItems
+        case .estimate: return !(siparis.estimates ?? []).isEmpty
         case .repairIntake:
             let intake = siparis.repairIntake
             return siparis.orderType == "repair"
@@ -2900,6 +2906,9 @@ struct SiparisDetayView: View {
         case .summary:
             let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
             return design.isEmpty ? t(siparis.status, lang: seciliDil) : "\(design) • \(t(siparis.status, lang: seciliDil))"
+        case .estimate:
+            guard let current = currentEstimateSummary else { return t("Estimate & Approval", lang: seciliDil) }
+            return "\(current.number) · \(t(estimateStatusLabel(current.status), lang: seciliDil))"
         case .repairIntake:
             let itemType = siparis.repairIntake?.fields["itemType"] ?? ""
             return itemType.isEmpty ? t("Repair Intake & Item", lang: seciliDil) : itemType
@@ -3425,6 +3434,7 @@ struct SiparisDetayView: View {
         case .priority: return showCardPriority
         case .invoiceItems: return showCardInvoiceItems
         case .repairIntake: return showCardRepairIntake
+        case .estimate: return showCardEstimate
         }
     }
 
@@ -3490,6 +3500,7 @@ struct SiparisDetayView: View {
             case .priority: showCardPriority = visible
             case .invoiceItems: showCardInvoiceItems = visible
             case .repairIntake: showCardRepairIntake = visible
+            case .estimate: showCardEstimate = visible
             }
             yenileCalismaAlaniHitbox(delay: 0.01)
             persistWorkspaceCustomizationChange()
@@ -3615,7 +3626,8 @@ struct SiparisDetayView: View {
                 KartTipi.materials.rawValue: showCardMaterials,
                 KartTipi.priority.rawValue: showCardPriority,
                 KartTipi.invoiceItems.rawValue: showCardInvoiceItems,
-                KartTipi.repairIntake.rawValue: showCardRepairIntake
+                KartTipi.repairIntake.rawValue: showCardRepairIntake,
+                KartTipi.estimate.rawValue: showCardEstimate
             ]
         )
     }
@@ -3737,6 +3749,7 @@ struct SiparisDetayView: View {
         showCardPriority = snapshot.visibility[KartTipi.priority.rawValue] ?? true
         showCardInvoiceItems = snapshot.visibility[KartTipi.invoiceItems.rawValue] ?? true
         showCardRepairIntake = snapshot.visibility[KartTipi.repairIntake.rawValue] ?? true
+        showCardEstimate = snapshot.visibility[KartTipi.estimate.rawValue] ?? true
 
         kartYerlesimi = snapshot.kartYerlesimi.isEmpty ? kartYerlesimi : snapshot.kartYerlesimi
         while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
@@ -4984,6 +4997,7 @@ struct SiparisDetayView: View {
         } else {
             switch kart {
             case .repairIntake: repairIntakeKarti(colIndex: colIndex)
+            case .estimate: estimateKarti(colIndex: colIndex)
             case .preview: previewKarti(colIndex: colIndex)
             case .summary: summaryKarti(colIndex: colIndex)
             case .customer:
@@ -7402,6 +7416,133 @@ struct SiparisDetayView: View {
                 .stroke(scheduleStatusColor(item).opacity(0.16), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    // What the customer was quoted, and — once they have decided — the evidence
+    // of it. Read-only here: an estimate is created and decided on the server,
+    // never edited in place, because a revision has to leave the old one intact.
+    private var currentEstimateSummary: OrderEstimateSummary? {
+        let rows = siparis.estimates ?? []
+        return rows.first(where: { $0.status != "superseded" }) ?? rows.first
+    }
+
+    private func estimateStatusLabel(_ status: String) -> String {
+        switch status {
+        case "sent": return "Sent"
+        case "viewed": return "Viewed"
+        case "approved": return "Approved"
+        case "declined": return "Declined"
+        case "superseded": return "Superseded"
+        default: return "Draft"
+        }
+    }
+
+    private func estimateStatusColor(_ status: String) -> Color {
+        switch status {
+        case "approved": return .green
+        case "declined": return .red
+        case "superseded": return .gray
+        default: return .blue
+        }
+    }
+
+    private func estimateMomentText(_ ms: Double) -> String {
+        guard ms > 0 else { return "—" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yy HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: ms / 1000))
+    }
+
+    private func estimateKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Estimate & Approval", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .estimate),
+            kartTipi: .estimate,
+            yukseklik: bindingYukseklik(for: .estimate),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .estimate),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.estimate, false) },
+            onColorChange: { setKartColor(kart: .estimate, color: $0) }
+        ) {
+            if let current = currentEstimateSummary {
+                HStack {
+                    Text(current.number.isEmpty ? "#\(current.version)" : current.number)
+                        .font(.system(size: 14, weight: .bold))
+                    Spacer()
+                    Text(t(estimateStatusLabel(current.status), lang: seciliDil))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(estimateStatusColor(current.status))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(estimateStatusColor(current.status).opacity(0.18))
+                        .cornerRadius(6)
+                }
+
+                Divider().background(Color.primary.opacity(0.1))
+
+                estimateAmountRow(t("Subtotal", lang: seciliDil), current.subtotal)
+                if current.taxType != "Profit" && current.taxRate > 0.0001 {
+                    estimateAmountRow("\(t("VAT", lang: seciliDil)) (\(Int(current.taxRate))%)", current.taxAmount)
+                }
+                estimateAmountRow(t("Total", lang: seciliDil), current.total, bold: true)
+
+                if current.decidedAtMs > 0 {
+                    Divider().background(Color.primary.opacity(0.1))
+                    estimateDetailRow(
+                        t(current.status == "declined" ? "Declined by" : "Approved by", lang: seciliDil),
+                        current.decidedBy.isEmpty ? "—" : current.decidedBy
+                    )
+                    estimateDetailRow(
+                        t(current.status == "declined" ? "Declined at" : "Approved at", lang: seciliDil),
+                        estimateMomentText(current.decidedAtMs)
+                    )
+                    estimateDetailRow(t("Approval Method", lang: seciliDil), t("Customer Portal", lang: seciliDil))
+                    if current.hasSignature {
+                        estimateDetailRow(t("Customer Signature", lang: seciliDil), t("Signed", lang: seciliDil))
+                    }
+                }
+
+                let history = (siparis.estimates ?? []).filter { $0.id != current.id }
+                if !history.isEmpty {
+                    Divider().background(Color.primary.opacity(0.1))
+                    Text(t("Estimate History", lang: seciliDil))
+                        .font(.system(size: 12)).foregroundColor(.gray)
+                    ForEach(history) { row in
+                        estimateDetailRow(
+                            row.number.isEmpty ? "#\(row.version)" : row.number,
+                            "\(privacyCurrency(row.total, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)) · \(t(estimateStatusLabel(row.status), lang: seciliDil))"
+                        )
+                    }
+                }
+            } else {
+                Text(t("No estimate yet. Create one on the web portal and the customer's approval appears here.", lang: seciliDil))
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func estimateAmountRow(_ label: String, _ value: Double, bold: Bool = false) -> some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray)
+            Spacer()
+            Text(privacyCurrency(value, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers))
+                .font(.system(size: bold ? 15 : 13, weight: bold ? .bold : .semibold))
+        }
+    }
+
+    @ViewBuilder
+    private func estimateDetailRow(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 10) {
+            Text(label).font(.system(size: 13)).foregroundColor(.gray)
+            Spacer()
+            Text(value).font(.system(size: 13, weight: .semibold))
+        }
     }
 
     // A custom order is something we make; a repair is the customer's own item,
@@ -12527,6 +12668,7 @@ struct DetayKarti<Content: View>: View {
     private var kartTipiMinimumBoyu: Double {
         switch kartTipi {
         case .repairIntake: return 430
+        case .estimate: return 460
         case .preview: return previewMinBoyu
         case .financial: return 430
         case .schedule: return 390

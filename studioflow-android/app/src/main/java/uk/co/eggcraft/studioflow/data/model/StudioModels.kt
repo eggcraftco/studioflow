@@ -890,6 +890,29 @@ data class StudioScheduleReminder(
 
 // The customer's own item, handed in for repair. Never stock: the server stamps
 // customerOwned so nothing downstream can mistake it for inventory.
+// One revision of what the customer was quoted. The full document and the
+// approval evidence live in a subcollection no client can read; this is the row
+// the card shows.
+data class StudioEstimateSummary(
+    val id: String = "",
+    val number: String = "",
+    val version: Int = 1,
+    val status: String = "draft",
+    val total: Double = 0.0,
+    val subtotal: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val taxRate: Double = 0.0,
+    val taxType: String = "",
+    val itemCount: Int = 0,
+    val createdAtMs: Long = 0L,
+    val decidedAtMs: Long = 0L,
+    val decidedBy: String = "",
+    val decisionMethod: String = "",
+    val hasSignature: Boolean = false,
+    val supersededById: String = "",
+    val linkState: String = "none"
+)
+
 data class StudioRepairIntake(
     // Keyed by the field id the workspace configured (itemType, metal, hallmark…).
     val fields: Map<String, String> = emptyMap(),
@@ -959,6 +982,8 @@ data class StudioOrder(
     // "custom" (something we make) or "repair" (the customer's own item, left with us).
     val orderType: String = "custom",
     val repairIntake: StudioRepairIntake? = null,
+    val estimates: List<StudioEstimateSummary> = emptyList(),
+    val estimateStatus: String = "",
     val invoiceNumber: String,
     val clientFileCount: Int,
     val todoCount: Int,
@@ -1013,6 +1038,7 @@ data class StudioOrder(
             val lineItems = parseLineItems(document.get("lineItems"))
             val customFields = stringMap(document.get("customFields"))
             val repairIntake = parseRepairIntake(document.get("repairIntake"))
+            val estimates = parseEstimates(document.get("estimates"))
             return StudioOrder(
                 id = document.id,
                 companyId = document.getString("companyId").orEmpty(),
@@ -1069,6 +1095,8 @@ data class StudioOrder(
                 lineItems = lineItems,
                 orderType = if (document.getString("orderType") == "repair") "repair" else "custom",
                 repairIntake = repairIntake,
+                estimates = estimates,
+                estimateStatus = document.getString("estimateStatus").orEmpty(),
                 invoiceNumber = document.getString("invoiceNumber") ?: "",
                 clientFileCount = clientFiles.size,
                 todoCount = todoItems.size,
@@ -1231,6 +1259,30 @@ private fun parseLineItems(value: Any?): List<StudioLineItem> {
             quantity = doubleAny(item["quantity"], 1.0),
             unitPrice = doubleAny(item["unitPrice"], 0.0),
             lineTotal = doubleAny(item["lineTotal"], 0.0)
+        )
+    }
+}
+
+private fun parseEstimates(value: Any?): List<StudioEstimateSummary> {
+    return mapItems(value).map { item ->
+        StudioEstimateSummary(
+            id = stringAny(item["id"], ""),
+            number = stringAny(item["number"], ""),
+            version = (item["version"] as? Number)?.toInt() ?: 1,
+            status = stringAny(item["status"], "draft"),
+            total = doubleAny(item["total"], 0.0),
+            subtotal = doubleAny(item["subtotal"], 0.0),
+            taxAmount = doubleAny(item["taxAmount"], 0.0),
+            taxRate = doubleAny(item["taxRate"], 0.0),
+            taxType = stringAny(item["taxType"], ""),
+            itemCount = (item["itemCount"] as? Number)?.toInt() ?: 0,
+            createdAtMs = (item["createdAtMs"] as? Number)?.toLong() ?: 0L,
+            decidedAtMs = (item["decidedAtMs"] as? Number)?.toLong() ?: 0L,
+            decidedBy = stringAny(item["decidedBy"], ""),
+            decisionMethod = stringAny(item["decisionMethod"], ""),
+            hasSignature = item["hasSignature"] == true,
+            supersededById = stringAny(item["supersededById"], ""),
+            linkState = stringAny(item["linkState"], "none")
         )
     }
 }
