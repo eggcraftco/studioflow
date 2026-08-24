@@ -1,5 +1,6 @@
 "use client";
 
+import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -5476,7 +5477,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
           <span className="about-app-mark" aria-hidden="true">⬢</span>
           <div>
             <strong>NivaDesk</strong>
-            <p>{t("Version")} 1.0.0</p>
+            <p>{t("Version")} {CHANGELOG[0]?.version ?? ""}</p>
             <p>{t("An EGGcraft brand for studio workspace management.")}</p>
             <p>
               <Link className="about-changelog-link" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>

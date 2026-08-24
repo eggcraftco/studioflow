@@ -508,6 +508,48 @@ export type OrderDetail = {
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
   invoiceNumber: string;
+  // "custom" or "repair". A repair order carries the customer's own item, which
+  // is recorded below and is deliberately not stock.
+  orderType: string;
+  repairIntake: RepairIntakeDetail | null;
+  // The index the order carries. Full line items and the approval evidence live
+  // in a subcollection no client can read; these rows are what the card shows.
+  estimates: EstimateSummary[];
+  estimateStatus: string;
+};
+
+export type EstimateSummary = {
+  id: string;
+  number: string;
+  version: number;
+  status: string;
+  total: number;
+  subtotal: number;
+  taxAmount: number;
+  taxRate: number;
+  taxType: string;
+  itemCount: number;
+  createdAtMs: number;
+  sentAtMs: number;
+  viewedAtMs: number;
+  decidedAtMs: number;
+  decidedBy: string;
+  decisionMethod: string;
+  hasSignature: boolean;
+  supersedesId: string;
+  supersededById: string;
+  linkState: string;
+};
+
+export type RepairIntakeDetail = {
+  fields: Record<string, string>;
+  condition: string[];
+  requestedWork: string[];
+  customerInstructions: string;
+  receivedAt: Date | null;
+  receivedByUid: string;
+  receivedByName: string;
+  customerOwned: boolean;
 };
 
 const ACTIVE_CLOSED_STATUSES = new Set(["done", "completed", "cancelled", "canceled"]);
@@ -1671,6 +1713,60 @@ function mapLineItems(value: unknown): LineItemDetail[] {
   });
 }
 
+function mapEstimates(value: unknown): EstimateSummary[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `estimate-${index}`),
+      number: stringValue(entry.number, ""),
+      version: numberValue(entry.version, 1),
+      status: stringValue(entry.status, "draft"),
+      total: numberValue(entry.total),
+      subtotal: numberValue(entry.subtotal),
+      taxAmount: numberValue(entry.taxAmount),
+      taxRate: numberValue(entry.taxRate),
+      taxType: stringValue(entry.taxType, ""),
+      itemCount: numberValue(entry.itemCount),
+      createdAtMs: numberValue(entry.createdAtMs),
+      sentAtMs: numberValue(entry.sentAtMs),
+      viewedAtMs: numberValue(entry.viewedAtMs),
+      decidedAtMs: numberValue(entry.decidedAtMs),
+      decidedBy: stringValue(entry.decidedBy, ""),
+      decisionMethod: stringValue(entry.decisionMethod, ""),
+      hasSignature: entry.hasSignature === true,
+      supersedesId: stringValue(entry.supersedesId, ""),
+      supersededById: stringValue(entry.supersededById, ""),
+      linkState: stringValue(entry.linkState, "none")
+    };
+  });
+}
+
+function mapRepairIntake(value: unknown): RepairIntakeDetail | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const fields: Record<string, string> = {};
+  const rawFields = entry.fields && typeof entry.fields === "object" && !Array.isArray(entry.fields)
+    ? entry.fields as Record<string, unknown>
+    : {};
+  for (const [key, raw] of Object.entries(rawFields)) {
+    const text = stringValue(raw, "");
+    if (text) fields[key] = text;
+  }
+  const lines = (raw: unknown) => collectionItemsValue(raw)
+    .map(item => (typeof item === "string" ? item : stringValue((item as Record<string, unknown>)?.text, "")))
+    .filter(Boolean);
+  return {
+    fields,
+    condition: lines(entry.condition),
+    requestedWork: lines(entry.requestedWork),
+    customerInstructions: stringValue(entry.customerInstructions, ""),
+    receivedAt: dateValue(entry.receivedAt),
+    receivedByUid: stringValue(entry.receivedByUid, ""),
+    receivedByName: stringValue(entry.receivedByName, ""),
+    customerOwned: true
+  };
+}
+
 function mapOrderDetailSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   companyId: string,
@@ -1777,7 +1873,11 @@ function mapOrderDetailSnapshot(
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),
     lineItems: mapLineItems(data.lineItems),
-    invoiceNumber: stringValue(data.invoiceNumber, "")
+    invoiceNumber: stringValue(data.invoiceNumber, ""),
+    orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
+    repairIntake: mapRepairIntake(data.repairIntake),
+    estimates: mapEstimates(data.estimates),
+    estimateStatus: stringValue(data.estimateStatus, "")
   };
 }
 

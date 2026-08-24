@@ -10,6 +10,9 @@ import type { StudioLanguage } from "@/lib/studioflow/language";
 //   4. List `changes`, each tagged "new" | "improved" | "fixed".
 //   5. Update CHANGELOG_LAST_UPDATED to the same date.
 //
+// Settings ▸ About shows CHANGELOG[0].version, so the top entry is also what
+// the web app reports as its version. Keep the list newest-first.
+//
 // Release text is written in English (the source of truth). The page chrome
 // (titles, tags, labels) is localized to all 12 languages automatically.
 // ---------------------------------------------------------------------------

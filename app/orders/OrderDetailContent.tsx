@@ -7,6 +7,14 @@ import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle"
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
+import {
+  createOrderEstimate,
+  estimateStatusLabel,
+  loadOrderEstimateRecord,
+  revokeOrderEstimateLink,
+  sendOrderEstimate,
+  type EstimateRecord
+} from "@/lib/studioflow/estimates";
 import { studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -1104,8 +1112,34 @@ function isClientFilePdf(file: ClientFileDetail) {
   return file.fileName.toLowerCase().endsWith(".pdf") || file.contentType.toLowerCase().includes("pdf");
 }
 
+// Falls back to these when the workspace has not renamed the intake rows.
+const DEFAULT_REPAIR_INTAKE_FIELDS = [
+  { id: "itemType", title: "Item Type" },
+  { id: "metal", title: "Metal" },
+  { id: "hallmark", title: "Hallmark" },
+  { id: "itemSize", title: "Size" },
+  { id: "stones", title: "Stones" },
+  { id: "weight", title: "Weight" },
+  { id: "serialReference", title: "Serial / Reference" }
+];
+
+const INTAKE_PHOTO_SOURCE = "intake_photo";
+
+type RepairIntakeDraft = {
+  fields: Record<string, string>;
+  condition: string;
+  requestedWork: string;
+  customerInstructions: string;
+};
+
+function emptyRepairIntakeDraft(): RepairIntakeDraft {
+  return { fields: {}, condition: "", requestedWork: "", customerInstructions: "" };
+}
+
 const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
+  repairIntake: "Repair Intake & Item",
+  estimate: "Estimate & Approval",
   summary: "Order Summary",
   customer: "Customer & Communication",
   invoiceItems: "Invoice Items",
@@ -1125,6 +1159,8 @@ const CARD_LABELS: Record<OrderDetailCardId, string> = {
 
 const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   preview: "cardPreview",
+  repairIntake: "cardSummary",
+  estimate: "cardFinancial",
   summary: "cardSummary",
   customer: "cardCustomer",
   invoiceItems: "cardCustomer",
@@ -1261,6 +1297,8 @@ function communicationChannelPatch(channel: string, value: string): DetailsPatch
 
 const DEFAULT_CARD_HEIGHTS: Record<OrderDetailCardId, number> = {
   preview: 250,
+  repairIntake: 460,
+  estimate: 520,
   summary: 210,
   customer: 200,
   invoiceItems: 220,
@@ -2510,6 +2548,8 @@ export function OrderDetailContent({
   function cardIcon(cardId: OrderDetailCardId): CardIcon {
     const icons: Record<OrderDetailCardId, CardIcon> = {
       preview: "photo",
+      repairIntake: "shippingBox",
+      estimate: "finance",
       summary: "docText",
       customer: "customer",
       invoiceItems: "docText",
@@ -3691,6 +3731,20 @@ export function OrderDetailContent({
         nextPatch.remainingAmount = Math.max(0, Math.round((itemsTotal - order.paidAmount) * 100) / 100);
       }
     }
+    if (typeof patch.orderType === "string") nextPatch.orderType = patch.orderType;
+    if (patch.repairIntake && typeof patch.repairIntake === "object") {
+      const incoming = patch.repairIntake;
+      nextPatch.repairIntake = {
+        fields: { ...(incoming.fields ?? {}) },
+        condition: [...(incoming.condition ?? [])],
+        requestedWork: [...(incoming.requestedWork ?? [])],
+        customerInstructions: incoming.customerInstructions ?? "",
+        receivedAt: incoming.receivedAt ? new Date(incoming.receivedAt) : (order.repairIntake?.receivedAt ?? new Date()),
+        receivedByUid: incoming.receivedByUid ?? order.repairIntake?.receivedByUid ?? "",
+        receivedByName: incoming.receivedByName ?? order.repairIntake?.receivedByName ?? "",
+        customerOwned: true
+      };
+    }
     if (typeof patch.watchRef === "string") nextPatch.watchRef = patch.watchRef;
     if (typeof patch.designLink === "string") nextPatch.designLink = patch.designLink;
     if (typeof patch.emailAddress === "string") nextPatch.emailAddress = patch.emailAddress;
@@ -4754,6 +4808,164 @@ export function OrderDetailContent({
     );
   }
 
+  // --- Repair intake -------------------------------------------------------
+  // A repair order holds the customer's own item. It is recorded here, never in
+  // stock: `customerOwned` is stamped server-side so nothing downstream can
+  // mistake a customer's ring for inventory.
+  const repairIntakeFieldRows = useMemo(() => {
+    const configured = blockHeadingSettings?.repairIntakeFields
+      ?.map(field => ({ id: field.id.trim(), title: field.title.trim() }))
+      .filter(field => field.id && field.title) ?? [];
+    return configured.length > 0 ? configured : DEFAULT_REPAIR_INTAKE_FIELDS;
+  }, [blockHeadingSettings]);
+
+  const repairIntake = order.repairIntake;
+  const [repairIntakeEditing, setRepairIntakeEditing] = useState(false);
+  const [repairIntakeDraft, setRepairIntakeDraft] = useState<RepairIntakeDraft>(() => emptyRepairIntakeDraft());
+
+  function beginRepairIntakeEdit() {
+    setRepairIntakeDraft({
+      fields: { ...(repairIntake?.fields ?? {}) },
+      condition: (repairIntake?.condition ?? []).join("\n"),
+      requestedWork: (repairIntake?.requestedWork ?? []).join("\n"),
+      customerInstructions: repairIntake?.customerInstructions ?? ""
+    });
+    setRepairIntakeEditing(true);
+  }
+
+  async function saveRepairIntake() {
+    const toLines = (value: string) => value.split("\n").map(line => line.trim()).filter(Boolean);
+    const fields: Record<string, string> = {};
+    for (const row of repairIntakeFieldRows) {
+      const value = (repairIntakeDraft.fields[row.id] ?? "").trim();
+      if (value) fields[row.id] = value;
+    }
+    setRepairIntakeEditing(false);
+    await saveDetailsPatch({
+      orderType: "repair",
+      repairIntake: {
+        fields,
+        condition: toLines(repairIntakeDraft.condition),
+        requestedWork: toLines(repairIntakeDraft.requestedWork),
+        customerInstructions: repairIntakeDraft.customerInstructions.trim(),
+        receivedAt: (repairIntake?.receivedAt ?? new Date()).toISOString(),
+        receivedByUid: repairIntake?.receivedByUid || user?.uid || "",
+        receivedByName: repairIntake?.receivedByName || user?.displayName || user?.email || ""
+      }
+    }, "Repair intake");
+  }
+
+  // --- Estimate & approval -------------------------------------------------
+  // The card shows the current revision. Older ones stay in the list and are
+  // never edited: an approved estimate is evidence of what was agreed.
+  const estimates = order.estimates;
+  const currentEstimate = estimates.find(row => row.status !== "superseded") ?? estimates[0] ?? null;
+  const currentEstimateId = currentEstimate?.id ?? "";
+  const currentEstimateStatus = currentEstimate?.status ?? "";
+  const [estimateRecord, setEstimateRecord] = useState<EstimateRecord | null>(null);
+  const [estimateBusy, setEstimateBusy] = useState(false);
+  const [estimateNotice, setEstimateNotice] = useState("");
+
+  useEffect(() => {
+    if (!currentEstimateId) {
+      setEstimateRecord(null);
+      return;
+    }
+    let cancelled = false;
+    loadOrderEstimateRecord(workspace, order.id, currentEstimateId)
+      .then(result => {
+        if (!cancelled) setEstimateRecord(result?.record ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setEstimateRecord(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, order.id, currentEstimateId, currentEstimateStatus]);
+
+  // A revision is a new estimate, never an edit. Seeded from the order's own
+  // invoice lines so the jeweller is not retyping what is already there.
+  async function createEstimateRevision() {
+    const lines = order.lineItems.length > 0
+      ? order.lineItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: item.lineTotal
+        }))
+      : [{ name: "Repair work", quantity: 1, unitPrice: 0, lineTotal: 0 }];
+    setEstimateBusy(true);
+    setEstimateNotice("");
+    try {
+      await createOrderEstimate(workspace, {
+        orderId: order.id,
+        lineItems: lines,
+        taxRate: order.taxRate ?? 0,
+        taxType: order.taxType ?? "",
+        supersedesId: currentEstimate && currentEstimate.status !== "superseded" ? currentEstimate.id : undefined
+      });
+      await onReloadOrder();
+      setEstimateNotice("New estimate created from the invoice lines.");
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The estimate could not be created.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
+  async function shareEstimateLink() {
+    if (!currentEstimate) return;
+    setEstimateBusy(true);
+    setEstimateNotice("");
+    try {
+      const result = await sendOrderEstimate(workspace, order.id, currentEstimate.id);
+      const url = result?.url || "";
+      if (url) {
+        // There is no outbound email to customers yet, so the jeweller sends the
+        // link themselves — usually on the thread they are already in.
+        await navigator.clipboard?.writeText(url).catch(() => undefined);
+        setEstimateNotice("Link copied. Send it to your customer.");
+      }
+      await onReloadOrder();
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be created.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
+  async function revokeEstimateLink() {
+    if (!currentEstimate) return;
+    setEstimateBusy(true);
+    try {
+      await revokeOrderEstimateLink(workspace, order.id, currentEstimate.id);
+      await onReloadOrder();
+      setEstimateNotice("Link revoked.");
+    } catch (failure) {
+      setEstimateNotice(failure instanceof Error ? failure.message : "The link could not be revoked.");
+    } finally {
+      setEstimateBusy(false);
+    }
+  }
+
+  // Photos taken at intake ride on the existing client-file pipeline, tagged so
+  // they show here as well as in Client Files: one upload path, not four.
+  //
+  // Which means they inherit its permission too. An owner who has taken client
+  // files away from a member meant it — showing the same images (and their real
+  // download URLs) through a different card would quietly undo that.
+  const canSeeIntakePhotos = useMemo(
+    () => workspaceAccessAllows(workspace.memberAccess, "clientFiles"),
+    [workspace.memberAccess]
+  );
+  const intakePhotos = useMemo(
+    () => (canSeeIntakePhotos
+      ? order.clientFiles.filter(file => file.source === INTAKE_PHOTO_SOURCE || (file.contentType || "").startsWith("image/"))
+      : []),
+    [order.clientFiles, canSeeIntakePhotos]
+  );
+
   function renderCard(cardId: OrderDetailCardId) {
     const forcedByGuide =
       (guideForcesCustomerVisible && cardId === "customer") ||
@@ -4761,6 +4973,284 @@ export function OrderDetailContent({
     if (!cardLayout.visibility[cardId] && !forcedByGuide) return null;
 
     switch (cardId) {
+      case "estimate": {
+        const record = estimateRecord;
+        const approval = record?.approval ?? null;
+        const approved = approval?.decision === "approved";
+        const statusTone = currentEstimate?.status === "approved"
+          ? "is-approved"
+          : currentEstimate?.status === "declined"
+            ? "is-declined"
+            : currentEstimate?.status === "superseded"
+              ? "is-superseded"
+              : "is-pending";
+        const lines = record?.lineItems ?? [];
+        const marginScheme = (record?.taxType ?? order.taxType) === "Profit";
+        const showVat = !marginScheme && (record?.taxRate ?? 0) > 0.0001;
+        const linkLive = currentEstimate?.linkState === "active";
+
+        return (
+          <section key={cardId} className="card order-detail-card">
+            {renderCardTitle(cardId)}
+            <div className="app-card-panel estimate-card">
+              {!canSeeFinance ? (
+                <p className="estimate-card-note">Hidden on this workspace role.</p>
+              ) : !currentEstimate ? (
+                <>
+                  <p className="estimate-card-note">
+                    No estimate yet. Create one from the invoice lines, send the link, and the customer&apos;s
+                    approval is recorded here.
+                  </p>
+                  {canInlineEditFullDetails ? (
+                    <button type="button" className="estimate-card-primary" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
+                      {estimateBusy ? "Working…" : "Create estimate"}
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div className="estimate-card-head">
+                    <strong>Estimate {currentEstimate.number || `#${currentEstimate.version}`}</strong>
+                    <span className={`estimate-card-chip ${statusTone}`}>{estimateStatusLabel(currentEstimate.status)}</span>
+                  </div>
+
+                  {lines.length > 0 ? (
+                    <div className="estimate-card-lines">
+                      <div className="estimate-card-line is-head">
+                        <span>Item</span>
+                        <span>Amount</span>
+                      </div>
+                      {lines.map((line, index) => (
+                        <div key={`${line.name}-${index}`} className="estimate-card-line">
+                          <span>{line.name}{line.quantity > 1 ? ` (${line.quantity})` : ""}</span>
+                          <span>{money(line.lineTotal, hideNumbers)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="estimate-card-totals">
+                    <div className="estimate-card-line">
+                      <span>Subtotal</span>
+                      <span>{money(currentEstimate.subtotal, hideNumbers)}</span>
+                    </div>
+                    {showVat ? (
+                      <div className="estimate-card-line">
+                        <span>VAT ({record?.taxRate ?? 0}%)</span>
+                        <span>{money(currentEstimate.taxAmount, hideNumbers)}</span>
+                      </div>
+                    ) : null}
+                    <div className="estimate-card-line is-total">
+                      <span>Total</span>
+                      <span>{money(currentEstimate.total, hideNumbers)}</span>
+                    </div>
+                  </div>
+
+                  {approval ? (
+                    <div className="estimate-card-approval">
+                      <span className="estimate-card-approval-title">Approval Details</span>
+                      <div className="estimate-card-line">
+                        <span>{approved ? "Approved by" : "Declined by"}</span>
+                        <strong>{approval.approvedByName}</strong>
+                      </div>
+                      <div className="estimate-card-line">
+                        <span>{approved ? "Approved at" : "Declined at"}</span>
+                        <strong>{formatDateTime(new Date(approval.decidedAtMs))}</strong>
+                      </div>
+                      <div className="estimate-card-line">
+                        <span>Approval Method</span>
+                        <strong>Customer Portal</strong>
+                      </div>
+                      {approval.signatureDownloadUrl ? (
+                        <div className="estimate-card-signature">
+                          <span>Customer Signature</span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={approval.signatureDownloadUrl} alt="Customer signature" />
+                        </div>
+                      ) : null}
+                      {approval.declineReason ? (
+                        <p className="estimate-card-note">{approval.declineReason}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
+
+                  {canInlineEditFullDetails ? (
+                    <div className="estimate-card-actions">
+                      {!approval && currentEstimate.status !== "superseded" ? (
+                        <button type="button" onClick={() => void shareEstimateLink()} disabled={estimateBusy}>
+                          {linkLive ? "Copy link again" : "Send to customer"}
+                        </button>
+                      ) : null}
+                      {linkLive && !approval ? (
+                        <button type="button" onClick={() => void revokeEstimateLink()} disabled={estimateBusy}>
+                          Revoke link
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => void createEstimateRevision()} disabled={estimateBusy}>
+                        Create new estimate
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {estimates.length > 1 ? (
+                    <div className="estimate-card-history">
+                      <span className="estimate-card-approval-title">Estimate History</span>
+                      {estimates.map(row => (
+                        <div key={row.id} className="estimate-card-line">
+                          <span>{row.number || `#${row.version}`}</span>
+                          <span>
+                            {money(row.total, hideNumbers)} · {estimateStatusLabel(row.status)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </section>
+        );
+      }
+      case "repairIntake": {
+        const bulletList = (title: string, lines: string[]) => (
+          lines.length > 0 ? (
+            <div className="repair-intake-block">
+              <span className="repair-intake-block-title">{title}</span>
+              <ul className="repair-intake-bullets">
+                {lines.map((line, index) => <li key={`${title}-${index}`}>{line}</li>)}
+              </ul>
+            </div>
+          ) : null
+        );
+
+        return (
+          <section key={cardId} className="card order-detail-card">
+            <div className="repair-intake-head">
+              {renderCardTitle(cardId)}
+              {canInlineEditFullDetails && !repairIntakeEditing ? (
+                <button type="button" className="repair-intake-edit" onClick={beginRepairIntakeEdit}>Edit</button>
+              ) : null}
+            </div>
+
+            <div className="app-card-panel repair-intake-panel">
+              {repairIntakeEditing ? (
+                <>
+                  {repairIntakeFieldRows.map(row => (
+                    <label key={row.id} className="repair-intake-edit-row">
+                      <span>{row.title}</span>
+                      <textarea
+                        rows={row.id === "stones" ? 2 : 1}
+                        value={repairIntakeDraft.fields[row.id] ?? ""}
+                        onChange={event => setRepairIntakeDraft(draft => ({
+                          ...draft,
+                          fields: { ...draft.fields, [row.id]: event.target.value }
+                        }))}
+                      />
+                    </label>
+                  ))}
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Condition</span>
+                    <textarea
+                      rows={3}
+                      placeholder="One per line"
+                      value={repairIntakeDraft.condition}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, condition: event.target.value }))}
+                    />
+                  </label>
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Requested Work</span>
+                    <textarea
+                      rows={3}
+                      placeholder="One per line"
+                      value={repairIntakeDraft.requestedWork}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, requestedWork: event.target.value }))}
+                    />
+                  </label>
+                  <label className="repair-intake-edit-row is-stacked">
+                    <span>Customer Instructions</span>
+                    <textarea
+                      rows={2}
+                      value={repairIntakeDraft.customerInstructions}
+                      onChange={event => setRepairIntakeDraft(draft => ({ ...draft, customerInstructions: event.target.value }))}
+                    />
+                  </label>
+                  <div className="repair-intake-edit-actions">
+                    <button type="button" className="repair-intake-cancel" onClick={() => setRepairIntakeEditing(false)}>Cancel</button>
+                    <button type="button" className="repair-intake-save" onClick={() => void saveRepairIntake()}>Save</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="repair-intake-rows">
+                    {repairIntakeFieldRows.map(row => {
+                      const value = repairIntake?.fields?.[row.id] ?? "";
+                      if (!value) return null;
+                      return (
+                        <div key={row.id} className="repair-intake-row">
+                          <span>{row.title}</span>
+                          <strong>
+                            {value.split("\n").map((line, index) => <span key={index}>{line}</span>)}
+                          </strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {bulletList("Condition", repairIntake?.condition ?? [])}
+                  {bulletList("Requested Work", repairIntake?.requestedWork ?? [])}
+
+                  {repairIntake?.customerInstructions ? (
+                    <div className="repair-intake-block">
+                      <span className="repair-intake-block-title">Customer Instructions</span>
+                      <p className="repair-intake-instructions">{repairIntake.customerInstructions}</p>
+                    </div>
+                  ) : null}
+
+                  {intakePhotos.length > 0 ? (
+                    <div className="repair-intake-block">
+                      <div className="repair-intake-photos-head">
+                        <span className="repair-intake-block-title">Intake Photos</span>
+                        {intakePhotos.length > 4 ? (
+                          <span className="repair-intake-photo-more">+{intakePhotos.length - 4}</span>
+                        ) : null}
+                      </div>
+                      <div className="repair-intake-photos">
+                        {intakePhotos.slice(0, 4).map(photo => (
+                          <a
+                            key={photo.id}
+                            className="repair-intake-photo"
+                            href={photo.downloadURL || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={photo.note || photo.fileName}
+                          >
+                            {photo.downloadURL
+                              ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
+                              : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="repair-intake-footer">
+                    <div className="repair-intake-row">
+                      <span>Received</span>
+                      <strong>{repairIntake?.receivedAt ? formatDateTime(repairIntake.receivedAt) : "—"}</strong>
+                    </div>
+                    <div className="repair-intake-row">
+                      <span>Received By</span>
+                      <strong>{repairIntake?.receivedByName || "—"}</strong>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        );
+      }
       case "preview":
         return (
           <section key={cardId} className="card order-detail-card is-preview-card">
@@ -4900,6 +5390,21 @@ export function OrderDetailContent({
                     <b className={`app-summary-status-badge ${dynamicStatusTone(summaryValue2)}`}>{summaryValue2}</b>
                   </div>
                 </div>
+              </div>
+              <div className="app-card-divider" />
+              <div className="app-summary-order-type">
+                <span>Order Type</span>
+                {canInlineEditFullDetails ? (
+                  <select
+                    value={order.orderType === "repair" ? "repair" : "custom"}
+                    onChange={event => void saveDetailsPatch({ orderType: event.target.value }, "Order type")}
+                  >
+                    <option value="custom">Custom Order</option>
+                    <option value="repair">Repair / Service</option>
+                  </select>
+                ) : (
+                  <strong>{order.orderType === "repair" ? "Repair / Service" : "Custom Order"}</strong>
+                )}
               </div>
               <div className="app-card-divider" />
               <div className="app-summary-bottom">
@@ -7666,7 +8171,8 @@ type HeadingListKey =
   | "financialExpenseItems"
   | "financialRemainingItems"
   | "specialNoteSections"
-  | "scheduleQuickReminders";
+  | "scheduleQuickReminders"
+  | "repairIntakeFields";
 
 const PRIMARY_SPECIAL_NOTE_ID = "00000000-0000-0000-0000-000000000101";
 
@@ -8113,6 +8619,10 @@ function BlockHeadingsModal({
         return renderList("Special Note Fields", "specialNoteSections", "Special Note", true);
       case "schedule":
         return renderList("Quick reminders", "scheduleQuickReminders", "Custom reminder");
+      case "repairIntake":
+        // "Ring Size" to a jeweller is "Case Size" to a watchmaker. Without this
+        // the dialog opened empty and still offered a Save that reported success.
+        return renderList("Repair intake rows", "repairIntakeFields", "Intake Row");
       case "invoiceItems":
         return (
           <CompanyNumbersEditor

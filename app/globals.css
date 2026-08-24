@@ -8272,6 +8272,634 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
     0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
+.app-summary-order-type {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.app-summary-order-type > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.app-summary-order-type select {
+  padding: 5px 9px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 9px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Estimate & Approval card: the current revision, its totals, and — once the
+   customer has decided — the evidence of what they agreed to and when. */
+.estimate-card {
+  gap: 14px;
+}
+
+.estimate-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.estimate-card-head strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.estimate-card-chip {
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.estimate-card-chip.is-approved { background: rgba(20, 128, 74, 0.12); color: #14804a; }
+.estimate-card-chip.is-declined { background: rgba(180, 35, 24, 0.12); color: #b42318; }
+.estimate-card-chip.is-superseded { background: rgba(23, 25, 35, 0.08); color: rgba(23, 25, 35, 0.55); }
+.estimate-card-chip.is-pending { background: rgba(37, 99, 235, 0.12); color: #2563eb; }
+
+.estimate-card-lines,
+.estimate-card-totals,
+.estimate-card-history {
+  display: grid;
+  gap: 7px;
+}
+
+.estimate-card-totals {
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.estimate-card-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.estimate-card-line > span:last-child,
+.estimate-card-line > strong {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.estimate-card-line.is-head {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+  font-size: 12px;
+}
+
+.estimate-card-line.is-head > span:last-child {
+  font-weight: 600;
+}
+
+.estimate-card-line.is-total {
+  padding-top: 8px;
+  border-top: 1px solid rgba(23, 25, 35, 0.12);
+  font-size: 15px;
+}
+
+.estimate-card-line.is-total > span:last-child {
+  font-weight: 900;
+}
+
+.estimate-card-approval {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid rgba(23, 25, 35, 0.1);
+  border-radius: 12px;
+  background: rgba(20, 128, 74, 0.05);
+}
+
+.estimate-card-approval-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.estimate-card-signature {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.estimate-card-signature img {
+  width: 100%;
+  max-height: 90px;
+  object-fit: contain;
+  border: 1px solid rgba(23, 25, 35, 0.1);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.estimate-card-history {
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.estimate-card-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.estimate-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.estimate-card-actions button,
+.estimate-card-primary {
+  padding: 8px 14px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 10px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.estimate-card-actions button:disabled,
+.estimate-card-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.estimate-card-primary {
+  justify-self: start;
+  border-color: transparent;
+  background: #171923;
+  color: #ffffff;
+}
+
+/* The customer's estimate page. Standalone: it is wrapped in .public-site so
+   the --public-* tokens resolve (they are scoped there, not on :root), but it
+   borrows nothing else from the marketing shell. */
+.estimate-page {
+  min-height: 100vh;
+  padding: 32px 18px 64px;
+  background: var(--public-bg, #f4f5f2);
+  display: flex;
+  justify-content: center;
+}
+
+.estimate-panel {
+  width: 100%;
+  max-width: 560px;
+  padding: 26px;
+  border-radius: 20px;
+  border: 1px solid rgba(23, 25, 35, 0.1);
+  background: #ffffff;
+  color: #171923;
+}
+
+.estimate-panel h1 {
+  margin: 12px 0 8px;
+  font-size: 25px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.estimate-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.estimate-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.estimate-head strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.estimate-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.estimate-note {
+  margin: 0;
+  color: rgba(23, 25, 35, 0.6);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.estimate-terms {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(23, 25, 35, 0.65);
+}
+
+.estimate-lines {
+  width: 100%;
+  margin-top: 18px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.estimate-lines th {
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(23, 25, 35, 0.1);
+  color: rgba(23, 25, 35, 0.55);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.estimate-lines th:last-child,
+.estimate-lines td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.estimate-lines td {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(23, 25, 35, 0.06);
+}
+
+.estimate-rows {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.estimate-rows > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.estimate-rows dt {
+  color: rgba(23, 25, 35, 0.6);
+}
+
+.estimate-rows dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.estimate-totals .estimate-total-row {
+  padding-top: 10px;
+  border-top: 1px solid rgba(23, 25, 35, 0.12);
+  font-size: 17px;
+}
+
+.estimate-totals .estimate-total-row dd {
+  font-weight: 900;
+}
+
+.estimate-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.estimate-form label {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.estimate-form label > span {
+  color: rgba(23, 25, 35, 0.6);
+}
+
+.estimate-form input,
+.estimate-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(23, 25, 35, 0.18);
+  border-radius: 10px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 15px;
+}
+
+.estimate-signature {
+  display: grid;
+  gap: 6px;
+}
+
+.estimate-signature-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: rgba(23, 25, 35, 0.6);
+}
+
+.estimate-signature-head button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: rgba(23, 25, 35, 0.55);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.estimate-signature canvas {
+  width: 100%;
+  height: 160px;
+  border: 1px dashed rgba(23, 25, 35, 0.28);
+  border-radius: 12px;
+  background: #fbfbfa;
+  touch-action: none;
+}
+
+.estimate-consent {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(23, 25, 35, 0.55);
+}
+
+.estimate-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.estimate-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.estimate-actions button {
+  flex: 1;
+  padding: 13px 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.estimate-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.estimate-secondary {
+  border-color: rgba(23, 25, 35, 0.18);
+  background: #ffffff;
+}
+
+.estimate-approve {
+  background: #14804a;
+  color: #ffffff;
+}
+
+.estimate-decline {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.estimate-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.estimate-chip.is-approved {
+  background: rgba(20, 128, 74, 0.12);
+  color: #14804a;
+}
+
+.estimate-chip.is-declined {
+  background: rgba(180, 35, 24, 0.12);
+  color: #b42318;
+}
+
+/* Repair Intake & Item — the record of a customer's own item, handed in for
+   service. Laid out as label/value rows, then the two lists a jeweller writes
+   at the counter, then the photos taken while the customer is still there. */
+.repair-intake-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.repair-intake-edit {
+  flex: none;
+  padding: 5px 14px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repair-intake-edit:hover {
+  border-color: rgba(23, 25, 35, 0.3);
+}
+
+.repair-intake-panel {
+  gap: 14px;
+}
+
+.repair-intake-rows {
+  display: grid;
+  gap: 9px;
+}
+
+.repair-intake-row {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 13px;
+}
+
+.repair-intake-row > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-row > strong {
+  display: grid;
+  gap: 2px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-block {
+  display: grid;
+  gap: 6px;
+}
+
+.repair-intake-block-title {
+  font-size: 13px;
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-bullets {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repair-intake-bullets li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-bullets li::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e5484d;
+}
+
+.repair-intake-instructions {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.repair-intake-photos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.repair-intake-photo-more {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(23, 25, 35, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repair-intake-photos {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.repair-intake-photo {
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid rgba(23, 25, 35, 0.1);
+  border-radius: 10px;
+  background: rgba(23, 25, 35, 0.04);
+}
+
+.repair-intake-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.repair-intake-photo-empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  opacity: 0.4;
+}
+
+.repair-intake-footer {
+  display: grid;
+  gap: 9px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 25, 35, 0.08);
+}
+
+.repair-intake-edit-row {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.repair-intake-edit-row.is-stacked {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  align-items: start;
+}
+
+.repair-intake-edit-row > span {
+  color: var(--muted, rgba(23, 25, 35, 0.55));
+}
+
+.repair-intake-edit-row textarea {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  border-radius: 9px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.repair-intake-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.repair-intake-cancel,
+.repair-intake-save {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 25, 35, 0.16);
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.repair-intake-save {
+  border-color: transparent;
+  background: #171923;
+  color: #ffffff;
+}
+
 .app-card-divider {
   height: 1px;
   margin: 2px 0;
