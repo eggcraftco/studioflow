@@ -8849,17 +8849,38 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
 
 .repair-intake-photos {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Four across at most, and they stay small: widening the card fits more
+     thumbnails per row rather than blowing each one up to fill it. */
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
   gap: 8px;
+  max-width: 340px;
 }
 
 .repair-intake-photo {
   display: block;
   aspect-ratio: 1 / 1;
   overflow: hidden;
+  padding: 0;
+  cursor: pointer;
   border: 1px solid rgba(23, 25, 35, 0.1);
   border-radius: 10px;
   background: rgba(23, 25, 35, 0.04);
+}
+
+.repair-intake-photo.is-more {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+}
+
+.repair-intake-photo-add {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-accent, #2563eb);
+  cursor: pointer;
 }
 
 .repair-intake-photo img {
