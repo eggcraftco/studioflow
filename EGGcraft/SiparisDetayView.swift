@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import FirebaseFirestore
+import FirebaseAuth
 #if canImport(UserNotifications)
 import UserNotifications
 #endif
@@ -524,6 +525,10 @@ func privacyDigits(_ text: String, hideNumbers: Bool) -> String {
 
 struct CustomStepDTO: Codable, Identifiable, Equatable { var id = UUID(); var title: String }
 
+// Intake rows carry stable string ids ("itemType", "hallmark") so a workspace can
+// rename the label without orphaning the value already saved against it.
+struct RepairIntakeFieldDTO: Codable, Identifiable, Equatable { var id: String; var title: String }
+
 private func statusCustomToggleStorageKey(for toggle: CustomStepDTO) -> String {
     "statusToggle::\(toggle.id.uuidString.lowercased())"
 }
@@ -611,6 +616,7 @@ enum KartTipi: String, Codable, Equatable, Identifiable {
     case todo = "todo"
     case customerNotes = "customerNotes", materials = "materials", priority = "priority"
     case invoiceItems = "invoiceItems"
+    case repairIntake = "repairIntake"
     var id: String { self.rawValue }
 }
 
@@ -1116,6 +1122,7 @@ struct SiparisDetayView: View {
         case .materials: return "cardMaterials"
         case .priority: return "cardPriority"
         case .invoiceItems: return "cardCustomer"
+        case .repairIntake: return "cardSummary"
         case .communication, .customerNotes: return nil
         }
     }
@@ -1271,6 +1278,7 @@ struct SiparisDetayView: View {
     @AppStorage("showCardMaterials") private var showCardMaterials = true
     @AppStorage("showCardPriority") private var showCardPriority = true
     @AppStorage("showCardInvoiceItems") private var showCardInvoiceItems = true
+    @AppStorage("showCardRepairIntake") private var showCardRepairIntake = true
     @State private var showInvoiceFooterEditor = false
     @AppStorage("showCardSchedule") private var showCardSchedule = true
     @AppStorage("showCardHistoryLog") private var showCardHistoryLog = true
@@ -1331,6 +1339,7 @@ struct SiparisDetayView: View {
     
     @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
     @AppStorage("customFieldsJSON") private var customFieldsJSON: String = ""
+    @AppStorage("repairIntakeFieldsJSON") private var repairIntakeFieldsJSON: String = ""
     @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
     @AppStorage("materialsTogglesJSON") private var materialsTogglesJSON: String = ""
     @AppStorage("materialsDefaultChecksJSON") private var materialsDefaultChecksJSON: String = ""
@@ -1405,6 +1414,29 @@ struct SiparisDetayView: View {
         }
         return []
     }
+    // Rows on the Repair Intake card. Ids stay put so saved values survive a
+    // rename; titles are the workspace's ("Ring Size" here, "Case Size" there).
+    var repairIntakeFieldsList: [RepairIntakeFieldDTO] {
+        let trimmed = repairIntakeFieldsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty,
+           let data = trimmed.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode([RepairIntakeFieldDTO].self, from: data) {
+            let cleaned = decoded.filter { !$0.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if !cleaned.isEmpty { return cleaned }
+        }
+        return SiparisDetayView.defaultRepairIntakeFields
+    }
+
+    static let defaultRepairIntakeFields: [RepairIntakeFieldDTO] = [
+        RepairIntakeFieldDTO(id: "itemType", title: "Item Type"),
+        RepairIntakeFieldDTO(id: "metal", title: "Metal"),
+        RepairIntakeFieldDTO(id: "hallmark", title: "Hallmark"),
+        RepairIntakeFieldDTO(id: "itemSize", title: "Size"),
+        RepairIntakeFieldDTO(id: "stones", title: "Stones"),
+        RepairIntakeFieldDTO(id: "weight", title: "Weight"),
+        RepairIntakeFieldDTO(id: "serialReference", title: "Serial / Reference")
+    ]
+
     var communicationChannelLabels: [String] { normalizedCommunicationChannelLabels(from: communicationChannelLabelsJSON) }
     private var orderExtraNoteSectionsKey: String { "orderExtraNoteSectionsJSON" }
     private var orderExtraNoteSections: [CustomStepDTO] {
@@ -2524,6 +2556,7 @@ struct SiparisDetayView: View {
         case .materials: return t("Materials & Inventory", lang: seciliDil)
         case .priority: return t("Priority / Risk", lang: seciliDil)
         case .invoiceItems: return resolvedItemsHeading
+        case .repairIntake: return t("Repair Intake & Item", lang: seciliDil)
         }
     }
 
@@ -2547,6 +2580,7 @@ struct SiparisDetayView: View {
         case .materials: return "shippingbox.circle.fill"
         case .priority: return "exclamationmark.triangle.fill"
         case .invoiceItems: return "list.bullet.rectangle"
+        case .repairIntake: return "shippingbox"
         }
     }
 
@@ -2574,6 +2608,7 @@ struct SiparisDetayView: View {
         case .materials: return studioWarningOrange
         case .priority: return .red
         case .invoiceItems: return .green
+        case .repairIntake: return studioWarningOrange
         }
     }
 
@@ -2848,6 +2883,7 @@ struct SiparisDetayView: View {
         case .materials: return siparis.invBool1 || siparis.invBool2 || siparis.invBool3 || siparis.invBool4 || !siparis.invNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .priority: return siparis.priority != "Normal" || siparis.risk != "None"
         case .invoiceItems: return siparis.hasLineItems
+        case .repairIntake: return siparis.orderType == "repair"
         }
     }
 
@@ -2856,6 +2892,9 @@ struct SiparisDetayView: View {
         case .summary:
             let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
             return design.isEmpty ? t(siparis.status, lang: seciliDil) : "\(design) • \(t(siparis.status, lang: seciliDil))"
+        case .repairIntake:
+            let itemType = siparis.repairIntake?.fields["itemType"] ?? ""
+            return itemType.isEmpty ? t("Repair Intake & Item", lang: seciliDil) : itemType
         case .preview:
             let design = siparis.designName.trimmingCharacters(in: .whitespacesAndNewlines)
             return design.isEmpty ? t("Preview", lang: seciliDil) : design
@@ -3377,6 +3416,7 @@ struct SiparisDetayView: View {
         case .materials: return showCardMaterials
         case .priority: return showCardPriority
         case .invoiceItems: return showCardInvoiceItems
+        case .repairIntake: return showCardRepairIntake && siparis.orderType == "repair"
         }
     }
 
@@ -3441,6 +3481,7 @@ struct SiparisDetayView: View {
             case .materials: showCardMaterials = visible
             case .priority: showCardPriority = visible
             case .invoiceItems: showCardInvoiceItems = visible
+            case .repairIntake: showCardRepairIntake = visible
             }
             yenileCalismaAlaniHitbox(delay: 0.01)
             persistWorkspaceCustomizationChange()
@@ -3565,7 +3606,8 @@ struct SiparisDetayView: View {
                 KartTipi.customerNotes.rawValue: showCardCustomerNotes,
                 KartTipi.materials.rawValue: showCardMaterials,
                 KartTipi.priority.rawValue: showCardPriority,
-                KartTipi.invoiceItems.rawValue: showCardInvoiceItems
+                KartTipi.invoiceItems.rawValue: showCardInvoiceItems,
+                KartTipi.repairIntake.rawValue: showCardRepairIntake
             ]
         )
     }
@@ -3686,6 +3728,7 @@ struct SiparisDetayView: View {
         showCardMaterials = snapshot.visibility[KartTipi.materials.rawValue] ?? true
         showCardPriority = snapshot.visibility[KartTipi.priority.rawValue] ?? true
         showCardInvoiceItems = snapshot.visibility[KartTipi.invoiceItems.rawValue] ?? true
+        showCardRepairIntake = snapshot.visibility[KartTipi.repairIntake.rawValue] ?? true
 
         kartYerlesimi = snapshot.kartYerlesimi.isEmpty ? kartYerlesimi : snapshot.kartYerlesimi
         while kartYerlesimi.count < 3 { kartYerlesimi.append([]) }
@@ -4932,6 +4975,7 @@ struct SiparisDetayView: View {
             planLockedKarti(for: kart, colIndex: colIndex)
         } else {
             switch kart {
+            case .repairIntake: repairIntakeKarti(colIndex: colIndex)
             case .preview: previewKarti(colIndex: colIndex)
             case .summary: summaryKarti(colIndex: colIndex)
             case .customer:
@@ -7352,6 +7396,162 @@ struct SiparisDetayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    // A custom order is something we make; a repair is the customer's own item,
+    // left with us. Choosing Repair is what brings the intake card out.
+    @ViewBuilder
+    private var orderTypeRow: some View {
+        HStack(spacing: 10) {
+            Text(t("Order Type", lang: seciliDil))
+                .font(.system(size: 12)).foregroundColor(.gray)
+            Spacer()
+            if canEditOrderDetails {
+                Menu {
+                    Button(t("Custom Order", lang: seciliDil)) { siparis.orderType = "custom" }
+                    Button(t("Repair / Service", lang: seciliDil)) { siparis.orderType = "repair" }
+                } label: {
+                    Text(t(siparis.orderType == "repair" ? "Repair / Service" : "Custom Order", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.06))
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(t(siparis.orderType == "repair" ? "Repair / Service" : "Custom Order", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+            }
+        }
+    }
+
+    // The customer's own item, taken in for repair. Never stock: the server stamps
+    // customerOwned so nothing downstream can mistake it for inventory.
+    private func repairIntakeKarti(colIndex: Int) -> some View {
+        DetayKarti(
+            title: t("Repair Intake & Item", lang: seciliDil),
+            iconName: cardHeaderIcon(for: .repairIntake),
+            kartTipi: .repairIntake,
+            yukseklik: bindingYukseklik(for: .repairIntake),
+            sutunGenisligi: getBinding(for: colIndex),
+            draggedKart: $draggedKart,
+            uiTetikleyici: uiTetikleyici,
+            kartRengi: getKartColor(kart: .repairIntake),
+            onHeightChangeEnd: kaydetKartYukseklikleri,
+            onWidthChangeEnd: saveWidths,
+            onHide: { setCardVisibleWithUndo(.repairIntake, false) },
+            onColorChange: { setKartColor(kart: .repairIntake, color: $0) }
+        ) {
+            ForEach(repairIntakeFieldsList) { field in
+                DetailField(
+                    label: t(field.title, lang: seciliDil),
+                    value: repairIntakeFieldBinding(field.id),
+                    editableLabelRaw: canEditOrderDetails ? field.title : nil,
+                    onLabelCommit: canEditOrderDetails ? { renameRepairIntakeField(field.id, to: $0) } : nil
+                )
+            }
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            repairIntakeListEditor(
+                title: t("Condition", lang: seciliDil),
+                lines: repairIntakeLinesBinding(\.condition)
+            )
+
+            repairIntakeListEditor(
+                title: t("Requested Work", lang: seciliDil),
+                lines: repairIntakeLinesBinding(\.requestedWork)
+            )
+
+            Divider().background(Color.primary.opacity(0.1))
+
+            HStack(spacing: 10) {
+                Text(t("Received", lang: seciliDil))
+                    .font(.system(size: 13)).foregroundColor(.gray)
+                    .frame(width: 110, alignment: .leading)
+                Text(repairIntakeReceivedText)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+
+            HStack(spacing: 10) {
+                Text(t("Received By", lang: seciliDil))
+                    .font(.system(size: 13)).foregroundColor(.gray)
+                    .frame(width: 110, alignment: .leading)
+                Text(siparis.repairIntake?.receivedByName.isEmpty == false ? siparis.repairIntake!.receivedByName : "—")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+        }
+    }
+
+    private var repairIntakeReceivedText: String {
+        guard let received = siparis.repairIntake?.receivedAt else { return "—" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d MMM yyyy · HH:mm"
+        return formatter.string(from: received)
+    }
+
+    @ViewBuilder
+    private func repairIntakeListEditor(title: String, lines: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.system(size: 13)).foregroundColor(.gray)
+            TextEditor(text: lines)
+                .font(.system(size: 13))
+                .frame(minHeight: 62)
+                .padding(6)
+                .background(colorSchemeFieldSurface())
+                .cornerRadius(6)
+                .disabled(!canEditOrderDetails)
+        }
+    }
+
+    private func ensuredRepairIntake() -> RepairIntake {
+        if let existing = siparis.repairIntake { return existing }
+        var fresh = RepairIntake()
+        fresh.receivedAt = Date()
+        fresh.receivedByUid = Auth.auth().currentUser?.uid ?? ""
+        fresh.receivedByName = Auth.auth().currentUser?.displayName ?? Auth.auth().currentUser?.email ?? ""
+        return fresh
+    }
+
+    private func repairIntakeFieldBinding(_ fieldId: String) -> Binding<String> {
+        Binding(
+            get: { siparis.repairIntake?.fields[fieldId] ?? "" },
+            set: { newValue in
+                var intake = ensuredRepairIntake()
+                let cleaned = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if cleaned.isEmpty { intake.fields.removeValue(forKey: fieldId) } else { intake.fields[fieldId] = newValue }
+                siparis.repairIntake = intake
+            }
+        )
+    }
+
+    // The two lists a jeweller writes at the counter, edited as plain lines.
+    private func repairIntakeLinesBinding(_ keyPath: WritableKeyPath<RepairIntake, [String]>) -> Binding<String> {
+        Binding(
+            get: { (siparis.repairIntake?[keyPath: keyPath] ?? []).joined(separator: "\n") },
+            set: { newValue in
+                var intake = ensuredRepairIntake()
+                intake[keyPath: keyPath] = newValue
+                    .components(separatedBy: "\n")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                siparis.repairIntake = intake
+            }
+        )
+    }
+
+    private func renameRepairIntakeField(_ fieldId: String, to newTitle: String) {
+        let cleaned = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+        var rows = repairIntakeFieldsList
+        guard let index = rows.firstIndex(where: { $0.id == fieldId }) else { return }
+        rows[index] = RepairIntakeFieldDTO(id: fieldId, title: cleaned)
+        if let data = try? JSONEncoder().encode(rows), let json = String(data: data, encoding: .utf8) {
+            repairIntakeFieldsJSON = json
+            syncCardLabel(key: "repairIntakeFieldsJSON", value: json)
+        }
+    }
+
     private func priorityKarti(colIndex: Int) -> some View {
         DetayKarti(
             title: t("Priority / Risk", lang: seciliDil),
@@ -8667,7 +8867,7 @@ struct SiparisDetayView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func summaryKarti(colIndex: Int) -> some View { DetayKarti(title: t("Order Summary", lang: seciliDil), iconName: cardHeaderIcon(for: .summary), kartTipi: .summary, yukseklik: bindingYukseklik(for: .summary), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .summary), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.summary, false) }, onColorChange: { setKartColor(kart: .summary, color: $0) }, onEditHeadings: { headingEditorTarget = .summary }) { VStack(spacing: 20) { HStack { VStack(alignment: .leading, spacing: 8) { Text(t(hideFinancialForWorkflow ? "Customer" : "Order Value", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); Text(hideFinancialForWorkflow ? (siparis.customerName.isEmpty ? "-" : siparis.customerName) : privacyCurrency(siparis.salesTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)).font(.system(size: 15, weight: .bold)).foregroundColor(hideFinancialForWorkflow ? .primary : .green) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 6) { HStack { Text(resolvedSummaryStep1).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val1 = getStepValue(for: resolvedSummaryStep1); Text(t(val1, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val1)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val1).opacity(0.2)).cornerRadius(6) }; HStack { Text(resolvedSummaryStep2).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val2 = getStepValue(for: resolvedSummaryStep2); Text(t(val2, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val2)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val2).opacity(0.2)).cornerRadius(6) } }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); HStack { VStack(alignment: .leading, spacing: 8) { Text(t("Placed On", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "calendar").foregroundColor(.gray); Text(privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13)).foregroundColor(.primary) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 8) { Text(t("Delivery In", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "clock").foregroundColor(kalanGunRengi(siparis: siparis)); Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13, weight: .bold)).foregroundColor(kalanGunRengi(siparis: siparis)) }.frame(maxWidth: .infinity, alignment: .leading) } } } }
+    private func summaryKarti(colIndex: Int) -> some View { DetayKarti(title: t("Order Summary", lang: seciliDil), iconName: cardHeaderIcon(for: .summary), kartTipi: .summary, yukseklik: bindingYukseklik(for: .summary), sutunGenisligi: getBinding(for: colIndex), draggedKart: $draggedKart, uiTetikleyici: uiTetikleyici, kartRengi: getKartColor(kart: .summary), onHeightChangeEnd: kaydetKartYukseklikleri, onWidthChangeEnd: saveWidths, onHide: { setCardVisibleWithUndo(.summary, false) }, onColorChange: { setKartColor(kart: .summary, color: $0) }, onEditHeadings: { headingEditorTarget = .summary }) { VStack(spacing: 20) { HStack { VStack(alignment: .leading, spacing: 8) { Text(t(hideFinancialForWorkflow ? "Customer" : "Order Value", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); Text(hideFinancialForWorkflow ? (siparis.customerName.isEmpty ? "-" : siparis.customerName) : privacyCurrency(siparis.salesTotal, symbol: seciliParaBirimi, ondalik: seciliOndalik, hideNumbers: hideSensitiveNumbers)).font(.system(size: 15, weight: .bold)).foregroundColor(hideFinancialForWorkflow ? .primary : .green) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 6) { HStack { Text(resolvedSummaryStep1).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val1 = getStepValue(for: resolvedSummaryStep1); Text(t(val1, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val1)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val1).opacity(0.2)).cornerRadius(6) }; HStack { Text(resolvedSummaryStep2).font(.system(size: 11)).foregroundColor(.gray).frame(width: 70, alignment: .leading); let val2 = getStepValue(for: resolvedSummaryStep2); Text(t(val2, lang: seciliDil)).font(.system(size: 10, weight: .bold)).foregroundColor(dinamikRenk(icin: val2)).padding(.horizontal, 8).padding(.vertical, 3).background(dinamikRenk(icin: val2).opacity(0.2)).cornerRadius(6) } }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); HStack { VStack(alignment: .leading, spacing: 8) { Text(t("Placed On", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "calendar").foregroundColor(.gray); Text(privacyDate(siparis.paymentDate, hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13)).foregroundColor(.primary) }.frame(maxWidth: .infinity, alignment: .leading); VStack(alignment: .leading, spacing: 8) { Text(t("Delivery In", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.gray); HStack(spacing: 4) { Image(systemName: "clock").foregroundColor(kalanGunRengi(siparis: siparis)); Text(privacyDigits(kalanGunMetni(siparis: siparis), hideNumbers: hideSensitiveNumbers)) }.font(.system(size: 13, weight: .bold)).foregroundColor(kalanGunRengi(siparis: siparis)) }.frame(maxWidth: .infinity, alignment: .leading) }; Divider().background(Color.primary.opacity(0.1)); orderTypeRow } } }
 
     private func deliveryKarti(colIndex: Int) -> some View {
         let dueDate = deliveryDueDate(for: siparis)
@@ -12318,6 +12518,7 @@ struct DetayKarti<Content: View>: View {
     
     private var kartTipiMinimumBoyu: Double {
         switch kartTipi {
+        case .repairIntake: return 430
         case .preview: return previewMinBoyu
         case .financial: return 430
         case .schedule: return 390

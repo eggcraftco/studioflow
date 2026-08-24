@@ -209,6 +209,8 @@ struct AyarlarView: View {
     @AppStorage("orderListStep2") private var orderListStep2: String = "Painting"
     @AppStorage("orderItemsHeading") private var orderItemsHeading: String = ""
     @AppStorage("specialNoteSectionsJSONV1") private var specialNoteSectionsJSON: String = ""
+    // Rows on the Repair Intake card, renamable per workspace.
+    @AppStorage("repairIntakeFieldsJSON") private var repairIntakeFieldsJSON: String = ""
     @State private var disariAktariliyor = false
     @State private var iceriAktariliyor = false
     @State private var exportBelgesi: AppBackupBelgesi?
@@ -273,6 +275,7 @@ struct AyarlarView: View {
             orderListStep2,
             orderItemsHeading,
             specialNoteSectionsJSON,
+            repairIntakeFieldsJSON,
             invLabel1,
             invLabel2,
             invLabel3,
@@ -3293,6 +3296,7 @@ struct AyarlarView: View {
                 applyBool("corporationTaxEnabled", { corporationTaxEnabled = $0 }, corporationTaxEnabled)
                 applyDouble("corporationTaxRate", { corporationTaxRate = min(max($0, 0), 100) }, corporationTaxRate)
                 applyString("specialNoteSectionsJSON", { specialNoteSectionsJSON = $0 }, specialNoteSectionsJSON)
+                applyString("repairIntakeFieldsJSON", { repairIntakeFieldsJSON = $0 }, repairIntakeFieldsJSON)
 
                 applyString("businessType", { businessType = $0 }, businessType)
                 applyString("businessDescriptionPrompt", { businessDescriptionPrompt = $0 }, businessDescriptionPrompt)

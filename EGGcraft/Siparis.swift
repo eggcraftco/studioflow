@@ -82,6 +82,21 @@ struct ClientFileItem: Identifiable, Codable, Equatable {
     var pendingQueueId: String = ""
 }
 
+// The customer's own item, handed in for repair. This is not stock: `customerOwned`
+// is stamped by the server so nothing downstream can mistake it for inventory.
+struct RepairIntake: Codable, Equatable {
+    // Keyed by the field id the workspace configured (itemType, metal, hallmark…),
+    // so renaming or adding a row never needs a model change.
+    var fields: [String: String] = [:]
+    var condition: [String] = []
+    var requestedWork: [String] = []
+    var customerInstructions: String = ""
+    var receivedAt: Date = Date()
+    var receivedByUid: String = ""
+    var receivedByName: String = ""
+    var customerOwned: Bool = true
+}
+
 struct Siparis: Identifiable, Codable {
     @DocumentID var id: String?
     
@@ -146,6 +161,10 @@ struct Siparis: Identifiable, Codable {
     // present, their sum drives the order total (see lineItemsTotal / hasLineItems).
     var lineItems: [LineItem]?
     var invoiceNumber: String = ""
+    // "custom" (something we make) or "repair" (something the customer brought in).
+    var orderType: String = "custom"
+    // Present only on repair orders. Optional so every existing order still decodes.
+    var repairIntake: RepairIntake?
     var assignedToUid: String = ""
     var assignedToEmail: String = ""
     // Trash / soft-delete: when true the order is hidden from all normal views and
