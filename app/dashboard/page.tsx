@@ -319,7 +319,9 @@ function yearTotals(orders: DashboardFinanceOrder[], settings: WorkspaceSettings
   const previous = orders
     .filter(order => order.paymentDate?.getFullYear() === thisYear - 1)
     .reduce((total, order) => total + adjustedDashboardNetProfit(order, settings), 0);
-  const growth = previous === 0 ? (current > 0 ? 100 : 0) : ((current - previous) / previous) * 100;
+  // Divide by the magnitude, not the signed value: after a loss year a
+  // recovery is growth, and a signed denominator flips the arrow.
+  const growth = previous === 0 ? (current > 0 ? 100 : 0) : ((current - previous) / Math.abs(previous)) * 100;
   const basicOrders = orders.filter(order => order.paymentDate?.getFullYear() === thisYear);
   const received = basicOrders.reduce((total, order) => total + order.paidAmount, 0);
   const baseCost = basicOrders.reduce((total, order) => total + order.watchPurchasePrice, 0);
@@ -757,7 +759,14 @@ export default function DashboardPage() {
                     <>
                       <YearSummary title={t("This Year")} value={money(yearly.current, hideNumbers, settings)} />
                       <YearSummary title={t("Last Year")} value={money(yearly.previous, hideNumbers, settings)} />
-                      <YearSummary title={t("Growth")} value={`${Math.abs(yearly.growth).toFixed(1)}%`} trend={yearly.growth >= 0 ? "up" : "down"} />
+                      <YearSummary
+                        title={t("Growth")}
+                        value={growthDisplay(yearly.growth)}
+                        srLabel={growthDirection(yearly.growth) === 0
+                          ? undefined
+                          : `${Math.abs(yearly.growth).toFixed(1)}% ${growthDirection(yearly.growth) > 0 ? t("up on last year") : t("down on last year")}`}
+                        trend={growthDirection(yearly.growth) === 0 ? undefined : growthDirection(yearly.growth) > 0 ? "up" : "down"}
+                      />
                     </>
                   ) : (
                     <>
@@ -1089,11 +1098,27 @@ function DashboardSummaryCard({ icon, title, value, tone, locked = false }: { ic
   );
 }
 
-function YearSummary({ title, value, trend }: { title: string; value: string; trend?: "up" | "down" }) {
+// Rounded to one decimal for display, so direction is read off the rounded
+// figure: a change too small to print must not draw an arrow.
+function growthDirection(growth: number): -1 | 0 | 1 {
+  const rounded = Number(growth.toFixed(1));
+  if (rounded > 0) return 1;
+  if (rounded < 0) return -1;
+  return 0;
+}
+
+function growthDisplay(growth: number) {
+  const magnitude = `${Math.abs(growth).toFixed(1)}%`;
+  const direction = growthDirection(growth);
+  if (direction === 0) return magnitude;
+  return `${direction > 0 ? "\u2191 +" : "\u2193 \u2212"}${magnitude}`;
+}
+
+function YearSummary({ title, value, trend, srLabel }: { title: string; value: string; trend?: "up" | "down"; srLabel?: string }) {
   return (
     <article className="year-summary-item">
       <span>{title}</span>
-      <strong className={trend ? `trend-${trend}` : ""}>{value}</strong>
+      <strong className={trend ? `trend-${trend}` : ""} aria-label={srLabel}>{value}</strong>
     </article>
   );
 }

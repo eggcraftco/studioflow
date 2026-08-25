@@ -161,6 +161,8 @@ export type DashboardFinanceOrder = {
 };
 
 export type WorkspaceSettingsOverview = {
+  /** When this workspace last downloaded a backup, so the delete screen can stop guessing. */
+  lastBackupExportedAtMs: number;
   appTheme: string;
   appSubtitle: string;
   appLogoUrl: string;
@@ -1047,6 +1049,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     appSubtitle: stringValue(data.appSubtitle, "Bespoke Hand-Painted Dials"),
     appLogoUrl: stringValue(data.appLogoUrl, ""),
     selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
+    lastBackupExportedAtMs: numberValue(data.lastBackupExportedAtMs, 0),
     selectedCurrency: stringValue(data.seciliParaBirimi, "£"),
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),

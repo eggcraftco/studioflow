@@ -29,7 +29,9 @@ function planFeatureRows(plan: PlanEntitlements) {
   return [
     { title: orderText(plan), enabled: true },
     { title: customerText(plan), enabled: true },
-    { title: `Storage: ${storageLimitLabel(plan)}`, enabled: plan.features.client_files },
+    // "Plan storage" so the matrix cannot be read as this workspace's total,
+    // which includes any storage add-on and is shown separately in Settings.
+    { title: `Plan storage: ${storageLimitLabel(plan)}`, enabled: plan.features.client_files },
     { title: "Client Files", enabled: plan.features.client_files },
     { title: "Share Sheet", enabled: proOrTeam },
     { title: "Team Access", enabled: plan.features.team_access },

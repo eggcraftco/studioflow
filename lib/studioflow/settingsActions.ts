@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { db, functions } from "@/lib/firebase/client";
+import { doc, setDoc } from "firebase/firestore";
 import { type StudioBillingPlan } from "@/lib/studioflow/plans";
 import {
   type DashboardWidgetVisibility,
@@ -309,6 +310,54 @@ export async function saveOrderCardDisplaySettings(workspace: WorkspaceContext, 
   }
 }
 
+export type FinancialRecalculationPreview = {
+  ok?: boolean;
+  orderCount: number;
+  wouldUpdateCount: number;
+  skippedIntegrationCount: number;
+  trashedAffectedCount: number;
+  zeroRateForcedToDefaultCount: number;
+  truncated: boolean;
+  totals: {
+    taxBefore: number;
+    taxAfter: number;
+    taxDelta: number;
+    feeBefore: number;
+    feeAfter: number;
+    feeDelta: number;
+  };
+  sample: Array<{
+    orderId: string;
+    label: string;
+    inTrash: boolean;
+    taxBefore: number;
+    taxAfter: number;
+    feeBefore: number;
+    feeAfter: number;
+  }>;
+};
+
+// Reads what the recalculation would do. Writes nothing, so it is safe to call
+// as often as the owner wants to look before committing.
+export async function previewFinancialRecalculationForOrders(workspace: WorkspaceContext) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot edit this settings section.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, FinancialRecalculationPreview>(
+        functions,
+        "previewFinancialRecalculationForOrders"
+      );
+      const result = await callable({ companyId: workspace.id });
+      return result.data;
+    }, "Checking what would change.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
 export async function recalculateFinancialSettingsForOrders(workspace: WorkspaceContext) {
   if (!canEditWorkspaceSettingsForRole(workspace.role)) {
     throw new Error("Your workspace role cannot edit this settings section.");
@@ -330,8 +379,53 @@ export async function recalculateFinancialSettingsForOrders(workspace: Workspace
 export type ClearAllOrdersTaxResult = {
   ok?: boolean;
   clearedCount?: number;
+  runId?: string;
+  undoAvailable?: boolean;
   message?: string;
 };
+
+export type ClearTaxPreview = {
+  ok?: boolean;
+  orderCount: number;
+  wouldClearCount: number;
+  trashedAffectedCount: number;
+  undoAvailable: boolean;
+  totals: { taxBefore: number; taxAfter: number; taxDelta: number };
+  sample: Array<{ orderId: string; label: string; inTrash: boolean; taxBefore: number; taxAfter: number }>;
+};
+
+export async function previewClearAllOrdersTax(workspace: WorkspaceContext) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot edit this settings section.");
+  }
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, ClearTaxPreview>(functions, "previewClearAllOrdersTax");
+      const result = await callable({ companyId: workspace.id });
+      return result.data;
+    }, "Checking what would change.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
+export async function undoClearAllOrdersTax(workspace: WorkspaceContext, runId: string) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot edit this settings section.");
+  }
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; restoredCount?: number; message?: string }>(
+        functions,
+        "undoClearAllOrdersTax"
+      );
+      const result = await callable({ companyId: workspace.id, runId });
+      return result.data;
+    }, "Restoring VAT.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
 
 export async function clearAllOrdersTax(workspace: WorkspaceContext) {
   if (!canEditWorkspaceSettingsForRole(workspace.role)) {
@@ -347,6 +441,48 @@ export async function clearAllOrdersTax(workspace: WorkspaceContext) {
   } catch (error) {
     throw new Error(friendlySettingsError(error));
   }
+}
+
+export type ImportBackupPreview = {
+  ok?: boolean;
+  fileOrders: number;
+  fileCustomers: number;
+  existingOrders: number;
+  existingCustomers: number;
+  likelyDuplicateOrders: number;
+  likelyDuplicateCustomers: number;
+  droppedOrders: number;
+  droppedCustomers: number;
+  truncated: boolean;
+  importsSettings: boolean;
+};
+
+// Same parse, same payload builders, no writes — so what the dialog promises is
+// what the import does.
+export async function previewWorkspaceBackupImport(workspace: WorkspaceContext, backup: unknown) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot import workspace data.");
+  }
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, ImportBackupPreview>(functions, "importWorkspaceBackup");
+      const result = await callable({ companyId: workspace.id, backup, dryRun: true });
+      return result.data;
+    }, "Checking the backup file.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
+// The delete screen tells people to export a backup first while having no idea
+// whether they ever did. Two fields, written straight to companySettings —
+// neither is in the rule's blocked list.
+export async function recordWorkspaceBackupExport(workspace: WorkspaceContext) {
+  await setDoc(
+    doc(db, "companySettings", workspace.id),
+    { lastBackupExportedAtMs: Date.now(), lastBackupExportedBy: workspace.currentMemberDisplayName || "" },
+    { merge: true }
+  );
 }
 
 export async function importWorkspaceBackup(workspace: WorkspaceContext, backup: unknown) {

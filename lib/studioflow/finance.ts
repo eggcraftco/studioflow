@@ -15,7 +15,10 @@ type DashboardCostOptions = {
   showTax?: boolean;
 };
 
-export function swiftOrderNetProfit(order: DashboardFinanceOrder) {
+// What the toolbar strip shows. Deliberately NOT net profit: extra spending and
+// tax stay in, which is why the strip says "Margin". The Dashboard's
+// adjustedDashboardNetProfit is the figure that deducts them.
+export function orderGrossMargin(order: DashboardFinanceOrder) {
   return orderSalesTotal(order) - order.watchPurchasePrice - order.paymentFee - order.deliveryCost;
 }
 

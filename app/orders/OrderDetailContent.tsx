@@ -922,12 +922,12 @@ function invoiceHtml(
   const taxRate = isEstimate ? estimate!.taxRate : (order.taxRate ?? 0);
   const isMarginScheme = (isEstimate ? estimate!.taxType : order.taxType) === "Profit";
   const isZeroRated = taxRate <= 0.0001;
-  // Line-item invoices recompute VAT on the item total with the order's rate
-  // (same total*rate/100 convention as the Finance card).
+  // Line-item invoices recompute VAT on the item total with the order's rate,
+  // extracted from the gross the same way the Finance card and the server do.
   const vatAmount = isEstimate
     ? estimate!.taxAmount
     : hasLineItems
-      ? (orderValue * taxRate) / 100
+      ? (orderValue * taxRate) / (100 + taxRate)
       : order.taxAmount;
   const subtotal = isEstimate
     ? estimate!.subtotal
@@ -1477,10 +1477,14 @@ function webFinanceTaxAmount({
   // Mirrors the backend: custom receivables join the sales total, custom
   // expenses reduce the Profit tax base.
   const orderValue = paidAmount + remainingAmount + customRemainingTotal;
+  // VAT sits inside the price the customer pays, so it is extracted from the
+  // gross rather than added to it: £1,450 at 20% is £241.67, not £290. Mirrors
+  // vatFromGrossAmount() on the server.
+  const vatFromGross = (gross: number) => Math.round((gross * taxRate * 100) / (100 + taxRate)) / 100;
   if (taxType.trim().toLowerCase() === "profit") {
-    return Math.round(Math.max(orderValue - watchPurchasePrice - customExpenseTotal - paymentFee - deliveryCost, 0) * taxRate) / 100;
+    return vatFromGross(Math.max(orderValue - watchPurchasePrice - customExpenseTotal - paymentFee - deliveryCost, 0));
   }
-  return Math.round(orderValue * taxRate) / 100;
+  return vatFromGross(orderValue);
 }
 
 function parseFinanceNumber(value: string | number) {

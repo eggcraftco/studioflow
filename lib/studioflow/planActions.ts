@@ -31,6 +31,68 @@ function planGuardMessage(result: PlanActionResult) {
   }
 }
 
+export type IntegrationWebhookInfo = {
+  deliveryUrl: string;
+  tokenCreatedAtMs: number;
+  lastDeliveryAtMs: number;
+  lastDeliveryOk: boolean;
+  lastDeliveryError: string;
+};
+
+type IntegrationWebhookResponse = {
+  ok?: boolean;
+  deliveryUrl?: string;
+  tokenCreatedAtMs?: number;
+  lastDeliveryAtMs?: number;
+  lastDeliveryOk?: boolean;
+  lastDeliveryError?: string;
+};
+
+function integrationWebhookInfo(data: IntegrationWebhookResponse | undefined): IntegrationWebhookInfo {
+  return {
+    deliveryUrl: data?.deliveryUrl || "",
+    tokenCreatedAtMs: Number(data?.tokenCreatedAtMs || 0),
+    lastDeliveryAtMs: Number(data?.lastDeliveryAtMs || 0),
+    lastDeliveryOk: data?.lastDeliveryOk === true,
+    lastDeliveryError: String(data?.lastDeliveryError || "")
+  };
+}
+
+async function integrationWebhookCall(name: string, companyId: string): Promise<IntegrationWebhookInfo> {
+  const callable = httpsCallable<{ companyId: string }, IntegrationWebhookResponse>(functions, name);
+  const response = await callable({ companyId });
+  return integrationWebhookInfo(response.data);
+}
+
+export const INTEGRATION_WEBHOOK_CALLABLES = {
+  woocommerce: "getWooCommerceWebhookToken",
+  shopify: "getShopifyWebhookToken",
+  inbound: "getInboundWebhookToken"
+} as const;
+
+export type IntegrationWebhookKind = keyof typeof INTEGRATION_WEBHOOK_CALLABLES;
+
+export async function getIntegrationWebhookInfo(
+  kind: IntegrationWebhookKind,
+  companyId: string
+): Promise<IntegrationWebhookInfo> {
+  return integrationWebhookCall(INTEGRATION_WEBHOOK_CALLABLES[kind], companyId);
+}
+
+// Replaces the token. The previous delivery URL stops working immediately —
+// that is the whole point of having a rotate button.
+export async function rotateIntegrationWebhookToken(
+  kind: IntegrationWebhookKind,
+  companyId: string
+): Promise<IntegrationWebhookInfo> {
+  const callable = httpsCallable<{ companyId: string; integration: string }, IntegrationWebhookResponse>(
+    functions,
+    "rotateIntegrationWebhookToken"
+  );
+  const response = await callable({ companyId, integration: kind });
+  return integrationWebhookInfo(response.data);
+}
+
 export async function getWooCommerceWebhookDeliveryUrl(companyId: string): Promise<string> {
   const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
     functions,

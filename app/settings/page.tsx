@@ -10,10 +10,13 @@ import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { SettingsDialog } from "./SettingsDialog";
+import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPreview } from "@/lib/studioflow/settingsActions";
+import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
-import { getWooCommerceWebhookDeliveryUrl, getShopifyWebhookDeliveryUrl, getInboundWebhookDeliveryUrl } from "@/lib/studioflow/planActions";
+import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
@@ -49,10 +52,10 @@ import {
 } from "@/lib/studioflow/blockHeadings";
 import { workspaceOnboardingPromptSeed, isWorkspaceOnboardingPromptSeed } from "@/lib/studioflow/workspaceOnboarding";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, ordersToCsv, safeFileDate } from "@/lib/studioflow/export";
-import { studioT, SUPPORTED_STUDIO_LANGUAGES } from "@/lib/studioflow/language";
+import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/studioflow/language";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -291,6 +294,16 @@ export default function SettingsPage() {
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
+  // Sections register their own unsaved edits here; see ./unsavedChanges.
+  const settingsDirty = useProvideSettingsDirty();
+  const unsavedSectionId = useMemo(
+    () => Object.keys(settingsDirty.dirtySections).find(id => settingsDirty.dirtySections[id]) ?? "",
+    [settingsDirty.dirtySections]
+  );
+  const [pendingExit, setPendingExit] = useState<
+    { kind: "section"; sectionId: SettingsSectionId } | { kind: "link"; href: string } | null
+  >(null);
+  const [savingBeforeExit, setSavingBeforeExit] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [error, setError] = useState("");
   // Mobile drill-in: show the section list first, then the selected section's
@@ -401,12 +414,72 @@ export default function SettingsPage() {
     return usagePercent(counts.estimatedFileUsageMB, workspace.billingStorageLimitMB);
   }, [counts, workspace]);
 
-  function selectSection(sectionId: SettingsSectionId) {
+  // Closing or reloading the tab is the browser's to warn about.
+  useEffect(() => {
+    if (!unsavedSectionId) return;
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [unsavedSectionId]);
+
+  // Leaving through the app's own nav is a client-side route change, so
+  // beforeunload never fires for it. This is the path that actually loses work.
+  useEffect(() => {
+    if (!unsavedSectionId) return;
+    function onClick(event: MouseEvent) {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") ?? "";
+      if (!href.startsWith("/") || anchor.getAttribute("target") === "_blank") return;
+      const destination = new URL(href, window.location.origin);
+      if (destination.pathname === window.location.pathname) return;
+      event.preventDefault();
+      setPendingExit({ kind: "link", href });
+    }
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [unsavedSectionId]);
+
+  function leavePendingExit(exit: { kind: "section"; sectionId: SettingsSectionId } | { kind: "link"; href: string }) {
+    setPendingExit(null);
+    if (exit.kind === "section") applySection(exit.sectionId);
+    else router.push(exit.href);
+  }
+
+  async function savePendingExit() {
+    if (!pendingExit) return;
+    const save = settingsDirty.saveHandlerFor(unsavedSectionId);
+    if (!save) return;
+    setSavingBeforeExit(true);
+    try {
+      await save();
+      leavePendingExit(pendingExit);
+    } catch {
+      // The section shows its own error; keep the user where the edit still is.
+      setPendingExit(null);
+    } finally {
+      setSavingBeforeExit(false);
+    }
+  }
+
+  function applySection(sectionId: SettingsSectionId) {
     setActiveSection(sectionId);
     setMobileDetail(true);
     const url = new URL(window.location.href);
     url.searchParams.set("section", sectionId);
     window.history.replaceState(null, "", url);
+  }
+
+  function selectSection(sectionId: SettingsSectionId) {
+    if (sectionId === activeSection || !unsavedSectionId) {
+      applySection(sectionId);
+      return;
+    }
+    setPendingExit({ kind: "section", sectionId });
   }
 
   async function refreshSettingsAfterImport() {
@@ -441,6 +514,38 @@ export default function SettingsPage() {
   return (
     <AppShell>
       {loadingSettings ? <LoadingScreen /> : null}
+      {pendingExit ? (
+        <SettingsDialog
+          eyebrow={t("Unsaved changes")}
+          title={t("Leave without saving?")}
+          onDismiss={() => setPendingExit(null)}
+          actions={[
+            ...(settingsDirty.saveHandlerFor(unsavedSectionId)
+              ? [{
+                  label: savingBeforeExit ? t("Saving...") : t("Save and continue"),
+                  tone: "primary" as const,
+                  disabled: savingBeforeExit,
+                  onClick: () => { void savePendingExit(); }
+                }]
+              : []),
+            {
+              label: t("Discard changes"),
+              tone: "danger" as const,
+              disabled: savingBeforeExit,
+              onClick: () => leavePendingExit(pendingExit)
+            },
+            {
+              label: t("Stay here"),
+              tone: "secondary" as const,
+              disabled: savingBeforeExit,
+              onClick: () => setPendingExit(null)
+            }
+          ]}
+        >
+          <p>{t("This section has changes you have not saved yet. Leaving now discards them.")}</p>
+        </SettingsDialog>
+      ) : null}
+      <SettingsDirtyProvider value={settingsDirty}>
       <div className="settings-workspace" data-mobile-view={isPhone ? (mobileDetail ? "detail" : "list") : "both"}>
         <aside className="settings-sidebar">
           <div className="settings-sidebar-heading">
@@ -467,6 +572,9 @@ export default function SettingsPage() {
                     <span>
                       <strong style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                         {t(section.title)}
+                        {settingsDirty.dirtySections[section.id] ? (
+                          <span className="settings-unsaved-dot" title={t("Unsaved changes")} aria-label={t("Unsaved changes")} />
+                        ) : null}
                         {unreadCount > 0 ? <span style={supportUnreadMenuBadgeStyle}>{unreadCount}</span> : null}
                       </strong>
                       <small>{t(section.description)}</small>
@@ -513,6 +621,7 @@ export default function SettingsPage() {
           }) : null}
         </section>
       </div>
+      </SettingsDirtyProvider>
     </AppShell>
   );
 }
@@ -582,7 +691,7 @@ function renderSettingsSection({
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
-      return <DataManagementSection workspace={workspace} counts={counts} userEmail={userEmail} onImported={onDataImported} language={language} />;
+      return <DataManagementSection workspace={workspace} counts={counts} settings={settings} userEmail={userEmail} onImported={onDataImported} language={language} />;
     case "plan-access":
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
@@ -626,7 +735,16 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
     void loadSettings();
   }, [loadSettings]);
 
-  async function handleSave() {
+  // The three switches start true and are overwritten once the callable answers,
+  // so the baseline waits for `loading` to clear.
+  const { dirty: messageDirty, markSaved: markMessageSaved } = useUnsavedGuard(
+    "message-settings",
+    { directMessages, groupConversations, attachments },
+    !loading,
+    () => handleSave(true)
+  );
+
+  async function handleSave(rethrow = false) {
     setSaving(true);
     setStatus("");
     setError("");
@@ -637,9 +755,11 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
         attachmentsEnabled: attachments
       };
       await setMessageWorkspaceSettings(workspace, next);
+      markMessageSaved();
       setStatus("Message settings saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Message settings could not be saved.");
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
@@ -650,6 +770,10 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
       <section className="card app-card">
         <CardTitle icon="reply" eyebrow={t("Message Settings")} title={t("Workspace messaging permissions")} />
         <p className="muted-copy">{t("Control workspace-wide messaging permissions for the team.")}</p>
+        {/* The three switches start ticked and disabled for about a second while
+            the real values load. With nothing on screen saying so, that looked
+            like the app had decided for you. */}
+        {loading ? <p className="muted-copy">{t("Loading permissions...")}</p> : null}
         <div className="settings-toggle-stack">
           <label className="settings-toggle-row">
             <span>
@@ -695,7 +819,7 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
           <button className="button secondary" type="button" disabled={loading} onClick={() => void loadSettings()}>
             {t("Reload")}
           </button>
-          <button className="button" type="button" disabled={!canEdit || saving || loading} onClick={handleSave}>
+          <button className="button" type="button" disabled={!canEdit || saving || loading || !messageDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save")}
           </button>
         </div>
@@ -770,6 +894,9 @@ function AutoLockSection({ language }: { language: string }) {
             <option value={60}>{t("After 1 hour")}</option>
           </select>
         </label>
+        {/* Theme and Language next door have Save buttons; this one writes on
+            change, which read as "my choice was ignored". */}
+        <p className="muted-copy">{t("Saved automatically on this browser.")}</p>
       </section>
     </div>
   );
@@ -899,7 +1026,17 @@ function WorkspaceBrandingSection({
     setPolicyAccepted(window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted");
   }, [workspace.id]);
 
-  async function handleSaveIdentity() {
+  // Only the two fields the Save button writes. The logo upload is its own
+  // action and the policy checkbox writes to localStorage on the spot, so
+  // neither is an unsaved edit.
+  const { dirty: brandingDirty, markSaved: markBrandingSaved } = useUnsavedGuard(
+    "branding",
+    { companyName, appSubtitle },
+    Boolean(settings),
+    () => handleSaveIdentity(true)
+  );
+
+  async function handleSaveIdentity(rethrow = false) {
     if (!settings) return;
     setSavingIdentity(true);
     setIdentityStatus("");
@@ -917,9 +1054,11 @@ function WorkspaceBrandingSection({
         setAppSubtitle(nextSettings.appSubtitle);
       }
       onSaved(nextSettings);
+      markBrandingSaved();
       setIdentityStatus(t("Workspace branding saved."));
     } catch (saveError) {
       setIdentityError(saveError instanceof Error ? saveError.message : t("Workspace branding could not be saved."));
+      if (rethrow) throw saveError;
     } finally {
       setSavingIdentity(false);
     }
@@ -1050,8 +1189,8 @@ function WorkspaceBrandingSection({
           <button
             className="button"
             type="button"
-            disabled={savingIdentity || !settings || (!canEditCompanyName && !canEditBranding)}
-            onClick={handleSaveIdentity}
+            disabled={savingIdentity || !brandingDirty || !settings || (!canEditCompanyName && !canEditBranding)}
+            onClick={() => { void handleSaveIdentity(); }}
           >
             {savingIdentity ? t("Saving...") : t("Save Branding")}
           </button>
@@ -1076,6 +1215,13 @@ function WorkspaceBrandingSection({
           <div className="workspace-logo-copy">
             <strong>{logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}</strong>
             <p className="muted-copy">{t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.")}</p>
+            {/* The picker accepted a file and then rejected it after the fact,
+                with nothing on screen saying what it would accept. */}
+            <p className="muted-copy">
+              {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
+              {" "}
+              {t("Maximum")} {maxSizeMB} MB.
+            </p>
             <div className="workspace-logo-actions">
               <input
                 ref={logoInputRef}
@@ -1299,6 +1445,42 @@ type WorkflowTemplate = {
   summaryStep2: string;
 };
 
+// Which trades a label belongs to, read straight out of the templates below —
+// no separate list to keep in step. A workspace ends up with Vehicle Repair
+// fields under a Photography business type by trying templates one after
+// another; nothing ever said so.
+function workflowLabelsOfTemplate(template: WorkflowTemplate): string[] {
+  return [...template.customFields, ...template.customSteps, ...template.customToggles, ...template.inventoryLabels]
+    .map(label => label.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function workflowForeignTrades(settings: BlockHeadingSettings | null): string[] {
+  if (!settings) return [];
+  const own = new Set(
+    workflowLabelsOfTemplate(WORKFLOW_STANDARD_TEMPLATES[settings.businessType] ?? DEFAULT_WORKFLOW_TEMPLATE)
+  );
+  const present = [
+    ...(settings.customFields ?? []),
+    ...(settings.customSteps ?? []),
+    ...(settings.customToggles ?? []),
+    ...(settings.materialsDefaultChecks ?? [])
+  ]
+    .map(item => String(item?.title ?? "").trim().toLowerCase())
+    .filter(label => label && !own.has(label));
+  if (present.length === 0) return [];
+
+  const trades = new Set<string>();
+  for (const [type, template] of Object.entries(WORKFLOW_STANDARD_TEMPLATES)) {
+    if (type === settings.businessType) continue;
+    const labels = new Set(workflowLabelsOfTemplate(template));
+    // Two shared labels, so a single generic word ("Material 1") is not enough
+    // to accuse a workspace of borrowing from another trade.
+    if (present.filter(label => labels.has(label)).length >= 2) trades.add(type);
+  }
+  return [...trades];
+}
+
 const WORKFLOW_STANDARD_TEMPLATES: Record<string, WorkflowTemplate> = {
   "Custom Art Studio": {
     customFields: ["Watch Ref.", "Concept"],
@@ -1439,7 +1621,16 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     updateSetting("activeStatuses", uniqueNext);
   }
 
-  async function persistWorkflowSettings(settingsToSave: BlockHeadingSettings, successMessage: string) {
+  // Two controls here persist on their own (business type, standard template),
+  // so re-baselining belongs in the one place all three paths pass through.
+  const { dirty: workflowDirty, markSaved: markWorkflowSaved } = useUnsavedGuard(
+    "workflow",
+    blockSettings,
+    Boolean(blockSettings) && !loading,
+    () => handleSave(true)
+  );
+
+  async function persistWorkflowSettings(settingsToSave: BlockHeadingSettings, successMessage: string, rethrow = false) {
     setSaving(true);
     setStatus("");
     setError("");
@@ -1448,9 +1639,11 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
       await saveWorkspaceBlockHeadings(workspace, "customer", settingsToSave);
       const saved = await saveWorkspaceBlockHeadings(workspace, "materials", settingsToSave);
       setBlockSettings(workflowSettingsWithMaterialDefaults(saved));
+      markWorkflowSaved();
       setStatus(successMessage);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Workflow settings could not be saved.");
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
@@ -1474,12 +1667,18 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     void persistWorkflowSettings(nextSettings, "Business type saved.");
   }
 
+  // The old confirm listed the categories it would overwrite but never what it
+  // would put there, and never said the labels are shared with every existing
+  // order's cards.
   function applyStandardTemplate() {
     if (!blockSettings) return;
-    const confirmed = window.confirm("This will overwrite workflow steps, custom fields, production checks, material labels and summary badge choices. Apply the standard template?");
-    if (!confirmed) return;
+    setPendingTemplate(WORKFLOW_STANDARD_TEMPLATES[blockSettings.businessType] ?? DEFAULT_WORKFLOW_TEMPLATE);
+  }
 
-    const template = WORKFLOW_STANDARD_TEMPLATES[blockSettings.businessType] ?? DEFAULT_WORKFLOW_TEMPLATE;
+  function commitStandardTemplate() {
+    if (!blockSettings || !pendingTemplate) return;
+    const template = pendingTemplate;
+    setPendingTemplate(null);
     const materialLabels = [...template.inventoryLabels, "Material 1", "Material 2", "Prep Done", "Ready to Use"];
     const nextSettings = {
       ...blockSettings,
@@ -1500,10 +1699,13 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     void persistWorkflowSettings(nextSettings, "Template applied and saved.");
   }
 
-  async function handleSave() {
+  async function handleSave(rethrow = false) {
     if (!blockSettings) return;
-    await persistWorkflowSettings(blockSettings, "Workflow settings saved.");
+    await persistWorkflowSettings(blockSettings, "Workflow settings saved.", rethrow);
   }
+
+  const foreignTrades = useMemo(() => workflowForeignTrades(blockSettings), [blockSettings]);
+  const [pendingTemplate, setPendingTemplate] = useState<WorkflowTemplate | null>(null);
 
   function renderHeadingList(key: WorkflowHeadingListKey, emptyTitle: string, addTitle: string, placeholder: string) {
     const items = blockSettings?.[key] ?? [];
@@ -1558,6 +1760,31 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
 
   return (
     <div className="settings-card-stack">
+      {pendingTemplate ? (
+        <SettingsDialog
+          wide
+          eyebrow={t("Apply Standard Template")}
+          title={t("Replace this workflow with the standard template?")}
+          onDismiss={() => setPendingTemplate(null)}
+          actions={[
+            { label: t("Replace"), tone: "danger" as const, onClick: commitStandardTemplate },
+            { label: t("Keep custom fields"), tone: "secondary" as const, onClick: () => setPendingTemplate(null) }
+          ]}
+        >
+          <p>{t("Your current custom fields, production steps, Yes / No checks and material labels are replaced by the ones below. Anything you renamed is lost.")}</p>
+          <div className="settings-impact-grid">
+            <span>{t("Custom fields")}</span>
+            <strong>{pendingTemplate.customFields.join(", ") || "—"}</strong>
+            <span>{t("Production Steps")}</span>
+            <strong>{pendingTemplate.customSteps.join(", ") || "—"}</strong>
+            <span>{t("Yes / No checks")}</span>
+            <strong>{pendingTemplate.customToggles.join(", ") || "—"}</strong>
+            <span>{t("Material checks")}</span>
+            <strong>{pendingTemplate.inventoryLabels.join(", ") || "—"}</strong>
+          </div>
+          <p>{t("These labels are shared, so existing projects show the new headings too. Values already recorded under an old heading stay on the project but stop being displayed.")}</p>
+        </SettingsDialog>
+      ) : null}
       {!canEdit ? (
         <section className="card app-card">
           <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Lite") : t("Workflow settings are read-only")} />
@@ -1596,6 +1823,16 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             {studioT("Apply Standard Template", language)}
           </button>
         </div>
+        {foreignTrades.length > 0 ? (
+          <div className="workflow-mixed-warning">
+            <strong>{t("This workflow mixes fields from more than one trade")}</strong>
+            <p className="muted-copy">
+              {t("Fields matching these industry templates are also in use:")} {foreignTrades.map(type => studioT(type, language)).join(", ")}.
+              {" "}
+              {t("That is fine if you built it deliberately. Applying the standard template replaces them.")}
+            </p>
+          </div>
+        ) : null}
         <p className="muted-copy">{t("Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.")}</p>
       </section>
 
@@ -1703,7 +1940,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
           <p className="muted-copy">{t("Saved values write to the same app-compatible companySettings block heading fields used by Mac, iPad, iPhone and web.")}</p>
         </div>
         <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
+          <button className="button" type="button" disabled={!canEdit || saving || !workflowDirty} onClick={() => { void handleSave(); }}>
             {saving ? studioT("Saving...", language) : studioT("Save Workflow Settings", language)}
           </button>
         </div>
@@ -1795,6 +2032,17 @@ function PdfExportSettingsSection({
     }
   }, [settings, isWorkflowOnly, workspace]);
 
+  // The baseline is the seeded draft, not the stored document: this section
+  // injects three company-number rows with fresh crypto.randomUUID() ids for a
+  // workspace that has never saved any, so a document comparison could never
+  // match.
+  const { dirty: pdfDirty, markSaved: markPdfSaved } = useUnsavedGuard(
+    "pdf",
+    draft,
+    Boolean(draft),
+    () => handleSave(true)
+  );
+
   if (!draft) {
     return <PlaceholderSection title={t("PDF Export Settings")} detail={t("PDF settings could not be loaded yet.")} action={<Link className="button secondary" href="/export">{t("Open Export")}</Link>} />;
   }
@@ -1828,7 +2076,7 @@ function PdfExportSettingsSection({
     } : current);
   }
 
-  async function handleSave() {
+  async function handleSave(rethrow = false) {
     if (!draft) return;
     setSaving(true);
     setStatus("");
@@ -1864,9 +2112,11 @@ function PdfExportSettingsSection({
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
       setDraft(savedSettings);
       onSaved(savedSettings);
+      markPdfSaved();
       setStatus(result.message || "PDF Export settings saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("PDF Export settings could not be saved."));
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
@@ -1900,6 +2150,13 @@ function PdfExportSettingsSection({
             </label>
           ))}
         </div>
+        {/* Empty company numbers are filtered out of the printed document, but
+            the labels sit here with blank values and nothing said which way it
+            would go. */}
+        <p className="muted-copy">{t("Company numbers with no value are left out of the PDF — an empty VAT or EORI line never prints.")}</p>
+        {draft.pdfShowFinInternal ? (
+          <p className="layout-error">{t("Internal Financials prints your cost, profit and supplier details. Do not send that PDF to a customer.")}</p>
+        ) : null}
       </section>
 
       {!isWorkflowOnly ? <section className="card app-card quick-reply-settings-card">
@@ -1940,7 +2197,7 @@ function PdfExportSettingsSection({
         </div>
         <div className="settings-action-row">
           <Link className="button secondary" href="/export">{t("Open Export")}</Link>
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
+          <button className="button" type="button" disabled={!canEdit || saving || !pdfDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save PDF Settings")}
           </button>
         </div>
@@ -2132,7 +2389,17 @@ function QuickReplySettingsSection({
     setRules(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   }
 
-  async function handleSave() {
+  // personalLoaded is the section's own "the callables have answered" flag, so
+  // it is exactly the right moment to take the baseline. The API key box is
+  // deliberately excluded: it is write-only and never reflects stored state.
+  const { dirty: quickReplyDirty, markSaved: markQuickReplySaved } = useUnsavedGuard(
+    "quick-reply",
+    { replyMode, politeness, replyLength, mainKnowledgeBase, onDeviceKnowledgeBase, products, rules },
+    personalLoaded,
+    () => handleSave(true)
+  );
+
+  async function handleSave(rethrow = false) {
     if (!settings || !canEditPersonal) return;
     setSaving(true);
     setStatus("");
@@ -2156,9 +2423,11 @@ function QuickReplySettingsSection({
       setApiKeyInput("");
       setIsReplacingOpenAIKey(false);
       setClearOpenAIKey(false);
+      markQuickReplySaved();
       setStatus(personalResult.message || "Your Quick Reply settings were saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Quick Reply settings could not be saved.");
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
@@ -2353,7 +2622,12 @@ function QuickReplySettingsSection({
 
         <div className="quick-reply-settings-actions quick-reply-settings-footer">
           <Link className="button secondary" href="/quick-reply">{t("Open Quick Reply")}</Link>
-          <button className="button" type="button" disabled={!canEditPersonal || !personalLoaded || saving} onClick={handleSave}>
+          <button
+            className="button"
+            type="button"
+            disabled={!canEditPersonal || !personalLoaded || saving || (!quickReplyDirty && !apiKeyInput.trim() && !clearOpenAIKey)}
+            onClick={() => { void handleSave(); }}
+          >
             {saving ? t("Saving...") : t("Save My Settings")}
           </button>
         </div>
@@ -2388,7 +2662,11 @@ function KnowledgeBaseEditor({
         onChange={event => onChange(event.target.value)}
         placeholder={t("Add your pricing, process, policies, FAQs and common customer answers here...")}
       />
-      <span>{t("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.")}</span>
+      <span>
+        {t("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.")}
+        {" "}
+        {value.length.toLocaleString()} {t("characters")}.
+      </span>
     </label>
   );
 }
@@ -2490,7 +2768,16 @@ function SafetyUploadsSection({
     else window.localStorage.removeItem(key);
   }
 
-  async function handleSave() {
+  // browserAccepted is excluded: it writes to localStorage the moment it
+  // changes, so it is never an unsaved edit.
+  const { dirty: safetyDirty, markSaved: markSafetySaved } = useUnsavedGuard(
+    "safety-uploads",
+    { requirePolicy, maxFileSizeMB },
+    Boolean(settings),
+    () => handleSave(true)
+  );
+
+  async function handleSave(rethrow = false) {
     if (!settings) return;
     setSaving(true);
     setStatus("");
@@ -2505,9 +2792,11 @@ function SafetyUploadsSection({
         uploadSafetyRequirePolicyAcceptance: result.settings?.uploadSafetyRequirePolicyAcceptance ?? requirePolicy,
         uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB
       });
+      markSafetySaved();
       setStatus(result.message || "Upload Safety settings saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Upload Safety settings could not be saved.");
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
@@ -2524,7 +2813,7 @@ function SafetyUploadsSection({
           <label className="settings-toggle-row">
             <span>
               <strong>{t("Require upload policy acceptance before upload")}</strong>
-              <small>{t("When enabled, this browser asks the user to accept the upload policy before Client Files upload.")}</small>
+              <small>{t("When enabled, every browser and device in this workspace must accept the upload policy before its first Client Files upload.")}</small>
             </span>
             <input
               type="checkbox"
@@ -2534,17 +2823,23 @@ function SafetyUploadsSection({
             />
           </label>
 
-          <label className="settings-toggle-row">
+          {/* This used to be a checkbox whose label read "This browser has
+              accepted the upload policy" — styled exactly like the status
+              sentence below it, so an un-accepted browser showed the claim and
+              its own contradiction one after the other. The state is stated
+              once now, and the control is only ever a reset: ticking a box
+              should not count as reading a policy. */}
+          <div className="settings-toggle-row">
             <span>
-              <strong>{t("This browser has accepted the upload policy")}</strong>
-              <small>{t("This remains local to this browser, matching the app’s device-level acceptance behavior.")}</small>
+              <strong>{t("Upload policy acceptance")}</strong>
+              <small>{t("Acceptance is stored on this browser only, the same way each device accepts separately.")}</small>
             </span>
-            <input
-              type="checkbox"
-              checked={browserAccepted}
-              onChange={event => updateBrowserAccepted(event.target.checked)}
-            />
-          </label>
+            {browserAccepted ? (
+              <button className="button secondary" type="button" onClick={() => updateBrowserAccepted(false)}>
+                {t("Reset for this browser")}
+              </button>
+            ) : null}
+          </div>
 
           <label className="settings-range-row">
             <span>
@@ -2567,15 +2862,14 @@ function SafetyUploadsSection({
 
         <div className="settings-mini-grid">
           <InfoTile label={t("Policy prompt")} value={requirePolicy ? t("Required") : t("Not required")} />
-          <InfoTile label={t("Accepted in browser")} value={browserAccepted ? t("Accepted") : t("Not accepted")} />
           <InfoTile label={t("Max file size")} value={`${Math.round(maxFileSizeMB)} MB`} />
         </div>
         <div className="quick-reply-settings-info">
-          <strong>{browserAccepted ? t("Upload policy is accepted on this browser.") : t("The first upload will ask this browser to accept the upload policy.")}</strong>
+          <strong>{browserAccepted ? t("Accepted on this browser. Uploads will not ask again until you reset it.") : t("Not accepted on this browser. The next upload will ask you to accept the upload policy.")}</strong>
           <p>{t("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.")}</p>
         </div>
         <div className="settings-action-row">
-          <button className="button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
+          <button className="button" type="button" disabled={!canEdit || saving || !safetyDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save Upload Safety")}
           </button>
         </div>
@@ -2727,7 +3021,26 @@ function AccountSection({
     }
   }
 
-  async function handleSaveProfile() {
+  async function copyIdentifier(value: string, feedback: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setProfileStatus(feedback);
+    } catch {
+      setProfileError(t("Copy failed. Select the value and copy it manually."));
+    }
+  }
+
+  // Email, avatar and the workspace logo are their own actions with their own
+  // buttons; only the two fields Save Profile writes are tracked here.
+  const { dirty: profileDirty, markSaved: markProfileSaved } = useUnsavedGuard(
+    "profile-security",
+    { displayName, companyName },
+    true,
+    () => handleSaveProfile(true)
+  );
+
+  async function handleSaveProfile(rethrow = false) {
     setSavingProfile(true);
     setProfileStatus("");
     setProfileError("");
@@ -2738,9 +3051,11 @@ function AccountSection({
         setDisplayName(profile.displayName);
         setCompanyName(profile.companyName);
       }
+      markProfileSaved();
       setProfileStatus(result.message || t("Profile updated."));
     } catch (saveError) {
       setProfileError(saveError instanceof Error ? saveError.message : t("Profile could not be saved."));
+      if (rethrow) throw saveError;
     } finally {
       setSavingProfile(false);
     }
@@ -3033,10 +3348,14 @@ function AccountSection({
         <div className="settings-mini-grid">
           <InfoTile label={t("Workspace")} value={workspace.name} />
           <InfoTile label={t("Role")} value={workspace.roleLabel} />
-          <InfoTile label={t("User ID")} value={user?.uid ?? "-"} />
+          <InfoTile
+            label={t("User ID")}
+            value={user?.uid ? `${user.uid.slice(0, 6)}…${user.uid.slice(-4)}` : "-"}
+            action={user?.uid ? { label: t("Copy"), onClick: () => copyIdentifier(user.uid, t("User ID copied")) } : undefined}
+          />
         </div>
         <div className="settings-action-row">
-          <button className="button" type="button" disabled={savingProfile} onClick={handleSaveProfile}>
+          <button className="button" type="button" disabled={savingProfile || !profileDirty} onClick={() => { void handleSaveProfile(); }}>
             {savingProfile ? t("Saving...") : t("Save Profile")}
           </button>
         </div>
@@ -3055,8 +3374,10 @@ function AccountSection({
         </div>
         <p className="muted-copy">{t("Password changes are handled securely by Firebase. Web sends a reset link to your account email instead of storing or editing your password here.")}</p>
         <div className="settings-action-row">
+          {/* The button sent a link without ever naming the address it was
+              going to, which matters on an account whose email was changed. */}
           <button className="button secondary" type="button" disabled={sendingReset} onClick={handlePasswordReset}>
-            {sendingReset ? t("Sending...") : t("Send Password Reset Email")}
+            {sendingReset ? t("Sending...") : `${t("Send reset link to")} ${accountEmail || userEmail}`}
           </button>
           <button className="button secondary danger-button" type="button" disabled={signingOut} onClick={handleSignOut}>
             {signingOut ? t("Signing out...") : t("Sign Out")}
@@ -3080,6 +3401,13 @@ function AccountSection({
           <div className="workspace-logo-copy">
             <strong>{logoUrl ? t("Workspace logo is set") : t("No logo uploaded yet")}</strong>
             <p className="muted-copy">{t("Upload or replace the logo used in the app header for this workspace. Manual logo links are disabled so each workspace uses an uploaded logo file.")}</p>
+            {/* The picker accepted a file and then rejected it after the fact,
+                with nothing on screen saying what it would accept. */}
+            <p className="muted-copy">
+              {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
+              {" "}
+              {t("Maximum")} {maxSizeMB} MB.
+            </p>
             <div className="workspace-logo-actions">
               <input
                 ref={logoInputRef}
@@ -3233,6 +3561,10 @@ function FinancialSettingsSection({
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [clearingTax, setClearingTax] = useState(false);
+  const [recalculationPreview, setRecalculationPreview] = useState<FinancialRecalculationPreview | null>(null);
+  const [clearTaxPreview, setClearTaxPreview] = useState<ClearTaxPreview | null>(null);
+  // Kept so the removal can be taken back without hunting for a run id.
+  const [clearTaxUndoRunId, setClearTaxUndoRunId] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
@@ -3243,6 +3575,13 @@ function FinancialSettingsSection({
     setStatus("");
     setError("");
   }, [settings]);
+
+  const { dirty: financialDirty, markSaved: markFinancialSaved } = useUnsavedGuard(
+    "financial",
+    draft,
+    Boolean(draft),
+    () => handleSave(true)
+  );
 
   if (!draft) {
     return <PlaceholderSection title={t("Financial Settings")} detail={t("Financial settings could not be loaded yet.")} />;
@@ -3269,7 +3608,7 @@ function FinancialSettingsSection({
     setError("");
   }
 
-  async function handleSave() {
+  async function handleSave(rethrow = false) {
     if (!draft) return;
     setSaving(true);
     setStatus("");
@@ -3293,18 +3632,21 @@ function FinancialSettingsSection({
       const savedSettings = { ...draft, ...(result.settings ?? {}) };
       setDraft(savedSettings);
       onSaved(savedSettings);
+      markFinancialSaved();
       setStatus(result.message || t("Financial settings saved."));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : t("Financial settings could not be saved."));
+      if (rethrow) throw saveError;
     } finally {
       setSaving(false);
     }
   }
 
+  // The old flow was a browser confirm over a number nobody could see. Saving
+  // the settings first is deliberate: the preview has to describe the rules that
+  // will actually be applied, not the draft on screen.
   async function handleRecalculate() {
     if (!draft) return;
-    const confirmed = window.confirm(t("Recalculate VAT and platform fees for existing projects using these Financial Settings?"));
-    if (!confirmed) return;
     setRecalculating(true);
     setStatus("");
     setError("");
@@ -3327,6 +3669,21 @@ function FinancialSettingsSection({
       const savedSettings = { ...draft, ...(saved.settings ?? {}) };
       setDraft(savedSettings);
       onSaved(savedSettings);
+      markFinancialSaved();
+      setRecalculationPreview(await previewFinancialRecalculationForOrders(workspace));
+    } catch (recalculateError) {
+      setError(recalculateError instanceof Error ? recalculateError.message : t("Existing projects could not be recalculated."));
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
+  async function applyRecalculation() {
+    setRecalculationPreview(null);
+    setRecalculating(true);
+    setStatus("");
+    setError("");
+    try {
       const result = await recalculateFinancialSettingsForOrders(workspace);
       setStatus(result.message || t("Existing projects recalculated."));
     } catch (recalculateError) {
@@ -3338,13 +3695,26 @@ function FinancialSettingsSection({
 
   async function handleClearTax() {
     if (!workspace) return;
-    const confirmed = window.confirm(t("Set VAT/tax to 0 on ALL orders? Use this when VAT does not apply (e.g. you sell abroad / are not VAT-registered). This cannot be undone."));
-    if (!confirmed) return;
+    setClearingTax(true);
+    setError("");
+    setStatus("");
+    try {
+      setClearTaxPreview(await previewClearAllOrdersTax(workspace));
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : t("Preview could not be loaded."));
+    } finally {
+      setClearingTax(false);
+    }
+  }
+
+  async function applyClearTax() {
+    setClearTaxPreview(null);
     setClearingTax(true);
     setError("");
     setStatus("");
     try {
       const result = await clearAllOrdersTax(workspace);
+      setClearTaxUndoRunId(result.undoAvailable && result.runId ? result.runId : "");
       setStatus(result.message || t("VAT removed from all orders."));
     } catch (clearError) {
       setError(clearError instanceof Error ? clearError.message : t("VAT could not be removed."));
@@ -3353,8 +3723,154 @@ function FinancialSettingsSection({
     }
   }
 
+  async function handleUndoClearTax() {
+    if (!clearTaxUndoRunId) return;
+    setClearingTax(true);
+    setError("");
+    setStatus("");
+    try {
+      const result = await undoClearAllOrdersTax(workspace, clearTaxUndoRunId);
+      setClearTaxUndoRunId("");
+      setStatus(result.message || t("VAT restored."));
+    } catch (undoError) {
+      setError(undoError instanceof Error ? undoError.message : t("VAT could not be restored."));
+    } finally {
+      setClearingTax(false);
+    }
+  }
+
+  const previewCurrency = draft.selectedCurrency || "£";
+  const previewMoney = (value: number) =>
+    `${previewCurrency}${Number(value || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
   return (
     <div className="settings-card-stack">
+      {recalculationPreview ? (
+        <SettingsDialog
+          wide
+          eyebrow={t("Recalculate Taxes for Past Orders")}
+          title={
+            recalculationPreview.wouldUpdateCount === 0
+              ? t("Nothing would change")
+              : `${t("Recalculate")} ${recalculationPreview.wouldUpdateCount} / ${recalculationPreview.orderCount}`
+          }
+          onDismiss={() => setRecalculationPreview(null)}
+          actions={[
+            ...(recalculationPreview.wouldUpdateCount > 0
+              ? [{
+                  label: t("Apply these changes"),
+                  tone: "primary" as const,
+                  onClick: () => { void applyRecalculation(); }
+                }]
+              : []),
+            { label: t("Cancel"), tone: "secondary" as const, onClick: () => setRecalculationPreview(null) }
+          ]}
+        >
+          <p>{t("This preview does not change anything yet.")}</p>
+          <div className="settings-impact-grid">
+            <span>{t("Projects that would change")}</span>
+            <strong>{recalculationPreview.wouldUpdateCount}</strong>
+            <span>{t("Skipped — tax came from your shop")}</span>
+            <strong>{recalculationPreview.skippedIntegrationCount}</strong>
+            <span>{t("Of those, in Trash")}</span>
+            <strong>{recalculationPreview.trashedAffectedCount}</strong>
+            <span>{t("At 0% — would move to the default rate")}</span>
+            <strong>{recalculationPreview.zeroRateForcedToDefaultCount}</strong>
+            <span>{t("VAT total before")}</span>
+            <strong>{previewMoney(recalculationPreview.totals.taxBefore)}</strong>
+            <span>{t("VAT total after")}</span>
+            <strong>{previewMoney(recalculationPreview.totals.taxAfter)}</strong>
+            <span>{t("Difference")}</span>
+            <strong>{previewMoney(recalculationPreview.totals.taxDelta)}</strong>
+            <span>{t("Platform fee total after")}</span>
+            <strong>{previewMoney(recalculationPreview.totals.feeAfter)}</strong>
+          </div>
+          {recalculationPreview.sample.length > 0 ? (
+            <div className="settings-impact-samples">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("Project")}</th>
+                    <th>{t("VAT now")}</th>
+                    <th>{t("VAT after")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recalculationPreview.sample.slice(0, 3).map(row => (
+                    <tr key={row.orderId}>
+                      <td>{row.label}{row.inTrash ? ` (${t("Trash")})` : ""}</td>
+                      <td>{previewMoney(row.taxBefore)}</td>
+                      <td>{previewMoney(row.taxAfter)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          <p>{t("Each changed project records this in its own history. Existing estimates you already sent are not touched.")}</p>
+        </SettingsDialog>
+      ) : null}
+      {clearTaxPreview ? (
+        <SettingsDialog
+          wide
+          eyebrow={t("Remove VAT from all orders")}
+          title={
+            clearTaxPreview.wouldClearCount === 0
+              ? t("Nothing would change")
+              : `${t("Remove VAT")} ${clearTaxPreview.wouldClearCount} / ${clearTaxPreview.orderCount}`
+          }
+          onDismiss={() => setClearTaxPreview(null)}
+          actions={[
+            ...(clearTaxPreview.wouldClearCount > 0
+              ? [{
+                  label: t("Remove VAT"),
+                  tone: "danger" as const,
+                  onClick: () => { void applyClearTax(); }
+                }]
+              : []),
+            { label: t("Cancel"), tone: "secondary" as const, onClick: () => setClearTaxPreview(null) }
+          ]}
+        >
+          <p>{t("Use this when VAT does not apply — you sell abroad, or you are not VAT-registered.")}</p>
+          <div className="settings-impact-grid">
+            <span>{t("Projects that would change")}</span>
+            <strong>{clearTaxPreview.wouldClearCount}</strong>
+            <span>{t("Of those, in Trash")}</span>
+            <strong>{clearTaxPreview.trashedAffectedCount}</strong>
+            <span>{t("VAT total before")}</span>
+            <strong>{previewMoney(clearTaxPreview.totals.taxBefore)}</strong>
+            <span>{t("VAT total after")}</span>
+            <strong>{previewMoney(0)}</strong>
+          </div>
+          {clearTaxPreview.sample.length > 0 ? (
+            <div className="settings-impact-samples">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t("Project")}</th>
+                    <th>{t("VAT now")}</th>
+                    <th>{t("VAT after")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clearTaxPreview.sample.map(row => (
+                    <tr key={row.orderId}>
+                      <td>{row.label}{row.inTrash ? ` (${t("Trash")})` : ""}</td>
+                      <td>{previewMoney(row.taxBefore)}</td>
+                      <td>{previewMoney(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          <p>
+            {clearTaxPreview.undoAvailable
+              ? t("This can be undone straight afterwards — an Undo button appears once it has run.")
+              : t("Too many projects to keep an undo record. Export a backup first.")}
+          </p>
+        </SettingsDialog>
+      ) : null}
       {!canEdit ? (
         <section className="card app-card">
           <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Financial settings are read-only")} />
@@ -3571,7 +4087,7 @@ function FinancialSettingsSection({
         </div>
 
         <div className="financial-settings-footer">
-          <button className="button secondary financial-save-button" type="button" disabled={!canEdit || saving} onClick={handleSave}>
+          <button className="button secondary financial-save-button" type="button" disabled={!canEdit || saving || !financialDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save Financial Settings")}
           </button>
           <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
@@ -3582,6 +4098,11 @@ function FinancialSettingsSection({
             <span aria-hidden="true">⊘</span>
             {clearingTax ? t("Removing VAT...") : t("Remove VAT from all orders")}
           </button>
+          {clearTaxUndoRunId ? (
+            <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
+              {t("Undo VAT removal")}
+            </button>
+          ) : null}
         </div>
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
@@ -3599,6 +4120,9 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
   // so the copied URL authenticates with the webhook.
   const [deliveryUrl, setDeliveryUrl] = useState("");
   const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -3606,9 +4130,11 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
     }
     let active = true;
     setDeliveryUrlLoading(true);
-    getWooCommerceWebhookDeliveryUrl(companyId)
-      .then((url) => {
-        if (active) setDeliveryUrl(url);
+    getIntegrationWebhookInfo("woocommerce", companyId)
+      .then((next) => {
+        if (!active) return;
+        setWebhookInfo(next);
+        setDeliveryUrl(next.deliveryUrl);
       })
       .catch(() => {})
       .finally(() => {
@@ -3618,6 +4144,22 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
       active = false;
     };
   }, [companyId]);
+
+  async function replaceDeliveryUrl() {
+    if (!companyId) return;
+    setRotating(true);
+    try {
+      const next = await rotateIntegrationWebhookToken("woocommerce", companyId);
+      setWebhookInfo(next);
+      setDeliveryUrl(next.deliveryUrl);
+      setCopyStatus(t("Webhook URL replaced. Paste the new one into your shop."));
+    } catch (rotateError) {
+      setCopyStatus(rotateError instanceof Error ? rotateError.message : t("The URL could not be replaced."));
+    } finally {
+      setRotating(false);
+      setConfirmRotate(false);
+    }
+  }
 
   async function copyText(value: string, label: string) {
     if (!value) return;
@@ -3652,13 +4194,31 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
           canCopy={Boolean(companyId)}
           onCopy={() => copyText(companyId, t("Company ID"))}
         />
-        <CopyableIntegrationValue
+        <SecretDeliveryUrl
           title={t("Delivery URL with Company ID")}
-          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
-          buttonTitle={t("Copy Delivery URL")}
-          canCopy={Boolean(deliveryUrl)}
+          url={deliveryUrl}
+          loading={deliveryUrlLoading}
+          info={webhookInfo}
+          canManage={canEditWorkspaceSettingsForRole(workspace.role)}
+          rotating={rotating}
           onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+          onRotate={() => setConfirmRotate(true)}
+          t={t}
+          language={language}
         />
+        {confirmRotate ? (
+          <SettingsDialog
+            eyebrow={t("Replace URL")}
+            title={t("Replace this webhook URL?")}
+            onDismiss={() => setConfirmRotate(false)}
+            actions={[
+              { label: t("Replace URL"), tone: "danger" as const, disabled: rotating, onClick: () => { void replaceDeliveryUrl(); } },
+              { label: t("Cancel"), tone: "secondary" as const, disabled: rotating, onClick: () => setConfirmRotate(false) }
+            ]}
+          >
+            <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
+          </SettingsDialog>
+        ) : null}
         {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
       </section>
 
@@ -3853,6 +4413,9 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
   // so the copied URL authenticates with the webhook.
   const [deliveryUrl, setDeliveryUrl] = useState("");
   const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -3860,9 +4423,11 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
     }
     let active = true;
     setDeliveryUrlLoading(true);
-    getShopifyWebhookDeliveryUrl(companyId)
-      .then((url) => {
-        if (active) setDeliveryUrl(url);
+    getIntegrationWebhookInfo("shopify", companyId)
+      .then((next) => {
+        if (!active) return;
+        setWebhookInfo(next);
+        setDeliveryUrl(next.deliveryUrl);
       })
       .catch(() => {})
       .finally(() => {
@@ -3872,6 +4437,22 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
       active = false;
     };
   }, [companyId]);
+
+  async function replaceDeliveryUrl() {
+    if (!companyId) return;
+    setRotating(true);
+    try {
+      const next = await rotateIntegrationWebhookToken("shopify", companyId);
+      setWebhookInfo(next);
+      setDeliveryUrl(next.deliveryUrl);
+      setCopyStatus(t("Webhook URL replaced. Paste the new one into your shop."));
+    } catch (rotateError) {
+      setCopyStatus(rotateError instanceof Error ? rotateError.message : t("The URL could not be replaced."));
+    } finally {
+      setRotating(false);
+      setConfirmRotate(false);
+    }
+  }
 
   async function copyText(value: string, label: string) {
     if (!value) return;
@@ -3907,13 +4488,31 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
           canCopy={Boolean(companyId)}
           onCopy={() => copyText(companyId, t("Company ID"))}
         />
-        <CopyableIntegrationValue
+        <SecretDeliveryUrl
           title={t("Delivery URL with Company ID")}
-          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
-          buttonTitle={t("Copy Delivery URL")}
-          canCopy={Boolean(deliveryUrl)}
+          url={deliveryUrl}
+          loading={deliveryUrlLoading}
+          info={webhookInfo}
+          canManage={canEditWorkspaceSettingsForRole(workspace.role)}
+          rotating={rotating}
           onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+          onRotate={() => setConfirmRotate(true)}
+          t={t}
+          language={language}
         />
+        {confirmRotate ? (
+          <SettingsDialog
+            eyebrow={t("Replace URL")}
+            title={t("Replace this webhook URL?")}
+            onDismiss={() => setConfirmRotate(false)}
+            actions={[
+              { label: t("Replace URL"), tone: "danger" as const, disabled: rotating, onClick: () => { void replaceDeliveryUrl(); } },
+              { label: t("Cancel"), tone: "secondary" as const, disabled: rotating, onClick: () => setConfirmRotate(false) }
+            ]}
+          >
+            <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
+          </SettingsDialog>
+        ) : null}
         {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
       </section>
 
@@ -3941,6 +4540,9 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
   const companyId = workspace.id.trim();
   const [deliveryUrl, setDeliveryUrl] = useState("");
   const [deliveryUrlLoading, setDeliveryUrlLoading] = useState(false);
+  const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -3948,9 +4550,11 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
     }
     let active = true;
     setDeliveryUrlLoading(true);
-    getInboundWebhookDeliveryUrl(companyId)
-      .then((url) => {
-        if (active) setDeliveryUrl(url);
+    getIntegrationWebhookInfo("inbound", companyId)
+      .then((next) => {
+        if (!active) return;
+        setWebhookInfo(next);
+        setDeliveryUrl(next.deliveryUrl);
       })
       .catch(() => {})
       .finally(() => {
@@ -3960,6 +4564,22 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
       active = false;
     };
   }, [companyId]);
+
+  async function replaceDeliveryUrl() {
+    if (!companyId) return;
+    setRotating(true);
+    try {
+      const next = await rotateIntegrationWebhookToken("inbound", companyId);
+      setWebhookInfo(next);
+      setDeliveryUrl(next.deliveryUrl);
+      setCopyStatus(t("Webhook URL replaced. Paste the new one into your shop."));
+    } catch (rotateError) {
+      setCopyStatus(rotateError instanceof Error ? rotateError.message : t("The URL could not be replaced."));
+    } finally {
+      setRotating(false);
+      setConfirmRotate(false);
+    }
+  }
 
   async function copyText(value: string, label: string) {
     if (!value) return;
@@ -3994,13 +4614,31 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
           canCopy={Boolean(companyId)}
           onCopy={() => copyText(companyId, t("Company ID"))}
         />
-        <CopyableIntegrationValue
+        <SecretDeliveryUrl
           title={t("Delivery URL with Company ID")}
-          value={deliveryUrl || (deliveryUrlLoading ? t("Loading…") : t("Unavailable"))}
-          buttonTitle={t("Copy Delivery URL")}
-          canCopy={Boolean(deliveryUrl)}
+          url={deliveryUrl}
+          loading={deliveryUrlLoading}
+          info={webhookInfo}
+          canManage={canEditWorkspaceSettingsForRole(workspace.role)}
+          rotating={rotating}
           onCopy={() => copyText(deliveryUrl, t("Delivery URL"))}
+          onRotate={() => setConfirmRotate(true)}
+          t={t}
+          language={language}
         />
+        {confirmRotate ? (
+          <SettingsDialog
+            eyebrow={t("Replace URL")}
+            title={t("Replace this webhook URL?")}
+            onDismiss={() => setConfirmRotate(false)}
+            actions={[
+              { label: t("Replace URL"), tone: "danger" as const, disabled: rotating, onClick: () => { void replaceDeliveryUrl(); } },
+              { label: t("Cancel"), tone: "secondary" as const, disabled: rotating, onClick: () => setConfirmRotate(false) }
+            ]}
+          >
+            <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
+          </SettingsDialog>
+        ) : null}
         {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
       </section>
 
@@ -4051,6 +4689,101 @@ function CopyableIntegrationValue({
   );
 }
 
+// A delivery URL carries a token that creates orders. It used to sit on screen
+// in plain text on every platform, so a screen share or a support screenshot
+// handed it away. Masked by default, revealed briefly on request, and copied
+// without ever being shown.
+function maskDeliveryUrl(url: string) {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    const token = parsed.searchParams.get("token");
+    if (!token) return url;
+    parsed.searchParams.set("token", `${token.slice(0, 4)}${"•".repeat(24)}`);
+    return decodeURIComponent(parsed.toString());
+  } catch {
+    return url.replace(/token=[^&]+/i, `token=${"•".repeat(24)}`);
+  }
+}
+
+const REVEAL_SECONDS = 30;
+
+function SecretDeliveryUrl({
+  title,
+  url,
+  loading,
+  info,
+  canManage,
+  rotating,
+  onCopy,
+  onRotate,
+  t,
+  language
+}: {
+  title: string;
+  url: string;
+  loading: boolean;
+  info: IntegrationWebhookInfo | null;
+  canManage: boolean;
+  rotating: boolean;
+  onCopy: () => void;
+  onRotate: () => void;
+  t: (text: string) => string;
+  language: string;
+}) {
+  const [revealedUntil, setRevealedUntil] = useState(0);
+  const revealed = revealedUntil > 0;
+
+  useEffect(() => {
+    if (!revealedUntil) return;
+    const timer = window.setTimeout(() => setRevealedUntil(0), REVEAL_SECONDS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [revealedUntil]);
+
+  // A rotated URL must never stay on screen from the previous token.
+  useEffect(() => { setRevealedUntil(0); }, [url]);
+
+  const shown = url
+    ? (revealed ? url : maskDeliveryUrl(url))
+    : (loading ? t("Loading…") : t("Unavailable"));
+
+  const deliveryDate = info && info.lastDeliveryAtMs > 0 ? new Date(info.lastDeliveryAtMs) : null;
+
+  return (
+    <div className="copyable-integration-value">
+      <div>
+        <strong>{title}</strong>
+        <div className="integration-secret-actions">
+          <button className="button secondary" type="button" disabled={!url} onClick={onCopy}>
+            {t("Copy Delivery URL")}
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!url}
+            onClick={() => setRevealedUntil(revealed ? 0 : Date.now() + REVEAL_SECONDS * 1000)}
+          >
+            {revealed ? t("Hide") : t("Reveal for 30 seconds")}
+          </button>
+          {canManage ? (
+            <button className="button secondary" type="button" disabled={!url || rotating} onClick={onRotate}>
+              {rotating ? t("Replacing...") : t("Replace URL")}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <code>{shown}</code>
+      {info ? (
+        <p className="muted-copy integration-secret-status">
+          {deliveryDate
+            ? `${info.lastDeliveryOk ? t("Last delivery") : t("Last delivery failed")}: ${deliveryDate.toLocaleString(studioLocaleTag(language))}${info.lastDeliveryOk ? "" : ` — ${info.lastDeliveryError}`}`
+            : t("No delivery received yet.")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function IntegrationInfoRow({ number, title, detail }: { number: string; title: string; detail: string }) {
   return (
     <div className="integration-info-row">
@@ -4073,12 +4806,14 @@ function settingsFilePrefix(workspace: WorkspaceContext) {
 function DataManagementSection({
   workspace,
   counts,
+  settings,
   userEmail,
   onImported,
   language = "English"
 }: {
   workspace: WorkspaceContext;
   counts: DashboardCounts | null;
+  settings: WorkspaceSettingsOverview | null;
   userEmail: string;
   onImported: () => Promise<void>;
   language?: string;
@@ -4087,6 +4822,8 @@ function DataManagementSection({
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [exporting, setExporting] = useState<"backup" | "webBackup" | "orders" | "customers" | "">("");
   const [importing, setImporting] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{ backup: unknown; preview: ImportBackupPreview } | null>(null);
+  const [lastBackupAtMs, setLastBackupAtMs] = useState(settings?.lastBackupExportedAtMs ?? 0);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [status, setStatus] = useState("");
@@ -4122,6 +4859,10 @@ function DataManagementSection({
         downloadTextFile(`${prefix}-customers-${date}.csv`, customersToCsv(exportData.customers), "text/csv");
         setStatus("Customers CSV downloaded.");
       }
+      if (kind === "backup" || kind === "webBackup") {
+        await recordWorkspaceBackupExport(workspace).catch(() => undefined);
+        setLastBackupAtMs(Date.now());
+      }
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : t("Export could not be prepared."));
     } finally {
@@ -4129,6 +4870,9 @@ function DataManagementSection({
     }
   }
 
+  // Picking a file used to import it on the spot. Import is append-only and
+  // mints new records every time, so the second run of the same file silently
+  // doubled the workspace.
   async function handleImportFile(file: File | undefined) {
     if (!file) return;
     setImporting(true);
@@ -4137,14 +4881,30 @@ function DataManagementSection({
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
-      const result = await importWorkspaceBackup(workspace, parsed);
+      setPendingImport({ backup: parsed, preview: await previewWorkspaceBackupImport(workspace, parsed) });
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
+
+  async function applyPendingImport() {
+    if (!pendingImport) return;
+    const backup = pendingImport.backup;
+    setPendingImport(null);
+    setImporting(true);
+    setStatus("");
+    setError("");
+    try {
+      const result = await importWorkspaceBackup(workspace, backup);
       await onImported();
       setStatus(result.message || "Import finished.");
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
     } finally {
       setImporting(false);
-      if (importInputRef.current) importInputRef.current.value = "";
     }
   }
 
@@ -4166,24 +4926,67 @@ function DataManagementSection({
 
   return (
     <div className="settings-card-stack">
+      {pendingImport ? (
+        <SettingsDialog
+          wide
+          eyebrow={t("Import Backup")}
+          title={t("Import this backup?")}
+          onDismiss={() => setPendingImport(null)}
+          actions={[
+            { label: t("Import"), tone: "primary" as const, onClick: () => { void applyPendingImport(); } },
+            { label: t("Cancel"), tone: "secondary" as const, onClick: () => setPendingImport(null) }
+          ]}
+        >
+          <div className="settings-impact-grid">
+            <span>{t("Orders in this file")}</span>
+            <strong>{pendingImport.preview.fileOrders}</strong>
+            <span>{t("Customers in this file")}</span>
+            <strong>{pendingImport.preview.fileCustomers}</strong>
+            <span>{t("Already in this workspace")}</span>
+            <strong>{pendingImport.preview.existingOrders}</strong>
+            <span>{t("Look like they are already here")}</span>
+            <strong>{pendingImport.preview.likelyDuplicateOrders}</strong>
+          </div>
+          <p>{t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup.")}</p>
+          {pendingImport.preview.likelyDuplicateOrders > 0 ? (
+            <p className="layout-error">
+              {t("Some of these look like orders you already have. Importing anyway will create a second copy of each.")}
+            </p>
+          ) : null}
+          {pendingImport.preview.truncated ? (
+            <>
+              <p className="layout-error">{t("One import is capped at 500 records. The rest will not be imported.")}</p>
+              <div className="settings-impact-grid">
+                <span>{t("Orders that will not be imported")}</span>
+                <strong>{pendingImport.preview.droppedOrders}</strong>
+                <span>{t("Customers that will not be imported")}</span>
+                <strong>{pendingImport.preview.droppedCustomers}</strong>
+              </div>
+            </>
+          ) : null}
+        </SettingsDialog>
+      ) : null}
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="export" eyebrow={t("Data Management")} title={t("Export and backup")} />
         <p className="muted-copy">{t("Create a backup before importing or deleting data.")}</p>
         <div className="settings-mini-grid">
           <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
           <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile label={t("Export")} value={exportAllowed ? t("Available") : t("Locked")} />
+          <InfoTile
+            label={t("Last backup")}
+            value={lastBackupAtMs > 0 ? new Date(lastBackupAtMs).toLocaleDateString(studioLocaleTag(language)) : t("Never")}
+          />
         </div>
 
         <div className="data-management-actions">
           <button className="button" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
-            {exporting === "backup" ? t("Exporting...") : t("Export Backup")}
+            {exporting === "backup" ? t("Exporting...") : t("Download backup")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("webBackup")}>
-            {exporting === "webBackup" ? t("Exporting...") : t("Web JSON Backup")}
+            {exporting === "webBackup" ? t("Exporting...") : t("Full web archive")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("orders")}>
-            {exporting === "orders" ? t("Exporting...") : t("Export CSV")}
+            {exporting === "orders" ? t("Exporting...") : t("Orders CSV")}
           </button>
           <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("customers")}>
             {exporting === "customers" ? t("Exporting...") : t("Customers CSV")}
@@ -4200,7 +5003,7 @@ function DataManagementSection({
           </button>
         </div>
 
-        <p className="muted-copy">{t("Export Backup uses the same JSON structure as the Swift app. Web JSON Backup keeps the raw web archive. Import accepts both formats and adds the selected NivaDesk backup into the current workspace without clearing existing data.")}</p>
+        <p className="muted-copy">{t("Download backup is the one to keep — it restores into NivaDesk on any device. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
         {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
@@ -4300,9 +5103,24 @@ function PlanAccessSection({
         <div className="settings-mini-grid">
           <InfoTile label={t("Orders")} value={`${counts?.orderCount ?? 0}`} />
           <InfoTile label={t("Customers")} value={`${counts?.customerCount ?? 0}`} />
-          <InfoTile label={t("Current seat allowance")} value={`${workspace.billingTeamMemberLimit}`} />
-          <InfoTile label={t("Storage")} value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
+          <InfoTile
+            label={workspace.billingTeamMemberLimit > 1 ? t("Seats") : t("Users")}
+            value={workspace.billingTeamMemberLimit > 1
+              ? `${workspace.billingTeamMemberLimit}`
+              : `1 (${t("single-user plan")})`}
+          />
+          <InfoTile label={t("Storage (total)")} value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
         </div>
+        {/* "Current seat allowance: 1" read as if it were seats used, and the
+            total storage read as if it contradicted the plan matrix. Both
+            numbers were right; neither said which quantity it was. */}
+        {workspace.storageAddonMB > 0 ? (
+          <p className="muted-copy">
+            {formatStorageFromMB(workspace.billingStorageLimitMB - workspace.storageAddonMB)} {t("plan")}
+            {" + "}
+            {formatStorageFromMB(workspace.storageAddonMB)} {t("add-on")}
+          </p>
+        ) : null}
         <div className="progress-track settings-progress">
           <div className="progress-fill" style={{ width: `${storagePercent}%` }} />
         </div>
@@ -4692,10 +5510,13 @@ function TeamAccessSection({
         </form>
 
         <section className="card app-card team-access-panel-card">
+          {/* Nothing here sends an invitation: the other person has to ask to
+              join and the owner approves. Calling it "Invite People" made people
+              wait for an email that was never going to arrive. */}
           <div className="team-access-panel-heading">
-            <strong>{t("Invite People")}</strong>
+            <strong>{t("How members join")}</strong>
           </div>
-          <p className="muted-copy">{t("Share your account email or Company ID with the person you want to invite. They will send a request, then you approve it here.")}</p>
+          <p className="muted-copy">{t("NivaDesk does not send invitation emails. Share your Company ID with the person; they sign up, send a join request, and you approve it here.")}</p>
           {isOwner && hasTeamPlan ? (
             <div className="team-access-id-box">
               <code>{workspace.id}</code>
@@ -5477,7 +6298,14 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
           <span className="about-app-mark" aria-hidden="true">⬢</span>
           <div>
             <strong>NivaDesk</strong>
-            <p>{t("Version")} {CHANGELOG[0]?.version ?? ""}</p>
+            <p>
+              {t("Version")} {CHANGELOG[0]?.version ?? ""}
+              {CHANGELOG[0]?.date ? ` · ${CHANGELOG[0].date}` : ""}
+              {" · "}
+              {typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+                ? t("Local")
+                : t("Web")}
+            </p>
             <p>{t("An EGGcraft brand for studio workspace management.")}</p>
             <p>
               <Link className="about-changelog-link" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>
@@ -5514,11 +6342,24 @@ function PlaceholderSection({ title, detail, action }: { title: string; detail: 
   );
 }
 
-function InfoTile({ label, value }: { label: string; value: string }) {
+function InfoTile({
+  label,
+  value,
+  action
+}: {
+  label: string;
+  value: string;
+  action?: { label: string; onClick: () => void };
+}) {
   return (
     <article className="mini-panel settings-info-tile">
       <span>{label}</span>
       <strong>{value}</strong>
+      {action ? (
+        <button className="button secondary settings-info-tile-action" type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
     </article>
   );
 }

@@ -24,6 +24,14 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
+// The messaging service worker runs outside the bundle and cannot read
+// process.env, so it is handed this same config as query parameters at
+// registration time. That keeps one source of truth and stops the worker's
+// copy from drifting — it used to ship REPLACE_* placeholders.
+export const messagingServiceWorkerConfig: Record<string, string> = Object.fromEntries(
+  Object.entries(firebaseConfig).filter(([, value]) => Boolean(value)) as [string, string][]
+);
+
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
 // App Check (monitor mode): attaches a reCAPTCHA v3 attestation token to

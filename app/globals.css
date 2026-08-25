@@ -13772,7 +13772,7 @@ body[data-studio-theme="dark"] .dashboard-header-card h1,
 body[data-studio-theme="dark"] .dashboard-chart-card .card-title-text,
 body[data-studio-theme="dark"] .yearly-summary-card .card-title-text,
 body[data-studio-theme="dark"] .dashboard-summary-card strong,
-body[data-studio-theme="dark"] .year-summary-item strong {
+body[data-studio-theme="dark"] .year-summary-item strong:not(.trend-up):not(.trend-down) {
   color: #f0f0f0;
 }
 
@@ -23895,3 +23895,113 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
 .inventory-label-qr svg { width: 84px; height: 84px; display: block; }
 .inventory-label-number { display: block; font-size: 18px; font-weight: 800; letter-spacing: 0.4px; }
 .inventory-label-name { display: block; font-size: 12px; font-weight: 600; }
+
+/* Settings dialogs — the unsaved-changes prompt and the bulk finance preview.
+   Both replace window.confirm, which froze the tab and could only ask yes/no. */
+.settings-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+}
+
+.settings-dialog-wide { width: min(760px, 100%); }
+
+.settings-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.settings-dialog-body p { margin: 0; color: var(--muted); }
+
+.settings-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-dialog-actions button { min-width: 112px; }
+
+.settings-unsaved-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--warning, #f59e0b);
+  flex: none;
+}
+
+.settings-impact-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.settings-impact-grid span { color: var(--muted); }
+.settings-impact-grid strong { text-align: right; font-variant-numeric: tabular-nums; }
+
+.settings-impact-samples {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.settings-impact-samples table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.settings-impact-samples th,
+.settings-impact-samples td { padding: 7px 10px; text-align: left; white-space: nowrap; }
+.settings-impact-samples th { color: var(--muted); font-weight: 700; }
+.settings-impact-samples td:not(:first-child),
+.settings-impact-samples th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.settings-impact-samples tbody tr + tr td { border-top: 1px solid var(--border); }
+
+/* The shared backdrop is tuned for light cards; a dialog over the dark theme
+   needs a heavier scrim or the page reads straight through it. */
+body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
+  background: rgba(2, 6, 23, 0.62);
+}
+
+/* Delivery URLs carry a token that can create orders, so they are masked until
+   asked for. The actions sit beside the label rather than under the value, so a
+   long URL never pushes them off screen. */
+.integration-secret-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.integration-secret-actions button { font-size: 12px; padding: 6px 10px; }
+
+.integration-secret-status {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+/* A workspace can end up with fields from three different trades by trying
+   templates one after another. Named, not silently accepted. */
+.workflow-mixed-warning {
+  border: 1px solid var(--warning, #f59e0b);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.workflow-mixed-warning strong { display: block; margin-bottom: 4px; font-size: 13.5px; }
+.workflow-mixed-warning p { margin: 0; font-size: 12.5px; }
+
+.settings-info-tile-action {
+  margin-top: 6px;
+  align-self: flex-start;
+  font-size: 11.5px;
+  padding: 4px 9px;
+}
