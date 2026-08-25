@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFunctions
+import FirebaseStorage
 
 // Inventory on Mac and iPhone. Mirrors functions/inventory.js and the web app:
 // the money rules, the item numbering and the status lifecycle all live on the
@@ -86,6 +87,7 @@ struct InventoryItem: Identifiable, Equatable {
     var additionalCostsTotal: Double
     var internalTotalCost: Double
     var valuationCost: Double
+    var photos: [String]
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
@@ -116,6 +118,7 @@ struct InventoryItem: Identifiable, Equatable {
         additionalCostsTotal = (raw["additionalCostsTotal"] as? NSNumber)?.doubleValue ?? 0
         internalTotalCost = (raw["internalTotalCost"] as? NSNumber)?.doubleValue ?? 0
         valuationCost = (raw["valuationCost"] as? NSNumber)?.doubleValue ?? 0
+        photos = (raw["photos"] as? [String]) ?? []
     }
 
     /// A unique item is one object, whatever a stale record happens to say.
@@ -597,6 +600,41 @@ extension FirebaseManager {
         let raw = try await inventoryCall(
             "importOpeningStock", ["items": items, "openingDate": openingDate])
         return (raw["imported"] as? NSNumber)?.intValue ?? 0
+    }
+
+    // MARK: Item photos
+    //
+    // Stored as storage paths, not URLs — a path is permanent where a download
+    // URL expires. Screens resolve paths only when they draw.
+
+    func inventoryPhotoURL(_ path: String) async throws -> URL {
+        try await Storage.storage().reference(withPath: path).downloadURL()
+    }
+
+    /// Uploads one photo and returns the storage path to put in `photos`.
+    func uploadInventoryPhoto(itemId: String, data: Data, fileName: String) async throws -> String {
+        let safe = fileName.map { $0.isLetter || $0.isNumber || "._-".contains($0) ? $0 : "_" }
+        let name = String(String(safe).suffix(80))
+        let path = "companies/\(currentCompanyId)/inventory_photos/\(itemId)/\(Int(Date().timeIntervalSince1970 * 1000))-\(name.isEmpty ? "photo.jpg" : name)"
+        let meta = StorageMetadata()
+        meta.contentType = "image/jpeg"
+        _ = try await Storage.storage().reference(withPath: path).putDataAsync(data, metadata: meta)
+        return path
+    }
+
+    /// Saves just the photo list. Every other field rides through untouched
+    /// because the server keeps what the form does not send.
+    func saveInventoryPhotos(item: InventoryItem, photos: [String]) async throws {
+        _ = try await inventoryCall("saveInventoryItem", [
+            "itemId": item.id,
+            "item": [
+                "name": item.name,
+                "category": item.category,
+                "trackingType": item.trackingType.rawValue,
+                "ownership": item.ownership.rawValue,
+                "photos": photos
+            ]
+        ])
     }
 
     // MARK: Stocktake and reporting

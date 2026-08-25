@@ -2686,6 +2686,38 @@ class StudioFlowRepository(
         return (raw["imported"] as? Number)?.toInt() ?: 0
     }
 
+    // ---- Item photos ----
+    //
+    // Stored as storage paths, not URLs — a path is permanent where a download
+    // URL expires. Screens resolve paths only when they draw.
+
+    suspend fun inventoryPhotoUrl(path: String): String =
+        FirebaseStorage.getInstance().reference.child(path).downloadUrl.await().toString()
+
+    /** Uploads one photo and returns the storage path to put in `photos`. */
+    suspend fun inventoryUploadPhoto(workspaceId: String, itemId: String, bytes: ByteArray): String {
+        val path = "companies/$workspaceId/inventory_photos/$itemId/${System.currentTimeMillis()}-photo.jpg"
+        val ref = FirebaseStorage.getInstance().reference.child(path)
+        val metadata = StorageMetadata.Builder().setContentType("image/jpeg").build()
+        ref.putBytes(bytes, metadata).await()
+        return path
+    }
+
+    /** Saves just the photo list. Every other field rides through untouched
+     *  because the server keeps what the form does not send. */
+    suspend fun inventorySavePhotos(workspaceId: String, item: StudioInventoryItem, photos: List<String>) {
+        inventoryCall("saveInventoryItem", workspaceId, mapOf(
+            "itemId" to item.id,
+            "item" to mapOf(
+                "name" to item.name,
+                "category" to item.category,
+                "trackingType" to item.trackingType.raw,
+                "ownership" to if (item.isCustomerOwned) "customer" else "business",
+                "photos" to photos
+            )
+        ))
+    }
+
     // ---- Stocktake and reporting ----
 
     suspend fun inventoryStartStocktake(workspaceId: String, location: String, category: String): String {

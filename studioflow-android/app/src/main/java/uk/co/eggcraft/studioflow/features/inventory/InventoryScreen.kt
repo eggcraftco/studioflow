@@ -128,6 +128,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var notice by remember { mutableStateOf<String?>(null) }
     var showNewItem by remember { mutableStateOf(false) }
     var showOpeningStock by remember { mutableStateOf(false) }
+    var photosFor by remember { mutableStateOf<StudioInventoryItem?>(null) }
     var showNewPurchase by remember { mutableStateOf(false) }
     var showNewSupplier by remember { mutableStateOf(false) }
     var editingSupplier by remember { mutableStateOf<StudioSupplier?>(null) }
@@ -247,7 +248,8 @@ fun InventoryScreen(state: StudioFlowUiState) {
                             reloadItems()
                         } catch (error: Exception) { notice = error.message }
                     }
-                }
+                },
+                onPhotos = { photosFor = it }
             )
 
             InventoryTab.Purchases -> PurchasesTab(
@@ -298,6 +300,17 @@ fun InventoryScreen(state: StudioFlowUiState) {
                 onEdit = { editingSupplier = it }
             )
         }
+    }
+
+    photosFor?.let { item ->
+        ItemPhotosDialog(
+            workspaceId = workspaceId,
+            item = item,
+            canEdit = canEdit,
+            t = t,
+            onDismiss = { photosFor = null },
+            onChanged = { scope.launch { reloadItems() } }
+        )
     }
 
     if (showOpeningStock) {
@@ -404,7 +417,8 @@ private fun ItemsTab(
     loading: Boolean,
     canEdit: Boolean,
     t: (String) -> String,
-    onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit
+    onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit,
+    onPhotos: (StudioInventoryItem) -> Unit
 ) {
     val cards = listOf(
         Triple(t("Total Inventory Value"), inventoryMoney(symbol, summary.totalValue), ""),
@@ -463,7 +477,7 @@ private fun ItemsTab(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(items, key = { it.id }) { item ->
-                    InventoryItemRow(item, symbol, canEdit, t, onChangeStatus)
+                    InventoryItemRow(item, symbol, canEdit, t, onChangeStatus, onPhotos)
                 }
             }
         }
@@ -476,7 +490,8 @@ private fun InventoryItemRow(
     symbol: String,
     canEdit: Boolean,
     t: (String) -> String,
-    onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit
+    onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit,
+    onPhotos: (StudioInventoryItem) -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
@@ -506,6 +521,11 @@ private fun InventoryItemRow(
                     if (item.location.isNotBlank()) {
                         Text(item.location, fontSize = 10.sp, color = Color.Gray)
                     }
+                    Text(
+                        if (item.photos.isEmpty()) "\uD83D\uDCF7" else "\uD83D\uDCF7 ${item.photos.size}",
+                        fontSize = 10.sp,
+                        modifier = Modifier.clickable { onPhotos(item) }
+                    )
                 }
             }
             Column(horizontalAlignment = Alignment.End) {

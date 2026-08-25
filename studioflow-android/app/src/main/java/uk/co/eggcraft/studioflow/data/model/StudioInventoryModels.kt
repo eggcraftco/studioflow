@@ -56,7 +56,8 @@ data class StudioInventoryItem(
     val purchasePrice: Double,
     val additionalCostsTotal: Double,
     val internalTotalCost: Double,
-    val valuationCost: Double
+    val valuationCost: Double,
+    val photos: List<String>
 ) {
     /** A unique item is one object, whatever a stale record happens to say. */
     val displayOnHand: Double get() = if (trackingType == StudioTrackingType.Unique) 1.0 else onHand
@@ -109,7 +110,8 @@ data class StudioInventoryItem(
                 purchasePrice = (raw["purchasePrice"] as? Number)?.toDouble() ?: 0.0,
                 additionalCostsTotal = (raw["additionalCostsTotal"] as? Number)?.toDouble() ?: 0.0,
                 internalTotalCost = (raw["internalTotalCost"] as? Number)?.toDouble() ?: 0.0,
-                valuationCost = (raw["valuationCost"] as? Number)?.toDouble() ?: 0.0
+                valuationCost = (raw["valuationCost"] as? Number)?.toDouble() ?: 0.0,
+                photos = (raw["photos"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String }
             )
         }
     }

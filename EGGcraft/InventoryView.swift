@@ -71,6 +71,7 @@ struct InventoryView: View {
     @State private var statusFilter: InventoryStatus?
     @State private var showNewItem = false
     @State private var showOpeningStock = false
+    @State private var photosFor: InventoryItem?
     @State private var showNewPurchase = false
     @State private var editingSupplier: Supplier?
     @State private var showNewSupplier = false
@@ -121,6 +122,12 @@ struct InventoryView: View {
             .padding(isPhone ? 14 : 22)
         }
         .task { await model.loadItems(firebaseManager) }
+        .sheet(item: $photosFor) { item in
+            ItemPhotosSheet(item: item, lang: seciliDil, canEdit: canEdit) {
+                Task { await model.loadItems(firebaseManager) }
+            }
+            .environmentObject(firebaseManager)
+        }
         .sheet(isPresented: $showOpeningStock) {
             OpeningStockSheet(currencySymbol: seciliParaBirimi, lang: seciliDil) { count in
                 model.notice = "\(count) " + t("items were imported as opening stock.", lang: seciliDil)
@@ -346,6 +353,13 @@ struct InventoryView: View {
                     if !item.location.isEmpty {
                         Text(item.location).font(.system(size: 10)).foregroundColor(.secondary)
                     }
+                    Button {
+                        photosFor = item
+                    } label: {
+                        Text(item.photos.isEmpty ? "📷" : "📷 \(item.photos.count)")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             Spacer(minLength: 8)
