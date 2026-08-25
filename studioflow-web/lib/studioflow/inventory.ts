@@ -398,7 +398,14 @@ export async function releaseInventoryFromOrder(
 
 // How much of a counted material is free to promise to a new order: what is on
 // the shelf, less what other orders are already holding.
+//
+// Something sold, used up or archived is out of the story whatever the count
+// says — the server refuses to reserve it, so offering it here would only be a
+// dead end for the person clicking.
+const UNRESERVABLE: InventoryStatus[] = ["sold", "used", "archived"];
+
 export function inventoryFreeToReserve(item: InventoryItem) {
+  if (UNRESERVABLE.includes(item.status)) return 0;
   if (item.trackingType === "unique") return item.status === "available" ? 1 : 0;
   const onHand = inventoryOnHand(item);
   const reserved = Number(item.quantity?.reserved) || 0;

@@ -40,7 +40,9 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
@@ -69,11 +72,31 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
-internal fun inventoryMoney(symbol: String, value: Double): String =
-    symbol + String.format("%.2f", value)
+/** The workspace's decimal separator, so every inventory screen formats money
+ *  the same way without threading it through each composable's signature. */
+internal val LocalInventoryDecimalSeparator = compositionLocalOf { "." }
+
+/** Grouped thousands and the workspace's decimal separator, the same way the
+ *  bank and dashboard screens format money. Plain String.format ignored both,
+ *  so £6,210.00 came out as "£6210.00". */
+@Composable
+internal fun inventoryMoney(symbol: String, value: Double): String {
+    val formatted = String.format(Locale.UK, "%,.2f", value)
+    return symbol + if (LocalInventoryDecimalSeparator.current == ",") {
+        formatted.replace(",", "_").replace(".", ",").replace("_", ".")
+    } else formatted
+}
 
 internal fun inventoryQuantity(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString() else String.format("%.2f", value)
+
+
+/** The rest of the app draws cards on the plain surface colour; Material 3's
+ *  default is surfaceVariant, which left the inventory screen looking grey and
+ *  patchy next to every other screen. */
+@Composable
+internal fun inventoryCardColors() =
+    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
 
 private enum class InventoryTab(val label: String) {
     Items("Items"), Purchases("Purchases"), Suppliers("Suppliers")
@@ -88,6 +111,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
     val repository = remember { StudioFlowRepository() }
     val workspaceId = state.workspace?.id.orEmpty()
     val symbol = state.workspaceSettings.selectedCurrency
+    val decimalSeparator = state.workspaceSettings.selectedDecimalSeparator
     // Inventory rides the orders permission: someone who cannot see orders has
     // no reason to see what the workshop owns.
     val canEdit = state.workspace?.isOwner == true ||
@@ -148,6 +172,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
         ).any { it.lowercase().contains(needle) }
     }
 
+    CompositionLocalProvider(LocalInventoryDecimalSeparator provides decimalSeparator) {
     Column(Modifier.fillMaxWidth().padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(t("Inventory"), fontSize = 21.sp, fontWeight = FontWeight.Bold)
@@ -324,6 +349,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
             }
         )
     }
+    }
 }
 
 @Composable
@@ -339,6 +365,14 @@ private fun ItemsTab(
     t: (String) -> String,
     onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit
 ) {
+    val cards = listOf(
+        Triple(t("Total Inventory Value"), inventoryMoney(symbol, summary.totalValue), ""),
+        Triple(t("Unique Items"), summary.uniqueCount.toString(), inventoryMoney(symbol, summary.uniqueValue)),
+        Triple(t("Quantity Items"), summary.quantityCount.toString(), inventoryMoney(symbol, summary.quantityValue)),
+        Triple(t("Reserved for Orders"), inventoryMoney(symbol, summary.reservedValue), "${summary.reservedCount} " + t("items")),
+        Triple(t("Incoming"), summary.incomingCount.toString(), inventoryMoney(symbol, summary.incomingValue)),
+        Triple(t("Low Stock"), summary.lowStockCount.toString(), "")
+    )
     Column {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(150.dp),
@@ -346,17 +380,9 @@ private fun ItemsTab(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.heightIn(max = 190.dp)
         ) {
-            val cards = listOf(
-                Triple(t("Total Inventory Value"), inventoryMoney(symbol, summary.totalValue), ""),
-                Triple(t("Unique Items"), summary.uniqueCount.toString(), inventoryMoney(symbol, summary.uniqueValue)),
-                Triple(t("Quantity Items"), summary.quantityCount.toString(), inventoryMoney(symbol, summary.quantityValue)),
-                Triple(t("Reserved for Orders"), inventoryMoney(symbol, summary.reservedValue), "${summary.reservedCount} " + t("items")),
-                Triple(t("Incoming"), summary.incomingCount.toString(), inventoryMoney(symbol, summary.incomingValue)),
-                Triple(t("Low Stock"), summary.lowStockCount.toString(), "")
-            )
             items(cards.size) { index ->
                 val (label, value, sub) = cards[index]
-                Card(colors = CardDefaults.cardColors(), shape = RoundedCornerShape(12.dp)) {
+                Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
                     Column(Modifier.padding(11.dp)) {
                         Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
                         Text(value, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -412,7 +438,7 @@ private fun InventoryItemRow(
     onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Card(shape = RoundedCornerShape(12.dp)) {
+    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(12.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -500,7 +526,7 @@ private fun PurchasesTab(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(purchases, key = { it.id }) { purchase ->
-                    Card(shape = RoundedCornerShape(12.dp)) {
+                    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Row {
                                 Column(Modifier.weight(1f)) {
@@ -578,7 +604,7 @@ private fun SuppliersTab(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(suppliers, key = { it.listKey }) { supplier ->
-                    Card(shape = RoundedCornerShape(12.dp)) {
+                    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
                         Column(Modifier.fillMaxWidth().padding(13.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(supplier.name, fontSize = 14.sp, fontWeight = FontWeight.Bold)
@@ -636,7 +662,7 @@ internal fun InventoryPill(text: String, colour: Color) {
 
 @Composable
 private fun InventoryEmptyBox(title: String, body: String) {
-    Card(shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally

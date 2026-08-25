@@ -5,9 +5,6 @@ import SwiftUI
 // answer: a unique object carries identity (serial, condition, year) and a
 // counted material carries an amount and a reorder point.
 
-private func inventoryMoney(_ symbol: String, _ value: Double) -> String {
-    symbol + String(format: "%.2f", value)
-}
 
 private func parseAmount(_ text: String) -> Double {
     Double(text.replacingOccurrences(of: ",", with: ".").filter { "0123456789.".contains($0) }) ?? 0

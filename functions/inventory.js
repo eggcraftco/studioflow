@@ -86,12 +86,22 @@ function createInventoryFunctions({
     return Math.round(number * 100) / 100;
   }
 
+  // A per-unit cost can legitimately be finer than a penny: £6.25 of shipping
+  // spread over 20 pieces is £0.3125 each, and rounding that to £0.31 loses 5p
+  // off the line. Four places keeps the arithmetic exact; screens still format
+  // to two.
+  function roundUnitMoney(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.round(Math.max(0, number) * 10000) / 10000;
+  }
+
   function cleanAdditionalCosts(value) {
     const rows = Array.isArray(value) ? value.slice(0, 20) : [];
     return rows
       .map((row) => ({
         label: clean(row && row.label, "", 60),
-        amount: cleanMoney(row && row.amount)
+        amount: roundUnitMoney(row && row.amount)
       }))
       .filter((row) => row.label || row.amount > 0);
   }
@@ -100,12 +110,12 @@ function createInventoryFunctions({
   function costSummary(purchasePrice, additionalCosts) {
     const price = cleanMoney(purchasePrice);
     const extras = cleanAdditionalCosts(additionalCosts);
-    const extrasTotal = roundMoney(extras.reduce((sum, row) => sum + row.amount, 0));
+    const extrasTotal = roundUnitMoney(extras.reduce((sum, row) => sum + row.amount, 0));
     return {
       purchasePrice: price,
       additionalCosts: extras,
       additionalCostsTotal: extrasTotal,
-      internalTotalCost: roundMoney(price + extrasTotal)
+      internalTotalCost: roundUnitMoney(price + extrasTotal)
     };
   }
 
@@ -200,6 +210,10 @@ function createInventoryFunctions({
 
       const number = existing ? existing.number : await nextItemNumber(tx, companyId);
       const status = existing ? existing.status : "available";
+      const heldReservations = existing ? cleanReservations(existing.reservations) : [];
+      const heldReserved = fields.trackingType === "unique"
+        ? 0
+        : roundMoney(heldReservations.reduce((sum, row) => sum + row.quantity, 0));
 
       tx.set(ref, {
         ...fields,
@@ -207,6 +221,13 @@ function createInventoryFunctions({
         number,
         status,
         reservedForOrderId: existing ? existing.reservedForOrderId || "" : "",
+        // The reservations are the record of what orders are holding; the
+        // reserved count is only a running total of them. An edit form does not
+        // send either, so both are carried over rather than rebuilt from input —
+        // otherwise saving a name change would hand out stock twice.
+        reservations: heldReservations,
+        reservedOrderIds: heldReservations.map((row) => row.orderId),
+        quantity: { ...fields.quantity, reserved: heldReserved },
         source: existing ? existing.source || "manual" : clean(input.source, "manual", 40),
         createdAtMs: existing ? existing.createdAtMs || now : now,
         createdByUid: existing ? existing.createdByUid || uid : uid,
@@ -366,10 +387,15 @@ function createInventoryFunctions({
           counter += 1;
           tx.set(itemsRef(companyId).doc(), {
             ...fields,
+            // A row that carries its own date keeps it; otherwise the opening
+            // date stands in, so no imported item ends up dateless on screen.
+            purchaseDate: fields.purchaseDate || openingDate,
             companyId,
             number: `INV-${String(counter).padStart(5, "0")}`,
             status: "available",
             reservedForOrderId: "",
+            reservations: [],
+            reservedOrderIds: [],
             source: "openingStock",
             openingStockDate: openingDate,
             createdAtMs: now,
@@ -456,14 +482,6 @@ function createInventoryFunctions({
     return { goodsTotal: goods, shipping: ship, otherCosts: other, total: roundMoney(goods + ship + other) };
   }
 
-  async function nextPurchaseNumber(tx, companyId) {
-    const ref = companyRef(companyId);
-    const snap = await tx.get(ref);
-    const next = (Number((snap.exists ? snap.data() || {} : {}).purchaseCounter) || 0) + 1;
-    tx.set(ref, { purchaseCounter: next }, { merge: true });
-    return `PUR-${String(next).padStart(4, "0")}`;
-  }
-
   const savePurchase = onCall({ region: REGION }, async (request) => {
     const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
@@ -493,23 +511,39 @@ function createInventoryFunctions({
         }
       }
 
-      const number = existing ? existing.number : await nextPurchaseNumber(tx, companyId);
+      // Firestore requires every read in a transaction to happen before every
+      // write, so the workspace doc is read once here and both counters come
+      // out of it. Reading it again after the first write throws.
+      const companySnap = await tx.get(companyRef(companyId));
+      const companyCounters = companySnap.exists ? companySnap.data() || {} : {};
+
+      let number;
       let counter = null;
+      if (existing) {
+        number = existing.number;
+      } else {
+        const nextPurchase = (Number(companyCounters.purchaseCounter) || 0) + 1;
+        number = `PUR-${String(nextPurchase).padStart(4, "0")}`;
+        counter = Number(companyCounters.inventoryCounter) || 0;
+        tx.set(companyRef(companyId), { purchaseCounter: nextPurchase }, { merge: true });
+      }
 
       // Each line becomes an inventory item straight away, held as `incoming`
       // so it is visible and countable without pretending it is in the drawer.
       const createdItemIds = [];
-      if (!existing) {
-        const companySnap = await tx.get(companyRef(companyId));
-        counter = Number((companySnap.exists ? companySnap.data() || {} : {}).inventoryCounter) || 0;
-      }
 
       lines.forEach((line, index) => {
         if (existing) return; // editing an unreceived purchase leaves its items alone
         counter += 1;
         const itemRef = itemsRef(companyId).doc();
-        const extras = shares[index] > 0
-          ? [{ label: "Shipping & fees (allocated)", amount: shares[index] }]
+        // The share is what this LINE carries. Every money field on an item is
+        // per unit, so a counted line divides it by the quantity — adding the
+        // whole share to each piece would multiply it by the count.
+        const perUnitShare = line.trackingType === "unique"
+          ? shares[index]
+          : (line.quantity > 0 ? shares[index] / line.quantity : 0);
+        const extras = perUnitShare > 0
+          ? [{ label: "Shipping & fees (allocated)", amount: perUnitShare }]
           : [];
         const fields = normalizeItemInput({
           name: line.name,
@@ -715,7 +749,10 @@ function createInventoryFunctions({
       const purchase = doc.data() || {};
       const key = clean(purchase.supplierName, "", 160).toLowerCase();
       if (!key) return;
-      const entry = stats.get(key) || { total: 0, count: 0, lastDate: "", matched: 0, lines: 0 };
+      // The key is lower-cased so "Royal Mail" and "royal mail" are one supplier,
+      // but the name shown must keep the spelling the user actually typed.
+      const entry = stats.get(key)
+        || { total: 0, count: 0, lastDate: "", matched: 0, lines: 0, displayName: clean(purchase.supplierName, "", 160) };
       entry.total = roundMoney(entry.total + (Number(purchase.total) || 0));
       entry.count += 1;
       entry.lines += Array.isArray(purchase.lines) ? purchase.lines.length : 0;
@@ -729,9 +766,9 @@ function createInventoryFunctions({
     const savedKeys = new Set(saved.map((row) => String(row.name || "").toLowerCase()));
     // A supplier you have bought from but never filled in a card for still
     // belongs in the list — it is the purchases that make it real.
-    const implied = [...stats.keys()]
-      .filter((key) => !savedKeys.has(key))
-      .map((key) => ({ id: "", name: key, implied: true }));
+    const implied = [...stats.entries()]
+      .filter(([key]) => !savedKeys.has(key))
+      .map(([key, entry]) => ({ id: "", name: entry.displayName || key, implied: true }));
 
     return {
       ok: true,

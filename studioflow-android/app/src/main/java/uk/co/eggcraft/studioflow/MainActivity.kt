@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
                 .installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
         } catch (_: Exception) {
         }
+        if (BuildConfig.DEBUG) connectLocalEmulatorsIfRequested()
         StudioMessagingService.ensureChannel(this)
         requestNotificationPermissionIfNeeded()
         handleStudioIntent(intent)
@@ -42,6 +43,33 @@ class MainActivity : ComponentActivity() {
             // reading appTheme from workspace settings ("System" / "Light" / "Dark").
             StudioFlowApp()
         }
+    }
+
+    /**
+     * Points the app at the local Firebase emulators when a marker file is
+     * present, so a test workspace can be exercised on an emulator without
+     * touching live data. Debug builds only, opt-in — a normal run never sees
+     * this. The marker is pushed with `adb push`; an env var would not survive
+     * the way Android launches an activity.
+     */
+    private fun connectLocalEmulatorsIfRequested() {
+        val marker = java.io.File(filesDir, "nivadesk-emulator.txt")
+        if (!marker.exists()) return
+        val lines = runCatching { marker.readLines() }.getOrDefault(emptyList())
+        val host = lines.getOrNull(0)?.trim().orEmpty().ifBlank { "10.0.2.2" }
+        val token = lines.getOrNull(1)?.trim().orEmpty()
+        runCatching {
+            com.google.firebase.auth.FirebaseAuth.getInstance().useEmulator(host, 9099)
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().useEmulator(host, 8080)
+            com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2").useEmulator(host, 5001)
+            android.util.Log.i("NivaDesk", "Local Firebase emulators connected at $host")
+            if (token.isNotBlank()) {
+                com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCustomToken(token)
+                    .addOnCompleteListener { task ->
+                        android.util.Log.i("NivaDesk", "Emulator sign-in: ${task.isSuccessful} ${task.exception?.message ?: ""}")
+                    }
+            }
+        }.onFailure { android.util.Log.w("NivaDesk", "Emulator wiring failed: ${it.message}") }
     }
 
     override fun onNewIntent(intent: Intent) {

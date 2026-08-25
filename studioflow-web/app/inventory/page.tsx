@@ -6,6 +6,7 @@
 // split and the status lifecycle are all decided on the server.
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -20,11 +21,19 @@ import { moneySymbol } from "@/lib/studioflow/money";
 import { InventoryContent } from "./InventoryContent";
 
 export default function InventoryPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // A session that has gone away must land on the login page. Without this the
+  // screen sits on its loading state for ever, because the load below never
+  // runs and never clears the flag.
+  useEffect(() => {
+    if (!authLoading && !user) router.replace("/login");
+  }, [authLoading, user, router]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -46,6 +55,7 @@ export default function InventoryPage() {
   }, [authLoading, user]);
 
   if (authLoading || loading) return <LoadingScreen />;
+  if (!user) return null;
 
   if (error || !workspace) {
     return (

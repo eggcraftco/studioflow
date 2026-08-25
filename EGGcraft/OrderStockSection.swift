@@ -6,9 +6,6 @@ import SwiftUI
 // the drawer and still an asset; it just cannot be promised to a second order.
 // That is why this shows a reserved total rather than deducting anything.
 
-private func inventoryMoney(_ symbol: String, _ value: Double) -> String {
-    symbol + String(format: "%.2f", value)
-}
 
 struct OrderStockSection: View {
     @EnvironmentObject var firebaseManager: FirebaseManager

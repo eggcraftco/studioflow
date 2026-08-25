@@ -1,7 +1,9 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseAppCheck
+import FirebaseAuth
 import FirebaseFirestore
+import FirebaseFunctions
 import UserNotifications
 #if os(iOS)
 import UIKit
@@ -89,6 +91,9 @@ struct StudioManagerApp: App {
 
         AppCheck.setAppCheckProviderFactory(StudioAppCheckProviderFactory())
         FirebaseApp.configure()
+        #if DEBUG
+        Self.connectLocalEmulatorsIfRequested()
+        #endif
         #if os(iOS)
         UNUserNotificationCenter.current().delegate = PushNotificationManager.shared
         #endif
@@ -98,6 +103,39 @@ struct StudioManagerApp: App {
         _authVM = StateObject(wrappedValue: AuthViewModel())
         _firebaseManager = StateObject(wrappedValue: FirebaseManager())
     }
+
+    #if DEBUG
+    /// Points the app at the local Firebase emulators when launched with
+    /// NIVADESK_USE_EMULATOR=1, so a test workspace can be exercised on a
+    /// simulator without touching live data. Debug builds only, opt-in by
+    /// environment variable — a normal run never sees this.
+    private static func connectLocalEmulatorsIfRequested() {
+        let env = ProcessInfo.processInfo.environment
+        guard env["NIVADESK_USE_EMULATOR"] == "1" else { return }
+        let host = env["NIVADESK_EMULATOR_HOST"] ?? "127.0.0.1"
+        Auth.auth().useEmulator(withHost: host, port: 9099)
+        let firestore = Firestore.firestore()
+        let settings = firestore.settings
+        settings.host = "\(host):8080"
+        settings.isSSLEnabled = false
+        settings.cacheSettings = MemoryCacheSettings()
+        firestore.settings = settings
+        Functions.functions(region: "europe-west2").useEmulator(withHost: host, port: 5001)
+        print("[NivaDesk] Local Firebase emulators connected at \(host)")
+
+        // A custom token lets a test workspace sign in without a password. Only
+        // the emulator accepts these, so this cannot reach a real account.
+        if let token = env["NIVADESK_EMULATOR_TOKEN"], !token.isEmpty {
+            Auth.auth().signIn(withCustomToken: token) { _, error in
+                if let error {
+                    print("[NivaDesk] Emulator sign-in failed: \(error.localizedDescription)")
+                } else {
+                    print("[NivaDesk] Emulator sign-in complete")
+                }
+            }
+        }
+    }
+    #endif
 
     #if os(macOS) && DEBUG
     private static func useMemoryFirestoreCacheForDebugRuns() {

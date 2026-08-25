@@ -6,9 +6,6 @@ import SwiftUI
 //
 // Everything that decides money or status is a server call. This file draws.
 
-private func inventoryMoney(_ symbol: String, _ value: Double) -> String {
-    symbol + String(format: "%.2f", value)
-}
 
 enum InventoryTab: String, CaseIterable {
     case items, purchases, suppliers
@@ -263,7 +260,8 @@ struct InventoryView: View {
         VStack(spacing: 8) {
             TextField(t("Search items, brand, ref, serial, SKU…", lang: seciliDil), text: $search)
                 .textFieldStyle(.roundedBorder)
-            HStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
                 Picker(t("Category", lang: seciliDil), selection: $categoryFilter) {
                     Text(t("All Categories", lang: seciliDil)).tag("")
                     ForEach(inventoryCategories, id: \.self) { Text(t($0, lang: seciliDil)).tag($0) }
@@ -280,9 +278,12 @@ struct InventoryView: View {
                         Text(t($0.label, lang: seciliDil)).tag(InventoryStatus?.some($0))
                     }
                 }
+              }
+              .pickerStyle(.menu)
+              .font(.system(size: 12))
+              .fixedSize()
+              .padding(.trailing, 2)
             }
-            .pickerStyle(.menu)
-            .font(.system(size: 12))
         }
     }
 

@@ -73,12 +73,15 @@ data class StudioInventoryItem(
     val isLowStock: Boolean
         get() = trackingType == StudioTrackingType.Quantity && lowStockAt > 0 && displayOnHand <= lowStockAt
 
-    /** What can honestly be promised to a new order. */
+    /** What can honestly be promised to a new order. Something sold, used up or
+     *  archived is out of the story whatever the count says — the server refuses
+     *  to reserve it, so offering it would only be a dead end. */
     val freeToReserve: Double
-        get() = if (trackingType == StudioTrackingType.Unique) {
-            if (status == StudioInventoryStatus.Available) 1.0 else 0.0
-        } else {
-            maxOf(0.0, onHand - reserved)
+        get() = when {
+            status in listOf(StudioInventoryStatus.Sold, StudioInventoryStatus.Used, StudioInventoryStatus.Archived) -> 0.0
+            trackingType == StudioTrackingType.Unique ->
+                if (status == StudioInventoryStatus.Available) 1.0 else 0.0
+            else -> maxOf(0.0, onHand - reserved)
         }
 
     companion object {

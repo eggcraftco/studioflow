@@ -7,6 +7,15 @@ import FirebaseFunctions
 // each do their own arithmetic will eventually disagree, and the one a person
 // is looking at will be the wrong one.
 
+
+/// Inventory money, formatted the way the rest of the app formats money:
+/// grouped thousands and the user's decimal separator. `String(format:)`
+/// ignored both, so £6,210.00 came out as "£6210.00".
+func inventoryMoney(_ symbol: String, _ value: Double) -> String {
+    let separator = UserDefaults.standard.string(forKey: "seciliOndalik") ?? "."
+    return symbol + formatFiyat(value, ondalik: separator)
+}
+
 enum InventoryTrackingType: String, CaseIterable, Codable {
     case unique
     case quantity
@@ -123,8 +132,11 @@ struct InventoryItem: Identifiable, Equatable {
         trackingType == .quantity && lowStockAt > 0 && displayOnHand <= lowStockAt
     }
 
-    /// What can honestly be promised to a new order.
+    /// What can honestly be promised to a new order. Something sold, used up or
+    /// archived is out of the story whatever the count says — the server refuses
+    /// to reserve it, so offering it would only be a dead end.
     var freeToReserve: Double {
+        if [.sold, .used, .archived].contains(status) { return 0 }
         if trackingType == .unique { return status == .available ? 1 : 0 }
         return max(0, onHand - reserved)
     }

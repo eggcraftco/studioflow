@@ -473,13 +473,13 @@ function NewItemModal({
                 <input className="input" value={draft.sku ?? ""} onChange={e => set("sku", e.target.value)}
                   placeholder="PAINT-BLK" /></label>
               <label className="inventory-field"><span>{t("On Hand")}</span>
-                <input className="input" type="number" min={0} step="0.01" value={draft.onHand ?? 0}
+                <input className="input" type="number" min={0} step="0.01" value={draft.onHand ? String(draft.onHand) : ""} placeholder="0"
                   onChange={e => set("onHand", Number(e.target.value) || 0)} /></label>
               <label className="inventory-field"><span>{t("Unit")}</span>
                 <input className="input" value={draft.unit ?? ""} onChange={e => set("unit", e.target.value)}
                   placeholder={t("ml, g, pcs")} /></label>
               <label className="inventory-field"><span>{t("Reorder at")}</span>
-                <input className="input" type="number" min={0} step="0.01" value={draft.lowStockAt ?? 0}
+                <input className="input" type="number" min={0} step="0.01" value={draft.lowStockAt ? String(draft.lowStockAt) : ""} placeholder="0"
                   onChange={e => set("lowStockAt", Number(e.target.value) || 0)} /></label>
             </>
           )}
@@ -494,19 +494,18 @@ function NewItemModal({
           <div className="inventory-cost-head">
             <strong>{t("Cost")}</strong>
             <span>
-              Purchase price and additional costs are kept apart on purpose — the VAT margin scheme
-              uses the price of the item alone.
+              {t("Purchase price and additional costs are kept apart on purpose — the VAT margin scheme uses the price of the item alone.")}
             </span>
           </div>
           <div className="inventory-form">
             <label className="inventory-field">
-              <span>Purchase price {isUnique ? "" : "(per unit)"}</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ?? 0}
+              <span>{isUnique ? t("Purchase price") : t("Purchase price (per unit)")}</span>
+              <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ? String(draft.purchasePrice) : ""} placeholder="0.00"
                 onChange={e => set("purchasePrice", Number(e.target.value) || 0)} />
             </label>
             <label className="inventory-field">
               <span>{t("Current value (est.)")}</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ?? 0}
+              <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ? String(draft.currentValueEst) : ""} placeholder="0.00"
                 onChange={e => set("currentValueEst", Number(e.target.value) || 0)} />
             </label>
           </div>
@@ -515,14 +514,14 @@ function NewItemModal({
             <div className="inventory-extra-row" key={index}>
               <input className="input" placeholder={t("Service, shipping, restoration…")} value={row.label}
                 onChange={e => set("additionalCosts", extras.map((r, i) => i === index ? { ...r, label: e.target.value } : r))} />
-              <input className="input" type="number" min={0} step="0.01" value={row.amount}
+              <input className="input" type="number" min={0} step="0.01" value={row.amount ? String(row.amount) : ""} placeholder="0.00"
                 onChange={e => set("additionalCosts", extras.map((r, i) => i === index ? { ...r, amount: Number(e.target.value) || 0 } : r))} />
               <button type="button" onClick={() => set("additionalCosts", extras.filter((_, i) => i !== index))}>{t("Remove")}</button>
             </div>
           ))}
           <button type="button" className="inventory-add-cost"
             onClick={() => set("additionalCosts", [...extras, { label: "", amount: 0 }])}>
-            + Add cost
+            {t("+ Add cost")}
           </button>
 
           <div className="inventory-cost-total">
@@ -538,8 +537,7 @@ function NewItemModal({
             onChange={e => set("ownership", e.target.checked ? "customer" : "business")}
           />
           <span>
-            This belongs to a customer, not the business. It will be held and findable, but valued at
-            zero and left out of inventory value.
+            {t("This belongs to a customer, not the business. It will be held and findable, but valued at zero and left out of inventory value.")}
           </span>
         </label>
 
