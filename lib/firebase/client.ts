@@ -2,7 +2,7 @@ import { initializeApp, getApps } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { connectAuthEmulator, getAuth, signInWithCustomToken, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 
 // Local Firebase emulators, for exercising a signed-in workspace end to end
@@ -73,6 +73,7 @@ export const functions = getFunctions(app, "europe-west2");
 if (USE_EMULATOR) {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
 }
 
 // Emulator only: lets a local script sign a test workspace in with a custom
