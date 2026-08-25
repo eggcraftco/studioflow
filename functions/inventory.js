@@ -172,9 +172,15 @@ function createInventoryFunctions({
       currentValueEst: cleanMoney(input.currentValueEst),
       lowStockAt: isUnique ? 0 : cleanQuantity(input.lowStockAt),
       notes: clean(input.notes, "", 2000),
-      photos: (Array.isArray(input.photos) ? input.photos.slice(0, 12) : [])
-        .map((url) => clean(url, "", 600))
-        .filter(Boolean),
+      // Photos are storage paths, not URLs — a path is permanent, a download
+      // URL expires. A form that does not send the field leaves the photos
+      // alone; sending an empty array is how they are deliberately cleared.
+      // Without that distinction, every name edit would silently wipe them.
+      photos: input.photos === undefined && existing
+        ? (Array.isArray(existing.photos) ? existing.photos : [])
+        : (Array.isArray(input.photos) ? input.photos.slice(0, 12) : [])
+            .map((path) => clean(path, "", 600))
+            .filter(Boolean),
       quantity,
       ...costs
     };

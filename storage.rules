@@ -271,6 +271,24 @@ service firebase.storage {
       allow delete: if canEditWorkspaceFiles(companyId);
     }
 
+    // Inventory item photos. Readable by the workspace; written by the roles
+    // that can change inventory itself (owner/admin/member) — someone who
+    // cannot edit an item has no business changing what it looks like. The
+    // document's `photos` field stores these paths; the paths are permanent
+    // where a download URL is not. 25MB covers phone photos.
+    match /companies/{companyId}/inventory_photos/{itemId}/{fileName} {
+      allow read: if canReadWorkspace(companyId);
+      allow create, update: if signedIn()
+        && companyExists(companyId)
+        && (isOwner(companyId)
+            || membersMap(companyId)[request.auth.uid].role in ["owner", "admin", "member"])
+        && request.resource != null && request.resource.size <= 25 * 1024 * 1024;
+      allow delete: if signedIn()
+        && companyExists(companyId)
+        && (isOwner(companyId)
+            || membersMap(companyId)[request.auth.uid].role in ["owner", "admin", "member"]);
+    }
+
     // Receipts/invoices attached to bank transactions — owner-only, like the
     // bank feed itself. 25MB covers photographed invoices and PDFs.
     match /companies/{companyId}/bank_receipts/{transactionId}/{fileName} {

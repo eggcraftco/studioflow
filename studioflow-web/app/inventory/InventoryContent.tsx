@@ -22,6 +22,8 @@ import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { ItemLabelModal } from "./ItemLabelModal";
+import { ItemPhotosModal } from "./ItemPhotosModal";
 import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
 import { ReportsPanel } from "./ReportsPanel";
@@ -105,6 +107,8 @@ export function InventoryContent({
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [openingOpen, setOpeningOpen] = useState(false);
+  const [photosFor, setPhotosFor] = useState<InventoryItem | null>(null);
+  const [labelFor, setLabelFor] = useState<InventoryItem | null>(null);
   const [tab, setTab] = useState<InventoryTab>("items");
   const [supplierNames, setSupplierNames] = useState<string[]>([]);
 
@@ -282,15 +286,15 @@ export function InventoryContent({
           <thead>
             <tr>
               <th>{t("Item")}</th><th>{t("Type")}</th><th>{t("Category")}</th><th>{t("Status")}</th>
-              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th />
+              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th /><th />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="inventory-empty">{t("Loading…")}</td></tr>
+              <tr><td colSpan={9} className="inventory-empty">{t("Loading…")}</td></tr>
             ) : visible.length === 0 ? (
               <tr>
-                <td colSpan={8} className="inventory-empty">
+                <td colSpan={9} className="inventory-empty">
                   {items.length === 0 ? (
                     <>
                       {t("Nothing in inventory yet.")}{" "}
@@ -331,6 +335,25 @@ export function InventoryContent({
                 </td>
                 <td>{item.location || "—"}</td>
                 <td className="r">
+                  <button
+                    type="button"
+                    className="inventory-link"
+                    title={t("Photos")}
+                    onClick={() => setPhotosFor(item)}
+                  >
+                    {item.photos && item.photos.length > 0 ? `📷 ${item.photos.length}` : "📷"}
+                  </button>
+                  {" "}
+                  <button
+                    type="button"
+                    className="inventory-link"
+                    title={t("Label")}
+                    onClick={() => setLabelFor(item)}
+                  >
+                    🏷
+                  </button>
+                </td>
+                <td className="r">
                   {canEdit ? (
                     <select
                       className="inventory-status-select"
@@ -352,6 +375,24 @@ export function InventoryContent({
 
         </>
       )}
+
+      {labelFor ? (
+        <ItemLabelModal
+          item={labelFor}
+          workspaceName={workspace.name || ""}
+          onClose={() => setLabelFor(null)}
+        />
+      ) : null}
+
+      {photosFor ? (
+        <ItemPhotosModal
+          workspace={workspace}
+          item={photosFor}
+          canEdit={canEdit}
+          onClose={() => setPhotosFor(null)}
+          onChanged={() => void reload()}
+        />
+      ) : null}
 
       {openingOpen ? (
         <OpeningStockModal

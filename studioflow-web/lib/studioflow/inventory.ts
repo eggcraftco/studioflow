@@ -676,3 +676,40 @@ export async function listInventoryMovements(workspace: WorkspaceContext, itemId
     "The movements could not be loaded."
   );
 }
+
+// ---------------------------------------------------------------------------
+// Item photos
+//
+// Stored as storage paths, not URLs: a path is permanent where a download URL
+// expires. The item's `photos` array carries the paths; screens resolve them
+// to URLs when they draw.
+// ---------------------------------------------------------------------------
+
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { storage } from "@/lib/firebase/client";
+
+export const INVENTORY_PHOTO_LIMIT = 12;
+
+function safePhotoName(name: string) {
+  const cleaned = name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80);
+  return cleaned || "photo.jpg";
+}
+
+/** Uploads one photo and returns the storage path to put in `photos`. */
+export async function uploadInventoryPhoto(
+  workspace: WorkspaceContext,
+  itemId: string,
+  file: File
+) {
+  const path = `companies/${workspace.id}/inventory_photos/${itemId}/${Date.now()}-${safePhotoName(file.name)}`;
+  await uploadBytes(storageRef(storage, path), file);
+  return path;
+}
+
+export async function inventoryPhotoUrl(path: string) {
+  return getDownloadURL(storageRef(storage, path));
+}
+
+export async function deleteInventoryPhoto(path: string) {
+  await deleteObject(storageRef(storage, path)).catch(() => undefined);
+}
