@@ -12,11 +12,12 @@ import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { SettingsDialog } from "./SettingsDialog";
 import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPreview } from "@/lib/studioflow/settingsActions";
+import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studioflow/planActions";
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
-import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
+import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
@@ -4616,6 +4617,35 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
   const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTest, setWebhookTest] = useState<InboundWebhookTestResult | null>(null);
+  const [payloadDraft, setPayloadDraft] = useState("");
+  const [checkingPayload, setCheckingPayload] = useState(false);
+  const [payloadCheck, setPayloadCheck] = useState<InboundPayloadCheck | null>(null);
+
+  async function runWebhookTest() {
+    setTestingWebhook(true);
+    setWebhookTest(null);
+    try {
+      setWebhookTest(await sendTestInboundWebhook(companyId));
+    } catch (testError) {
+      setWebhookTest({ ok: false, message: testError instanceof Error ? testError.message : t("The test could not be sent.") });
+    } finally {
+      setTestingWebhook(false);
+    }
+  }
+
+  async function runPayloadCheck() {
+    setCheckingPayload(true);
+    setPayloadCheck(null);
+    try {
+      setPayloadCheck(await validateInboundOrderPayload(companyId, payloadDraft));
+    } catch (checkError) {
+      setPayloadCheck({ ok: false, parseError: checkError instanceof Error ? checkError.message : t("The payload could not be checked."), warnings: [] });
+    } finally {
+      setCheckingPayload(false);
+    }
+  }
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -4722,15 +4752,69 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
           <IntegrationInfoRow number="2" title={t("Send the order as JSON")} detail={t("POST a JSON body to the Delivery URL on each new order. At minimum include orderId. Common fields: orderId, orderNumber, customerName, email, phone, total, currency, products, note, source.")} />
           <IntegrationInfoRow number="3" title={t("Order appears automatically")} detail={t("Each posted order is added to Orders and Schedule, tagged with the source you send.")} />
         </div>
+        {/* The old example taught products as a string, which is exactly the
+            shape that produces no itemised invoice, and showed currency as if it
+            changed anything. */}
         <pre style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8, padding: 12, overflowX: "auto", fontSize: 12, lineHeight: 1.5, margin: "10px 0 0", color: "var(--text)" }}>{`{
+  "schemaVersion": 1,
   "orderId": "1001",
   "customerName": "Jane Doe",
   "email": "jane@example.com",
   "total": 120.50,
-  "currency": "GBP",
-  "products": "Custom dial x1",
+  "status": "paid",
+  "products": [
+    { "name": "Custom dial", "quantity": 1, "unitPrice": 120.50 }
+  ],
+  "shippingCost": 4.99,
   "source": "Wix"
 }`}</pre>
+        <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. Amounts are shown in your workspace currency.")}</p>
+
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runWebhookTest(); }}>
+            {testingWebhook ? t("Testing...") : t("Send test webhook")}
+          </button>
+        </div>
+        {webhookTest ? (
+          <p className={webhookTest.ok ? "success-copy" : "layout-error"}>
+            {webhookTest.message}{" "}
+            {webhookTest.ok ? t("This proves the URL, workspace and token. It does not prove your own tool is pointed at it.") : ""}
+          </p>
+        ) : null}
+
+        {/* The £0-order class of bug is a payload problem, not a reachability
+            problem, so checking a payload is a separate box from pressing the URL. */}
+        <label className="quick-reply-settings-label">
+          <span>{t("Check a payload before you wire it up")}</span>
+          <textarea
+            className="input"
+            rows={5}
+            value={payloadDraft}
+            placeholder={'{ "orderId": "1001", "total": 120.50 }'}
+            onChange={event => setPayloadDraft(event.target.value)}
+          />
+        </label>
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={checkingPayload || !payloadDraft.trim()} onClick={() => { void runPayloadCheck(); }}>
+            {checkingPayload ? t("Checking...") : t("Check this payload")}
+          </button>
+        </div>
+        {payloadCheck ? (
+          <div className="settings-dialog-body">
+            {payloadCheck.parseError ? <p className="layout-error">{payloadCheck.parseError}</p> : null}
+            {payloadCheck.reads ? (
+              <div className="settings-impact-grid">
+                <span>{t("Customer")}</span><strong>{payloadCheck.reads.customerName}</strong>
+                <span>{t("Total")}</span><strong>{payloadCheck.reads.total}</strong>
+                <span>{t("Invoice lines")}</span><strong>{payloadCheck.reads.lineItemCount}</strong>
+              </div>
+            ) : null}
+            {(payloadCheck.warnings ?? []).map(warning => (
+              <p className="layout-error" key={warning}>{warning}</p>
+            ))}
+            {payloadCheck.ok ? <p className="success-copy">{t("This payload reads cleanly.")}</p> : null}
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -4849,7 +4933,7 @@ function SecretDeliveryUrl({
       {info ? (
         <p className="muted-copy integration-secret-status">
           {deliveryDate
-            ? `${info.lastDeliveryOk ? t("Last delivery") : t("Last delivery failed")}: ${deliveryDate.toLocaleString(studioLocaleTag(language))}${info.lastDeliveryOk ? "" : ` — ${info.lastDeliveryError}`}`
+            ? `${info.lastDeliveryOk ? (info.lastDeliveryWasTest ? t("Last test") : t("Last order received")) : t("Last delivery failed")}: ${deliveryDate.toLocaleString(studioLocaleTag(language))}${info.lastDeliveryOk ? "" : ` — ${info.lastDeliveryError}`}`
             : t("No delivery received yet.")}
         </p>
       ) : null}

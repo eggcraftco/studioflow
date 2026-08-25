@@ -36,6 +36,7 @@ export type IntegrationWebhookInfo = {
   tokenCreatedAtMs: number;
   lastDeliveryAtMs: number;
   lastDeliveryOk: boolean;
+  lastDeliveryWasTest: boolean;
   lastDeliveryError: string;
 };
 
@@ -45,6 +46,7 @@ type IntegrationWebhookResponse = {
   tokenCreatedAtMs?: number;
   lastDeliveryAtMs?: number;
   lastDeliveryOk?: boolean;
+  lastDeliveryWasTest?: boolean;
   lastDeliveryError?: string;
 };
 
@@ -54,6 +56,7 @@ function integrationWebhookInfo(data: IntegrationWebhookResponse | undefined): I
     tokenCreatedAtMs: Number(data?.tokenCreatedAtMs || 0),
     lastDeliveryAtMs: Number(data?.lastDeliveryAtMs || 0),
     lastDeliveryOk: data?.lastDeliveryOk === true,
+    lastDeliveryWasTest: data?.lastDeliveryWasTest === true,
     lastDeliveryError: String(data?.lastDeliveryError || "")
   };
 }
@@ -62,6 +65,47 @@ async function integrationWebhookCall(name: string, companyId: string): Promise<
   const callable = httpsCallable<{ companyId: string }, IntegrationWebhookResponse>(functions, name);
   const response = await callable({ companyId });
   return integrationWebhookInfo(response.data);
+}
+
+export type InboundWebhookTestResult = {
+  ok?: boolean;
+  status?: number;
+  orderCreated?: boolean;
+  warnings?: string[];
+  message?: string;
+};
+
+export type InboundPayloadCheck = {
+  ok?: boolean;
+  parseError?: string;
+  warnings?: string[];
+  reads?: {
+    orderNumber: string;
+    customerName: string;
+    designName: string;
+    total: number;
+    deliveryCost: number;
+    taxAmount: number;
+    lineItemCount: number;
+  } | null;
+};
+
+// Presses the workspace's own delivery URL. Proves the endpoint, the companyId
+// and the token — not that the URL was pasted into Zapier correctly.
+export async function sendTestInboundWebhook(companyId: string): Promise<InboundWebhookTestResult> {
+  const callable = httpsCallable<{ companyId: string }, InboundWebhookTestResult>(functions, "sendTestInboundWebhook");
+  const response = await callable({ companyId });
+  return response.data ?? {};
+}
+
+// Runs the real mapper over a pasted payload without sending or writing anything.
+export async function validateInboundOrderPayload(companyId: string, payload: string): Promise<InboundPayloadCheck> {
+  const callable = httpsCallable<{ companyId: string; payload: string }, InboundPayloadCheck>(
+    functions,
+    "validateInboundOrderPayload"
+  );
+  const response = await callable({ companyId, payload });
+  return response.data ?? {};
 }
 
 export const INTEGRATION_WEBHOOK_CALLABLES = {
