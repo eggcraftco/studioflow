@@ -21397,13 +21397,16 @@ function cleanSmsSenderId(value = "") {
 
 // Which events are worth a text is the workspace's call — a busy bench may want
 // only "ready for collection", a quiet one may want all of them.
-const SMS_TRIGGER_KEYS = ["estimateReady", "workStarted", "readyForCollection"];
+const SMS_TRIGGER_KEYS = ["estimateReady", "workStarted", "readyForCollection", "everyStatusChange"];
 
 function cleanSmsTriggers(value) {
   const incoming = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const output = {};
   for (const key of SMS_TRIGGER_KEYS) {
-    output[key] = typeof incoming[key] === "boolean" ? incoming[key] : true;
+    // The three milestones are on by default; telling a customer about every
+    // internal step is a choice a business makes, not one made for them.
+    const fallback = key !== "everyStatusChange";
+    output[key] = typeof incoming[key] === "boolean" ? incoming[key] : fallback;
   }
   return output;
 }
@@ -21622,6 +21625,20 @@ function portalStatusMessage(status = "", context = {}) {
     };
   }
   return null;
+}
+
+// Used only when a workspace has opted into hearing about every step rather than
+// the three milestones. Plain and short on purpose: it shares one segment with
+// the business name and the tracking link.
+function portalGenericStatusMessage(status = "", context = {}) {
+  const item = context.itemName ? ` \u2014 ${context.itemName}` : "";
+  const clean = String(status || "").trim();
+  return {
+    trigger: "everyStatusChange",
+    subject: `Update on your order${item}`,
+    line: `Your order is now at this stage: ${clean}.`,
+    sms: `Your order is now at this stage: ${clean}.`
+  };
 }
 
 // Sent from the NivaDesk mailbox with the workspace as the visible sender name
@@ -21992,7 +22009,8 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     const companyData = companySnap.exists ? companySnap.data() || {} : {};
     const config = workspaceSmsConfig(settings);
     const itemName = cleanOrderText(after.designName, "", 160);
-    const message = portalStatusMessage(status, { itemName });
+    const message = portalStatusMessage(status, { itemName })
+      || (config.triggers.everyStatusChange ? portalGenericStatusMessage(status, { itemName }) : null);
     if (!message) {
       // Not a milestone worth a message, but remember it so the next real one is
       // still recognised as a change.

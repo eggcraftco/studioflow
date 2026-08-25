@@ -167,6 +167,15 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     artifactKey: "feature.orders.artifact"
   },
   {
+    titleKey: "feature.portal.title",
+    eyebrowKey: "feature.portal.eyebrow",
+    bodyKey: "feature.portal.body",
+    bulletKeys: ["feature.portal.bullet1", "feature.portal.bullet2", "feature.portal.bullet3", "feature.portal.bullet4"],
+    tone: "sky",
+    metricKey: "feature.portal.metric",
+    artifactKey: "feature.portal.artifact"
+  },
+  {
     titleKey: "feature.files.title",
     eyebrowKey: "feature.files.eyebrow",
     bodyKey: "feature.files.body",
@@ -314,6 +323,9 @@ const PLATFORM_CARDS: PlatformCard[] = [
 
 const ORDER_CARDS: OrderCardInfo[] = [
   { titleKey: "orderCard.preview", detailKey: "orderCard.preview.detail", icon: "photo" },
+  { titleKey: "orderCard.repairIntake", detailKey: "orderCard.repairIntake.detail", icon: "shippingBox" },
+  { titleKey: "orderCard.estimate", detailKey: "orderCard.estimate.detail", icon: "finance" },
+  { titleKey: "orderCard.customerPortal", detailKey: "orderCard.customerPortal.detail", icon: "customer" },
   { titleKey: "orderCard.summary", detailKey: "orderCard.summary.detail", icon: "docText" },
   { titleKey: "orderCard.customer", detailKey: "orderCard.customer.detail", icon: "customer" },
   { titleKey: "orderCard.invoiceItems", detailKey: "orderCard.invoiceItems.detail", icon: "docText" },
