@@ -1,20 +1,22 @@
 // Firebase Cloud Messaging service worker for web push.
 // This file must be served at the site root (/firebase-messaging-sw.js).
-// Replace the firebaseConfig placeholders with your project's web config.
 
 importScripts("https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging-compat.js");
 
-// IMPORTANT: This file cannot read process.env. The firebaseConfig must be
-// hardcoded here OR injected at build time. The values below match
-// lib/firebase/client.ts — copy your real values from .env.local.
-self.firebaseConfig = self.firebaseConfig || {
-  apiKey: "REPLACE_API_KEY",
-  authDomain: "REPLACE_AUTH_DOMAIN",
-  projectId: "REPLACE_PROJECT_ID",
-  storageBucket: "REPLACE_STORAGE_BUCKET",
-  messagingSenderId: "REPLACE_MESSAGING_SENDER_ID",
-  appId: "REPLACE_APP_ID",
+// A service worker cannot read process.env, so the page passes the same config
+// it already holds as query parameters when it registers this file (see
+// lib/studioflow/pushNotifications.ts). One source of truth, nothing to keep in
+// step by hand — an earlier copy of this file shipped REPLACE_* placeholders
+// for months and silently broke background push.
+const swParams = new URLSearchParams(self.location.search);
+self.firebaseConfig = {
+  apiKey: swParams.get("apiKey") || "",
+  authDomain: swParams.get("authDomain") || "",
+  projectId: swParams.get("projectId") || "",
+  storageBucket: swParams.get("storageBucket") || "",
+  messagingSenderId: swParams.get("messagingSenderId") || "",
+  appId: swParams.get("appId") || "",
 };
 
 firebase.initializeApp(self.firebaseConfig);

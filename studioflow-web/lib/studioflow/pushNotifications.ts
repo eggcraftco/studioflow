@@ -1,6 +1,6 @@
 import { deleteDoc, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getMessaging, getToken, isSupported, onMessage } from "firebase/messaging";
-import { db } from "@/lib/firebase/client";
+import { db, messagingServiceWorkerConfig } from "@/lib/firebase/client";
 import { getApp } from "firebase/app";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
@@ -10,6 +10,21 @@ const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
 // reload (module state does not survive navigation).
 const LAST_TOKEN_KEY = "pushDeviceTokenLastSavedV1";
 const LAST_COMPANY_KEY = "pushDeviceTokenCompanyLastSavedV1";
+
+export type WebPushStatus =
+  | "ok"
+  | "not_configured"
+  | "unsupported"
+  | "permission_denied"
+  | "error";
+
+// AppShell wraps every route, so this runs again on each navigation. Without
+// these two guards a signed-in browser re-ran getToken and stacked a second
+// foreground listener — one duplicate notification per page visited — and
+// repeated the missing-key warning until the console was unreadable.
+let warnedNotConfigured = false;
+let registeredFor = "";
+let foregroundListenerAttached = false;
 
 function sanitizeTokenForDocId(token: string): string {
   return token.replace(/\//g, "_").replace(/\+/g, "-").replace(/:/g, "_");
@@ -27,32 +42,39 @@ function sanitizeTokenForDocId(token: string): string {
 export async function registerWebPush(
   workspace: WorkspaceContext,
   user: { uid: string; email?: string | null },
-): Promise<void> {
+): Promise<WebPushStatus> {
   try {
-    if (!workspace.id || !user.uid) return;
-    if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator)) return;
+    if (!workspace.id || !user.uid) return "error";
+    if (typeof window === "undefined") return "unsupported";
+    if (!("serviceWorker" in navigator)) return "unsupported";
     const supported = await isSupported();
-    if (!supported) return;
+    if (!supported) return "unsupported";
     if (!VAPID_KEY) {
-      console.warn("[push] NEXT_PUBLIC_FIREBASE_VAPID_KEY is not configured — skipping push registration.");
-      return;
+      if (!warnedNotConfigured) {
+        warnedNotConfigured = true;
+        console.warn("[push] NEXT_PUBLIC_FIREBASE_VAPID_KEY is not configured — skipping push registration.");
+      }
+      return "not_configured";
     }
+
+    const registrationKey = `${workspace.id}|${user.uid}`;
+    if (registeredFor === registrationKey) return "ok";
 
     // Ask permission if needed.
     if (Notification.permission === "default") {
       const result = await Notification.requestPermission();
-      if (result !== "granted") return;
+      if (result !== "granted") return "permission_denied";
     }
-    if (Notification.permission !== "granted") return;
+    if (Notification.permission !== "granted") return "permission_denied";
 
-    const swRegistration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const configQuery = new URLSearchParams(messagingServiceWorkerConfig).toString();
+    const swRegistration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?${configQuery}`);
     const messaging = getMessaging(getApp());
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: swRegistration,
     });
-    if (!token) return;
+    if (!token) return "error";
 
     const documentId = sanitizeTokenForDocId(token);
     await setDoc(
@@ -78,16 +100,24 @@ export async function registerWebPush(
       /* private mode — cleanup on sign-out just becomes a no-op */
     }
 
-    // Foreground push: show a browser notification ourselves
-    onMessage(messaging, (payload) => {
-      const title = payload.notification?.title || payload.data?.title || "New message";
-      const body = payload.notification?.body || payload.data?.body || "";
-      if (Notification.permission === "granted") {
-        new Notification(title, { body, icon: "/icon.png" });
-      }
-    });
+    // Foreground push: show a browser notification ourselves. Attached once for
+    // the life of the page — a second listener means a second notification.
+    if (!foregroundListenerAttached) {
+      foregroundListenerAttached = true;
+      onMessage(messaging, (payload) => {
+        const title = payload.notification?.title || payload.data?.title || "New message";
+        const body = payload.notification?.body || payload.data?.body || "";
+        if (Notification.permission === "granted") {
+          new Notification(title, { body, icon: "/icon.png" });
+        }
+      });
+    }
+
+    registeredFor = registrationKey;
+    return "ok";
   } catch (err) {
     console.warn("[push] registration failed:", err);
+    return "error";
   }
 }
 
@@ -107,6 +137,8 @@ export async function unregisterWebPush(): Promise<void> {
     await deleteDoc(doc(db, "companies", companyId, "deviceTokens", sanitizeTokenForDocId(token)));
     window.localStorage.removeItem(LAST_TOKEN_KEY);
     window.localStorage.removeItem(LAST_COMPANY_KEY);
+    // The next sign-in is a different workspace/user pair and must register again.
+    registeredFor = "";
   } catch (err) {
     console.warn("[push] unregister failed:", err);
   }
