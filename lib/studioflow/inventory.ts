@@ -197,3 +197,217 @@ export function isInventoryLowStock(item: InventoryItem) {
   const at = Number(item.lowStockAt) || 0;
   return at > 0 && inventoryOnHand(item) <= at;
 }
+
+// ---------------------------------------------------------------------------
+// Purchases and suppliers
+// ---------------------------------------------------------------------------
+
+export type PurchaseStatus = "ordered" | "received";
+
+export type PurchaseLine = {
+  itemId: string;
+  name: string;
+  category: string;
+  trackingType: InventoryTrackingType;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  reference: string;
+  serialNumber: string;
+  location: string;
+  allocatedExtras: number;
+};
+
+export type Purchase = {
+  id: string;
+  number: string;
+  supplierName: string;
+  supplierId: string;
+  purchaseDate: string;
+  reference: string;
+  notes: string;
+  lines: PurchaseLine[];
+  goodsTotal: number;
+  shipping: number;
+  otherCosts: number;
+  total: number;
+  status: PurchaseStatus;
+  itemIds: string[];
+  bankTransactionId: string;
+  receivedAtMs: number;
+  createdAtMs: number;
+};
+
+export type PurchaseInput = {
+  supplierName: string;
+  supplierId?: string;
+  purchaseDate: string;
+  reference?: string;
+  notes?: string;
+  shipping?: number;
+  otherCosts?: number;
+  lines: Array<{
+    name: string;
+    category: string;
+    trackingType: InventoryTrackingType;
+    quantity: number;
+    unit?: string;
+    unitPrice: number;
+    reference?: string;
+    serialNumber?: string;
+    location?: string;
+  }>;
+};
+
+export type SupplierStats = {
+  total: number;
+  count: number;
+  lastDate: string;
+  matched: number;
+  lines: number;
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  notes?: string;
+  implied?: boolean;
+  stats: SupplierStats;
+};
+
+export async function listPurchases(workspace: WorkspaceContext) {
+  return call<{ ok?: boolean; purchases?: Purchase[] }>(
+    "listPurchases",
+    { companyId: workspace.id },
+    "Purchases could not be loaded."
+  );
+}
+
+export async function savePurchase(
+  workspace: WorkspaceContext,
+  purchase: PurchaseInput,
+  purchaseId?: string
+) {
+  return call<{ ok?: boolean; purchaseId?: string; number?: string; total?: number; itemsCreated?: number }>(
+    "savePurchase",
+    { companyId: workspace.id, purchaseId: purchaseId || "", purchase },
+    "The purchase could not be saved."
+  );
+}
+
+export async function receivePurchase(workspace: WorkspaceContext, purchaseId: string) {
+  return call<{ ok?: boolean; received?: number; alreadyReceived?: boolean }>(
+    "receivePurchase",
+    { companyId: workspace.id, purchaseId },
+    "The purchase could not be marked as received."
+  );
+}
+
+export async function deletePurchase(workspace: WorkspaceContext, purchaseId: string) {
+  return call<{ ok?: boolean }>(
+    "deletePurchase",
+    { companyId: workspace.id, purchaseId },
+    "The purchase could not be deleted."
+  );
+}
+
+export async function linkPurchaseToBankTransaction(
+  workspace: WorkspaceContext,
+  purchaseId: string,
+  transactionId: string
+) {
+  return call<{ ok?: boolean; linked?: boolean; paid?: number; purchaseTotal?: number; difference?: number }>(
+    "linkPurchaseToBankTransaction",
+    { companyId: workspace.id, purchaseId, transactionId },
+    "The payment could not be matched."
+  );
+}
+
+export async function listSuppliers(workspace: WorkspaceContext) {
+  return call<{ ok?: boolean; suppliers?: Supplier[] }>(
+    "listSuppliers",
+    { companyId: workspace.id },
+    "Suppliers could not be loaded."
+  );
+}
+
+export async function saveSupplier(
+  workspace: WorkspaceContext,
+  supplier: { name: string; email?: string; phone?: string; website?: string; notes?: string },
+  supplierId?: string
+) {
+  return call<{ ok?: boolean; supplierId?: string }>(
+    "saveSupplier",
+    { companyId: workspace.id, supplierId: supplierId || "", supplier },
+    "The supplier could not be saved."
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reserving stock for an order
+// ---------------------------------------------------------------------------
+
+export type OrderInventoryLine = {
+  id: string;
+  number: string;
+  name: string;
+  category: string;
+  trackingType: InventoryTrackingType;
+  unit: string;
+  status: InventoryStatus;
+  quantity: number;
+  unitCost: number;
+  lineCost: number;
+};
+
+export async function getOrderInventory(workspace: WorkspaceContext, orderId: string) {
+  return call<{ ok?: boolean; items?: OrderInventoryLine[]; totalCost?: number }>(
+    "getOrderInventory",
+    { companyId: workspace.id, orderId },
+    "The order's stock could not be loaded."
+  );
+}
+
+export async function reserveInventoryForOrder(
+  workspace: WorkspaceContext,
+  itemId: string,
+  orderId: string,
+  quantity: number
+) {
+  return call<{ ok?: boolean; reserved?: number; remaining?: number }>(
+    "reserveInventoryForOrder",
+    { companyId: workspace.id, itemId, orderId, quantity },
+    "The item could not be reserved."
+  );
+}
+
+export async function releaseInventoryFromOrder(
+  workspace: WorkspaceContext,
+  itemId: string,
+  orderId: string
+) {
+  return call<{ ok?: boolean }>(
+    "releaseInventoryFromOrder",
+    { companyId: workspace.id, itemId, orderId },
+    "The item could not be released."
+  );
+}
+
+// How much of a counted material is free to promise to a new order: what is on
+// the shelf, less what other orders are already holding.
+//
+// Something sold, used up or archived is out of the story whatever the count
+// says — the server refuses to reserve it, so offering it here would only be a
+// dead end for the person clicking.
+const UNRESERVABLE: InventoryStatus[] = ["sold", "used", "archived"];
+
+export function inventoryFreeToReserve(item: InventoryItem) {
+  if (UNRESERVABLE.includes(item.status)) return 0;
+  if (item.trackingType === "unique") return item.status === "available" ? 1 : 0;
+  const onHand = inventoryOnHand(item);
+  const reserved = Number(item.quantity?.reserved) || 0;
+  return Math.max(0, Math.round((onHand - reserved) * 100) / 100);
+}

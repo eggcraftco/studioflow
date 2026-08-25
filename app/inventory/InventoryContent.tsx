@@ -18,7 +18,22 @@ import {
   type InventoryStatus,
   type InventoryTrackingType
 } from "@/lib/studioflow/inventory";
+import { listSuppliers } from "@/lib/studioflow/inventory";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { PurchasesPanel } from "./PurchasesPanel";
+import { SuppliersPanel } from "./SuppliersPanel";
+
+type InventoryTab = "items" | "purchases" | "suppliers";
+
+// Labels are stored untranslated and translated where they are drawn: this
+// list is module scope, and t() needs the language from the component.
+const TABS: Array<{ key: InventoryTab; label: string }> = [
+  { key: "items", label: "Items" },
+  { key: "purchases", label: "Purchases" },
+  { key: "suppliers", label: "Suppliers" }
+];
 
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
@@ -72,6 +87,9 @@ export function InventoryContent({
   currencySymbol: string;
   canEdit: boolean;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +99,8 @@ export function InventoryContent({
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [tab, setTab] = useState<InventoryTab>("items");
+  const [supplierNames, setSupplierNames] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -93,7 +113,7 @@ export function InventoryContent({
       setSummary(totals?.summary ?? null);
       setNotice("");
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "Inventory could not be loaded.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("Inventory could not be loaded."));
     } finally {
       setLoading(false);
     }
@@ -102,6 +122,21 @@ export function InventoryContent({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Fed to the purchase form so a supplier can be picked rather than retyped —
+  // a second spelling of the same name would split its history in two.
+  const reloadSuppliers = useCallback(async () => {
+    try {
+      const result = await listSuppliers(workspace);
+      setSupplierNames((result?.suppliers ?? []).map(row => row.name).filter(Boolean));
+    } catch {
+      setSupplierNames([]);
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    void reloadSuppliers();
+  }, [reloadSuppliers]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -121,31 +156,64 @@ export function InventoryContent({
       await setInventoryItemStatus(workspace, item.id, status);
       await reload();
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "The item status could not be changed.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("The item status could not be changed."));
     }
   }
 
   const cards: { label: string; value: string; sub?: string; tone?: string }[] = summary
     ? [
-        { label: "Total Inventory Value", value: money(currencySymbol, summary.totalValue), tone: "accent" },
-        { label: "Unique Items", value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue) },
-        { label: "Quantity Items", value: String(summary.quantityCount), sub: money(currencySymbol, summary.quantityValue) },
-        { label: "Reserved for Orders", value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items` },
-        { label: "Incoming", value: `${summary.incomingCount} items`, sub: money(currencySymbol, summary.incomingValue) },
-        { label: "Low Stock", value: `${summary.lowStockCount} items`, tone: summary.lowStockCount > 0 ? "warn" : undefined }
+        { label: t("Total Inventory Value"), value: money(currencySymbol, summary.totalValue), tone: "accent" },
+        { label: t("Unique Items"), value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue) },
+        { label: t("Quantity Items"), value: String(summary.quantityCount), sub: money(currencySymbol, summary.quantityValue) },
+        { label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items` },
+        { label: t("Incoming"), value: `${summary.incomingCount} items`, sub: money(currencySymbol, summary.incomingValue) },
+        { label: t("Low Stock"), value: `${summary.lowStockCount} items`, tone: summary.lowStockCount > 0 ? "warn" : undefined }
       ]
     : [];
 
   return (
     <div className="inventory-page">
       <div className="inventory-head">
-        <h1>Inventory</h1>
-        {canEdit ? (
+        <h1>{t("Inventory")}</h1>
+        {canEdit && tab === "items" ? (
           <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
             + Add Item
           </button>
         ) : null}
       </div>
+
+      <div className="inventory-tabs" role="tablist">
+        {TABS.map(entry => (
+          <button
+            key={entry.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.key}
+            data-active={tab === entry.key}
+            onClick={() => setTab(entry.key)}
+          >
+            {t(entry.label)}
+          </button>
+        ))}
+      </div>
+
+      {tab === "purchases" ? (
+        <PurchasesPanel
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          supplierNames={supplierNames}
+          onStockChanged={() => { void reload(); void reloadSuppliers(); }}
+        />
+      ) : tab === "suppliers" ? (
+        <SuppliersPanel
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          onChanged={() => void reloadSuppliers()}
+        />
+      ) : (
+        <>
 
       <div className="inventory-stats">
         {cards.map(card => (
@@ -168,22 +236,22 @@ export function InventoryContent({
       <div className="inventory-filters">
         <input
           className="input"
-          placeholder="Search items, brand, ref, serial, SKU…"
+          placeholder={t("Search items, brand, ref, serial, SKU…")}
           value={search}
           onChange={event => setSearch(event.target.value)}
         />
         <select className="input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-          <option value="">All Categories</option>
-          {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          <option value="">{t("All Categories")}</option>
+          {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
         </select>
         <select className="input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-          <option value="">All Types</option>
-          <option value="unique">Unique</option>
-          <option value="quantity">Quantity</option>
+          <option value="">{t("All Types")}</option>
+          <option value="unique">{t("Unique")}</option>
+          <option value="quantity">{t("Quantity")}</option>
         </select>
         <select className="input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="">All Status</option>
-          {INVENTORY_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          <option value="">{t("All Status")}</option>
+          {INVENTORY_STATUSES.map(s => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
         </select>
       </div>
 
@@ -193,19 +261,19 @@ export function InventoryContent({
         <table className="inventory-table">
           <thead>
             <tr>
-              <th>Item</th><th>Type</th><th>Category</th><th>Status</th>
-              <th className="r">On Hand</th><th className="r">Value</th><th>Location</th><th />
+              <th>{t("Item")}</th><th>{t("Type")}</th><th>{t("Category")}</th><th>{t("Status")}</th>
+              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="inventory-empty">Loading…</td></tr>
+              <tr><td colSpan={8} className="inventory-empty">{t("Loading…")}</td></tr>
             ) : visible.length === 0 ? (
               <tr>
                 <td colSpan={8} className="inventory-empty">
                   {items.length === 0
                     ? "Nothing in inventory yet. Add your first item, or import your opening stock."
-                    : "No items match these filters."}
+                    : t("No items match these filters.")}
                 </td>
               </tr>
             ) : visible.map(item => (
@@ -217,13 +285,13 @@ export function InventoryContent({
                       .filter(Boolean).join(" · ")}
                   </span>
                 </td>
-                <td><span className="inventory-chip">{item.trackingType === "unique" ? "Unique" : "Quantity"}</span></td>
-                <td>{item.category}</td>
+                <td><span className="inventory-chip">{item.trackingType === "unique" ? t("Unique") : t("Quantity")}</span></td>
+                <td>{t(item.category)}</td>
                 <td>
                   <span className={`inventory-status is-${item.status}`}>
                     {isInventoryLowStock(item) && item.status === "available"
                       ? "Low Stock"
-                      : STATUS_LABEL[item.status] ?? item.status}
+                      : t(STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </td>
                 <td className="r">
@@ -242,9 +310,9 @@ export function InventoryContent({
                       value=""
                       onChange={e => { if (e.target.value) void changeStatus(item, e.target.value as InventoryStatus); }}
                     >
-                      <option value="">Move to…</option>
+                      <option value="">{t("Move to…")}</option>
                       {INVENTORY_STATUSES.filter(s => s !== item.status).map(s => (
-                        <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                        <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>
                       ))}
                     </select>
                   ) : null}
@@ -254,6 +322,9 @@ export function InventoryContent({
           </tbody>
         </table>
       </div>
+
+        </>
+      )}
 
       {modalOpen ? (
         <NewItemModal
@@ -282,6 +353,8 @@ function NewItemModal({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [draft, setDraft] = useState<InventoryItemInput>(() => emptyDraft("unique"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -319,7 +392,7 @@ function NewItemModal({
       await saveInventoryItem(workspace, draft);
       await onSaved();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The item could not be saved.");
+      setError(failure instanceof Error ? t(failure.message) : "The item could not be saved.");
     } finally {
       setBusy(false);
     }
@@ -329,8 +402,8 @@ function NewItemModal({
     <div className="modal-backdrop" role="presentation">
       <div className="modal inventory-modal" role="dialog" aria-modal="true" aria-label="Add inventory item">
         <div className="inventory-modal-head">
-          <h2>Add Inventory Item</h2>
-          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label="Close">×</button>
+          <h2>{t("Add Inventory Item")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
 
         <div className="inventory-type-choice">
@@ -360,100 +433,99 @@ function NewItemModal({
 
         <div className="inventory-form">
           <label className="inventory-field is-wide">
-            <span>Name</span>
+            <span>{t("Name")}</span>
             <input className="input" value={draft.name} onChange={e => set("name", e.target.value)}
               placeholder={isUnique ? "Rolex Air-King 5500" : "Dial Paint — Black"} />
           </label>
 
           <label className="inventory-field">
-            <span>Category</span>
+            <span>{t("Category")}</span>
             <select className="input" value={draft.category} onChange={e => set("category", e.target.value)}>
-              {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
             </select>
           </label>
 
           <label className="inventory-field">
-            <span>Location</span>
+            <span>{t("Location")}</span>
             <input className="input" value={draft.location ?? ""} onChange={e => set("location", e.target.value)}
-              placeholder="Safe A, Drawer 3…" />
+              placeholder={t("Safe A, Drawer 3…")} />
           </label>
 
           {isUnique ? (
             <>
-              <label className="inventory-field"><span>Brand</span>
+              <label className="inventory-field"><span>{t("Brand")}</span>
                 <input className="input" value={draft.brand ?? ""} onChange={e => set("brand", e.target.value)} /></label>
-              <label className="inventory-field"><span>Model</span>
+              <label className="inventory-field"><span>{t("Model")}</span>
                 <input className="input" value={draft.model ?? ""} onChange={e => set("model", e.target.value)} /></label>
-              <label className="inventory-field"><span>Reference</span>
+              <label className="inventory-field"><span>{t("Reference")}</span>
                 <input className="input" value={draft.reference ?? ""} onChange={e => set("reference", e.target.value)} /></label>
-              <label className="inventory-field"><span>Serial Number</span>
+              <label className="inventory-field"><span>{t("Serial Number")}</span>
                 <input className="input" value={draft.serialNumber ?? ""} onChange={e => set("serialNumber", e.target.value)} /></label>
-              <label className="inventory-field"><span>Year</span>
+              <label className="inventory-field"><span>{t("Year")}</span>
                 <input className="input" value={draft.year ?? ""} onChange={e => set("year", e.target.value)} /></label>
-              <label className="inventory-field"><span>Condition</span>
+              <label className="inventory-field"><span>{t("Condition")}</span>
                 <input className="input" value={draft.condition ?? ""} onChange={e => set("condition", e.target.value)}
-                  placeholder="Good, Fair, Needs service…" /></label>
+                  placeholder={t("Good, Fair, Needs service…")} /></label>
             </>
           ) : (
             <>
-              <label className="inventory-field"><span>SKU</span>
+              <label className="inventory-field"><span>{t("SKU")}</span>
                 <input className="input" value={draft.sku ?? ""} onChange={e => set("sku", e.target.value)}
                   placeholder="PAINT-BLK" /></label>
-              <label className="inventory-field"><span>On Hand</span>
-                <input className="input" type="number" min={0} step="0.01" value={draft.onHand ?? 0}
+              <label className="inventory-field"><span>{t("On Hand")}</span>
+                <input className="input" type="number" min={0} step="0.01" value={draft.onHand ? String(draft.onHand) : ""} placeholder="0"
                   onChange={e => set("onHand", Number(e.target.value) || 0)} /></label>
-              <label className="inventory-field"><span>Unit</span>
+              <label className="inventory-field"><span>{t("Unit")}</span>
                 <input className="input" value={draft.unit ?? ""} onChange={e => set("unit", e.target.value)}
-                  placeholder="ml, g, pcs" /></label>
-              <label className="inventory-field"><span>Reorder at</span>
-                <input className="input" type="number" min={0} step="0.01" value={draft.lowStockAt ?? 0}
+                  placeholder={t("ml, g, pcs")} /></label>
+              <label className="inventory-field"><span>{t("Reorder at")}</span>
+                <input className="input" type="number" min={0} step="0.01" value={draft.lowStockAt ? String(draft.lowStockAt) : ""} placeholder="0"
                   onChange={e => set("lowStockAt", Number(e.target.value) || 0)} /></label>
             </>
           )}
 
-          <label className="inventory-field"><span>Supplier</span>
+          <label className="inventory-field"><span>{t("Supplier")}</span>
             <input className="input" value={draft.supplierName ?? ""} onChange={e => set("supplierName", e.target.value)} /></label>
-          <label className="inventory-field"><span>Purchase date</span>
+          <label className="inventory-field"><span>{t("Purchase date")}</span>
             <input className="input" type="date" value={draft.purchaseDate ?? ""} onChange={e => set("purchaseDate", e.target.value)} /></label>
         </div>
 
         <div className="inventory-cost-block">
           <div className="inventory-cost-head">
-            <strong>Cost</strong>
+            <strong>{t("Cost")}</strong>
             <span>
-              Purchase price and additional costs are kept apart on purpose — the VAT margin scheme
-              uses the price of the item alone.
+              {t("Purchase price and additional costs are kept apart on purpose — the VAT margin scheme uses the price of the item alone.")}
             </span>
           </div>
           <div className="inventory-form">
             <label className="inventory-field">
-              <span>Purchase price {isUnique ? "" : "(per unit)"}</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ?? 0}
+              <span>{isUnique ? t("Purchase price") : t("Purchase price (per unit)")}</span>
+              <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ? String(draft.purchasePrice) : ""} placeholder="0.00"
                 onChange={e => set("purchasePrice", Number(e.target.value) || 0)} />
             </label>
             <label className="inventory-field">
-              <span>Current value (est.)</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ?? 0}
+              <span>{t("Current value (est.)")}</span>
+              <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ? String(draft.currentValueEst) : ""} placeholder="0.00"
                 onChange={e => set("currentValueEst", Number(e.target.value) || 0)} />
             </label>
           </div>
 
           {extras.map((row, index) => (
             <div className="inventory-extra-row" key={index}>
-              <input className="input" placeholder="Service, shipping, restoration…" value={row.label}
+              <input className="input" placeholder={t("Service, shipping, restoration…")} value={row.label}
                 onChange={e => set("additionalCosts", extras.map((r, i) => i === index ? { ...r, label: e.target.value } : r))} />
-              <input className="input" type="number" min={0} step="0.01" value={row.amount}
+              <input className="input" type="number" min={0} step="0.01" value={row.amount ? String(row.amount) : ""} placeholder="0.00"
                 onChange={e => set("additionalCosts", extras.map((r, i) => i === index ? { ...r, amount: Number(e.target.value) || 0 } : r))} />
-              <button type="button" onClick={() => set("additionalCosts", extras.filter((_, i) => i !== index))}>Remove</button>
+              <button type="button" onClick={() => set("additionalCosts", extras.filter((_, i) => i !== index))}>{t("Remove")}</button>
             </div>
           ))}
           <button type="button" className="inventory-add-cost"
             onClick={() => set("additionalCosts", [...extras, { label: "", amount: 0 }])}>
-            + Add cost
+            {t("+ Add cost")}
           </button>
 
           <div className="inventory-cost-total">
-            <span>Internal total cost</span>
+            <span>{t("Internal total cost")}</span>
             <strong>{money(currencySymbol, internalTotal)}</strong>
           </div>
         </div>
@@ -465,17 +537,16 @@ function NewItemModal({
             onChange={e => set("ownership", e.target.checked ? "customer" : "business")}
           />
           <span>
-            This belongs to a customer, not the business. It will be held and findable, but valued at
-            zero and left out of inventory value.
+            {t("This belongs to a customer, not the business. It will be held and findable, but valued at zero and left out of inventory value.")}
           </span>
         </label>
 
         {error ? <p className="inventory-notice">{error}</p> : null}
 
         <div className="inventory-modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="button" onClick={onClose}>{t("Cancel")}</button>
           <button type="button" className="inventory-primary" disabled={busy} onClick={() => void submit()}>
-            {busy ? "Saving…" : "Add Item"}
+            {busy ? t("Saving…") : t("Add Item")}
           </button>
         </div>
       </div>

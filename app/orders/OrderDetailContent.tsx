@@ -96,6 +96,7 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { OrderStockBlock } from "./OrderStockBlock";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 
@@ -5873,6 +5874,14 @@ export function OrderDetailContent({
                     />
                   </>
                 ) : null}
+                <div className="app-card-divider" />
+                <OrderStockBlock
+                  workspace={workspace}
+                  orderId={order.id}
+                  currencySymbol={moneySymbol(moneySettings)}
+                  canEdit={canInlineEditFullDetails}
+                  onUseAsBaseCost={total => { void saveMoneyFinanceValue("watchPurchasePrice", total, "Cost (Base)"); }}
+                />
               </div>
             ) : (
               <LockedInline title="Materials & Inventory locked" note="Materials cards are available from NivaDesk Lite." />
