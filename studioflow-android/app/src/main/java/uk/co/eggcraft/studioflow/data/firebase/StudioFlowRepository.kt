@@ -58,6 +58,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioOrderStockLine
+import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockRead
+import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockRow
+import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockSkip
+import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
 import uk.co.eggcraft.studioflow.data.model.StudioPurchase
 import uk.co.eggcraft.studioflow.data.model.StudioSupplier
 import uk.co.eggcraft.studioflow.data.model.StudioTeamAccessSnapshot
@@ -2631,6 +2635,51 @@ class StudioFlowRepository(
 
     suspend fun inventorySaveSupplier(workspaceId: String, supplier: Map<String, Any?>, supplierId: String = "") {
         inventoryCall("saveSupplier", workspaceId, mapOf("supplierId" to supplierId, "supplier" to supplier))
+    }
+
+    /** Asks the server what a pasted list would become. The preview and the
+     *  import come out of the same call, so the screen cannot promise one thing
+     *  and the write do another. */
+    suspend fun inventoryReadOpeningStock(
+        workspaceId: String,
+        text: String,
+        hasHeader: Boolean,
+        mapping: List<String>,
+        defaultType: StudioTrackingType,
+        typeOverrides: Map<Int, StudioTrackingType>
+    ): StudioOpeningStockRead {
+        val payload = mutableMapOf<String, Any?>(
+            "text" to text, "hasHeader" to hasHeader, "defaultType" to defaultType.raw
+        )
+        if (mapping.isNotEmpty()) payload["mapping"] = mapping
+        if (typeOverrides.isNotEmpty()) {
+            payload["typeOverrides"] = typeOverrides.entries.associate { it.key.toString() to it.value.raw }
+        }
+        val raw = inventoryCall("parseOpeningStock", workspaceId, payload)
+        return StudioOpeningStockRead(
+            grid = (raw["grid"] as? List<*> ?: emptyList<Any?>())
+                .map { row -> (row as? List<*> ?: emptyList<Any?>()).map { it as? String ?: "" } },
+            headers = (raw["headers"] as? List<*> ?: emptyList<Any?>()).map { it as? String ?: "" },
+            mapping = (raw["mapping"] as? List<*> ?: emptyList<Any?>()).map { it as? String ?: "" },
+            items = (raw["items"] as? List<*> ?: emptyList<Any?>())
+                .mapNotNull { (it as? Map<*, *>)?.let(StudioOpeningStockRow::from) },
+            skipped = (raw["skipped"] as? List<*> ?: emptyList<Any?>()).mapNotNull { entry ->
+                (entry as? Map<*, *>)?.let {
+                    StudioOpeningStockSkip(it["name"] as? String ?: "", it["reason"] as? String ?: "")
+                }
+            },
+            maxRows = (raw["maxRows"] as? Number)?.toInt() ?: 500
+        )
+    }
+
+    suspend fun inventoryImportOpeningStock(
+        workspaceId: String,
+        items: List<Map<String, Any?>>,
+        openingDate: String
+    ): Int {
+        val raw = inventoryCall(
+            "importOpeningStock", workspaceId, mapOf("items" to items, "openingDate" to openingDate))
+        return (raw["imported"] as? Number)?.toInt() ?: 0
     }
 
     suspend fun inventoryOrderStock(workspaceId: String, orderId: String): Pair<List<StudioOrderStockLine>, Double> {

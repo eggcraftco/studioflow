@@ -126,6 +126,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var loading by remember { mutableStateOf(true) }
     var notice by remember { mutableStateOf<String?>(null) }
     var showNewItem by remember { mutableStateOf(false) }
+    var showOpeningStock by remember { mutableStateOf(false) }
     var showNewPurchase by remember { mutableStateOf(false) }
     var showNewSupplier by remember { mutableStateOf(false) }
     var editingSupplier by remember { mutableStateOf<StudioSupplier?>(null) }
@@ -177,6 +178,13 @@ fun InventoryScreen(state: StudioFlowUiState) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(t("Inventory"), fontSize = 21.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
+            if (canEdit && tab == InventoryTab.Items) {
+                Text(
+                    t("Import opening stock"),
+                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
+                    modifier = Modifier.clickable { showOpeningStock = true }.padding(end = 12.dp)
+                )
+            }
             if (canEdit) {
                 Button(onClick = {
                     when (tab) {
@@ -271,6 +279,20 @@ fun InventoryScreen(state: StudioFlowUiState) {
                 onEdit = { editingSupplier = it }
             )
         }
+    }
+
+    if (showOpeningStock) {
+        OpeningStockDialog(
+            workspaceId = workspaceId,
+            symbol = symbol,
+            t = t,
+            onDismiss = { showOpeningStock = false },
+            onImported = { count ->
+                showOpeningStock = false
+                notice = "$count " + t("items were imported as opening stock.")
+                scope.launch { reloadItems() }
+            }
+        )
     }
 
     if (showNewItem) {

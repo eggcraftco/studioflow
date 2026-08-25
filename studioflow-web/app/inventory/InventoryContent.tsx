@@ -22,6 +22,7 @@ import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
@@ -99,6 +100,7 @@ export function InventoryContent({
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [openingOpen, setOpeningOpen] = useState(false);
   const [tab, setTab] = useState<InventoryTab>("items");
   const [supplierNames, setSupplierNames] = useState<string[]>([]);
 
@@ -176,9 +178,14 @@ export function InventoryContent({
       <div className="inventory-head">
         <h1>{t("Inventory")}</h1>
         {canEdit && tab === "items" ? (
-          <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
-            + Add Item
-          </button>
+          <div className="inventory-head-actions">
+            <button type="button" className="inventory-secondary" onClick={() => setOpeningOpen(true)}>
+              {t("Import opening stock")}
+            </button>
+            <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
+              + {t("Add Item")}
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -271,9 +278,16 @@ export function InventoryContent({
             ) : visible.length === 0 ? (
               <tr>
                 <td colSpan={8} className="inventory-empty">
-                  {items.length === 0
-                    ? "Nothing in inventory yet. Add your first item, or import your opening stock."
-                    : t("No items match these filters.")}
+                  {items.length === 0 ? (
+                    <>
+                      {t("Nothing in inventory yet.")}{" "}
+                      {canEdit ? (
+                        <button type="button" className="inventory-link" onClick={() => setOpeningOpen(true)}>
+                          {t("Import your opening stock")}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : t("No items match these filters.")}
                 </td>
               </tr>
             ) : visible.map(item => (
@@ -325,6 +339,19 @@ export function InventoryContent({
 
         </>
       )}
+
+      {openingOpen ? (
+        <OpeningStockModal
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          onClose={() => setOpeningOpen(false)}
+          onImported={async count => {
+            setOpeningOpen(false);
+            await reload();
+            setNotice(`${count} ${t("items were imported as opening stock.")}`);
+          }}
+        />
+      ) : null}
 
       {modalOpen ? (
         <NewItemModal

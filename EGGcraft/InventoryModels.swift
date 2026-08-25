@@ -278,6 +278,73 @@ struct OrderStockLine: Identifiable, Equatable {
     }
 }
 
+/// One row of a pasted list, as the server read it. The payload is handed back
+/// to the import untouched, so what the preview shows is what gets written.
+struct OpeningStockRow: Identifiable {
+    let id = UUID()
+    let rowIndex: Int
+    let name: String
+    let category: String
+    let trackingType: InventoryTrackingType
+    let onHand: Double
+    let unit: String
+    let purchasePrice: Double
+    let location: String
+    let lineValue: Double
+    /// The raw dictionary the server returned; passed straight to the import.
+    let payload: [String: Any]
+
+    init?(_ raw: [String: Any]) {
+        guard let name = raw["name"] as? String else { return nil }
+        rowIndex = (raw["rowIndex"] as? NSNumber)?.intValue ?? 0
+        self.name = name
+        category = raw["category"] as? String ?? "Other"
+        trackingType = InventoryTrackingType(rawValue: raw["trackingType"] as? String ?? "") ?? .quantity
+        onHand = (raw["onHand"] as? NSNumber)?.doubleValue ?? 0
+        unit = raw["unit"] as? String ?? ""
+        purchasePrice = (raw["purchasePrice"] as? NSNumber)?.doubleValue ?? 0
+        location = raw["location"] as? String ?? ""
+        lineValue = (raw["lineValue"] as? NSNumber)?.doubleValue ?? 0
+        payload = raw
+    }
+}
+
+/// A row that cannot become an item, and the reason as a code — the words
+/// belong to whichever language the app is in.
+struct OpeningStockSkip: Identifiable {
+    let id = UUID()
+    let name: String
+    let reason: String
+
+    var message: String {
+        reason == "noName"
+            ? "No name — this row cannot become an item."
+            : "No amount on hand — a counted item needs one."
+    }
+}
+
+struct OpeningStockRead {
+    var grid: [[String]] = []
+    var headers: [String] = []
+    var mapping: [String] = []
+    var items: [OpeningStockRow] = []
+    var skipped: [OpeningStockSkip] = []
+    var maxRows: Int = 500
+
+    var bodyRows: [[String]] { grid.count > 1 ? Array(grid.dropFirst()) : [] }
+}
+
+/// The fields a pasted column can be pointed at. The aliases that guess this
+/// automatically live on the server; these are only the menu labels.
+let openingStockFields: [(key: String, label: String)] = [
+    ("name", "Name"), ("trackingType", "Type"), ("category", "Category"),
+    ("brand", "Brand"), ("model", "Model"), ("reference", "Reference"),
+    ("serialNumber", "Serial number"), ("sku", "SKU"), ("onHand", "On hand"),
+    ("unit", "Unit"), ("lowStockAt", "Reorder at"), ("purchasePrice", "Purchase price"),
+    ("location", "Location"), ("supplierName", "Supplier"),
+    ("purchaseDate", "Purchase date"), ("notes", "Notes")
+]
+
 struct InventoryError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -354,6 +421,46 @@ extension FirebaseManager {
 
     func saveSupplier(_ supplier: [String: Any], supplierId: String = "") async throws {
         _ = try await inventoryCall("saveSupplier", ["supplierId": supplierId, "supplier": supplier])
+    }
+
+    /// Asks the server what a pasted list would become. The preview and the
+    /// import come out of the same call, so the screen cannot promise one thing
+    /// and the write do another.
+    func readOpeningStock(
+        text: String,
+        hasHeader: Bool,
+        mapping: [String],
+        defaultType: InventoryTrackingType,
+        typeOverrides: [Int: InventoryTrackingType]
+    ) async throws -> OpeningStockRead {
+        var payload: [String: Any] = [
+            "text": text,
+            "hasHeader": hasHeader,
+            "defaultType": defaultType.rawValue
+        ]
+        if !mapping.isEmpty { payload["mapping"] = mapping }
+        if !typeOverrides.isEmpty {
+            payload["typeOverrides"] = Dictionary(
+                uniqueKeysWithValues: typeOverrides.map { (String($0.key), $0.value.rawValue) })
+        }
+        let raw = try await inventoryCall("parseOpeningStock", payload)
+        var read = OpeningStockRead()
+        read.grid = (raw["grid"] as? [[String]]) ?? []
+        read.headers = (raw["headers"] as? [String]) ?? []
+        read.mapping = (raw["mapping"] as? [String]) ?? []
+        read.items = (raw["items"] as? [[String: Any]] ?? []).compactMap(OpeningStockRow.init)
+        read.skipped = (raw["skipped"] as? [[String: Any]] ?? []).map {
+            OpeningStockSkip(name: $0["name"] as? String ?? "", reason: $0["reason"] as? String ?? "")
+        }
+        read.maxRows = (raw["maxRows"] as? NSNumber)?.intValue ?? 500
+        return read
+    }
+
+    @discardableResult
+    func importOpeningStock(items: [[String: Any]], openingDate: String) async throws -> Int {
+        let raw = try await inventoryCall(
+            "importOpeningStock", ["items": items, "openingDate": openingDate])
+        return (raw["imported"] as? NSNumber)?.intValue ?? 0
     }
 
     func loadOrderStock(orderId: String) async throws -> (lines: [OrderStockLine], total: Double) {

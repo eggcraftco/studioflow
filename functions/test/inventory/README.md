@@ -7,7 +7,19 @@ Two kinds, both runnable from `functions/`.
 ```
 node test/inventory/money-rules.test.js
 node test/inventory/reservations.test.js
+node test/inventory/spreadsheet.test.js
+node test/inventory/opening-roundtrip.test.js
 ```
+
+`spreadsheet.test.js` covers reading a pasted list: tab, comma and semicolon
+delimiters, quoted fields with commas and newlines inside them, and numbers in
+both `£1,250.50` and `1.250,50` form. That code lives on the server precisely so
+there is one of it — written once per platform, a name like `Strap, brown` would
+have three chances to break on one client only.
+
+`opening-roundtrip.test.js` guards the shape of what the preview returns: the
+rows a person approves go straight back to the import, so a "display shape"
+would quietly write counted items with zero stock.
 
 These load `inventory.js` against a fake Firestore. Fast, but a fake cannot
 enforce everything a real one does: the read-before-write rule and nested-map

@@ -363,6 +363,219 @@ function createInventoryFunctions({
   // Opening stock: what is on the shelf today, without reconstructing years of
   // bank history to justify it. Items land marked so a later reconciliation can
   // tell them apart from things bought through NivaDesk.
+  // -------------------------------------------------------------------------
+  // Reading a spreadsheet
+  //
+  // Splitting delimited text is fiddly in exactly the ways that bite: a name
+  // like `Strap, brown` inside quotes, a doubled quote meaning a literal one, a
+  // paste out of Excel that is tab-separated, a European export using
+  // semicolons and commas for decimals. Writing that three times — once per
+  // platform — is three chances for one of them to be subtly wrong, so it is
+  // written once, here, and every client asks.
+  // -------------------------------------------------------------------------
+
+  const OPENING_STOCK_ALIASES = [
+    ["name", ["name", "item", "item name", "description", "product", "title"]],
+    ["trackingType", ["type", "tracking", "tracking type", "kind"]],
+    ["category", ["category", "group"]],
+    ["brand", ["brand", "make", "manufacturer"]],
+    ["model", ["model"]],
+    ["reference", ["reference", "ref", "ref."]],
+    ["serialNumber", ["serial", "serial number", "serial no", "serialno"]],
+    ["sku", ["sku", "code", "part number", "part no"]],
+    ["onHand", ["on hand", "onhand", "qty", "quantity", "stock", "count", "amount"]],
+    ["unit", ["unit", "units", "uom"]],
+    ["lowStockAt", ["reorder at", "reorder", "min", "minimum", "low stock"]],
+    ["purchasePrice", ["purchase price", "price", "cost", "unit price", "unit cost", "buy price"]],
+    ["location", ["location", "where", "shelf", "bin", "storage"]],
+    ["supplierName", ["supplier", "vendor", "from", "bought from"]],
+    ["purchaseDate", ["purchase date", "date", "bought", "acquired"]],
+    ["notes", ["notes", "note", "comment", "comments"]]
+  ];
+
+  function splitDelimited(text) {
+    const source = String(text || "").replace(/\r\n?/g, "\n").trim();
+    if (!source) return [];
+
+    // The delimiter is detected from the header line rather than assumed.
+    const firstLine = source.split("\n")[0];
+    const candidates = [
+      ["\t", (firstLine.match(/\t/g) || []).length],
+      [",", (firstLine.match(/,/g) || []).length],
+      [";", (firstLine.match(/;/g) || []).length]
+    ].sort((a, b) => b[1] - a[1]);
+    const delimiter = candidates[0][1] > 0 ? candidates[0][0] : ",";
+
+    const rows = [];
+    let cell = "";
+    let row = [];
+    let quoted = false;
+
+    for (let i = 0; i < source.length; i += 1) {
+      const char = source[i];
+      if (quoted) {
+        if (char === '"') {
+          if (source[i + 1] === '"') { cell += '"'; i += 1; }
+          else quoted = false;
+        } else cell += char;
+        continue;
+      }
+      if (char === '"') { quoted = true; continue; }
+      if (char === delimiter) { row.push(cell); cell = ""; continue; }
+      if (char === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; continue; }
+      cell += char;
+    }
+    row.push(cell);
+    rows.push(row);
+
+    return rows
+      .map((cells) => cells.map((value) => value.trim()))
+      .filter((cells) => cells.some((value) => value !== ""));
+  }
+
+  function guessMapping(headers) {
+    const used = new Set();
+    return headers.map((header) => {
+      const needle = String(header || "").trim().toLowerCase()
+        .replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+      if (!needle) return "";
+      const match = OPENING_STOCK_ALIASES.find(
+        ([key, aliases]) => !used.has(key) && aliases.includes(needle)
+      );
+      if (!match) return "";
+      used.add(match[0]);
+      return match[0];
+    });
+  }
+
+  /**
+   * Money and counts out of a spreadsheet arrive as "£1,250.00" or "1.250,00".
+   * Whichever separator comes last is the decimal point; the other groups.
+   */
+  function spreadsheetNumber(raw) {
+    const cleaned = String(raw == null ? "" : raw).replace(/[^\d.,-]/g, "").trim();
+    if (!cleaned) return 0;
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    const normalized = lastComma > lastDot
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned.replace(/,/g, "");
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  /**
+   * Answers one question: what would this list become?
+   *
+   * The preview a person approves and the rows that get written come out of
+   * this same call, so the screen cannot promise one thing and the import do
+   * another. Skip reasons come back as codes — the words belong to whichever
+   * language the client is in.
+   */
+  const parseOpeningStock = onCall({ region: REGION }, async (request) => {
+    await requireInventoryAccess(request);
+    const data = request.data || {};
+    // 400k of text is far more than 500 rows of stock and keeps one paste from
+    // becoming a denial of service.
+    const text = String(data.text || "").slice(0, 400000);
+    const rows = splitDelimited(text);
+    const width = rows.length > 0 ? Math.max(...rows.map((cells) => cells.length)) : 0;
+    // Ragged rows are normal in exports; pad so every client indexes safely.
+    const grid = rows.map((cells) => {
+      const padded = cells.slice(0, width);
+      while (padded.length < width) padded.push("");
+      return padded;
+    });
+    const headers = grid.length > 0 ? grid[0] : [];
+    const guessed = guessMapping(headers);
+
+    const hasHeader = data.hasHeader !== false;
+    const mapping = Array.isArray(data.mapping) && data.mapping.length === width
+      ? data.mapping.map((key) => String(key || ""))
+      : guessed;
+    const defaultType = TRACKING_TYPES.includes(String(data.defaultType))
+      ? String(data.defaultType)
+      : "quantity";
+    const overrides = (data.typeOverrides && typeof data.typeOverrides === "object")
+      ? data.typeOverrides
+      : {};
+
+    const body = hasHeader ? grid.slice(1) : grid;
+    const nameColumn = mapping.indexOf("name");
+    const items = [];
+    const skipped = [];
+
+    if (nameColumn >= 0) {
+      body.forEach((cells, rowIndex) => {
+        const pick = (key) => {
+          const index = mapping.indexOf(key);
+          return index >= 0 ? String(cells[index] || "").trim() : "";
+        };
+        const typeCell = pick("trackingType").toLowerCase();
+        const override = TRACKING_TYPES.includes(String(overrides[rowIndex]))
+          ? String(overrides[rowIndex])
+          : "";
+        const trackingType = override
+          || (typeCell.startsWith("u") ? "unique"
+            : typeCell.startsWith("q") ? "quantity"
+            : defaultType);
+        const isUnique = trackingType === "unique";
+
+        const raw = {
+          name: pick("name"),
+          category: pick("category") || "Other",
+          trackingType,
+          brand: pick("brand"),
+          model: pick("model"),
+          reference: pick("reference"),
+          serialNumber: pick("serialNumber"),
+          sku: pick("sku"),
+          location: pick("location"),
+          supplierName: pick("supplierName"),
+          purchaseDate: pick("purchaseDate"),
+          notes: pick("notes"),
+          unit: isUnique ? "" : pick("unit"),
+          onHand: isUnique ? 1 : spreadsheetNumber(pick("onHand")),
+          lowStockAt: isUnique ? 0 : spreadsheetNumber(pick("lowStockAt")),
+          purchasePrice: spreadsheetNumber(pick("purchasePrice")),
+          additionalCosts: []
+        };
+
+        // Why a row cannot become an item, said in terms of what is missing.
+        const reason = !raw.name ? "noName"
+          : (!isUnique && !(raw.onHand > 0)) ? "noAmount"
+          : "";
+        if (reason) {
+          skipped.push({ rowIndex, name: raw.name, reason });
+          return;
+        }
+        // Returned in the shape importOpeningStock takes, so the rows the
+        // person approved are the exact rows that get written — not a
+        // normalized view of them that has to be translated back.
+        const costs = costSummary(raw.purchasePrice, raw.additionalCosts);
+        items.push({
+          ...raw,
+          rowIndex,
+          // For the preview only: what this line is worth on the shelf.
+          lineValue: roundMoney(costs.internalTotalCost * (isUnique ? 1 : raw.onHand))
+        });
+      });
+    }
+
+    return {
+      ok: true,
+      grid,
+      width,
+      headers,
+      mapping,
+      guessedMapping: guessed,
+      fields: OPENING_STOCK_ALIASES.map(([key]) => key),
+      items,
+      skipped,
+      maxRows: 500
+    };
+  });
+
   const importOpeningStock = onCall({ region: REGION }, async (request) => {
     const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const rows = Array.isArray(request.data && request.data.items)
@@ -944,6 +1157,7 @@ function createInventoryFunctions({
     listInventoryItems,
     getInventorySummary,
     importOpeningStock,
+    parseOpeningStock,
     savePurchase,
     receivePurchase,
     listPurchases,
@@ -954,7 +1168,7 @@ function createInventoryFunctions({
     reserveInventoryForOrder,
     releaseInventoryFromOrder,
     getOrderInventory,
-    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
+    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }
 

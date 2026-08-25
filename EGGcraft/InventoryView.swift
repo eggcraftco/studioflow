@@ -68,6 +68,7 @@ struct InventoryView: View {
     @State private var typeFilter: InventoryTrackingType?
     @State private var statusFilter: InventoryStatus?
     @State private var showNewItem = false
+    @State private var showOpeningStock = false
     @State private var showNewPurchase = false
     @State private var editingSupplier: Supplier?
     @State private var showNewSupplier = false
@@ -110,6 +111,13 @@ struct InventoryView: View {
             .padding(isPhone ? 14 : 22)
         }
         .task { await model.loadItems(firebaseManager) }
+        .sheet(isPresented: $showOpeningStock) {
+            OpeningStockSheet(currencySymbol: seciliParaBirimi, lang: seciliDil) { count in
+                model.notice = "\(count) " + t("items were imported as opening stock.", lang: seciliDil)
+                Task { await model.loadItems(firebaseManager) }
+            }
+            .environmentObject(firebaseManager)
+        }
         .sheet(isPresented: $showNewItem) {
             NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil) {
                 Task { await model.loadItems(firebaseManager) }
@@ -156,6 +164,12 @@ struct InventoryView: View {
             if canEdit {
                 switch tab {
                 case .items:
+                    if !isPhone {
+                        Button { showOpeningStock = true } label: {
+                            Text(t("Import opening stock", lang: seciliDil))
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     Button { showNewItem = true } label: { Label(t("Add Item", lang: seciliDil), systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
                 case .purchases:
@@ -203,6 +217,11 @@ struct InventoryView: View {
 
     private var itemsTab: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if isPhone && canEdit {
+                Button(t("Import opening stock", lang: seciliDil)) { showOpeningStock = true }
+                    .font(.system(size: 12, weight: .semibold))
+                    .buttonStyle(.plain).foregroundColor(.blue)
+            }
             statsGrid
             if model.summary.customerOwnedCount > 0 {
                 Text(customerOwnedNote)
@@ -213,10 +232,17 @@ struct InventoryView: View {
             if model.loading && model.items.isEmpty {
                 Text(t("Loading…", lang: seciliDil)).font(.system(size: 12)).foregroundColor(.secondary)
             } else if visibleItems.isEmpty {
-                emptyBox(
-                    title: model.items.isEmpty ? t("Nothing in inventory yet", lang: seciliDil) : t("No items match these filters", lang: seciliDil),
-                    body: model.items.isEmpty ? t("Add your first item, or import your opening stock.", lang: seciliDil) : ""
-                )
+                VStack(spacing: 8) {
+                    emptyBox(
+                        title: model.items.isEmpty ? t("Nothing in inventory yet", lang: seciliDil) : t("No items match these filters", lang: seciliDil),
+                        body: model.items.isEmpty ? t("Add your first item, or import your opening stock.", lang: seciliDil) : ""
+                    )
+                    if model.items.isEmpty && canEdit {
+                        Button(t("Import your opening stock", lang: seciliDil)) { showOpeningStock = true }
+                            .font(.system(size: 12, weight: .semibold))
+                            .buttonStyle(.plain).foregroundColor(.blue)
+                    }
+                }
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(visibleItems) { item in itemRow(item) }

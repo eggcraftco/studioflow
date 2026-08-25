@@ -263,3 +263,65 @@ data class StudioOrderStockLine(
         }
     }
 }
+
+/** One row of a pasted list, as the server read it. [payload] goes back to the
+ *  import untouched, so what the preview shows is what gets written. */
+data class StudioOpeningStockRow(
+    val rowIndex: Int,
+    val name: String,
+    val category: String,
+    val trackingType: StudioTrackingType,
+    val onHand: Double,
+    val unit: String,
+    val purchasePrice: Double,
+    val location: String,
+    val lineValue: Double,
+    val payload: Map<String, Any?>
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioOpeningStockRow? {
+            val name = raw["name"] as? String ?: return null
+            @Suppress("UNCHECKED_CAST")
+            return StudioOpeningStockRow(
+                rowIndex = (raw["rowIndex"] as? Number)?.toInt() ?: 0,
+                name = name,
+                category = raw["category"] as? String ?: "Other",
+                trackingType = StudioTrackingType.from(raw["trackingType"] as? String),
+                onHand = (raw["onHand"] as? Number)?.toDouble() ?: 0.0,
+                unit = raw["unit"] as? String ?: "",
+                purchasePrice = (raw["purchasePrice"] as? Number)?.toDouble() ?: 0.0,
+                location = raw["location"] as? String ?: "",
+                lineValue = (raw["lineValue"] as? Number)?.toDouble() ?: 0.0,
+                payload = raw as Map<String, Any?>
+            )
+        }
+    }
+}
+
+/** A row that cannot become an item. The reason is a code — the words belong to
+ *  whichever language the app is in. */
+data class StudioOpeningStockSkip(val name: String, val reason: String) {
+    val message: String
+        get() = if (reason == "noName") "No name — this row cannot become an item."
+                else "No amount on hand — a counted item needs one."
+}
+
+data class StudioOpeningStockRead(
+    val grid: List<List<String>> = emptyList(),
+    val headers: List<String> = emptyList(),
+    val mapping: List<String> = emptyList(),
+    val items: List<StudioOpeningStockRow> = emptyList(),
+    val skipped: List<StudioOpeningStockSkip> = emptyList(),
+    val maxRows: Int = 500
+)
+
+/** The fields a pasted column can be pointed at. The aliases that guess this
+ *  automatically live on the server; these are only the menu labels. */
+val studioOpeningStockFields: List<Pair<String, String>> = listOf(
+    "name" to "Name", "trackingType" to "Type", "category" to "Category",
+    "brand" to "Brand", "model" to "Model", "reference" to "Reference",
+    "serialNumber" to "Serial number", "sku" to "SKU", "onHand" to "On hand",
+    "unit" to "Unit", "lowStockAt" to "Reorder at", "purchasePrice" to "Purchase price",
+    "location" to "Location", "supplierName" to "Supplier",
+    "purchaseDate" to "Purchase date", "notes" to "Notes"
+)
