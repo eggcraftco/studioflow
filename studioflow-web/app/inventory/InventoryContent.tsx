@@ -18,7 +18,18 @@ import {
   type InventoryStatus,
   type InventoryTrackingType
 } from "@/lib/studioflow/inventory";
+import { listSuppliers } from "@/lib/studioflow/inventory";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { PurchasesPanel } from "./PurchasesPanel";
+import { SuppliersPanel } from "./SuppliersPanel";
+
+type InventoryTab = "items" | "purchases" | "suppliers";
+
+const TABS: Array<{ key: InventoryTab; label: string }> = [
+  { key: "items", label: "Items" },
+  { key: "purchases", label: "Purchases" },
+  { key: "suppliers", label: "Suppliers" }
+];
 
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
@@ -81,6 +92,8 @@ export function InventoryContent({
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [tab, setTab] = useState<InventoryTab>("items");
+  const [supplierNames, setSupplierNames] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -102,6 +115,21 @@ export function InventoryContent({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Fed to the purchase form so a supplier can be picked rather than retyped —
+  // a second spelling of the same name would split its history in two.
+  const reloadSuppliers = useCallback(async () => {
+    try {
+      const result = await listSuppliers(workspace);
+      setSupplierNames((result?.suppliers ?? []).map(row => row.name).filter(Boolean));
+    } catch {
+      setSupplierNames([]);
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    void reloadSuppliers();
+  }, [reloadSuppliers]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -140,12 +168,45 @@ export function InventoryContent({
     <div className="inventory-page">
       <div className="inventory-head">
         <h1>Inventory</h1>
-        {canEdit ? (
+        {canEdit && tab === "items" ? (
           <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
             + Add Item
           </button>
         ) : null}
       </div>
+
+      <div className="inventory-tabs" role="tablist">
+        {TABS.map(entry => (
+          <button
+            key={entry.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.key}
+            data-active={tab === entry.key}
+            onClick={() => setTab(entry.key)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "purchases" ? (
+        <PurchasesPanel
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          supplierNames={supplierNames}
+          onStockChanged={() => { void reload(); void reloadSuppliers(); }}
+        />
+      ) : tab === "suppliers" ? (
+        <SuppliersPanel
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          onChanged={() => void reloadSuppliers()}
+        />
+      ) : (
+        <>
 
       <div className="inventory-stats">
         {cards.map(card => (
@@ -254,6 +315,9 @@ export function InventoryContent({
           </tbody>
         </table>
       </div>
+
+        </>
+      )}
 
       {modalOpen ? (
         <NewItemModal

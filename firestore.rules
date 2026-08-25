@@ -473,6 +473,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Purchases and suppliers follow the same rule as inventory: readable so a
+    // screen can list them, server-written because a purchase decides how the
+    // shipping is split across its lines and when its stock becomes real.
+    match /companies/{companyId}/purchases/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/suppliers/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     // Provider consent tokens — server-only, never client-readable.
     match /companies/{companyId}/bankTokens/{document=**} {
       allow read, write: if false;
@@ -585,6 +598,8 @@ service cloud.firestore {
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && collectionId != 'inventoryItems'
+        && collectionId != 'purchases'
+        && collectionId != 'suppliers'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -607,6 +622,8 @@ service cloud.firestore {
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
         && collectionId != 'inventoryItems'
+        && collectionId != 'purchases'
+        && collectionId != 'suppliers'
         && canWriteCompanyData(companyId);
     }
 

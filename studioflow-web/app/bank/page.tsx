@@ -43,6 +43,7 @@ type BankTransaction = {
   receiptName: string;
   linkedOrderId: string;
   linkedOrderLabel: string;
+  purchaseNumber: string;
   category: string;
   categoryAuto: string;
   txType: string;
@@ -278,6 +279,7 @@ function BankPageContent() {
             receiptName: String(data.receiptName || ""),
             linkedOrderId: String(data.linkedOrderId || ""),
             linkedOrderLabel: String(data.linkedOrderLabel || ""),
+            purchaseNumber: String(data.purchaseNumber || ""),
             category: String(data.category || ""),
             categoryAuto: String(data.categoryAuto || ""),
             txType: String(data.txType || ""),
@@ -1686,6 +1688,9 @@ function BankPageContent() {
                                         {duplicateIds.has(transaction.id) ? <span title={t("Possible duplicates")} style={{ marginRight: 4, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{t("Duplicate?")}</span> : null}
                                         {transaction.counterparty || transaction.description || "—"}
                                       </span>
+                                      {transaction.purchaseNumber ? (
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: "#16a34a" }}>▣ {transaction.purchaseNumber}</span>
+                                      ) : null}
                                       {transaction.linkedOrderId ? (
                                         <span style={{ fontSize: 10, fontWeight: 700, color: "#2563eb" }}>⛓ {transaction.linkedOrderLabel || t("Order")}</span>
                                       ) : isOwner && orderSuggestions.get(transaction.id) ? (() => {

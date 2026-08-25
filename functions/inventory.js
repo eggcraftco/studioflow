@@ -387,6 +387,519 @@ function createInventoryFunctions({
     return { ok: true, imported: written };
   });
 
+  // -------------------------------------------------------------------------
+  // Purchases and suppliers
+  //
+  // A purchase is the missing middle. A bank row says "£2,450 left the account
+  // and went to Vintage Watch Company"; a purchase says what that money bought,
+  // how many, and what the shipping was. Without it, inventory and banking can
+  // only be joined by guesswork.
+  //
+  // Buying is not receiving. A purchase can be placed while the goods are still
+  // with a courier, so its lines enter inventory as `incoming` and only become
+  // `available` when the purchase is marked received. A workshop that counts
+  // things it has paid for but cannot touch will start a job it cannot finish.
+  // -------------------------------------------------------------------------
+
+  const purchasesRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("purchases");
+  const suppliersRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("suppliers");
+  const bankTxRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("bankTransactions");
+
+  function cleanPurchaseLines(value) {
+    const rows = Array.isArray(value) ? value.slice(0, 60) : [];
+    return rows
+      .map((row) => {
+        const trackingType = TRACKING_TYPES.includes(String(row && row.trackingType))
+          ? String(row.trackingType)
+          : "unique";
+        const quantity = trackingType === "unique" ? 1 : cleanQuantity(row && row.quantity);
+        return {
+          itemId: clean(row && row.itemId, "", 80),
+          name: clean(row && row.name, "", 160),
+          category: clean(row && row.category, "Other", 60) || "Other",
+          trackingType,
+          quantity,
+          unit: trackingType === "unique" ? "" : clean(row && row.unit, "", 12),
+          unitPrice: cleanMoney(row && row.unitPrice),
+          reference: clean(row && row.reference, "", 80),
+          serialNumber: clean(row && row.serialNumber, "", 80),
+          location: clean(row && row.location, "", 80)
+        };
+      })
+      .filter((row) => row.name && row.quantity > 0);
+  }
+
+  // Shipping and fees are spread across the lines by value, never folded into a
+  // line's unit price. The purchase price of an item has to survive intact — it
+  // is the figure the VAT margin scheme is computed from — so the share each
+  // line carries is recorded as a separate cost against it.
+  function allocateExtras(lines, extrasTotal) {
+    const goods = lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
+    if (extrasTotal <= 0 || goods <= 0) return lines.map(() => 0);
+    let allocated = 0;
+    const shares = lines.map((line, index) => {
+      if (index === lines.length - 1) return roundMoney(extrasTotal - allocated);
+      const share = roundMoney((line.unitPrice * line.quantity / goods) * extrasTotal);
+      allocated = roundMoney(allocated + share);
+      return share;
+    });
+    return shares;
+  }
+
+  function purchaseTotals(lines, shipping, otherCosts) {
+    const goods = roundMoney(lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
+    const ship = cleanMoney(shipping);
+    const other = cleanMoney(otherCosts);
+    return { goodsTotal: goods, shipping: ship, otherCosts: other, total: roundMoney(goods + ship + other) };
+  }
+
+  async function nextPurchaseNumber(tx, companyId) {
+    const ref = companyRef(companyId);
+    const snap = await tx.get(ref);
+    const next = (Number((snap.exists ? snap.data() || {} : {}).purchaseCounter) || 0) + 1;
+    tx.set(ref, { purchaseCounter: next }, { merge: true });
+    return `PUR-${String(next).padStart(4, "0")}`;
+  }
+
+  const savePurchase = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
+    const input = request.data && request.data.purchase;
+    if (!input || typeof input !== "object") {
+      throw new HttpsError("invalid-argument", "purchase is required.");
+    }
+
+    const lines = cleanPurchaseLines(input.lines);
+    if (lines.length === 0) throw new HttpsError("invalid-argument", "Add at least one line.");
+    const totals = purchaseTotals(lines, input.shipping, input.otherCosts);
+    const shares = allocateExtras(lines, roundMoney(totals.shipping + totals.otherCosts));
+    const now = Date.now();
+
+    const result = await db().runTransaction(async (tx) => {
+      const ref = purchaseId ? purchasesRef(companyId).doc(purchaseId) : purchasesRef(companyId).doc();
+      let existing = null;
+      if (purchaseId) {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError("not-found", "Purchase not found.");
+        existing = snap.data() || {};
+        if (existing.status === "received") {
+          throw new HttpsError(
+            "failed-precondition",
+            "A received purchase cannot be edited — the stock it created is already on the shelf."
+          );
+        }
+      }
+
+      const number = existing ? existing.number : await nextPurchaseNumber(tx, companyId);
+      let counter = null;
+
+      // Each line becomes an inventory item straight away, held as `incoming`
+      // so it is visible and countable without pretending it is in the drawer.
+      const createdItemIds = [];
+      if (!existing) {
+        const companySnap = await tx.get(companyRef(companyId));
+        counter = Number((companySnap.exists ? companySnap.data() || {} : {}).inventoryCounter) || 0;
+      }
+
+      lines.forEach((line, index) => {
+        if (existing) return; // editing an unreceived purchase leaves its items alone
+        counter += 1;
+        const itemRef = itemsRef(companyId).doc();
+        const extras = shares[index] > 0
+          ? [{ label: "Shipping & fees (allocated)", amount: shares[index] }]
+          : [];
+        const fields = normalizeItemInput({
+          name: line.name,
+          category: line.category,
+          trackingType: line.trackingType,
+          reference: line.reference,
+          serialNumber: line.serialNumber,
+          location: line.location,
+          unit: line.unit,
+          onHand: line.trackingType === "unique" ? 1 : line.quantity,
+          purchasePrice: line.unitPrice,
+          additionalCosts: extras,
+          supplierName: clean(input.supplierName, "", 160),
+          purchaseDate: clean(input.purchaseDate, "", 40)
+        }, null);
+        tx.set(itemRef, {
+          ...fields,
+          companyId,
+          number: `INV-${String(counter).padStart(5, "0")}`,
+          status: "incoming",
+          reservedForOrderId: "",
+          reservations: [],
+          reservedOrderIds: [],
+          purchaseId: ref.id,
+          purchaseNumber: number,
+          source: "purchase",
+          createdAtMs: now,
+          createdByUid: uid,
+          createdByEmail: email,
+          updatedAtMs: now,
+          updatedByUid: uid
+        });
+        createdItemIds.push(itemRef.id);
+      });
+
+      if (counter !== null) tx.set(companyRef(companyId), { inventoryCounter: counter }, { merge: true });
+
+      tx.set(ref, {
+        companyId,
+        number,
+        supplierName: clean(input.supplierName, "", 160),
+        supplierId: clean(input.supplierId, "", 80),
+        purchaseDate: clean(input.purchaseDate, "", 40),
+        reference: clean(input.reference, "", 80),
+        notes: clean(input.notes, "", 2000),
+        lines: lines.map((line, index) => ({ ...line, allocatedExtras: shares[index] })),
+        ...totals,
+        status: existing ? existing.status : "ordered",
+        itemIds: existing ? existing.itemIds || [] : createdItemIds,
+        bankTransactionId: existing ? existing.bankTransactionId || "" : "",
+        receiptPath: existing ? existing.receiptPath || "" : "",
+        receivedAtMs: existing ? existing.receivedAtMs || 0 : 0,
+        createdAtMs: existing ? existing.createdAtMs || now : now,
+        createdByUid: existing ? existing.createdByUid || uid : uid,
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+
+      return { purchaseId: ref.id, number, total: totals.total, itemsCreated: createdItemIds.length };
+    });
+
+    return { ok: true, ...result };
+  });
+
+  const receivePurchase = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
+    if (!purchaseId) throw new HttpsError("invalid-argument", "purchaseId is required.");
+    const now = Date.now();
+
+    const ref = purchasesRef(companyId).doc(purchaseId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Purchase not found.");
+    const purchase = snap.data() || {};
+    if (purchase.status === "received") return { ok: true, alreadyReceived: true };
+
+    const itemIds = Array.isArray(purchase.itemIds) ? purchase.itemIds : [];
+    const batch = db().batch();
+    itemIds.forEach((itemId) => {
+      batch.set(itemsRef(companyId).doc(itemId), {
+        status: "available",
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+    });
+    batch.set(ref, { status: "received", receivedAtMs: now, updatedAtMs: now, updatedByUid: uid }, { merge: true });
+    await batch.commit();
+
+    return { ok: true, received: itemIds.length };
+  });
+
+  const listPurchases = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const snap = await purchasesRef(companyId).orderBy("createdAtMs", "desc").limit(300).get();
+    return { ok: true, purchases: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })) };
+  });
+
+  const deletePurchase = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
+    if (!purchaseId) throw new HttpsError("invalid-argument", "purchaseId is required.");
+    const ref = purchasesRef(companyId).doc(purchaseId);
+    const snap = await ref.get();
+    if (!snap.exists) return { ok: true };
+    const purchase = snap.data() || {};
+    if (purchase.status === "received") {
+      throw new HttpsError(
+        "failed-precondition",
+        "A received purchase cannot be deleted — its stock is on the shelf."
+      );
+    }
+    // The incoming items exist only because of this purchase, so they go with it.
+    const itemIds = Array.isArray(purchase.itemIds) ? purchase.itemIds : [];
+    const batch = db().batch();
+    itemIds.forEach((itemId) => batch.delete(itemsRef(companyId).doc(itemId)));
+    batch.delete(ref);
+    await batch.commit();
+    return { ok: true };
+  });
+
+  // Matching, never creating. A bank row is a merchant, a date and a total; it
+  // cannot know that £1,382.40 at eBay was one dial, one bracelet and postage.
+  // So the purchase is written by a person and the payment is attached to it.
+  const linkPurchaseToBankTransaction = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
+    const transactionId = clean(request.data && request.data.transactionId, "", 200);
+    if (!purchaseId) throw new HttpsError("invalid-argument", "purchaseId is required.");
+
+    const purchaseRef = purchasesRef(companyId).doc(purchaseId);
+    const purchaseSnap = await purchaseRef.get();
+    if (!purchaseSnap.exists) throw new HttpsError("not-found", "Purchase not found.");
+    const purchase = purchaseSnap.data() || {};
+    const now = Date.now();
+
+    // Unlinking: clear both sides so neither screen keeps claiming a match.
+    if (!transactionId) {
+      const previous = clean(purchase.bankTransactionId, "", 200);
+      const batch = db().batch();
+      if (previous) batch.set(bankTxRef(companyId).doc(previous), { purchaseId: "", purchaseNumber: "" }, { merge: true });
+      batch.set(purchaseRef, { bankTransactionId: "", updatedAtMs: now, updatedByUid: uid }, { merge: true });
+      await batch.commit();
+      return { ok: true, linked: false };
+    }
+
+    const txSnap = await bankTxRef(companyId).doc(transactionId).get();
+    if (!txSnap.exists) throw new HttpsError("not-found", "Bank transaction not found.");
+    const transaction = txSnap.data() || {};
+    const alreadyOn = clean(transaction.purchaseId, "", 80);
+    if (alreadyOn && alreadyOn !== purchaseId) {
+      throw new HttpsError("failed-precondition", "That payment is already matched to another purchase.");
+    }
+
+    const paid = Math.abs(Number(transaction.amount) || 0);
+    const batch = db().batch();
+    batch.set(bankTxRef(companyId).doc(transactionId), {
+      purchaseId,
+      purchaseNumber: clean(purchase.number, "", 40)
+    }, { merge: true });
+    batch.set(purchaseRef, {
+      bankTransactionId: transactionId,
+      updatedAtMs: now,
+      updatedByUid: uid
+    }, { merge: true });
+    await batch.commit();
+
+    // Reported, not enforced: a deposit or a part payment is a real thing, and
+    // refusing the match would just push the user back to a spreadsheet.
+    const difference = roundMoney(paid - (Number(purchase.total) || 0));
+    return { ok: true, linked: true, paid, purchaseTotal: Number(purchase.total) || 0, difference };
+  });
+
+  const saveSupplier = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const supplierId = clean(request.data && request.data.supplierId, "", 80);
+    const input = request.data && request.data.supplier;
+    const name = clean(input && input.name, "", 160);
+    if (!name) throw new HttpsError("invalid-argument", "A supplier name is required.");
+    const ref = supplierId ? suppliersRef(companyId).doc(supplierId) : suppliersRef(companyId).doc();
+    await ref.set({
+      companyId,
+      name,
+      email: clean(input && input.email, "", 240),
+      phone: clean(input && input.phone, "", 60),
+      website: clean(input && input.website, "", 240),
+      notes: clean(input && input.notes, "", 2000),
+      updatedAtMs: Date.now()
+    }, { merge: true });
+    return { ok: true, supplierId: ref.id };
+  });
+
+  // Supplier totals are counted from the purchases rather than stored on the
+  // supplier, so they cannot drift away from what was actually bought.
+  const listSuppliers = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const [supplierSnap, purchaseSnap] = await Promise.all([
+      suppliersRef(companyId).limit(500).get(),
+      purchasesRef(companyId).limit(1000).get()
+    ]);
+
+    const stats = new Map();
+    purchaseSnap.docs.forEach((doc) => {
+      const purchase = doc.data() || {};
+      const key = clean(purchase.supplierName, "", 160).toLowerCase();
+      if (!key) return;
+      const entry = stats.get(key) || { total: 0, count: 0, lastDate: "", matched: 0, lines: 0 };
+      entry.total = roundMoney(entry.total + (Number(purchase.total) || 0));
+      entry.count += 1;
+      entry.lines += Array.isArray(purchase.lines) ? purchase.lines.length : 0;
+      if (clean(purchase.bankTransactionId, "", 200)) entry.matched += 1;
+      const date = clean(purchase.purchaseDate, "", 40);
+      if (date > entry.lastDate) entry.lastDate = date;
+      stats.set(key, entry);
+    });
+
+    const saved = supplierSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+    const savedKeys = new Set(saved.map((row) => String(row.name || "").toLowerCase()));
+    // A supplier you have bought from but never filled in a card for still
+    // belongs in the list — it is the purchases that make it real.
+    const implied = [...stats.keys()]
+      .filter((key) => !savedKeys.has(key))
+      .map((key) => ({ id: "", name: key, implied: true }));
+
+    return {
+      ok: true,
+      suppliers: [...saved, ...implied].map((row) => ({
+        ...row,
+        stats: stats.get(String(row.name || "").toLowerCase()) || { total: 0, count: 0, lastDate: "", matched: 0, lines: 0 }
+      }))
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // Reserving stock for an order
+  //
+  // Reserved is not consumed. A part set aside for a job is still physically on
+  // the shelf and still an asset; it just is not available to promise twice.
+  // Consuming it is a separate, later act.
+  // -------------------------------------------------------------------------
+
+  function cleanReservations(value) {
+    const rows = Array.isArray(value) ? value : [];
+    return rows
+      .map((row) => ({
+        orderId: clean(row && row.orderId, "", 200),
+        quantity: cleanQuantity(row && row.quantity),
+        createdAtMs: Number(row && row.createdAtMs) || 0
+      }))
+      .filter((row) => row.orderId && row.quantity > 0);
+  }
+
+  const reserveInventoryForOrder = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    const requested = cleanQuantity(request.data && request.data.quantity);
+    if (!itemId || !orderId) throw new HttpsError("invalid-argument", "itemId and orderId are required.");
+
+    const ref = itemsRef(companyId).doc(itemId);
+    const now = Date.now();
+
+    const outcome = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Inventory item not found.");
+      const item = snap.data() || {};
+      if (String(item.ownership) === "customer") {
+        throw new HttpsError("failed-precondition", "A customer's own item is not stock and cannot be reserved.");
+      }
+      if (["sold", "used", "archived"].includes(String(item.status))) {
+        throw new HttpsError("failed-precondition", "That item is no longer available to reserve.");
+      }
+
+      const isUnique = String(item.trackingType) === "unique";
+      const existing = cleanReservations(item.reservations);
+      const others = existing.filter((row) => row.orderId !== orderId);
+
+      if (isUnique) {
+        if (others.length > 0) {
+          throw new HttpsError("failed-precondition", "That item is already reserved for another order.");
+        }
+        tx.set(ref, {
+          status: "reserved",
+          reservedForOrderId: orderId,
+          reservations: [{ orderId, quantity: 1, createdAtMs: now }],
+          reservedOrderIds: [orderId],
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+        return { reserved: 1 };
+      }
+
+      const onHand = cleanQuantity((item.quantity || {}).onHand);
+      const reservedElsewhere = others.reduce((sum, row) => sum + row.quantity, 0);
+      const free = roundMoney(onHand - reservedElsewhere);
+      if (requested <= 0) throw new HttpsError("invalid-argument", "Enter how much to reserve.");
+      if (requested > free) {
+        throw new HttpsError(
+          "failed-precondition",
+          `Only ${free} available to reserve — ${reservedElsewhere} is already promised to other orders.`
+        );
+      }
+
+      const next = [...others, { orderId, quantity: requested, createdAtMs: now }];
+      const totalReserved = roundMoney(next.reduce((sum, row) => sum + row.quantity, 0));
+      tx.set(ref, {
+        reservations: next,
+        reservedOrderIds: next.map((row) => row.orderId),
+        quantity: { ...(item.quantity || {}), reserved: totalReserved },
+        status: totalReserved > 0 ? "reserved" : "available",
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+      return { reserved: requested, remaining: roundMoney(free - requested) };
+    });
+
+    return { ok: true, ...outcome };
+  });
+
+  const releaseInventoryFromOrder = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    if (!itemId || !orderId) throw new HttpsError("invalid-argument", "itemId and orderId are required.");
+    const ref = itemsRef(companyId).doc(itemId);
+    const now = Date.now();
+
+    await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Inventory item not found.");
+      const item = snap.data() || {};
+      const next = cleanReservations(item.reservations).filter((row) => row.orderId !== orderId);
+      const totalReserved = roundMoney(next.reduce((sum, row) => sum + row.quantity, 0));
+      const isUnique = String(item.trackingType) === "unique";
+      tx.set(ref, {
+        reservations: next,
+        reservedOrderIds: next.map((row) => row.orderId),
+        reservedForOrderId: isUnique ? "" : clean(item.reservedForOrderId, "", 200),
+        quantity: isUnique ? item.quantity : { ...(item.quantity || {}), reserved: totalReserved },
+        // Releasing puts it back on the shelf, but never resurrects something
+        // already used or sold.
+        status: ["used", "sold", "archived"].includes(String(item.status))
+          ? item.status
+          : (totalReserved > 0 ? "reserved" : "available"),
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+    });
+
+    return { ok: true };
+  });
+
+  // What an order is actually holding, and what it cost. This is the number the
+  // Financial card can trust instead of a hand-typed material cost.
+  const getOrderInventory = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+
+    const snap = await itemsRef(companyId)
+      .where("reservedOrderIds", "array-contains", orderId)
+      .limit(200)
+      .get();
+
+    let total = 0;
+    const items = snap.docs.map((doc) => {
+      const item = doc.data() || {};
+      const reservation = cleanReservations(item.reservations).find((row) => row.orderId === orderId);
+      const quantity = reservation ? reservation.quantity : 0;
+      const unitCost = Number(item.valuationCost) || 0;
+      const lineCost = String(item.trackingType) === "unique"
+        ? unitCost
+        : roundMoney(unitCost * quantity);
+      total = roundMoney(total + lineCost);
+      return {
+        id: doc.id,
+        number: item.number || "",
+        name: item.name || "",
+        category: item.category || "",
+        trackingType: item.trackingType || "unique",
+        unit: (item.quantity || {}).unit || "",
+        status: item.status || "available",
+        quantity,
+        unitCost,
+        lineCost
+      };
+    });
+
+    return { ok: true, orderId, items, totalCost: total };
+  });
+
   return {
     saveInventoryItem,
     setInventoryItemStatus,
@@ -394,7 +907,17 @@ function createInventoryFunctions({
     listInventoryItems,
     getInventorySummary,
     importOpeningStock,
-    _internal: { normalizeItemInput, costSummary, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
+    savePurchase,
+    receivePurchase,
+    listPurchases,
+    deletePurchase,
+    linkPurchaseToBankTransaction,
+    saveSupplier,
+    listSuppliers,
+    reserveInventoryForOrder,
+    releaseInventoryFromOrder,
+    getOrderInventory,
+    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }
 
