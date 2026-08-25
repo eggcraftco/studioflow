@@ -92,6 +92,7 @@ const NAV_ITEMS: Array<
   { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
   { href: "/customers", label: "Customers", icon: "customers" },
+  { href: "/inventory", label: "Inventory", icon: "files" },
   { href: "/files", label: "Files", icon: "files" },
   { href: "/messages", label: "Messages", icon: "messages" },
   { href: "/quick-reply", label: "AI Replies", icon: "reply" },
@@ -103,6 +104,9 @@ const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/orders": "orders",
   "/dashboard": "dashboard",
   "/bank": "bankFeed",
+  // Inventory rides the orders permission: someone who cannot see orders has no
+  // reason to see what the workshop owns.
+  "/inventory": "orders",
   "/schedule": "schedule",
   "/team-schedule": "schedule",
   "/customers": "customers",
