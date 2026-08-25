@@ -43,7 +43,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
-import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, type QuickReplyContributionItem } from "@/lib/studioflow/quickReply";
+import { canContributeQuickReplyKnowledgeForRole, canEditPersonalQuickReplySettingsForRole, canEditQuickReplySettingsForRole, deleteQuickReplyContribution, listQuickReplyContributions, loadQuickReplyPersonalSettings, saveQuickReplyContribution, saveQuickReplyPersonalSettings, saveQuickReplySettings, testQuickReplyApiKey, type QuickReplyContributionItem, type QuickReplyKeyTestResult } from "@/lib/studioflow/quickReply";
 import {
   loadWorkspaceBlockHeadings,
   saveWorkspaceBlockHeadings,
@@ -2264,6 +2264,8 @@ function QuickReplySettingsSection({
   const [contributionDraft, setContributionDraft] = useState("");
   const [contributions, setContributions] = useState<QuickReplyContributionItem[]>([]);
   const [contributionSaving, setContributionSaving] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [keyTest, setKeyTest] = useState<QuickReplyKeyTestResult | null>(null);
   const canEditCore = canEditQuickReplySettingsForRole(workspace.role);
   // The same key can also power the assistant on the public website. Only a
   // NivaDesk support admin sees this, and only they can switch it on.
@@ -2439,6 +2441,18 @@ function QuickReplySettingsSection({
 
   const showMaskedOpenAIKey = canEditCore && settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
 
+  async function runKeyTest() {
+    setTestingKey(true);
+    setKeyTest(null);
+    try {
+      setKeyTest(await testQuickReplyApiKey(workspace));
+    } catch (testError) {
+      setKeyTest({ ok: false, message: testError instanceof Error ? testError.message : t("The key did not answer.") });
+    } finally {
+      setTestingKey(false);
+    }
+  }
+
   return (
     <div className="settings-card-stack">
       <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
@@ -2547,6 +2561,28 @@ function QuickReplySettingsSection({
                       placeholder={settings.hasOpenAIKey ? t("Paste a new key to replace") : "sk-proj-..."}
                     />
                     <span>{t("Stored server-side and never shared with workspace members. If the website assistant is switched on below, the same key answers questions from the nivadesk.app chat widget.")}</span>
+                    {/* "Configured" said nothing about whether the key still
+                        works. A revoked key looked identical to a good one until
+                        a customer reply failed. */}
+                    {settings.hasOpenAIKey ? (
+                      <div className="quick-reply-key-row">
+                        <span className={keyTest ? (keyTest.ok ? "studio-pill success" : "studio-pill danger") : (settings.openAIKeyWorks ? "studio-pill success" : "studio-pill")}>
+                          {keyTest
+                            ? (keyTest.ok ? t("The key works.") : keyTest.message || t("The key did not answer."))
+                            : settings.openAIKeyCheckedAtMs > 0
+                              ? `${settings.openAIKeyWorks ? t("Last checked, working") : t("Last checked, failing")}: ${new Date(settings.openAIKeyCheckedAtMs).toLocaleDateString(studioLocaleTag(language))}`
+                              : t("Never checked")}
+                        </span>
+                        <button
+                          className="button secondary"
+                          type="button"
+                          disabled={testingKey}
+                          onClick={() => { void runKeyTest(); }}
+                        >
+                          {testingKey ? t("Testing...") : t("Test API Connection")}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 {assistant.visible ? (
@@ -3739,6 +3775,17 @@ function FinancialSettingsSection({
     }
   }
 
+  // Worked from this workspace's own rate, so the example can never drift from
+  // what the invoice will actually print.
+  const taxExample = (() => {
+    const rate = Math.max(0, Number(draft.defaultTaxRate) || 0);
+    const round = (value: number) => Math.round(value * 100) / 100;
+    const vatFromGross = (gross: number) => (rate > 0 ? round((gross * rate) / (100 + rate)) : 0);
+    const vat = vatFromGross(1000);
+    const marginVat = vatFromGross(400);
+    return { rate, vat, net: round(1000 - vat), marginVat, marginNet: round(400 - marginVat) };
+  })();
+
   const previewCurrency = draft.selectedCurrency || "£";
   const previewMoney = (value: number) =>
     `${previewCurrency}${Number(value || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -4013,6 +4060,32 @@ function FinancialSettingsSection({
               <option value="Profit">{draft.taxRuleNameProfit || "Profit"}</option>
             </select>
           </label>
+
+          {/* The page named the rule and the rate and never said what either one
+              meant, so nobody could tell whether the price already contained the
+              VAT or had it added later. The arithmetic is spelled out with this
+              workspace's own rate instead of described. */}
+          <div className="financial-tax-explainer">
+            <strong>{t("What this means")}</strong>
+            {draft.taxCalculationType === "Profit" ? (
+              <>
+                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
+                <p className="financial-tax-example">
+                  {t("Example")}: {previewMoney(1000)} {t("order")}, {previewMoney(600)} {t("cost")} →{" "}
+                  {previewMoney(400)} {t("margin")} = {previewMoney(taxExample.marginNet)} + {previewMoney(taxExample.marginVat)} {t("VAT")}
+                </p>
+              </>
+            ) : (
+              <>
+                <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
+                <p className="financial-tax-example">
+                  {t("Example")}: {previewMoney(1000)} {t("order")} ={" "}
+                  {previewMoney(taxExample.net)} + {previewMoney(taxExample.vat)} {t("VAT")} {t("at")} {taxExample.rate}%
+                </p>
+              </>
+            )}
+            <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
+          </div>
 
           <label className="financial-settings-row">
             <span>{t("Use Tax Transition Date")}</span>
@@ -5963,9 +6036,13 @@ function SupportTicketsSection({
             onClick={() => setTicketMode("workspace")}
             style={{ textAlign: "left" }}
           >
+            {/* Named one role, so on an owner account it read as writing to
+                yourself. The sender is always excluded server-side, so this
+                wording is true for every role — including the owner, whose
+                ticket goes to their admins and support managers. */}
             <span>
-              <strong>{t("Contact Workspace Owner")}</strong>
-              <small>{t("For internal project, task, customer or approval questions.")}</small>
+              <strong>{t("Internal Workspace Ticket")}</strong>
+              <small>{t("Goes to your workspace owner, admins and support managers. For internal project, task, customer or approval questions.")}</small>
             </span>
           </button>
           <button

@@ -234,6 +234,9 @@ export type QuickReplySettings = {
   quickReplyLength: string;
   aiKnowledgeBase: string;
   hasOpenAIKey: boolean;
+  /** When the stored OpenAI key was last checked against OpenAI, and whether it worked. */
+  openAIKeyCheckedAtMs: number;
+  openAIKeyWorks: boolean;
   products: QuickReplyTemplateItem[];
   rules: QuickReplyTemplateItem[];
 };
@@ -1157,6 +1160,8 @@ export async function loadQuickReplySettings(companyId: string): Promise<QuickRe
     quickReplyLength: stringValue(data.quickReplyLength, "Short"),
     aiKnowledgeBase: stringValue(data.aiKnowledgeBase, ""),
     hasOpenAIKey: booleanValue(data.hasOpenAIKey, false),
+    openAIKeyCheckedAtMs: numberValue(data.openAIKeyCheckedAtMs, 0),
+    openAIKeyWorks: booleanValue(data.openAIKeyWorks, false),
     products: decodeQuickReplyTemplateItems(data.customProductsJSON),
     rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
   };
