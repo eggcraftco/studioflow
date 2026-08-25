@@ -22013,7 +22013,16 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
       // The customer sees "NivaDesk" as the sender, so the business has to name
       // itself in the text or the message is from a stranger. Once a workspace
       // has its own registered sender ID the prefix is redundant and dropped.
-      const workspaceName = cleanOrderText(settings.appSubtitle, "", 40);
+      // The name the business signed up under, not appSubtitle — that field is a
+      // tagline whose stock value is "Bespoke Hand-Painted Dials", which would
+      // introduce a jeweller's customer to a watch-dial studio and eat a fifth of
+      // the segment doing it. Capped short: the name shares 160 characters with
+      // the message and the tracking link.
+      const workspaceName = cleanOrderText(
+        companyData.name || companyData.companyName || settings.appSubtitle,
+        "",
+        32
+      );
       const smsBody = [
         !config.usesOwnSender && workspaceName ? `${workspaceName}: ${message.sms}` : message.sms,
         portalUrl
