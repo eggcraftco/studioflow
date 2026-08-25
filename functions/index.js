@@ -21408,15 +21408,26 @@ function cleanSmsTriggers(value) {
   return output;
 }
 
+// One sender ID registered once, for the whole platform. A workspace can bring
+// its own later — a customer trusts "EGGcraft" more than "NivaDesk" — but that
+// needs its own aggregator registration, so until then everyone rides this one
+// and the workspace's name goes in the body where the customer actually reads it.
+const PLATFORM_SMS_SENDER_ID = String(process.env.NIVADESK_SMS_SENDER_ID || "NivaDesk").trim();
+
 function workspaceSmsConfig(settings = {}) {
+  const ownSenderId = cleanSmsSenderId(settings.smsSenderId);
+  // Ofcom's July 2026 rules put KYC on the aggregator, and Twilio requires UK
+  // sender-ID pre-registration. This mirrors that state; it is not a claim
+  // NivaDesk makes on its own.
+  const ownSenderStatus = ["unset", "pending", "verified"].includes(String(settings.smsSenderStatus || ""))
+    ? String(settings.smsSenderStatus)
+    : "unset";
+  const usesOwnSender = Boolean(ownSenderId) && ownSenderStatus === "verified";
   return {
-    senderId: cleanSmsSenderId(settings.smsSenderId),
-    // Ofcom's July 2026 rules put KYC on the aggregator, and Twilio requires UK
-    // sender-ID pre-registration. This mirrors that state; it is not a claim
-    // NivaDesk makes on its own.
-    senderStatus: ["unset", "pending", "verified"].includes(String(settings.smsSenderStatus || ""))
-      ? String(settings.smsSenderStatus)
-      : "unset",
+    senderId: usesOwnSender ? ownSenderId : PLATFORM_SMS_SENDER_ID,
+    ownSenderId,
+    usesOwnSender,
+    senderStatus: ownSenderStatus,
     defaultCallingCode: String(settings.smsDefaultCallingCode || "44").replace(/\D/g, "") || "44",
     triggers: cleanSmsTriggers(settings.smsTriggers)
   };
@@ -21433,8 +21444,9 @@ async function sendWorkspaceSMS({ companyData, settings, companyId, orderId, ord
   if (!provider.isConfigured()) return { sent: false, reason: "provider_not_configured" };
 
   const config = workspaceSmsConfig(settings || {});
+  // Always resolves: an unregistered workspace falls back to the platform sender
+  // rather than being refused, so SMS works on day one of a subscription.
   if (!config.senderId) return { sent: false, reason: "no_sender_id" };
-  if (config.senderStatus !== "verified") return { sent: false, reason: "sender_not_verified" };
 
   const to = cleanE164Phone(toNumber, config.defaultCallingCode);
   if (!to) return { sent: false, reason: "invalid_number" };
@@ -21995,9 +22007,12 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     // customer already has with this business — never a promotion, which is what
     // keeps it out of direct-marketing rules.
     if (auto.sms && config.triggers[message.trigger] !== false) {
-      const senderName = config.senderId || String(settings.appSubtitle || "");
+      // The customer sees "NivaDesk" as the sender, so the business has to name
+      // itself in the text or the message is from a stranger. Once a workspace
+      // has its own registered sender ID the prefix is redundant and dropped.
+      const workspaceName = cleanOrderText(settings.appSubtitle, "", 40);
       const smsBody = [
-        senderName ? `${senderName}: ${message.sms}` : message.sms,
+        !config.usesOwnSender && workspaceName ? `${workspaceName}: ${message.sms}` : message.sms,
         portalUrl
       ].filter(Boolean).join(" ");
       await sendWorkspaceSMS({
