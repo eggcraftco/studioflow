@@ -103,6 +103,83 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "card-repair-intake",
+        title: "Repair Intake & Item card",
+        blocks: [
+          { kind: "para", text: "When a customer hands you their own item to repair, service or alter, this card is the record of what came in. It is deliberately not inventory: the item is stamped as customer-owned so nothing downstream can mistake it for your stock." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "A row for each detail you record at intake. What those rows are depends on your trade — a jeweller records Metal, Hallmark and Stones; a phone repairer records Serial / IMEI and whether the passcode was handed over.",
+            "Condition and Requested Work, one line each, so the state it arrived in and the job agreed are written down separately.",
+            "Customer Instructions for anything the customer specifically asked for.",
+            "Intake Photos: pictures of the item as it arrived, shared with that order's Client Files. Four thumbnails at a time; tap one to open it full size.",
+            "Received and Received By: when the item came in and who took it."
+          ] },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Tap any value to fill it in, and tap a heading to rename it — ‘Ring Size’ to a jeweller is ‘Case Size’ to a watchmaker.",
+            "Use Edit block headings to start from a trade template (jewellery, watch, electronics, tailoring, shoe and leather, furniture, bicycle, automotive, instruments, or a general set) and then add, rename or delete rows.",
+            "Until you edit the rows, the trade you chose when you signed up decides which template you start on."
+          ] },
+          { kind: "para", text: "Tip: photograph the item at intake even when it looks fine. It is the cheapest possible protection against a disagreement about a scratch later." }
+        ]
+      },
+      {
+        id: "card-estimate",
+        title: "Estimate & Approval card",
+        blocks: [
+          { kind: "para", text: "Quote a price, send it to the customer, and keep proof of what they agreed to. The estimate is built from the order's invoice items, and every revision is preserved — an approved estimate is evidence of what was agreed, so it is never edited or deleted." },
+          { kind: "sub", text: "What it shows" },
+          { kind: "bullets", items: [
+            "The current estimate with its own number (for example EST-2026-0001), its status, and its line items with subtotal, VAT and total.",
+            "Approval Details once the customer decides: who approved it, when, how, and their signature.",
+            "Estimate History listing every earlier revision with its number and total.",
+            "A View Estimate PDF button, available to anyone who can see the card."
+          ] },
+          { kind: "sub", text: "How it works" },
+          { kind: "steps", items: [
+            "Add your invoice items, then tap Create estimate. The number, the totals and the status are all set by NivaDesk, never by the device.",
+            "Tap Send to customer. You get a private link to send them however you normally talk to them.",
+            "The customer opens the link without signing in, reviews the figures, and approves or declines. Approving asks for their name and a signature.",
+            "The card updates with the decision, and the signature appears on the estimate PDF."
+          ] },
+          { kind: "sub", text: "Revisions" },
+          { kind: "bullets", items: [
+            "Create new estimate makes a fresh revision. The previous one is marked superseded and keeps its own number and figures.",
+            "Making a new estimate turns off the previous link, so an old price can never be approved by mistake.",
+            "The approval evidence is stored where no device can reach it — it can be read, but not altered."
+          ] }
+        ]
+      },
+      {
+        id: "card-customer-portal",
+        title: "Customer Portal card",
+        blocks: [
+          { kind: "para", text: "The question every repair shop answers all day is ‘is mine ready yet?’. This card is the answer: one link per order that the customer opens with no login, showing where their item is." },
+          { kind: "sub", text: "What the customer sees" },
+          { kind: "bullets", items: [
+            "Repair status as a progress track. The stages are your own workflow steps, so it reads correctly whether you are a jeweller, a tailor or a furniture restorer.",
+            "Estimate and approval, payment and balance, photos, and the expected completion date.",
+            "Your business name and logo at the top — not NivaDesk's."
+          ] },
+          { kind: "sub", text: "What the customer never sees" },
+          { kind: "para", text: "Internal notes, cost prices, supplier names, profit and team messages. These are not filtered out of the order on the way to the page — the page is built only from the parts you switch on, so nothing else can leak into it." },
+          { kind: "sub", text: "What you can change" },
+          { kind: "bullets", items: [
+            "Switch each of the five sections on or off per order, and the page honours it immediately.",
+            "Create portal link to make the link, Copy Link to send it again later, and Turn off to stop it opening.",
+            "Creating a fresh link retires the previous one — that is how you take back a link sent to the wrong person."
+          ] },
+          { kind: "sub", text: "Automatic updates" },
+          { kind: "bullets", items: [
+            "With updates on, moving the order to a new status tells the customer automatically: their estimate is ready, work has started, or their item is ready for collection.",
+            "Email is on by default. SMS is off by default and each business turns it on for itself.",
+            "The message comes from your business name, and replies come back to you."
+          ] },
+          { kind: "para", text: "Tip: send the link when the item comes in, not when it is finished. Most of the calls you are trying to avoid happen in the middle." }
+        ]
+      },
+      {
         id: "card-summary",
         title: "Order Summary card",
         blocks: [
@@ -692,6 +769,83 @@ const TREE_TR: GuideNode[] = [
             "Önizleme görselleri standart görsel dosyalarını kabul eder (JPG, PNG, HEIC ve benzeri)."
           ] },
           { kind: "para", text: "İpucu: iyi bir önizleme fotoğrafı, kalabalık bir listede siparişleri bir bakışta tanımayı çok kolaylaştırır." }
+        ]
+      },
+      {
+        id: "card-repair-intake",
+        title: "Onarım Kabulü ve Ürün kartı",
+        blocks: [
+          { kind: "para", text: "Müşteri onarım, bakım ya da tadilat için kendi ürününü size teslim ettiğinde, gelen şeyin kaydı bu karttır. Bilinçli olarak stok değildir: ürün müşteriye ait olarak damgalanır, böylece hiçbir yerde sizin stoğunuzla karıştırılamaz." },
+          { kind: "sub", text: "Neler görünür" },
+          { kind: "bullets", items: [
+            "Kabulde kaydettiğiniz her ayrıntı için bir satır. Bu satırların ne olduğu iş dalınıza bağlıdır — kuyumcu Metal, Ayar ve Taş kaydeder; telefon tamircisi Seri / IMEI ve şifrenin verilip verilmediğini kaydeder.",
+            "Durum ve İstenen İş, satır satır: ürünün geldiği hâli ile üzerinde anlaşılan iş ayrı ayrı yazılır.",
+            "Müşterinin özellikle istediği şeyler için Müşteri Talimatları.",
+            "Kabul Fotoğrafları: ürünün geldiği andaki hâli, o siparişin Client Files'ıyla paylaşılır. Aynı anda dört küçük görsel; birine dokununca tam boy açılır.",
+            "Teslim Alındı ve Teslim Alan: ürünün ne zaman geldiği ve kimin aldığı."
+          ] },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Doldurmak için değere dokunun; yeniden adlandırmak için başlığa dokunun — kuyumcunun ‘Yüzük Ölçüsü’ saatçide ‘Kasa Ölçüsü’dür.",
+            "Blok başlıklarını düzenle ile bir iş dalı şablonundan başlayın (kuyumculuk, saat, elektronik, terzilik, ayakkabı ve deri, mobilya, bisiklet, otomotiv, müzik aletleri ya da genel) ve ardından satır ekleyin, adlandırın veya silin.",
+            "Satırlara dokunmadığınız sürece, kayıt olurken seçtiğiniz iş dalı hangi şablonla başlayacağınızı belirler."
+          ] },
+          { kind: "para", text: "İpucu: ürün sağlam görünse bile kabulde fotoğraflayın. Sonradan çıkacak bir çizik tartışmasına karşı en ucuz korumadır." }
+        ]
+      },
+      {
+        id: "card-estimate",
+        title: "Teklif ve Onay kartı",
+        blocks: [
+          { kind: "para", text: "Fiyat verin, müşteriye gönderin ve neye onay verdiğinin kanıtını saklayın. Teklif siparişin fatura kalemlerinden oluşur ve her revizyon korunur — onaylanmış bir teklif, üzerinde anlaşılanın kanıtıdır; bu yüzden asla düzenlenmez veya silinmez." },
+          { kind: "sub", text: "Neler görünür" },
+          { kind: "bullets", items: [
+            "Kendi numarasıyla güncel teklif (örneğin EST-2026-0001), durumu ve kalemleriyle ara toplam, KDV ve toplam.",
+            "Müşteri karar verdiğinde Onay Ayrıntıları: kim, ne zaman, nasıl onayladı ve imzası.",
+            "Her eski revizyonu numarası ve tutarıyla listeleyen Teklif Geçmişi.",
+            "Kartı görebilen herkesin kullanabileceği bir Teklif PDF'i düğmesi."
+          ] },
+          { kind: "sub", text: "Nasıl çalışır" },
+          { kind: "steps", items: [
+            "Fatura kalemlerinizi ekleyin, sonra Teklif oluştur'a dokunun. Numara, toplamlar ve durum NivaDesk tarafından belirlenir, cihaz tarafından değil.",
+            "Müşteriye gönder'e dokunun. Size özel bir bağlantı verilir; müşterinizle normalde nasıl konuşuyorsanız öyle iletirsiniz.",
+            "Müşteri bağlantıyı giriş yapmadan açar, rakamları görür ve onaylar ya da reddeder. Onaylarken adını ve imzasını ister.",
+            "Kart kararla güncellenir ve imza teklif PDF'inde görünür."
+          ] },
+          { kind: "sub", text: "Revizyonlar" },
+          { kind: "bullets", items: [
+            "Yeni teklif oluştur yeni bir revizyon yapar. Öncekinin üzeri çizilir ama kendi numarasını ve rakamlarını korur.",
+            "Yeni teklif yapmak önceki bağlantıyı kapatır; böylece eski bir fiyat yanlışlıkla onaylanamaz.",
+            "Onay kanıtı hiçbir cihazın erişemeyeceği yerde saklanır — okunabilir, değiştirilemez."
+          ] }
+        ]
+      },
+      {
+        id: "card-customer-portal",
+        title: "Müşteri Portalı kartı",
+        blocks: [
+          { kind: "para", text: "Her onarım atölyesinin gün boyu cevapladığı soru şudur: ‘benimki hazır mı?’. Bu kart o sorunun cevabı: sipariş başına tek bir bağlantı, müşteri giriş yapmadan açar ve ürününün nerede olduğunu görür." },
+          { kind: "sub", text: "Müşteri ne görür" },
+          { kind: "bullets", items: [
+            "Onarım durumu bir ilerleme çizgisi olarak. Aşamalar sizin kendi iş adımlarınızdır; kuyumcu da terzi de mobilya restoratörü de kendi akışını görür.",
+            "Teklif ve onay, ödeme ve kalan tutar, fotoğraflar ve tahmini teslim tarihi.",
+            "Üstte sizin işletme adınız ve logonuz — NivaDesk'in değil."
+          ] },
+          { kind: "sub", text: "Müşteri asla ne görmez" },
+          { kind: "para", text: "İç notlar, maliyet fiyatları, tedarikçi adları, kâr ve ekip mesajları. Bunlar sayfaya giderken siparişten süzülmüyor — sayfa yalnızca sizin açtığınız bölümlerden kuruluyor, dolayısıyla başka bir şeyin sızması mümkün değil." },
+          { kind: "sub", text: "Neleri değiştirebilirsiniz" },
+          { kind: "bullets", items: [
+            "Beş bölümün her birini sipariş bazında açıp kapatın; sayfa buna anında uyar.",
+            "Portal bağlantısı oluştur ile bağlantıyı üretin, Bağlantıyı kopyala ile sonradan tekrar gönderin, Kapat ile açılmasını durdurun.",
+            "Yeni bağlantı üretmek eskisini geçersiz kılar — yanlış kişiye giden bir bağlantıyı böyle geri alırsınız."
+          ] },
+          { kind: "sub", text: "Otomatik bildirimler" },
+          { kind: "bullets", items: [
+            "Bildirimler açıkken siparişi yeni bir duruma taşımanız müşteriye kendiliğinden haber verir: teklifi hazır, işe başlandı ya da ürünü teslime hazır.",
+            "E-posta varsayılan olarak açık. SMS varsayılan olarak kapalı ve her işletme kendisi için açar.",
+            "Mesaj sizin işletme adınızla gider ve yanıtlar size döner."
+          ] },
+          { kind: "para", text: "İpucu: bağlantıyı iş bitince değil, ürün geldiğinde gönderin. Kaçınmaya çalıştığınız telefonların çoğu aradaki süreçte gelir." }
         ]
       },
       {
