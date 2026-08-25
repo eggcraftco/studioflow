@@ -22,6 +22,8 @@ import {
   type Purchase,
   type PurchaseInput
 } from "@/lib/studioflow/inventory";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
 type DraftLine = {
@@ -89,6 +91,9 @@ export function PurchasesPanel({
   supplierNames: string[];
   onStockChanged: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -102,7 +107,7 @@ export function PurchasesPanel({
       const result = await listPurchases(workspace);
       setPurchases(result?.purchases ?? []);
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "Purchases could not be loaded.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("Purchases could not be loaded."));
     } finally {
       setLoading(false);
     }
@@ -125,7 +130,7 @@ export function PurchasesPanel({
           : `${purchase.number} was already received.`
       );
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "The purchase could not be received.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("The purchase could not be received."));
     } finally {
       setBusyId("");
     }
@@ -144,7 +149,7 @@ export function PurchasesPanel({
       onStockChanged();
       setNotice("");
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "The purchase could not be deleted.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("The purchase could not be deleted."));
     } finally {
       setBusyId("");
     }
@@ -164,10 +169,8 @@ export function PurchasesPanel({
     <div className="inventory-panel">
       <div className="inventory-head">
         <div>
-          <h2>Purchases</h2>
-          <p className="inventory-panel-hint">
-            What you bought, from whom, and what it cost — the record a bank payment gets matched to.
-          </p>
+          <h2>{t("Purchases")}</h2>
+          <p className="inventory-panel-hint">{t("What you bought, from whom, and what it cost — the record a bank payment gets matched to.")}</p>
         </div>
         {canEdit ? (
           <button type="button" className="inventory-primary" onClick={() => setModalOpen(true)}>
@@ -179,12 +182,12 @@ export function PurchasesPanel({
       {purchases.length > 0 ? (
         <div className="inventory-stats inventory-stats-slim">
           <div className="inventory-stat">
-            <span className="inventory-stat-label">Awaiting Delivery</span>
+            <span className="inventory-stat-label">{t("Awaiting Delivery")}</span>
             <strong>{totals.ordered}</strong>
             <span className="inventory-stat-sub">{money(currencySymbol, totals.orderedValue)}</span>
           </div>
           <div className="inventory-stat" data-tone={totals.unmatched > 0 ? "warn" : undefined}>
-            <span className="inventory-stat-label">No Payment Matched</span>
+            <span className="inventory-stat-label">{t("No Payment Matched")}</span>
             <strong>{totals.unmatched}</strong>
           </div>
         </div>
@@ -193,10 +196,10 @@ export function PurchasesPanel({
       {notice ? <p className="inventory-notice">{notice}</p> : null}
 
       {loading ? (
-        <p className="inventory-note">Loading purchases…</p>
+        <p className="inventory-note">{t("Loading purchases…")}</p>
       ) : purchases.length === 0 ? (
         <div className="inventory-empty">
-          <strong>No purchases yet</strong>
+          <strong>{t("No purchases yet")}</strong>
           <p>
             Record what you buy here and the stock is created for you — held as
             incoming until you mark it received.
@@ -207,13 +210,13 @@ export function PurchasesPanel({
           <table className="inventory-table">
             <thead>
               <tr>
-                <th>Purchase</th>
-                <th>Supplier</th>
-                <th>Date</th>
-                <th>Items</th>
-                <th className="r">Total</th>
-                <th>Status</th>
-                <th>Payment</th>
+                <th>{t("Purchase")}</th>
+                <th>{t("Supplier")}</th>
+                <th>{t("Date")}</th>
+                <th>{t("Items")}</th>
+                <th className="r">{t("Total")}</th>
+                <th>{t("Status")}</th>
+                <th>{t("Payment")}</th>
                 {canEdit ? <th /> : null}
               </tr>
             </thead>
@@ -237,18 +240,16 @@ export function PurchasesPanel({
                   <td className="r">{money(currencySymbol, purchase.total)}</td>
                   <td>
                     <span className="inventory-chip" data-status={purchase.status === "received" ? "available" : "incoming"}>
-                      {purchase.status === "received" ? "Received" : "Ordered"}
+                      {purchase.status === "received" ? t("Received") : t("Ordered")}
                     </span>
                   </td>
                   <td>
                     {purchase.bankTransactionId ? (
-                      <span className="inventory-chip" data-status="available">Matched</span>
+                      <span className="inventory-chip" data-status="available">{t("Matched")}</span>
                     ) : canEdit ? (
-                      <button type="button" className="inventory-link" onClick={() => setMatching(purchase)}>
-                        Match payment
-                      </button>
+                      <button type="button" className="inventory-link" onClick={() => setMatching(purchase)}>{t("Match payment")}</button>
                     ) : (
-                      <span className="inventory-sub">Not matched</span>
+                      <span className="inventory-sub">{t("Not matched")}</span>
                     )}
                   </td>
                   {canEdit ? (
@@ -260,17 +261,13 @@ export function PurchasesPanel({
                             className="inventory-link"
                             disabled={busyId === purchase.id}
                             onClick={() => void markReceived(purchase)}
-                          >
-                            Mark received
-                          </button>
+                          >{t("Mark received")}</button>
                           <button
                             type="button"
                             className="inventory-link inventory-link-danger"
                             disabled={busyId === purchase.id}
                             onClick={() => void removePurchase(purchase)}
-                          >
-                            Delete
-                          </button>
+                          >{t("Delete")}</button>
                         </>
                       ) : null}
                     </td>
@@ -325,6 +322,8 @@ function NewPurchaseModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [supplierName, setSupplierName] = useState("");
   const [purchaseDate, setPurchaseDate] = useState(today());
   const [reference, setReference] = useState("");
@@ -356,7 +355,7 @@ function NewPurchaseModal({
   async function submit() {
     const usable = lines.filter(line => line.name.trim() && num(line.quantity) > 0);
     if (usable.length === 0) {
-      setError("Add at least one line with a name and a quantity.");
+      setError(t("Add at least one line with a name and a quantity."));
       return;
     }
     setSaving(true);
@@ -384,7 +383,7 @@ function NewPurchaseModal({
       await savePurchase(workspace, payload);
       onSaved();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The purchase could not be saved.");
+      setError(failure instanceof Error ? t(failure.message) : t("The purchase could not be saved."));
       setSaving(false);
     }
   }
@@ -395,42 +394,42 @@ function NewPurchaseModal({
         className="inventory-modal inventory-modal-wide"
         role="dialog"
         aria-modal="true"
-        aria-label="New purchase"
+        aria-label={t("New purchase")}
         onClick={event => event.stopPropagation()}
       >
         <div className="inventory-modal-head">
-          <h2>New Purchase</h2>
-          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label="Close">×</button>
+          <h2>{t("New Purchase")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
 
         <div className="inventory-modal-body">
           <div className="inventory-form">
             <label className="inventory-field">
-              <span>Supplier</span>
+              <span>{t("Supplier")}</span>
               <input
                 className="input"
                 list="purchase-suppliers"
                 value={supplierName}
                 onChange={event => setSupplierName(event.target.value)}
-                placeholder="Who you bought from"
+                placeholder={t("Who you bought from")}
               />
               <datalist id="purchase-suppliers">
                 {supplierNames.map(name => <option key={name} value={name} />)}
               </datalist>
             </label>
             <label className="inventory-field">
-              <span>Purchase date</span>
+              <span>{t("Purchase date")}</span>
               <input className="input" type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} />
             </label>
             <label className="inventory-field">
-              <span>Invoice / order reference</span>
+              <span>{t("Invoice / order reference")}</span>
               <input className="input" value={reference} onChange={e => setReference(e.target.value)} />
             </label>
           </div>
 
           <div className="inventory-section">
             <div className="inventory-section-head">
-              <h3>Items</h3>
+              <h3>{t("Items")}</h3>
               <button type="button" className="inventory-link" onClick={() => setLines(current => [...current, emptyLine()])}>
                 + Add line
               </button>
@@ -445,74 +444,68 @@ function NewPurchaseModal({
                       type="button"
                       data-active={line.trackingType === "unique"}
                       onClick={() => updateLine(index, { trackingType: "unique" })}
-                    >
-                      Unique
-                    </button>
+                    >{t("Unique")}</button>
                     <button
                       type="button"
                       data-active={line.trackingType === "quantity"}
                       onClick={() => updateLine(index, { trackingType: "quantity" })}
-                    >
-                      Quantity
-                    </button>
+                    >{t("Quantity")}</button>
                   </div>
                   {lines.length > 1 ? (
                     <button
                       type="button"
                       className="inventory-link inventory-link-danger"
                       onClick={() => setLines(current => current.filter((_, position) => position !== index))}
-                    >
-                      Remove
-                    </button>
+                    >{t("Remove")}</button>
                   ) : null}
                 </div>
 
                 <div className="inventory-form">
                   <label className="inventory-field is-wide">
-                    <span>Item</span>
+                    <span>{t("Item")}</span>
                     <input
                       className="input"
                       value={line.name}
                       onChange={e => updateLine(index, { name: e.target.value })}
-                      placeholder={line.trackingType === "unique" ? "Rolex 1601 silver dial" : "Dial feet solder"}
+                      placeholder={line.trackingType === "unique" ? t("Rolex 1601 silver dial") : t("Dial feet solder")}
                     />
                   </label>
                   <label className="inventory-field">
-                    <span>Category</span>
+                    <span>{t("Category")}</span>
                     <select className="input" value={line.category} onChange={e => updateLine(index, { category: e.target.value })}>
-                      {INVENTORY_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+                      {INVENTORY_CATEGORIES.map(category => <option key={category} value={category}>{t(category)}</option>)}
                     </select>
                   </label>
                   {line.trackingType === "quantity" ? (
                     <>
                       <label className="inventory-field">
-                        <span>Quantity</span>
+                        <span>{t("Quantity")}</span>
                         <input className="input" inputMode="decimal" value={line.quantity} onChange={e => updateLine(index, { quantity: e.target.value })} />
                       </label>
                       <label className="inventory-field">
-                        <span>Unit</span>
-                        <input className="input" value={line.unit} onChange={e => updateLine(index, { unit: e.target.value })} placeholder="pcs, ml, g" />
+                        <span>{t("Unit")}</span>
+                        <input className="input" value={line.unit} onChange={e => updateLine(index, { unit: e.target.value })} placeholder={t("pcs, ml, g")} />
                       </label>
                     </>
                   ) : (
                     <>
                       <label className="inventory-field">
-                        <span>Reference</span>
+                        <span>{t("Reference")}</span>
                         <input className="input" value={line.reference} onChange={e => updateLine(index, { reference: e.target.value })} />
                       </label>
                       <label className="inventory-field">
-                        <span>Serial number</span>
+                        <span>{t("Serial number")}</span>
                         <input className="input" value={line.serialNumber} onChange={e => updateLine(index, { serialNumber: e.target.value })} />
                       </label>
                     </>
                   )}
                   <label className="inventory-field">
-                    <span>{line.trackingType === "unique" ? "Purchase price" : "Price per unit"}</span>
+                    <span>{line.trackingType === "unique" ? t("Purchase price") : t("Price per unit")}</span>
                     <input className="input" inputMode="decimal" value={line.unitPrice} onChange={e => updateLine(index, { unitPrice: e.target.value })} placeholder="0.00" />
                   </label>
                   <label className="inventory-field">
-                    <span>Location</span>
-                    <input className="input" value={line.location} onChange={e => updateLine(index, { location: e.target.value })} placeholder="Safe, drawer 3" />
+                    <span>{t("Location")}</span>
+                    <input className="input" value={line.location} onChange={e => updateLine(index, { location: e.target.value })} placeholder={t("Safe, drawer 3")} />
                   </label>
                 </div>
               </div>
@@ -520,31 +513,31 @@ function NewPurchaseModal({
           </div>
 
           <div className="inventory-section">
-            <h3>Shipping and fees</h3>
+            <h3>{t("Shipping and fees")}</h3>
             <p className="inventory-hint">
               Kept out of the item prices on purpose. Each item&apos;s purchase price stays exactly what
               you paid for the goods, and its share of these costs is recorded separately against it.
             </p>
             <div className="inventory-form">
               <label className="inventory-field">
-                <span>Shipping</span>
+                <span>{t("Shipping")}</span>
                 <input className="input" inputMode="decimal" value={shipping} onChange={e => setShipping(e.target.value)} placeholder="0.00" />
               </label>
               <label className="inventory-field">
-                <span>Other costs</span>
-                <input className="input" inputMode="decimal" value={otherCosts} onChange={e => setOtherCosts(e.target.value)} placeholder="Import duty, fees" />
+                <span>{t("Other costs")}</span>
+                <input className="input" inputMode="decimal" value={otherCosts} onChange={e => setOtherCosts(e.target.value)} placeholder={t("Import duty, fees")} />
               </label>
             </div>
           </div>
 
           <div className="inventory-totals">
-            <div><span>Goods</span><strong>{money(currencySymbol, goods)}</strong></div>
-            <div><span>Shipping and fees</span><strong>{money(currencySymbol, extras)}</strong></div>
-            <div className="inventory-totals-final"><span>Purchase total</span><strong>{money(currencySymbol, total)}</strong></div>
+            <div><span>{t("Goods")}</span><strong>{money(currencySymbol, goods)}</strong></div>
+            <div><span>{t("Shipping and fees")}</span><strong>{money(currencySymbol, extras)}</strong></div>
+            <div className="inventory-totals-final"><span>{t("Purchase total")}</span><strong>{money(currencySymbol, total)}</strong></div>
           </div>
 
           <label className="inventory-field">
-            <span>Notes</span>
+            <span>{t("Notes")}</span>
             <textarea className="input" rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
           </label>
 
@@ -557,9 +550,9 @@ function NewPurchaseModal({
             the purchase received.
           </p>
           <div className="inventory-modal-actions">
-            <button type="button" className="inventory-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>
             <button type="button" className="inventory-primary" disabled={saving} onClick={() => void submit()}>
-              {saving ? "Saving…" : "Save purchase"}
+              {saving ? t("Saving…") : t("Save purchase")}
             </button>
           </div>
         </div>
@@ -581,6 +574,8 @@ function MatchPaymentModal({
   onClose: () => void;
   onMatched: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [rows, setRows] = useState<BankRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -609,7 +604,7 @@ function MatchPaymentModal({
         // Money out only, and nothing already spoken for by another purchase.
         setRows(all.filter(row => row.amount < 0 && (!row.purchaseId || row.purchaseId === purchase.id)));
       } catch {
-        if (!cancelled) setError("The bank feed could not be read. Connect a bank account first.");
+        if (!cancelled) setError(t("The bank feed could not be read. Connect a bank account first."));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -638,17 +633,17 @@ function MatchPaymentModal({
       }
       onMatched();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The payment could not be matched.");
+      setError(failure instanceof Error ? t(failure.message) : t("The payment could not be matched."));
       setBusy("");
     }
   }
 
   return (
     <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label="Match payment" onClick={e => e.stopPropagation()}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Match payment")} onClick={e => e.stopPropagation()}>
         <div className="inventory-modal-head">
-          <h2>Match a payment</h2>
-          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label="Close">×</button>
+          <h2>{t("Match a payment")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
         <div className="inventory-modal-body">
           <p className="inventory-hint">
@@ -656,9 +651,9 @@ function MatchPaymentModal({
           </p>
 
           {loading ? (
-            <p className="inventory-note">Reading the bank feed…</p>
+            <p className="inventory-note">{t("Reading the bank feed…")}</p>
           ) : ranked.length === 0 ? (
-            <p className="inventory-note">No unmatched money-out transactions to choose from.</p>
+            <p className="inventory-note">{t("No unmatched money-out transactions to choose from.")}</p>
           ) : (
             <div className="inventory-match-list">
               {ranked.map(row => {
@@ -680,7 +675,7 @@ function MatchPaymentModal({
                     <span className="inventory-match-amount">
                       <strong>{money(currencySymbol, paid)}</strong>
                       {Math.abs(gap) < 0.01 ? (
-                        <span className="inventory-sub">Exact match</span>
+                        <span className="inventory-sub">{t("Exact match")}</span>
                       ) : (
                         <span className="inventory-sub">{gap > 0 ? "+" : ""}{money(currencySymbol, gap)}</span>
                       )}
@@ -695,12 +690,10 @@ function MatchPaymentModal({
         </div>
         <div className="inventory-modal-foot">
           {purchase.bankTransactionId ? (
-            <button type="button" className="inventory-link inventory-link-danger" disabled={busy !== ""} onClick={() => void match("")}>
-              Unlink current payment
-            </button>
+            <button type="button" className="inventory-link inventory-link-danger" disabled={busy !== ""} onClick={() => void match("")}>{t("Unlink current payment")}</button>
           ) : <span />}
           <div className="inventory-modal-actions">
-            <button type="button" className="inventory-secondary" onClick={onClose}>Close</button>
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Close")}</button>
           </div>
         </div>
       </div>

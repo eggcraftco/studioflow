@@ -54,6 +54,12 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
+import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
+import uk.co.eggcraft.studioflow.data.model.StudioOrderStockLine
+import uk.co.eggcraft.studioflow.data.model.StudioPurchase
+import uk.co.eggcraft.studioflow.data.model.StudioSupplier
 import uk.co.eggcraft.studioflow.data.model.StudioTeamAccessSnapshot
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspaceOption
@@ -2553,6 +2559,97 @@ class StudioFlowRepository(
                 trySend(if (map.isNullOrEmpty()) BANK_DEFAULT_CATEGORY_TAX else map)
             }
         awaitClose { registration.remove() }
+    }
+
+    // ---- Inventory (workspace-scoped, role-checked server-side) ----
+    //
+    // Every write goes through the same Cloud Functions the web and Apple apps
+    // call. The money rules, the item numbering and the status lifecycle are
+    // decided in one place so no two screens can disagree about what a thing
+    // cost or where it is.
+
+    private suspend fun inventoryCall(name: String, workspaceId: String, data: Map<String, Any?> = emptyMap()): Map<*, *> {
+        val payload = data.toMutableMap()
+        payload["companyId"] = workspaceId
+        val result = functions.getHttpsCallable(name).call(payload).await()
+        return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
+    }
+
+    suspend fun inventoryItems(workspaceId: String): List<StudioInventoryItem> {
+        val raw = inventoryCall("listInventoryItems", workspaceId, mapOf("limit" to 500))
+        return (raw["items"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryItem::from) }
+    }
+
+    suspend fun inventorySummary(workspaceId: String): StudioInventorySummary {
+        val raw = inventoryCall("getInventorySummary", workspaceId)
+        return StudioInventorySummary.from(raw["summary"] as? Map<*, *> ?: emptyMap<String, Any?>())
+    }
+
+    suspend fun inventorySaveItem(workspaceId: String, item: Map<String, Any?>, itemId: String = "") {
+        inventoryCall("saveInventoryItem", workspaceId, mapOf("itemId" to itemId, "item" to item))
+    }
+
+    suspend fun inventorySetStatus(workspaceId: String, itemId: String, status: StudioInventoryStatus) {
+        inventoryCall("setInventoryItemStatus", workspaceId, mapOf("itemId" to itemId, "status" to status.raw))
+    }
+
+    suspend fun inventoryPurchases(workspaceId: String): List<StudioPurchase> {
+        val raw = inventoryCall("listPurchases", workspaceId)
+        return (raw["purchases"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioPurchase::from) }
+    }
+
+    suspend fun inventorySavePurchase(workspaceId: String, purchase: Map<String, Any?>) {
+        inventoryCall("savePurchase", workspaceId, mapOf("purchase" to purchase))
+    }
+
+    suspend fun inventoryReceivePurchase(workspaceId: String, purchaseId: String) {
+        inventoryCall("receivePurchase", workspaceId, mapOf("purchaseId" to purchaseId))
+    }
+
+    suspend fun inventoryDeletePurchase(workspaceId: String, purchaseId: String) {
+        inventoryCall("deletePurchase", workspaceId, mapOf("purchaseId" to purchaseId))
+    }
+
+    /** Returns how far the payment is from the purchase total. A deposit or a
+     *  part payment is a real thing, so the gap is reported, not refused. */
+    suspend fun inventoryMatchPayment(workspaceId: String, purchaseId: String, transactionId: String): Double {
+        val raw = inventoryCall(
+            "linkPurchaseToBankTransaction",
+            workspaceId,
+            mapOf("purchaseId" to purchaseId, "transactionId" to transactionId)
+        )
+        return (raw["difference"] as? Number)?.toDouble() ?: 0.0
+    }
+
+    suspend fun inventorySuppliers(workspaceId: String): List<StudioSupplier> {
+        val raw = inventoryCall("listSuppliers", workspaceId)
+        return (raw["suppliers"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioSupplier::from) }
+    }
+
+    suspend fun inventorySaveSupplier(workspaceId: String, supplier: Map<String, Any?>, supplierId: String = "") {
+        inventoryCall("saveSupplier", workspaceId, mapOf("supplierId" to supplierId, "supplier" to supplier))
+    }
+
+    suspend fun inventoryOrderStock(workspaceId: String, orderId: String): Pair<List<StudioOrderStockLine>, Double> {
+        val raw = inventoryCall("getOrderInventory", workspaceId, mapOf("orderId" to orderId))
+        val lines = (raw["items"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioOrderStockLine::from) }
+        return lines to ((raw["totalCost"] as? Number)?.toDouble() ?: 0.0)
+    }
+
+    suspend fun inventoryReserve(workspaceId: String, itemId: String, orderId: String, quantity: Double) {
+        inventoryCall(
+            "reserveInventoryForOrder",
+            workspaceId,
+            mapOf("itemId" to itemId, "orderId" to orderId, "quantity" to quantity)
+        )
+    }
+
+    suspend fun inventoryRelease(workspaceId: String, itemId: String, orderId: String) {
+        inventoryCall("releaseInventoryFromOrder", workspaceId, mapOf("itemId" to itemId, "orderId" to orderId))
     }
 
     // ---- Bank owner actions (all owner-checked server-side) ----

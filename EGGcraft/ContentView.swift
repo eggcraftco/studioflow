@@ -7726,6 +7726,11 @@ struct ContentView: View {
                     aktifSekme = "BankSpending"; phoneShowsOrderDetail = false
                 }
             }
+            if canAccessOrders {
+                phoneNavMenuRow(t("Inventory", lang: seciliDil), "shippingbox.fill") {
+                    aktifSekme = "Inventory"; phoneShowsOrderDetail = false
+                }
+            }
             if canAccessSchedule {
                 phoneNavMenuRow(t("Schedule", lang: seciliDil), "calendar") {
                     aktifSekme = "Schedule"; phoneShowsOrderDetail = false
@@ -8054,6 +8059,9 @@ struct ContentView: View {
             }
             if canAccessBankSpending {
                 UstMenuButonu(title: t("Bank", lang: seciliDil), icon: "building.columns.fill", isSelected: aktifSekme == "BankSpending") { aktifSekme = "BankSpending" }
+            }
+            if canAccessOrders {
+                UstMenuButonu(title: t("Inventory", lang: seciliDil), icon: "shippingbox.fill", isSelected: aktifSekme == "Inventory") { aktifSekme = "Inventory" }
             }
             if canAccessSchedule {
                 UstMenuButonu(title: t("Schedule", lang: seciliDil), icon: "calendar", isSelected: aktifSekme == "Schedule") { aktifSekme = "Schedule" }
@@ -8457,6 +8465,15 @@ struct ContentView: View {
                     .environmentObject(firebaseManager)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(bgMain)
+            } else if aktifSekme == "Inventory" {
+                if canAccessOrders {
+                    InventoryView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
+                } else {
+                    restrictedAccessView(
+                        title: t("Inventory hidden", lang: seciliDil),
+                        message: t("Your current workspace role does not include order access.", lang: seciliDil)
+                    )
+                }
             } else if aktifSekme == "BankSpending" {
                 if canAccessBankSpending {
                     BankSpendingView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -10347,6 +10364,7 @@ struct ContentView: View {
         case "Orders": return canAccessOrders
         case "Dashboard": return canAccessDashboard
         case "BankSpending": return canAccessBankSpending
+        case "Inventory": return canAccessOrders
         case "Schedule": return canAccessSchedule
         case "TeamSchedule": return canAccessTeamSchedule
         case "Customers": return canAccessCustomers

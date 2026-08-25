@@ -6938,6 +6938,18 @@ private fun MaterialsInventoryCard(
                         }
                     )
                 }
+                if (order.companyId.isNotBlank() && order.id.isNotBlank()) {
+                    HorizontalRule()
+                    uk.co.eggcraft.studioflow.features.inventory.OrderStockSection(
+                        workspaceId = order.companyId,
+                        orderId = order.id,
+                        currencySymbol = workspaceSettings.selectedCurrency,
+                        canEdit = canEditWorkflow,
+                        onUseAsBaseCost = { total ->
+                            onUpdateOrderFields(order, mapOf("finance" to mapOf("watchPurchasePrice" to total)))
+                        }
+                    )
+                }
                 if (workspaceSettings.showMaterialsNotesSupplier) {
                     HorizontalRule()
                     Text(

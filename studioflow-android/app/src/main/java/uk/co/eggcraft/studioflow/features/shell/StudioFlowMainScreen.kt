@@ -132,6 +132,7 @@ import uk.co.eggcraft.studioflow.features.quickreply.QuickReplyScreen
 import uk.co.eggcraft.studioflow.features.schedule.ScheduleScreen
 import uk.co.eggcraft.studioflow.features.settings.SettingsScreen
 import uk.co.eggcraft.studioflow.features.settings.smartWorkflowTemplateUpdates
+import androidx.compose.material.icons.filled.Inventory2
 import uk.co.eggcraft.studioflow.features.settings.standardWorkflowTemplate
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
@@ -142,6 +143,7 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
     BankSpending("Bank", Icons.Filled.AccountBalance, "dashboard"),
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
+    Inventory("Inventory", Icons.Filled.Inventory2, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     TeamSchedule("Team Schedule", Icons.Filled.Groups, "schedule"),
     Customers("Customers", Icons.Filled.People, "customers"),
@@ -276,6 +278,7 @@ fun StudioFlowMainScreen(
     var isNotificationDrawerOpen by rememberSaveable { mutableStateOf(false) }
     val preferredSectionOrder = listOf(
         StudioSection.Orders,
+        StudioSection.Inventory,
         StudioSection.Dashboard,
         StudioSection.BankSpending,
         StudioSection.Schedule,
@@ -1533,6 +1536,7 @@ private fun StudioSectionContent(
                 onSaveDraft = onSaveDraft
             )
             StudioSection.BankSpending -> uk.co.eggcraft.studioflow.features.bank.BankSpendingScreen(state = state)
+            StudioSection.Inventory -> uk.co.eggcraft.studioflow.features.inventory.InventoryScreen(state = state)
             StudioSection.Notes -> uk.co.eggcraft.studioflow.features.notes.NotesScreen(
                 state = state,
                 onSetSearch = onSetKeepNotesSearch,

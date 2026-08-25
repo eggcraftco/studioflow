@@ -8595,6 +8595,17 @@ struct SiparisDetayView: View {
                 Divider().background(Color.primary.opacity(0.1))
                 NoteSupplierField(label: t(materialsNotesSupplierLabel, lang: seciliDil), value: $siparis.invNotes)
             }
+            if let orderId = siparis.id, !orderId.isEmpty {
+                Divider().background(Color.primary.opacity(0.1))
+                OrderStockSection(
+                    orderId: orderId,
+                    currencySymbol: seciliParaBirimi,
+                    lang: seciliDil,
+                    canEdit: canEditOrderDetails,
+                    onUseAsBaseCost: { total in siparis.watchPurchasePrice = total }
+                )
+                .environmentObject(firebaseManager)
+            }
         }
     }
     private func previewKarti(colIndex: Int) -> some View {

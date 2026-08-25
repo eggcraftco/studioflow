@@ -34,6 +34,10 @@ struct StudioBankTransaction: Identifiable, Equatable {
     let vatCode: String
     let note: String
     let pandleConfirmed: Bool
+    /// Set when this payment has been matched to a purchase, so a row can show
+    /// what it actually bought and the matcher can skip rows already spoken for.
+    let purchaseId: String
+    let purchaseNumber: String
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -55,6 +59,8 @@ struct StudioBankTransaction: Identifiable, Equatable {
         vatCode = ((data["vatCode"] as? String) ?? "").uppercased()
         note = (data["note"] as? String) ?? ""
         pandleConfirmed = ((data["pandle"] as? [String: Any])?["status"] as? String) == "confirmed"
+        purchaseId = (data["purchaseId"] as? String) ?? ""
+        purchaseNumber = (data["purchaseNumber"] as? String) ?? ""
     }
 
     var effectiveCategory: String { category.isEmpty ? categoryAuto : category }

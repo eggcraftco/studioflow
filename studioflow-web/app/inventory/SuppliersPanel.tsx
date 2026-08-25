@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listSuppliers, saveSupplier, type Supplier } from "@/lib/studioflow/inventory";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
 function money(symbol: string, value: number) {
@@ -29,6 +31,9 @@ export function SuppliersPanel({
   canEdit: boolean;
   onChanged: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -42,7 +47,7 @@ export function SuppliersPanel({
       const rows = result?.suppliers ?? [];
       setSuppliers([...rows].sort((a, b) => (b.stats?.total || 0) - (a.stats?.total || 0)));
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "Suppliers could not be loaded.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("Suppliers could not be loaded."));
     } finally {
       setLoading(false);
     }
@@ -56,10 +61,8 @@ export function SuppliersPanel({
     <div className="inventory-panel">
       <div className="inventory-head">
         <div>
-          <h2>Suppliers</h2>
-          <p className="inventory-panel-hint">
-            Who you buy from, and what you have spent with each of them.
-          </p>
+          <h2>{t("Suppliers")}</h2>
+          <p className="inventory-panel-hint">{t("Who you buy from, and what you have spent with each of them.")}</p>
         </div>
         {canEdit ? (
           <button type="button" className="inventory-primary" onClick={() => setCreating(true)}>
@@ -71,11 +74,11 @@ export function SuppliersPanel({
       {notice ? <p className="inventory-notice">{notice}</p> : null}
 
       {loading ? (
-        <p className="inventory-note">Loading suppliers…</p>
+        <p className="inventory-note">{t("Loading suppliers…")}</p>
       ) : suppliers.length === 0 ? (
         <div className="inventory-empty">
-          <strong>No suppliers yet</strong>
-          <p>Suppliers appear here as soon as you record a purchase from them.</p>
+          <strong>{t("No suppliers yet")}</strong>
+          <p>{t("Suppliers appear here as soon as you record a purchase from them.")}</p>
         </div>
       ) : (
         <div className="inventory-supplier-grid">
@@ -85,7 +88,7 @@ export function SuppliersPanel({
                 <strong>{supplier.name}</strong>
                 {canEdit ? (
                   <button type="button" className="inventory-link" onClick={() => setEditing(supplier)}>
-                    {supplier.implied ? "Add details" : "Edit"}
+                    {supplier.implied ? t("Add details") : t("Edit")}
                   </button>
                 ) : null}
               </div>
@@ -94,19 +97,19 @@ export function SuppliersPanel({
               ) : null}
               <div className="inventory-supplier-stats">
                 <div>
-                  <span>Spent</span>
+                  <span>{t("Spent")}</span>
                   <strong>{money(currencySymbol, supplier.stats?.total || 0)}</strong>
                 </div>
                 <div>
-                  <span>Purchases</span>
+                  <span>{t("Purchases")}</span>
                   <strong>{supplier.stats?.count || 0}</strong>
                 </div>
                 <div>
-                  <span>Items</span>
+                  <span>{t("Items")}</span>
                   <strong>{supplier.stats?.lines || 0}</strong>
                 </div>
                 <div>
-                  <span>Last</span>
+                  <span>{t("Last")}</span>
                   <strong>{supplier.stats?.lastDate || "—"}</strong>
                 </div>
               </div>
@@ -149,6 +152,8 @@ function SupplierModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [name, setName] = useState(supplier?.name || "");
   const [email, setEmail] = useState(supplier?.email || "");
   const [phone, setPhone] = useState(supplier?.phone || "");
@@ -172,39 +177,39 @@ function SupplierModal({
       );
       onSaved();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The supplier could not be saved.");
+      setError(failure instanceof Error ? t(failure.message) : t("The supplier could not be saved."));
       setSaving(false);
     }
   }
 
   return (
     <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label="Supplier" onClick={e => e.stopPropagation()}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Supplier")} onClick={e => e.stopPropagation()}>
         <div className="inventory-modal-head">
-          <h2>{supplier && !supplier.implied ? "Edit supplier" : "New supplier"}</h2>
-          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label="Close">×</button>
+          <h2>{supplier && !supplier.implied ? t("Edit supplier") : t("New supplier")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
         <div className="inventory-modal-body">
           <div className="inventory-form">
             <label className="inventory-field is-wide">
-              <span>Name</span>
+              <span>{t("Name")}</span>
               <input className="input" value={name} onChange={e => setName(e.target.value)} />
             </label>
             <label className="inventory-field">
-              <span>Email</span>
+              <span>{t("Email")}</span>
               <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} />
             </label>
             <label className="inventory-field">
-              <span>Phone</span>
+              <span>{t("Phone")}</span>
               <input className="input" value={phone} onChange={e => setPhone(e.target.value)} />
             </label>
             <label className="inventory-field is-wide">
-              <span>Website</span>
+              <span>{t("Website")}</span>
               <input className="input" value={website} onChange={e => setWebsite(e.target.value)} />
             </label>
           </div>
           <label className="inventory-field">
-            <span>Notes</span>
+            <span>{t("Notes")}</span>
             <textarea className="input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
           </label>
           {error ? <p className="inventory-error">{error}</p> : null}
@@ -212,9 +217,9 @@ function SupplierModal({
         <div className="inventory-modal-foot">
           <span />
           <div className="inventory-modal-actions">
-            <button type="button" className="inventory-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>
             <button type="button" className="inventory-primary" disabled={saving} onClick={() => void submit()}>
-              {saving ? "Saving…" : "Save supplier"}
+              {saving ? t("Saving…") : t("Save supplier")}
             </button>
           </div>
         </div>

@@ -24,7 +24,11 @@ data class StudioBankTransaction(
     val linkedOrderLabel: String,
     val vatCode: String,
     val note: String,
-    val pandleConfirmed: Boolean
+    val pandleConfirmed: Boolean,
+    /** Set when this payment has been matched to a purchase, so a row can show
+     *  what it actually bought and the matcher can skip rows already spoken for. */
+    val purchaseId: String = "",
+    val purchaseNumber: String = ""
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
@@ -122,7 +126,9 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?: "",
         vatCode = ((data["vatCode"] as? String) ?: "").uppercase(),
         note = (data["note"] as? String) ?: "",
-        pandleConfirmed = (pandle?.get("status") as? String) == "confirmed"
+        pandleConfirmed = (pandle?.get("status") as? String) == "confirmed",
+        purchaseId = (data["purchaseId"] as? String) ?: "",
+        purchaseNumber = (data["purchaseNumber"] as? String) ?: ""
     )
 }
 

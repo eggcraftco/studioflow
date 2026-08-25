@@ -21,6 +21,8 @@ import {
   type InventoryItem,
   type OrderInventoryLine
 } from "@/lib/studioflow/inventory";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
 function money(symbol: string, value: number) {
@@ -43,6 +45,9 @@ export function OrderStockBlock({
   canEdit: boolean;
   onUseAsBaseCost?: (total: number) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+
   const [lines, setLines] = useState<OrderInventoryLine[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -58,7 +63,7 @@ export function OrderStockBlock({
       setLines(result?.items ?? []);
       setTotal(Number(result?.totalCost) || 0);
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "");
+      setNotice(failure instanceof Error ? t(failure.message) : "");
     } finally {
       setLoading(false);
     }
@@ -75,20 +80,20 @@ export function OrderStockBlock({
       await releaseInventoryFromOrder(workspace, line.id, orderId);
       await reload();
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : "The item could not be released.");
+      setNotice(failure instanceof Error ? t(failure.message) : t("The item could not be released."));
     } finally {
       setBusyId("");
     }
   }
 
   if (loading && lines.length === 0) {
-    return <p className="app-inline-note">Loading reserved stock…</p>;
+    return <p className="app-inline-note">{t("Loading reserved stock…")}</p>;
   }
 
   return (
     <div className="order-stock-block">
       <div className="order-stock-head">
-        <span className="order-stock-title">Stock reserved for this order</span>
+        <span className="order-stock-title">{t("Stock reserved for this order")}</span>
         {canEdit ? (
           <button type="button" className="inventory-link" onClick={() => setPicking(true)}>
             + Reserve stock
@@ -97,9 +102,7 @@ export function OrderStockBlock({
       </div>
 
       {lines.length === 0 ? (
-        <p className="app-inline-note">
-          Nothing reserved yet. Reserving puts a part aside for this job so it cannot be promised twice.
-        </p>
+        <p className="app-inline-note">{t("Nothing reserved yet. Reserving puts a part aside for this job so it cannot be promised twice.")}</p>
       ) : (
         <>
           <ul className="order-stock-list">
@@ -120,21 +123,17 @@ export function OrderStockBlock({
                     className="inventory-link inventory-link-danger"
                     disabled={busyId === line.id}
                     onClick={() => void release(line)}
-                  >
-                    Release
-                  </button>
+                  >{t("Release")}</button>
                 ) : null}
               </li>
             ))}
           </ul>
           <div className="order-stock-total">
-            <span>Committed stock cost</span>
+            <span>{t("Committed stock cost")}</span>
             <strong>{money(currencySymbol, total)}</strong>
           </div>
           {canEdit && onUseAsBaseCost && total > 0 ? (
-            <button type="button" className="inventory-link" onClick={() => onUseAsBaseCost(total)}>
-              Use as the base cost on the Financial card
-            </button>
+            <button type="button" className="inventory-link" onClick={() => onUseAsBaseCost(total)}>{t("Use as the base cost on the Financial card")}</button>
           ) : null}
         </>
       )}
@@ -170,6 +169,8 @@ function ReserveStockModal({
   onClose: () => void;
   onReserved: () => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -184,7 +185,7 @@ function ReserveStockModal({
         const result = await listInventoryItems(workspace);
         if (!cancelled) setItems(result?.items ?? []);
       } catch (failure) {
-        if (!cancelled) setError(failure instanceof Error ? failure.message : "Inventory could not be loaded.");
+        if (!cancelled) setError(failure instanceof Error ? t(failure.message) : t("Inventory could not be loaded."));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -215,7 +216,7 @@ function ReserveStockModal({
       ? 1
       : Number(amounts[item.id] ?? free) || 0;
     if (item.trackingType === "quantity" && wanted <= 0) {
-      setError("Enter how much to reserve.");
+      setError(t("Enter how much to reserve."));
       return;
     }
     setBusy(item.id);
@@ -224,32 +225,32 @@ function ReserveStockModal({
       await reserveInventoryForOrder(workspace, item.id, orderId, wanted);
       onReserved();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "The item could not be reserved.");
+      setError(failure instanceof Error ? t(failure.message) : t("The item could not be reserved."));
       setBusy("");
     }
   }
 
   return (
     <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label="Reserve stock" onClick={e => e.stopPropagation()}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Reserve stock")} onClick={e => e.stopPropagation()}>
         <div className="inventory-modal-head">
-          <h2>Reserve stock</h2>
-          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label="Close">×</button>
+          <h2>{t("Reserve stock")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
         <div className="inventory-modal-body">
           <input
             className="input"
-            placeholder="Search stock…"
+            placeholder={t("Search stock…")}
             value={search}
             onChange={event => setSearch(event.target.value)}
           />
           {loading ? (
-            <p className="inventory-note">Loading stock…</p>
+            <p className="inventory-note">{t("Loading stock…")}</p>
           ) : choices.length === 0 ? (
             <p className="inventory-note">
               {items.length === 0
                 ? "There is nothing in inventory yet."
-                : "Nothing available to reserve — everything is either used, sold or already promised."}
+                : t("Nothing available to reserve — everything is either used, sold or already promised.")}
             </p>
           ) : (
             <div className="inventory-match-list">
@@ -283,9 +284,7 @@ function ReserveStockModal({
                       className="inventory-secondary inventory-secondary-small"
                       disabled={busy !== ""}
                       onClick={() => void reserve(item)}
-                    >
-                      Reserve
-                    </button>
+                    >{t("Reserve")}</button>
                   </div>
                 );
               })}
@@ -296,7 +295,7 @@ function ReserveStockModal({
         <div className="inventory-modal-foot">
           <span />
           <div className="inventory-modal-actions">
-            <button type="button" className="inventory-secondary" onClick={onClose}>Close</button>
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Close")}</button>
           </div>
         </div>
       </div>
