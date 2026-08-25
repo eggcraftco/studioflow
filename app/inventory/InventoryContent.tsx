@@ -24,16 +24,20 @@ import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
+import { ReportsPanel } from "./ReportsPanel";
+import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
-type InventoryTab = "items" | "purchases" | "suppliers";
+type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "reports";
 
 // Labels are stored untranslated and translated where they are drawn: this
 // list is module scope, and t() needs the language from the component.
 const TABS: Array<{ key: InventoryTab; label: string }> = [
   { key: "items", label: "Items" },
   { key: "purchases", label: "Purchases" },
-  { key: "suppliers", label: "Suppliers" }
+  { key: "suppliers", label: "Suppliers" },
+  { key: "stocktake", label: "Stocktake" },
+  { key: "reports", label: "Reports" }
 ];
 
 function money(symbol: string, value: number) {
@@ -212,6 +216,15 @@ export function InventoryContent({
           supplierNames={supplierNames}
           onStockChanged={() => { void reload(); void reloadSuppliers(); }}
         />
+      ) : tab === "stocktake" ? (
+        <StocktakePanel
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          onStockChanged={() => void reload()}
+        />
+      ) : tab === "reports" ? (
+        <ReportsPanel workspace={workspace} currencySymbol={currencySymbol} />
       ) : tab === "suppliers" ? (
         <SuppliersPanel
           workspace={workspace}
