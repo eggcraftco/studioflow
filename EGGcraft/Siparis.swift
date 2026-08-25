@@ -1,6 +1,15 @@
 import Foundation
 import FirebaseFirestore
 
+// VAT sits INSIDE the price the customer pays, so it is extracted from the
+// gross rather than added on top: £1,450 at 20% is £241.67 of VAT on £1,208.33,
+// not £290. Mirrors vatFromGrossAmount() in functions/index.js — the invoice,
+// the estimate and the Finance card must all agree with the server.
+func kdvBrutten(_ taxRate: Double, _ brutTutar: Double) -> Double {
+    guard taxRate > 0, brutTutar > 0 else { return 0 }
+    return (brutTutar * taxRate) / (100.0 + taxRate)
+}
+
 struct OrderHistoryLogItem: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var createdAt: Date = Date()

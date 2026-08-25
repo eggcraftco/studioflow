@@ -149,6 +149,16 @@ service cloud.firestore {
       ];
     }
 
+    // ownerUid is what both the server (uidIsCompanyOwner) and these rules
+    // (isCompanyOwner) treat as the real owner, and nothing pinned it: an owner
+    // could write any uid there from a plain client write and hand out full
+    // owner rights off the books. It may only ever be set to your own uid — the
+    // apps' self-repair writes do exactly that, an off-book co-owner does not.
+    function validOwnerUidUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid'])
+        || request.resource.data.ownerUid == request.auth.uid;
+    }
+
     function validTeamWorkspaceUpdate(companyId) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedTeamWorkspaceFields())
         || hasTeamPlan(companyId);
@@ -272,7 +282,11 @@ service cloud.firestore {
         'billingUpdatedAt',
         'billingUpdatedBy',
         'woocommerceWebhookToken',
-        'woocommerceWebhookTokenCreatedAt'
+        'woocommerceWebhookTokenCreatedAt',
+        'shopifyWebhookToken',
+        'shopifyWebhookTokenCreatedAt',
+        'inboundWebhookToken',
+        'inboundWebhookTokenCreatedAt'
       ];
     }
 
@@ -394,6 +408,7 @@ service cloud.firestore {
       allow list: if signedIn() && request.auth.uid in resource.data.memberUids;
       allow update: if isCompanyOwner(companyId)
         && validCompanyBillingUpdate()
+        && validOwnerUidUpdate()
         && validTeamWorkspaceUpdate(companyId);
       allow delete: if isCompanyOwner(companyId);
     }
@@ -615,6 +630,8 @@ service cloud.firestore {
         && collectionId != 'suppliers'
         && collectionId != 'inventoryMovements'
         && collectionId != 'stocktakes'
+        && collectionId != 'integrationSecrets'
+        && collectionId != 'financeBulkRuns'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -641,6 +658,8 @@ service cloud.firestore {
         && collectionId != 'suppliers'
         && collectionId != 'inventoryMovements'
         && collectionId != 'stocktakes'
+        && collectionId != 'integrationSecrets'
+        && collectionId != 'financeBulkRuns'
         && canWriteCompanyData(companyId);
     }
 

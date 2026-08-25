@@ -977,12 +977,15 @@ private fun money(value: Double, currency: String, decimalSeparator: String, hid
 
 private fun growthLabel(current: Double, previous: Double): String {
     val delta = current - previous
-    val sign = if (delta >= 0) "+" else "-"
+    // Divide by the magnitude, not the signed value: after a loss year a
+    // recovery is growth, and a signed denominator flips the sign.
     val percent = if (previous == 0.0) {
         if (current > 0.0) 100.0 else 0.0
     } else {
-        kotlin.math.abs(delta / previous * 100.0)
+        kotlin.math.abs(delta / kotlin.math.abs(previous) * 100.0)
     }
+    // Nothing moved is neither up nor down; "-0.0%" was the old reading.
+    val sign = if (percent == 0.0) "" else if (delta >= 0) "+" else "-"
     return "$sign${String.format(Locale.UK, "%.1f", percent)}%"
 }
 

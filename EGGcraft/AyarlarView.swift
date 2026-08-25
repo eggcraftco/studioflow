@@ -179,9 +179,12 @@ struct AyarlarView: View {
     
     @State private var isRecalculating = false
     @State private var showRecalcAlert = false
+    @State private var revealedIntegrationSecrets: Set<String> = []
+    @State private var recalcHataMesaji = ""
     @State private var isClearingTax = false
     @State private var showClearTaxConfirm = false
     @State private var showClearTaxAlert = false
+    @State private var clearTaxHataMesaji = ""
     @AppStorage("replyMode") private var replyMode: String = "AI"
     @AppStorage("openAIKey") private var openAIKey: String = ""
     @State private var quickReplyHasOpenAIKey: Bool = false
@@ -5887,7 +5890,7 @@ struct AyarlarView: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(isRecalculating)
-                .alert(t("Done", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(t("VAT recalculation completed!", lang: seciliDil)) }
+                .alert(recalcHataMesaji.isEmpty ? t("Done", lang: seciliDil) : t("Existing projects could not be recalculated.", lang: seciliDil), isPresented: $showRecalcAlert) { Button("OK", role: .cancel) { } } message: { Text(recalcHataMesaji.isEmpty ? t("VAT recalculation completed!", lang: seciliDil) : recalcHataMesaji) }
 
                 Button(action: { showClearTaxConfirm = true }) {
                     HStack(spacing: 10) {
@@ -5912,7 +5915,7 @@ struct AyarlarView: View {
                     Button(t("Remove", lang: seciliDil), role: .destructive) { tumVatleriSil() }
                     Button(t("Cancel", lang: seciliDil), role: .cancel) { }
                 } message: { Text(t("This sets VAT/tax to 0 on all orders. Use this when VAT does not apply (e.g. you export). This cannot be undone.", lang: seciliDil)) }
-                .alert(t("Done", lang: seciliDil), isPresented: $showClearTaxAlert) { Button("OK", role: .cancel) { } } message: { Text(t("VAT removed from all orders.", lang: seciliDil)) }
+                .alert(clearTaxHataMesaji.isEmpty ? t("Done", lang: seciliDil) : t("VAT could not be removed.", lang: seciliDil), isPresented: $showClearTaxAlert) { Button("OK", role: .cancel) { } } message: { Text(clearTaxHataMesaji.isEmpty ? t("VAT removed from all orders.", lang: seciliDil) : clearTaxHataMesaji) }
             }
         }
     }
@@ -5951,30 +5954,36 @@ struct AyarlarView: View {
         }
     }
     
+    // This used to recalculate locally, and its arithmetic had drifted from the
+    // server's: it left out custom receivables and custom spending, and had no
+    // guard for orders whose tax came from WooCommerce or Shopify. Two people
+    // pressing "the same button" on Mac and on the web got different numbers.
+    // The server owns this calculation now, exactly as Android already did.
     private func tumVergileriYenidenHesapla() {
+        let companyId = activeSettingsCompanyId
+        guard !companyId.isEmpty else { return }
         isRecalculating = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            let milat = Date(timeIntervalSince1970: taxMilestoneDate)
-            for mutSiparis in firebaseManager.siparisler {
-                var s = mutSiparis
-                if taxMilestoneEnabled { s.taxType = s.paymentDate >= milat ? "Revenue" : "Profit" } else { s.taxType = taxCalculationType }
-                if s.taxRate == 0 { s.taxRate = defaultTaxRate }
-                let toplamSatis = s.paidAmount + s.remainingAmount
-                if toplamSatis >= 0 { s.paymentFee = (toplamSatis * self.feePercentage) / 100.0 }
-                if s.taxType == "Revenue" { s.taxAmount = (toplamSatis * s.taxRate) / 100.0 } else { let brutKar = toplamSatis - s.watchPurchasePrice - s.deliveryCost - s.paymentFee; if brutKar > 0 { s.taxAmount = (brutKar * s.taxRate) / 100.0 } else { s.taxAmount = 0 } }
-                DispatchQueue.main.async { firebaseManager.updateSiparis(s) }
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("recalculateFinancialSettingsForOrders")
+            .call(["companyId": companyId]) { _, hata in
+                DispatchQueue.main.async {
+                    isRecalculating = false
+                    if let hata { recalcHataMesaji = hata.localizedDescription } else { recalcHataMesaji = "" }
+                    showRecalcAlert = true
+                }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { isRecalculating = false; showRecalcAlert = true }
-        }
     }
 
     private func tumVatleriSil() {
         let companyId = activeSettingsCompanyId
         guard !companyId.isEmpty else { return }
         isClearingTax = true
-        Functions.functions(region: "europe-west2").httpsCallable("clearAllOrdersTax").call(["companyId": companyId]) { _, _ in
+        Functions.functions(region: "europe-west2").httpsCallable("clearAllOrdersTax").call(["companyId": companyId]) { _, hata in
             DispatchQueue.main.async {
                 isClearingTax = false
+                // Reporting "VAT removed" after a permission error was worse than
+                // reporting nothing: the owner walked away believing it worked.
+                clearTaxHataMesaji = hata?.localizedDescription ?? ""
                 showClearTaxAlert = true
             }
         }
@@ -6104,7 +6113,8 @@ struct AyarlarView: View {
                         title: t("Delivery URL with Company ID", lang: seciliDil),
                         value: deliveryURL.isEmpty ? (wooCommerceTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
                         buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !deliveryURL.isEmpty
+                        canCopy: !deliveryURL.isEmpty,
+                        isSecret: true
                     )
 
                     if !wooCommerceCopyFeedback.isEmpty {
@@ -6265,7 +6275,8 @@ struct AyarlarView: View {
                         title: t("Delivery URL with Company ID", lang: seciliDil),
                         value: deliveryURL.isEmpty ? (shopifyTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
                         buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !deliveryURL.isEmpty
+                        canCopy: !deliveryURL.isEmpty,
+                        isSecret: true
                     )
 
                     if !wooCommerceCopyFeedback.isEmpty {
@@ -6343,7 +6354,8 @@ struct AyarlarView: View {
                         title: t("Delivery URL with Company ID", lang: seciliDil),
                         value: deliveryURL.isEmpty ? (inboundTokenLoading ? t("Loading...", lang: seciliDil) : "—") : deliveryURL,
                         buttonTitle: t("Copy Delivery URL", lang: seciliDil),
-                        canCopy: !deliveryURL.isEmpty
+                        canCopy: !deliveryURL.isEmpty,
+                        isSecret: true
                     )
 
                     if !wooCommerceCopyFeedback.isEmpty {
@@ -6479,13 +6491,36 @@ struct AyarlarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func copyableIntegrationValue(title: String, value: String, buttonTitle: String, canCopy: Bool = true) -> some View {
+    // A delivery URL carries a token that creates orders. Shown in full it leaks
+    // through a screen share or a support screenshot, so it is masked unless the
+    // owner asks — and copying never needs it revealed.
+    private func maskedDeliveryURL(_ url: String) -> String {
+        guard let range = url.range(of: "token=") else { return url }
+        let prefixEnd = url.index(range.upperBound, offsetBy: 4, limitedBy: url.endIndex) ?? url.endIndex
+        return String(url[..<prefixEnd]) + String(repeating: "•", count: 24)
+    }
+
+    private func copyableIntegrationValue(title: String, value: String, buttonTitle: String, canCopy: Bool = true, isSecret: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .center, spacing: 10) {
                 Text(title)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.primary)
                 Spacer(minLength: 8)
+                if isSecret && canCopy {
+                    Button(action: { revealedIntegrationSecrets = revealedIntegrationSecrets.symmetricDifference([title]) }) {
+                        Text(revealedIntegrationSecrets.contains(title)
+                             ? t("Hide", lang: seciliDil)
+                             : t("Reveal for 30 seconds", lang: seciliDil))
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.primary.opacity(0.05))
+                            .foregroundColor(.secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button(action: {
                     copyIntegrationText(value, feedback: t("Copied", lang: seciliDil))
                 }) {
@@ -6504,7 +6539,7 @@ struct AyarlarView: View {
                 .disabled(!canCopy)
             }
 
-            Text(value)
+            Text(isSecret && !revealedIntegrationSecrets.contains(title) ? maskedDeliveryURL(value) : value)
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundColor(.primary)
                 .padding(12)
@@ -6820,7 +6855,8 @@ struct AyarlarView: View {
             ("taxRuleNameRevenue", "Standard VAT (Services/New)"),
             ("taxRuleNameProfit", "Margin Scheme (2nd Hand)"),
             ("replyMode", "AI"),
-            ("openAIKey", ""),
+            // openAIKey is not backed up: it can spend money, and a backup is a
+            // file people email to themselves.
             ("localAIURL", "http://localhost:11434"),
             ("localAIModel", "llama3.1:latest"),
             ("aiKnowledgeBase", ""),
@@ -6947,7 +6983,6 @@ struct AyarlarView: View {
         taxRuleNameRevenue = settings.strings["taxRuleNameRevenue"] ?? taxRuleNameRevenue
         taxRuleNameProfit = settings.strings["taxRuleNameProfit"] ?? taxRuleNameProfit
         replyMode = settings.strings["replyMode"] ?? replyMode
-        openAIKey = settings.strings["openAIKey"] ?? openAIKey
         localAIURL = settings.strings["localAIURL"] ?? localAIURL
         localAIModel = settings.strings["localAIModel"] ?? localAIModel
         aiKnowledgeBase = settings.strings["aiKnowledgeBase"] ?? aiKnowledgeBase

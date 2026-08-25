@@ -1387,65 +1387,27 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "Custom role deleted."
     }
 
-    suspend fun importBackup(workspace: StudioWorkspace, rawJson: String): Int {
+    // This used to write straight to Firestore from the phone, which skipped
+    // every guard the server applies: the 500-record cap, the plan's order and
+    // customer limits, and the field allowlist that sanitises what a backup may
+    // set. It also wrote the settings envelope raw, so importing a Mac or web
+    // backup on Android planted three literal maps named strings/bools/doubles
+    // instead of applying any setting. The callable does all of that correctly
+    // and is the same one web and iOS already use.
+    suspend fun importBackup(workspace: StudioWorkspace, rawJson: String): ImportBackupResult {
         val root = JSONObject(rawJson)
-        val orders = root.optJSONArray("siparisler") ?: root.optJSONArray("orders") ?: JSONArray()
-        val customers = root.optJSONArray("musteriler") ?: root.optJSONArray("customers") ?: JSONArray()
-        val settings = root.optJSONObject("settings")
-        var imported = 0
-        var batch = db.batch()
-        var batchSize = 0
-        for (index in 0 until orders.length()) {
-            val item = orders.optJSONObject(index) ?: continue
-            val ref = db.collection("siparisler").document()
-            batch.set(ref, orderMapFromBackup(workspace.id, item))
-            imported += 1
-            batchSize += 1
-            if (batchSize >= 400) {
-                batch.commit().await()
-                batch = db.batch()
-                batchSize = 0
-            }
-        }
-        if (batchSize > 0) {
-            batch.commit().await()
-        }
-        batch = db.batch()
-        batchSize = 0
-        for (index in 0 until customers.length()) {
-            val item = customers.optJSONObject(index) ?: continue
-            val ref = db.collection("musteriler").document()
-            batch.set(
-                ref,
-                jsonObjectToMap(item).toMutableMap().apply {
-                    put("companyId", workspace.id)
-                    put("importedAt", FieldValue.serverTimestamp())
-                    put("updatedAt", FieldValue.serverTimestamp())
-                }
-            )
-            imported += 1
-            batchSize += 1
-            if (batchSize >= 400) {
-                batch.commit().await()
-                batch = db.batch()
-                batchSize = 0
-            }
-        }
-        if (batchSize > 0) {
-            batch.commit().await()
-        }
-        if (settings != null) {
-            db.collection("companySettings").document(workspace.id)
-                .set(
-                    jsonObjectToMap(settings).toMutableMap().apply {
-                        put("settingsUpdatedAt", FieldValue.serverTimestamp())
-                        put("settingsImportedAt", FieldValue.serverTimestamp())
-                    },
-                    com.google.firebase.firestore.SetOptions.merge()
-                )
-                .await()
-        }
-        return imported
+        val result = functions.getHttpsCallable("importWorkspaceBackup")
+            .call(mapOf("companyId" to workspace.id, "backup" to jsonObjectToMap(root)))
+            .await()
+        val data = result.data as? Map<*, *>
+        fun count(key: String): Int = (data?.get(key) as? Number)?.toInt() ?: 0
+        return ImportBackupResult(
+            importedOrders = count("importedOrders"),
+            importedCustomers = count("importedCustomers"),
+            droppedOrders = count("droppedOrders"),
+            droppedCustomers = count("droppedCustomers"),
+            message = (data?.get("message") as? String).orEmpty()
+        )
     }
 
     suspend fun deleteWorkspaceData(workspace: StudioWorkspace): Int {
@@ -3503,6 +3465,14 @@ private fun orderMapFromBackup(companyId: String, item: JSONObject): Map<String,
         "updatedAt" to FieldValue.serverTimestamp()
     )
 }
+
+data class ImportBackupResult(
+    val importedOrders: Int,
+    val importedCustomers: Int,
+    val droppedOrders: Int,
+    val droppedCustomers: Int,
+    val message: String
+)
 
 private fun jsonObjectToMap(value: JSONObject): Map<String, Any> {
     val output = mutableMapOf<String, Any>()

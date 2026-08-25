@@ -96,6 +96,21 @@ function friendlyQuickReplyError(error: unknown) {
   return message || "Quick Reply could not complete the request.";
 }
 
+export type QuickReplyKeyTestResult = {
+  ok?: boolean;
+  checkedAtMs?: number;
+  message?: string;
+  reason?: string;
+};
+
+// Asks OpenAI whether the stored key still works. Cheap on purpose: it lists
+// models rather than generating anything, so testing costs nothing.
+export async function testQuickReplyApiKey(workspace: WorkspaceContext): Promise<QuickReplyKeyTestResult> {
+  const callable = httpsCallable<{ companyId: string }, QuickReplyKeyTestResult>(functions, "testQuickReplyApiKey");
+  const result = await callable({ companyId: workspace.id });
+  return result.data ?? {};
+}
+
 export async function saveQuickReplySettings(workspace: WorkspaceContext, input: QuickReplySaveInput) {
   if (!canEditQuickReplySettingsForRole(workspace.role)) {
     throw new Error("Your workspace role cannot edit Quick Reply settings.");

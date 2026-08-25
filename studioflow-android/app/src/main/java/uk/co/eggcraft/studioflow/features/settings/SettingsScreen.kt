@@ -1443,6 +1443,10 @@ private fun FinancialSettingsDetail(
     val financeCompanyId = state.workspace?.id ?: ""
     var showClearTaxConfirm by remember { mutableStateOf(false) }
     var clearingTax by remember { mutableStateOf(false) }
+    // Recalculating rewrites VAT on every past order. It used to fire on one tap
+    // with nothing shown first; now the server says what would change.
+    var recalcPreview by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var loadingRecalcPreview by remember { mutableStateOf(false) }
     var selectedCurrency by rememberSaveable(settings.selectedCurrency) { mutableStateOf(settings.selectedCurrency) }
     var selectedDecimalSeparator by rememberSaveable(settings.selectedDecimalSeparator) { mutableStateOf(settings.selectedDecimalSeparator) }
     var feePercentage by rememberSaveable(settings.feePercentage) { mutableStateOf(settingsNumberText(settings.feePercentage)) }
@@ -1621,8 +1625,23 @@ private fun FinancialSettingsDetail(
                     Text(if (state.settingsSaving) "Saving..." else "Save Financial Settings", fontWeight = FontWeight.ExtraBold)
                 }
                 Button(
-                    onClick = { onRecalculate(payload()) },
-                    enabled = !state.settingsSaving,
+                    onClick = {
+                        loadingRecalcPreview = true
+                        scope.launch {
+                            try {
+                                val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+                                    .getHttpsCallable("previewFinancialRecalculationForOrders")
+                                    .call(hashMapOf("companyId" to financeCompanyId))
+                                    .await()
+                                @Suppress("UNCHECKED_CAST")
+                                recalcPreview = result.data as? Map<String, Any?>
+                            } catch (error: Exception) {
+                                Toast.makeText(context, error.message ?: t("Preview could not be loaded."), Toast.LENGTH_SHORT).show()
+                            }
+                            loadingRecalcPreview = false
+                        }
+                    },
+                    enabled = !state.settingsSaving && !loadingRecalcPreview && financeCompanyId.isNotEmpty(),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = StudioOrange),
                     shape = RoundedCornerShape(10.dp)
@@ -1640,6 +1659,45 @@ private fun FinancialSettingsDetail(
                 Text(if (clearingTax) t("Removing VAT...") else t("Remove VAT from all orders"), fontWeight = FontWeight.ExtraBold)
             }
         }
+    }
+
+    recalcPreview?.let { preview ->
+        fun count(key: String): Long = (preview[key] as? Number)?.toLong() ?: 0L
+        @Suppress("UNCHECKED_CAST")
+        val totals = preview["totals"] as? Map<String, Any?> ?: emptyMap()
+        fun money(key: String): String {
+            val value = (totals[key] as? Number)?.toDouble() ?: 0.0
+            return String.format(Locale.UK, "%,.2f", value)
+        }
+        val wouldChange = count("wouldUpdateCount")
+        AlertDialog(
+            onDismissRequest = { recalcPreview = null },
+            title = {
+                Text(
+                    if (wouldChange == 0L) t("Nothing would change")
+                    else "${t("Recalculate")} $wouldChange / ${count("orderCount")}"
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(t("This preview does not change anything yet."))
+                    Text("${t("Projects that would change")}: $wouldChange")
+                    Text("${t("Skipped — tax came from your shop")}: ${count("skippedIntegrationCount")}")
+                    Text("${t("At 0% — would move to the default rate")}: ${count("zeroRateForcedToDefaultCount")}")
+                    Text("${t("VAT total before")}: ${money("taxBefore")}")
+                    Text("${t("VAT total after")}: ${money("taxAfter")}")
+                }
+            },
+            confirmButton = {
+                if (wouldChange > 0L) {
+                    Button(onClick = {
+                        recalcPreview = null
+                        onRecalculate(payload())
+                    }) { Text(t("Apply these changes")) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { recalcPreview = null }) { Text(t("Cancel")) } }
+        )
     }
 
     if (showClearTaxConfirm) {
@@ -1763,7 +1821,7 @@ private fun WooCommerceDetail(state: StudioFlowUiState) {
         }
         DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
             CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
-            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL", isSecret = true)
         }
         DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
             StepRow("1", "Open WooCommerce webhooks", "In WordPress, open WooCommerce > Settings > Advanced > Webhooks.")
@@ -1878,7 +1936,7 @@ private fun ShopifyDetail(state: StudioFlowUiState) {
         }
         DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
             CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
-            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL", isSecret = true)
         }
         DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
             StepRow("1", "Open Shopify webhooks", "In Shopify admin, open Settings > Notifications > Webhooks (or create a custom app for webhooks).")
@@ -1993,7 +2051,7 @@ private fun InboundDetail(state: StudioFlowUiState) {
         }
         DetailCard(title = t("Copy Setup Details"), icon = Icons.Filled.ContentCopy) {
             CopyableValue(t("Your Company ID"), companyId, "Copy Company ID")
-            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL")
+            CopyableValue("Delivery URL with Company ID", deliveryUrl, "Copy Delivery URL", isSecret = true)
         }
         DetailCard(title = t("What you need to do"), icon = Icons.Filled.CheckCircle) {
             StepRow("1", "Pick a connection method", "Most platforms connect through Zapier or Make (a 'Webhooks > POST' action). Developers can also POST directly from their own site.")
@@ -2118,7 +2176,7 @@ private fun DataManagementDetail(
         DetailCard(title = t("Data Management"), icon = Icons.Filled.Storage) {
             Text(t("Create a backup before importing or deleting data."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             ActionButton("Export Backup", Icons.Filled.Backup, StudioBlue) {
-                shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.workspaceSettings))
+                shareText(context, "StudioManager_Backup.json", backupJson(state.orders, state.customers, state.workspaceSettings))
             }
             ActionButton("Export CSV", Icons.Filled.TableChart, StudioBlue) {
                 showExportDialog = true
@@ -4694,15 +4752,31 @@ private fun ActionButton(label: String, icon: ImageVector, color: Color, onClick
     }
 }
 
+// A delivery URL carries a token that creates orders. Shown in full it leaks
+// through a screen share or a support screenshot, so it is masked unless asked
+// for — and copying never needs it revealed.
+private fun maskDeliveryUrl(url: String): String {
+    val marker = url.indexOf("token=")
+    if (marker < 0) return url
+    val keepTo = minOf(marker + "token=".length + 4, url.length)
+    return url.substring(0, keepTo) + "•".repeat(24)
+}
+
 @Composable
-private fun CopyableValue(title: String, value: String, buttonTitle: String) {
+private fun CopyableValue(title: String, value: String, buttonTitle: String, isSecret: Boolean = false) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    var revealed by remember(value) { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, modifier = Modifier.weight(1f), fontWeight = FontWeight.ExtraBold)
+            if (isSecret && value.isNotBlank()) {
+                TextButton(onClick = { revealed = !revealed }) {
+                    Text(if (revealed) t("Hide") else t("Reveal for 30 seconds"))
+                }
+            }
             TextButton(onClick = {
                 clipboard.setText(AnnotatedString(value))
                 Toast.makeText(context, "$title copied.", Toast.LENGTH_SHORT).show()
@@ -4713,7 +4787,12 @@ private fun CopyableValue(title: String, value: String, buttonTitle: String) {
             }
         }
         Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-            Text(value, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text(
+                if (isSecret && !revealed) maskDeliveryUrl(value) else value,
+                modifier = Modifier.padding(12.dp),
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
@@ -5074,7 +5153,14 @@ private fun shareText(context: android.content.Context, title: String, text: Str
     context.startActivity(Intent.createChooser(intent, title))
 }
 
-private fun backupJson(orders: List<StudioOrder>, settings: StudioWorkspaceSettings): String {
+// Android backups carried orders and settings but no customers at all, so a
+// user treating "Export Backup" as a real backup had none of their customer
+// list in it. The key name matches what web and the server already read.
+private fun backupJson(
+    orders: List<StudioOrder>,
+    customers: List<uk.co.eggcraft.studioflow.data.model.StudioCustomer>,
+    settings: StudioWorkspaceSettings
+): String {
     val root = JSONObject()
     val array = JSONArray()
     orders.forEach { order ->
@@ -5119,6 +5205,31 @@ private fun backupJson(orders: List<StudioOrder>, settings: StudioWorkspaceSetti
     root.put("version", 2)
     root.put("exportedAt", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(java.util.Date()))
     root.put("siparisler", array)
+
+    val customerArray = JSONArray()
+    customers.forEach { customer ->
+        customerArray.put(JSONObject().apply {
+            put("name", customer.name)
+            put("email", customer.email)
+            put("phone", customer.phone)
+            put("instagram", customer.instagram)
+            put("address", customer.address)
+            put("streetAddress", customer.streetAddress)
+            put("city", customer.city)
+            put("postalCode", customer.postalCode)
+            put("country", customer.country)
+            put("shippingAddress", customer.shippingAddress)
+            put("shippingStreetAddress", customer.shippingStreetAddress)
+            put("shippingCity", customer.shippingCity)
+            put("shippingPostalCode", customer.shippingPostalCode)
+            put("shippingCountry", customer.shippingCountry)
+            put("shippingPhone", customer.shippingPhone)
+            put("notes", customer.notes)
+            put("profileImageUrl", customer.profileImageUrl)
+        })
+    }
+    root.put("musteriler", customerArray)
+
     root.put("settings", JSONObject().apply {
         put("appTheme", settings.appTheme)
         put("seciliDil", settings.selectedLanguage)

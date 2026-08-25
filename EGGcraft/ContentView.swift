@@ -7883,7 +7883,7 @@ struct ContentView: View {
         HStack(spacing: 14) {
             if canSeeFinancialData {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t("Month Net", lang: seciliDil))
+                    Text(t("Month Margin", lang: seciliDil))
                         .font(.system(size: 11))
                         .foregroundColor(.gray)
                     Text(hideSensitiveNumbers ? "\(seciliParaBirimi)••••" : "\(seciliParaBirimi)\(formatFiyat(buAyNetKar, ondalik: seciliOndalik))")
@@ -7899,7 +7899,7 @@ struct ContentView: View {
                     .background(Color.primary.opacity(0.1))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(t("Year Net", lang: seciliDil))
+                    Text(t("Year Margin", lang: seciliDil))
                         .font(.system(size: 11))
                         .foregroundColor(.gray)
                     Text(hideSensitiveNumbers ? "\(seciliParaBirimi)••••" : "\(seciliParaBirimi)\(formatFiyat(buYilNetKar, ondalik: seciliOndalik))")
@@ -7924,6 +7924,7 @@ struct ContentView: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+        .help(t("Sales minus base cost, fees and shipping. VAT and extra spending are not deducted — the Dashboard shows Net Profit.", lang: seciliDil))
     }
 
     private var messageUnreadCountForBadge: Int {

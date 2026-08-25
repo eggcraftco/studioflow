@@ -7795,6 +7795,58 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "يمكن لمالك مساحة العمل أو المشرفين فقط تغيير تعيينات مديري الدعم.",
     "हिन्दी (Hindi)": "केवल वर्कस्पेस स्वामी या एडमिन सपोर्ट मैनेजर असाइनमेंट बदल सकते हैं।"
   },
+  "Month Margin": {
+    "Türkçe": "Ay Marjı",
+    "Deutsch": "Monatsmarge",
+    "Français": "Marge du mois",
+    "Italiano": "Margine mese",
+    "Español (Spanish)": "Margen del mes",
+    "Português": "Margem do mês",
+    "Русский (Russian)": "Маржа за месяц",
+    "日本語 (Japanese)": "月間粗利",
+    "中文 (Chinese)": "本月毛利",
+    "العربية (Arabic)": "هامش الشهر",
+    "हिन्दी (Hindi)": "माह मार्जिन"
+  },
+  "Year Margin": {
+    "Türkçe": "Yıl Marjı",
+    "Deutsch": "Jahresmarge",
+    "Français": "Marge de l\'année",
+    "Italiano": "Margine anno",
+    "Español (Spanish)": "Margen del año",
+    "Português": "Margem do ano",
+    "Русский (Russian)": "Маржа за год",
+    "日本語 (Japanese)": "年間粗利",
+    "中文 (Chinese)": "本年毛利",
+    "العربية (Arabic)": "هامش السنة",
+    "हिन्दी (Hindi)": "वर्ष मार्जिन"
+  },
+  "Workspace gross margin": {
+    "Türkçe": "Çalışma alanı brüt marjı",
+    "Deutsch": "Rohmarge des Arbeitsbereichs",
+    "Français": "Marge brute de l\'espace de travail",
+    "Italiano": "Margine lordo dello spazio di lavoro",
+    "Español (Spanish)": "Margen bruto del espacio de trabajo",
+    "Português": "Margem bruta do espaço de trabalho",
+    "Русский (Russian)": "Валовая маржа рабочего пространства",
+    "日本語 (Japanese)": "ワークスペースの粗利",
+    "中文 (Chinese)": "工作区毛利",
+    "العربية (Arabic)": "الهامش الإجمالي لمساحة العمل",
+    "हिन्दी (Hindi)": "वर्कस्पेस सकल मार्जिन"
+  },
+  "Sales minus base cost, fees and shipping. VAT and extra spending are not deducted — the Dashboard shows Net Profit.": {
+    "Türkçe": "Satış eksi maliyet, komisyon ve kargo. KDV ve ek giderler düşülmez — Net Kâr için Panoya bakın.",
+    "Deutsch": "Umsatz abzüglich Einkaufspreis, Gebühren und Versand. MwSt. und Zusatzausgaben sind nicht abgezogen — den Nettogewinn zeigt das Dashboard.",
+    "Français": "Ventes moins coût d\'achat, frais et livraison. La TVA et les dépenses supplémentaires ne sont pas déduites — le tableau de bord affiche le bénéfice net.",
+    "Italiano": "Vendite meno costo base, commissioni e spedizione. IVA e spese extra non sono dedotte — l\'utile netto è nella Dashboard.",
+    "Español (Spanish)": "Ventas menos coste base, comisiones y envío. El IVA y los gastos extra no se descuentan — el beneficio neto está en el Panel.",
+    "Português": "Vendas menos custo base, taxas e envio. O IVA e as despesas extra não são deduzidos — o lucro líquido está no Painel.",
+    "Русский (Russian)": "Продажи минус себестоимость, комиссии и доставка. НДС и дополнительные расходы не вычитаются — чистая прибыль показана на панели.",
+    "日本語 (Japanese)": "売上から仕入原価・手数料・送料を引いた額です。消費税と追加支出は差し引いていません — 純利益はダッシュボードをご覧ください。",
+    "中文 (Chinese)": "销售额减去成本、手续费和运费。未扣除增值税和额外支出 — 净利润请见仪表板。",
+    "العربية (Arabic)": "المبيعات ناقص التكلفة الأساسية والرسوم والشحن. لم تُخصم ضريبة القيمة المضافة ولا المصروفات الإضافية — صافي الربح في لوحة المعلومات.",
+    "हिन्दी (Hindi)": "बिक्री में से लागत, शुल्क और शिपिंग घटाकर। VAT और अतिरिक्त खर्च नहीं घटाए गए — शुद्ध लाभ डैशबोर्ड में है।"
+  },
   "Month Net": {
     "Türkçe": "Ay Net",
     "Deutsch": "Monatsnetto",

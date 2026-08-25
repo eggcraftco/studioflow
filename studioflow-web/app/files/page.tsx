@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -176,7 +177,8 @@ function FilesPreviewModal({
 
 export default function FilesPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [uploadSafetySettings, setUploadSafetySettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
@@ -473,7 +475,7 @@ export default function FilesPage() {
       {loadingFiles ? <LoadingScreen /> : null}
 
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>
-        <div className="pill">Read-only file index</div>
+        <div className="pill">{t("Every client file in this workspace")}</div>
         <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>Client Files</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
           {workspace ? `${workspace.name} - ${workspace.billingPlanName}` : "Loading workspace..."}

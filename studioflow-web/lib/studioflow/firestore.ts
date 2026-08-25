@@ -46,6 +46,8 @@ export type WorkspaceContext = {
   billingEntitlementResolutionReason: string;
   billingStorageLimitMB: number;
   billingTeamMemberLimit: number;
+  /** When the current paid period ends — a renewal date while active, an access-until date once cancelled. */
+  billingCurrentPeriodEndMs: number;
   storageAddonMB: number;
   storageAddonKey: string;
   currentMemberDisplayName: string;
@@ -161,6 +163,8 @@ export type DashboardFinanceOrder = {
 };
 
 export type WorkspaceSettingsOverview = {
+  /** When this workspace last downloaded a backup, so the delete screen can stop guessing. */
+  lastBackupExportedAtMs: number;
   appTheme: string;
   appSubtitle: string;
   appLogoUrl: string;
@@ -232,6 +236,9 @@ export type QuickReplySettings = {
   quickReplyLength: string;
   aiKnowledgeBase: string;
   hasOpenAIKey: boolean;
+  /** When the stored OpenAI key was last checked against OpenAI, and whether it worked. */
+  openAIKeyCheckedAtMs: number;
+  openAIKeyWorks: boolean;
   products: QuickReplyTemplateItem[];
   rules: QuickReplyTemplateItem[];
 };
@@ -866,6 +873,7 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
     billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
     billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
+    billingCurrentPeriodEndMs: dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
     billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
     billingCustomerId: stringValue(companyData.billingCustomerId, stringValue(companyData.billingStripeCustomerId, "")),
     billingSubscriptionId: stringValue(companyData.billingSubscriptionId, ""),
@@ -1047,6 +1055,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     appSubtitle: stringValue(data.appSubtitle, "Bespoke Hand-Painted Dials"),
     appLogoUrl: stringValue(data.appLogoUrl, ""),
     selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
+    lastBackupExportedAtMs: numberValue(data.lastBackupExportedAtMs, 0),
     selectedCurrency: stringValue(data.seciliParaBirimi, "£"),
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),
@@ -1154,6 +1163,8 @@ export async function loadQuickReplySettings(companyId: string): Promise<QuickRe
     quickReplyLength: stringValue(data.quickReplyLength, "Short"),
     aiKnowledgeBase: stringValue(data.aiKnowledgeBase, ""),
     hasOpenAIKey: booleanValue(data.hasOpenAIKey, false),
+    openAIKeyCheckedAtMs: numberValue(data.openAIKeyCheckedAtMs, 0),
+    openAIKeyWorks: booleanValue(data.openAIKeyWorks, false),
     products: decodeQuickReplyTemplateItems(data.customProductsJSON),
     rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
   };

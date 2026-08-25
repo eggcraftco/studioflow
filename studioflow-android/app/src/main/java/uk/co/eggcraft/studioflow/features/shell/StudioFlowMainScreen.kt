@@ -1625,8 +1625,8 @@ private fun StudioLargeTopBar(
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var menuOpen by rememberSaveable { mutableStateOf(false) }
-    val monthNet = remember(orders) { orders.netForCurrentMonth() }
-    val yearNet = remember(orders) { orders.netForCurrentYear() }
+    val monthMargin = remember(orders) { orders.grossMarginForCurrentMonth() }
+    val yearMargin = remember(orders) { orders.grossMarginForCurrentYear() }
 
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
         // Two rows like the Mac app: header (logo/metrics/actions) on top, the
@@ -1654,8 +1654,8 @@ private fun StudioLargeTopBar(
             )
             if (showFinancialMetrics) {
                 TopMetric(
-                    label = "Month Net",
-                    value = formatNetPounds(monthNet, currency, decimalSeparator, hideSensitiveNumbers),
+                    label = "Month Margin",
+                    value = formatNetPounds(monthMargin, currency, decimalSeparator, hideSensitiveNumbers),
                     compact = compact
                 )
                 Surface(
@@ -1665,8 +1665,8 @@ private fun StudioLargeTopBar(
                     color = MaterialTheme.colorScheme.outlineVariant
                 ) {}
                 TopMetric(
-                    label = "Year Net",
-                    value = formatNetPounds(yearNet, currency, decimalSeparator, hideSensitiveNumbers),
+                    label = "Year Margin",
+                    value = formatNetPounds(yearMargin, currency, decimalSeparator, hideSensitiveNumbers),
                     compact = compact
                 )
             }
@@ -1818,7 +1818,7 @@ private fun TopMetric(label: String, value: String, compact: Boolean) {
     Column(modifier = Modifier.width(if (compact) 86.dp else 112.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
+        Text(t(label), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Bold)
         Text(value, color = StudioGreen, fontSize = if (compact) 12.sp else 15.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -1866,21 +1866,21 @@ private fun TopNavItem(section: StudioSection, selected: Boolean, badgeCount: In
     }
 }
 
-private fun List<StudioOrder>.netForCurrentMonth(): Double {
+private fun List<StudioOrder>.grossMarginForCurrentMonth(): Double {
     val now = Calendar.getInstance()
     val currentYear = now.get(Calendar.YEAR)
     val currentMonth = now.get(Calendar.MONTH)
     return sumOf { order ->
         val calendar = Calendar.getInstance().apply { time = order.paymentDate }
-        if (calendar.get(Calendar.YEAR) == currentYear && calendar.get(Calendar.MONTH) == currentMonth) order.netProfit else 0.0
+        if (calendar.get(Calendar.YEAR) == currentYear && calendar.get(Calendar.MONTH) == currentMonth) order.grossMargin else 0.0
     }
 }
 
-private fun List<StudioOrder>.netForCurrentYear(): Double {
+private fun List<StudioOrder>.grossMarginForCurrentYear(): Double {
     val currentYear = Calendar.getInstance().get(Calendar.YEAR)
     return sumOf { order ->
         val calendar = Calendar.getInstance().apply { time = order.paymentDate }
-        if (calendar.get(Calendar.YEAR) == currentYear) order.netProfit else 0.0
+        if (calendar.get(Calendar.YEAR) == currentYear) order.grossMargin else 0.0
     }
 }
 

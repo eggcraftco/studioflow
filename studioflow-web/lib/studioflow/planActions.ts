@@ -31,6 +31,112 @@ function planGuardMessage(result: PlanActionResult) {
   }
 }
 
+export type IntegrationWebhookInfo = {
+  deliveryUrl: string;
+  tokenCreatedAtMs: number;
+  lastDeliveryAtMs: number;
+  lastDeliveryOk: boolean;
+  lastDeliveryWasTest: boolean;
+  lastDeliveryError: string;
+};
+
+type IntegrationWebhookResponse = {
+  ok?: boolean;
+  deliveryUrl?: string;
+  tokenCreatedAtMs?: number;
+  lastDeliveryAtMs?: number;
+  lastDeliveryOk?: boolean;
+  lastDeliveryWasTest?: boolean;
+  lastDeliveryError?: string;
+};
+
+function integrationWebhookInfo(data: IntegrationWebhookResponse | undefined): IntegrationWebhookInfo {
+  return {
+    deliveryUrl: data?.deliveryUrl || "",
+    tokenCreatedAtMs: Number(data?.tokenCreatedAtMs || 0),
+    lastDeliveryAtMs: Number(data?.lastDeliveryAtMs || 0),
+    lastDeliveryOk: data?.lastDeliveryOk === true,
+    lastDeliveryWasTest: data?.lastDeliveryWasTest === true,
+    lastDeliveryError: String(data?.lastDeliveryError || "")
+  };
+}
+
+async function integrationWebhookCall(name: string, companyId: string): Promise<IntegrationWebhookInfo> {
+  const callable = httpsCallable<{ companyId: string }, IntegrationWebhookResponse>(functions, name);
+  const response = await callable({ companyId });
+  return integrationWebhookInfo(response.data);
+}
+
+export type InboundWebhookTestResult = {
+  ok?: boolean;
+  status?: number;
+  orderCreated?: boolean;
+  warnings?: string[];
+  message?: string;
+};
+
+export type InboundPayloadCheck = {
+  ok?: boolean;
+  parseError?: string;
+  warnings?: string[];
+  reads?: {
+    orderNumber: string;
+    customerName: string;
+    designName: string;
+    total: number;
+    deliveryCost: number;
+    taxAmount: number;
+    lineItemCount: number;
+  } | null;
+};
+
+// Presses the workspace's own delivery URL. Proves the endpoint, the companyId
+// and the token — not that the URL was pasted into Zapier correctly.
+export async function sendTestInboundWebhook(companyId: string): Promise<InboundWebhookTestResult> {
+  const callable = httpsCallable<{ companyId: string }, InboundWebhookTestResult>(functions, "sendTestInboundWebhook");
+  const response = await callable({ companyId });
+  return response.data ?? {};
+}
+
+// Runs the real mapper over a pasted payload without sending or writing anything.
+export async function validateInboundOrderPayload(companyId: string, payload: string): Promise<InboundPayloadCheck> {
+  const callable = httpsCallable<{ companyId: string; payload: string }, InboundPayloadCheck>(
+    functions,
+    "validateInboundOrderPayload"
+  );
+  const response = await callable({ companyId, payload });
+  return response.data ?? {};
+}
+
+export const INTEGRATION_WEBHOOK_CALLABLES = {
+  woocommerce: "getWooCommerceWebhookToken",
+  shopify: "getShopifyWebhookToken",
+  inbound: "getInboundWebhookToken"
+} as const;
+
+export type IntegrationWebhookKind = keyof typeof INTEGRATION_WEBHOOK_CALLABLES;
+
+export async function getIntegrationWebhookInfo(
+  kind: IntegrationWebhookKind,
+  companyId: string
+): Promise<IntegrationWebhookInfo> {
+  return integrationWebhookCall(INTEGRATION_WEBHOOK_CALLABLES[kind], companyId);
+}
+
+// Replaces the token. The previous delivery URL stops working immediately —
+// that is the whole point of having a rotate button.
+export async function rotateIntegrationWebhookToken(
+  kind: IntegrationWebhookKind,
+  companyId: string
+): Promise<IntegrationWebhookInfo> {
+  const callable = httpsCallable<{ companyId: string; integration: string }, IntegrationWebhookResponse>(
+    functions,
+    "rotateIntegrationWebhookToken"
+  );
+  const response = await callable({ companyId, integration: kind });
+  return integrationWebhookInfo(response.data);
+}
+
 export async function getWooCommerceWebhookDeliveryUrl(companyId: string): Promise<string> {
   const callable = httpsCallable<{ companyId: string }, { ok: boolean; deliveryUrl?: string }>(
     functions,

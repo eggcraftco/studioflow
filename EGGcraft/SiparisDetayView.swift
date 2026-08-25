@@ -12580,10 +12580,10 @@ struct SiparisDetayView: View {
         }
 
         if siparis.taxType == "Revenue" {
-            siparis.taxAmount = (toplamSatis * siparis.taxRate) / 100.0
+            siparis.taxAmount = kdvBrutten(siparis.taxRate, toplamSatis)
         } else {
             let brutKar = toplamSatis - baseCostTotal - customExpenseTotal - siparis.deliveryCost - siparis.paymentFee
-            siparis.taxAmount = brutKar > 0 ? (brutKar * siparis.taxRate) / 100.0 : 0
+            siparis.taxAmount = brutKar > 0 ? kdvBrutten(siparis.taxRate, brutKar) : 0
         }
     }
     private func kargoSayfasiniAc(firma: String, kod: String) { let tKod = kod.trimmingCharacters(in: .whitespacesAndNewlines); var url = ""; switch firma { case "DHL": url = "https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id=\(tKod)"; case "Royal Mail": url = "https://www.royalmail.com/track-your-item#/tracking-results/\(tKod)"; case "FedEx": url = "https://www.fedex.com/fedextrack/?trknbr=\(tKod)"; case "UPS": url = "https://www.ups.com/track?tracknum=\(tKod)"; default: url = "https://www.17track.net/en/track-details?nums=\(tKod)" }; if let u = URL(string: url) { openURL(u) } }
@@ -14393,9 +14393,9 @@ struct OrderInvoicePDFView: View {
         // recomputed, or the paper drifts from what the customer agreed to.
         if let estimate { return estimate.taxAmount }
         // Line-item invoices recompute VAT on the item total with the order's
-        // rate (same total*rate/100 convention as the Finance card); otherwise
-        // the stored order-level tax amount is used as before.
-        return siparis.hasLineItems ? (orderValue * siparis.taxRate) / 100.0 : siparis.taxAmount
+        // rate, extracted from the gross the same way the server does;
+        // otherwise the stored order-level tax amount is used as before.
+        return siparis.hasLineItems ? kdvBrutten(siparis.taxRate, orderValue) : siparis.taxAmount
     }
     private var subtotal: Double {
         if let estimate { return estimate.subtotal }

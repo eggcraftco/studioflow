@@ -1137,8 +1137,13 @@ class StudioFlowViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
             runCatching { repository.importBackup(workspace, rawJson) }
-                .onSuccess { count ->
-                    mutableState.update { it.copy(settingsSaving = false, settingsMessage = "Imported $count orders.") }
+                .onSuccess { result ->
+                    // The old message said "Imported N orders" where N counted
+                    // customers too, and never mentioned records the cap dropped.
+                    val summary = result.message.ifBlank {
+                        "Imported ${result.importedOrders} orders and ${result.importedCustomers} customers."
+                    }
+                    mutableState.update { it.copy(settingsSaving = false, settingsMessage = summary) }
                 }
                 .onFailure { error ->
                     mutableState.update {

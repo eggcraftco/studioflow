@@ -31,7 +31,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview,
 } from "@/lib/studioflow/firestore";
-import { swiftOrderNetProfit } from "@/lib/studioflow/finance";
+import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
@@ -1255,18 +1255,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     memberCanAccess(workspace, "dashboard") &&
     memberCanAccess(workspace, "financialInfo"),
   );
-  const monthNet = useMemo(
+  const monthMargin = useMemo(
     () =>
       financeOrders
         .filter(orderInCurrentMonth)
-        .reduce((total, order) => total + swiftOrderNetProfit(order), 0),
+        .reduce((total, order) => total + orderGrossMargin(order), 0),
     [financeOrders],
   );
-  const yearNet = useMemo(
+  const yearMargin = useMemo(
     () =>
       financeOrders
         .filter(orderInCurrentYear)
-        .reduce((total, order) => total + swiftOrderNetProfit(order), 0),
+        .reduce((total, order) => total + orderGrossMargin(order), 0),
     [financeOrders],
   );
   const toolbarAvatarUrl = workspace?.currentMemberPhotoURL ?? "";
@@ -1556,15 +1556,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               {canSeeToolbarFinance ? (
                 <div
                   className="toolbar-net-strip"
-                  aria-label="Workspace net profit"
+                  aria-label={t("Workspace gross margin")}
+                  title={t("Sales minus base cost, fees and shipping. VAT and extra spending are not deducted — the Dashboard shows Net Profit.")}
                 >
                   <span>
-                    {t("Month Net")}{" "}
-                    <strong>{money(monthNet, hideNumbers, settings)}</strong>
+                    {t("Month Margin")}{" "}
+                    <strong>{money(monthMargin, hideNumbers, settings)}</strong>
                   </span>
                   <span>
-                    {t("Year Net")}{" "}
-                    <strong>{money(yearNet, hideNumbers, settings)}</strong>
+                    {t("Year Margin")}{" "}
+                    <strong>{money(yearMargin, hideNumbers, settings)}</strong>
                   </span>
                 </div>
               ) : (

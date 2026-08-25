@@ -8,6 +8,20 @@ const archiver = require("archiver");
 const nodemailer = require("nodemailer");
 const { defineSecret } = require("firebase-functions/params");
 
+// The functions emulator wraps firebase-admin in a proxy and hands back
+// admin.firestore re-bound, which drops its statics (FieldValue, Timestamp).
+// Deployed code never enters this branch; without it nothing here can be
+// exercised against the emulator.
+if (process.env.FUNCTIONS_EMULATOR === "true" && !admin.firestore.FieldValue) {
+  const realFirestore = require("firebase-admin/firestore");
+  const base = admin.firestore;
+  function firestoreWithStatics(...args) {
+    return base(...args);
+  }
+  Object.assign(firestoreWithStatics, realFirestore);
+  Object.defineProperty(admin, "firestore", { value: firestoreWithStatics, configurable: true });
+}
+
 admin.initializeApp();
 
 const TRACK17_TOKEN = defineSecret("TRACK17_TOKEN");
@@ -4046,10 +4060,21 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
   payload.targetRole = "owner_admin";
 
   await ticketRef.set(payload);
-  await safeSupportNotification("notifyWorkspaceTicketRecipients(createWorkspaceTicket)", () =>
+  // The sender is always excluded from the recipient list, so a workspace with
+  // no admins and no support managers notifies nobody. It used to answer
+  // "sent to the workspace owner" anyway — to the owner, about themselves.
+  const notified = await safeSupportNotification("notifyWorkspaceTicketRecipients(createWorkspaceTicket)", () =>
     notifyWorkspaceTicketRecipients(companyId, companyData, ticketRef.id, payload, uid, "new_ticket", payload.message)
   );
-  return { ok: true, ticketId: ticketRef.id, message: "Workspace ticket sent to the workspace owner." };
+  const reachedNobody = Boolean(notified && notified.skipped && notified.reason === "no_workspace_ticket_recipients");
+  return {
+    ok: true,
+    ticketId: ticketRef.id,
+    notifiedAnyone: !reachedNobody,
+    message: reachedNobody
+      ? "Ticket saved, but nobody else in this workspace is set up to receive it yet. Add an admin or a support manager, or use Contact NivaDesk Support."
+      : "Workspace ticket sent to your workspace owner, admins and support managers."
+  };
 });
 
 
@@ -6543,6 +6568,8 @@ function quickReplySettingsFromData(data = {}) {
     quickReplyLength: cleanQuickReplyOption(data.quickReplyLength, QUICK_REPLY_LENGTHS, "Short"),
     aiKnowledgeBase: String(data.aiKnowledgeBase || ""),
     hasOpenAIKey: data.hasOpenAIKey === true || String(data.openAIKey || "").trim().length > 0,
+    openAIKeyCheckedAtMs: Number(data.openAIKeyCheckedAtMs || 0),
+    openAIKeyWorks: data.openAIKeyWorks === true,
     products: decodeQuickReplyTemplateItems(data.customProductsJSON),
     rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
   };
@@ -6642,6 +6669,54 @@ function generateOfflineQuickReply(settings, input = {}) {
 function uidCanEditWorkspaceSettings(companyData = {}, uid = "") {
   return uidCanAccessWorkspaceArea(companyData, uid, "settings") && canFullyEditOrder(workspaceOrderRole(companyData, uid));
 }
+
+// The key box said "configured" and nothing more: a revoked or mistyped key
+// looked identical to a working one until a customer reply failed. This asks
+// OpenAI, cheaply — /v1/models, no completion, no tokens spent — and records
+// the answer so the settings page can show when it was last known good.
+exports.testQuickReplyApiKey = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceAreaAccess(companyData, uid, "quickReply", "Quick Reply is not enabled for your workspace account.");
+  requireWorkspaceAreaAccess(companyData, uid, "settingsQuickReply", "Quick Reply Settings are not enabled for your role.");
+  if (!uidCanEditWorkspaceSettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot test the API key.");
+  }
+
+  const settingsSnapshot = await companySettingsDocRef(companyId).get();
+  const settingsData = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
+  const key = await secureQuickReplyOpenAIKey(companyId, settingsData);
+  if (!key) {
+    return { ok: false, checkedAtMs: Date.now(), reason: "no_key", message: "No OpenAI key is saved for this workspace." };
+  }
+
+  let ok = false;
+  let message = "";
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const response = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    ok = response.ok;
+    if (!ok) {
+      message = response.status === 401
+        ? "OpenAI rejected this key. Replace it with a current one."
+        : `OpenAI answered ${response.status}. Try again in a moment.`;
+    }
+  } catch (error) {
+    message = String(error?.name === "AbortError" ? "OpenAI did not answer in time." : error?.message || error);
+  }
+
+  const checkedAtMs = Date.now();
+  await companySettingsDocRef(companyId).set({
+    openAIKeyCheckedAtMs: checkedAtMs,
+    openAIKeyWorks: ok
+  }, { merge: true });
+
+  return { ok, checkedAtMs, message: ok ? "The key works." : message };
+});
 
 exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
@@ -7240,7 +7315,72 @@ exports.saveThemeBrandingSettings = onCall({ region: "europe-west2" }, async (re
   };
 });
 
-exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" }, async (request) => {
+// One calculation, two callers. The preview has to describe exactly what the
+// apply will write, so both read the plan from here rather than each deriving
+// its own idea of what would change.
+function financialRecalculationPlanForOrder(orderData, financialSettings) {
+  const paidAmount = roundMoneyValue(orderData.paidAmount);
+  const remainingAmount = roundMoneyValue(orderData.remainingAmount);
+  const watchPurchasePrice = roundMoneyValue(orderData.watchPurchasePrice);
+  const deliveryCost = roundMoneyValue(orderData.deliveryCost);
+  const paymentDate = dateFromFirestore(orderData.paymentDate, new Date());
+  const customRemainingTotal = orderCustomRemainingTotal(orderData.customFields);
+  const customExpenseTotal = orderCustomExpenseTotal(orderData.customFields);
+  const orderValue = paidAmount + remainingAmount + customRemainingTotal;
+  const paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
+  const taxType = financialTaxTypeForPaymentDate(financialSettings, paymentDate);
+
+  // An order imported from a shop carries that shop's own tax figure. Keying
+  // off the integration marker rather than off "has a tax amount" matters:
+  // a zero-rated or exempt import has no amount either, and would otherwise
+  // have our default rate invented onto it.
+  const integrationSource = cleanOrderText(orderData.customFields && orderData.customFields.Source, "", 60);
+  const taxCameFromIntegration = Boolean(integrationSource) && cleanTaxRate(orderData.taxRate) === 0;
+
+  const taxRate = cleanTaxRate(orderData.taxRate) || cleanPercentageNumber(financialSettings.defaultTaxRate, 20);
+  const taxAmount = webFinanceTaxAmount({
+    paidAmount,
+    remainingAmount,
+    customRemainingTotal,
+    customExpenseTotal,
+    watchPurchasePrice,
+    paymentFee,
+    deliveryCost,
+    taxRate,
+    taxType
+  });
+
+  const changes = {};
+  const feeBefore = roundMoneyValue(orderData.paymentFee);
+  if (feeBefore !== paymentFee) changes.paymentFee = { from: feeBefore, to: paymentFee };
+
+  const taxBefore = roundMoneyValue(orderData.taxAmount);
+  let taxAfter = taxBefore;
+  if (!taxCameFromIntegration) {
+    if (cleanTaxType(orderData.taxType) !== taxType) {
+      changes.taxType = { from: cleanTaxType(orderData.taxType) || "-", to: taxType };
+    }
+    if (cleanTaxRate(orderData.taxRate) !== taxRate) {
+      changes.taxRate = { from: cleanTaxRate(orderData.taxRate), to: taxRate };
+    }
+    if (taxBefore !== taxAmount) changes.taxAmount = { from: taxBefore, to: taxAmount };
+    taxAfter = taxAmount;
+  }
+
+  return {
+    taxCameFromIntegration,
+    integrationSource,
+    inTrash: orderData.isDeleted === true,
+    zeroRateForcedToDefault: !taxCameFromIntegration && cleanTaxRate(orderData.taxRate) === 0 && taxRate > 0,
+    changes,
+    feeBefore,
+    feeAfter: paymentFee,
+    taxBefore,
+    taxAfter
+  };
+}
+
+async function loadFinancialRecalculationContext(request) {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot recalculate Financial Settings.");
@@ -7249,11 +7389,90 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
   if (billingEntitlementsForCompany(companyData).advancedFinanceEnabled !== true) {
     throw new HttpsError("failed-precondition", "Advanced Financial Settings are available on NivaDesk Pro and Team.");
   }
+  const settingsSnapshot = await companySettingsDocRef(companyId).get();
+  return {
+    uid,
+    companyId,
+    email: String(request.auth?.token?.email || ""),
+    financialSettings: financialSettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {})
+  };
+}
+
+const RECALCULATION_SAMPLE_LIMIT = 200;
+
+// Says what pressing the button would do, and writes nothing. Every input is
+// already on the order document, so this is a read of the same query the apply
+// runs — no dry-run flag threaded through the write path.
+exports.previewFinancialRecalculationForOrders = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const { companyId, financialSettings } = await loadFinancialRecalculationContext(request);
+    const snapshot = await admin.firestore().collection("siparisler").where("companyId", "==", companyId).get();
+
+    let wouldUpdateCount = 0;
+    let skippedIntegrationCount = 0;
+    let trashedAffectedCount = 0;
+    let zeroRateForcedToDefaultCount = 0;
+    let taxBefore = 0;
+    let taxAfter = 0;
+    let feeBefore = 0;
+    let feeAfter = 0;
+    const sample = [];
+
+    for (const orderDoc of snapshot.docs) {
+      const orderData = orderDoc.data() || {};
+      const plan = financialRecalculationPlanForOrder(orderData, financialSettings);
+      taxBefore += plan.taxBefore;
+      taxAfter += plan.taxAfter;
+      feeBefore += plan.feeBefore;
+      feeAfter += plan.feeAfter;
+      if (plan.taxCameFromIntegration) skippedIntegrationCount += 1;
+      if (Object.keys(plan.changes).length === 0) continue;
+      wouldUpdateCount += 1;
+      if (plan.inTrash) trashedAffectedCount += 1;
+      if (plan.zeroRateForcedToDefault) zeroRateForcedToDefaultCount += 1;
+      if (sample.length < RECALCULATION_SAMPLE_LIMIT) {
+        sample.push({
+          orderId: orderDoc.id,
+          label: cleanOrderText(orderData.invoiceNumber, "", 60)
+            || cleanOrderText(orderData.customerName, "Project", 60),
+          inTrash: plan.inTrash,
+          taxBefore: plan.taxBefore,
+          taxAfter: plan.taxAfter,
+          feeBefore: plan.feeBefore,
+          feeAfter: plan.feeAfter
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      companyId,
+      orderCount: snapshot.size,
+      wouldUpdateCount,
+      skippedIntegrationCount,
+      trashedAffectedCount,
+      zeroRateForcedToDefaultCount,
+      truncated: wouldUpdateCount > sample.length,
+      totals: {
+        taxBefore: roundMoneyValue(taxBefore),
+        taxAfter: roundMoneyValue(taxAfter),
+        taxDelta: Math.round((taxAfter - taxBefore) * 100) / 100,
+        feeBefore: roundMoneyValue(feeBefore),
+        feeAfter: roundMoneyValue(feeAfter),
+        feeDelta: Math.round((feeAfter - feeBefore) * 100) / 100
+      },
+      sample
+    };
+  }
+);
+
+exports.recalculateFinancialSettingsForOrders = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+  const { uid, companyId, email, financialSettings } = await loadFinancialRecalculationContext(request);
 
   const db = admin.firestore();
-  const settingsSnapshot = await companySettingsDocRef(companyId).get();
-  const financialSettings = financialSettingsFromData(settingsSnapshot.exists ? settingsSnapshot.data() || {} : {});
-  const email = String(request.auth?.token?.email || "");
   const snapshot = await db.collection("siparisler").where("companyId", "==", companyId).get();
   let batch = db.batch();
   let batchCount = 0;
@@ -7269,47 +7488,35 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
 
   for (const orderDoc of snapshot.docs) {
     const orderData = orderDoc.data() || {};
-    const paidAmount = roundMoneyValue(orderData.paidAmount);
-    const remainingAmount = roundMoneyValue(orderData.remainingAmount);
-    const watchPurchasePrice = roundMoneyValue(orderData.watchPurchasePrice);
-    const deliveryCost = roundMoneyValue(orderData.deliveryCost);
-    const paymentDate = dateFromFirestore(orderData.paymentDate, new Date());
-    const customRemainingTotal = orderCustomRemainingTotal(orderData.customFields);
-    const customExpenseTotal = orderCustomExpenseTotal(orderData.customFields);
-    const orderValue = paidAmount + remainingAmount + customRemainingTotal;
-    const paymentFee = roundMoneyValue((orderValue * cleanPercentageNumber(financialSettings.feePercentage, 3)) / 100);
-    const taxType = financialTaxTypeForPaymentDate(financialSettings, paymentDate);
-    const taxRate = cleanTaxRate(orderData.taxRate) || cleanPercentageNumber(financialSettings.defaultTaxRate, 20);
-    const taxAmount = webFinanceTaxAmount({
-      paidAmount,
-      remainingAmount,
-      customRemainingTotal,
-      customExpenseTotal,
-      watchPurchasePrice,
-      paymentFee,
-      deliveryCost,
-      taxRate,
-      taxType
-    });
+    const plan = financialRecalculationPlanForOrder(orderData, financialSettings);
+    const changedFields = Object.keys(plan.changes);
+    if (changedFields.length === 0) continue;
 
     const updates = {};
-    if (roundMoneyValue(orderData.paymentFee) !== paymentFee) updates.paymentFee = paymentFee;
-    if (cleanTaxType(orderData.taxType) !== taxType) updates.taxType = taxType;
-    if (cleanTaxRate(orderData.taxRate) !== taxRate) updates.taxRate = taxRate;
-    if (roundMoneyValue(orderData.taxAmount) !== taxAmount) updates.taxAmount = taxAmount;
+    for (const field of changedFields) updates[field] = plan.changes[field].to;
 
-    if (Object.keys(updates).length > 0) {
-      batch.set(orderDoc.ref, {
-        ...updates,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedByUid: uid,
-        updatedByEmail: email,
-        source: orderData.source || "web"
-      }, { merge: true });
-      batchCount += 1;
-      updatedCount += 1;
-      await commitBatchIfNeeded(false);
+    // Per-order finance edits already record themselves in the history log; a
+    // bulk run that did not was the one way a VAT figure could change with
+    // nothing to say who changed it.
+    if (plan.changes.taxAmount) {
+      updates.historyLog = historyLogWithEntry(
+        orderData,
+        "VAT recalculated",
+        amountHistoryValue(plan.changes.taxAmount.from),
+        amountHistoryValue(plan.changes.taxAmount.to)
+      );
     }
+
+    batch.set(orderDoc.ref, {
+      ...updates,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid,
+      updatedByEmail: email,
+      source: orderData.source || "web"
+    }, { merge: true });
+    batchCount += 1;
+    updatedCount += 1;
+    await commitBatchIfNeeded(false);
   }
 
   await commitBatchIfNeeded(true);
@@ -7325,7 +7532,61 @@ exports.recalculateFinancialSettingsForOrders = onCall({ region: "europe-west2" 
 // Bulk-clear VAT/tax on every order in the workspace. For businesses where VAT
 // does not apply (e.g. exports / not VAT-registered) so they don't have to zero
 // each order by hand. Sets taxAmount/taxRate to 0 and clears taxType.
-exports.clearAllOrdersTax = onCall({ region: "europe-west2" }, async (request) => {
+const CLEAR_TAX_UNDO_LIMIT = 4000;
+
+function clearTaxRunRef(companyId, runId) {
+  return admin.firestore().collection("companies").doc(companyId).collection("financeBulkRuns").doc(runId);
+}
+
+// Says what "Remove VAT from all orders" would touch. The button's own copy said
+// it could not be undone, and that was true — there was no before-image anywhere.
+exports.previewClearAllOrdersTax = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    if (!uidCanEditWorkspaceSettings(companyData, uid)) {
+      throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
+    }
+    requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+
+    const snapshot = await admin.firestore().collection("siparisler").where("companyId", "==", companyId).get();
+    let wouldClearCount = 0;
+    let trashedAffectedCount = 0;
+    let taxBefore = 0;
+    const sample = [];
+    for (const orderDoc of snapshot.docs) {
+      const orderData = orderDoc.data() || {};
+      const tax = roundMoneyValue(orderData.taxAmount);
+      if (tax === 0 && cleanTaxRate(orderData.taxRate) === 0) continue;
+      wouldClearCount += 1;
+      taxBefore += tax;
+      if (orderData.isDeleted === true) trashedAffectedCount += 1;
+      if (sample.length < 3) {
+        sample.push({
+          orderId: orderDoc.id,
+          label: cleanOrderText(orderData.invoiceNumber, "", 60) || cleanOrderText(orderData.customerName, "Project", 60),
+          inTrash: orderData.isDeleted === true,
+          taxBefore: tax,
+          taxAfter: 0
+        });
+      }
+    }
+    return {
+      ok: true,
+      companyId,
+      orderCount: snapshot.size,
+      wouldClearCount,
+      trashedAffectedCount,
+      undoAvailable: wouldClearCount <= CLEAR_TAX_UNDO_LIMIT,
+      totals: { taxBefore: roundMoneyValue(taxBefore), taxAfter: 0, taxDelta: -roundMoneyValue(taxBefore) },
+      sample
+    };
+  }
+);
+
+exports.clearAllOrdersTax = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceSettings(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
@@ -7338,6 +7599,9 @@ exports.clearAllOrdersTax = onCall({ region: "europe-west2" }, async (request) =
   let batch = db.batch();
   let batchCount = 0;
   let clearedCount = 0;
+  // The before-image is what makes this reversible. Kept small on purpose: three
+  // numbers per order, and only for orders that actually change.
+  const beforeImages = [];
 
   async function commitBatchIfNeeded(force = false) {
     if (batchCount === 0) return;
@@ -7349,11 +7613,18 @@ exports.clearAllOrdersTax = onCall({ region: "europe-west2" }, async (request) =
 
   for (const orderDoc of snapshot.docs) {
     const orderData = orderDoc.data() || {};
-    if (roundMoneyValue(orderData.taxAmount) === 0 && cleanTaxRate(orderData.taxRate) === 0) continue;
+    const previousTax = roundMoneyValue(orderData.taxAmount);
+    const previousRate = cleanTaxRate(orderData.taxRate);
+    const previousType = cleanTaxType(orderData.taxType);
+    if (previousTax === 0 && previousRate === 0 && !previousType) continue;
+    if (beforeImages.length < CLEAR_TAX_UNDO_LIMIT) {
+      beforeImages.push({ orderId: orderDoc.id, taxAmount: previousTax, taxRate: previousRate, taxType: previousType });
+    }
     batch.set(orderDoc.ref, {
       taxAmount: 0,
       taxRate: 0,
       taxType: "",
+      historyLog: historyLogWithEntry(orderData, "VAT removed", amountHistoryValue(previousTax), amountHistoryValue(0)),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedByUid: uid,
       updatedByEmail: email,
@@ -7365,13 +7636,76 @@ exports.clearAllOrdersTax = onCall({ region: "europe-west2" }, async (request) =
   }
   await commitBatchIfNeeded(true);
 
+  const runId = crypto.randomUUID();
+  if (clearedCount > 0) {
+    await clearTaxRunRef(companyId, runId).set({
+      type: "clearTax",
+      runAtMs: Date.now(),
+      byUid: uid,
+      byEmail: email,
+      clearedCount,
+      truncated: clearedCount > beforeImages.length,
+      beforeImages
+    });
+  }
+
   return {
     ok: true,
     companyId,
     clearedCount,
+    runId: clearedCount > 0 ? runId : "",
+    undoAvailable: clearedCount > 0 && clearedCount <= CLEAR_TAX_UNDO_LIMIT,
     message: `Cleared VAT/tax on ${clearedCount} orders.`
   };
 });
+
+// Puts back exactly what the removal took away, order by order.
+exports.undoClearAllOrdersTax = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    if (!uidCanEditWorkspaceSettings(companyData, uid)) {
+      throw new HttpsError("permission-denied", "Your workspace role cannot edit Financial Settings.");
+    }
+    requireWorkspaceAreaAccess(companyData, uid, "financialInfo", "Financial Info is not enabled for your workspace account.");
+
+    const runId = cleanOrderText(request.data && request.data.runId, "", 80);
+    if (!runId) throw new HttpsError("invalid-argument", "runId is required.");
+    const runSnap = await clearTaxRunRef(companyId, runId).get();
+    if (!runSnap.exists) throw new HttpsError("not-found", "That run is no longer available to undo.");
+    const run = runSnap.data() || {};
+    if (run.undoneAtMs) throw new HttpsError("failed-precondition", "That run has already been undone.");
+
+    const db = admin.firestore();
+    const images = Array.isArray(run.beforeImages) ? run.beforeImages : [];
+    let batch = db.batch();
+    let batchCount = 0;
+    let restoredCount = 0;
+
+    for (const image of images) {
+      const orderId = cleanOrderText(image && image.orderId, "", 200);
+      if (!orderId) continue;
+      batch.set(db.collection("siparisler").doc(orderId), {
+        taxAmount: roundMoneyValue(image.taxAmount),
+        taxRate: cleanTaxRate(image.taxRate),
+        taxType: cleanTaxType(image.taxType),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedByUid: uid
+      }, { merge: true });
+      batchCount += 1;
+      restoredCount += 1;
+      if (batchCount >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        batchCount = 0;
+      }
+    }
+    if (batchCount > 0) await batch.commit();
+    await clearTaxRunRef(companyId, runId).set({ undoneAtMs: Date.now(), undoneByUid: uid }, { merge: true });
+
+    return { ok: true, companyId, restoredCount, message: `Restored VAT on ${restoredCount} orders.` };
+  }
+);
 
 // Manually fold one order's payment(s) into another (e.g. an installment that the
 // auto-combine split off, or two orders that should be one). The source order's
@@ -8325,7 +8659,10 @@ const BACKUP_STRING_SETTING_KEYS = new Set([
   "taxRuleNameRevenue",
   "taxRuleNameProfit",
   "replyMode",
-  "openAIKey",
+  // Importing openAIKey would re-plant a credential into companySettings, the
+  // exact location secureQuickReplyOpenAIKey() migrates it OUT of — and it
+  // would carry one workspace's key into another. Old backups that still
+  // contain it are simply ignored.
   "localAIURL",
   "localAIModel",
   "aiKnowledgeBase",
@@ -8719,7 +9056,33 @@ async function commitBackupImportWrites(writes) {
   if (count > 0) await batch.commit();
 }
 
-exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (request) => {
+// Import is append-only and mints a fresh document id per row, so importing the
+// same file twice doubles the workspace. None of the backup formats carries a
+// record id, so the only thing available is a content key — every format writes
+// these five fields. It is a warning, never a silent skip: two genuinely
+// different orders for one customer on one day at one price are indistinguishable.
+function backupOrderMatchKey(order = {}) {
+  const tracking = String(order.trackingNumber || "").trim().toLowerCase();
+  if (tracking) return `t:${tracking}`;
+  const day = shortISODate(dateFromFirestore(order.paymentDate, new Date()));
+  return [
+    "o",
+    String(order.customerName || "").trim().toLowerCase(),
+    String(order.designName || "").trim().toLowerCase(),
+    day,
+    roundMoneyValue(order.paidAmount),
+    roundMoneyValue(order.remainingAmount)
+  ].join("|");
+}
+
+function backupCustomerMatchKey(customer = {}) {
+  const name = String(customer.name || "").trim().toLowerCase();
+  const email = String(customer.email || "").trim().toLowerCase();
+  const phone = String(customer.phone || "").trim().toLowerCase();
+  return `c|${name}|${email || phone}`;
+}
+
+exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
   if (!canFullyEditOrder(role)) {
@@ -8727,8 +9090,15 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (reques
   }
 
   const backup = request.data?.backup;
-  const orderItems = backupOrderItems(backup).slice(0, 500);
-  const customerItems = backupCustomerItems(backup).slice(0, 500);
+  // Restoring a 900-order workspace used to return 500 orders and the word
+  // "finished". Silent truncation during a restore is the one failure a user
+  // cannot see and cannot recover from, so the counts now come back.
+  const allOrderItems = backupOrderItems(backup);
+  const allCustomerItems = backupCustomerItems(backup);
+  const orderItems = allOrderItems.slice(0, 500);
+  const customerItems = allCustomerItems.slice(0, 500);
+  const droppedOrders = allOrderItems.length - orderItems.length;
+  const droppedCustomers = allCustomerItems.length - customerItems.length;
   const settingsUpdates = importedBackupSettingsPayload(backup && typeof backup === "object" ? backup.settings : null);
   if (orderItems.length === 0 && customerItems.length === 0 && Object.keys(settingsUpdates).length === 0) {
     throw new HttpsError("invalid-argument", "Choose a valid NivaDesk backup JSON file.");
@@ -8746,6 +9116,50 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (reques
 
   const email = String(request.auth?.token?.email || "");
   const db = admin.firestore();
+
+  // The preview and the real run parse the same file through the same payload
+  // builders, so what the dialog promises is what the import does.
+  const dryRun = request.data?.dryRun === true;
+  if (dryRun) {
+    const existing = await db.collection("siparisler").where("companyId", "==", companyId).get();
+    const existingOrderKeys = new Set();
+    for (const doc of existing.docs) existingOrderKeys.add(backupOrderMatchKey(doc.data() || {}));
+    const existingCustomers = await db.collection("musteriler").where("companyId", "==", companyId).get();
+    const existingCustomerKeys = new Set();
+    for (const doc of existingCustomers.docs) existingCustomerKeys.add(backupCustomerMatchKey(doc.data() || {}));
+
+    let likelyDuplicateOrders = 0;
+    for (const item of orderItems) {
+      if (existingOrderKeys.has(backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email)))) {
+        likelyDuplicateOrders += 1;
+      }
+    }
+    let likelyDuplicateCustomers = 0;
+    let customerRows = 0;
+    for (const item of customerItems) {
+      const payload = importedCustomerPayload(item, companyId, uid, email);
+      if (!payload) continue;
+      customerRows += 1;
+      if (existingCustomerKeys.has(backupCustomerMatchKey(payload))) likelyDuplicateCustomers += 1;
+    }
+
+    return {
+      ok: true,
+      companyId,
+      dryRun: true,
+      fileOrders: orderItems.length,
+      fileCustomers: customerRows,
+      existingOrders: existing.size,
+      existingCustomers: existingCustomers.size,
+      likelyDuplicateOrders,
+      likelyDuplicateCustomers,
+      droppedOrders,
+      droppedCustomers,
+      truncated: droppedOrders > 0 || droppedCustomers > 0,
+      importsSettings: Object.keys(settingsUpdates).length > 0
+    };
+  }
+
   const writes = [];
   const importedOrders = [];
   const importedCustomers = [];
@@ -8786,13 +9200,20 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2" }, async (reques
     console.warn("Backup import billing usage update failed:", error?.message || error);
   }
 
+  const truncatedNote = droppedOrders > 0 || droppedCustomers > 0
+    ? ` NOT imported because one import is capped at 500 records: ${droppedOrders} orders, ${droppedCustomers} customers.`
+    : "";
+
   return {
     ok: true,
     companyId,
     importedOrders: importedOrders.length,
     importedCustomers: importedCustomers.length,
+    droppedOrders,
+    droppedCustomers,
+    truncated: droppedOrders > 0 || droppedCustomers > 0,
     importedSettings: Object.keys(settingsUpdates).length > 0,
-    message: `Import finished. Orders: ${importedOrders.length}. Customers: ${importedCustomers.length}.${Object.keys(settingsUpdates).length > 0 ? " Settings imported." : ""}`
+    message: `Import finished. Orders: ${importedOrders.length}. Customers: ${importedCustomers.length}.${Object.keys(settingsUpdates).length > 0 ? " Settings imported." : ""}${truncatedNote}`
   };
 });
 
@@ -9628,6 +10049,18 @@ function cleanTaxRate(value) {
   return Math.min(Math.round(number * 100) / 100, 100);
 }
 
+// VAT sits INSIDE the price the customer pays, so it is extracted from the
+// gross rather than added on top: £1,450 at 20% is £241.67 of VAT on £1,208.33,
+// not £290. Every printed Subtotal + VAT = Total on every platform reads from
+// this, and the margin scheme extracts the same way from the margin.
+function vatFromGrossAmount(grossAmount, taxRate) {
+  const rate = cleanTaxRate(taxRate);
+  if (!(rate > 0)) return 0;
+  const gross = Number(grossAmount);
+  if (!Number.isFinite(gross) || gross <= 0) return 0;
+  return roundMoneyValue((gross * rate) / (100 + rate));
+}
+
 function cleanTaxType(value, fallback = "") {
   const text = cleanOrderText(value, fallback, 80);
   const normalized = text.toLowerCase();
@@ -9647,9 +10080,9 @@ function webFinanceTaxAmount({ paidAmount, remainingAmount, customRemainingTotal
       orderValue - roundMoneyValue(watchPurchasePrice) - roundMoneyValue(customExpenseTotal) - roundMoneyValue(paymentFee) - roundMoneyValue(deliveryCost),
       0
     );
-    return roundMoneyValue((taxableProfit * cleanTaxRate(taxRate)) / 100);
+    return vatFromGrossAmount(taxableProfit, taxRate);
   }
-  return roundMoneyValue((orderValue * cleanTaxRate(taxRate)) / 100);
+  return vatFromGrossAmount(orderValue, taxRate);
 }
 
 // Per-order spending / remaining headings live on the order itself, keyed
@@ -15152,6 +15585,102 @@ function wooNumber(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+// Zapier, Make and hand-rolled senders post money the way a human writes it:
+// "£1,234.56", "1.234,56", "120,50". Number() turns every one of those into NaN,
+// and the caller's fallback quietly made it a £0 order that answered HTTP 200.
+// Returns null when it genuinely cannot read the value, so the caller can say so
+// instead of inventing a zero. Woo and Shopify keep wooNumber — they send
+// machine-formatted numbers and a tolerant parser would only add guesswork.
+const INBOUND_SCHEMA_VERSION = 1;
+
+// Statuses that mean "this order is not happening". Module scope so the payload
+// validator and the handler agree on the list — they used to be one local Set.
+const REJECT_STATUSES = new Set(["cancelled", "canceled", "refunded", "voided", "failed", "deleted"]);
+
+// Names the ways a payload can be misread. Every one of these was silent: the
+// order was created, HTTP 200 came back, and the number on screen was wrong.
+function inboundPayloadWarnings(payload) {
+  const warnings = [];
+  if (!payload || typeof payload !== "object") return ["The body was not a JSON object."];
+
+  const rawTotal = inboundValue(payload, ["total", "amount", "total_price", "totalPrice", "grandTotal"]);
+  if (rawTotal !== "" && rawTotal !== null && rawTotal !== undefined && inboundMoneyNumber(rawTotal) === null) {
+    warnings.push(`The total "${String(rawTotal).slice(0, 40)}" could not be read as a number, so this order would be saved as 0.`);
+  } else if (rawTotal === "" || rawTotal === null || rawTotal === undefined) {
+    warnings.push("No total was sent, so this order would be saved as 0.");
+  }
+
+  const products = inboundValue(payload, ["products", "items", "lineItems", "line_items"]);
+  if (products && !Array.isArray(products)) {
+    warnings.push("products was sent as text, so the invoice gets a single line. Send an array of { name, quantity, unitPrice } for an itemised invoice.");
+  } else if (Array.isArray(products) && products.length > 0 && !products.some(item => item && typeof item === "object")) {
+    warnings.push("products is a list of names with no prices, so the invoice gets a single line.");
+  }
+
+  if (payload.currency) {
+    warnings.push("currency is recorded for reference only — the order is shown in your workspace currency.");
+  }
+
+  const status = String(inboundValue(payload, ["status", "financial_status", "paymentStatus"]) || "").toLowerCase();
+  if (status && REJECT_STATUSES.has(status)) {
+    warnings.push(`status "${status}" means this order would be dropped without being created.`);
+  }
+
+  if (!inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"])) {
+    warnings.push("No orderId, so no order can be created. It is also what stops a redelivery creating a second copy.");
+  }
+
+  // Anything outside every alias list vanishes silently, which is how a
+  // misconfigured Zap ends up producing "Website Customer" and a £0 total.
+  const known = new Set([
+    "companyId", "company_id", "studioflow_company_id", "test", "nivadeskTest", "schemaVersion",
+    "orderId", "id", "order_id", "orderNumber", "number", "order_number",
+    "total", "amount", "total_price", "totalPrice", "grandTotal",
+    "createdAt", "created_at", "date", "orderDate",
+    "products", "items", "lineItems", "line_items", "productNames",
+    "designName", "design_name", "title",
+    "customerName", "customer_name", "name", "fullName", "buyerName",
+    "source", "platform", "store", "paymentMethod", "payment_method", "gateway",
+    "email", "customerEmail", "buyerEmail", "phone", "telephone", "whatsapp", "mobile",
+    "note", "notes", "customerNote", "message",
+    "status", "financial_status", "paymentStatus",
+    "billing", "billingAddress", "billing_address", "address",
+    "shipping", "shippingAddress", "shipping_address",
+    "currency", "sku", "ref", "watchRef", "deliveryTime", "delivery_days",
+    "orderUrl", "url", "link", "permalink", "instagram", "instagramUsername",
+    "shippingCost", "shipping_total", "deliveryCost", "tax", "total_tax", "taxAmount"
+  ]);
+  const ignored = Object.keys(payload).filter(key => !known.has(key));
+  if (ignored.length > 0) {
+    warnings.push(`These fields were not recognised and would be ignored: ${ignored.slice(0, 10).join(", ")}.`);
+  }
+  return warnings;
+}
+
+function inboundMoneyNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const cleaned = value.replace(/[^\d.,-]/g, "").trim();
+  if (!cleaned) return null;
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  let normalized;
+  if (lastComma >= 0 && lastDot >= 0) {
+    // Whichever separator comes last is the decimal point.
+    normalized = lastComma > lastDot
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    // "1,234" is ambiguous; three trailing digits means thousands, else decimal.
+    normalized = /,\d{3}$/.test(cleaned) ? cleaned.replace(/,/g, "") : cleaned.replace(",", ".");
+  } else {
+    normalized = cleaned;
+  }
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function wooDate(value, fallback = new Date()) {
   if (!value) return fallback;
   const parsed = new Date(value);
@@ -15310,6 +15839,49 @@ function resolveDefaultDeliveryTime(settingsData) {
   const raw = Number(settingsData && settingsData.defaultDeliveryTime);
   if (!Number.isFinite(raw) || raw <= 0) return 30;
   return Math.min(Math.max(Math.round(raw), 1), 730);
+}
+
+// A redelivery of the same order used to write the whole mapped object back with
+// merge:true. Every field the mapper produces is unconditionally present, so a
+// shop that resends an order — Woo retries, a Shopify update, a Zapier replay —
+// silently reset the studio's own work: designStatus and status back to
+// "Not Yet", the tracking number and courier blanked, the delivery time reset.
+// The shop owns the money and the customer; the studio owns the workflow.
+const INTEGRATION_SHOP_OWNED_FIELDS = new Set([
+  "customerName",
+  "designName",
+  "designLink",
+  "emailAddress",
+  "whatsappNumber",
+  "instagramUsername",
+  "notes",
+  "paidAmount",
+  "remainingAmount",
+  "orderValue",
+  "lineItems",
+  "payments",
+  "deliveryCost",
+  "taxAmount",
+  "taxRate",
+  "shippingName",
+  "shippingStreetAddress",
+  "shippingCity",
+  "shippingPostalCode",
+  "shippingCountry",
+  "shippingPhone",
+  "customFields",
+  "companyId",
+  "updatedAt",
+  "source"
+]);
+
+function integrationOrderUpdate(mappedOrder, isNew) {
+  if (isNew) return mappedOrder;
+  const patch = {};
+  for (const [key, value] of Object.entries(mappedOrder)) {
+    if (INTEGRATION_SHOP_OWNED_FIELDS.has(key)) patch[key] = value;
+  }
+  return patch;
 }
 
 function mapWooCommerceOrderToSiparis(order, companyId, isNew = true, defaultDeliveryTime = 30) {
@@ -15506,17 +16078,213 @@ function woocommerceDeliveryUrl(companyId, token) {
 // Owner-only: returns this workspace's WooCommerce webhook token + full Delivery URL,
 // minting a per-workspace token on first use. The token is what the webhook checks, so each
 // workspace gets an isolated, unguessable credential shown in the app's integration screen.
-exports.getWooCommerceWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
-  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
-  let token = String(companyData.woocommerceWebhookToken || "").trim();
-  if (!token) {
-    token = crypto.randomBytes(24).toString("hex");
-    await companyRef.set({
-      woocommerceWebhookToken: token,
-      woocommerceWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+// Webhook tokens used to live as fields on companies/{companyId}. That document
+// is readable by every member — owner, admin, member, viewer, workflow — so any
+// of them could lift a URL that creates orders in the workspace. They live in a
+// server-only subcollection now. Whatever is still on the company document is
+// moved across the first time it is read and the old field is cleared, so a
+// workspace migrates itself on its next webhook delivery or settings visit.
+const INTEGRATION_KINDS = {
+  woocommerce: { tokenField: "woocommerceWebhookToken", createdAtField: "woocommerceWebhookTokenCreatedAt" },
+  shopify: { tokenField: "shopifyWebhookToken", createdAtField: "shopifyWebhookTokenCreatedAt" },
+  inbound: { tokenField: "inboundWebhookToken", createdAtField: "inboundWebhookTokenCreatedAt" }
+};
+
+function integrationSecretRef(companyId, kind) {
+  return admin.firestore().collection("companies").doc(companyId).collection("integrationSecrets").doc(kind);
+}
+
+function integrationMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+async function readIntegrationSecret(companyId, kind) {
+  const config = INTEGRATION_KINDS[kind];
+  if (!config) throw new HttpsError("invalid-argument", "Unknown integration.");
+  const ref = integrationSecretRef(companyId, kind);
+  const snap = await ref.get();
+  if (snap.exists) {
+    const data = snap.data() || {};
+    const token = String(data.token || "").trim();
+    if (token) return { token, data };
   }
-  return { ok: true, companyId, token, deliveryUrl: woocommerceDeliveryUrl(companyId, token) };
+
+  const companyRef = admin.firestore().collection("companies").doc(companyId);
+  const companySnap = await companyRef.get();
+  const legacyToken = String((companySnap.data() || {})[config.tokenField] || "").trim();
+  if (!legacyToken) return { token: "", data: snap.exists ? snap.data() || {} : {} };
+
+  const createdAt = (companySnap.data() || {})[config.createdAtField] || null;
+  await ref.set({ token: legacyToken, createdAt: createdAt || admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await companyRef.set({
+    [config.tokenField]: admin.firestore.FieldValue.delete(),
+    [config.createdAtField]: admin.firestore.FieldValue.delete()
+  }, { merge: true });
+  return { token: legacyToken, data: { token: legacyToken, createdAt } };
+}
+
+async function mintIntegrationToken(companyId, kind) {
+  if (!INTEGRATION_KINDS[kind]) throw new HttpsError("invalid-argument", "Unknown integration.");
+  const token = crypto.randomBytes(24).toString("hex");
+  await integrationSecretRef(companyId, kind).set({
+    token,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return token;
+}
+
+// What the Settings page needs to say whether the integration is actually
+// working: nobody could tell before, because nothing was recorded.
+async function recordIntegrationDelivery(companyId, kind, outcome) {
+  if (!INTEGRATION_KINDS[kind] || !companyId) return;
+  try {
+    await integrationSecretRef(companyId, kind).set({
+      lastDeliveryAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastDeliveryOk: outcome.ok === true,
+      // Without this a pressed test button paints the same green a real order
+      // does, and a broken Zap looks connected forever.
+      lastDeliveryWasTest: outcome.test === true,
+      lastDeliveryError: outcome.ok === true ? "" : String(outcome.error || "unauthorized").slice(0, 300)
+    }, { merge: true });
+  } catch (error) {
+    console.warn("recordIntegrationDelivery failed", { companyId, kind, error: String(error) });
+  }
+}
+
+function integrationStatusPayload(data = {}) {
+  return {
+    tokenCreatedAtMs: integrationMillis(data.createdAt),
+    lastDeliveryAtMs: integrationMillis(data.lastDeliveryAt),
+    lastDeliveryOk: data.lastDeliveryOk === true,
+    lastDeliveryWasTest: data.lastDeliveryWasTest === true,
+    lastDeliveryError: String(data.lastDeliveryError || "")
+  };
+}
+
+// Rotating invalidates the old URL immediately. That is the point: a token that
+// has been shared in a screenshot or a support thread cannot be taken back any
+// other way.
+// Presses the workspace's own delivery URL with a test payload and hands back
+// whatever the handler said. Be plain about what this proves: the endpoint, the
+// companyId, the token and the round trip. It cannot prove the URL was pasted
+// into Zapier correctly, because the server posts to a URL it minted itself.
+exports.sendTestInboundWebhook = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const { token } = await readIntegrationSecret(companyId, "inbound");
+  if (!token) {
+    throw new HttpsError("failed-precondition", "Open this page once so a delivery URL is created, then try again.");
+  }
+
+  const url = inboundDeliveryUrl(companyId, token);
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nivadeskTest: true, schemaVersion: INBOUND_SCHEMA_VERSION }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const body = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok && body?.ok === true,
+      status: response.status,
+      orderCreated: body?.orderCreated === true,
+      warnings: Array.isArray(body?.warnings) ? body.warnings : [],
+      message: response.ok
+        ? "The delivery URL answered. No order was created."
+        : `The delivery URL answered ${response.status}.`
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      orderCreated: false,
+      warnings: [],
+      message: String(error?.name === "AbortError" ? "The delivery URL did not answer in time." : error?.message || error)
+    };
+  }
+});
+
+// Checks a payload without sending it anywhere: same mapper the webhook runs, no
+// network, no writes. This is the one that catches a £0 order before it happens.
+exports.validateInboundOrderPayload = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  let payload = request.data && request.data.payload;
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch (error) {
+      return { ok: false, parseError: "That is not valid JSON.", warnings: [], reads: null };
+    }
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, parseError: "Send a JSON object.", warnings: [], reads: null };
+  }
+
+  const preview = mapGenericInboundOrderToSiparis(payload, companyId, true);
+  const warnings = inboundPayloadWarnings(payload);
+  return {
+    ok: warnings.length === 0,
+    parseError: "",
+    schemaVersion: INBOUND_SCHEMA_VERSION,
+    warnings,
+    reads: {
+      orderNumber: preview.watchRef || "",
+      customerName: preview.customerName,
+      designName: preview.designName,
+      total: preview.paidAmount,
+      deliveryCost: preview.deliveryCost,
+      taxAmount: preview.taxAmount,
+      lineItemCount: Array.isArray(preview.lineItems) ? preview.lineItems.length : 0
+    }
+  };
+});
+
+exports.rotateIntegrationWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const kind = String(request.data && request.data.integration || "").trim();
+  if (!INTEGRATION_KINDS[kind]) throw new HttpsError("invalid-argument", "Unknown integration.");
+  const token = await mintIntegrationToken(companyId, kind);
+  await integrationSecretRef(companyId, kind).set({
+    lastDeliveryAt: admin.firestore.FieldValue.delete(),
+    lastDeliveryOk: admin.firestore.FieldValue.delete(),
+    lastDeliveryWasTest: admin.firestore.FieldValue.delete(),
+    lastDeliveryError: admin.firestore.FieldValue.delete()
+  }, { merge: true });
+  const deliveryUrl = kind === "woocommerce"
+    ? woocommerceDeliveryUrl(companyId, token)
+    : kind === "shopify"
+      ? shopifyDeliveryUrl(companyId, token)
+      : inboundDeliveryUrl(companyId, token);
+  return {
+    ok: true,
+    companyId,
+    deliveryUrl,
+    ...integrationStatusPayload({ createdAt: admin.firestore.Timestamp.now() }),
+    message: "Webhook URL replaced. Paste the new one into your shop."
+  };
+});
+
+exports.getWooCommerceWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  // The raw token is deliberately not returned any more: the delivery URL is the
+  // only thing a client needs, and nothing ever read the bare token.
+  let { token, data } = await readIntegrationSecret(companyId, "woocommerce");
+  if (!token) {
+    token = await mintIntegrationToken(companyId, "woocommerce");
+    data = { createdAt: admin.firestore.Timestamp.now() };
+  }
+  return {
+    ok: true,
+    companyId,
+    deliveryUrl: woocommerceDeliveryUrl(companyId, token),
+    ...integrationStatusPayload(data)
+  };
 });
 
 // Installment combine: find the single open WooCommerce-sourced order for this
@@ -15574,34 +16342,28 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       res.status(404).json({ ok: false, error: "unknown_company" });
       return;
     }
-    const workspaceToken = String(companyAuthSnap.data()?.woocommerceWebhookToken || "").trim();
-    const globalSecret = String(process.env.WOOCOMMERCE_WEBHOOK_SECRET || "").trim();
-
+    const { token: workspaceToken } = await readIntegrationSecret(companyId, "woocommerce");
+    // There was a second way in here: one platform-wide WOOCOMMERCE_WEBHOOK_SECRET
+    // accepted as a plain query token against ANY companyId — a single string that
+    // could forge orders into every workspace on the service. It never ran, because
+    // the variable was never a defineSecret and so was never mounted into this
+    // function, but it was one env var away from running. Deleted rather than
+    // configured. Auth is the workspace's own token, and only that.
     let authed = false;
     if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
       authed = true;
     }
-    if (!authed && globalSecret) {
-      if (nvTimingSafeEqual(providedToken, globalSecret)) {
-        authed = true;
-      } else {
-        const signature = String(req.headers["x-wc-webhook-signature"] || "");
-        if (signature) {
-          const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-          const expected = crypto.createHmac("sha256", globalSecret).update(rawBody).digest("base64");
-          authed = nvTimingSafeEqual(signature, expected);
-        }
-      }
-    }
     if (!authed) {
-      if (!workspaceToken && !globalSecret) {
-        console.warn("woocommerceOrderWebhook: no token configured for workspace — request not authenticated.");
-      } else {
-        console.warn("woocommerceOrderWebhook: rejected request with invalid token/signature.");
-        res.status(401).json({ ok: false, error: "unauthorized" });
-        return;
-      }
+      const reason = workspaceToken ? "invalid token" : "no token in the delivery URL";
+      console.warn(`woocommerceOrderWebhook: rejected request — ${reason}.`);
+      await recordIntegrationDelivery(companyId, "woocommerce", { ok: false, error: reason });
+      res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
     }
+    // Recorded here rather than after the order is written: a verification ping
+    // that carries no order is still a delivery that arrived and authenticated,
+    // which is exactly what "is this connected?" is asking.
+    await recordIntegrationDelivery(companyId, "woocommerce", { ok: true });
 
     const wooOrderId = cleanWooText(order?.id || order?.number);
     if (!wooOrderId) {
@@ -15696,7 +16458,7 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
 
     const wooDefaultDeliveryTime = resolveDefaultDeliveryTime((await companySettingsDocRef(companyId).get()).data());
     const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, wooDefaultDeliveryTime);
-    await ref.set(mappedOrder, { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -15970,16 +16732,20 @@ function shopifyDeliveryUrl(companyId, token) {
 // Owner-only: returns this workspace's Shopify webhook token + full Delivery URL,
 // minting a per-workspace token on first use (isolated, unguessable per workspace).
 exports.getShopifyWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
-  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
-  let token = String(companyData.shopifyWebhookToken || "").trim();
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  // The raw token is deliberately not returned any more: the delivery URL is the
+  // only thing a client needs, and nothing ever read the bare token.
+  let { token, data } = await readIntegrationSecret(companyId, "shopify");
   if (!token) {
-    token = crypto.randomBytes(24).toString("hex");
-    await companyRef.set({
-      shopifyWebhookToken: token,
-      shopifyWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    token = await mintIntegrationToken(companyId, "shopify");
+    data = { createdAt: admin.firestore.Timestamp.now() };
   }
-  return { ok: true, companyId, token, deliveryUrl: shopifyDeliveryUrl(companyId, token) };
+  return {
+    ok: true,
+    companyId,
+    deliveryUrl: shopifyDeliveryUrl(companyId, token),
+    ...integrationStatusPayload(data)
+  };
 });
 
 exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
@@ -16015,30 +16781,25 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       res.status(404).json({ ok: false, error: "unknown_company" });
       return;
     }
-    const workspaceToken = String(companyAuthSnap.data()?.shopifyWebhookToken || "").trim();
-    const globalSecret = String(process.env.SHOPIFY_WEBHOOK_SECRET || "").trim();
-
+    const { token: workspaceToken } = await readIntegrationSecret(companyId, "shopify");
+    // Same dead platform-wide-secret branch as WooCommerce, deleted for the same
+    // reason. The official Shopify app path (shopifyAppWebhook) does verify an
+    // HMAC, against a real mounted secret — that one stays.
     let authed = false;
     if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
       authed = true;
     }
-    if (!authed && globalSecret) {
-      const signature = String(req.headers["x-shopify-hmac-sha256"] || "");
-      if (signature) {
-        const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
-        const expected = crypto.createHmac("sha256", globalSecret).update(rawBody).digest("base64");
-        authed = nvTimingSafeEqual(signature, expected);
-      }
-    }
     if (!authed) {
-      if (!workspaceToken && !globalSecret) {
-        console.warn("shopifyOrderWebhook: no token configured for workspace — request not authenticated.");
-      } else {
-        console.warn("shopifyOrderWebhook: rejected request with invalid token/signature.");
-        res.status(401).json({ ok: false, error: "unauthorized" });
-        return;
-      }
+      const reason = workspaceToken ? "invalid token" : "no token in the delivery URL";
+      console.warn(`shopifyOrderWebhook: rejected request — ${reason}.`);
+      await recordIntegrationDelivery(companyId, "shopify", { ok: false, error: reason });
+      res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
     }
+    // Recorded here rather than after the order is written: a verification ping
+    // that carries no order is still a delivery that arrived and authenticated,
+    // which is exactly what "is this connected?" is asking.
+    await recordIntegrationDelivery(companyId, "shopify", { ok: true });
 
     const shopifyOrderId = cleanWooText(order?.id || order?.order_number || order?.name);
     if (!shopifyOrderId) {
@@ -16064,7 +16825,7 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
-    await ref.set(mappedOrder, { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -16210,7 +16971,9 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
   const now = new Date();
   const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]) || crypto.randomUUID());
   const orderNumber = cleanWooText(inboundValue(payload, ["orderNumber", "number", "order_number", "orderId", "id"]) || externalId);
-  const total = wooNumber(inboundValue(payload, ["total", "amount", "total_price", "totalPrice", "grandTotal"]), 0);
+  const rawTotal = inboundValue(payload, ["total", "amount", "total_price", "totalPrice", "grandTotal"]);
+  const parsedTotal = inboundMoneyNumber(rawTotal);
+  const total = parsedTotal ?? 0;
   const createdAt = wooDate(inboundValue(payload, ["createdAt", "created_at", "date", "orderDate"]), now);
   const productsSummary = inboundProductsSummary(payload);
   // Structured invoice line items — only when the sender supplied per-line prices; otherwise []
@@ -16280,7 +17043,9 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     courier: "Auto Detect",
     isDelivered: false,
     paymentFee: 0,
-    deliveryCost: wooNumber(inboundValue(payload, ["shipping", "shippingCost", "shipping_total", "deliveryCost"]), 0),
+    // "shipping" is also the shipping ADDRESS key, and it came first: a sender
+    // that posts an address lost its shipping cost to Number({}) = NaN.
+    deliveryCost: inboundMoneyNumber(inboundValue(payload, ["shippingCost", "shipping_total", "deliveryCost", "shipping"])) ?? 0,
     taxType: "",
     extraStatuses: {},
     taxRate: 0,
@@ -16324,16 +17089,20 @@ function inboundDeliveryUrl(companyId, token) {
 
 // Owner-only: returns this workspace's generic inbound webhook token + Delivery URL.
 exports.getInboundWebhookToken = onCall({ region: "europe-west2" }, async (request) => {
-  const { companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
-  let token = String(companyData.inboundWebhookToken || "").trim();
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  // The raw token is deliberately not returned any more: the delivery URL is the
+  // only thing a client needs, and nothing ever read the bare token.
+  let { token, data } = await readIntegrationSecret(companyId, "inbound");
   if (!token) {
-    token = crypto.randomBytes(24).toString("hex");
-    await companyRef.set({
-      inboundWebhookToken: token,
-      inboundWebhookTokenCreatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    token = await mintIntegrationToken(companyId, "inbound");
+    data = { createdAt: admin.firestore.Timestamp.now() };
   }
-  return { ok: true, companyId, token, deliveryUrl: inboundDeliveryUrl(companyId, token) };
+  return {
+    ok: true,
+    companyId,
+    deliveryUrl: inboundDeliveryUrl(companyId, token),
+    ...integrationStatusPayload(data)
+  };
 });
 
 exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
@@ -16375,16 +17144,55 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       res.status(404).json({ ok: false, error: "unknown_company" });
       return;
     }
-    const workspaceToken = String(companyAuthSnap.data()?.inboundWebhookToken || "").trim();
+    const { token: workspaceToken } = await readIntegrationSecret(companyId, "inbound");
     if (!workspaceToken || !nvTimingSafeEqual(providedToken, workspaceToken)) {
+      await recordIntegrationDelivery(companyId, "inbound", {
+        ok: false,
+        error: workspaceToken ? "invalid token" : "no token in the delivery URL"
+      });
       console.warn("inboundOrderWebhook: rejected request with missing/invalid token.");
       res.status(401).json({ ok: false, error: "unauthorized" });
       return;
     }
+    // A payload marked as a test proves the URL, the companyId, the token and the
+    // round trip — and stops there. Placed AFTER the token check so the flag can
+    // never be a way in, and BEFORE the order write so a test that happens to
+    // carry an orderId still creates nothing.
+    const isTestDelivery = payload?.nivadeskTest === true || payload?.test === true;
+    if (isTestDelivery) {
+      await recordIntegrationDelivery(companyId, "inbound", { ok: true, test: true });
+      const preview = mapGenericInboundOrderToSiparis(payload, companyId, true);
+      res.status(200).json({
+        ok: true,
+        test: true,
+        orderCreated: false,
+        schemaVersion: INBOUND_SCHEMA_VERSION,
+        companyId,
+        reads: {
+          customerName: preview.customerName,
+          designName: preview.designName,
+          total: preview.paidAmount,
+          lineItemCount: Array.isArray(preview.lineItems) ? preview.lineItems.length : 0,
+          deliveryCost: preview.deliveryCost
+        },
+        warnings: inboundPayloadWarnings(payload)
+      });
+      return;
+    }
+
+    await recordIntegrationDelivery(companyId, "inbound", { ok: true });
 
     const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]));
     if (!externalId) {
-      res.status(400).json({ ok: false, error: "Missing orderId in the payload." });
+      // Woo and Shopify answer a verification ping with 200; this one used to 400,
+      // so a sender testing its wiring saw a failure it could not act on.
+      res.status(200).json({
+        ok: true,
+        ignored: "no_order_id",
+        schemaVersion: INBOUND_SCHEMA_VERSION,
+        message: "Reached the workspace and authenticated, but the payload carried no orderId so no order was created.",
+        warnings: inboundPayloadWarnings(payload)
+      });
       return;
     }
 
@@ -16396,14 +17204,13 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     // sends rather than gating on a specific paid status — we only skip orders that
     // are clearly cancelled/refunded on creation.
     const status = String(inboundValue(payload, ["status", "financial_status", "paymentStatus"]) || "").trim().toLowerCase();
-    const REJECT_STATUSES = new Set(["cancelled", "canceled", "refunded", "voided", "failed", "deleted"]);
     if (!existing.exists && REJECT_STATUSES.has(status)) {
       res.status(200).json({ ok: true, ignored: "rejected_status", status, orderId: docId });
       return;
     }
 
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
-    await ref.set(mappedOrder, { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (best-effort).
     try {
@@ -22131,7 +22938,7 @@ function estimateTotals(lineItems, taxRate, taxType) {
   const isMargin = String(taxType || "") === "Profit";
   const gross = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const total = roundLineMoney(gross);
-  const taxAmount = isMargin || rate <= 0.0001 ? 0 : roundLineMoney((total * rate) / 100);
+  const taxAmount = isMargin || rate <= 0.0001 ? 0 : roundLineMoney((total * rate) / (100 + rate));
   const subtotal = isMargin ? total : roundLineMoney(total - taxAmount);
   return { subtotal, taxAmount, total };
 }

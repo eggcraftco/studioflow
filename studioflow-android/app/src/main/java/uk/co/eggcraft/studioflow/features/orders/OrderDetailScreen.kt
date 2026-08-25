@@ -11931,7 +11931,7 @@ private fun buildInvoiceHtml(order: StudioOrder, settings: StudioWorkspaceSettin
     val isZero = order.taxRate <= 0.0001
     // Line-item invoices recompute VAT on the item total with the order's rate
     // (same total*rate/100 convention as the Finance card).
-    val vat = if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
+    val vat = if (order.hasLineItems) vatFromGross(order.taxRate, orderValue) else order.taxAmount
     val subtotal = if (isMargin) orderValue else orderValue - vat
     val business = escapeInvoiceHtml(settings.appSubtitle.ifBlank { "NivaDesk" })
     val logo = settings.appLogoUrl.trim()
@@ -12435,7 +12435,7 @@ private fun createInvoicePdfFile(
     val orderValue = estimate?.total
         ?: if (order.hasLineItems) order.lineItemsTotal else order.paidAmount + order.remainingAmount
     val vat = estimate?.taxAmount
-        ?: if (order.hasLineItems) (orderValue * order.taxRate) / 100.0 else order.taxAmount
+        ?: if (order.hasLineItems) vatFromGross(order.taxRate, orderValue) else order.taxAmount
     val subtotal = estimate?.subtotal ?: if (isMargin) orderValue else orderValue - vat
 
     val tableHeaderBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF3F4F6.toInt() }
@@ -13209,4 +13209,13 @@ private fun ShopifyOrderSourceStrip(order: StudioOrder) {
             }
         }
     }
+}
+
+// VAT sits INSIDE the price the customer pays, so it is extracted from the
+// gross rather than added on top: £1,450 at 20% is £241.67 of VAT on £1,208.33,
+// not £290. Mirrors vatFromGrossAmount() in functions/index.js — the invoice,
+// the estimate and the Finance card must all agree with the server.
+private fun vatFromGross(taxRate: Double, grossAmount: Double): Double {
+    if (taxRate <= 0.0 || grossAmount <= 0.0) return 0.0
+    return (grossAmount * taxRate) / (100.0 + taxRate)
 }

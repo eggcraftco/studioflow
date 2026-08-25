@@ -1297,6 +1297,10 @@ data class StudioOrder(
 
     val netProfit: Double get() = orderValue - watchPurchasePrice - paymentFee - deliveryCost - taxAmount
 
+    // The toolbar strip shows margin, not net: VAT and extra spending stay in.
+    // Web and Mac compute it the same way, so all three toolbars agree.
+    val grossMargin: Double get() = orderValue - watchPurchasePrice - paymentFee - deliveryCost
+
     val remainingDays: Int
         get() {
             val due = Date(paymentDate.time + deliveryTime.coerceAtLeast(1) * 24L * 60L * 60L * 1000L)

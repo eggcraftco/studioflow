@@ -541,7 +541,9 @@ struct DashboardView: View {
     var buYilBasicBalance: Double { buYilReceived - buYilBaseCost }
     var buYilKari: Double { buYilSiparisleri.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
     var gecenYilKari: Double { let cal = Calendar.current; guard let gecenYil = cal.date(byAdding: .year, value: -1, to: Date()) else { return 0 }; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: gecenYil, toGranularity: .year) }.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
-    var buyumeYuzdesi: Double { if gecenYilKari == 0 { return buYilKari > 0 ? 100.0 : 0.0 }; return ((buYilKari - gecenYilKari) / gecenYilKari) * 100.0 }
+    // Divide by the magnitude, not the signed value: after a loss year a
+    // recovery is growth, and a signed denominator flips the arrow.
+    var buyumeYuzdesi: Double { if gecenYilKari == 0 { return buYilKari > 0 ? 100.0 : 0.0 }; return ((buYilKari - gecenYilKari) / abs(gecenYilKari)) * 100.0 }
     
     var body: some View {
         ZStack {

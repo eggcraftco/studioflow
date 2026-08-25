@@ -1,0 +1,4 @@
+# Written by seed-qa.js on every run: emulator uid, company id and a custom
+# auth token. Scratch state for a local emulator, never source.
+seed-out.json
+seed-err.txt

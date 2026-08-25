@@ -33,7 +33,10 @@ const APP_BACKUP_STRING_KEYS = [
   "taxRuleNameRevenue",
   "taxRuleNameProfit",
   "replyMode",
-  "openAIKey",
+  // openAIKey deliberately absent: a backup is a file people email to
+  // themselves and drop in Drive, and this key can spend money. The server
+  // moved it out of companySettings into quickReplySecrets for the same
+  // reason — putting it back into an export undoes that.
   "localAIURL",
   "localAIModel",
   "aiKnowledgeBase",
