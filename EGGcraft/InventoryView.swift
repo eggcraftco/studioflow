@@ -8,13 +8,15 @@ import SwiftUI
 
 
 enum InventoryTab: String, CaseIterable {
-    case items, purchases, suppliers
+    case items, purchases, suppliers, stocktake, reports
 
     var label: String {
         switch self {
         case .items: return "Items"
         case .purchases: return "Purchases"
         case .suppliers: return "Suppliers"
+        case .stocktake: return "Stocktake"
+        case .reports: return "Reports"
         }
     }
 }
@@ -106,6 +108,14 @@ struct InventoryView: View {
                 case .items: itemsTab
                 case .purchases: purchasesTab
                 case .suppliers: suppliersTab
+                case .stocktake:
+                    StocktakeTab(currencySymbol: seciliParaBirimi, lang: seciliDil, canEdit: canEdit) {
+                        Task { await model.loadItems(firebaseManager) }
+                    }
+                    .environmentObject(firebaseManager)
+                case .reports:
+                    ReportsTab(currencySymbol: seciliParaBirimi, lang: seciliDil)
+                        .environmentObject(firebaseManager)
                 }
             }
             .padding(isPhone ? 14 : 22)
@@ -178,12 +188,15 @@ struct InventoryView: View {
                 case .suppliers:
                     Button { showNewSupplier = true } label: { Label(t("New Supplier", lang: seciliDil), systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
+                case .stocktake, .reports:
+                    EmptyView()
                 }
             }
         }
     }
 
     private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 4) {
             ForEach(InventoryTab.allCases, id: \.self) { entry in
                 Button {
@@ -195,6 +208,7 @@ struct InventoryView: View {
                             await model.loadPurchases(firebaseManager)
                             if model.suppliers.isEmpty { await model.loadSuppliers(firebaseManager) }
                         case .suppliers: await model.loadSuppliers(firebaseManager)
+                        case .stocktake, .reports: break
                         }
                     }
                 } label: {
@@ -207,8 +221,10 @@ struct InventoryView: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
             }
             Spacer()
+        }
         }
         .overlay(alignment: .bottom) { Divider() }
     }

@@ -486,6 +486,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The movement ledger and the counts that write to it. Readable so a
+    // report can be drawn, server-written because a stock figure that moved
+    // without a ledger line — or a line without the move — would both be lies.
+    match /companies/{companyId}/inventoryMovements/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/stocktakes/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     // Provider consent tokens — server-only, never client-readable.
     match /companies/{companyId}/bankTokens/{document=**} {
       allow read, write: if false;
@@ -600,6 +613,8 @@ service cloud.firestore {
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
         && collectionId != 'suppliers'
+        && collectionId != 'inventoryMovements'
+        && collectionId != 'stocktakes'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -624,6 +639,8 @@ service cloud.firestore {
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
         && collectionId != 'suppliers'
+        && collectionId != 'inventoryMovements'
+        && collectionId != 'stocktakes'
         && canWriteCompanyData(companyId);
     }
 

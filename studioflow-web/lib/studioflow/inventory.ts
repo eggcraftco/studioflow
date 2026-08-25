@@ -495,3 +495,184 @@ export async function readOpeningStock(
     "That list could not be read."
   );
 }
+
+// ---------------------------------------------------------------------------
+// The movement ledger, stocktakes and reporting
+// ---------------------------------------------------------------------------
+
+export type MovementKind =
+  | "openingStock" | "purchase" | "adjustment" | "stocktake"
+  | "used" | "sold" | "removed";
+
+export type InventoryMovement = {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemNumber: string;
+  category: string;
+  trackingType: InventoryTrackingType;
+  kind: MovementKind;
+  delta: number;
+  unitCost: number;
+  valueDelta: number;
+  ref: string;
+  note: string;
+  at: number;
+  byEmail: string;
+};
+
+export type StocktakeLine = {
+  itemId: string;
+  number: string;
+  name: string;
+  category: string;
+  location: string;
+  trackingType: InventoryTrackingType;
+  unit: string;
+  expected: number;
+  unitCost: number;
+  /** null means nobody has counted this yet — which is not "counted as zero". */
+  counted: number | null;
+  note: string;
+};
+
+export type StocktakeSummary = {
+  id: string;
+  number: string;
+  status: "open" | "committed" | "cancelled";
+  location: string;
+  category: string;
+  note: string;
+  startedAtMs: number;
+  committedAtMs: number;
+  startedByEmail: string;
+  lineCount: number;
+  countedCount: number;
+  adjustedLines: number;
+  valueDelta: number;
+};
+
+export type OverPromised = {
+  itemId: string;
+  name: string;
+  number: string;
+  counted: number;
+  reserved: number;
+  orderIds: string[];
+};
+
+export type Stocktake = StocktakeSummary & {
+  lines: StocktakeLine[];
+  overPromised?: OverPromised[];
+};
+
+export type InventoryReport = {
+  generatedAtMs: number;
+  fromMs: number;
+  toMs: number;
+  valuation: {
+    totalValue: number;
+    onShelfCount: number;
+    customerOwnedCount: number;
+    byCategory: Array<{ name: string; value: number }>;
+    byLocation: Array<{ name: string; value: number }>;
+  };
+  movement: {
+    /** When the ledger starts. Before this, "nothing moved" is not a fact. */
+    ledgerStartsMs: number;
+    coversWholePeriod: boolean;
+    lines: number;
+    truncated: boolean;
+    inValue: number;
+    outValue: number;
+    netValue: number;
+    byKind: Array<{ kind: MovementKind; lines: number; delta: number; value: number }>;
+  };
+  lowStock: Array<{
+    itemId: string; number: string; name: string;
+    onHand: number; lowStockAt: number; unit: string; supplierName: string;
+  }>;
+  deadStock: Array<{
+    itemId: string; number: string; name: string;
+    category: string; value: number; idleDays: number;
+  }>;
+  deadStockAfterDays: number;
+};
+
+export async function startStocktake(
+  workspace: WorkspaceContext,
+  input: { location?: string; category?: string; note?: string }
+) {
+  return call<{ ok?: boolean; stocktakeId?: string; number?: string; lines?: number }>(
+    "startStocktake",
+    { companyId: workspace.id, ...input },
+    "The count could not be started."
+  );
+}
+
+export async function saveStocktakeCounts(
+  workspace: WorkspaceContext,
+  stocktakeId: string,
+  counts: Record<string, number | null>,
+  notes: Record<string, string> = {}
+) {
+  return call<{ ok?: boolean }>(
+    "saveStocktakeCounts",
+    { companyId: workspace.id, stocktakeId, counts, notes },
+    "The counts could not be saved."
+  );
+}
+
+export async function commitStocktake(workspace: WorkspaceContext, stocktakeId: string) {
+  return call<{
+    ok?: boolean; adjusted?: number; counted?: number; total?: number;
+    valueDelta?: number; overPromised?: OverPromised[];
+  }>(
+    "commitStocktake",
+    { companyId: workspace.id, stocktakeId },
+    "The count could not be applied."
+  );
+}
+
+export async function cancelStocktake(workspace: WorkspaceContext, stocktakeId: string) {
+  return call<{ ok?: boolean }>(
+    "cancelStocktake",
+    { companyId: workspace.id, stocktakeId },
+    "The count could not be cancelled."
+  );
+}
+
+export async function listStocktakes(workspace: WorkspaceContext) {
+  return call<{ ok?: boolean; stocktakes?: StocktakeSummary[] }>(
+    "listStocktakes",
+    { companyId: workspace.id },
+    "The counts could not be loaded."
+  );
+}
+
+export async function getStocktake(workspace: WorkspaceContext, stocktakeId: string) {
+  return call<{ ok?: boolean; stocktake?: Stocktake }>(
+    "getStocktake",
+    { companyId: workspace.id, stocktakeId },
+    "That count could not be loaded."
+  );
+}
+
+export async function getInventoryReport(
+  workspace: WorkspaceContext,
+  range: { fromMs?: number; toMs?: number } = {}
+) {
+  return call<InventoryReport & { ok?: boolean }>(
+    "getInventoryReport",
+    { companyId: workspace.id, ...range },
+    "The report could not be built."
+  );
+}
+
+export async function listInventoryMovements(workspace: WorkspaceContext, itemId?: string) {
+  return call<{ ok?: boolean; movements?: InventoryMovement[] }>(
+    "listInventoryMovements",
+    { companyId: workspace.id, itemId: itemId || "" },
+    "The movements could not be loaded."
+  );
+}

@@ -325,3 +325,154 @@ val studioOpeningStockFields: List<Pair<String, String>> = listOf(
     "location" to "Location", "supplierName" to "Supplier",
     "purchaseDate" to "Purchase date", "notes" to "Notes"
 )
+
+enum class StudioMovementKind(val raw: String, val label: String) {
+    OpeningStock("openingStock", "Opening stock"),
+    Purchase("purchase", "Purchases received"),
+    Adjustment("adjustment", "Corrected by hand"),
+    Stocktake("stocktake", "Stocktake"),
+    Used("used", "Used on jobs"),
+    Sold("sold", "Sold"),
+    Removed("removed", "Removed");
+
+    companion object {
+        fun from(value: String?): StudioMovementKind? = entries.firstOrNull { it.raw == value }
+    }
+}
+
+data class StudioStocktakeLine(
+    val itemId: String,
+    val number: String,
+    val name: String,
+    val category: String,
+    val location: String,
+    val trackingType: StudioTrackingType,
+    val unit: String,
+    val expected: Double,
+    val unitCost: Double,
+    /** null means nobody has counted this yet — which is not "counted as zero". */
+    val counted: Double?
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioStocktakeLine? {
+            val itemId = raw["itemId"] as? String ?: return null
+            return StudioStocktakeLine(
+                itemId = itemId,
+                number = raw["number"] as? String ?: "",
+                name = raw["name"] as? String ?: "",
+                category = raw["category"] as? String ?: "",
+                location = raw["location"] as? String ?: "",
+                trackingType = StudioTrackingType.from(raw["trackingType"] as? String),
+                unit = raw["unit"] as? String ?: "",
+                expected = (raw["expected"] as? Number)?.toDouble() ?: 0.0,
+                unitCost = (raw["unitCost"] as? Number)?.toDouble() ?: 0.0,
+                counted = (raw["counted"] as? Number)?.toDouble()
+            )
+        }
+    }
+}
+
+data class StudioOverPromised(
+    val name: String,
+    val counted: Double,
+    val reserved: Double,
+    val orderIds: List<String>
+)
+
+data class StudioStocktakeSummary(
+    val id: String,
+    val number: String,
+    val status: String,
+    val location: String,
+    val category: String,
+    val startedAtMs: Long,
+    val startedByEmail: String,
+    val lineCount: Int,
+    val countedCount: Int,
+    val adjustedLines: Int,
+    val valueDelta: Double
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioStocktakeSummary? {
+            val id = raw["id"] as? String ?: return null
+            return StudioStocktakeSummary(
+                id = id,
+                number = raw["number"] as? String ?: "",
+                status = raw["status"] as? String ?: "open",
+                location = raw["location"] as? String ?: "",
+                category = raw["category"] as? String ?: "",
+                startedAtMs = (raw["startedAtMs"] as? Number)?.toLong() ?: 0L,
+                startedByEmail = raw["startedByEmail"] as? String ?: "",
+                lineCount = (raw["lineCount"] as? Number)?.toInt() ?: 0,
+                countedCount = (raw["countedCount"] as? Number)?.toInt() ?: 0,
+                adjustedLines = (raw["adjustedLines"] as? Number)?.toInt() ?: 0,
+                valueDelta = (raw["valueDelta"] as? Number)?.toDouble() ?: 0.0
+            )
+        }
+    }
+}
+
+data class StudioReportRow(val name: String, val value: Double)
+data class StudioReportKind(val kind: StudioMovementKind, val lines: Int, val value: Double)
+data class StudioLowStockRow(
+    val name: String, val number: String, val onHand: Double,
+    val lowStockAt: Double, val unit: String)
+data class StudioDeadStockRow(
+    val name: String, val number: String, val value: Double, val idleDays: Int)
+
+data class StudioInventoryReport(
+    val totalValue: Double = 0.0,
+    val onShelfCount: Int = 0,
+    val byCategory: List<StudioReportRow> = emptyList(),
+    val inValue: Double = 0.0,
+    val outValue: Double = 0.0,
+    val byKind: List<StudioReportKind> = emptyList(),
+    val ledgerStartsMs: Long = 0L,
+    val coversWholePeriod: Boolean = true,
+    val lowStock: List<StudioLowStockRow> = emptyList(),
+    val deadStock: List<StudioDeadStockRow> = emptyList(),
+    val deadStockAfterDays: Int = 180
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryReport {
+            val valuation = raw["valuation"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            val movement = raw["movement"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            return StudioInventoryReport(
+                totalValue = (valuation["totalValue"] as? Number)?.toDouble() ?: 0.0,
+                onShelfCount = (valuation["onShelfCount"] as? Number)?.toInt() ?: 0,
+                byCategory = (valuation["byCategory"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+                    (row as? Map<*, *>)?.let {
+                        StudioReportRow(it["name"] as? String ?: "",
+                                        (it["value"] as? Number)?.toDouble() ?: 0.0)
+                    }
+                },
+                inValue = (movement["inValue"] as? Number)?.toDouble() ?: 0.0,
+                outValue = (movement["outValue"] as? Number)?.toDouble() ?: 0.0,
+                byKind = (movement["byKind"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+                    val entry = row as? Map<*, *> ?: return@mapNotNull null
+                    val kind = StudioMovementKind.from(entry["kind"] as? String) ?: return@mapNotNull null
+                    StudioReportKind(kind, (entry["lines"] as? Number)?.toInt() ?: 0,
+                                     (entry["value"] as? Number)?.toDouble() ?: 0.0)
+                },
+                ledgerStartsMs = (movement["ledgerStartsMs"] as? Number)?.toLong() ?: 0L,
+                coversWholePeriod = movement["coversWholePeriod"] as? Boolean ?: true,
+                lowStock = (raw["lowStock"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+                    (row as? Map<*, *>)?.let {
+                        StudioLowStockRow(it["name"] as? String ?: "", it["number"] as? String ?: "",
+                            (it["onHand"] as? Number)?.toDouble() ?: 0.0,
+                            (it["lowStockAt"] as? Number)?.toDouble() ?: 0.0,
+                            it["unit"] as? String ?: "")
+                    }
+                },
+                deadStock = (raw["deadStock"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+                    (row as? Map<*, *>)?.let {
+                        StudioDeadStockRow(it["name"] as? String ?: "", it["number"] as? String ?: "",
+                            (it["value"] as? Number)?.toDouble() ?: 0.0,
+                            (it["idleDays"] as? Number)?.toInt() ?: 0)
+                    }
+                },
+                deadStockAfterDays = (raw["deadStockAfterDays"] as? Number)?.toInt() ?: 180
+            )
+        }
+    }
+}

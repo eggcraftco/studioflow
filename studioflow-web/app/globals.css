@@ -23850,3 +23850,23 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
 }
 .inventory-chip-button { border: 1px dashed rgba(37,99,235,0.45); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .inventory-chip-button:hover { background: rgba(37,99,235,0.2); }
+
+/* Stocktake and reporting */
+.inventory-diff-down { color: #dc2626; font-weight: 800; }
+.inventory-diff-up { color: #16a34a; font-weight: 800; }
+.inventory-report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.inventory-bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.inventory-bar-list li { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: 10px; align-items: center; font-size: 12px; }
+.inventory-bar-list li:only-child, .inventory-section .inventory-bar-list li:not(:has(.inventory-bar-track)) {
+  grid-template-columns: 1fr auto;
+}
+.inventory-bar-label { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-bar-track { height: 8px; border-radius: 999px; background: rgba(37,99,235,0.12); overflow: hidden; }
+.inventory-bar-fill { display: block; height: 100%; border-radius: 999px; background: #2563eb; }
+.inventory-bar-value { font-weight: 700; white-space: nowrap; text-align: right; }
+
+@media (max-width: 640px) {
+  .inventory-report-grid { grid-template-columns: 1fr; }
+  .inventory-bar-list li { grid-template-columns: 1fr auto; }
+  .inventory-bar-track { display: none; }
+}

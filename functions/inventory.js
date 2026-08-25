@@ -90,6 +90,18 @@ function createInventoryFunctions({
   // spread over 20 pieces is £0.3125 each, and rounding that to £0.31 loses 5p
   // off the line. Four places keeps the arithmetic exact; screens still format
   // to two.
+  /**
+   * A movement is signed: stock arrives and stock leaves. roundUnitMoney floors
+   * at zero because a cost cannot be negative, which is right for money and
+   * quietly wrong for a delta — using it here once swallowed every outward
+   * movement, so the ledger only ever showed things arriving.
+   */
+  function roundSigned(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.round(number * 10000) / 10000;
+  }
+
   function roundUnitMoney(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return 0;
@@ -184,6 +196,71 @@ function createInventoryFunctions({
     return context;
   }
 
+  // -------------------------------------------------------------------------
+  // The movement ledger
+  //
+  // An inventory that only knows what it has today can answer "what is on the
+  // shelf" and nothing else. It cannot say what went out last month, which
+  // parts have not moved in a year, or why the count changed — and those are
+  // the questions a workshop actually asks at year end.
+  //
+  // So every change to a quantity writes a line here: what moved, by how much,
+  // what it was worth, and what caused it. The lines are only ever appended;
+  // correcting a mistake writes another line rather than editing this one, the
+  // way a ledger works and a spreadsheet does not.
+  // -------------------------------------------------------------------------
+
+  const movementsRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("inventoryMovements");
+
+  const MOVEMENT_KINDS = [
+    "openingStock",   // counted in when the workspace started using inventory
+    "purchase",       // a received purchase put it on the shelf
+    "adjustment",     // someone corrected the number by hand
+    "stocktake",      // a physical count corrected it
+    "used",           // consumed on a job
+    "sold",           // sold on
+    "removed"         // archived or deleted
+  ];
+
+  /**
+   * Appends one line to the ledger. Takes the writer (a transaction or a batch)
+   * so the movement lands with the change that caused it — a stock figure that
+   * moved without a line, or a line without the move, would both be lies.
+   */
+  function recordMovement(writer, companyId, {
+    item, itemId, kind, delta, unitCost, at, uid, email, ref = "", note = ""
+  }) {
+    if (!MOVEMENT_KINDS.includes(kind)) return;
+    const amount = roundSigned(delta);
+    if (amount === 0) return;
+    const cost = roundUnitMoney(unitCost);
+    // Stamped on the item at the same moment, so "nothing has happened to this
+    // for six months" is a fact the report can read without walking the ledger.
+    if (itemId) {
+      writer.set(itemsRef(companyId).doc(String(itemId)),
+        { lastMovementAtMs: Number(at) || Date.now() }, { merge: true });
+    }
+    writer.set(movementsRef(companyId).doc(), {
+      companyId,
+      itemId: String(itemId || ""),
+      itemName: clean(item && item.name, "", 160),
+      itemNumber: clean(item && item.number, "", 40),
+      category: clean(item && item.category, "", 60),
+      trackingType: clean(item && item.trackingType, "unique", 20),
+      kind,
+      delta: amount,
+      unitCost: cost,
+      // What this movement did to the value on the shelf.
+      valueDelta: roundMoney(cost * amount),
+      ref: clean(ref, "", 200),
+      note: clean(note, "", 300),
+      at: Number(at) || Date.now(),
+      byUid: String(uid || ""),
+      byEmail: String(email || "")
+    });
+  }
+
   const saveInventoryItem = onCall({ region: REGION }, async (request) => {
     const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const itemId = clean(request.data && request.data.itemId, "", 80);
@@ -236,6 +313,22 @@ function createInventoryFunctions({
         updatedByUid: uid
       }, { merge: true });
 
+      // A new item arriving, or someone correcting a count by hand, both move
+      // stock. The ledger records the change, not the resulting number.
+      const before = existing
+        ? (existing.trackingType === "unique" ? 1 : cleanQuantity((existing.quantity || {}).onHand))
+        : 0;
+      const after = fields.trackingType === "unique" ? 1 : fields.quantity.onHand;
+      recordMovement(tx, companyId, {
+        item: { ...fields, number },
+        itemId: ref.id,
+        kind: existing ? "adjustment" : "openingStock",
+        delta: roundSigned(after - before),
+        unitCost: fields.valuationCost,
+        at: now, uid, email,
+        note: existing ? "Corrected by hand" : ""
+      });
+
       return { itemId: ref.id, number };
     });
 
@@ -243,7 +336,7 @@ function createInventoryFunctions({
   });
 
   const setInventoryItemStatus = onCall({ region: REGION }, async (request) => {
-    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const itemId = clean(request.data && request.data.itemId, "", 80);
     const status = clean(request.data && request.data.status, "", 20);
     const orderId = clean(request.data && request.data.orderId, "", 200);
@@ -263,13 +356,33 @@ function createInventoryFunctions({
           `An item that is ${from} cannot become ${status}.`
         );
       }
+      const now = Date.now();
       tx.set(ref, {
         status,
         // Reserving points at an order; anything else lets it go.
         reservedForOrderId: status === "reserved" ? orderId : "",
-        updatedAtMs: Date.now(),
+        updatedAtMs: now,
         updatedByUid: uid
       }, { merge: true });
+
+      // Only some status changes move stock. Reserving does not — the part is
+      // still on the shelf, just spoken for. Using, selling or archiving does.
+      const LEAVES_THE_SHELF = { used: "used", sold: "sold", archived: "removed" };
+      const wasOnShelf = !Object.keys(LEAVES_THE_SHELF).includes(from);
+      const nowOff = Object.keys(LEAVES_THE_SHELF).includes(status);
+      if (wasOnShelf !== nowOff) return;
+      const onHand = String(item.trackingType) === "unique"
+        ? 1
+        : cleanQuantity((item.quantity || {}).onHand);
+      recordMovement(tx, companyId, {
+        item, itemId,
+        kind: nowOff ? LEAVES_THE_SHELF[status] : "adjustment",
+        delta: nowOff ? -onHand : onHand,
+        unitCost: item.valuationCost,
+        at: now, uid, email,
+        ref: orderId,
+        note: nowOff ? "" : "Put back on the shelf"
+      });
     });
 
     return { ok: true, status };
@@ -598,7 +711,8 @@ function createInventoryFunctions({
           const fields = normalizeItemInput(row, null);
           if (!fields.name) continue;
           counter += 1;
-          tx.set(itemsRef(companyId).doc(), {
+          const itemDoc = itemsRef(companyId).doc();
+          tx.set(itemDoc, {
             ...fields,
             // A row that carries its own date keeps it; otherwise the opening
             // date stands in, so no imported item ends up dateless on screen.
@@ -617,6 +731,15 @@ function createInventoryFunctions({
             updatedAtMs: now,
             updatedByUid: uid
           });
+          recordMovement(tx, companyId, {
+            item: { ...fields, number: `INV-${String(counter).padStart(5, "0")}` },
+            itemId: itemDoc.id,
+            kind: "openingStock",
+            delta: fields.trackingType === "unique" ? 1 : fields.quantity.onHand,
+            unitCost: fields.valuationCost,
+            at: now, uid, email,
+            note: openingDate
+          });
           written += 1;
         }
         tx.set(ref, { inventoryCounter: counter }, { merge: true });
@@ -624,6 +747,440 @@ function createInventoryFunctions({
     }
 
     return { ok: true, imported: written };
+  });
+
+  // -------------------------------------------------------------------------
+  // Valuation and reporting
+  //
+  // Two different questions, and it matters that they are answered differently.
+  //
+  // "What is my stock worth" is answered from the shelf: every item, at what it
+  // cost. That is the figure an accountant asks for at year end.
+  //
+  // "What happened to my stock" can only be answered from the ledger, and only
+  // for the period the ledger covers. A workspace that started keeping
+  // inventory last week cannot be told what moved last year, and this says so
+  // rather than quietly reporting zero.
+  // -------------------------------------------------------------------------
+
+  const DEAD_STOCK_DAYS = 180;
+
+  const getInventoryReport = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const now = Date.now();
+    const fromMs = Number(request.data && request.data.fromMs) || (now - 30 * 24 * 3600 * 1000);
+    const toMs = Number(request.data && request.data.toMs) || now;
+
+    const [itemSnap, movementSnap, earliestSnap] = await Promise.all([
+      itemsRef(companyId).limit(2000).get(),
+      movementsRef(companyId).where("at", ">=", fromMs).where("at", "<=", toMs).limit(3000).get(),
+      movementsRef(companyId).orderBy("at", "asc").limit(1).get()
+    ]);
+
+    // ---- What it is worth, right now ----
+    const byCategory = new Map();
+    const byLocation = new Map();
+    let totalValue = 0;
+    let onShelfCount = 0;
+    const lowStock = [];
+    const deadStock = [];
+    let customerOwnedCount = 0;
+
+    itemSnap.docs.forEach((doc) => {
+      const item = doc.data() || {};
+      if (String(item.ownership) === "customer") { customerOwnedCount += 1; return; }
+      const status = String(item.status || "available");
+      const isUnique = String(item.trackingType) === "unique";
+      const onHand = isUnique ? 1 : cleanQuantity((item.quantity || {}).onHand);
+      // Sold, used and archived things are history, not stock.
+      if (["sold", "used", "archived", "removed"].includes(status)) return;
+      const value = roundMoney(roundUnitMoney(item.valuationCost) * onHand);
+
+      // Incoming stock is paid for but not on the shelf; it is counted
+      // separately rather than folded into what the workshop can reach.
+      if (status !== "incoming") {
+        totalValue = roundMoney(totalValue + value);
+        onShelfCount += 1;
+        const category = clean(item.category, "Other", 60) || "Other";
+        const location = clean(item.location, "", 80) || "—";
+        byCategory.set(category, roundMoney((byCategory.get(category) || 0) + value));
+        byLocation.set(location, roundMoney((byLocation.get(location) || 0) + value));
+      }
+
+      const lowAt = cleanQuantity(item.lowStockAt);
+      if (!isUnique && lowAt > 0 && onHand <= lowAt) {
+        lowStock.push({
+          itemId: doc.id, number: item.number || "", name: item.name || "",
+          onHand, lowStockAt: lowAt, unit: (item.quantity || {}).unit || "",
+          supplierName: item.supplierName || ""
+        });
+      }
+
+      // Money sitting still. Judged on the last time anything happened to the
+      // item, falling back to when it arrived.
+      const lastTouched = Number(item.lastMovementAtMs) || Number(item.createdAtMs) || 0;
+      const idleDays = lastTouched > 0 ? Math.floor((now - lastTouched) / 86400000) : null;
+      if (status === "available" && idleDays !== null && idleDays >= DEAD_STOCK_DAYS && value > 0) {
+        deadStock.push({
+          itemId: doc.id, number: item.number || "", name: item.name || "",
+          category: item.category || "", value, idleDays
+        });
+      }
+    });
+
+    // ---- What happened, over the period ----
+    const byKind = {};
+    let inValue = 0;
+    let outValue = 0;
+    movementSnap.docs.forEach((doc) => {
+      const movement = doc.data() || {};
+      const kind = String(movement.kind || "adjustment");
+      const delta = Number(movement.delta) || 0;
+      const value = Number(movement.valueDelta) || 0;
+      const entry = byKind[kind] || { kind, lines: 0, delta: 0, value: 0 };
+      entry.lines += 1;
+      entry.delta = roundSigned(entry.delta + delta);
+      entry.value = roundMoney(entry.value + value);
+      byKind[kind] = entry;
+      if (value >= 0) inValue = roundMoney(inValue + value);
+      else outValue = roundMoney(outValue + value);
+    });
+
+    const earliest = earliestSnap.docs[0];
+    const ledgerStartsMs = earliest ? Number((earliest.data() || {}).at) || 0 : 0;
+
+    return {
+      ok: true,
+      generatedAtMs: now,
+      fromMs, toMs,
+      valuation: {
+        totalValue,
+        onShelfCount,
+        customerOwnedCount,
+        byCategory: [...byCategory.entries()]
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value),
+        byLocation: [...byLocation.entries()]
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value)
+      },
+      movement: {
+        // The ledger cannot answer for time before it existed. Saying when it
+        // starts is the difference between "nothing moved" and "we were not
+        // watching yet".
+        ledgerStartsMs,
+        coversWholePeriod: ledgerStartsMs > 0 && ledgerStartsMs <= fromMs,
+        lines: movementSnap.size,
+        truncated: movementSnap.size >= 3000,
+        inValue,
+        outValue,
+        netValue: roundMoney(inValue + outValue),
+        byKind: Object.values(byKind).sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      },
+      lowStock: lowStock.sort((a, b) => a.onHand - b.onHand).slice(0, 100),
+      deadStock: deadStock.sort((a, b) => b.value - a.value).slice(0, 100),
+      deadStockAfterDays: DEAD_STOCK_DAYS
+    };
+  });
+
+  const listInventoryMovements = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    let query = movementsRef(companyId);
+    if (itemId) query = query.where("itemId", "==", itemId);
+    const snap = await query.orderBy("at", "desc").limit(300).get();
+    return {
+      ok: true,
+      movements: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }))
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // Stocktake
+  //
+  // Walking the shelves with a clipboard is the only thing that tells a
+  // workshop the truth. The system says 200 spring bars; you count 187. The
+  // thirteen are the point — breakage, a part used without being logged, a
+  // miscount last year. Editing the number to 187 answers the question and
+  // destroys it, so a count is a record: what the system expected, what a
+  // person counted, when, and by whom.
+  //
+  // A count is also a session, not an event. Forty things take an afternoon,
+  // so counts are saved as they are made and nothing is applied until the
+  // whole thing is committed — and then all of it lands together.
+  // -------------------------------------------------------------------------
+
+  const stocktakesRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("stocktakes");
+
+  async function nextStocktakeNumber(tx, companyId) {
+    const ref = companyRef(companyId);
+    const snap = await tx.get(ref);
+    const next = (Number((snap.exists ? snap.data() || {} : {}).stocktakeCounter) || 0) + 1;
+    tx.set(ref, { stocktakeCounter: next }, { merge: true });
+    return `CNT-${String(next).padStart(4, "0")}`;
+  }
+
+  /**
+   * Opens a count over everything on the shelf, optionally narrowed to one
+   * location or category — nobody counts the whole workshop at once.
+   *
+   * The expected figures are frozen here rather than read at commit time. A
+   * count is a statement about a moment; if the shelf moves underneath it, the
+   * difference belongs to the count, not to whatever the number happens to be
+   * an hour later.
+   */
+  const startStocktake = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const location = clean(request.data && request.data.location, "", 80);
+    const category = clean(request.data && request.data.category, "", 60);
+    const note = clean(request.data && request.data.note, "", 300);
+    const now = Date.now();
+
+    const snap = await itemsRef(companyId).limit(2000).get();
+    const lines = [];
+    snap.docs.forEach((doc) => {
+      const item = doc.data() || {};
+      // Things already sold, used or archived are not on the shelf to be
+      // counted, and a customer's own property is not the workshop's to count.
+      if (["sold", "used", "archived"].includes(String(item.status))) return;
+      if (String(item.ownership) === "customer") return;
+      if (location && clean(item.location, "", 80) !== location) return;
+      if (category && clean(item.category, "", 60) !== category) return;
+      const isUnique = String(item.trackingType) === "unique";
+      lines.push({
+        itemId: doc.id,
+        number: clean(item.number, "", 40),
+        name: clean(item.name, "", 160),
+        category: clean(item.category, "", 60),
+        location: clean(item.location, "", 80),
+        trackingType: isUnique ? "unique" : "quantity",
+        unit: clean((item.quantity || {}).unit, "", 12),
+        expected: isUnique ? 1 : cleanQuantity((item.quantity || {}).onHand),
+        unitCost: roundUnitMoney(item.valuationCost),
+        counted: null,
+        note: ""
+      });
+    });
+
+    if (lines.length === 0) {
+      throw new HttpsError("failed-precondition", "There is nothing on the shelf to count.");
+    }
+
+    const result = await db().runTransaction(async (tx) => {
+      const number = await nextStocktakeNumber(tx, companyId);
+      const ref = stocktakesRef(companyId).doc();
+      tx.set(ref, {
+        companyId,
+        number,
+        status: "open",
+        location, category, note,
+        lines,
+        startedAtMs: now,
+        startedByUid: uid,
+        startedByEmail: email,
+        committedAtMs: 0,
+        updatedAtMs: now
+      });
+      return { stocktakeId: ref.id, number, lines: lines.length };
+    });
+
+    return { ok: true, ...result };
+  });
+
+  /** Saves what has been counted so far. A count is an afternoon, not a click. */
+  const saveStocktakeCounts = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const stocktakeId = clean(request.data && request.data.stocktakeId, "", 80);
+    if (!stocktakeId) throw new HttpsError("invalid-argument", "stocktakeId is required.");
+    const counts = (request.data && request.data.counts) || {};
+    const notes = (request.data && request.data.notes) || {};
+
+    const ref = stocktakesRef(companyId).doc(stocktakeId);
+    await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Stocktake not found.");
+      const stocktake = snap.data() || {};
+      if (stocktake.status !== "open") {
+        throw new HttpsError("failed-precondition", "This count is already closed.");
+      }
+      const lines = (Array.isArray(stocktake.lines) ? stocktake.lines : []).map((line) => {
+        const raw = counts[line.itemId];
+        // Undefined means "not counted yet"; null clears a count already made.
+        const counted = raw === undefined ? line.counted
+          : raw === null || raw === "" ? null
+          : cleanQuantity(raw);
+        const note = notes[line.itemId] === undefined
+          ? line.note
+          : clean(notes[line.itemId], "", 200);
+        return { ...line, counted, note };
+      });
+      tx.set(ref, { lines, updatedAtMs: Date.now(), updatedByUid: uid }, { merge: true });
+    });
+
+    return { ok: true };
+  });
+
+  /**
+   * Applies the count. Every line that differs adjusts its item and writes one
+   * ledger line saying a physical count moved it; lines nobody counted are left
+   * exactly alone, because "not counted" is not "counted as zero".
+   */
+  const commitStocktake = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const stocktakeId = clean(request.data && request.data.stocktakeId, "", 80);
+    if (!stocktakeId) throw new HttpsError("invalid-argument", "stocktakeId is required.");
+    const now = Date.now();
+
+    const ref = stocktakesRef(companyId).doc(stocktakeId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Stocktake not found.");
+    const stocktake = snap.data() || {};
+    if (stocktake.status !== "open") {
+      throw new HttpsError("failed-precondition", "This count is already closed.");
+    }
+
+    const lines = Array.isArray(stocktake.lines) ? stocktake.lines : [];
+    const changed = lines.filter(
+      (line) => line.counted !== null && line.counted !== undefined
+        && roundSigned(line.counted) !== roundSigned(line.expected)
+    );
+
+    // Read every affected item up front: a count taken this afternoon is
+    // applied to the shelf as it is now, and the two can differ.
+    const itemSnaps = await Promise.all(
+      changed.map((line) => itemsRef(companyId).doc(line.itemId).get()));
+
+    const batch = db().batch();
+    let valueDelta = 0;
+    const overPromised = [];
+
+    itemSnaps.forEach((itemSnap, index) => {
+      const line = changed[index];
+      if (!itemSnap.exists) return;
+      const item = itemSnap.data() || {};
+      const isUnique = String(item.trackingType) === "unique";
+      const counted = roundUnitMoney(line.counted);
+      const delta = roundSigned(counted - roundUnitMoney(line.expected));
+
+      if (isUnique) {
+        // A unique thing is there or it is not. Counting zero means it is gone.
+        if (counted <= 0) {
+          batch.set(itemSnap.ref, {
+            status: "removed", updatedAtMs: now, updatedByUid: uid
+          }, { merge: true });
+        }
+      } else {
+        batch.set(itemSnap.ref, {
+          quantity: { ...(item.quantity || {}), onHand: counted },
+          updatedAtMs: now, updatedByUid: uid
+        }, { merge: true });
+        // Counting below what orders are already holding is not an error to
+        // refuse — the shelf is the truth — but somebody has to be told which
+        // promises no longer have stock behind them.
+        const reserved = cleanQuantity((item.quantity || {}).reserved);
+        if (reserved > counted) {
+          overPromised.push({
+            itemId: itemSnap.id,
+            name: clean(item.name, "", 160),
+            number: clean(item.number, "", 40),
+            counted,
+            reserved,
+            orderIds: cleanReservations(item.reservations).map((row) => row.orderId)
+          });
+        }
+      }
+
+      recordMovement(batch, companyId, {
+        item, itemId: itemSnap.id,
+        kind: "stocktake",
+        delta,
+        unitCost: item.valuationCost,
+        at: now, uid, email,
+        ref: stocktakeId,
+        note: clean(line.note, "", 200) || clean(stocktake.number, "", 40)
+      });
+      valueDelta = roundMoney(valueDelta + roundMoney(roundUnitMoney(item.valuationCost) * delta));
+    });
+
+    batch.set(ref, {
+      status: "committed",
+      committedAtMs: now,
+      committedByUid: uid,
+      committedByEmail: email,
+      adjustedLines: changed.length,
+      valueDelta,
+      overPromised,
+      updatedAtMs: now
+    }, { merge: true });
+    await batch.commit();
+
+    return {
+      ok: true,
+      adjusted: changed.length,
+      counted: lines.filter((line) => line.counted !== null && line.counted !== undefined).length,
+      total: lines.length,
+      valueDelta,
+      overPromised
+    };
+  });
+
+  const listStocktakes = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const snap = await stocktakesRef(companyId).orderBy("startedAtMs", "desc").limit(60).get();
+    return {
+      ok: true,
+      stocktakes: snap.docs.map((doc) => {
+        const data = doc.data() || {};
+        const lines = Array.isArray(data.lines) ? data.lines : [];
+        // The list does not need every line, only the shape of the count.
+        return {
+          id: doc.id,
+          number: data.number || "",
+          status: data.status || "open",
+          location: data.location || "",
+          category: data.category || "",
+          note: data.note || "",
+          startedAtMs: data.startedAtMs || 0,
+          committedAtMs: data.committedAtMs || 0,
+          startedByEmail: data.startedByEmail || "",
+          lineCount: lines.length,
+          countedCount: lines.filter((line) => line.counted !== null && line.counted !== undefined).length,
+          adjustedLines: data.adjustedLines || 0,
+          valueDelta: data.valueDelta || 0
+        };
+      })
+    };
+  });
+
+  const getStocktake = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const stocktakeId = clean(request.data && request.data.stocktakeId, "", 80);
+    if (!stocktakeId) throw new HttpsError("invalid-argument", "stocktakeId is required.");
+    const snap = await stocktakesRef(companyId).doc(stocktakeId).get();
+    if (!snap.exists) throw new HttpsError("not-found", "Stocktake not found.");
+    return { ok: true, stocktake: { id: snap.id, ...(snap.data() || {}) } };
+  });
+
+  const cancelStocktake = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const stocktakeId = clean(request.data && request.data.stocktakeId, "", 80);
+    if (!stocktakeId) throw new HttpsError("invalid-argument", "stocktakeId is required.");
+    const ref = stocktakesRef(companyId).doc(stocktakeId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Stocktake not found.");
+    if ((snap.data() || {}).status === "committed") {
+      throw new HttpsError(
+        "failed-precondition",
+        "A committed count cannot be cancelled — it already changed the shelf."
+      );
+    }
+    // Abandoned rather than deleted: that somebody started a count and walked
+    // away is itself worth being able to see.
+    await ref.set({
+      status: "cancelled", updatedAtMs: Date.now(), updatedByUid: uid
+    }, { merge: true });
+    return { ok: true };
   });
 
   // -------------------------------------------------------------------------
@@ -822,7 +1379,7 @@ function createInventoryFunctions({
   });
 
   const receivePurchase = onCall({ region: REGION }, async (request) => {
-    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
     if (!purchaseId) throw new HttpsError("invalid-argument", "purchaseId is required.");
     const now = Date.now();
@@ -834,13 +1391,30 @@ function createInventoryFunctions({
     if (purchase.status === "received") return { ok: true, alreadyReceived: true };
 
     const itemIds = Array.isArray(purchase.itemIds) ? purchase.itemIds : [];
+    // Read the items first so the ledger can record what actually arrived,
+    // rather than what the purchase line said it would be.
+    const itemSnaps = await Promise.all(
+      itemIds.map((itemId) => itemsRef(companyId).doc(itemId).get()));
     const batch = db().batch();
-    itemIds.forEach((itemId) => {
-      batch.set(itemsRef(companyId).doc(itemId), {
+    itemSnaps.forEach((snap) => {
+      if (!snap.exists) return;
+      const item = snap.data() || {};
+      batch.set(snap.ref, {
         status: "available",
         updatedAtMs: now,
         updatedByUid: uid
       }, { merge: true });
+      recordMovement(batch, companyId, {
+        item, itemId: snap.id,
+        kind: "purchase",
+        delta: String(item.trackingType) === "unique"
+          ? 1
+          : cleanQuantity((item.quantity || {}).onHand),
+        unitCost: item.valuationCost,
+        at: now, uid, email,
+        ref: purchaseId,
+        note: clean(purchase.number, "", 40)
+      });
     });
     batch.set(ref, { status: "received", receivedAtMs: now, updatedAtMs: now, updatedByUid: uid }, { merge: true });
     await batch.commit();
@@ -1158,6 +1732,14 @@ function createInventoryFunctions({
     getInventorySummary,
     importOpeningStock,
     parseOpeningStock,
+    startStocktake,
+    saveStocktakeCounts,
+    commitStocktake,
+    listStocktakes,
+    getStocktake,
+    cancelStocktake,
+    getInventoryReport,
+    listInventoryMovements,
     savePurchase,
     receivePurchase,
     listPurchases,
@@ -1168,7 +1750,7 @@ function createInventoryFunctions({
     reserveInventoryForOrder,
     releaseInventoryFromOrder,
     getOrderInventory,
-    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
+    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }
 

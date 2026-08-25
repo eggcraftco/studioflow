@@ -62,6 +62,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockRead
 import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockRow
 import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockSkip
 import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
+import uk.co.eggcraft.studioflow.data.model.StudioStocktakeSummary
+import uk.co.eggcraft.studioflow.data.model.StudioStocktakeLine
+import uk.co.eggcraft.studioflow.data.model.StudioOverPromised
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryReport
 import uk.co.eggcraft.studioflow.data.model.StudioPurchase
 import uk.co.eggcraft.studioflow.data.model.StudioSupplier
 import uk.co.eggcraft.studioflow.data.model.StudioTeamAccessSnapshot
@@ -2680,6 +2684,67 @@ class StudioFlowRepository(
         val raw = inventoryCall(
             "importOpeningStock", workspaceId, mapOf("items" to items, "openingDate" to openingDate))
         return (raw["imported"] as? Number)?.toInt() ?: 0
+    }
+
+    // ---- Stocktake and reporting ----
+
+    suspend fun inventoryStartStocktake(workspaceId: String, location: String, category: String): String {
+        val raw = inventoryCall("startStocktake", workspaceId,
+            mapOf("location" to location, "category" to category))
+        return raw["stocktakeId"] as? String ?: ""
+    }
+
+    suspend fun inventoryStocktakes(workspaceId: String): List<StudioStocktakeSummary> {
+        val raw = inventoryCall("listStocktakes", workspaceId)
+        return (raw["stocktakes"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioStocktakeSummary::from) }
+    }
+
+    suspend fun inventoryStocktakeLines(workspaceId: String, stocktakeId: String): List<StudioStocktakeLine> {
+        val raw = inventoryCall("getStocktake", workspaceId, mapOf("stocktakeId" to stocktakeId))
+        val stocktake = raw["stocktake"] as? Map<*, *> ?: emptyMap<String, Any?>()
+        return (stocktake["lines"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioStocktakeLine::from) }
+    }
+
+    suspend fun inventorySaveStocktakeCounts(
+        workspaceId: String, stocktakeId: String, counts: Map<String, Any?>
+    ) {
+        inventoryCall("saveStocktakeCounts", workspaceId,
+            mapOf("stocktakeId" to stocktakeId, "counts" to counts))
+    }
+
+    /** Returns how many lines were adjusted, what that did to the value, and any
+     *  items now promising more than the shelf holds. */
+    suspend fun inventoryCommitStocktake(
+        workspaceId: String, stocktakeId: String
+    ): Triple<Int, Double, List<StudioOverPromised>> {
+        val raw = inventoryCall("commitStocktake", workspaceId, mapOf("stocktakeId" to stocktakeId))
+        val over = (raw["overPromised"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+            (row as? Map<*, *>)?.let {
+                StudioOverPromised(
+                    it["name"] as? String ?: "",
+                    (it["counted"] as? Number)?.toDouble() ?: 0.0,
+                    (it["reserved"] as? Number)?.toDouble() ?: 0.0,
+                    (it["orderIds"] as? List<*> ?: emptyList<Any?>()).map { id -> id as? String ?: "" }
+                )
+            }
+        }
+        return Triple(
+            (raw["adjusted"] as? Number)?.toInt() ?: 0,
+            (raw["valueDelta"] as? Number)?.toDouble() ?: 0.0,
+            over
+        )
+    }
+
+    suspend fun inventoryCancelStocktake(workspaceId: String, stocktakeId: String) {
+        inventoryCall("cancelStocktake", workspaceId, mapOf("stocktakeId" to stocktakeId))
+    }
+
+    suspend fun inventoryReport(workspaceId: String, fromMs: Long, toMs: Long): StudioInventoryReport {
+        val raw = inventoryCall("getInventoryReport", workspaceId,
+            mapOf("fromMs" to fromMs, "toMs" to toMs))
+        return StudioInventoryReport.from(raw)
     }
 
     suspend fun inventoryOrderStock(workspaceId: String, orderId: String): Pair<List<StudioOrderStockLine>, Double> {

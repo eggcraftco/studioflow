@@ -99,7 +99,8 @@ internal fun inventoryCardColors() =
     CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
 
 private enum class InventoryTab(val label: String) {
-    Items("Items"), Purchases("Purchases"), Suppliers("Suppliers")
+    Items("Items"), Purchases("Purchases"), Suppliers("Suppliers"),
+    Stocktake("Stocktake"), Reports("Reports")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -162,7 +163,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
         when (tab) {
             InventoryTab.Purchases -> { reloadPurchases(); if (suppliers.isEmpty()) reloadSuppliers() }
             InventoryTab.Suppliers -> reloadSuppliers()
-            InventoryTab.Items -> Unit
+            else -> Unit
         }
     }
 
@@ -185,12 +186,13 @@ fun InventoryScreen(state: StudioFlowUiState) {
                     modifier = Modifier.clickable { showOpeningStock = true }.padding(end = 12.dp)
                 )
             }
-            if (canEdit) {
+            if (canEdit && tab != InventoryTab.Stocktake && tab != InventoryTab.Reports) {
                 Button(onClick = {
                     when (tab) {
                         InventoryTab.Items -> showNewItem = true
                         InventoryTab.Purchases -> showNewPurchase = true
                         InventoryTab.Suppliers -> showNewSupplier = true
+                        else -> Unit
                     }
                 }) {
                     Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -200,6 +202,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
                             InventoryTab.Items -> t("Add Item")
                             InventoryTab.Purchases -> t("New Purchase")
                             InventoryTab.Suppliers -> t("New Supplier")
+                            else -> ""
                         },
                         fontSize = 13.sp
                     )
@@ -269,6 +272,22 @@ fun InventoryScreen(state: StudioFlowUiState) {
                     }
                 },
                 onMatch = { matchingPurchase = it }
+            )
+
+            InventoryTab.Stocktake -> StocktakeTab(
+                workspaceId = workspaceId,
+                symbol = symbol,
+                decimalSeparator = decimalSeparator,
+                canEdit = canEdit,
+                t = t,
+                onStockChanged = { scope.launch { reloadItems() } }
+            )
+
+            InventoryTab.Reports -> ReportsTab(
+                workspaceId = workspaceId,
+                symbol = symbol,
+                decimalSeparator = decimalSeparator,
+                t = t
             )
 
             InventoryTab.Suppliers -> SuppliersTab(

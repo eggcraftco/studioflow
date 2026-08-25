@@ -345,6 +345,142 @@ let openingStockFields: [(key: String, label: String)] = [
     ("purchaseDate", "Purchase date"), ("notes", "Notes")
 ]
 
+enum MovementKind: String {
+    case openingStock, purchase, adjustment, stocktake, used, sold, removed
+
+    /// The label a person reads. English here; the app translates it.
+    var label: String {
+        switch self {
+        case .openingStock: return "Opening stock"
+        case .purchase:     return "Purchases received"
+        case .adjustment:   return "Corrected by hand"
+        case .stocktake:    return "Stocktake"
+        case .used:         return "Used on jobs"
+        case .sold:         return "Sold"
+        case .removed:      return "Removed"
+        }
+    }
+}
+
+struct StocktakeLine: Identifiable, Equatable {
+    var id: String { itemId }
+    let itemId: String
+    let number: String
+    let name: String
+    let category: String
+    let location: String
+    let trackingType: InventoryTrackingType
+    let unit: String
+    let expected: Double
+    let unitCost: Double
+    /// nil means nobody has counted this yet — which is not "counted as zero".
+    var counted: Double?
+
+    init?(_ raw: [String: Any]) {
+        guard let itemId = raw["itemId"] as? String else { return nil }
+        self.itemId = itemId
+        number = raw["number"] as? String ?? ""
+        name = raw["name"] as? String ?? ""
+        category = raw["category"] as? String ?? ""
+        location = raw["location"] as? String ?? ""
+        trackingType = InventoryTrackingType(rawValue: raw["trackingType"] as? String ?? "") ?? .quantity
+        unit = raw["unit"] as? String ?? ""
+        expected = (raw["expected"] as? NSNumber)?.doubleValue ?? 0
+        unitCost = (raw["unitCost"] as? NSNumber)?.doubleValue ?? 0
+        counted = (raw["counted"] as? NSNumber)?.doubleValue
+    }
+}
+
+struct OverPromisedItem: Identifiable {
+    let id = UUID()
+    let name: String
+    let counted: Double
+    let reserved: Double
+    let orderIds: [String]
+
+    init(_ raw: [String: Any]) {
+        name = raw["name"] as? String ?? ""
+        counted = (raw["counted"] as? NSNumber)?.doubleValue ?? 0
+        reserved = (raw["reserved"] as? NSNumber)?.doubleValue ?? 0
+        orderIds = (raw["orderIds"] as? [String]) ?? []
+    }
+}
+
+struct StocktakeSummary: Identifiable, Equatable {
+    let id: String
+    let number: String
+    let status: String
+    let location: String
+    let category: String
+    let startedAtMs: Double
+    let startedByEmail: String
+    let lineCount: Int
+    let countedCount: Int
+    let adjustedLines: Int
+    let valueDelta: Double
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String else { return nil }
+        self.id = id
+        number = raw["number"] as? String ?? ""
+        status = raw["status"] as? String ?? "open"
+        location = raw["location"] as? String ?? ""
+        category = raw["category"] as? String ?? ""
+        startedAtMs = (raw["startedAtMs"] as? NSNumber)?.doubleValue ?? 0
+        startedByEmail = raw["startedByEmail"] as? String ?? ""
+        lineCount = (raw["lineCount"] as? NSNumber)?.intValue ?? 0
+        countedCount = (raw["countedCount"] as? NSNumber)?.intValue ?? 0
+        adjustedLines = (raw["adjustedLines"] as? NSNumber)?.intValue ?? 0
+        valueDelta = (raw["valueDelta"] as? NSNumber)?.doubleValue ?? 0
+    }
+}
+
+struct InventoryReport {
+    var totalValue: Double = 0
+    var onShelfCount: Int = 0
+    var byCategory: [(name: String, value: Double)] = []
+    var inValue: Double = 0
+    var outValue: Double = 0
+    var byKind: [(kind: MovementKind, lines: Int, value: Double)] = []
+    var ledgerStartsMs: Double = 0
+    var coversWholePeriod: Bool = true
+    var lowStock: [(name: String, number: String, onHand: Double, lowStockAt: Double, unit: String)] = []
+    var deadStock: [(name: String, number: String, value: Double, idleDays: Int)] = []
+    var deadStockAfterDays: Int = 180
+
+    init(_ raw: [String: Any]) {
+        let valuation = raw["valuation"] as? [String: Any] ?? [:]
+        totalValue = (valuation["totalValue"] as? NSNumber)?.doubleValue ?? 0
+        onShelfCount = (valuation["onShelfCount"] as? NSNumber)?.intValue ?? 0
+        byCategory = (valuation["byCategory"] as? [[String: Any]] ?? []).map {
+            (name: $0["name"] as? String ?? "", value: ($0["value"] as? NSNumber)?.doubleValue ?? 0)
+        }
+        let movement = raw["movement"] as? [String: Any] ?? [:]
+        inValue = (movement["inValue"] as? NSNumber)?.doubleValue ?? 0
+        outValue = (movement["outValue"] as? NSNumber)?.doubleValue ?? 0
+        ledgerStartsMs = (movement["ledgerStartsMs"] as? NSNumber)?.doubleValue ?? 0
+        coversWholePeriod = (movement["coversWholePeriod"] as? Bool) ?? true
+        byKind = (movement["byKind"] as? [[String: Any]] ?? []).compactMap { entry in
+            guard let kind = MovementKind(rawValue: entry["kind"] as? String ?? "") else { return nil }
+            return (kind: kind,
+                    lines: (entry["lines"] as? NSNumber)?.intValue ?? 0,
+                    value: (entry["value"] as? NSNumber)?.doubleValue ?? 0)
+        }
+        lowStock = (raw["lowStock"] as? [[String: Any]] ?? []).map {
+            (name: $0["name"] as? String ?? "", number: $0["number"] as? String ?? "",
+             onHand: ($0["onHand"] as? NSNumber)?.doubleValue ?? 0,
+             lowStockAt: ($0["lowStockAt"] as? NSNumber)?.doubleValue ?? 0,
+             unit: $0["unit"] as? String ?? "")
+        }
+        deadStock = (raw["deadStock"] as? [[String: Any]] ?? []).map {
+            (name: $0["name"] as? String ?? "", number: $0["number"] as? String ?? "",
+             value: ($0["value"] as? NSNumber)?.doubleValue ?? 0,
+             idleDays: ($0["idleDays"] as? NSNumber)?.intValue ?? 0)
+        }
+        deadStockAfterDays = (raw["deadStockAfterDays"] as? NSNumber)?.intValue ?? 180
+    }
+}
+
 struct InventoryError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -461,6 +597,50 @@ extension FirebaseManager {
         let raw = try await inventoryCall(
             "importOpeningStock", ["items": items, "openingDate": openingDate])
         return (raw["imported"] as? NSNumber)?.intValue ?? 0
+    }
+
+    // MARK: Stocktake and reporting
+
+    func startStocktake(location: String, category: String) async throws -> String {
+        let raw = try await inventoryCall(
+            "startStocktake", ["location": location, "category": category])
+        return raw["stocktakeId"] as? String ?? ""
+    }
+
+    func loadStocktakes() async throws -> [StocktakeSummary] {
+        let raw = try await inventoryCall("listStocktakes")
+        return (raw["stocktakes"] as? [[String: Any]] ?? []).compactMap(StocktakeSummary.init)
+    }
+
+    func loadStocktakeLines(_ stocktakeId: String) async throws -> [StocktakeLine] {
+        let raw = try await inventoryCall("getStocktake", ["stocktakeId": stocktakeId])
+        let stocktake = raw["stocktake"] as? [String: Any] ?? [:]
+        return (stocktake["lines"] as? [[String: Any]] ?? []).compactMap(StocktakeLine.init)
+    }
+
+    func saveStocktakeCounts(_ stocktakeId: String, counts: [String: Any]) async throws {
+        _ = try await inventoryCall(
+            "saveStocktakeCounts", ["stocktakeId": stocktakeId, "counts": counts])
+    }
+
+    /// Returns how many lines were adjusted, what that did to the value, and any
+    /// items now promising more than the shelf holds.
+    func commitStocktake(_ stocktakeId: String) async throws -> (adjusted: Int, valueDelta: Double, overPromised: [OverPromisedItem]) {
+        let raw = try await inventoryCall("commitStocktake", ["stocktakeId": stocktakeId])
+        return (
+            adjusted: (raw["adjusted"] as? NSNumber)?.intValue ?? 0,
+            valueDelta: (raw["valueDelta"] as? NSNumber)?.doubleValue ?? 0,
+            overPromised: (raw["overPromised"] as? [[String: Any]] ?? []).map(OverPromisedItem.init)
+        )
+    }
+
+    func cancelStocktake(_ stocktakeId: String) async throws {
+        _ = try await inventoryCall("cancelStocktake", ["stocktakeId": stocktakeId])
+    }
+
+    func loadInventoryReport(fromMs: Double, toMs: Double) async throws -> InventoryReport {
+        let raw = try await inventoryCall("getInventoryReport", ["fromMs": fromMs, "toMs": toMs])
+        return InventoryReport(raw)
     }
 
     func loadOrderStock(orderId: String) async throws -> (lines: [OrderStockLine], total: Double) {

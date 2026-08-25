@@ -31,11 +31,18 @@ merge semantics both slipped past it, which is why the tests below exist.
 # repo root, with a JDK on PATH
 firebase emulators:start --only auth,firestore,functions --project eggcraft-studio
 
-# then, from functions/
-node test/inventory/seed-emulator.js > test/inventory/seed-out.json
-node test/inventory/e2e.mjs
-node test/inventory/opening-stock.mjs
-node test/inventory/bank-match.test.js
+# then, from functions/ — EACH suite owns its dataset, so clear and reseed
+# between them. Chaining them on one database fails stocktake.mjs on
+# inherited data, and the failures look like real bugs until you check.
+clear() {
+  curl -s -X DELETE "http://127.0.0.1:8080/emulator/v1/projects/eggcraft-studio/databases/(default)/documents" -o /dev/null
+  curl -s -X DELETE "http://127.0.0.1:9099/emulator/v1/projects/eggcraft-studio/accounts" -o /dev/null
+  node test/inventory/seed-emulator.js > test/inventory/seed-out.json
+}
+clear && node test/inventory/e2e.mjs
+clear && node test/inventory/opening-stock.mjs
+clear && node test/inventory/bank-match.test.js
+clear && node test/inventory/stocktake.mjs
 ```
 
 These sign in as a test workspace with a custom token — no password anywhere —
