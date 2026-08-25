@@ -21607,7 +21607,10 @@ function portalStatusMessage(status = "", context = {}) {
       trigger: "readyForCollection",
       subject: `Ready for collection${item}`,
       line: "Good news — your item is ready for collection.",
-      sms: "Great news — your item is ready for collection."
+      // Plain ASCII on purpose: one em dash drops the whole message out of
+      // GSM-7 into UCS-2, which halves the characters per segment and doubles
+      // what the carrier charges for the same sentence.
+      sms: "Good news, your item is ready for collection."
     };
   }
   if (/workshop|progress|working|repair|bench|atölye|atolye|üretim|uretim/.test(raw)) {
