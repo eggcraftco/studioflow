@@ -24022,3 +24022,7 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 .financial-tax-explainer strong { font-size: 13px; }
 .financial-tax-explainer p { margin: 0; font-size: 12.5px; line-height: 1.5; }
 .financial-tax-example { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* Three engine names told you nothing about what each could do. */
+.quick-reply-engine-compare { margin-top: 10px; }
+.quick-reply-engine-compare strong { text-align: left; font-weight: 600; font-size: 12.5px; }

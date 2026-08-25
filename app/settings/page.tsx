@@ -187,12 +187,25 @@ function planOrderLimitText(plan: { orderLimit: number | null }) {
   return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} orders`;
 }
 
+function planBillingStateLabel(status: string) {
+  switch (String(status || "").toLowerCase()) {
+    case "active": return "Active";
+    case "trialing": return "Trial";
+    case "past_due": return "Payment failed";
+    case "cancelled":
+    case "canceled": return "Cancelled";
+    case "free": return "Free";
+    default: return status ? status : "Free";
+  }
+}
+
 function planCustomerLimitText(plan: { customerLimit: number | null }) {
   return plan.customerLimit == null ? "Unlimited customers" : `${plan.customerLimit} customers`;
 }
 
 function planTeamLimitText(plan: { plan?: string; teamMemberLimit: number }) {
-  if (plan.plan === "team_monthly") return "5 seats included · add up to 10";
+  // "add up to 10" read as "10 more". TEAM_INCLUDED_SEATS 5, TEAM_SELF_SERVICE_MAX_SEATS 10.
+  if (plan.plan === "team_monthly") return "5 seats included · 10 in total";
   return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
 }
 
@@ -2258,6 +2271,7 @@ function QuickReplySettingsSection({
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [isReplacingOpenAIKey, setIsReplacingOpenAIKey] = useState(false);
   const [clearOpenAIKey, setClearOpenAIKey] = useState(false);
+  const [confirmClearKey, setConfirmClearKey] = useState(false);
   const [personalLoaded, setPersonalLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
@@ -2441,6 +2455,23 @@ function QuickReplySettingsSection({
   }
 
   const showMaskedOpenAIKey = canEditCore && settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
+  const clearKeyDialog = confirmClearKey ? (
+    <SettingsDialog
+      eyebrow={t("OpenAI API Key")}
+      title={t("Clear the API key?")}
+      onDismiss={() => setConfirmClearKey(false)}
+      actions={[
+        {
+          label: t("Clear on save"),
+          tone: "danger" as const,
+          onClick: () => { setClearOpenAIKey(true); setIsReplacingOpenAIKey(false); setApiKeyInput(""); setConfirmClearKey(false); }
+        },
+        { label: t("Cancel"), tone: "secondary" as const, onClick: () => setConfirmClearKey(false) }
+      ]}
+    >
+      <p>{t("Clearing takes effect when you save. Until you paste a new key, AI Replies stop generating for everyone in this workspace, and the website assistant stops answering if it was on.")}</p>
+    </SettingsDialog>
+  ) : null;
 
   async function runKeyTest() {
     setTestingKey(true);
@@ -2456,6 +2487,7 @@ function QuickReplySettingsSection({
 
   return (
     <div className="settings-card-stack">
+      {clearKeyDialog}
       <section className="card app-card quick-reply-settings-card quick-reply-settings-shell">
         <div className="quick-reply-settings-main-title">
           <span className="quick-reply-settings-main-icon" aria-hidden="true">✦</span>
@@ -2500,6 +2532,16 @@ function QuickReplySettingsSection({
                 {t(label)}
               </button>
             ))}
+          </div>
+          {/* The three names said nothing about what each can actually do, so the
+              choice was a guess. */}
+          <div className="settings-impact-grid quick-reply-engine-compare">
+            <span>{t("OpenAI Online")}</span>
+            <strong>{t("Writes a fresh reply from your knowledge base. Needs an API key and internet. Costs money per reply.")}</strong>
+            <span>{t("On-Device Settings")}</span>
+            <strong>{t("Runs on the Mac or iPhone itself. Free and private, shorter replies, and only in the app — never in this browser.")}</strong>
+            <span>{t("Offline Template")}</span>
+            <strong>{t("Fills a fixed template. No AI, no key, no internet — the same wording every time.")}</strong>
           </div>
           {replyMode === "Apple" ? (
             <p className="muted-copy">{t("Configure personal on-device knowledge here. On-device generation runs in the supported mobile or desktop app, not in the web browser.")}</p>
@@ -2615,9 +2657,23 @@ function QuickReplySettingsSection({
                   </span>
                   {showMaskedOpenAIKey ? <button className="button secondary" type="button" onClick={() => setIsReplacingOpenAIKey(true)}>{t("Replace Key")}</button> : null}
                   {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{t("Cancel Replace")}</button> : null}
-                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setClearOpenAIKey(current => !current); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
+                  {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { if (!clearOpenAIKey) { setConfirmClearKey(true); return; } setClearOpenAIKey(false); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
                 </div>
                 <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
+                {/* An empty box with a "add your pricing, process, policies"
+                    placeholder is a blank page problem: everyone left it empty,
+                    which is why the replies came out generic. */}
+                {mainKnowledgeBase.trim().length === 0 ? (
+                  <div className="settings-action-row">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => setMainKnowledgeBase(QUICK_REPLY_STARTER_KNOWLEDGE)}
+                    >
+                      {t("Start from headings")}
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="quick-reply-settings-panel">
@@ -2674,6 +2730,19 @@ function QuickReplySettingsSection({
     </div>
   );
 }
+
+// Headings, not answers: the studio fills them in. Every one of these is a
+// question customers actually ask, so a half-filled version already beats empty.
+const QUICK_REPLY_STARTER_KNOWLEDGE = `What we make:
+Typical prices:
+How long an order usually takes:
+Deposit and payment terms:
+What we need from the customer before starting:
+Delivery, postage and collection:
+Returns, repairs and guarantees:
+Rush orders:
+What we do NOT take on:
+Opening hours and how to reach us:`;
 
 function KnowledgeBaseEditor({
   title,
@@ -5267,6 +5336,15 @@ function PlanAccessSection({
               : `1 (${t("single-user plan")})`}
           />
           <InfoTile label={t("Storage (total)")} value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
+          {/* Renewal date and billing state were on the company document all
+              along; Settings just never showed either. */}
+          {workspace.billingCurrentPeriodEndMs > 0 ? (
+            <InfoTile
+              label={workspace.billingStatus === "cancelled" || workspace.billingStatus === "canceled" ? t("Access until") : t("Renews on")}
+              value={new Date(workspace.billingCurrentPeriodEndMs).toLocaleDateString(studioLocaleTag(language))}
+            />
+          ) : null}
+          <InfoTile label={t("Billing state")} value={t(planBillingStateLabel(workspace.billingStatus))} />
         </div>
         {/* "Current seat allowance: 1" read as if it were seats used, and the
             total storage read as if it contradicted the plan matrix. Both
