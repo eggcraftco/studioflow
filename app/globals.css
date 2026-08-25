@@ -23824,3 +23824,29 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
   .inventory-supplier-grid { grid-template-columns: 1fr; }
   .inventory-match-row, .inventory-reserve-row { flex-wrap: wrap; }
 }
+
+/* Opening stock import */
+.inventory-head-actions { display: flex; align-items: center; gap: 8px; }
+.inventory-inline-actions { display: flex; gap: 12px; }
+.inventory-file-input { display: none; }
+.inventory-paste {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.5; white-space: pre; overflow-x: auto;
+}
+.inventory-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.inventory-map-grid .inventory-sub { min-height: 14px; font-style: italic; }
+.inventory-table-compact { min-width: 620px; }
+.inventory-table-compact th, .inventory-table-compact td { padding: 7px 11px; font-size: 12px; }
+.inventory-skip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.inventory-skip-list li {
+  padding: 8px 11px; border-radius: 10px;
+  background: rgba(220,38,38,0.05); border: 1px solid rgba(220,38,38,0.18);
+}
+.inventory-skip-list strong { display: block; font-size: 12px; font-weight: 700; }
+
+@media (max-width: 640px) {
+  .inventory-head-actions { flex-wrap: wrap; }
+  .inventory-map-grid { grid-template-columns: 1fr; }
+}
+.inventory-chip-button { border: 1px dashed rgba(37,99,235,0.45); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.inventory-chip-button:hover { background: rgba(37,99,235,0.2); }

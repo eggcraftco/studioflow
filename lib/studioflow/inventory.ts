@@ -411,3 +411,87 @@ export function inventoryFreeToReserve(item: InventoryItem) {
   const reserved = Number(item.quantity?.reserved) || 0;
   return Math.max(0, Math.round((onHand - reserved) * 100) / 100);
 }
+
+// ---------------------------------------------------------------------------
+// Opening stock import
+//
+// The point of an opening balance is that a workshop with two hundred things
+// already on the shelf can start using inventory today, without typing two
+// hundred forms. So this reads what people actually have: a spreadsheet.
+// ---------------------------------------------------------------------------
+
+/**
+ * The fields an opening-stock row can carry. The aliases live on the server —
+ * `parseOpeningStock` does the splitting and the header matching, so there is
+ * one implementation of the fiddly part and every platform behaves alike.
+ * These labels are only what the mapping menu shows.
+ */
+export const OPENING_STOCK_FIELDS = [
+  { key: "name", label: "Name" },
+  { key: "trackingType", label: "Type" },
+  { key: "category", label: "Category" },
+  { key: "brand", label: "Brand" },
+  { key: "model", label: "Model" },
+  { key: "reference", label: "Reference" },
+  { key: "serialNumber", label: "Serial number" },
+  { key: "sku", label: "SKU" },
+  { key: "onHand", label: "On hand" },
+  { key: "unit", label: "Unit" },
+  { key: "lowStockAt", label: "Reorder at" },
+  { key: "purchasePrice", label: "Purchase price" },
+  { key: "location", label: "Location" },
+  { key: "supplierName", label: "Supplier" },
+  { key: "purchaseDate", label: "Purchase date" },
+  { key: "notes", label: "Notes" }
+] as const;
+
+export type OpeningStockFieldKey = (typeof OPENING_STOCK_FIELDS)[number]["key"];
+
+/** How many rows one import may carry. Mirrors the server's own cap. */
+export const OPENING_STOCK_MAX_ROWS = 500;
+
+export type OpeningStockSkip = {
+  rowIndex: number;
+  name: string;
+  /** A code, not a sentence — the words belong to the reader's language. */
+  reason: "noName" | "noAmount";
+};
+
+export type OpeningStockPreviewItem = InventoryItemInput & {
+  rowIndex: number;
+  /** What this line is worth on the shelf, worked out by the server. */
+  lineValue: number;
+};
+
+export type OpeningStockRead = {
+  grid: string[][];
+  width: number;
+  headers: string[];
+  mapping: Array<OpeningStockFieldKey | "">;
+  guessedMapping: Array<OpeningStockFieldKey | "">;
+  items: OpeningStockPreviewItem[];
+  skipped: OpeningStockSkip[];
+  maxRows: number;
+};
+
+/**
+ * Asks the server what this list would become. The preview a person approves
+ * and the rows that get written come out of the same call, so the screen
+ * cannot promise one thing and the import do another.
+ */
+export async function readOpeningStock(
+  workspace: WorkspaceContext,
+  input: {
+    text: string;
+    hasHeader: boolean;
+    mapping?: Array<OpeningStockFieldKey | "">;
+    defaultType: InventoryTrackingType;
+    typeOverrides?: Record<number, InventoryTrackingType>;
+  }
+) {
+  return call<OpeningStockRead & { ok?: boolean }>(
+    "parseOpeningStock",
+    { companyId: workspace.id, ...input },
+    "That list could not be read."
+  );
+}
