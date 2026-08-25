@@ -4908,6 +4908,29 @@ const bankFeedExports = createBankFeedFunctions({
 const { _internal: bankFeedInternal, ...bankFeedCallables } = bankFeedExports;
 Object.assign(exports, bankFeedCallables);
 
+// Inventory: the physical things the workspace owns and what they cost. Kept in
+// its own module for the same reason bankFeed is — index.js is long enough, and
+// the money rules in there are worth reading without scrolling past everything
+// else. Access is granted through one function so the rules cannot drift.
+const { createInventoryFunctions } = require("./inventory");
+const inventoryExports = createInventoryFunctions({
+  admin,
+  onCall,
+  HttpsError,
+  cleanText: cleanOrderText,
+  roundMoney: roundLineMoney,
+  requireWorkspace: async (request, { area = "orders", write = false } = {}) => {
+    const context = await requireWorkspaceForBilling(request, false);
+    requireWorkspaceAreaAccess(context.companyData, context.uid, area);
+    if (write && !canFullyEditOrder(workspaceOrderRole(context.companyData, context.uid))) {
+      throw new HttpsError("permission-denied", "Your workspace role cannot change inventory.");
+    }
+    return context;
+  }
+});
+const { _internal: inventoryInternal, ...inventoryCallables } = inventoryExports;
+Object.assign(exports, inventoryCallables);
+
 // Pandle bookkeeping bridge: confirms NivaDesk-categorised bank transactions
 // in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
 const { createPandleFunctions } = require("./pandle");

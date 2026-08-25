@@ -464,6 +464,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Inventory. Readable by anyone who can read the workspace so a screen can
+    // list stock without a round trip, but written only through the callables:
+    // status transitions, cost splitting and the sequential item number are
+    // decided on the server, and a direct write would sidestep all three.
+    match /companies/{companyId}/inventoryItems/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     // Provider consent tokens — server-only, never client-readable.
     match /companies/{companyId}/bankTokens/{document=**} {
       allow read, write: if false;
@@ -575,6 +584,7 @@ service cloud.firestore {
         && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
+        && collectionId != 'inventoryItems'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -596,6 +606,7 @@ service cloud.firestore {
         && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
+        && collectionId != 'inventoryItems'
         && canWriteCompanyData(companyId);
     }
 
