@@ -113,8 +113,12 @@ import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel sto
 **26 Ağu akşamı eklendi:** hover eşleştirme (kart ↔ çubuk, iki yönlü),
 haftalıktan uzun aralıklarda sticky ay şeridi (etiket yatayda da sabit),
 range/seçim değişince seçili çubuk görünür alana getiriliyor — üçü de E2E'li.
-Kalan: Schedule–Team Schedule ayrım metni; zoom presetleri (%75/%100/%125/Fit);
-tarih değişikliğinde Undo (toast altyapısı yok — önce o); ilk-kullanım rehberi.
+**26 Ağu gece eklendi:** ortak toast/Undo altyapısı (StudioToastHost, AppShell'de
+tek host) — schedule sürüklemesi tarih değişimini Undo'lu toast'la bildiriyor
+(gerçek fareyle tam tur: sürükle → toast → Undo → tarihler geri, E2E'li), kart
+taşıma "Card moved — Undo" veriyor; zoom % göstergesi preset seçici oldu
+(75/100/125/150/Fit); iki ekranın alt başlığı ayrıştı ("Plan your orders" /
+"Plan your team"). 8 string × 11 dil. Kalan: ilk-kullanım rehberi.
 (Not: Duration/Remaining ikili gösterimi bilinçli tek "Xd left" ile çözüldü.)
 
 ### B. NivaDesk_order_kart_sistemi.md — kalan iyileştirmeler
