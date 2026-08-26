@@ -443,6 +443,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       console.warn("bankFinalizeRequisition replace failed:", error?.message || error);
     }
 
+    await logBankAudit(companyId, {
+      kind: "connected",
+      ok: true,
+      accounts: Array.isArray(accounts) ? accounts.length : 0,
+      imported
+    });
     return { status: "linked", accounts, imported, replaced };
   });
 
@@ -460,6 +466,20 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { kind: "error", message: message.slice(0, 300) };
   }
 
+  // The report's §"audit" ask: refresh and connection events leave a trail a
+  // person can read later — who/what connected, which syncs failed and why.
+  // Best-effort: an audit line must never break the sync it describes.
+  async function logBankAudit(companyId, entry) {
+    try {
+      await db().collection("companies").doc(String(companyId)).collection("bankAuditLog").add({
+        atMs: Date.now(),
+        ...entry
+      });
+    } catch (error) {
+      console.warn("bank audit log write failed:", error?.message || error);
+    }
+  }
+
   async function recordSyncFailure(companyId, doc, failure) {
     const data = doc.data() || {};
     const failures = (Number(data.syncFailures) || 0) + 1;
@@ -472,6 +492,14 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       lastSyncError: failure.message,
       lastSyncErrorAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+    await logBankAudit(companyId, {
+      kind: "sync",
+      ok: false,
+      connectionId: doc.id,
+      bank: cleanText(data.providerName, 80) || "Bank",
+      state: nextState,
+      error: failure.message.slice(0, 300)
+    });
     if (nextState !== "ok" && data.syncState !== nextState && typeof notifyCompany === "function") {
       const bank = cleanText(data.providerName, 80) || "Bank";
       await notifyCompany(companyId, {
@@ -507,12 +535,15 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       }
       let ok = false;
       let failure = null; // { kind: "needs_reconsent" | "error" | "rate_limited", message }
+      let importedForConnection = 0;
       try {
         const accessToken = await accessTokenForConnection(companyId, doc.id);
         const accounts = Array.isArray(data.accounts) ? data.accounts : [];
         for (const account of accounts) {
           try {
-            imported += await syncAccountTransactions(companyId, doc.id, account.id, accessToken, rules);
+            const importedForAccount = await syncAccountTransactions(companyId, doc.id, account.id, accessToken, rules);
+            imported += importedForAccount;
+            importedForConnection += importedForAccount;
             ok = true;
           } catch (error) {
             console.warn("bank sync account failed:", account.id, error?.message || error);
@@ -533,6 +564,13 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
           lastSyncError: admin.firestore.FieldValue.delete(),
           lastSyncErrorAt: admin.firestore.FieldValue.delete()
         }, { merge: true });
+        await logBankAudit(companyId, {
+          kind: "sync",
+          ok: true,
+          connectionId: doc.id,
+          bank: cleanText(data.providerName, 80) || "Bank",
+          imported: importedForConnection
+        });
       } else if (failure && failure.kind !== "rate_limited") {
         await recordSyncFailure(companyId, doc, failure);
       }
@@ -602,6 +640,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       if (stillLinked.empty) {
         await db().collection("companies").doc(companyId).set({ bankFeedEnabled: false }, { merge: true });
       }
+      await logBankAudit(companyId, { kind: "disconnected", ok: true, connectionId, kept: true });
       return { disconnected: true, kept: true };
     }
 
@@ -625,7 +664,18 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       await db().collection("companies").doc(companyId).set({ bankFeedEnabled: false }, { merge: true });
     }
 
+    await logBankAudit(companyId, { kind: "purged", ok: true, connectionId });
     return { deleted: true };
+  });
+
+  // Reads the trail the hooks above leave. Owner-only like the rest of the
+  // connection surface; served by a callable so no client rule is needed.
+  const bankListAuditLog = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const limit = Math.min(Math.max(Number(request.data?.limit) || 20, 1), 50);
+    const snap = await db().collection("companies").doc(String(companyId))
+      .collection("bankAuditLog").orderBy("atMs", "desc").limit(limit).get();
+    return { ok: true, entries: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })) };
   });
 
   // Records (or clears) the receipt/invoice attached to a transaction. Two
@@ -1532,6 +1582,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankFinalizeRequisition,
     bankSyncTransactions,
     bankDeleteConnection,
+    bankListAuditLog,
     bankSetTransactionReceipt,
     bankLinkTransactionToOrder,
     bankSetTransactionSplits,
