@@ -127,8 +127,13 @@ ayrımı + panel içi arama; şablonlar (Owner/Designer/Finance/Workshop/Mobile)
 sipariş türüne göre düzen; kullanıcıya özel düzen; "Saving card layout" akışı.
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
-**Kritik kalan:** duplicate BİRLEŞTİRME ekranı (uyarı+id-eşleştirme temeli
-hazır); alan bazlı kaynak/sync çatışma politikası (Store/NivaDesk/newest/ask);
+**26 Ağu akşamı eklendi:** duplicate birleştirme CANLI — profil seçilince aynı
+e-posta/telefonlu ikiz için uyarı bandı + "Review and merge" diyaloğu (ana kayıt
+seçimi, alan bazında isim/e-posta/telefon galibi, sipariş taşıma, sunucuda tam
+anlık görüntü `customerMergeLog` — istemciye kapalı, 403 testli).
+`mergeWebCustomers` deploy edildi; `customer-merge.mjs` 14 assert TÜMÜ GEÇTİ;
+14+1 string × 11 dil.
+**Kritik kalan:** alan bazlı kaynak/sync çatışma politikası (Store/NivaDesk/newest/ask);
 telefon–WhatsApp gerçek alan ayrımı (şema işi); GDPR export/anonymize/delete
 akışları (Shopify redact kısmen var); iade/refund'un müşteri değerine
 yansıması. **Orta:** ek sıralamalar (Last Order/Highest Value/Outstanding…);
