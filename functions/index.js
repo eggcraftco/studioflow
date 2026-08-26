@@ -12407,6 +12407,88 @@ exports.deleteWebCustomer = onCall({ region: "europe-west2" }, async (request) =
   };
 });
 
+// GDPR: strip a customer's personal data from their profile and every one of
+// their orders while the financial records survive untouched. Owner-only and
+// deliberately irreversible — export first if the data is still needed.
+exports.anonymizeWebCustomer = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can anonymize a customer.");
+  }
+
+  const customerId = String(request.data?.customerId || "").trim();
+  if (!customerId) throw new HttpsError("invalid-argument", "customerId is required.");
+
+  const db = admin.firestore();
+  const customerRef = db.collection("musteriler").doc(customerId);
+  const customerSnap = await customerRef.get();
+  if (!customerSnap.exists) throw new HttpsError("not-found", "Customer not found.");
+  const customerData = customerSnap.data() || {};
+  if (String(customerData.companyId || "").trim() !== companyId) {
+    throw new HttpsError("permission-denied", "This customer does not belong to the active workspace.");
+  }
+
+  const previousName = cleanOrderText(customerData.name, "", 180);
+  const label = `Anonymized customer ${customerId.slice(0, 6)}`;
+
+  await customerRef.set({
+    name: label,
+    email: "",
+    phone: "",
+    primaryPhone: "",
+    instagram: "",
+    address: "",
+    streetAddress: "",
+    city: "",
+    postalCode: "",
+    country: "",
+    shippingAddress: "",
+    shippingStreetAddress: "",
+    shippingCity: "",
+    shippingPostalCode: "",
+    shippingCountry: "",
+    shippingPhone: "",
+    notes: "",
+    profileImageUrl: "",
+    externalCustomerId: "",
+    anonymizedAt: admin.firestore.FieldValue.serverTimestamp(),
+    anonymizedByUid: uid,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  const previousKey = normalizedCustomerKey(previousName);
+  const ordersSnap = await db.collection("siparisler").where("companyId", "==", companyId).get();
+  const batch = db.batch();
+  let anonymizedOrderCount = 0;
+  ordersSnap.docs.forEach((orderDoc) => {
+    const orderData = orderDoc.data() || {};
+    if (normalizedCustomerKey(orderData.customerName) !== previousKey) return;
+    batch.set(orderDoc.ref, {
+      customerName: label,
+      emailAddress: "",
+      whatsappNumber: "",
+      instagramUsername: "",
+      shippingName: "",
+      shippingStreetAddress: "",
+      shippingCity: "",
+      shippingPostalCode: "",
+      shippingCountry: "",
+      shippingPhone: "",
+      customFields: {
+        communicationAddress: admin.firestore.FieldValue.delete(),
+        Address: admin.firestore.FieldValue.delete(),
+        communicationCustomerNotes: admin.firestore.FieldValue.delete()
+      },
+      historyLog: historyLogWithEntry(orderData, "Customer anonymized (GDPR)", "-", "personal data removed"),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    anonymizedOrderCount += 1;
+  });
+  if (anonymizedOrderCount > 0) await batch.commit();
+
+  return { ok: true, companyId, customerId, anonymizedOrderCount, message: "Customer anonymized." };
+});
+
 // Fold a duplicate customer into a primary one. The primary's non-empty
 // fields win, gaps fill from the duplicate, and the caller may explicitly
 // pick whose name/email/phone survives. Orders join customers by NAME, so

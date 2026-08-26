@@ -23,6 +23,7 @@ import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import {
   canManageCustomersForRole,
   createCustomerFromWeb,
+  anonymizeCustomerFromWeb,
   deleteCustomerFromWeb,
   mergeCustomersFromWeb,
   updateCustomerFromWeb,
@@ -352,6 +353,86 @@ export default function CustomersPage() {
     }
   }
 
+  // GDPR Art. 15/20: hand the customer's full record over as a file. The
+  // directory is already client-side, so no server round-trip is needed.
+  function exportCustomerData(customer: CustomerDirectoryItem) {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      workspace: workspace?.name ?? "",
+      profile: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        primaryPhone: customer.primaryPhone,
+        instagram: customer.instagram,
+        address: customer.address,
+        streetAddress: customer.streetAddress,
+        city: customer.city,
+        postalCode: customer.postalCode,
+        country: customer.country,
+        shippingAddress: customer.shippingAddress,
+        shippingStreetAddress: customer.shippingStreetAddress,
+        shippingCity: customer.shippingCity,
+        shippingPostalCode: customer.shippingPostalCode,
+        shippingCountry: customer.shippingCountry,
+        shippingPhone: customer.shippingPhone,
+        notes: customer.notes,
+        source: customer.source,
+        lastContactDate: customer.lastContactDate?.toISOString() ?? null
+      },
+      totals: {
+        orderCount: customer.orderCount,
+        totalOrderValue: customer.totalValue,
+        totalPaid: customer.totalPaid,
+        totalOutstanding: customer.totalOutstanding
+      },
+      orders: customer.orders.map(order => ({
+        invoiceNumber: order.invoiceNumber,
+        designName: order.designName,
+        status: order.status,
+        orderDate: order.paymentDate?.toISOString() ?? null,
+        dueDate: order.dueDate?.toISOString() ?? null,
+        paidAmount: order.paidAmount,
+        remainingAmount: order.remainingAmount + order.customRemainingTotal,
+        notes: order.notes,
+        files: order.files.map(file => file.fileName),
+        activity: order.activity.map(entry => ({
+          title: entry.title,
+          oldValue: entry.oldValue,
+          newValue: entry.newValue,
+          at: entry.createdAt?.toISOString() ?? null
+        }))
+      }))
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `customer-${customerDisplayName(customer.name).replace(/[^A-Za-z0-9]+/g, "-").toLowerCase()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setActionStatus(t("Customer data exported."));
+  }
+
+  async function handleAnonymizeCustomer(customer: CustomerDirectoryItem) {
+    if (!workspace) return;
+    const label = customerDisplayName(customer.name);
+    const confirmed = window.confirm(
+      `${t("Anonymize this customer permanently?")} ${label}. ${t("Personal details vanish from the profile and every order; financial records stay. This cannot be undone — export the data first if you still need it.")}`
+    );
+    if (!confirmed) return;
+    setActionStatus(t("Anonymizing customer..."));
+    setActionError("");
+    try {
+      await anonymizeCustomerFromWeb(workspace, customer.id);
+      await refreshCustomers(customer.id);
+      setActionStatus(t("Customer anonymized."));
+    } catch (anonymizeError) {
+      setActionStatus("");
+      setActionError(anonymizeError instanceof Error ? anonymizeError.message : t("The customer could not be anonymized."));
+    }
+  }
+
   function openCreateForm() {
     setActionStatus("");
     setActionError("");
@@ -664,6 +745,32 @@ export default function CustomersPage() {
           role="menu"
           onClick={event => event.stopPropagation()}
         >
+          <button
+            className="order-list-context-row"
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setCustomerContextMenu(null);
+              exportCustomerData(contextCustomer);
+            }}
+          >
+            <span aria-hidden="true">⇩</span>
+            {t("Export data (JSON)")}
+          </button>
+          {workspace && workspace.role.toLowerCase() === "owner" ? (
+            <button
+              className="order-list-context-row danger"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setCustomerContextMenu(null);
+                void handleAnonymizeCustomer(contextCustomer);
+              }}
+            >
+              <span aria-hidden="true">◍</span>
+              {t("Anonymize (GDPR)")}
+            </button>
+          ) : null}
           <button
             className="order-list-context-row danger"
             type="button"
