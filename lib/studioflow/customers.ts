@@ -155,6 +155,23 @@ export async function mergeCustomersFromWeb(
   }
 }
 
+// Replays the store's last webhook payload onto the profile — the explicit
+// "take the store's values now" action; no store API call is involved.
+export async function resyncIntegrationCustomerFromWeb(workspace: WorkspaceContext, customerId: string) {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, CustomerActionResult & { applied?: number }>(functions, "resyncIntegrationCustomer");
+      const response = await callable({ companyId: workspace.id, customerId });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "The customer could not be resynced.");
+      }
+      return response.data;
+    }, "Resyncing customer from store data.");
+  } catch (error) {
+    throw new Error(friendlyCustomerError(error, "The customer could not be resynced."));
+  }
+}
+
 // GDPR anonymization: owner-only and irreversible. Personal fields vanish
 // from the profile and every order; financial records stay intact.
 export async function anonymizeCustomerFromWeb(workspace: WorkspaceContext, customerId: string) {

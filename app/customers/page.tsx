@@ -33,6 +33,7 @@ import {
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
+import { resyncIntegrationCustomerFromWeb } from "@/lib/studioflow/customers";
 
 type SortMode = "recent" | "orders" | "lastOrder" | "highestValue" | "outstanding" | "alphabetical";
 type FormMode = "create" | "edit" | null;
@@ -611,6 +612,23 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleResyncCustomer(customer: CustomerDirectoryItem) {
+    if (!workspace) return;
+    setSavingInlineField("Integration resync");
+    setActionStatus(t("Resyncing from store data…"));
+    setActionError("");
+    try {
+      const result = await resyncIntegrationCustomerFromWeb(workspace, customer.id);
+      await refreshCustomers(customer.id);
+      setActionStatus(`${t("Resynced from store data.")}${result && typeof result.applied === "number" ? ` (${result.applied})` : ""}`);
+    } catch (resyncError) {
+      setActionStatus("");
+      setActionError(resyncError instanceof Error ? resyncError.message : "The customer could not be resynced.");
+    } finally {
+      setSavingInlineField("");
+    }
+  }
+
   async function handleCustomerPhotoUpload(customer: CustomerDirectoryItem, file: File) {
     if (!workspace) return;
     if (!canManageCustomers) {
@@ -739,6 +757,7 @@ export default function CustomersPage() {
               language={language}
               duplicate={selectedDuplicate}
               linkedNotes={selectedLinkedNotes}
+              onResync={() => handleResyncCustomer(selectedCustomer)}
               onReviewMerge={() => setMergeOpen(true)}
               onSaveDetails={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
               onUploadPhoto={file => handleCustomerPhotoUpload(selectedCustomer, file)}
@@ -895,6 +914,7 @@ function CustomerDetail({
   language,
   duplicate,
   linkedNotes,
+  onResync,
   onReviewMerge,
   onSaveDetails,
   onUploadPhoto
@@ -907,6 +927,7 @@ function CustomerDetail({
   language: string;
   duplicate: { other: CustomerDirectoryItem; reason: "email" | "phone" } | null;
   linkedNotes: StudioKeepNote[];
+  onResync: () => void;
   onReviewMerge: () => void;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
   onUploadPhoto: (file: File) => Promise<void>;
@@ -975,6 +996,24 @@ function CustomerDetail({
             {countLabel(customer.orderCount, "order", "orders", t)}
             {CUSTOMER_SOURCE_LABEL[customer.source] ? <span className="studio-pill" style={{ marginLeft: 8 }}>{CUSTOMER_SOURCE_LABEL[customer.source]}</span> : null}
           </p>
+          {(() => {
+            // One-tap ways to reach the customer, built from what the profile
+            // already knows — no dialer/app integration, plain links.
+            const phone = (customer.primaryPhone || customer.phone).trim();
+            const phoneDigits = phone.replace(/[^0-9+]/g, "");
+            const waDigits = phoneDigits.replace(/^\+/, "").replace(/^00/, "");
+            const instagram = customer.instagram.trim().replace(/^@/, "");
+            const quickAction: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 12px", border: "1px solid rgba(120,120,140,0.28)", textDecoration: "none", color: "inherit" };
+            if (!phone && !customer.email && !instagram) return null;
+            return (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {phone ? <a style={quickAction} href={`tel:${phoneDigits}`}>📞 {t("Call")}</a> : null}
+                {phone ? <a style={quickAction} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
+                {customer.email ? <a style={quickAction} href={`mailto:${customer.email}`}>✉️ {t("Email")}</a> : null}
+                {instagram ? <a style={quickAction} href={`https://instagram.com/${encodeURIComponent(instagram)}`} target="_blank" rel="noopener noreferrer">◎ Instagram</a> : null}
+              </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -1000,6 +1039,31 @@ function CustomerDetail({
         <CustomerStatCard emoji="📅" tint="#af52de" label={t("Last Order")} value={lastOrderDate ? formatDate(lastOrderDate) : "—"} />
         <CustomerStatCard emoji="🕐" tint="#ff9500" label={t("Customer Since")} value={customerSinceDate ? formatMonthYear(customerSinceDate) : "—"} />
       </div>
+
+      {CUSTOMER_SOURCE_LABEL[customer.source] ? (
+        <section className="card app-card customer-detail-card" style={{ marginBottom: 14 }}>
+          <div className="app-card-panel" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 12.5 }}>
+            <span><span style={{ opacity: 0.6 }}>{t("Connected store")}:</span> <strong>{CUSTOMER_SOURCE_LABEL[customer.source]}</strong></span>
+            {customer.externalCustomerId ? <span><span style={{ opacity: 0.6 }}>{t("Store customer ID")}:</span> <strong style={{ fontVariantNumeric: "tabular-nums" }}>{customer.externalCustomerId}</strong></span> : null}
+            <span><span style={{ opacity: 0.6 }}>{t("Last synced")}:</span> <strong>{customer.integrationSyncedAt ? formatDateTime(customer.integrationSyncedAt) : "—"}</strong></span>
+            <span style={{ flex: 1 }} />
+            {canManageCustomers && customer.integrationLastPayload ? (
+              <button type="button" className="customer-view-all" disabled={savingInlineField === "Integration resync"}
+                onClick={onResync} title={t("Re-applies what the store last sent — the store's values win.")}>
+                ⟳ {savingInlineField === "Integration resync" ? t("Resyncing from store data…") : t("Resync from store data")}
+              </button>
+            ) : null}
+          </div>
+          {customer.integrationLastPayload ? (
+            <details style={{ padding: "0 18px 12px", fontSize: 11.5 }}>
+              <summary style={{ cursor: "pointer", opacity: 0.65, fontWeight: 700 }}>{t("View raw store data")}</summary>
+              <pre style={{ margin: "8px 0 0", padding: 10, borderRadius: 10, background: "rgba(120,120,140,0.08)", overflowX: "auto", fontSize: 11, lineHeight: 1.5 }}>
+                {(() => { try { return JSON.stringify(JSON.parse(customer.integrationLastPayload), null, 2); } catch { return customer.integrationLastPayload; } })()}
+              </pre>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="customer-detail-grid">
         <div className="customer-card-stack">

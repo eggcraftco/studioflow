@@ -384,6 +384,10 @@ export type CustomerDirectoryItem = {
   lastContactDate: Date | null;
   // Where this customer record originated: "web" | "woocommerce" | "shopify" | "inbound" | "".
   source: string;
+  externalCustomerId: string;
+  // Integration panel: when the store last spoke, and its last normalized payload (JSON string).
+  integrationSyncedAt: Date | null;
+  integrationLastPayload: string;
   orderCount: number;
   totalPaid: number;
   totalValue: number;
@@ -1543,6 +1547,9 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       profileImageUrl: stringValue(data.profileImageUrl, ""),
       lastContactDate: dateValue(data.lastContactDate),
       source: stringValue(data.source, ""),
+      externalCustomerId: stringValue(data.externalCustomerId, ""),
+      integrationSyncedAt: dateValue(data.integrationSyncedAt),
+      integrationLastPayload: stringValue(data.integrationLastPayload, ""),
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
