@@ -18900,6 +18900,7 @@ struct ClientFilesHubView: View {
     @Binding var aktifSekme: String
     @Binding var seciliSiparis: Siparis?
 
+    @State private var hubMode: String = "classic"
     @State private var previewItems: [ClientFileItem] = []
     @State private var previewInitialID: UUID? = nil
     @State private var showPreview = false
@@ -18965,6 +18966,29 @@ struct ClientFilesHubView: View {
     private var canManageFiles: Bool { clientFilesEnabled && canAccessFiles && canEditAll }
 
     var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Picker("", selection: $hubMode) {
+                    Text(lt("Client & Orders")).tag("classic")
+                    Text(lt("Library")).tag("library")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 360)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+
+            if hubMode == "library" {
+                FilesLibraryPane(clientFilesEnabled: clientFilesEnabled, canEdit: canManageFiles, canDelete: canDeleteFilesAccess)
+            } else {
+                classicBody
+            }
+        }
+    }
+
+    private var classicBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
@@ -19414,6 +19438,563 @@ struct ClientFilesHubView: View {
             }
             self.deletingOrderId = nil
             self.statusMessage = anyFail ? self.lt("Some files could not be deleted.") : self.lt("Deleted all files.")
+        }
+    }
+}
+
+// The central library's shared vocabulary: a file's visible name, the words a
+// link kind carries, and how a callable failure is reported. The server sends
+// terse codes for its own errors; anything readable travels through as-is.
+
+private func libraryFileTitle(_ file: LibraryFile) -> String {
+    file.displayName.isEmpty ? file.fileName : file.displayName
+}
+
+private func libraryKindLabel(_ kind: String) -> String {
+    switch kind {
+    case "order": return "Order"
+    case "inventoryItem": return "Inventory Item"
+    case "purchase": return "Purchase"
+    case "bankTransaction": return "Bank Transaction"
+    case "supplier": return "Supplier"
+    default: return kind
+    }
+}
+
+private func librarySizeLabel(_ bytes: Int64) -> String {
+    if bytes >= 1024 * 1024 { return String(format: "%.1f MB", Double(bytes) / 1024.0 / 1024.0) }
+    if bytes >= 1024 { return "\(bytes / 1024) KB" }
+    return "\(bytes) B"
+}
+
+private func libraryDateLabel(_ ms: Double) -> String {
+    guard ms > 0 else { return "—" }
+    let f = DateFormatter()
+    f.dateFormat = "d MMM yyyy"
+    return f.string(from: Date(timeIntervalSince1970: ms / 1000))
+}
+
+private func libraryFailureText(_ error: Error, fallback: String) -> String {
+    let raw = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+    if raw.isEmpty || ["internal", "unknown", "unavailable"].contains(raw.lowercased()) { return fallback }
+    return raw
+}
+
+/// A text badge, never colour alone — "Client portal" must survive greyscale.
+private struct LibraryPortalBadge: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.system(size: 9, weight: .bold))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.blue.opacity(0.14)))
+            .foregroundColor(.blue)
+    }
+}
+
+// The Library half of the Files screen — the same views, filters and words as
+// the web's /files rail. Everything here manipulates links and metadata; the
+// bytes stay wherever their feature put them. Indexing and permanent delete
+// stay web-only.
+private struct FilesLibraryPane: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    let clientFilesEnabled: Bool
+    let canEdit: Bool
+    let canDelete: Bool
+
+    @State private var files: [LibraryFile]? = nil
+    @State private var viewFilter: String = "all"
+    @State private var searchText: String = ""
+    @State private var notice: String = ""
+    @State private var selected: LibraryFile? = nil
+
+    private func lt(_ key: String) -> String { t(key, lang: seciliDil) }
+
+    private let filterOptions: [(String, String)] = [
+        ("all", "All Files"),
+        ("recent", "Recent"),
+        ("sharedClients", "Shared with Clients"),
+        ("internalOnly", "Internal Only"),
+        ("unlinked", "Unlinked"),
+        ("trash", "Trash")
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if !clientFilesEnabled {
+                    Text(lt("Client Files is available on NivaDesk Pro and Team."))
+                        .foregroundColor(.secondary).padding(.top, 20)
+                } else {
+                    toolbar
+                    if !notice.isEmpty {
+                        Text(notice).font(.system(size: 12, weight: .semibold)).foregroundColor(.secondary)
+                    }
+                    listBody
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task { await reload() }
+        .onChange(of: viewFilter) { oldValue, newValue in
+            // Trash is a different server list, not a client-side filter.
+            guard (oldValue == "trash") != (newValue == "trash") else { return }
+            files = nil
+            Task { await reload() }
+        }
+        .sheet(item: $selected) { file in
+            LibraryFileDetailSheet(
+                file: file,
+                canEdit: canEdit,
+                canDelete: canDelete,
+                inTrash: viewFilter == "trash"
+            ) {
+                Task { await reload() }
+            }
+            .environmentObject(firebaseManager)
+        }
+    }
+
+    private var toolbar: some View {
+        HStack(spacing: 10) {
+            Picker("", selection: $viewFilter) {
+                ForEach(filterOptions, id: \.0) { option in
+                    Text(lt(option.1)).tag(option.0)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField(lt("Search files and links…"), text: $searchText).textFieldStyle(.plain)
+            }
+            .padding(8)
+            .background(Color.primary.opacity(0.05))
+            .cornerRadius(8)
+        }
+    }
+
+    @ViewBuilder
+    private var listBody: some View {
+        if let files {
+            let visible = visibleFiles(files)
+            if visible.isEmpty {
+                Text(emptyText(files))
+                    .foregroundColor(.secondary).padding(.top, 30)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(visible) { file in
+                        fileRow(file)
+                    }
+                }
+            }
+        } else {
+            Text(lt("Loading…")).foregroundColor(.secondary).padding(.top, 30)
+        }
+    }
+
+    private func emptyText(_ files: [LibraryFile]) -> String {
+        if viewFilter == "trash" { return lt("Trash is empty.") }
+        if viewFilter == "all" && files.isEmpty {
+            return lt("The library is empty. Index existing files to bring in everything the workspace already stores.")
+        }
+        return lt("No files match this view.")
+    }
+
+    private func visibleFiles(_ files: [LibraryFile]) -> [LibraryFile] {
+        var list = files
+        switch viewFilter {
+        case "sharedClients": list = list.filter { $0.clientPortalVisible }
+        case "internalOnly": list = list.filter { !$0.clientPortalVisible }
+        case "unlinked": list = list.filter { $0.links.isEmpty }
+        default: break
+        }
+        let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !needle.isEmpty {
+            list = list.filter { file in
+                ([file.displayName, file.fileName] + file.links.map { $0.label })
+                    .contains { !$0.isEmpty && $0.lowercased().contains(needle) }
+            }
+        }
+        // Recent trims last so a search covers the whole library, not just
+        // the newest twenty-five.
+        if viewFilter == "recent" { list = Array(list.prefix(25)) }
+        return list
+    }
+
+    private func fileRow(_ file: LibraryFile) -> some View {
+        Button { selected = file } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(libraryFileTitle(file))
+                        .font(.system(size: 13, weight: .bold)).lineLimit(1).truncationMode(.middle)
+                    Text(secondaryLine(file))
+                        .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if file.clientPortalVisible {
+                    LibraryPortalBadge(text: lt("Client portal"))
+                }
+                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            .padding(10)
+            .background(Color.gray.opacity(0.06))
+            .cornerRadius(10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func secondaryLine(_ file: LibraryFile) -> String {
+        var parts = [librarySizeLabel(file.fileSize), libraryDateLabel(file.updatedAtMs)]
+        if !file.linkKinds.isEmpty {
+            parts.append(file.linkKinds.map { lt(libraryKindLabel($0)) }.joined(separator: ", "))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func reload() async {
+        do {
+            files = try await firebaseManager.loadLibraryFiles(trashed: viewFilter == "trash")
+            notice = ""
+        } catch {
+            files = []
+            notice = libraryFailureText(error, fallback: lt("The file library could not be loaded."))
+        }
+    }
+}
+
+// One library record, opened from a row. Browse, open, rename, share, trash,
+// restore — version management and permanent delete stay on the web.
+private struct LibraryFileDetailSheet: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    let canEdit: Bool
+    let canDelete: Bool
+    let inTrash: Bool
+    let onChanged: () -> Void
+
+    @State private var file: LibraryFile
+    @State private var busy = false
+    @State private var error = ""
+    @State private var showRenameDialog = false
+    @State private var renameText = ""
+    @State private var showShare = false
+
+    init(file: LibraryFile, canEdit: Bool, canDelete: Bool, inTrash: Bool, onChanged: @escaping () -> Void) {
+        _file = State(initialValue: file)
+        self.canEdit = canEdit
+        self.canDelete = canDelete
+        self.inTrash = inTrash
+        self.onChanged = onChanged
+    }
+
+    private func lt(_ key: String) -> String { t(key, lang: seciliDil) }
+
+    private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    header
+                    if !error.isEmpty {
+                        Text(error).font(.system(size: 12)).foregroundColor(.red)
+                    }
+                    linkedRecordsCard
+                    activityCard
+                    actionsCard
+                }
+                .padding(16)
+            }
+            .navigationTitle(lt("Library"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(lt("Close")) { dismiss() }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 560)
+        #endif
+        .alert(lt("Rename"), isPresented: $showRenameDialog) {
+            TextField(lt("File name"), text: $renameText)
+            Button(lt("Rename")) { commitRename() }
+            Button(lt("Cancel"), role: .cancel) { }
+        }
+        .sheet(isPresented: $showShare) {
+            ShareLibraryWithOrderSheet(fileId: file.id, fileName: libraryFileTitle(file)) {
+                Task { await refreshFile() }
+                onChanged()
+            }
+            .environmentObject(firebaseManager)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(libraryFileTitle(file)).font(.system(size: 18, weight: .bold))
+                if file.clientPortalVisible { LibraryPortalBadge(text: lt("Client portal")) }
+            }
+            Text("\(file.fileName) · \(librarySizeLabel(file.fileSize))")
+                .font(.system(size: 12)).foregroundColor(.secondary)
+        }
+    }
+
+    private var linkedRecordsCard: some View {
+        card(lt("Linked Records")) {
+            if file.links.isEmpty {
+                Text(lt("Not linked to any record yet."))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            } else {
+                ForEach(Array(file.links.enumerated()), id: \.offset) { entry in
+                    HStack(spacing: 8) {
+                        Text(lt(libraryKindLabel(entry.element.kind)))
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(entry.element.label.isEmpty ? String(entry.element.id.prefix(10)) : entry.element.label)
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                        if entry.element.kind == "order" && entry.element.audience == "portal" {
+                            LibraryPortalBadge(text: lt("Client portal"))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private var activityCard: some View {
+        card(lt("Activity")) {
+            if file.activity.isEmpty {
+                Text(lt("No activity recorded yet."))
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+            } else {
+                ForEach(Array(file.activity.prefix(5).enumerated()), id: \.offset) { entry in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(lt(entry.element.action) + (entry.element.detail.isEmpty ? "" : " · \(entry.element.detail)"))
+                            .font(.system(size: 12, weight: .semibold))
+                        Text([
+                            Date(timeIntervalSince1970: entry.element.atMs / 1000)
+                                .formatted(date: .abbreviated, time: .shortened),
+                            entry.element.byEmail
+                        ].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.system(size: 10)).foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionsCard: some View {
+        if inTrash {
+            if canEdit {
+                card(lt("Trash")) {
+                    Button(lt("Restore")) { restore() }
+                        .font(.system(size: 12, weight: .semibold))
+                        .buttonStyle(.bordered)
+                        .disabled(busy)
+                }
+            }
+        } else {
+            card(lt("Actions")) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
+                    Button(lt("Open")) { openFile() }
+                        .font(.system(size: 12, weight: .semibold)).buttonStyle(.bordered).disabled(busy)
+                    if canEdit {
+                        Button(lt("Rename")) {
+                            renameText = libraryFileTitle(file)
+                            showRenameDialog = true
+                        }
+                        .font(.system(size: 12, weight: .semibold)).buttonStyle(.bordered).disabled(busy)
+                        Button(lt("Share with Order")) { showShare = true }
+                            .font(.system(size: 12, weight: .semibold)).buttonStyle(.bordered).disabled(busy)
+                        if canDelete {
+                            Button(lt("Move to trash")) { moveToTrash() }
+                                .font(.system(size: 12, weight: .semibold)).buttonStyle(.bordered)
+                                .foregroundColor(.red).disabled(busy)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(cardBackground))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.16)))
+    }
+
+    private func openFile() {
+        guard !file.storagePath.isEmpty else { return }
+        Task {
+            do {
+                let url = try await firebaseManager.libraryFileURL(file.storagePath)
+                #if os(macOS)
+                NSWorkspace.shared.open(url)
+                #else
+                await UIApplication.shared.open(url)
+                #endif
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func commitRename() {
+        let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty, newName != libraryFileTitle(file) else { return }
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.renameLibraryFile(fileId: file.id, displayName: newName)
+                await refreshFile()
+                onChanged()
+            } catch {
+                self.error = libraryFailureText(error, fallback: lt("The file could not be renamed."))
+            }
+            busy = false
+        }
+    }
+
+    private func moveToTrash() {
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.trashLibraryFile(fileId: file.id)
+                onChanged()
+                dismiss()
+            } catch {
+                self.error = libraryFailureText(error, fallback: lt("The file could not be moved to trash."))
+            }
+            busy = false
+        }
+    }
+
+    private func restore() {
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.restoreLibraryFile(fileId: file.id)
+                onChanged()
+                dismiss()
+            } catch {
+                self.error = libraryFailureText(error, fallback: lt("The file could not be restored."))
+            }
+            busy = false
+        }
+    }
+
+    private func refreshFile() async {
+        if let fresh = (try? await firebaseManager.loadLibraryFiles(trashed: inTrash))?.first(where: { $0.id == file.id }) {
+            file = fresh
+        }
+    }
+}
+
+// The share flow, verbatim from the web: pick the order, pick the audience,
+// rename what the client sees if needed. No copies are made anywhere.
+private struct ShareLibraryWithOrderSheet: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    let fileId: String
+    let fileName: String
+    let onShared: () -> Void
+
+    @State private var orderId = ""
+    @State private var visibility = "team"
+    @State private var displayName = ""
+    @State private var busy = false
+    @State private var error = ""
+
+    private func lt(_ key: String) -> String { t(key, lang: seciliDil) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(fileName).font(.system(size: 12)).foregroundColor(.secondary)
+                }
+                Section {
+                    Picker(lt("Order"), selection: $orderId) {
+                        Text(lt("Choose an order…")).tag("")
+                        ForEach(firebaseManager.siparisler) { order in
+                            Text("\(order.customerName) — \(order.designName)").tag(order.id ?? "")
+                        }
+                    }
+                    Picker(lt("Visibility"), selection: $visibility) {
+                        Text(lt("Order team only")).tag("team")
+                        Text(lt("Client portal visible")).tag("portal")
+                        Text(lt("Internal only")).tag("internal")
+                    }
+                    TextField(lt("Name shown to the client (optional)"), text: $displayName)
+                }
+                Section {
+                    Text(lt("Sharing creates a link, never a copy. Removing the share later removes only the link."))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+                if !error.isEmpty {
+                    Text(error).font(.system(size: 12)).foregroundColor(.red)
+                }
+            }
+            .navigationTitle(lt("Share with Order"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(lt("Cancel")) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(busy ? lt("Saving…") : lt("Share")) { submit() }
+                        .disabled(busy || orderId.isEmpty)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 420)
+        #endif
+    }
+
+    private func submit() {
+        guard !orderId.isEmpty else { return }
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.shareLibraryFileWithOrder(
+                    fileId: fileId,
+                    orderId: orderId,
+                    visibility: visibility,
+                    displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                onShared()
+                dismiss()
+            } catch {
+                self.error = libraryFailureText(error, fallback: lt("The file could not be shared."))
+                busy = false
+            }
         }
     }
 }

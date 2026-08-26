@@ -2718,6 +2718,39 @@ class StudioFlowRepository(
     suspend fun libraryFileUrl(path: String): String =
         storage.reference.child(path).downloadUrl.await().toString()
 
+    /** The whole library in one call; trashed=true returns ONLY trashed records. */
+    suspend fun libraryAllFiles(workspaceId: String, trashed: Boolean = false): List<StudioLibraryFile> {
+        val raw = inventoryCall(
+            "listLibraryFiles", workspaceId,
+            if (trashed) mapOf("trashed" to true) else emptyMap()
+        )
+        return (raw["files"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioLibraryFile::from) }
+    }
+
+    suspend fun libraryRenameFile(workspaceId: String, fileId: String, displayName: String) {
+        inventoryCall("renameLibraryFile", workspaceId,
+            mapOf("fileId" to fileId, "displayName" to displayName))
+    }
+
+    /** Shares by linking — the server never copies the file. */
+    suspend fun libraryShareFileWithOrder(
+        workspaceId: String, fileId: String, orderId: String, visibility: String, displayName: String
+    ) {
+        val payload = mutableMapOf<String, Any?>(
+            "fileId" to fileId, "orderId" to orderId, "visibility" to visibility)
+        if (displayName.isNotBlank()) payload["displayName"] = displayName
+        inventoryCall("shareLibraryFileWithOrder", workspaceId, payload)
+    }
+
+    suspend fun libraryTrashFile(workspaceId: String, fileId: String) {
+        inventoryCall("trashLibraryFile", workspaceId, mapOf("fileId" to fileId))
+    }
+
+    suspend fun libraryRestoreFile(workspaceId: String, fileId: String) {
+        inventoryCall("restoreLibraryFile", workspaceId, mapOf("fileId" to fileId))
+    }
+
     // ---- Stocktake and reporting ----
 
     suspend fun inventoryStartStocktake(workspaceId: String, location: String, category: String): String {

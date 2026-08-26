@@ -462,14 +462,20 @@ data class StudioInventoryMovement(
 }
 
 /** One row of the Files library, as listLibraryFiles returns it. Only the
- *  fields the detail sheet draws are kept — anything else the server sends is
+ *  fields the screens draw are kept — anything else the server sends is
  *  ignored, so new library fields never break the parse. */
 data class StudioLibraryFile(
     val id: String,
     val displayName: String,
+    val fileName: String,
     val fileSize: Long,
     val storagePath: String,
-    val updatedAtMs: Long
+    val updatedAtMs: Long,
+    val clientPortalVisible: Boolean,
+    val trashedAtMs: Long,
+    val linkKinds: List<String>,
+    val links: List<StudioLibraryFileLink>,
+    val activity: List<StudioLibraryFileActivity>
 ) {
     companion object {
         fun from(raw: Map<*, *>): StudioLibraryFile? {
@@ -477,9 +483,60 @@ data class StudioLibraryFile(
             return StudioLibraryFile(
                 id = id,
                 displayName = raw["displayName"] as? String ?: "",
+                fileName = raw["fileName"] as? String ?: "",
                 fileSize = (raw["fileSize"] as? Number)?.toLong() ?: 0L,
                 storagePath = raw["storagePath"] as? String ?: "",
-                updatedAtMs = (raw["updatedAtMs"] as? Number)?.toLong() ?: 0L
+                updatedAtMs = (raw["updatedAtMs"] as? Number)?.toLong() ?: 0L,
+                clientPortalVisible = raw["clientPortalVisible"] as? Boolean ?: false,
+                trashedAtMs = (raw["trashedAtMs"] as? Number)?.toLong() ?: 0L,
+                linkKinds = (raw["linkKinds"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { it as? String },
+                links = (raw["links"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { (it as? Map<*, *>)?.let(StudioLibraryFileLink::from) },
+                activity = (raw["activity"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { (it as? Map<*, *>)?.let(StudioLibraryFileActivity::from) }
+            )
+        }
+    }
+}
+
+/** One link between a library file and a record ("order", "inventoryItem"…). */
+data class StudioLibraryFileLink(
+    val kind: String,
+    val id: String,
+    val label: String,
+    val audience: String,
+    val displayName: String
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioLibraryFileLink? {
+            val kind = raw["kind"] as? String ?: return null
+            return StudioLibraryFileLink(
+                kind = kind,
+                id = raw["id"] as? String ?: "",
+                label = raw["label"] as? String ?: "",
+                audience = raw["audience"] as? String ?: "",
+                displayName = raw["displayName"] as? String ?: ""
+            )
+        }
+    }
+}
+
+/** One line of a library file's activity trail. */
+data class StudioLibraryFileActivity(
+    val atMs: Long,
+    val byEmail: String,
+    val action: String,
+    val detail: String
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioLibraryFileActivity? {
+            val action = raw["action"] as? String ?: return null
+            return StudioLibraryFileActivity(
+                atMs = (raw["atMs"] as? Number)?.toLong() ?: 0L,
+                byEmail = raw["byEmail"] as? String ?: "",
+                action = action,
+                detail = raw["detail"] as? String ?: ""
             )
         }
     }

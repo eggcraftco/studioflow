@@ -255,22 +255,68 @@ struct InventoryMovement: Identifiable, Equatable {
     }
 }
 
+/// One link a library file carries — the record it points at and how the
+/// client portal is allowed to see it. Links are the whole design: the bytes
+/// live once, everything else points.
+struct LibraryFileLink: Equatable {
+    let kind: String
+    let id: String
+    let label: String
+    let audience: String
+    let displayName: String
+
+    init(_ raw: [String: Any]) {
+        kind = raw["kind"] as? String ?? ""
+        id = raw["id"] as? String ?? ""
+        label = raw["label"] as? String ?? ""
+        audience = raw["audience"] as? String ?? "team"
+        displayName = raw["displayName"] as? String ?? ""
+    }
+}
+
+/// One line of a library file's history, as the server recorded it.
+struct LibraryFileActivity: Equatable {
+    let atMs: Double
+    let byEmail: String
+    let action: String
+    let detail: String
+
+    init(_ raw: [String: Any]) {
+        atMs = (raw["atMs"] as? NSNumber)?.doubleValue ?? 0
+        byEmail = raw["byEmail"] as? String ?? ""
+        action = raw["action"] as? String ?? ""
+        detail = raw["detail"] as? String ?? ""
+    }
+}
+
 /// One file from the central library, as listLibraryFiles returns it. The
-/// server sends more fields than this; the panel only needs enough to name a
-/// file, size it, date it and open it.
+/// server sends more fields than this; the screens only need enough to name a
+/// file, size it, date it, open it and show where it points.
 struct LibraryFile: Identifiable, Equatable {
     let id: String
+    let fileName: String
     let displayName: String
     let fileSize: Int64
     let storagePath: String
+    let links: [LibraryFileLink]
+    let linkKinds: [String]
+    let clientPortalVisible: Bool
+    let activity: [LibraryFileActivity]
+    let trashedAtMs: Double
     let updatedAtMs: Double
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
         self.id = id
+        fileName = raw["fileName"] as? String ?? ""
         displayName = raw["displayName"] as? String ?? ""
         fileSize = (raw["fileSize"] as? NSNumber)?.int64Value ?? 0
         storagePath = raw["storagePath"] as? String ?? ""
+        links = (raw["links"] as? [[String: Any]] ?? []).map(LibraryFileLink.init)
+        linkKinds = raw["linkKinds"] as? [String] ?? []
+        clientPortalVisible = (raw["clientPortalVisible"] as? Bool) ?? false
+        activity = (raw["activity"] as? [[String: Any]] ?? []).map(LibraryFileActivity.init)
+        trashedAtMs = (raw["trashedAtMs"] as? NSNumber)?.doubleValue ?? 0
         updatedAtMs = (raw["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0
     }
 }
@@ -688,6 +734,34 @@ extension FirebaseManager {
     func loadLibraryFiles(linkKey: String) async throws -> [LibraryFile] {
         let raw = try await inventoryCall("listLibraryFiles", ["linkKey": linkKey])
         return (raw["files"] as? [[String: Any]] ?? []).compactMap(LibraryFile.init)
+    }
+
+    /// The whole library, or only its trash. The server returns one or the
+    /// other, never a mix, so the Trash view re-fetches instead of filtering.
+    func loadLibraryFiles(trashed: Bool = false) async throws -> [LibraryFile] {
+        let raw = try await inventoryCall("listLibraryFiles", trashed ? ["trashed": true] : [:])
+        return (raw["files"] as? [[String: Any]] ?? []).compactMap(LibraryFile.init)
+    }
+
+    func renameLibraryFile(fileId: String, displayName: String) async throws {
+        _ = try await inventoryCall("renameLibraryFile", ["fileId": fileId, "displayName": displayName])
+    }
+
+    /// Sharing writes a link with an audience, never a copy — removing the
+    /// share later removes only the link.
+    func shareLibraryFileWithOrder(fileId: String, orderId: String, visibility: String, displayName: String) async throws {
+        _ = try await inventoryCall(
+            "shareLibraryFileWithOrder",
+            ["fileId": fileId, "orderId": orderId, "visibility": visibility, "displayName": displayName]
+        )
+    }
+
+    func trashLibraryFile(fileId: String) async throws {
+        _ = try await inventoryCall("trashLibraryFile", ["fileId": fileId])
+    }
+
+    func restoreLibraryFile(fileId: String) async throws {
+        _ = try await inventoryCall("restoreLibraryFile", ["fileId": fileId])
     }
 
     /// Library files store storage paths, not URLs — same reasoning as item

@@ -1313,6 +1313,7 @@ struct SiparisDetayView: View {
     @State private var clientFileMessage: String = ""
     @State private var offlineClientFileRefreshToken = UUID()
     @State private var clientFilePreviewItem: ClientFileItem? = nil
+    @State private var orderLibraryFiles: [LibraryFile]? = nil
     @AppStorage("uploadSafetyRequirePolicyAcceptanceV1") private var uploadSafetyRequirePolicyAcceptance: Bool = true
     @AppStorage("uploadSafetyPolicyAcceptedV1") private var uploadSafetyPolicyAccepted: Bool = false
     @State private var pendingUploadSafetyURL: URL? = nil
@@ -9470,12 +9471,15 @@ struct SiparisDetayView: View {
                     .clipped()
                 }
 
+                orderLibraryFilesStrip
+
                 Text(t("Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. The size limit follows Settings > Safety & Uploads.", lang: seciliDil))
                     .font(.system(size: 10))
                     .foregroundColor(.gray)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .onAppear { loadOrderLibraryFilesIfNeeded() }
         }
         .onDrop(of: [.fileURL], isTargeted: $isClientFileDropTargeted) { providers in
             let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
@@ -9545,6 +9549,80 @@ struct SiparisDetayView: View {
             }
         }
         #endif
+    }
+
+    // Read-only window onto the central Files library: files whose links point
+    // at this order. Management lives on the Files screen — nothing here ever
+    // touches the order document's save path.
+    @ViewBuilder
+    private var orderLibraryFilesStrip: some View {
+        if let libraryLinked = orderLibraryFiles, !libraryLinked.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("From the Files library", lang: seciliDil))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                ForEach(libraryLinked) { file in
+                    Button { openOrderLibraryFile(file) } label: {
+                        HStack(spacing: 8) {
+                            Text(orderLibraryFileName(file))
+                                .font(.system(size: 12, weight: .semibold))
+                                .lineLimit(1).truncationMode(.middle)
+                            if let badge = orderLibraryAudienceBadge(file) {
+                                Text(badge)
+                                    .font(.system(size: 9, weight: .bold))
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.blue.opacity(0.14)))
+                                    .foregroundColor(.blue)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func orderLibraryLink(_ file: LibraryFile) -> LibraryFileLink? {
+        file.links.first { $0.kind == "order" && $0.id == siparis.id }
+    }
+
+    private func orderLibraryFileName(_ file: LibraryFile) -> String {
+        if let link = orderLibraryLink(file), !link.displayName.isEmpty { return link.displayName }
+        return file.displayName.isEmpty ? file.fileName : file.displayName
+    }
+
+    private func orderLibraryAudienceBadge(_ file: LibraryFile) -> String? {
+        switch orderLibraryLink(file)?.audience {
+        case "portal": return t("Client portal", lang: seciliDil)
+        case "internal": return t("Internal only", lang: seciliDil)
+        default: return nil
+        }
+    }
+
+    private func loadOrderLibraryFilesIfNeeded() {
+        guard orderLibraryFiles == nil, let orderId = siparis.id, !orderId.isEmpty else { return }
+        Task {
+            do { orderLibraryFiles = try await firebaseManager.loadLibraryFiles(linkKey: "order:\(orderId)") }
+            catch { orderLibraryFiles = [] }
+        }
+    }
+
+    private func openOrderLibraryFile(_ file: LibraryFile) {
+        guard !file.storagePath.isEmpty else { return }
+        Task {
+            do {
+                let url = try await firebaseManager.libraryFileURL(file.storagePath)
+                #if os(macOS)
+                NSWorkspace.shared.open(url)
+                #else
+                await UIApplication.shared.open(url)
+                #endif
+            } catch { }
+        }
     }
 
     private var clientFilesIntroText: some View {

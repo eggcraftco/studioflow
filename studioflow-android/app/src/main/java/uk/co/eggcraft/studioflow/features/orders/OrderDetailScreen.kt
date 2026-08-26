@@ -173,6 +173,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
@@ -181,6 +182,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioEstimateRecord
 import uk.co.eggcraft.studioflow.data.model.parseEstimateRecord
 import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
+import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.StudioPortalAutoUpdates
 import uk.co.eggcraft.studioflow.data.model.StudioPortalVisibility
 import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
@@ -4637,6 +4639,77 @@ private fun DesktopClientFilesCard(
                     lineHeight = 15.sp,
                     fontWeight = FontWeight.Medium
                 )
+            }
+        }
+        LibraryFilesForOrderStrip(order = order)
+    }
+}
+
+// Read-only strip of Files-library records shared with this order. Sharing is
+// managed from the Files screen's Library tab; nothing here touches any
+// order-save path.
+@Composable
+private fun LibraryFilesForOrderStrip(order: StudioOrder) {
+    if (order.companyId.isBlank() || order.id.isBlank()) return
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { StudioFlowRepository() }
+    var libraryFiles by remember(order.id) { mutableStateOf<List<StudioLibraryFile>>(emptyList()) }
+
+    LaunchedEffect(order.id) {
+        libraryFiles = try { repository.libraryFiles(order.companyId, "order:${order.id}") }
+        catch (failure: Exception) { emptyList() }
+    }
+
+    if (libraryFiles.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Text(t("From the Files library"), fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+        libraryFiles.forEach { file ->
+            val link = file.links.firstOrNull { it.kind == "order" && it.id == order.id }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .clickable(enabled = file.storagePath.isNotBlank()) {
+                        scope.launch {
+                            runCatching {
+                                val url = repository.libraryFileUrl(file.storagePath)
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                        }
+                    }
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        (link?.displayName.orEmpty().ifBlank { file.displayName }).ifBlank { file.fileName },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        listOf(
+                            fileSizeLabel(file.fileSize),
+                            if (file.updatedAtMs > 0) shortDateOrDash(Date(file.updatedAtMs)) else ""
+                        ).filter { it.isNotBlank() }.joinToString(" · "),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                when (link?.audience) {
+                    "portal" -> Text(t("Client portal"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = StudioBlue)
+                    "internal" -> Text(
+                        t("Internal only"),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
