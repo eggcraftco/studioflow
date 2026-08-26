@@ -52,6 +52,7 @@ import {
   ORDER_WORKSPACE_LAYOUT_KEY,
   layoutFromOrderWorkspaceSnapshotJSON,
   loadOrderDetailCardLayout,
+  saveTypeOrderCardLayout,
   resetIndependentOrderCardLayout,
   saveIndependentOrderCardLayout,
   saveOrderDetailCardLayout,
@@ -2836,7 +2837,7 @@ export function OrderDetailContent({
     async function run() {
       setLayoutError(null);
       try {
-        const loadedLayout = await loadOrderDetailCardLayout(currentUser.uid, workspace.id, order.id);
+        const loadedLayout = await loadOrderDetailCardLayout(currentUser.uid, workspace.id, order.id, order.orderType === "repair" ? "repair" : "");
         if (!cancelled && !savingLayoutRef.current && !resizingCardIdRef.current) {
           setCardLayout(independentCardLayout ?? loadedLayout);
           setLayoutReadyOrderId(order.id);
@@ -2854,7 +2855,7 @@ export function OrderDetailContent({
     return () => {
       cancelled = true;
     };
-  }, [independentCardLayout, order.id, user, workspace.id]);
+  }, [independentCardLayout, order.id, order.orderType, user, workspace.id]);
 
   useEffect(() => {
     if (!user || !workspace.id) return;
@@ -2880,9 +2881,10 @@ export function OrderDetailContent({
       },
       message => {
         setLayoutError(message);
-      }
+      },
+      order.orderType === "repair" ? "repair" : ""
     );
-  }, [independentCardLayout, order.id, user, workspace.id, workspace.ownerUid]);
+  }, [independentCardLayout, order.id, order.orderType, user, workspace.id, workspace.ownerUid]);
 
   useEffect(() => {
     if (!workspace.id) {
@@ -8410,6 +8412,32 @@ export function OrderDetailContent({
                 >
                   Customize cards
                 </button>
+                {order.orderType === "repair" && workspace.role === "owner" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderActionsOpen(false);
+                        void saveTypeOrderCardLayout(workspace.id, "repair", cardLayout)
+                          .then(() => dispatchStudioToast({ message: t("Saved — every repair order now opens with this layout.") }))
+                          .catch(saveError => setOrderActionError(saveError instanceof Error ? saveError.message : "Could not save the order-type layout."));
+                      }}
+                    >
+                      {t("Save as the repair-order layout")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderActionsOpen(false);
+                        void saveTypeOrderCardLayout(workspace.id, "repair", null)
+                          .then(() => dispatchStudioToast({ message: t("Repair orders follow the shared layout again.") }))
+                          .catch(saveError => setOrderActionError(saveError instanceof Error ? saveError.message : "Could not save the order-type layout."));
+                      }}
+                    >
+                      {t("Remove the repair-order layout")}
+                    </button>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>
