@@ -1876,6 +1876,9 @@ function BankPageContent() {
                         </tbody>
                       </table>
                     )}
+                    {upcomingRenewals.length > 0 ? (
+                      <p style={{ fontSize: 10.5, opacity: 0.55, margin: 0, padding: "8px 18px 14px" }}>{t("These are estimates, not booked payments.")}</p>
+                    ) : null}
                   </div>
                 </div>
               </>
@@ -2303,8 +2306,19 @@ function BankPageContent() {
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(item.typicalAmount, item.currency)} <span style={{ fontSize: 9.5, opacity: 0.55, fontWeight: 600 }}>/{t(item.cadence === "weekly" ? "week" : item.cadence === "yearly" ? "year" : "month")}</span></td>
                                 <td style={{ ...tdStyle, opacity: 0.75 }}>
-                                  {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")} · {item.occurrences}×
-                                  {item.manual ? <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(37,99,235,0.12)", color: "#2563eb" }}>{t("Marked by you")}</span> : null}
+                                  <div>
+                                    {t(item.cadence === "weekly" ? "Weekly" : item.cadence === "yearly" ? "Yearly" : "Monthly")}
+                                    {item.expectedDayOfMonth ? ` · ${t("around the")} ${item.expectedDayOfMonth}.` : ""}
+                                    {item.manual ? <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(37,99,235,0.12)", color: "#2563eb" }}>{t("Marked by you")}</span> : null}
+                                  </div>
+                                  <div style={{ fontSize: 10.5, opacity: 0.75 }}>
+                                    {t("Detected from")} {item.occurrences} {t("payments").toLowerCase()}
+                                    {item.amountMax - item.amountMin > 0.01 ? ` · ${money(item.amountMin, item.currency)}–${money(item.amountMax, item.currency)}` : ""}
+                                    {" · "}
+                                    <span style={{ fontWeight: 700, color: item.confidence === "high" ? "#16a34a" : item.confidence === "medium" ? "#2563eb" : "#b45309" }}>
+                                      {t("Confidence")}: {t(item.confidence === "high" ? "High" : item.confidence === "medium" ? "Medium" : "Low")}
+                                    </span>
+                                  </div>
                                 </td>
                                 <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
                                 <td style={tdStyle}>
@@ -2344,12 +2358,16 @@ function BankPageContent() {
                         <span style={countBadge}>{upcomingRenewals.length}</span>
                       </div>
                       {upcomingRenewals.map(item => (
-                        <div key={item.key} style={recurringRow}>
-                          <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
-                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</span>
+                        <div key={item.key} style={recurringRow} title={`${t("These are estimates, not booked payments.")}`}>
+                          <span style={{ fontSize: 11, opacity: 0.6, minWidth: 74 }}>{t("around")} {new Date(item.nextExpected).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.merchant}</span>
+                            <span style={{ display: "block", fontSize: 10, opacity: 0.55 }}>{t("Based on the last")} {item.occurrences} {t(item.cadence === "weekly" ? "weekly" : item.cadence === "yearly" ? "yearly" : "monthly")} {t("payments").toLowerCase()}</span>
+                          </span>
                           <span style={{ fontSize: 12.5, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(item.typicalAmount, item.currency)}</span>
                         </div>
                       ))}
+                      {upcomingRenewals.length > 0 ? <p style={{ fontSize: 10.5, opacity: 0.55, margin: "6px 0 0" }}>{t("These are estimates, not booked payments.")}</p> : null}
                       {upcomingRenewals.length === 0 ? <p style={{ fontSize: 12, opacity: 0.65, margin: 0 }}>{t("Nothing expected in the next 30 days.")}</p> : null}
                     </div>
                   </div>

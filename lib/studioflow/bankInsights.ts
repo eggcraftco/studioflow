@@ -40,6 +40,15 @@ export type RecurringSpend = {
   // Set when the latest charge differs noticeably from what this merchant
   // usually costs (price increase/decrease on a subscription).
   priceChange: { previous: number; current: number } | null;
+  // Report §23 fields: when the pattern was first/last seen, how much the
+  // amount wanders, roughly which day it lands on, and how sure we are.
+  firstDate: string;
+  amountMin: number;
+  amountMax: number;
+  /** For monthly patterns: the typical day-of-month payments land on (1-31). */
+  expectedDayOfMonth: number | null;
+  /** high = 4+ agreeing payments with stable amounts; medium = detected; low = owner-marked with little history. */
+  confidence: "high" | "medium" | "low";
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -139,6 +148,23 @@ export function detectRecurringSpends(transactions: BankInsightTx[], vendors: Ba
       ? { previous: previousTypical, current: lastAmount }
       : null;
 
+    const stableCount = amounts.filter(value => Math.abs(value - typicalAmount) <= typicalAmount * 0.3).length;
+    const confidence: RecurringSpend["confidence"] = vendor && unique.length < 3
+      ? "low"
+      : unique.length >= 4 && stableCount / amounts.length >= 0.8
+        ? "high"
+        : "medium";
+    const dayCounts = new Map<number, number>();
+    if (cadence === "monthly") {
+      for (const entry of unique) {
+        const day = new Date(entry.time).getDate();
+        dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
+      }
+    }
+    const expectedDayOfMonth = cadence === "monthly"
+      ? [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+      : null;
+
     results.push({
       key,
       merchant: vendor?.name || last.tx.counterparty || last.tx.description,
@@ -152,7 +178,12 @@ export function detectRecurringSpends(transactions: BankInsightTx[], vendors: Ba
       nextExpected: new Date(nextTime).toISOString().slice(0, 10),
       active,
       monthlyEquivalent: typicalAmount * MONTHLY_FACTOR[cadence],
-      priceChange
+      priceChange,
+      firstDate: unique[0].tx.bookingDate,
+      amountMin: Math.min(...amounts),
+      amountMax: Math.max(...amounts),
+      expectedDayOfMonth,
+      confidence
     });
   }
 
