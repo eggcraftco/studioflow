@@ -330,3 +330,37 @@ entegrasyon paneli (last synced/resync/raw data).
 - Files kütüphanesi depolama yolu göçü — ayrı faz.
 - Native parite: tedarikçi alanları + etiketler ajan turu 27 Ağu gecesi
   başlatıldı (Swift+Android; commit bekliyor olabilir — git log'a bak).
+
+## Birikmiş işler dalgası — 27 Ağu gece (rounds 20–22, hepsi canlı chunk-doğrulamalı)
+
+**Customers kalanları KAPANDI (round 20):** whatsappNumber gerçek alan
+(payload/anonymize/merge/profil/modal/mükerrer tespiti/arama/GDPR export;
+WhatsApp hızlı aksiyonu önce onu çevirir; eski sütun "Phone (from orders)"
+olarak dürüst etiketlendi); company alanı aynı yollarda; Total Order Value
+altında "incl. £X cancelled or refunded" alt satırı (yalnız öyle sipariş
+varsa — countsTowardBalance); arama segment etiketlerini de tarar; AI Reply
+kısayolu /quick-reply'a müşteri adını taşır. 4 müşteri fonksiyonu redeploy.
+(Not: A3 sıralamalar, A4 shipping/consent, A5 ülke datalist, A6 sipariş-no
+araması ZATEN kapanmıştı — DURUM'daki "kalan" listesi eskiydi.)
+
+**Banking audit log KAPANDI (round 21):** her senkron (bağlantı başına,
+başarıda import sayısı / hatada sınıflandırılmış sebep), connect, disconnect
+ve purge bankAuditLog'a satır bırakır (best-effort); owner-only
+bankListAuditLog callable; bağlı hesap barında "Activity" → Connection
+activity listesi. 5 bank fonksiyonu deploy edildi.
+
+**Hiyerarşik konumlar KAPANDI (round 22, faz-3 büyüklerinden ilki):**
+inventoryLocations ağacı (path dizgileri, derinlik ≤4, döngü/kardeş-ad
+muhafızları); rename/taşıma alt-ağacı VE içinde duran ürünlerin location
+dizgilerini yeniden yazar (defter satırı yok); silme çocuk/stok varken
+reddedilir; web Locations paneli (girintili liste + sayaçlar + Rename/Move +
+parent seçici) + ürün formunda yol datalist'i. locations suite 15 assert;
+3 callable deploy. Emülatörde uçtan uca: Kasa X/Çekmece 1 → ürün kondu →
+Kasa Y rename → ürün dizgisi kendiliğinden izledi.
+
+**Native birleşik parite turu:** iki ajan (Swift+Android) konum ağacı +
+whatsapp/company + bank Activity için 27 Ağu gecesi başlatıldı; çeviriler
+web language.ts'ten bayt-bayt talimatlı.
+
+**Faz 3'te hâlâ açık:** BOM/reçete, maliyet katmanları, Files depolama yolu
+göçü, Shopify/Woo stok senkronu (kullanıcı kararına bloke).
