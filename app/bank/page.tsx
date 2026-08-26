@@ -199,6 +199,10 @@ function BankPageContent() {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [connections, setConnections] = useState<BankConnection[]>([]);
+  // The connection trail (§audit): syncs, failures, connects and disconnects,
+  // read on demand — owner-only, served by a callable so no client rule exists.
+  const [auditEntries, setAuditEntries] = useState<Array<{ id: string; atMs: number; kind: string; ok?: boolean; bank?: string; imported?: number; error?: string; state?: string; accounts?: number }> | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [customCategories, setCustomCategories] = useState<BankCategoryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -999,6 +1003,19 @@ function BankPageContent() {
     rules.forEach(rule => { if (rule.category) set.add(rule.category); });
     return Array.from(set);
   }, [transactions, rules]);
+  async function toggleAuditLog() {
+    if (auditOpen) { setAuditOpen(false); return; }
+    setAuditOpen(true);
+    if (auditEntries === null) {
+      try {
+        const result = await call<{ entries?: Array<{ id: string; atMs: number; kind: string; ok?: boolean; bank?: string; imported?: number; error?: string; state?: string; accounts?: number }> }>("bankListAuditLog", { limit: 15 });
+        setAuditEntries(result?.entries ?? []);
+      } catch {
+        setAuditEntries([]);
+      }
+    }
+  }
+
   const allAccounts = useMemo(() => connections.flatMap(item => item.accounts), [connections]);
   // Every pickable category: presets + the workspace's own active records +
   // whatever the feed already uses. A deactivated record drops out of the
@@ -1623,9 +1640,46 @@ function BankPageContent() {
                   </div>
                 ))}
                 <span style={{ flex: 1 }} />
+                {isOwner ? (
+                  <button type="button" style={{ ...bankBtnSm, opacity: 0.8 }} onClick={() => void toggleAuditLog()}>🕑 {t("Activity")}</button>
+                ) : null}
                 {isOwner && linkedBanks.length > 0 ? (
                   <button type="button" style={bankBtnSm} disabled={busy === "connect"} onClick={() => void connectBank()}>＋ {t("Add account")}</button>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* ---- Connection activity trail ------------------------------ */}
+            {auditOpen ? (
+              <div style={{ ...bankCard, padding: "10px 16px" }}>
+                <strong style={{ fontSize: 12.5 }}>{t("Connection activity")}</strong>
+                {auditEntries === null ? (
+                  <p style={{ fontSize: 12, opacity: 0.7, margin: "8px 0 0" }}>{t("Loading…")}</p>
+                ) : auditEntries.length === 0 ? (
+                  <p style={{ fontSize: 12, opacity: 0.7, margin: "8px 0 0" }}>{t("Nothing recorded yet — the trail starts with the next sync.")}</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                    {auditEntries.map(entry => {
+                      const good = entry.ok !== false;
+                      const label = entry.kind === "sync"
+                        ? (good
+                          ? `${t("Synced")}${entry.imported ? ` · ${entry.imported} ${t("new")}` : ""}`
+                          : `${t("Sync failed")}${entry.error ? ` — ${entry.error.slice(0, 90)}` : ""}`)
+                        : entry.kind === "connected" ? t("Bank connected")
+                        : entry.kind === "disconnected" ? t("Disconnected — data kept")
+                        : entry.kind === "purged" ? t("Connection and its imported data deleted")
+                        : entry.kind;
+                      return (
+                        <div key={entry.id} style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 12 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 999, background: good ? "#16a34a" : "#dc2626", display: "inline-block", flexShrink: 0 }} />
+                          <span style={{ opacity: 0.6, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{new Date(entry.atMs).toLocaleString()}</span>
+                          {entry.bank ? <strong style={{ flexShrink: 0 }}>{entry.bank}</strong> : null}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : null}
 
