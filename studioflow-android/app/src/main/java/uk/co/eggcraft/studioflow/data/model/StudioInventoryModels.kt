@@ -422,6 +422,31 @@ data class StudioSupplier(
     }
 }
 
+/** One node of the hierarchical location tree ("Safe A / Drawer 3"). Items
+ *  still carry ONE plain location string; the server owns the cascade that
+ *  rewrites subtree paths and item strings when a node is renamed or moved. */
+data class StudioInventoryLocation(
+    val id: String,
+    val name: String,
+    val parentId: String,
+    val path: String,
+    val depth: Int
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryLocation? {
+            val id = raw["id"] as? String ?: return null
+            val name = raw["name"] as? String ?: ""
+            return StudioInventoryLocation(
+                id = id,
+                name = name,
+                parentId = raw["parentId"] as? String ?: "",
+                path = (raw["path"] as? String).takeUnless { it.isNullOrBlank() } ?: name,
+                depth = (raw["depth"] as? Number)?.toInt() ?: 1
+            )
+        }
+    }
+}
+
 data class StudioOrderStockLine(
     val id: String,
     val number: String,

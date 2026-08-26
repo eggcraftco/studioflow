@@ -313,7 +313,7 @@ private fun CustomerListView(
         else state.customers.filter { it.tags.contains(segmentFilter) }
         val filtered = if (query.isBlank()) bySegment else bySegment.filter { c ->
             listOf(
-                c.name, c.email, c.phone, c.instagram,
+                c.name, c.email, c.phone, c.whatsappNumber, c.company, c.instagram,
                 c.address, c.streetAddress, c.city, c.postalCode, c.country
             ).any { it.lowercase(Locale.UK).contains(query) } ||
                 // Web parity: find a customer by what they ordered (invoice or design).
@@ -340,6 +340,8 @@ private fun CustomerListView(
                 val hint = when {
                     c.email.lowercase(Locale.UK).contains(term) -> "${t("Email")}: ${c.email}"
                     c.phone.lowercase(Locale.UK).contains(term) -> "${t("Phone")}: ${c.phone}"
+                    c.whatsappNumber.lowercase(Locale.UK).contains(term) -> "WhatsApp: ${c.whatsappNumber}"
+                    c.company.lowercase(Locale.UK).contains(term) -> "${t("Company")}: ${c.company}"
                     c.instagram.lowercase(Locale.UK).contains(term) -> "Instagram: ${c.instagram}"
                     else -> {
                         val invoiceOrder = customerOrders.firstOrNull { it.invoiceNumber.lowercase(Locale.UK).contains(term) }
@@ -734,6 +736,11 @@ private fun CustomerDetail(
             .sortedByDescending { it.paymentDate }
     }
     val totalSpent = customerOrders.sumOf { it.paidAmount + it.remainingAmount }
+    // The slice of that total sitting in cancelled/refunded orders — shown as a
+    // sub-line so the headline figure does not read as real trade (web parity).
+    val totalRefunded = customerOrders
+        .filter { !it.countsTowardBalance }
+        .sumOf { it.paidAmount + it.remainingAmount }
     val lastOrderDate = customerOrders.firstOrNull()?.paymentDate
     val customerSinceDate = customerOrders.lastOrNull()?.paymentDate
     val customerFiles = remember(customerOrders) {
@@ -777,14 +784,20 @@ private fun CustomerDetail(
         // without the leading + / 00, Instagram handle without the leading @.
         val phone = editable.phone.trim()
         val phoneDigits = phone.filter { it.isDigit() || it == '+' }
-        val waDigits = phoneDigits.removePrefix("+").removePrefix("00")
+        // WhatsApp goes to the customer's OWN WhatsApp number when one is
+        // recorded; the store-fed phone is only the fallback (web parity).
+        val waSource = editable.whatsappNumber.trim()
+            .ifBlank { phone }
+            .ifBlank { editable.primaryPhone.trim() }
+        val waDigits = waSource.filter { it.isDigit() || it == '+' }
+            .removePrefix("+").removePrefix("00")
         val instagram = editable.instagram.trim().removePrefix("@")
         val email = editable.email.trim()
         // "Do not contact" wins over every outreach shortcut — the chips stay
         // visible but inert and dimmed, so the flag is impossible to miss.
         val blocked = customer.doNotContact
         val followUp = customer.nextFollowUpDate
-        if (phone.isBlank() && email.isBlank() && instagram.isBlank() && !blocked && followUp == null) return
+        if (phone.isBlank() && waSource.isBlank() && email.isBlank() && instagram.isBlank() && !blocked && followUp == null) return
         fun open(intent: Intent) {
             runCatching { context.startActivity(intent) }
         }
@@ -797,6 +810,8 @@ private fun CustomerDetail(
         ) {
             if (phone.isNotBlank()) {
                 QuickActionChip("📞 ${t("Call")}", enabled = !blocked, highlighted = customer.preferredChannel == "phone") { open(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneDigits"))) }
+            }
+            if (waDigits.isNotBlank()) {
                 QuickActionChip("💬 WhatsApp", enabled = !blocked, highlighted = customer.preferredChannel == "whatsapp") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))) }
             }
             if (email.isNotBlank()) {
@@ -966,7 +981,13 @@ private fun CustomerDetail(
     fun contactCard() {
         DetailCard(title = t("Contact Info")) {
             CustomerField(t("Email"), editable.email) { editable = editable.copy(email = it); dirty = true }
-            CustomerField(t("WhatsApp"), editable.phone) { editable = editable.copy(phone = it); dirty = true }
+            // The customer's own WhatsApp number, kept apart from the store-fed
+            // phone — "Phone / WhatsApp" stops being one ambiguous box (web parity).
+            CustomerField(t("WhatsApp Number"), editable.whatsappNumber) { editable = editable.copy(whatsappNumber = it); dirty = true }
+            // The order's general phone lands here — it is NOT a verified
+            // WhatsApp number, so the label stays honest about that.
+            CustomerField(t("Phone (from orders)"), editable.phone) { editable = editable.copy(phone = it); dirty = true }
+            CustomerField(t("Company"), editable.company) { editable = editable.copy(company = it); dirty = true }
             CustomerField(t("Instagram"), editable.instagram) { editable = editable.copy(instagram = it); dirty = true }
             CustomerField(t("Street"), editable.streetAddress) { editable = editable.copy(streetAddress = it); dirty = true }
             CustomerField(t("City"), editable.city) { editable = editable.copy(city = it); dirty = true }
@@ -1069,7 +1090,13 @@ private fun CustomerDetail(
     @Composable
     fun statCardsSection() {
         val specs = listOf(
-            StatSpec(Icons.Filled.ShoppingBag, Color(0xFF34C759), t("Total Spent"), moneyText(currencySymbol, totalSpent), Color(0xFF34C759)),
+            StatSpec(
+                Icons.Filled.ShoppingBag, Color(0xFF34C759), t("Total Spent"),
+                moneyText(currencySymbol, totalSpent), Color(0xFF34C759),
+                sub = if (totalRefunded > 0.004) {
+                    "${t("incl.")} ${moneyText(currencySymbol, totalRefunded)} ${t("cancelled or refunded")}"
+                } else null
+            ),
             StatSpec(Icons.Filled.Inventory2, StudioBlue, t("Total Orders"), customerOrders.size.toString(), MaterialTheme.colorScheme.onSurface),
             StatSpec(Icons.Filled.CalendarMonth, Color(0xFFAF52DE), t("Last Order"), lastOrderDate?.let { dateFormatter.format(it) } ?: "—", MaterialTheme.colorScheme.onSurface),
             StatSpec(Icons.Filled.Schedule, Color(0xFFFF9500), t("Customer Since"), customerSinceDate?.let { monthYearFormatter.format(it) } ?: "—", MaterialTheme.colorScheme.onSurface)
@@ -1461,7 +1488,15 @@ private fun DetailCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
-private data class StatSpec(val icon: ImageVector, val tint: Color, val label: String, val value: String, val valueColor: Color)
+private data class StatSpec(
+    val icon: ImageVector,
+    val tint: Color,
+    val label: String,
+    val value: String,
+    val valueColor: Color,
+    /** Optional footnote under the value — e.g. the cancelled/refunded slice. */
+    val sub: String? = null
+)
 
 @Composable
 private fun StatCard(modifier: Modifier, spec: StatSpec) {
@@ -1472,6 +1507,9 @@ private fun StatCard(modifier: Modifier, spec: StatSpec) {
             }
             Text(spec.label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(spec.value, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = spec.valueColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            spec.sub?.let {
+                Text(it, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

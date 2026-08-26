@@ -153,6 +153,34 @@ data class StudioBankConnection(
     val isSyncFailing: Boolean get() = isLinked && syncState != "ok"
 }
 
+/** One line of the connection audit trail (owner-only, served by the
+ *  bankListAuditLog callable): every sync, connect, disconnect and purge the
+ *  server recorded, so "did it actually sync?" has an answer on the phone. */
+data class StudioBankAuditEntry(
+    val id: String,
+    val atMs: Long,
+    val kind: String,        // "sync" | "connected" | "disconnected" | "purged"
+    val ok: Boolean,
+    val bank: String,
+    val imported: Int,
+    val error: String
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioBankAuditEntry? {
+            val id = raw["id"] as? String ?: return null
+            return StudioBankAuditEntry(
+                id = id,
+                atMs = (raw["atMs"] as? Number)?.toLong() ?: 0L,
+                kind = raw["kind"] as? String ?: "",
+                ok = raw["ok"] != false,
+                bank = raw["bank"] as? String ?: "",
+                imported = (raw["imported"] as? Number)?.toInt() ?: 0,
+                error = raw["error"] as? String ?: ""
+            )
+        }
+    }
+}
+
 /** A workspace-defined category record (rename/deactivate/default VAT).
  *  Server-written via bankSaveCategory on the web; Android only reads it to
  *  merge active custom names into the category pickers. */

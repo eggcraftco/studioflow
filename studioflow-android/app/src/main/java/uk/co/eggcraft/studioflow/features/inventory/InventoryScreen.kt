@@ -102,7 +102,7 @@ internal fun inventoryCardColors() =
 
 private enum class InventoryTab(val label: String) {
     Items("Items"), Purchases("Purchases"), Suppliers("Suppliers"),
-    Stocktake("Stocktake"), Reports("Reports")
+    Stocktake("Stocktake"), Locations("Locations"), Reports("Reports")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,6 +144,15 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var editingSupplier by remember { mutableStateOf<StudioSupplier?>(null) }
     var matchingPurchase by remember { mutableStateOf<StudioPurchase?>(null) }
     var receivingPurchase by remember { mutableStateOf<StudioPurchase?>(null) }
+    // Defined location paths ("Safe A / Drawer 3") offered as suggestions on the
+    // item form's free-text location field. Best-effort: the field works without
+    // them, so a failed fetch stays silent.
+    var locationPaths by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    suspend fun reloadLocationPaths() {
+        runCatching { repository.inventoryLocations(workspaceId).map { it.path } }
+            .onSuccess { locationPaths = it }
+    }
 
     suspend fun reloadItems() {
         try {
@@ -186,7 +195,10 @@ fun InventoryScreen(state: StudioFlowUiState) {
     }
 
     LaunchedEffect(workspaceId) {
-        if (workspaceId.isNotBlank()) reloadItems()
+        if (workspaceId.isNotBlank()) {
+            reloadItems()
+            reloadLocationPaths()
+        }
     }
 
     LaunchedEffect(tab, workspaceId) {
@@ -218,7 +230,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
                     modifier = Modifier.clickable { showOpeningStock = true }.padding(end = 12.dp)
                 )
             }
-            if (canEdit && tab != InventoryTab.Stocktake && tab != InventoryTab.Reports) {
+            if (canEdit && (tab == InventoryTab.Items || tab == InventoryTab.Purchases || tab == InventoryTab.Suppliers)) {
                 Button(onClick = {
                     when (tab) {
                         InventoryTab.Items -> itemEditor = null to ""
@@ -321,6 +333,18 @@ fun InventoryScreen(state: StudioFlowUiState) {
                 onStockChanged = { scope.launch { reloadItems() } }
             )
 
+            InventoryTab.Locations -> LocationsTab(
+                workspaceId = workspaceId,
+                items = items,
+                canEdit = canEdit,
+                t = t,
+                onLocationsChanged = {
+                    // A rename cascades into item location strings server-side,
+                    // so both the item list and the form suggestions go stale.
+                    scope.launch { reloadItems(); reloadLocationPaths() }
+                }
+            )
+
             InventoryTab.Reports -> ReportsTab(
                 workspaceId = workspaceId,
                 symbol = symbol,
@@ -369,6 +393,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
             t = t,
             existing = prefill,
             itemId = editingItemId,
+            locationPaths = locationPaths,
             onDismiss = { itemEditor = null },
             onSave = { payload, savingItemId ->
                 scope.launch {

@@ -1297,6 +1297,14 @@ data class StudioOrder(
 
     val isClosed: Boolean get() = status == "Done" || status == "Cancelled"
 
+    // A cancelled or refunded order owes nothing and must not inflate a
+    // customer's totals as if it were real trade — same rule as the web's
+    // countsTowardBalance (status contains "cancel", or the store marked the
+    // order refunded through the "Shopify Status" custom field).
+    val countsTowardBalance: Boolean
+        get() = !status.lowercase().contains("cancel") &&
+            (customFields["Shopify Status"] ?: "").lowercase() != "refunded"
+
     // Total of the order's custom "Remaining" receivables (customFields keyed
     // financialRemaining::<title>). Counts toward the sales total exactly like
     // remainingAmount, on every platform.
@@ -1438,6 +1446,14 @@ data class StudioCustomer(
     val name: String = "",
     val email: String = "",
     val phone: String = "",
+    // A landline/primary number distinct from the WhatsApp-capable one. No form
+    // field on Android yet, but decoded and sent on every save so an edit here
+    // never wipes a number entered on the web.
+    val primaryPhone: String = "",
+    // The customer's OWN WhatsApp number — the store-fed "phone" stays untouched.
+    val whatsappNumber: String = "",
+    // Trade customers: the business the person buys for.
+    val company: String = "",
     val instagram: String = "",
     val address: String = "",
     val streetAddress: String = "",
@@ -1479,6 +1495,9 @@ data class StudioCustomer(
             name = document.getString("name").orEmpty(),
             email = document.getString("email").orEmpty(),
             phone = document.getString("phone").orEmpty(),
+            primaryPhone = document.getString("primaryPhone").orEmpty(),
+            whatsappNumber = document.getString("whatsappNumber").orEmpty(),
+            company = document.getString("company").orEmpty(),
             instagram = document.getString("instagram").orEmpty(),
             address = document.getString("address").orEmpty(),
             streetAddress = (document.getString("streetAddress")

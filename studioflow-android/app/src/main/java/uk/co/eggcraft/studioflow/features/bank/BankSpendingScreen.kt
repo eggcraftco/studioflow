@@ -114,6 +114,7 @@ import uk.co.eggcraft.studioflow.data.model.BankReceiptKind
 import uk.co.eggcraft.studioflow.data.model.BankConfidence
 import uk.co.eggcraft.studioflow.data.model.BankRecurringSpend
 import uk.co.eggcraft.studioflow.data.model.StudioBankAccount
+import uk.co.eggcraft.studioflow.data.model.StudioBankAuditEntry
 import uk.co.eggcraft.studioflow.data.model.StudioBankConnection
 import uk.co.eggcraft.studioflow.data.model.StudioBankRule
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
@@ -271,6 +272,10 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     var error by remember { mutableStateOf<String?>(null) }
     var ocr by remember { mutableStateOf<BankOcrResult?>(null) }
     var pendingAttachTxId by remember { mutableStateOf<String?>(null) }
+    // Connection audit trail (owner-only): fetched lazily on first open, null
+    // until then so the card can say "Loading…" honestly.
+    var auditOpen by remember { mutableStateOf(false) }
+    var auditEntries by remember { mutableStateOf<List<StudioBankAuditEntry>?>(null) }
     // Candidates returned by bankMatchIncomingToOrder("suggest") for the open sheet.
     var incomingSuggest by remember { mutableStateOf<BankIncomingMatchResult?>(null) }
 
@@ -508,7 +513,38 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
         if (connections.isNotEmpty()) {
             item {
                 Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-                    Column { connections.forEach { ConnectionRow(it, t, locale, isOwner, uriHandler::openUri) } }
+                    Column {
+                        connections.forEach { ConnectionRow(it, t, locale, isOwner, uriHandler::openUri) }
+                        if (isOwner) {
+                            // The trail the server leaves on every sync, connect,
+                            // disconnect and purge — owner-only like the callable.
+                            Text(
+                                "🕑 ${t("Activity")}",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clickable {
+                                        if (auditOpen) {
+                                            auditOpen = false
+                                        } else {
+                                            auditOpen = true
+                                            if (auditEntries == null) {
+                                                scope.launch {
+                                                    auditEntries = runCatching { repository.bankAuditLog(workspaceId, 15) }
+                                                        .getOrDefault(emptyList())
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            if (isOwner && auditOpen) {
+                item {
+                    BankAuditTrailCard(entries = auditEntries, t = t, locale = locale)
                 }
             }
         }
@@ -1275,6 +1311,48 @@ private fun ConnectionRow(connection: StudioBankConnection, t: (String) -> Strin
         }
         if (isOwner && connection.needsReconnect) {
             OutlinedButton(onClick = { openUri("https://nivadesk.app/bank") }) { Text(t("Reconnect"), fontSize = 12.sp, color = RED) }
+        }
+    }
+}
+
+/** The connection activity trail — one line per recorded sync/connect/
+ *  disconnect/purge, newest first, with a green/red dot by outcome. Owner-only
+ *  (the caller gates it and the callable re-checks server-side). */
+@Composable
+private fun BankAuditTrailCard(entries: List<StudioBankAuditEntry>?, t: (String) -> String, locale: Locale) {
+    Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(t("Connection activity"), fontSize = 12.5.sp, fontWeight = FontWeight.ExtraBold)
+            when {
+                entries == null -> Text(t("Loading…"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                entries.isEmpty() -> Text(
+                    t("Nothing recorded yet — the trail starts with the next sync."),
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                else -> entries.forEach { entry ->
+                    val label = when {
+                        entry.kind == "sync" && entry.ok ->
+                            t("Synced") + if (entry.imported > 0) " · ${entry.imported} ${t("new")}" else ""
+                        entry.kind == "sync" ->
+                            t("Sync failed") + if (entry.error.isNotBlank()) " — ${entry.error.take(90)}" else ""
+                        entry.kind == "connected" -> t("Bank connected")
+                        entry.kind == "disconnected" -> t("Disconnected — data kept")
+                        entry.kind == "purged" -> t("Connection and its imported data deleted")
+                        else -> entry.kind
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.size(6.dp).background(if (entry.ok) GREEN else RED, CircleShape))
+                        Text(
+                            SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(entry.atMs)),
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (entry.bank.isNotBlank()) {
+                            Text(entry.bank, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
         }
     }
 }

@@ -55,8 +55,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioBankAuditEntry
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryCursor
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryLocation
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryPage
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
@@ -595,6 +597,12 @@ class StudioFlowRepository(
         "name" to customer.name,
         "email" to customer.email,
         "phone" to customer.phone,
+        // The callable rebuilds these on every write (no key-present semantics),
+        // so they ride along on EVERY save path or an Android edit would wipe
+        // what the web stored.
+        "primaryPhone" to customer.primaryPhone,
+        "whatsappNumber" to customer.whatsappNumber,
+        "company" to customer.company,
         "instagram" to customer.instagram,
         "address" to customer.address,
         "streetAddress" to customer.streetAddress,
@@ -2753,6 +2761,30 @@ class StudioFlowRepository(
         inventoryCall("saveSupplier", workspaceId, mapOf("supplierId" to supplierId, "supplier" to supplier))
     }
 
+    /** The location tree, sorted by path server-side ("Safe A" before
+     *  "Safe A / Drawer 3"), so the screen can indent by depth and read down. */
+    suspend fun inventoryLocations(workspaceId: String): List<StudioInventoryLocation> {
+        val raw = inventoryCall("listInventoryLocations", workspaceId)
+        return (raw["locations"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryLocation::from) }
+    }
+
+    /** Creates ([locationId] blank) or renames/moves a location. The server
+     *  owns the whole cascade: sibling-name and cycle checks, the ≤4-level
+     *  depth cap, and rewriting subtree paths plus item location strings. */
+    suspend fun inventorySaveLocation(workspaceId: String, name: String, parentId: String, locationId: String = "") {
+        inventoryCall(
+            "saveInventoryLocation", workspaceId,
+            mapOf("locationId" to locationId, "name" to name, "parentId" to parentId)
+        )
+    }
+
+    /** Refused server-side while child locations or standing stock remain —
+     *  the HttpsError message says which, and the screen shows it verbatim. */
+    suspend fun inventoryDeleteLocation(workspaceId: String, locationId: String) {
+        inventoryCall("deleteInventoryLocation", workspaceId, mapOf("locationId" to locationId))
+    }
+
     /** Asks the server what a pasted list would become. The preview and the
      *  import come out of the same call, so the screen cannot promise one thing
      *  and the write do another. */
@@ -3158,6 +3190,14 @@ class StudioFlowRepository(
 
     suspend fun bankMatchWaitingReceipts(workspaceId: String): Int =
         ((bankCall("bankMatchWaitingReceipts", workspaceId)["matched"] as? Number)?.toInt()) ?: 0
+
+    /** The connection audit trail (owner-only server-side): newest first,
+     *  every sync/connect/disconnect/purge the server recorded. */
+    suspend fun bankAuditLog(workspaceId: String, limit: Int = 15): List<StudioBankAuditEntry> {
+        val raw = bankCall("bankListAuditLog", workspaceId, mapOf("limit" to limit))
+        return (raw["entries"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioBankAuditEntry::from) }
+    }
 
     fun bankConnectionsFlow(workspaceId: String): Flow<List<StudioBankConnection>> = callbackFlow {
         if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }

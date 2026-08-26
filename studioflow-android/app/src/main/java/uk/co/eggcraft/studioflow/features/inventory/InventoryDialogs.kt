@@ -126,6 +126,9 @@ fun NewInventoryItemDialog(
     t: (String) -> String,
     existing: StudioInventoryItem? = null,
     itemId: String = "",
+    /** Defined location paths ("Safe A / Drawer 3") offered as tap-to-fill
+     *  suggestions. The field stays free text — any location is still legal. */
+    locationPaths: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (Map<String, Any?>, String) -> Unit
 ) {
@@ -219,6 +222,25 @@ fun NewInventoryItemDialog(
 
                 Spacer(Modifier.height(8.dp))
                 InventoryField(t("Location"), location) { location = it }
+                // Tap-to-fill suggestions from the defined location tree; free
+                // text keeps working, so these are offers, not a constraint.
+                val locationSuggestions = locationPaths.filter { path ->
+                    path != location && (location.isBlank() || path.contains(location, ignoreCase = true))
+                }.take(6)
+                if (locationSuggestions.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        locationSuggestions.forEach { path ->
+                            Text(
+                                path, fontSize = 11.sp, color = StudioBlue,
+                                modifier = Modifier.clickable { location = path }.padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(14.dp))
                 HorizontalDivider()
