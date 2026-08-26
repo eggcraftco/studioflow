@@ -2455,6 +2455,10 @@ class FirebaseManager: ObservableObject {
             "email": musteri.email,
             "phone": musteri.phone,
             "primaryPhone": musteri.primaryPhone ?? "",
+            // The callable rewrites every contact basic, so the customer's own
+            // WhatsApp number and company must ride along or be wiped.
+            "whatsappNumber": musteri.whatsappNumber ?? "",
+            "company": musteri.company ?? "",
             "instagram": musteri.instagram,
             "address": musteri.address,
             "streetAddress": musteri.streetAddress ?? "",

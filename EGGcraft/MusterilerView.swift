@@ -76,6 +76,8 @@ struct MusterilerView: View {
                 $0.name.localizedStandardContains(aramaMetni) ||
                 $0.email.localizedStandardContains(aramaMetni) ||
                 $0.phone.localizedStandardContains(aramaMetni) ||
+                ($0.whatsappNumber ?? "").localizedStandardContains(aramaMetni) ||
+                ($0.company ?? "").localizedStandardContains(aramaMetni) ||
                 $0.instagram.localizedStandardContains(aramaMetni) ||
                 $0.address.localizedStandardContains(aramaMetni) ||
                 ($0.streetAddress ?? "").localizedStandardContains(aramaMetni) ||
@@ -743,6 +745,18 @@ struct MusteriDetayView: View {
 
     var musteriSiparisleri: [Siparis] { firebaseManager.siparisler.filter { $0.customerName.lowercased() == musteri.name.lowercased() }.sorted { $0.paymentDate > $1.paymentDate } }
     var toplamHarcama: Double { musteriSiparisleri.reduce(0) { $0 + $1.paidAmount + $1.remainingAmount } }
+    /// The slice of the gross figure sitting in cancelled/refunded orders —
+    /// shown as a sub-line so the total cannot quietly overstate a customer's
+    /// worth (same flag logic as the web's countsTowardBalance).
+    var iptalIadeToplami: Double {
+        musteriSiparisleri.filter(siparisIptalVeyaIade).reduce(0) { $0 + $1.paidAmount + $1.remainingAmount }
+    }
+    private func siparisIptalVeyaIade(_ siparis: Siparis) -> Bool {
+        if siparis.status.lowercased().contains("cancel") { return true }
+        let shopify = (siparis.customFields?["Shopify Status"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return shopify == "refunded"
+    }
     var lastOrderDate: Date? { musteriSiparisleri.first?.paymentDate }
     var customerSinceDate: Date? { musteriSiparisleri.last?.paymentDate }
     
@@ -858,8 +872,13 @@ struct MusteriDetayView: View {
     }
 
     private var quickActionWhatsAppDigits: String {
-        // wa.me wants the number without a leading "+" or "00".
-        var digits = quickActionPhoneDigits
+        // The dedicated WhatsApp number wins; the store-fed phone is only a
+        // fallback guess (mirror of the web). wa.me wants the number without
+        // a leading "+" or "00".
+        let source = [(musteri.whatsappNumber ?? ""), musteri.phone, (musteri.primaryPhone ?? "")]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
+        var digits = source.filter { $0.isNumber || $0 == "+" }
         if digits.hasPrefix("+") { digits.removeFirst() }
         if digits.hasPrefix("00") { digits.removeFirst(2) }
         return digits
@@ -888,6 +907,10 @@ struct MusteriDetayView: View {
                 if !phone.isEmpty {
                     quickActionChip(icon: "phone.fill", label: t("Call", lang: seciliDil), urlString: "tel:\(quickActionPhoneDigits)",
                                     highlighted: preferred == "phone", blocked: blocked)
+                }
+                // Shown whenever ANY WhatsApp-capable number exists — the
+                // dedicated one first, the store-fed phone as fallback.
+                if !quickActionWhatsAppDigits.isEmpty {
                     quickActionChip(icon: "message.fill", label: "WhatsApp", urlString: "https://wa.me/\(quickActionWhatsAppDigits)",
                                     highlighted: preferred == "whatsapp", blocked: blocked)
                 }
@@ -1308,8 +1331,12 @@ struct MusteriDetayView: View {
         DetayKartiSabit(title: t("Contact Info", lang: seciliDil), iconName: "person.crop.circle") {
             DetailField(label: t("Email", lang: seciliDil), value: $musteri.email)
                 .onChange(of: musteri.email) { _, _ in saveMusteriDetailChange() }
-            DetailField(label: t("WhatsApp", lang: seciliDil), value: $musteri.phone)
+            // The customer's own WhatsApp number, kept apart from the store-fed
+            // phone — which is relabelled so it stops claiming to be one.
+            DetailField(label: t("WhatsApp Number", lang: seciliDil), value: customerWhatsappNumberBinding)
+            DetailField(label: t("Phone (from orders)", lang: seciliDil), value: $musteri.phone)
                 .onChange(of: musteri.phone) { _, _ in saveMusteriDetailChange() }
+            DetailField(label: t("Company", lang: seciliDil), value: customerCompanyBinding)
             DetailField(label: t("Instagram", lang: seciliDil), value: $musteri.instagram)
                 .onChange(of: musteri.instagram) { _, _ in saveMusteriDetailChange() }
             Divider().opacity(0.35)
@@ -1517,6 +1544,20 @@ struct MusteriDetayView: View {
         )
     }
 
+    private var customerWhatsappNumberBinding: Binding<String> {
+        Binding(
+            get: { musteri.whatsappNumber ?? "" },
+            set: { musteri.whatsappNumber = $0; saveMusteriDetailChange() }
+        )
+    }
+
+    private var customerCompanyBinding: Binding<String> {
+        Binding(
+            get: { musteri.company ?? "" },
+            set: { musteri.company = $0; saveMusteriDetailChange() }
+        )
+    }
+
     private var customerCityBinding: Binding<String> {
         Binding(
             get: { musteri.city ?? "" },
@@ -1597,6 +1638,11 @@ struct MusteriDetayView: View {
             statCard(icon: "bag.fill", tint: .green,
                      label: t("Total Spent", lang: seciliDil),
                      value: "\(seciliParaBirimi)\(toplamHarcama.toCurrencyString())",
+                     // The gross figure confesses its refunded slice — only
+                     // when such orders exist (mirror of the web).
+                     sub: iptalIadeToplami > 0.004
+                        ? "\(t("incl.", lang: seciliDil)) \(seciliParaBirimi)\(iptalIadeToplami.toCurrencyString()) \(t("cancelled or refunded", lang: seciliDil))"
+                        : nil,
                      valueColor: .green)
             statCard(icon: "shippingbox.fill", tint: .blue,
                      label: t("Total Orders", lang: seciliDil),
@@ -1610,7 +1656,7 @@ struct MusteriDetayView: View {
         }
     }
 
-    private func statCard(icon: String, tint: Color, label: String, value: String, valueColor: Color = .primary) -> some View {
+    private func statCard(icon: String, tint: Color, label: String, value: String, sub: String? = nil, valueColor: Color = .primary) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.15)).frame(width: 30, height: 30)
@@ -1618,6 +1664,10 @@ struct MusteriDetayView: View {
             }
             Text(label).font(.system(size: 12, weight: .medium)).foregroundColor(.secondary).lineLimit(1)
             Text(value).font(.system(size: 16, weight: .bold)).foregroundColor(valueColor).lineLimit(1).minimumScaleFactor(0.6)
+            if let sub {
+                Text(sub).font(.system(size: 10.5)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

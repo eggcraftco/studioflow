@@ -33,6 +33,13 @@ struct Musteri: Identifiable, Codable, Equatable {
     // Secondary phone the web/callable path maintains. Decoded (and re-encoded on
     // full-document saves) so the app's setData writes never wipe it.
     var primaryPhone: String?
+    // The customer's OWN WhatsApp number — kept apart from the store-fed
+    // `phone` so "Phone / WhatsApp" stops being one ambiguous box. Optional so
+    // existing customers decode; full-document saves re-encode it.
+    var whatsappNumber: String?
+    // Trade customers: the business the person buys for. Same decode/re-encode
+    // contract as whatsappNumber.
+    var company: String?
     // Customer segments ("VIP", "Wholesale"...). Written through the
     // updateWebCustomer callable with KEY-PRESENT semantics — decoded here so
     // full-document local writes preserve them.

@@ -797,6 +797,27 @@ struct InventoryListPage {
     let cursor: InventoryListCursor?
 }
 
+/// One node of the location tree ("Safe A / Drawer 3"). The tree lives
+/// server-side and OWNS the location strings on items: renaming a node
+/// rewrites its subtree and every item standing in it. Items still carry one
+/// plain string, so free-typed locations keep working everywhere.
+struct InventoryLocation: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let parentId: String
+    let path: String
+    let depth: Int
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String, !id.isEmpty else { return nil }
+        self.id = id
+        name = raw["name"] as? String ?? ""
+        parentId = raw["parentId"] as? String ?? ""
+        path = raw["path"] as? String ?? (raw["name"] as? String ?? "")
+        depth = max(1, (raw["depth"] as? NSNumber)?.intValue ?? 1)
+    }
+}
+
 extension FirebaseManager {
 
     /// Every inventory callable is workspace-scoped and role-checked server-side,
@@ -955,6 +976,31 @@ extension FirebaseManager {
 
     func saveSupplier(_ supplier: [String: Any], supplierId: String = "") async throws {
         _ = try await inventoryCall("saveSupplier", ["supplierId": supplierId, "supplier": supplier])
+    }
+
+    // MARK: Hierarchical locations
+
+    /// The whole tree, path-sorted by the server ("Safe A" before
+    /// "Safe A / Drawer 3"), so the list draws in tree order as-is.
+    func listInventoryLocations() async throws -> [InventoryLocation] {
+        let raw = try await inventoryCall("listInventoryLocations")
+        return (raw["locations"] as? [[String: Any]] ?? []).compactMap(InventoryLocation.init)
+    }
+
+    /// Creates (empty `locationId`) or renames/moves a node. The server owns
+    /// every guard — sibling name clashes, cycles, the 4-level depth cap — and
+    /// a rename cascades into the subtree's paths AND the location strings of
+    /// items standing there, with no ledger lines (a shelf rename moves no goods).
+    func saveInventoryLocation(name: String, parentId: String, locationId: String = "") async throws {
+        _ = try await inventoryCall(
+            "saveInventoryLocation",
+            ["locationId": locationId, "name": name, "parentId": parentId])
+    }
+
+    /// Refused server-side while child locations or standing stock remain —
+    /// the refusal text is the user-facing message.
+    func deleteInventoryLocation(_ locationId: String) async throws {
+        _ = try await inventoryCall("deleteInventoryLocation", ["locationId": locationId])
     }
 
     /// Asks the server what a pasted list would become. The preview and the

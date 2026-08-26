@@ -34,6 +34,9 @@ struct NewInventoryItemSheet: View {
     /// Every tag already in use across the shelf, offered as one-tap
     /// suggestions. Empty where the caller has no list at hand.
     let tagSuggestions: [String]
+    /// Defined location paths plus every location already in use, offered
+    /// beside the Location field. Free text still works.
+    let locationSuggestions: [String]
     let onSaved: () -> Void
 
     @State private var trackingType: InventoryTrackingType = .unique
@@ -66,6 +69,7 @@ struct NewInventoryItemSheet: View {
         existing: InventoryItem? = nil,
         itemId: String = "",
         tagSuggestions: [String] = [],
+        locationSuggestions: [String] = [],
         onSaved: @escaping () -> Void
     ) {
         self.currencySymbol = currencySymbol
@@ -73,6 +77,7 @@ struct NewInventoryItemSheet: View {
         self.existing = existing
         self.itemId = itemId
         self.tagSuggestions = tagSuggestions
+        self.locationSuggestions = locationSuggestions
         self.onSaved = onSaved
         guard let item = existing else { return }
         _trackingType = State(initialValue: item.trackingType)
@@ -137,7 +142,12 @@ struct NewInventoryItemSheet: View {
                         TextField(t("Unit (pcs, ml, g)", lang: lang), text: $unit)
                         TextField(t("Tell me when it drops to", lang: lang), text: $lowStockAt)
                     }
-                    TextField(t("Location", lang: lang), text: $location)
+                    LocationFieldWithSuggestions(
+                        location: $location,
+                        lang: lang,
+                        placeholder: t("Location", lang: lang),
+                        suggestions: locationSuggestions
+                    )
                 }
 
                 Section(t("Tags", lang: lang)) {

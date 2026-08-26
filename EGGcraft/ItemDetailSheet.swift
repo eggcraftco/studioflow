@@ -13,6 +13,9 @@ struct ItemDetailSheet: View {
     let currencySymbol: String
     let lang: String
     let canEdit: Bool
+    /// Defined location paths plus every location already in use — offered by
+    /// the Move / Change Location editor. Free text still works.
+    let locationSuggestions: [String]
     let onChanged: () -> Void
 
     @State private var item: InventoryItem
@@ -29,12 +32,13 @@ struct ItemDetailSheet: View {
     @State private var locationDraft = ""
     @FocusState private var locationFocused: Bool
 
-    init(item: InventoryItem, currencySymbol: String, lang: String, canEdit: Bool, onChanged: @escaping () -> Void) {
+    init(item: InventoryItem, currencySymbol: String, lang: String, canEdit: Bool, locationSuggestions: [String] = [], onChanged: @escaping () -> Void) {
         _item = State(initialValue: item)
         _locationDraft = State(initialValue: item.location)
         self.currencySymbol = currencySymbol
         self.lang = lang
         self.canEdit = canEdit
+        self.locationSuggestions = locationSuggestions
         self.onChanged = onChanged
     }
 
@@ -78,13 +82,13 @@ struct ItemDetailSheet: View {
             await loadLibraryFiles()
         }
         .sheet(isPresented: $editing) {
-            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: item, itemId: item.id) {
+            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: item, itemId: item.id, locationSuggestions: locationSuggestions) {
                 Task { await refresh() }
             }
             .environmentObject(firebaseManager)
         }
         .sheet(item: $duplicating) { source in
-            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: source, itemId: "") {
+            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: source, itemId: "", locationSuggestions: locationSuggestions) {
                 Task { await refresh() }
             }
             .environmentObject(firebaseManager)
@@ -213,10 +217,15 @@ struct ItemDetailSheet: View {
             if movingLocation {
                 HStack(spacing: 8) {
                     Text(t("Location", lang: lang)).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-                    TextField(t("Safe A, Drawer 3…", lang: lang), text: $locationDraft)
+                    LocationFieldWithSuggestions(
+                        location: $locationDraft,
+                        lang: lang,
+                        placeholder: t("Safe A, Drawer 3…", lang: lang),
+                        suggestions: locationSuggestions,
+                        focus: $locationFocused
+                    )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12))
-                        .focused($locationFocused)
                     Button(t("Save", lang: lang)) { saveLocation() }
                         .font(.system(size: 11, weight: .semibold))
                         .buttonStyle(.plain).foregroundColor(.blue)

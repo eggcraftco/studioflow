@@ -775,6 +775,8 @@ private struct BankConnectionBar: View {
     let isOwner: Bool
     @ObservedObject var model: BankScreenModel
 
+    @State private var showActivity = false
+
     var body: some View {
         if !connections.isEmpty {
             VStack(spacing: 0) {
@@ -782,9 +784,100 @@ private struct BankConnectionBar: View {
                     BankConnectionRow(connection: connection, fmt: fmt, isOwner: isOwner, model: model)
                     if connection.id != connections.last?.id { Divider().padding(.leading, 52) }
                 }
+                // The connection trail (§audit): syncs, failures, connects and
+                // disconnects — owner-only, read on demand via a callable.
+                if isOwner {
+                    Divider().padding(.leading, 52)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showActivity.toggle() }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "clock.arrow.circlepath").font(.system(size: 10, weight: .semibold))
+                            Text(fmt.t("Activity")).font(.system(size: 11, weight: .bold))
+                            Spacer()
+                            Image(systemName: showActivity ? "chevron.up" : "chevron.down").font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if showActivity {
+                        BankConnectionActivityList(fmt: fmt, model: model)
+                    }
+                }
             }
             .padding(.vertical, 4)
             .background(background).cornerRadius(14)
+        }
+    }
+}
+
+/// The trail itself: timestamp, bank, and what happened — "Synced · N new",
+/// "Sync failed — why", connected, disconnected, purged — green/red dotted.
+/// Fetched once when first opened; its own struct (real-iPhone stack guard).
+private struct BankConnectionActivityList: View {
+    let fmt: BankFormat
+    @ObservedObject var model: BankScreenModel
+
+    @State private var entries: [BankAuditEntry]?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(fmt.t("Connection activity")).font(.system(size: 12.5, weight: .bold))
+            if let entries {
+                if entries.isEmpty {
+                    Text(fmt.t("Nothing recorded yet — the trail starts with the next sync."))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                } else {
+                    ForEach(entries) { entry in
+                        BankAuditEntryRow(entry: entry, fmt: fmt)
+                    }
+                }
+            } else {
+                Text(fmt.t("Loading…")).font(.system(size: 12)).foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard entries == nil, let manager = model.manager else { return }
+        entries = (try? await manager.bankListAuditLog(limit: 15)) ?? []
+    }
+}
+
+private struct BankAuditEntryRow: View {
+    let entry: BankAuditEntry
+    let fmt: BankFormat
+
+    private var label: String {
+        switch entry.kind {
+        case "sync":
+            if entry.ok {
+                return fmt.t("Synced") + (entry.imported > 0 ? " · \(entry.imported) \(fmt.t("new"))" : "")
+            }
+            return fmt.t("Sync failed") + (entry.error.isEmpty ? "" : " — \(entry.error.prefix(90))")
+        case "connected": return fmt.t("Bank connected")
+        case "disconnected": return fmt.t("Disconnected — data kept")
+        case "purged": return fmt.t("Connection and its imported data deleted")
+        default: return entry.kind
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle().fill(entry.ok ? Color.green : Color.red).frame(width: 6, height: 6)
+            Text(fmt.time(Date(timeIntervalSince1970: entry.atMs / 1000)))
+                .font(.system(size: 11)).monospacedDigit().foregroundColor(.secondary)
+                .layoutPriority(1)
+            if !entry.bank.isEmpty {
+                Text(entry.bank).font(.system(size: 11, weight: .bold)).lineLimit(1).layoutPriority(1)
+            }
+            Text(label).font(.system(size: 11)).lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
         }
     }
 }

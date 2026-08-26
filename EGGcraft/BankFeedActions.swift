@@ -67,6 +67,30 @@ struct BankIncomingMatchResult {
     let unlinked: Bool
 }
 
+/// One line of the connection trail (companies/{id}/bankAuditLog): every sync
+/// (success with its import count or failure with its classified error),
+/// every connect, disconnect and purge. Server-written, owner-only read.
+struct BankAuditEntry: Identifiable, Equatable {
+    let id: String
+    let atMs: Double
+    let kind: String       // "sync" | "connected" | "disconnected" | "purged"
+    let ok: Bool
+    let bank: String
+    let imported: Int
+    let error: String
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String, !id.isEmpty else { return nil }
+        self.id = id
+        atMs = (raw["atMs"] as? NSNumber)?.doubleValue ?? 0
+        kind = (raw["kind"] as? String) ?? ""
+        ok = (raw["ok"] as? Bool) ?? true
+        bank = (raw["bank"] as? String) ?? ""
+        imported = (raw["imported"] as? NSNumber)?.intValue ?? 0
+        error = (raw["error"] as? String) ?? ""
+    }
+}
+
 struct BankFeedError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -184,6 +208,13 @@ extension FirebaseManager {
     /// mode "purge" deletes the connection AND all its imported transactions.
     func bankDeleteConnection(connectionId: String, mode: String) async throws {
         try await bankCall("bankDeleteConnection", ["requisitionId": connectionId, "mode": mode])
+    }
+
+    /// The connection trail, newest first — owner-only server-side, served by
+    /// a callable so no client rule exists.
+    func bankListAuditLog(limit: Int = 15) async throws -> [BankAuditEntry] {
+        let raw = try await bankCall("bankListAuditLog", ["limit": limit])
+        return (raw["entries"] as? [[String: Any]] ?? []).compactMap(BankAuditEntry.init)
     }
 
     // MARK: Receipts

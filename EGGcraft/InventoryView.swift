@@ -8,7 +8,7 @@ import SwiftUI
 
 
 enum InventoryTab: String, CaseIterable {
-    case items, purchases, suppliers, stocktake, reports
+    case items, purchases, suppliers, stocktake, locations, reports
 
     var label: String {
         switch self {
@@ -16,6 +16,7 @@ enum InventoryTab: String, CaseIterable {
         case .purchases: return "Purchases"
         case .suppliers: return "Suppliers"
         case .stocktake: return "Stocktake"
+        case .locations: return "Locations"
         case .reports: return "Reports"
         }
     }
@@ -33,6 +34,15 @@ final class InventoryScreenModel: ObservableObject {
     // presence is what makes the "Load the next 500 items" row appear.
     @Published var listCursor: InventoryListCursor?
     @Published var loadingMore = false
+    // Defined location paths ("Safe A / Drawer 3") — offered in the item form
+    // so a fresh, still-empty location is pickable before anything stands in it.
+    @Published var locationPaths: [String] = []
+
+    func loadLocationPaths(_ manager: FirebaseManager) async {
+        // Best-effort, like the web: the item form works fine without the tree.
+        let rows = (try? await manager.listInventoryLocations()) ?? []
+        locationPaths = rows.map(\.path).filter { !$0.isEmpty }
+    }
 
     func loadItems(_ manager: FirebaseManager) async {
         loading = true
@@ -133,6 +143,12 @@ struct InventoryView: View {
         Array(Set(model.items.flatMap(\.tags))).sorted()
     }
 
+    /// Defined location paths plus every location already in use — a fresh,
+    /// still-empty drawer is pickable before anything stands in it.
+    private var locationSuggestions: [String] {
+        Array(Set(model.locationPaths + model.items.map(\.location).filter { !$0.isEmpty })).sorted()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -152,6 +168,16 @@ struct InventoryView: View {
                         Task { await model.loadItems(firebaseManager) }
                     }
                     .environmentObject(firebaseManager)
+                case .locations:
+                    LocationsTab(lang: seciliDil, items: model.items, canEdit: canEdit) {
+                        // Renames cascade into item location strings — reload
+                        // the shelf and the form's suggestion list.
+                        Task {
+                            await model.loadItems(firebaseManager)
+                            await model.loadLocationPaths(firebaseManager)
+                        }
+                    }
+                    .environmentObject(firebaseManager)
                 case .reports:
                     ReportsTab(currencySymbol: seciliParaBirimi, lang: seciliDil)
                         .environmentObject(firebaseManager)
@@ -159,13 +185,17 @@ struct InventoryView: View {
             }
             .padding(isPhone ? 14 : 22)
         }
-        .task { await model.loadItems(firebaseManager) }
+        .task {
+            await model.loadItems(firebaseManager)
+            await model.loadLocationPaths(firebaseManager)
+        }
         .sheet(item: $detailItem) { item in
             ItemDetailSheet(
                 item: item,
                 currencySymbol: seciliParaBirimi,
                 lang: seciliDil,
-                canEdit: canEdit
+                canEdit: canEdit,
+                locationSuggestions: locationSuggestions
             ) {
                 Task { await model.loadItems(firebaseManager) }
             }
@@ -185,7 +215,7 @@ struct InventoryView: View {
             .environmentObject(firebaseManager)
         }
         .sheet(isPresented: $showNewItem) {
-            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil, tagSuggestions: tagSuggestions) {
+            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil, tagSuggestions: tagSuggestions, locationSuggestions: locationSuggestions) {
                 Task { await model.loadItems(firebaseManager) }
             }
             .environmentObject(firebaseManager)
@@ -253,7 +283,7 @@ struct InventoryView: View {
                 case .suppliers:
                     Button { showNewSupplier = true } label: { Label(t("New Supplier", lang: seciliDil), systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
-                case .stocktake, .reports:
+                case .stocktake, .locations, .reports:
                     EmptyView()
                 }
             }
@@ -273,6 +303,9 @@ struct InventoryView: View {
                             await model.loadPurchases(firebaseManager)
                             if model.suppliers.isEmpty { await model.loadSuppliers(firebaseManager) }
                         case .suppliers: await model.loadSuppliers(firebaseManager)
+                        // The tree is cheap to fetch fresh; the standing-item
+                        // counts ride on the already-loaded item list.
+                        case .locations: if model.items.isEmpty { await model.loadItems(firebaseManager) }
                         case .stocktake, .reports: break
                         }
                     }
