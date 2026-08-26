@@ -159,6 +159,10 @@ export default function OrdersPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setRequestedOrderId(params.get("selectedOrderId") ?? params.get("orderId") ?? "");
+    // "View All Orders" on a customer profile lands here filtered to that
+    // customer — the search box already matches customer names.
+    const customerName = params.get("customerName");
+    if (customerName) setOrderSearch(customerName);
   }, []);
 
   useEffect(() => {
