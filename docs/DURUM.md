@@ -94,7 +94,8 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
 
 ### Kart + Customers raporlarından kalan ürün maddeleri (27 Ağu kaydı)
 - Kart: sipariş türüne göre otomatik düzen; kullanıcıya-özel (per-member) düzen.
-  (Görsel kararlar 1B/2B/3B UYGULANDI — web canlı, native'ler commit bekliyor.)
+  (Görsel kararlar 1B/2B/3B DÖRT platformda TAMAM — web canlı-doğrulamalı,
+  Mac+iPhone xcodebuild ve Android gradle build'leriyle commit'li, 27 Ağu.)
 - Customers ürün: segmentler/etiketler; Messages/AI Replies bağlantısı; profil
   hızlı aksiyonları; Overview sekme düzeni; entegrasyon paneli (last synced /
   resync / raw data); arama vurgusu (eşleşen alanın öne çıkarılması).
