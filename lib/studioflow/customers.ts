@@ -155,6 +155,27 @@ export async function mergeCustomersFromWeb(
   }
 }
 
+// GDPR anonymization: owner-only and irreversible. Personal fields vanish
+// from the profile and every order; financial records stay intact.
+export async function anonymizeCustomerFromWeb(workspace: WorkspaceContext, customerId: string) {
+  if (normalizeWorkspaceRole(workspace.role) !== "owner") {
+    throw new Error("Only the workspace owner can anonymize a customer.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, CustomerActionResult & { anonymizedOrderCount?: number }>(functions, "anonymizeWebCustomer");
+      const response = await callable({ companyId: workspace.id, customerId });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "The customer could not be anonymized.");
+      }
+      return response.data;
+    }, "Anonymizing customer in cloud.");
+  } catch (error) {
+    throw new Error(friendlyCustomerError(error, "The customer could not be anonymized."));
+  }
+}
+
 export async function uploadCustomerPhoto(workspace: WorkspaceContext, file: File) {
   if (!canManageCustomersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot edit customers.");
