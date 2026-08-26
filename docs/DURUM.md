@@ -140,11 +140,18 @@ kategoriler + mapping yönetimi (Rules sekmesi), review bulk. Emülatör:
 banking-core.mjs 45 assert; web drawer/kategori/kural formu tarayıcıda
 uçtan uca doğrulandı. 14 fonksiyon + firestore.rules deploy edildi; 51 yeni
 anahtar × 11 dil. Native parite ajanları (Swift+Kotlin) bu dilim için çalıştı.
-**Kalan Yüksek:** split transaction; incoming↔order payment eşleştirme
-(duplicate payment üretmeden; Match-to seçici: order payment/invoice/transfer/
-owner contribution); transfer/refund/owner-contribution ayrımı; receipt'in
-merkezi Files'a bağlanması (Upload new / Choose from Files); aranabilir order
-seçici; çoklu hesap filtresi; multi-currency alanları.
+**Yüksek liste de TAMAM (27 Ağu, B2 dilimi, 4 platform):** split transaction
+(bankSetTransactionSplits: toplam kuruşuna denk, ≤12 satır; Pandle push'ta
+split engeli; web/Swift/Kotlin editörleri canlı toplam göstergeli);
+incoming↔order payment eşleştirme (bankMatchIncomingToOrder:
+suggest→link→create/unlink; mevcut payment bankTransactionId ile damgalanır,
+create idempotent — asla çift kayıt); incomingKind ayrımı (transfer/owner
+contribution/loan hasılat sayılmaz, Incoming KPI hariç tutar); receipt
+Choose from Files (fileRecordId referansı, kopya yok, çöp korumalı, silme
+yalnız bank_receipts yükünde); aranabilir sipariş seçici; çoklu hesap
+filtresi. Emülatör: banking-links.mjs 29 assert. Native parite iki ajanla
+(BUILD SUCCEEDED ×2 + BUILD SUCCESSFUL). Kalan: multi-currency alanları
+(TrueLayer verisi geldikçe).
 **Kalan Orta:** receipt güven skoru UI (Suggested match %); recurring güven+
 fiyat değişimi alanları; rule priority/conflict; Supplier/Purchase/Inventory
 bağı (purchase bağlama var, panelde genişletme); Accounting Review ekranı;
@@ -154,20 +161,28 @@ Disconnect confirmation metni; Overview soruları (dönem/pending/transfer).
 Pandle'da mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT
 hard-code değil mapping.
 
-### 2) NOTES (banking sonrası)
-**Yüksek:** reminder tarihi kaydedilmiyor (DOĞRULANMIŞ bug — sessiz veri
-kaybı); Personal/Order/Customer/Team not türü ayrımı; Project Notes içinde
-New Note order bağlayabilmeli (tek evrensel form, Seçenek B); Notes reminder ↔
-Order Schedule&Alerts merkezi reminder ilişkisi; internal/client görünürlük
-kesin ayrımı; collaborator yetkileri (workspace-üyesi + view/edit); Project
-Notes sayaç tutarlılığı.
-**Orta:** Customer Notes merkezi görünümü; kronolojik not akışı; created/
-updated by; liste/grid + masonry + Pinned/Others; arama kapsamı + filtreli
-boş-durum mesajı; label yönetimi (rename/sil/renk).
-**İyileştirme:** checklist; recurring reminder/snooze; task'a dönüştürme;
-linked record açma; attachments↔Files; activity; kısayollar.
-**Temel kural:** not BİR kez oluşturulur; Notes menüsü, Order kartı ve
-Customer ekranı aynı kaydı kendi bağlamında gösterir (Files modeliyle aynı).
+### 2) NOTES
+**Yüksek TAMAM (27 Ağu, web + sunucu; native parite ajanları koşuyor):**
+reminder bug'ı kökten kapandı (yerel tarih parse + NaN muhafızı, toISOString
+UTC kayması yok, okuyucu {seconds}/ISO tanır, görsel yükleme ara kaydı
+taslağı taşır, başarısız yazma sesli; mirror payload reminderDateMillis
+kabul eder — sharePersonalNote deploy bekliyor); noteType
+(Personal/Order/Customer/Team) + visibility (Only me/Workspace) ayrı
+eksenler; evrensel form (aranabilir sipariş bağlama + müşteri adı; Project
+sekmesinde + New Note order tipiyle açılır); workspace görünürlüğü mevcut
+davet altyapısıyla üyelere fan-out; Project Notes sayacı = liste (8/6 bitti);
+Reminders merkezi (not hatırlatıcıları + sipariş Schedule&Alerts tek liste).
+**Orta TAMAM:** Customer Notes merkezi görünümü (müşteri Notes sekmesi bağlı
+kayıtları listeler) + sipariş Notes kartında "From the Notes app" şeridi;
+arama kapsamı (etiket + bağlı adlar) + aramaya/etikete özel boş durumlar;
+label rename/sil (renk yok — bilinçli, not rengi zaten var).
+**Kalan (sonraya):** client_portal görünürlüğü (portal fazı); collaborator
+view/edit ayrımı (mirror sync sunucu işi); checklist; recurring
+reminder/snooze; task'a dönüştürme; attachments↔Files; activity; kısayollar;
+masonry/kronolojik akış kozmetikleri; created/updated by gösterimi; admin
+insights notes sayacı (collectionGroup + index gerekir).
+**Temel kural (uygulandı):** not BİR kez oluşturulur; Notes menüsü, Order
+kartı ve Customer ekranı aynı kaydı kendi bağlamında gösterir.
 
 ---
 
