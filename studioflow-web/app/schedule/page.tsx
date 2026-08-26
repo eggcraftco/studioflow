@@ -408,6 +408,9 @@ export default function SchedulePage() {
   const [loadingSchedule, setLoadingSchedule] = useState(true);
   const [error, setError] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState("");
+  // Hover on a sidebar card lights up its timeline bar, and vice versa.
+  const [hoveredOrderId, setHoveredOrderId] = useState("");
+  const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [scheduleStatus, setScheduleStatus] = useState("");
@@ -815,6 +818,39 @@ export default function SchedulePage() {
   }
 
   const locale = studioLocaleTag(language);
+
+  // One segment per calendar month across the visible days; rendered as a
+  // sticky strip so long ranges never lose track of which month is on screen.
+  const monthSegments = useMemo(() => {
+    if (span === "weekly") return [] as { label: string; count: number }[];
+    const segments: { label: string; count: number }[] = [];
+    for (const day of visibleDays) {
+      const label = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(day);
+      const last = segments[segments.length - 1];
+      if (last && last.label === label) last.count += 1;
+      else segments.push({ label, count: 1 });
+    }
+    return segments;
+  }, [locale, span, visibleDays]);
+
+  // Whenever the range or selection changes, bring the selected order's bar
+  // back into view instead of leaving the user to hunt for it.
+  useEffect(() => {
+    if (teamMode || !selectedOrderId) return;
+    const scroller = timelineScrollRef.current;
+    if (!scroller) return;
+    const row = scroller.querySelector<HTMLElement>(`[data-schedule-row="${selectedOrderId}"]`);
+    const bar = row?.querySelector<HTMLElement>(".schedule-order-block");
+    if (!row || !bar) return;
+    const barLeft = bar.offsetLeft;
+    if (barLeft < scroller.scrollLeft + 20 || barLeft > scroller.scrollLeft + scroller.clientWidth - 160) {
+      // Instant, not smooth: smooth scrolling stalls in hidden tabs and the
+      // point here is that the bar is simply THERE when the range changes.
+      scroller.scrollLeft = Math.max(0, barLeft - Math.max(48, scroller.clientWidth * 0.15));
+    }
+    row.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrderId, span, dayWidth, teamMode, visibleStart.getTime()]);
   const rangeText = span === "monthly"
     ? new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" }).format(visibleStart)
     : span === "yearly"
@@ -933,7 +969,13 @@ export default function SchedulePage() {
 
           <div className="orders-list">
             {filteredOrders.map(order => (
-              <div key={order.id} id={`schedule-sidebar-order-${order.id}`} className="schedule-sidebar-order-anchor">
+              <div
+                key={order.id}
+                id={`schedule-sidebar-order-${order.id}`}
+                className={hoveredOrderId === order.id ? "schedule-sidebar-order-anchor is-timeline-hovered" : "schedule-sidebar-order-anchor"}
+                onMouseEnter={() => setHoveredOrderId(order.id)}
+                onMouseLeave={() => setHoveredOrderId(current => current === order.id ? "" : current)}
+              >
                 <OrderListCard
                   order={order}
                   selected={order.id === selectedOrderId}
@@ -1400,6 +1442,7 @@ export default function SchedulePage() {
               })}
             </div>
             <div
+              ref={timelineScrollRef}
               className={`schedule-timeline-scroll${scheduleTimelinePanning ? " is-panning" : ""}`}
               onPointerDown={startScheduleTimelinePan}
               onPointerMove={moveScheduleTimelinePan}
@@ -1413,6 +1456,15 @@ export default function SchedulePage() {
                   <strong>{rangeText}</strong>
                   <span>{visibleOrders.length} {t(visibleOrders.length === 1 ? "order" : "orders")}</span>
                 </div>
+                {monthSegments.length > 1 ? (
+                  <div className="schedule-month-header" aria-hidden="true">
+                    {monthSegments.map((segment, index) => (
+                      <div key={index} style={{ width: segment.count * dayWidth }}>
+                        <span>{segment.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="schedule-day-header">
                   {visibleDays.map(day => (
                     <div key={day.toISOString()} className={startOfDay(day).getTime() === startOfDay(new Date()).getTime() ? "today" : ""} style={{ width: dayWidth }}>
@@ -1433,6 +1485,8 @@ export default function SchedulePage() {
                       canSeeFinance={canSeeFinance}
                       moneySettings={moneySettings}
                       selected={order.id === selectedOrderId}
+                      hovered={order.id === hoveredOrderId}
+                      onHoverChange={next => setHoveredOrderId(current => next ? order.id : (current === order.id ? "" : current))}
                       canEdit={canEditSchedule}
                       saving={savingScheduleOrderId === order.id}
                       onSelect={() => selectScheduleOrder(order)}
@@ -1469,6 +1523,8 @@ function ScheduleTimelineRow({
   canSeeFinance,
   moneySettings,
   selected,
+  hovered,
+  onHoverChange,
   canEdit,
   saving,
   onSelect,
@@ -1485,6 +1541,8 @@ function ScheduleTimelineRow({
   canSeeFinance: boolean;
   moneySettings: StudioMoneySettings;
   selected: boolean;
+  hovered: boolean;
+  onHoverChange: (hovered: boolean) => void;
   canEdit: boolean;
   saving: boolean;
   onSelect: () => void;
@@ -1603,19 +1661,22 @@ function ScheduleTimelineRow({
   }
 
   return (
-    <div className="schedule-row" style={{ backgroundSize: `${dayWidth}px 100%` }}>
+    <div className="schedule-row" style={{ backgroundSize: `${dayWidth}px 100%` }} data-schedule-row={order.id}>
       <button
         type="button"
         className={[
           "schedule-order-block",
           tone,
           selected ? "selected" : "",
+          hovered ? "is-hovered" : "",
           canEdit ? "can-edit" : "",
           saving ? "is-saving" : ""
         ].filter(Boolean).join(" ")}
         style={{ left: x, width }}
         onClick={canEdit ? undefined : onSelect}
         onDoubleClick={onOpen}
+        onMouseEnter={() => onHoverChange(true)}
+        onMouseLeave={() => onHoverChange(false)}
         onPointerDown={event => startInteraction(event, "move")}
         onPointerMove={updateInteraction}
         onPointerUp={finishInteraction}
