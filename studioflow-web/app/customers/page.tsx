@@ -126,6 +126,12 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
   if (Array.isArray(input.tags)) {
     cleaned.tags = Array.from(new Set(input.tags.map(tag => tag.trim()).filter(Boolean))).slice(0, 20);
   }
+  // Contact preferences ride along only when the patch carries them — the
+  // server treats missing keys as "leave unchanged".
+  if (typeof input.preferredChannel === "string") cleaned.preferredChannel = input.preferredChannel;
+  if (typeof input.doNotContact === "boolean") cleaned.doNotContact = input.doNotContact;
+  if (typeof input.marketingOptIn === "string") cleaned.marketingOptIn = input.marketingOptIn;
+  if ("nextFollowUpDateMillis" in input) cleaned.nextFollowUpDateMillis = input.nextFollowUpDateMillis ?? null;
   return cleaned;
 }
 
@@ -1077,13 +1083,26 @@ function CustomerDetail({
             const waDigits = phoneDigits.replace(/^\+/, "").replace(/^00/, "");
             const instagram = customer.instagram.trim().replace(/^@/, "");
             const quickAction: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 12px", border: "1px solid rgba(120,120,140,0.28)", textDecoration: "none", color: "inherit" };
-            if (!phone && !customer.email && !instagram) return null;
+            // "Do not contact" wins over every outreach shortcut — the links
+            // stay visible but inert, so the flag is impossible to miss.
+            const blocked = customer.doNotContact;
+            const blockedStyle: React.CSSProperties = blocked ? { opacity: 0.35, pointerEvents: "none" } : {};
+            const preferredPill = (channel: string) => customer.preferredChannel === channel
+              ? { boxShadow: "0 0 0 2px rgba(47,109,246,0.35)" } : {};
             return (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                {phone ? <a style={quickAction} href={`tel:${phoneDigits}`}>📞 {t("Call")}</a> : null}
-                {phone ? <a style={quickAction} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
-                {customer.email ? <a style={quickAction} href={`mailto:${customer.email}`}>✉️ {t("Email")}</a> : null}
-                {instagram ? <a style={quickAction} href={`https://instagram.com/${encodeURIComponent(instagram)}`} target="_blank" rel="noopener noreferrer">◎ Instagram</a> : null}
+                {phone ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("phone") }} href={`tel:${phoneDigits}`}>📞 {t("Call")}</a> : null}
+                {phone ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("whatsapp") }} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
+                {customer.email ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("email") }} href={`mailto:${customer.email}`}>✉️ {t("Email")}</a> : null}
+                {instagram ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("instagram") }} href={`https://instagram.com/${encodeURIComponent(instagram)}`} target="_blank" rel="noopener noreferrer">◎ Instagram</a> : null}
+                <Link style={{ ...quickAction, ...blockedStyle }} href={`/messages?q=${encodeURIComponent(customerDisplayName(customer.name))}`}>🗨 {t("Messages")}</Link>
+                <Link style={{ ...quickAction, ...blockedStyle }} href="/quick-reply">✨ {t("AI Reply")}</Link>
+                {blocked ? <span style={{ ...quickAction, borderColor: "rgba(220,38,38,0.4)", color: "#dc2626", background: "rgba(220,38,38,0.06)" }}>⛔ {t("Do not contact")}</span> : null}
+                {customer.nextFollowUpDate ? (
+                  <span style={{ ...quickAction, borderColor: "rgba(245,158,11,0.4)", color: customer.nextFollowUpDate.getTime() < Date.now() ? "#dc2626" : "#b45309", background: "rgba(245,158,11,0.06)" }}>
+                    ⏰ {t("Follow-up")}: {formatDate(customer.nextFollowUpDate)}
+                  </span>
+                ) : null}
               </div>
             );
           })()}
@@ -1098,6 +1117,7 @@ function CustomerDetail({
               </span>
             ))}
             {canManageCustomers ? (
+              <>
               <input
                 type="text"
                 value={segmentInput}
@@ -1110,8 +1130,15 @@ function CustomerDetail({
                   setSegmentInput("");
                 }}
                 placeholder={`＋ ${t("Add segment")}`}
+                list="customer-segment-suggestions"
                 style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px dashed rgba(120,120,140,0.4)", background: "transparent", color: "inherit", width: 120 }}
               />
+              <datalist id="customer-segment-suggestions">
+                {["VIP", "High value", "Repeat customer", "New customer", "Inactive", "Outstanding balance", "Waiting for response", "Marketing subscribed", "Wholesale"].map(item => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+              </>
             ) : null}
           </div>
         </div>
@@ -1177,6 +1204,45 @@ function CustomerDetail({
                 onSave={patch => onSaveDetails(patch, "Customer details")}
               />
               <InfoRow label="Last Contact" value={formatDate(customer.lastContactDate)} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10, fontSize: 12.5 }}>
+                <label>
+                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.6, marginBottom: 4 }}>{t("Preferred channel")}</div>
+                  <select className="input" value={customer.preferredChannel} disabled={!canManageCustomers || savingInlineField === "Contact preferences"}
+                    onChange={event => void onSaveDetails({ preferredChannel: event.target.value }, "Contact preferences")}>
+                    <option value="">—</option>
+                    <option value="phone">{t("Call")}</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email">{t("Email")}</option>
+                    <option value="instagram">Instagram</option>
+                  </select>
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.6, marginBottom: 4 }}>{t("Marketing")}</div>
+                  <select className="input" value={customer.marketingOptIn} disabled={!canManageCustomers || savingInlineField === "Contact preferences"}
+                    onChange={event => void onSaveDetails({ marketingOptIn: event.target.value }, "Contact preferences")}>
+                    <option value="">—</option>
+                    <option value="subscribed">{t("Subscribed")}</option>
+                    <option value="unsubscribed">{t("Unsubscribed")}</option>
+                  </select>
+                </label>
+                <label>
+                  <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.6, marginBottom: 4 }}>{t("Next follow-up")}</div>
+                  <input className="input" type="date" disabled={!canManageCustomers || savingInlineField === "Contact preferences"}
+                    value={customer.nextFollowUpDate ? `${customer.nextFollowUpDate.getFullYear()}-${String(customer.nextFollowUpDate.getMonth() + 1).padStart(2, "0")}-${String(customer.nextFollowUpDate.getDate()).padStart(2, "0")}` : ""}
+                    onChange={event => {
+                      const value = event.target.value;
+                      if (!value) { void onSaveDetails({ nextFollowUpDateMillis: null }, "Contact preferences"); return; }
+                      const [y, m, d] = value.split("-").map(Number);
+                      if (!y || !m || !d) return;
+                      void onSaveDetails({ nextFollowUpDateMillis: new Date(y, m - 1, d, 12, 0, 0).getTime() }, "Contact preferences");
+                    }} />
+                </label>
+                <label style={{ display: "flex", alignItems: "flex-end", gap: 6, paddingBottom: 6 }}>
+                  <input type="checkbox" checked={customer.doNotContact} disabled={!canManageCustomers || savingInlineField === "Contact preferences"}
+                    onChange={event => void onSaveDetails({ doNotContact: event.target.checked }, "Contact preferences")} />
+                  <span style={{ fontWeight: 700, color: customer.doNotContact ? "#dc2626" : "inherit" }}>{t("Do not contact")}</span>
+                </label>
+              </div>
             </div>
           </section>
         </div>
@@ -1440,7 +1506,7 @@ function CustomerDetailsForm({
           <span>{item.label}</span>
           <input
             type={item.type || "text"}
-            value={draft[item.field] || ""}
+            value={(draft[item.field] as string) || ""}
             disabled={disabled || saving}
             onChange={event => updateField(item.field, event.target.value)}
             placeholder="-"

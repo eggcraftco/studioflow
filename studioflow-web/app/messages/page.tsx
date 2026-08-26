@@ -80,6 +80,16 @@ export default function MessagesPage() {
   const [typingUsers, setTypingUsers] = useState<StudioMessageTypingUser[]>([]);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // Deep link from a customer profile: /messages?q=<name> opens with the
+  // search prefilled, so "View message history" lands on that customer.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q && q.trim()) {
+      setSearchQuery(q.trim());
+      setSearchVisible(true);
+    }
+  }, []);
   const [attachmentFilter, setAttachmentFilter] = useState<"all" | "media" | "files">("all");
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [savedMap, setSavedMap] = useState<Record<string, string[]>>({});

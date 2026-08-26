@@ -390,6 +390,10 @@ export type CustomerDirectoryItem = {
   integrationLastPayload: string;
   // Segments: workspace tags like "VIP" or "Wholesale".
   tags: string[];
+  preferredChannel: string;
+  doNotContact: boolean;
+  marketingOptIn: string;
+  nextFollowUpDate: Date | null;
   orderCount: number;
   totalPaid: number;
   totalValue: number;
@@ -1553,6 +1557,10 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       integrationSyncedAt: dateValue(data.integrationSyncedAt),
       integrationLastPayload: stringValue(data.integrationLastPayload, ""),
       tags: Array.isArray(data.tags) ? (data.tags as unknown[]).map(tag => String(tag || "").trim()).filter(Boolean) : [],
+      preferredChannel: stringValue(data.preferredChannel, ""),
+      doNotContact: data.doNotContact === true,
+      marketingOptIn: stringValue(data.marketingOptIn, ""),
+      nextFollowUpDate: dateValue(data.nextFollowUpDate),
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),

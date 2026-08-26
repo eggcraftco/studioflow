@@ -12141,6 +12141,24 @@ function cleanCustomerPayload(data = {}, requireName = true) {
       .map((tag) => cleanOrderText(tag, "", 30))
       .filter(Boolean))).slice(0, 20);
   }
+  // Contact preferences (report §15) — same key-present guard as tags.
+  if (typeof data.preferredChannel === "string") {
+    const channel = data.preferredChannel.trim().toLowerCase();
+    payload.preferredChannel = ["phone", "whatsapp", "email", "instagram"].includes(channel) ? channel : "";
+  }
+  if (typeof data.doNotContact === "boolean") {
+    payload.doNotContact = data.doNotContact;
+  }
+  if (typeof data.marketingOptIn === "string") {
+    const optIn = data.marketingOptIn.trim().toLowerCase();
+    payload.marketingOptIn = ["subscribed", "unsubscribed"].includes(optIn) ? optIn : "";
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "nextFollowUpDateMillis")) {
+    const millis = Number(data.nextFollowUpDateMillis);
+    payload.nextFollowUpDate = Number.isFinite(millis) && millis > 0
+      ? admin.firestore.Timestamp.fromMillis(millis)
+      : null;
+  }
   // Only touch the profile photo when the client explicitly sends it. Contact-field
   // autosave omits this key, so an existing avatar is preserved (the doc is merged).
   if (typeof data.profileImageUrl === "string") {
