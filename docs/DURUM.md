@@ -152,6 +152,12 @@ SYNC ÇATIŞMA POLİTİKASI: integrationCustomerSync ("store" varsayılan /
 "nivadesk" = atölye düzenlemesi kazanır, mağaza yalnız boşluk doldurur) — 5
 webhook'ta zorlanıyor, Woo+Shopify ayar bölümlerinde kart, suite'te iki yönlü
 kanıt (atölye telefonu korundu + boş city doldu / store'da yeniden yazdı).
+**27 Ağu gece eklendi (2):** GDPR — "Export data (JSON)" (profil+toplamlar+
+siparişler+notlar+aktivite, istemci tarafında dosya) ve owner-only
+"Anonymize (GDPR)": profil + TÜM siparişlerden kişisel alanlar silinir,
+finansallar kalır, history'ye iz düşer, geri alınamaz (onay metni önce export
+der). Emülatörde kanıtlı: 3 sipariş yeniden adlandı+temizlendi, tutarlar
+korundu. `anonymizeWebCustomer` deploy edildi.
 **Kritik kalan:**
 telefon–WhatsApp gerçek alan ayrımı (şema işi); GDPR export/anonymize/delete
 akışları (Shopify redact kısmen var); iade/refund'un müşteri değerine
