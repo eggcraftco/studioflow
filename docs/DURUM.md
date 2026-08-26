@@ -364,3 +364,18 @@ web language.ts'ten bayt-bayt talimatlı.
 
 **Faz 3'te hâlâ açık:** BOM/reçete, maliyet katmanları, Files depolama yolu
 göçü, Shopify/Woo stok senkronu (kullanıcı kararına bloke).
+
+**Reçeteler (BOM) KAPANDI (round 23, faz-3 büyüklerinden ikincisi):**
+inventoryRecipes CRUD (≤30 satır) + applyRecipeToOrder — çarpanlı (≤100),
+TEK transaction, hepsi-ya-da-hiçbiri (kapasite/sahiplik/statü kontrolleri
+yazımdan önce; sığmayan satır hiçbir şeyi rezerve ettirmez, hata mesajı
+sığmayan parçayı adıyla söyler). Web: Manage → Recipes paneli + sipariş
+kartında "Use a recipe…" (kaç işlik çarpanıyla). recipes suite 15 assert;
+4 callable deploy; 23 anahtar × 11 dil. Emülatörde uçtan uca: 2 satırlık
+reçete tek hamlede rezerve.
+**Maliyet katmanları: TASARIM SONUCU — gerek yok.** Bu mimaride her satın
+alma partisi zaten kendi maliyetini taşıyan AYRI ürün dokümanı; FIFO/katman
+makinesi eklemek çözdüğü olmayan bir problemi çözerdi. (Aynı-SKU partileri
+tek karta birleştirme istenirse o ayrı bir tasarım kararı — kullanıcıyla.)
+**Native reçete paritesi:** birleşik parite turu (konumlar+whatsapp+bank
+Activity) bittikten sonra ayrı turla.
