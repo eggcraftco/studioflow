@@ -128,10 +128,14 @@ bölümü (Fit to content / Default / Match column / S-M-L, persistLayout
 üstünden); Customize cards 6 kategoriye ayrıldı + panel içi arama; ROL
 ŞABLONLARI (Owner/Designer/Finance/Workshop/Compact — yalnız görünürlük,
 Undo'lu; Compact 19→5 kart E2E'li) — raporun 1 numaralı önceliği.
+**27 Ağu gece eklendi (2):** kart menüsünde Move bölümü (↑↓←→, drag ile aynı
+mutator'lar → aynı Undo'lu toast; telefon sırası yolu da toast'lu); ⋮ ayırıcı
+tutamacı; Customers araması sipariş no + proje adını da tarar; Customize
+panelindeki gereksiz "Save this order" kalktı (autosave zaten var).
 Kalan: sol durum şeridi + zemin ayrımı (görsel karar — birlikte bakalım);
-hızlı sekmeler; ⋮ ayırıcı tutamacı; klavye ile taşıma; renk+etiket anlam
-sistemi; Actions gruplama; reset kapsam ayrımı; sipariş türüne göre düzen;
-kullanıcıya özel düzen; "Saving card layout" akışı.
+renk+etiket anlam sistemi; Actions gruplama; reset kapsam ayrımı; sipariş
+türüne göre düzen; kullanıcıya özel düzen. (Hızlı sekmeler: OrderQuickFilterBar
+zaten karşılıyor — kapalı sayıldı.)
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
 **26 Ağu gece eklendi:** iade/iptal bakiyesi düzeltildi — Outstanding artık
