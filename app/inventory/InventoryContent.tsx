@@ -32,10 +32,11 @@ import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
 import { ReportsPanel } from "./ReportsPanel";
 import { LocationsPanel } from "./LocationsPanel";
+import { RecipesPanel } from "./RecipesPanel";
 import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
-type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "reports";
+type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports";
 
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
@@ -423,6 +424,7 @@ export function InventoryContent({
         <p className="inventory-nav-group">{t("Manage")}</p>
         <button type="button" data-active={tab === "stocktake"} onClick={() => { setTab("stocktake"); setSelectedId(""); }}>{t("Stocktake")}</button>
         <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
+        <button type="button" data-active={tab === "recipes"} onClick={() => { setTab("recipes"); setSelectedId(""); }}>{t("Recipes")}</button>
         <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
       </nav>
 
@@ -442,6 +444,8 @@ export function InventoryContent({
           canEdit={canEdit}
           onStockChanged={() => void reload()}
         />
+      ) : tab === "recipes" ? (
+        <RecipesPanel workspace={workspace} items={items} canEdit={canEdit} />
       ) : tab === "locations" ? (
         <LocationsPanel
           workspace={workspace}

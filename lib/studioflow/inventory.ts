@@ -467,6 +467,63 @@ export async function deleteInventoryLocation(workspace: WorkspaceContext, locat
 }
 
 // ---------------------------------------------------------------------------
+// Recipes (BOM)
+//
+// A parts list written once; applying it to an order reserves every line in
+// one transaction on the server — all or nothing.
+// ---------------------------------------------------------------------------
+
+export type InventoryRecipeLine = { itemId: string; quantity: number };
+
+export type InventoryRecipe = {
+  id: string;
+  name: string;
+  notes?: string;
+  lines: InventoryRecipeLine[];
+};
+
+export async function listInventoryRecipes(workspace: WorkspaceContext) {
+  return call<{ ok?: boolean; recipes?: InventoryRecipe[] }>(
+    "listInventoryRecipes",
+    { companyId: workspace.id },
+    "Recipes could not be loaded."
+  );
+}
+
+export async function saveInventoryRecipe(
+  workspace: WorkspaceContext,
+  recipe: { name: string; notes?: string; lines: InventoryRecipeLine[] },
+  recipeId?: string
+) {
+  return call<{ ok?: boolean; recipeId?: string }>(
+    "saveInventoryRecipe",
+    { companyId: workspace.id, recipeId: recipeId || "", recipe },
+    "The recipe could not be saved."
+  );
+}
+
+export async function deleteInventoryRecipe(workspace: WorkspaceContext, recipeId: string) {
+  return call<{ ok?: boolean }>(
+    "deleteInventoryRecipe",
+    { companyId: workspace.id, recipeId },
+    "The recipe could not be deleted."
+  );
+}
+
+export async function applyRecipeToOrder(
+  workspace: WorkspaceContext,
+  recipeId: string,
+  orderId: string,
+  multiplier?: number
+) {
+  return call<{ ok?: boolean; reservedLines?: number; recipeName?: string }>(
+    "applyRecipeToOrder",
+    { companyId: workspace.id, recipeId, orderId, ...(multiplier && multiplier !== 1 ? { multiplier } : {}) },
+    "The recipe could not be applied."
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Reserving stock for an order
 // ---------------------------------------------------------------------------
 

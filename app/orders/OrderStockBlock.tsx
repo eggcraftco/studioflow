@@ -13,14 +13,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  applyRecipeToOrder,
   consumeInventoryForOrder,
   getOrderInventory,
   inventoryFreeToReserve,
   listInventoryItems,
+  listInventoryRecipes,
   releaseInventoryFromOrder,
   reserveInventoryForOrder,
   swapInventoryForOrder,
   type InventoryItem,
+  type InventoryRecipe,
   type OrderInventoryLine
 } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -55,6 +58,7 @@ export function OrderStockBlock({
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [swapFrom, setSwapFrom] = useState<OrderInventoryLine | null>(null);
+  const [recipePicking, setRecipePicking] = useState(false);
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
 
@@ -113,9 +117,14 @@ export function OrderStockBlock({
       <div className="order-stock-head">
         <span className="order-stock-title">{t("Stock reserved for this order")}</span>
         {canEdit ? (
-          <button type="button" className="inventory-link" onClick={() => setPicking(true)}>
-            + Reserve stock
-          </button>
+          <span className="order-stock-actions">
+            <button type="button" className="inventory-link" onClick={() => setPicking(true)}>
+              + Reserve stock
+            </button>
+            <button type="button" className="inventory-link" onClick={() => setRecipePicking(true)}>
+              {t("Use a recipe…")}
+            </button>
+          </span>
         ) : null}
       </div>
 
@@ -179,6 +188,15 @@ export function OrderStockBlock({
       )}
 
       {notice ? <p className="app-inline-error">{notice}</p> : null}
+
+      {recipePicking ? (
+        <ApplyRecipeModal
+          workspace={workspace}
+          orderId={orderId}
+          onClose={() => setRecipePicking(false)}
+          onApplied={async () => { setRecipePicking(false); await reload(); }}
+        />
+      ) : null}
 
       {picking || swapFrom ? (
         <ReserveStockModal
@@ -349,6 +367,106 @@ function ReserveStockModal({
           <span />
           <div className="inventory-modal-actions">
             <button type="button" className="inventory-secondary" onClick={onClose}>{t("Close")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// One act: pick the recipe, say how many jobs' worth, and the server reserves
+// every line in a single transaction — or refuses and reserves nothing.
+function ApplyRecipeModal({
+  workspace,
+  orderId,
+  onClose,
+  onApplied
+}: {
+  workspace: WorkspaceContext;
+  orderId: string;
+  onClose: () => void;
+  onApplied: () => void;
+}) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  const [recipes, setRecipes] = useState<InventoryRecipe[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [recipeId, setRecipeId] = useState("");
+  const [multiplier, setMultiplier] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await listInventoryRecipes(workspace);
+        if (!cancelled) {
+          const rows = result?.recipes ?? [];
+          setRecipes(rows);
+          if (rows.length === 1) setRecipeId(rows[0].id);
+        }
+      } catch (failure) {
+        if (!cancelled) setError(failure instanceof Error ? t(failure.message) : t("Recipes could not be loaded."));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace]);
+
+  async function apply() {
+    if (!recipeId) { setError(t("Choose a recipe first.")); return; }
+    const times = Number(multiplier) || 1;
+    setBusy(true);
+    setError("");
+    try {
+      await applyRecipeToOrder(workspace, recipeId, orderId, times);
+      onApplied();
+    } catch (failure) {
+      setError(failure instanceof Error ? t(failure.message) : t("The recipe could not be applied."));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Use a recipe")} onClick={e => e.stopPropagation()}>
+        <div className="inventory-modal-head">
+          <h2>{t("Use a recipe")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
+        </div>
+        <div className="inventory-modal-body">
+          {loading ? (
+            <p className="inventory-note">{t("Loading…")}</p>
+          ) : recipes.length === 0 ? (
+            <p className="inventory-note">{t("No recipes yet — write one under Inventory → Recipes.")}</p>
+          ) : (
+            <div className="inventory-form">
+              <label className="inventory-field is-wide">
+                <span>{t("Recipe")}</span>
+                <select className="input" value={recipeId} onChange={e => setRecipeId(e.target.value)}>
+                  <option value="">{t("Choose a recipe…")}</option>
+                  {recipes.map(recipe => (
+                    <option key={recipe.id} value={recipe.id}>{recipe.name} · {recipe.lines.length} {t("lines")}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="inventory-field">
+                <span>{t("How many jobs' worth")}</span>
+                <input className="input inventory-qty-input" inputMode="numeric" value={multiplier} onChange={e => setMultiplier(e.target.value)} />
+              </label>
+            </div>
+          )}
+          {error ? <p className="inventory-error">{error}</p> : null}
+        </div>
+        <div className="inventory-modal-foot">
+          <span />
+          <div className="inventory-modal-actions">
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>
+            <button type="button" className="inventory-primary" disabled={busy || recipes.length === 0} onClick={() => void apply()}>
+              {busy ? t("Saving…") : t("Reserve the parts")}
+            </button>
           </div>
         </div>
       </div>
