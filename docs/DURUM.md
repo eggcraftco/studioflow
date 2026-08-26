@@ -96,9 +96,13 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
 - Kart: sipariş türüne göre otomatik düzen; kullanıcıya-özel (per-member) düzen.
   (Görsel kararlar 1B/2B/3B DÖRT platformda TAMAM — web canlı-doğrulamalı,
   Mac+iPhone xcodebuild ve Android gradle build'leriyle commit'li, 27 Ağu.)
-- Customers ürün: segmentler/etiketler; Messages/AI Replies bağlantısı; profil
-  hızlı aksiyonları; Overview sekme düzeni; entegrasyon paneli (last synced /
-  resync / raw data); arama vurgusu (eşleşen alanın öne çıkarılması).
+- Customers ürün — 27 Ağu gece 3'te üçü kapandı (web, canlı yolda; native
+  ajan turu sırada): entegrasyon paneli (integrationSyncedAt + son payload
+  webhook'ta damgalanıyor; resyncIntegrationCustomer mağaza-kazanır replay —
+  emülatörde bozulan telefon geri döndü; Connected store/ID/Last synced/ham
+  veri) + profil hızlı aksiyonları (Call/WhatsApp/Email/Instagram) + arama
+  vurgusu ("⌕ Matched: Dup Band" kartta). KALAN: segmentler/etiketler;
+  Messages/AI Replies bağlantısı; Overview sekme düzeni.
 - Envanter/Files 3. aşaması (aşağıdaki eski liste).
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
