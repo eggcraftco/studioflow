@@ -2403,6 +2403,37 @@ class FirebaseManager: ObservableObject {
         }
     }
 
+    /// Replays the store's last stored webhook payload onto the customer profile via the
+    /// `resyncIntegrationCustomer` cloud function (same path the web app uses) — the store's
+    /// values win on every non-empty field. The musteriler snapshot listener picks up the
+    /// rewritten document, so no local mutation is needed here.
+    func resyncIntegrationCustomer(customerId: String, completion: ((Bool, String?) -> Void)? = nil) {
+        guard !currentCompanyId.isEmpty, !customerId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            completion?(false, nil)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("resyncIntegrationCustomer")
+            .call([
+                "companyId": currentCompanyId,
+                "customerId": customerId
+            ]) { result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        completion?(false, error.localizedDescription)
+                        return
+                    }
+                    let payload = result?.data as? [String: Any]
+                    let ok = (payload?["ok"] as? Bool) ?? true
+                    completion?(ok, payload?["message"] as? String)
+                }
+            }
+        #else
+        completion?(false, nil)
+        #endif
+    }
+
     private func musteriAnahtari(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }

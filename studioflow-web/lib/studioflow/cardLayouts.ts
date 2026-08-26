@@ -329,7 +329,17 @@ export function layoutFromOrderWorkspaceSnapshotJSON(value: unknown, orderId?: s
   return snapshot ? layoutFromWorkspaceSnapshot(snapshot, orderId) : null;
 }
 
-function layoutFromWorkspaceSettings(data: Record<string, unknown>, uid: string, ownerUid: string, orderId?: string) {
+function layoutFromWorkspaceSettings(data: Record<string, unknown>, uid: string, ownerUid: string, orderId?: string, orderType?: string) {
+  // A layout saved for an order TYPE (e.g. repair) is the workspace's
+  // convention for those orders — it beats personal profiles so a repair
+  // order looks like a repair order for everyone. The per-order independent
+  // layout still wins upstream (it never reaches this resolver).
+  const typeSnapshots = parseJSON(data.typeWorkspaceSnapshotsJSON, null);
+  const typeSnapshot = orderType && typeSnapshots && typeof typeSnapshots === "object" && !Array.isArray(typeSnapshots)
+    ? (typeSnapshots as Record<string, unknown>)[orderType]
+    : null;
+  if (typeSnapshot && typeof typeSnapshot === "object") return layoutFromWorkspaceSnapshot(typeSnapshot, orderId);
+
   const profiles = normalizeWorkspaceProfiles(data.workspaceUserProfilesJSON);
   const ownProfile = profiles.find(profile => profile.userId === uid);
   const ownerProfile = ownerUid ? profiles.find(profile => profile.userId === ownerUid) : undefined;
@@ -367,14 +377,31 @@ async function callCardLayoutFunction(name: string, payload: Record<string, unkn
   }
 }
 
-export async function loadOrderDetailCardLayout(uid: string, workspaceId: string, orderId?: string) {
+export async function loadOrderDetailCardLayout(uid: string, workspaceId: string, orderId?: string, orderType?: string) {
   if (!uid || !workspaceId) return DEFAULT_ORDER_DETAIL_CARD_LAYOUT;
   const response = await callCardLayoutFunction(
     "getWorkspaceCardLayout",
-    { companyId: workspaceId, orderId: normalizeOrderId(orderId) || undefined },
+    { companyId: workspaceId, orderId: normalizeOrderId(orderId) || undefined, orderType: orderType || undefined },
     "Could not load card layout. Using the default layout for now."
   );
   return normalizeOrderDetailCardLayout(response.layout);
+}
+
+// The workspace convention for one order type (e.g. every repair order opens
+// with the repair cards forward). Owner-only on the server; layout null clears.
+export async function saveTypeOrderCardLayout(workspaceId: string, orderType: string, layout: OrderDetailCardLayout | null) {
+  if (!workspaceId || !orderType) throw new Error("orderType is required.");
+  return withWebSyncStatus(() => callCardLayoutFunction(
+      "saveTypeWorkspaceCardLayout",
+      {
+        companyId: workspaceId,
+        orderType,
+        layout: layout ? normalizeOrderDetailCardLayout(layout) : null
+      },
+      "Could not save the order-type layout. Please try again."
+    ),
+    "Saving order-type layout to cloud."
+  );
 }
 
 export async function saveOrderDetailCardLayout(uid: string, workspaceId: string, layout: OrderDetailCardLayout, orderId?: string) {
@@ -439,7 +466,8 @@ export function subscribeOrderDetailCardLayout(
   ownerUid: string,
   orderId: string | undefined,
   onLayout: (layout: OrderDetailCardLayout) => void,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  orderType?: string
 ) {
   if (!uid || !workspaceId) return () => {};
 
@@ -449,7 +477,7 @@ export function subscribeOrderDetailCardLayout(
 
   const applySnapshotData = (data: Record<string, unknown>) => {
     if (disposed) return;
-    onLayout(layoutFromWorkspaceSettings(data, uid, ownerUid, orderId));
+    onLayout(layoutFromWorkspaceSettings(data, uid, ownerUid, orderId, orderType));
   };
 
   const scheduleSettledRefresh = () => {

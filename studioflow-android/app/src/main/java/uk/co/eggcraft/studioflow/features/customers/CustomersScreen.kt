@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -72,6 +76,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -91,11 +96,20 @@ import uk.co.eggcraft.studioflow.language.studioT
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 
 private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+private val dateTimeFormatter = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault())
 
 private fun moneyText(symbol: String, value: Double): String =
     symbol + String.format(Locale.UK, "%,.2f", value)
 
 private fun customerKey(name: String): String = name.trim().lowercase(Locale.UK)
+
+// Store-source badge labels — mirrors the web CUSTOMER_SOURCE_LABEL map.
+private fun customerSourceLabel(source: String): String = when (source) {
+    "shopify" -> "Shopify"
+    "woocommerce" -> "WooCommerce"
+    "inbound" -> "API"
+    else -> ""
+}
 
 @Composable
 fun CustomersScreen(
@@ -103,6 +117,7 @@ fun CustomersScreen(
     focusedCustomerName: String = "",
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
     onUpdateCustomer: (StudioCustomer) -> Unit = {},
+    onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit = { _, _, _ -> },
     onDeleteCustomer: (String) -> Unit = {},
     onOpenOrder: (StudioOrder) -> Unit = {}
@@ -179,6 +194,7 @@ fun CustomersScreen(
                             onBack = { selectedCustomerId = null },
                             showBack = false,
                             onUpdateCustomer = onUpdateCustomer,
+                            onResyncCustomer = onResyncCustomer,
                             onUploadCustomerPhoto = onUploadCustomerPhoto,
                             onDelete = {
                                 onDeleteCustomer(paneCustomer.id)
@@ -203,6 +219,7 @@ fun CustomersScreen(
                 currencySymbol = state.workspaceSettings.selectedCurrency,
                 onBack = { selectedCustomerId = null },
                 onUpdateCustomer = onUpdateCustomer,
+                onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDelete = {
                     onDeleteCustomer(selected.id)
@@ -241,20 +258,60 @@ private fun CustomerListView(
     val orderCountByName = remember(state.orders) {
         state.orders.groupingBy { customerKey(it.customerName) }.eachCount()
     }
-    val visible = remember(state.customers, searchText, sortByOrders, orderCountByName) {
+    val ordersByName = remember(state.orders) {
+        state.orders.groupBy { customerKey(it.customerName) }
+    }
+    val visible = remember(state.customers, searchText, sortByOrders, orderCountByName, ordersByName) {
         val query = searchText.trim().lowercase(Locale.UK)
         val filtered = if (query.isBlank()) state.customers else state.customers.filter { c ->
-            c.name.lowercase(Locale.UK).contains(query) ||
-                c.email.lowercase(Locale.UK).contains(query) ||
-                c.phone.lowercase(Locale.UK).contains(query) ||
-                c.instagram.lowercase(Locale.UK).contains(query) ||
-                c.address.lowercase(Locale.UK).contains(query)
+            listOf(
+                c.name, c.email, c.phone, c.instagram,
+                c.address, c.streetAddress, c.city, c.postalCode, c.country
+            ).any { it.lowercase(Locale.UK).contains(query) } ||
+                // Web parity: find a customer by what they ordered (invoice or design).
+                ordersByName[customerKey(c.name)].orEmpty().any { order ->
+                    order.invoiceNumber.lowercase(Locale.UK).contains(query) ||
+                        order.designName.lowercase(Locale.UK).contains(query)
+                }
         }
         if (sortByOrders) {
             filtered.sortedByDescending { orderCountByName[customerKey(it.name)] ?: 0 }
         } else {
             filtered.sortedByDescending { it.lastContactDate?.time ?: 0L }
         }
+    }
+    // Which field actually matched the search — shown on the card so a hit on
+    // an invoice number or address doesn't look like a random result (web parity).
+    val matchHints = remember(visible, searchText, ordersByName, lang) {
+        val term = searchText.trim().lowercase(Locale.UK)
+        val map = mutableMapOf<String, String>()
+        if (term.isNotEmpty()) {
+            for (c in visible) {
+                if (c.name.lowercase(Locale.UK).contains(term)) continue
+                val customerOrders = ordersByName[customerKey(c.name)].orEmpty()
+                val hint = when {
+                    c.email.lowercase(Locale.UK).contains(term) -> "${t("Email")}: ${c.email}"
+                    c.phone.lowercase(Locale.UK).contains(term) -> "${t("Phone")}: ${c.phone}"
+                    c.instagram.lowercase(Locale.UK).contains(term) -> "Instagram: ${c.instagram}"
+                    else -> {
+                        val invoiceOrder = customerOrders.firstOrNull { it.invoiceNumber.lowercase(Locale.UK).contains(term) }
+                        val designOrder = if (invoiceOrder == null) {
+                            customerOrders.firstOrNull { it.designName.lowercase(Locale.UK).contains(term) }
+                        } else null
+                        when {
+                            invoiceOrder != null -> "${t("Order")} ${invoiceOrder.invoiceNumber}"
+                            designOrder != null -> designOrder.designName
+                            listOf(c.address, c.streetAddress, c.city, c.postalCode, c.country)
+                                .any { it.lowercase(Locale.UK).contains(term) } ->
+                                "${t("Address")}: ${listOf(c.streetAddress.ifBlank { c.address }, c.city).filter { it.isNotBlank() }.joinToString(", ")}"
+                            else -> ""
+                        }
+                    }
+                }
+                if (hint.isNotEmpty()) map[c.id] = hint
+            }
+        }
+        map
     }
 
     Column(
@@ -312,6 +369,7 @@ private fun CustomerListView(
                 CustomerRow(
                     customer = customer,
                     designs = designTitlesFor(customer, state.orders, t),
+                    matchHint = matchHints[customer.id].orEmpty(),
                     onClick = { onOpen(customer) }
                 )
             }
@@ -441,7 +499,8 @@ private fun CustomerAvatar(customer: StudioCustomer, size: Dp, textSize: TextUni
 }
 
 @Composable
-private fun CustomerRow(customer: StudioCustomer, designs: String, onClick: () -> Unit) {
+private fun CustomerRow(customer: StudioCustomer, designs: String, matchHint: String = "", onClick: () -> Unit) {
+    val lang = LocalStudioLanguage.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -477,6 +536,17 @@ private fun CustomerRow(customer: StudioCustomer, designs: String, onClick: () -
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.SemiBold
                 )
+                if (matchHint.isNotEmpty()) {
+                    // Amber "why this result" line — the hit wasn't on the name.
+                    Text(
+                        text = "⌕ ${studioT("Matched", lang)}: $matchHint",
+                        color = Color(0xFFB45309),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -491,6 +561,7 @@ private fun CustomerDetail(
     onBack: () -> Unit,
     showBack: Boolean = true,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDelete: () -> Unit,
     onOpenOrder: (StudioOrder) -> Unit
@@ -553,6 +624,139 @@ private fun CustomerDetail(
     var isEditingNotes by remember(customer.id) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val monthYearFormatter = remember { SimpleDateFormat("MMM yyyy", Locale.getDefault()) }
+
+    // "Resync from store data" in-flight flag: cleared when the cloud write lands
+    // (integrationSyncedAt changes on the snapshot) or after a short fallback.
+    var resyncing by remember(customer.id) { mutableStateOf(false) }
+    LaunchedEffect(customer.integrationSyncedAt) {
+        resyncing = false
+        // A sync just replayed/refreshed the store payload — reflect the cloud
+        // values in the form (the store's values win, matching the web).
+        if (customer.integrationSyncedAt != null && customer != editable) {
+            editable = customer
+            dirty = false
+        }
+    }
+    LaunchedEffect(resyncing) {
+        if (resyncing) {
+            delay(6000)
+            resyncing = false
+        }
+    }
+
+    @Composable
+    fun quickActionsRow() {
+        // One-tap ways to reach the customer, built from what the profile already
+        // knows — same cleaning rules as the web: phone kept to [0-9+], wa.me digits
+        // without the leading + / 00, Instagram handle without the leading @.
+        val phone = editable.phone.trim()
+        val phoneDigits = phone.filter { it.isDigit() || it == '+' }
+        val waDigits = phoneDigits.removePrefix("+").removePrefix("00")
+        val instagram = editable.instagram.trim().removePrefix("@")
+        val email = editable.email.trim()
+        if (phone.isBlank() && email.isBlank() && instagram.isBlank()) return
+        fun open(intent: Intent) {
+            runCatching { context.startActivity(intent) }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (phone.isNotBlank()) {
+                QuickActionChip("📞 ${t("Call")}") { open(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneDigits"))) }
+                QuickActionChip("💬 WhatsApp") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))) }
+            }
+            if (email.isNotBlank()) {
+                QuickActionChip("✉️ ${t("Email")}") { open(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:$email"))) }
+            }
+            if (instagram.isNotBlank()) {
+                QuickActionChip("◎ Instagram") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/${Uri.encode(instagram)}"))) }
+            }
+        }
+    }
+
+    @Composable
+    fun integrationCard() {
+        // Store-integration panel (store-sourced customers only) — web parity:
+        // connected store, store customer id, last synced, resync + raw payload.
+        val sourceLabel = customerSourceLabel(customer.source)
+        if (sourceLabel.isEmpty()) return
+        var showRawPayload by remember(customer.id) { mutableStateOf(false) }
+        val prettyPayload = remember(customer.integrationLastPayload) {
+            val raw = customer.integrationLastPayload
+            runCatching {
+                if (raw.trimStart().startsWith("[")) org.json.JSONArray(raw).toString(2)
+                else org.json.JSONObject(raw).toString(2)
+            }.getOrDefault(raw)
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                @Composable
+                fun infoLine(label: String, value: String) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("$label:", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                infoLine(t("Connected store"), sourceLabel)
+                if (customer.externalCustomerId.isNotBlank()) {
+                    infoLine(t("Store customer ID"), customer.externalCustomerId)
+                }
+                infoLine(t("Last synced"), customer.integrationSyncedAt?.let { dateTimeFormatter.format(it) } ?: "—")
+                if (customer.integrationLastPayload.isNotBlank()) {
+                    TextButton(
+                        enabled = !resyncing,
+                        onClick = {
+                            resyncing = true
+                            onResyncCustomer(customer)
+                        }
+                    ) {
+                        Text(
+                            "⟳ ${if (resyncing) t("Resyncing from store data…") else t("Resync from store data")}",
+                            color = StudioBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                    Text(
+                        t("Re-applies what the store last sent — the store's values win."),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "${if (showRawPayload) "▾" else "▸"} ${t("View raw store data")}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { showRawPayload = !showRawPayload }
+                    )
+                    if (showRawPayload) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                                .horizontalScroll(rememberScrollState())
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                prettyPayload,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @Composable
     fun contactCard() {
@@ -853,7 +1057,11 @@ private fun CustomerDetail(
                 }
             }
 
+            quickActionsRow()
+
             statCardsSection()
+
+            integrationCard()
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 if (maxWidth >= 700.dp) {
@@ -980,6 +1188,24 @@ private fun fileSizeText(bytes: Long): String {
     var unit = 0
     while (size >= 1024 && unit < units.size - 1) { size /= 1024; unit++ }
     return if (unit == 0) "$bytes B" else String.format(Locale.UK, "%.1f %s", size, units[unit])
+}
+
+@Composable
+private fun QuickActionChip(label: String, onClick: () -> Unit) {
+    // Pill-shaped one-tap contact action — mirrors the web quick-action chips.
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.clip(RoundedCornerShape(999.dp)).clickable { onClick() }
+    ) {
+        Text(
+            label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
 }
 
 @Composable

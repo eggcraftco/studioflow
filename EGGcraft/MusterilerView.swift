@@ -37,16 +37,25 @@ struct MusterilerView: View {
     }
     
     var aramaSonuclari: [Musteri] {
-        let filtrelenmis = aramaMetni.isEmpty ? firebaseManager.musteriler : firebaseManager.musteriler.filter {
-            $0.name.localizedStandardContains(aramaMetni) ||
-            $0.email.localizedStandardContains(aramaMetni) ||
-            $0.phone.localizedStandardContains(aramaMetni) ||
-            $0.instagram.localizedStandardContains(aramaMetni) ||
-            $0.address.localizedStandardContains(aramaMetni) ||
-            ($0.streetAddress ?? "").localizedStandardContains(aramaMetni) ||
-            ($0.city ?? "").localizedStandardContains(aramaMetni) ||
-            ($0.postalCode ?? "").localizedStandardContains(aramaMetni) ||
-            ($0.country ?? "").localizedStandardContains(aramaMetni)
+        let filtrelenmis: [Musteri]
+        if aramaMetni.isEmpty {
+            filtrelenmis = firebaseManager.musteriler
+        } else {
+            // Mirrors the web's widened customer search: a hit on one of the
+            // customer's orders (invoice number or design name) also matches.
+            let siparisEslesenAnahtarlar = matchingOrderCustomerKeys(for: aramaMetni)
+            filtrelenmis = firebaseManager.musteriler.filter {
+                $0.name.localizedStandardContains(aramaMetni) ||
+                $0.email.localizedStandardContains(aramaMetni) ||
+                $0.phone.localizedStandardContains(aramaMetni) ||
+                $0.instagram.localizedStandardContains(aramaMetni) ||
+                $0.address.localizedStandardContains(aramaMetni) ||
+                ($0.streetAddress ?? "").localizedStandardContains(aramaMetni) ||
+                ($0.city ?? "").localizedStandardContains(aramaMetni) ||
+                ($0.postalCode ?? "").localizedStandardContains(aramaMetni) ||
+                ($0.country ?? "").localizedStandardContains(aramaMetni) ||
+                siparisEslesenAnahtarlar.contains(musteriAnahtari($0.name))
+            }
         }
         
         if seciliSiralama == .enCokSiparis {
@@ -63,6 +72,54 @@ struct MusterilerView: View {
 
     private func musteriAnahtari(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// Customer-name keys whose orders match the search term by invoice number
+    /// or design name (computed once per search pass, not per customer).
+    private func matchingOrderCustomerKeys(for term: String) -> Set<String> {
+        var keys = Set<String>()
+        for siparis in firebaseManager.siparisler {
+            guard siparis.invoiceNumber.localizedStandardContains(term)
+                    || siparis.designName.localizedStandardContains(term) else { continue }
+            let key = musteriAnahtari(siparis.customerName)
+            if !key.isEmpty { keys.insert(key) }
+        }
+        return keys
+    }
+
+    /// Which field actually matched the search — shown on the card so a hit on
+    /// an invoice number or address doesn't look like a random result. Returns
+    /// nil when the name itself matched (no explanation needed) or no search.
+    private func aramaEslesmeAciklamasi(icin musteri: Musteri) -> String? {
+        let term = aramaMetni.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else { return nil }
+        guard !musteri.name.localizedStandardContains(term) else { return nil }
+        if musteri.email.localizedStandardContains(term) {
+            return "\(t("Email", lang: seciliDil)): \(musteri.email)"
+        }
+        if musteri.phone.localizedStandardContains(term) {
+            return "\(t("Phone", lang: seciliDil)): \(musteri.phone)"
+        }
+        if musteri.instagram.localizedStandardContains(term) {
+            return "Instagram: \(musteri.instagram)"
+        }
+        let anahtar = musteriAnahtari(musteri.name)
+        if !anahtar.isEmpty {
+            let siparisler = firebaseManager.siparisler.filter { musteriAnahtari($0.customerName) == anahtar }
+            if let siparis = siparisler.first(where: { $0.invoiceNumber.localizedStandardContains(term) }) {
+                return "\(t("Order", lang: seciliDil)) \(siparis.invoiceNumber)"
+            }
+            if let siparis = siparisler.first(where: { $0.designName.localizedStandardContains(term) }) {
+                return siparis.designName
+            }
+        }
+        let adresAlanlari = [musteri.address, musteri.streetAddress ?? "", musteri.city ?? "", musteri.postalCode ?? "", musteri.country ?? ""]
+        if adresAlanlari.contains(where: { !$0.isEmpty && $0.localizedStandardContains(term) }) {
+            let sokak = (musteri.streetAddress ?? "").isEmpty ? musteri.address : (musteri.streetAddress ?? "")
+            let gosterim = [sokak, musteri.city ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+            return "\(t("Address", lang: seciliDil)): \(gosterim)"
+        }
+        return nil
     }
 
     private func designBasliklari(icin musteri: Musteri) -> [String] {
@@ -157,7 +214,7 @@ struct MusterilerView: View {
                     ScrollView {
                         VStack(spacing: 12) {
                             ForEach(aramaSonuclari) { musteri in
-                                MusteriKarti(musteri: musteri, isSelected: seciliMusteri?.id == musteri.id, designNames: designBasliklari(icin: musteri))
+                                MusteriKarti(musteri: musteri, isSelected: seciliMusteri?.id == musteri.id, designNames: designBasliklari(icin: musteri), matchHint: aramaEslesmeAciklamasi(icin: musteri))
                                     .onTapGesture { seciliMusteri = musteri }
                                     .contextMenu { Button(role: .destructive) { silMusteri(musteri) } label: { Label(t("Delete", lang: seciliDil), systemImage: "trash") } }
                             }
@@ -371,7 +428,7 @@ struct MusterilerView: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(aramaSonuclari) { musteri in
-                        MusteriKarti(musteri: musteri, isSelected: false, designNames: designBasliklari(icin: musteri))
+                        MusteriKarti(musteri: musteri, isSelected: false, designNames: designBasliklari(icin: musteri), matchHint: aramaEslesmeAciklamasi(icin: musteri))
                             .onTapGesture {
                                 seciliMusteri = musteri
                                 withAnimation(.snappy) {
@@ -465,6 +522,9 @@ struct MusteriKarti: View {
     let musteri: Musteri
     let isSelected: Bool
     let designNames: [String]
+    // Why this card is in the search results when the hit wasn't the name
+    // (e.g. "Order 1042", "Email: x@y.com") — nil outside a search.
+    var matchHint: String? = nil
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("seciliDil") private var seciliDil: String = "English"
 
@@ -519,6 +579,14 @@ struct MusteriKarti: View {
                 }
                 .font(.system(size: 11))
                 .foregroundColor(.gray)
+
+                if let matchHint {
+                    Text("⌕ \(t("Matched", lang: seciliDil)): \(matchHint)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(red: 180 / 255, green: 83 / 255, blue: 9 / 255)) // amber, same as web (#b45309)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
 
             Spacer()
@@ -557,6 +625,10 @@ struct MusteriDetayView: View {
     @FocusState private var customerNameFocused: Bool
     @State private var isEditingCustomerNotes = false
     @State private var selectedCustomerTab: String = "Orders"
+    @State private var isResyncingFromStore = false
+    @State private var resyncStatusMessage: String? = nil
+    @State private var resyncErrorMessage: String? = nil
+    @State private var showRawStoreData = false
     @Environment(\.openURL) private var openURL
 
     var musteriSiparisleri: [Siparis] { firebaseManager.siparisler.filter { $0.customerName.lowercased() == musteri.name.lowercased() }.sorted { $0.paymentDate > $1.paymentDate } }
@@ -572,6 +644,7 @@ struct MusteriDetayView: View {
                 if isPhoneLayout {
                     VStack(spacing: 16) {
                         customerStatsRow
+                        integrationPanelCard
                         contactInfoCard
                         orderHistoryCard
                         customerNotesCard
@@ -580,6 +653,7 @@ struct MusteriDetayView: View {
                 } else {
                     VStack(spacing: 25) {
                         customerStatsRow
+                        integrationPanelCard
 
                         HStack(alignment: .top, spacing: 25) {
                             VStack(spacing: 20) {
@@ -599,6 +673,13 @@ struct MusteriDetayView: View {
                 }
             }
             .padding(isPhoneLayout ? 14 : 40)
+        }
+        .onChange(of: musteri.id ?? "") { _, _ in
+            // Integration panel state is per-customer — never carry a
+            // "Resynced" message or an open raw-JSON viewer across profiles.
+            resyncStatusMessage = nil
+            resyncErrorMessage = nil
+            showRawStoreData = false
         }
         .onDisappear { flushMusteriAutosave() }
     }
@@ -640,11 +721,233 @@ struct MusteriDetayView: View {
                     .font(.system(size: isPhoneLayout ? 12 : 13, weight: .semibold))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+
+                customerQuickActionsRow
             }
 
             Spacer(minLength: 0)
         }
         .padding(.bottom, isPhoneLayout ? 4 : 10)
+    }
+
+    // MARK: - Quick actions (Call / WhatsApp / Email / Instagram)
+
+    private var quickActionPhoneDigits: String {
+        // Same cleaning as the web: keep only digits and "+".
+        musteri.phone.filter { $0.isNumber || $0 == "+" }
+    }
+
+    private var quickActionWhatsAppDigits: String {
+        // wa.me wants the number without a leading "+" or "00".
+        var digits = quickActionPhoneDigits
+        if digits.hasPrefix("+") { digits.removeFirst() }
+        if digits.hasPrefix("00") { digits.removeFirst(2) }
+        return digits
+    }
+
+    private var quickActionInstagramHandle: String {
+        var handle = musteri.instagram.trimmingCharacters(in: .whitespacesAndNewlines)
+        if handle.hasPrefix("@") { handle.removeFirst() }
+        return handle
+    }
+
+    /// One-tap ways to reach the customer, built from what the profile already
+    /// knows — plain URLs, no dialer integration (tel: opens FaceTime on macOS).
+    @ViewBuilder
+    private var customerQuickActionsRow: some View {
+        let phone = musteri.phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = musteri.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let instagram = quickActionInstagramHandle
+        if !phone.isEmpty || !email.isEmpty || !instagram.isEmpty {
+            HStack(spacing: 6) {
+                if !phone.isEmpty {
+                    quickActionChip(icon: "phone.fill", label: t("Call", lang: seciliDil), urlString: "tel:\(quickActionPhoneDigits)")
+                    quickActionChip(icon: "message.fill", label: "WhatsApp", urlString: "https://wa.me/\(quickActionWhatsAppDigits)")
+                }
+                if !email.isEmpty {
+                    quickActionChip(icon: "envelope.fill", label: t("Email", lang: seciliDil), urlString: "mailto:\(email)")
+                }
+                if !instagram.isEmpty {
+                    let encoded = instagram.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? instagram
+                    quickActionChip(icon: "at", label: "Instagram", urlString: "https://instagram.com/\(encoded)")
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func quickActionChip(icon: String, label: String, urlString: String) -> some View {
+        Button {
+            if let url = URL(string: urlString) { openURL(url) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+                Text(label).font(.system(size: 12, weight: .bold))
+            }
+            .foregroundColor(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover in
+            #if os(macOS)
+            if hover { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            #endif
+        }
+    }
+
+    // MARK: - Store integration panel
+
+    /// Only external origins get the panel — a manual record needs no explanation.
+    private var customerSourceLabel: String? {
+        switch (musteri.source ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "shopify": return "Shopify"
+        case "woocommerce": return "WooCommerce"
+        case "inbound": return "API"
+        default: return nil
+        }
+    }
+
+    private var hasStoredIntegrationPayload: Bool {
+        !(musteri.integrationLastPayload ?? "").isEmpty
+    }
+
+    /// The stored payload re-serialized with pretty printing; falls back to the
+    /// raw string when it is not valid JSON (mirrors the web viewer).
+    private var prettyIntegrationPayload: String? {
+        guard let raw = musteri.integrationLastPayload, !raw.isEmpty else { return nil }
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: pretty, encoding: .utf8) else { return raw }
+        return text
+    }
+
+    @ViewBuilder
+    private var integrationPanelCard: some View {
+        if let storeLabel = customerSourceLabel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.triangle.2.circlepath").foregroundColor(.gray)
+                    Text("\(t("Connected store", lang: seciliDil)): \(storeLabel)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.primary)
+                    Spacer(minLength: 8)
+                    if !isPhoneLayout, hasStoredIntegrationPayload {
+                        resyncFromStoreButton
+                    }
+                }
+
+                let externalId = (musteri.externalCustomerId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !externalId.isEmpty {
+                    integrationInfoRow(label: t("Store customer ID", lang: seciliDil), value: externalId)
+                }
+                integrationInfoRow(
+                    label: t("Last synced", lang: seciliDil),
+                    value: musteri.integrationSyncedAt.map { $0.formatted(.dateTime.day().month(.abbreviated).year().hour().minute()) } ?? "—"
+                )
+
+                if isPhoneLayout, hasStoredIntegrationPayload {
+                    resyncFromStoreButton
+                }
+
+                if let message = resyncStatusMessage {
+                    Text(message)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.green)
+                }
+                if let message = resyncErrorMessage {
+                    Text(message)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.red)
+                }
+
+                if let pretty = prettyIntegrationPayload {
+                    DisclosureGroup(isExpanded: $showRawStoreData) {
+                        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                            Text(pretty)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                                .textSelection(.enabled)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 260)
+                        .background(Color.primary.opacity(0.05))
+                        .cornerRadius(8)
+                    } label: {
+                        Text(t("View raw store data", lang: seciliDil))
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(colorScheme == .dark ? Color.white.opacity(0.05) : Color.white)
+            .cornerRadius(12)
+            .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.03), radius: 5, y: 2)
+        }
+    }
+
+    private func integrationInfoRow(label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.primary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var resyncFromStoreButton: some View {
+        Button {
+            runIntegrationResync()
+        } label: {
+            HStack(spacing: 6) {
+                if isResyncingFromStore {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 11, weight: .semibold))
+                }
+                Text(isResyncingFromStore
+                     ? t("Resyncing from store data…", lang: seciliDil)
+                     : t("Resync from store data", lang: seciliDil))
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(.blue)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.10))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .disabled(isResyncingFromStore)
+        .help(t("Re-applies what the store last sent — the store's values win.", lang: seciliDil))
+    }
+
+    private func runIntegrationResync() {
+        guard !isResyncingFromStore, let customerId = musteri.id else { return }
+        // A pending autosave writes the full local model — flush it now so it
+        // cannot fire after the resync and clobber the store's values.
+        flushMusteriAutosave()
+        isResyncingFromStore = true
+        resyncStatusMessage = nil
+        resyncErrorMessage = nil
+        firebaseManager.resyncIntegrationCustomer(customerId: customerId) { ok, message in
+            isResyncingFromStore = false
+            // The user may have switched profiles while the call was in flight.
+            guard musteri.id == customerId else { return }
+            if ok {
+                resyncStatusMessage = t("Resynced from store data.", lang: seciliDil)
+            } else {
+                resyncErrorMessage = message ?? "The customer could not be resynced."
+            }
+        }
     }
 
     private var customerAvatarView: some View {

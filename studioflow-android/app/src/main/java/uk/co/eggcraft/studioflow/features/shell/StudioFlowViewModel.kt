@@ -470,6 +470,21 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    fun resyncIntegrationCustomer(customer: StudioCustomer) {
+        val workspace = mutableState.value.workspace ?: return
+        viewModelScope.launch {
+            mutableState.update { it.copy(errorMessage = "", settingsMessage = "") }
+            runCatching { repository.resyncIntegrationCustomer(workspace.id, customer.id) }
+                .onSuccess { applied ->
+                    // Same success line the web shows, with the applied-field count.
+                    mutableState.update { it.copy(settingsMessage = "Resynced from store data.${if (applied > 0) " ($applied)" else ""}") }
+                }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "The customer could not be resynced.") }
+                }
+        }
+    }
+
     fun createCustomer(
         name: String,
         email: String,

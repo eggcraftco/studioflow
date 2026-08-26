@@ -5664,6 +5664,26 @@ exports.getWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (reque
   const orderId = sanitizeOrderLayoutId(request.data?.orderId);
   const settingsSnapshot = await companySettingsDocRef(companyId).get();
   const settingsData = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
+
+  // A layout saved for the order's TYPE (e.g. repair) is the workspace's
+  // convention for those orders and beats personal profiles. The independent
+  // per-order layout lives on the order doc and is resolved by the clients.
+  const orderType = String(request.data?.orderType || "").trim().slice(0, 40);
+  if (orderType) {
+    const typeSnapshots = parseJSON(settingsData.typeWorkspaceSnapshotsJSON, null);
+    const typeSnapshot = typeSnapshots && typeof typeSnapshots === "object" && !Array.isArray(typeSnapshots)
+      ? typeSnapshots[orderType]
+      : null;
+    if (typeSnapshot && typeof typeSnapshot === "object") {
+      return {
+        ok: true,
+        companyId,
+        source: "type_layout",
+        layout: layoutFromWorkspaceSnapshot(typeSnapshot, orderId)
+      };
+    }
+  }
+
   const profiles = normalizeWorkspaceProfiles(settingsData.workspaceUserProfilesJSON);
   const { profile, source } = ownOrFallbackWorkspaceProfile(profiles, uid, companyData);
   const sharedSnapshot = parseJSON(settingsData.sharedWorkspaceSnapshotJSON, null);
@@ -5694,6 +5714,36 @@ exports.getWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (reque
     source: "default",
     layout: normalizeOrderDetailCardLayout({})
   };
+});
+
+// The owner's convention for one order type: every repair order (for now the
+// only special type) opens with this layout for everyone, unless an order
+// carries its own independent layout. layout null clears the convention.
+exports.saveTypeWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireWorkspaceCardCustomization(companyData);
+  if (!uidIsCompanyOwner(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Order-type layouts are managed by the workspace owner.");
+  }
+  const orderType = String(request.data?.orderType || "").trim().slice(0, 40);
+  if (!orderType) throw new HttpsError("invalid-argument", "orderType is required.");
+
+  const settingsRef = companySettingsDocRef(companyId);
+  const settingsSnapshot = await settingsRef.get();
+  const settingsData = settingsSnapshot.exists ? settingsSnapshot.data() || {} : {};
+  const parsed = parseJSON(settingsData.typeWorkspaceSnapshotsJSON, null);
+  const typeSnapshots = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+
+  if (request.data?.layout == null) {
+    delete typeSnapshots[orderType];
+    await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots) }, { merge: true });
+    return { ok: true, cleared: true };
+  }
+
+  const layout = normalizeOrderDetailCardLayout(request.data.layout || {});
+  typeSnapshots[orderType] = workspaceSnapshotFromLayout(layout, {}, "");
+  await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots) }, { merge: true });
+  return { ok: true, layout };
 });
 
 exports.saveWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (request) => {

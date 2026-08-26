@@ -193,6 +193,7 @@ fun StudioFlowMainScreen(
     onRestoreOrder: (StudioOrder) -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onResyncCustomer: (StudioCustomer) -> Unit,
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDeleteCustomer: (String) -> Unit,
     onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
@@ -531,6 +532,7 @@ fun StudioFlowMainScreen(
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
+                    onResyncCustomer = onResyncCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
                     onDeleteCustomer = onDeleteCustomer,
                     onOpenOrderFromFiles = { order ->
@@ -676,6 +678,7 @@ fun StudioFlowMainScreen(
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
+                    onResyncCustomer = onResyncCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
                     onDeleteCustomer = onDeleteCustomer,
                     onOpenOrderFromFiles = { order ->
@@ -1369,6 +1372,7 @@ private fun StudioSectionContent(
     onCreateOrder: () -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onResyncCustomer: (StudioCustomer) -> Unit,
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDeleteCustomer: (String) -> Unit,
     onOpenOrderFromFiles: (StudioOrder) -> Unit,
@@ -1493,6 +1497,7 @@ private fun StudioSectionContent(
                 focusedCustomerName = focusedCustomerName,
                 onCreateCustomer = onCreateCustomer,
                 onUpdateCustomer = onUpdateCustomer,
+                onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDeleteCustomer = onDeleteCustomer,
                 onOpenOrder = onOpenOrderFromFiles

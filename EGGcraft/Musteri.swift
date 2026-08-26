@@ -23,6 +23,13 @@ struct Musteri: Identifiable, Codable, Equatable {
     var shippingPostalCode: String?
     var shippingCountry: String?
     var shippingPhone: String?
+    // Store-integration provenance (written by the WooCommerce/Shopify/inbound
+    // webhooks). Optional so pre-integration customers still decode. Read-only in
+    // the app — the resyncIntegrationCustomer callable replays the stored payload.
+    var source: String?                     // "woocommerce" | "shopify" | "inbound" | ""
+    var externalCustomerId: String?
+    var integrationSyncedAt: Date?          // when a store webhook last touched this customer
+    var integrationLastPayload: String?     // the store's last normalized payload (JSON string, ≤6KB)
     var notes: String
     var lastContactDate: Date
     var profileImageUrl: String // Profile photo URL

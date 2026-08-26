@@ -1449,7 +1449,15 @@ data class StudioCustomer(
     val shippingPhone: String = "",
     val notes: String = "",
     val profileImageUrl: String = "",
-    val lastContactDate: Date? = null
+    val lastContactDate: Date? = null,
+    // Store-integration provenance (web parity): where the record came from
+    // ("woocommerce" | "shopify" | "inbound" | ""), the store's own customer id,
+    // when the store last synced it, and the raw payload the store last sent
+    // (JSON string ≤6KB) so "Resync from store data" can replay it.
+    val source: String = "",
+    val externalCustomerId: String = "",
+    val integrationSyncedAt: Date? = null,
+    val integrationLastPayload: String = ""
 ) {
     companion object {
         fun fromDocument(document: DocumentSnapshot): StudioCustomer = StudioCustomer(
@@ -1474,7 +1482,11 @@ data class StudioCustomer(
             shippingPhone = document.getString("shippingPhone").orEmpty(),
             notes = document.getString("notes").orEmpty(),
             profileImageUrl = document.getString("profileImageUrl").orEmpty(),
-            lastContactDate = document.getDate("lastContactDate")
+            lastContactDate = document.getDate("lastContactDate"),
+            source = document.getString("source").orEmpty(),
+            externalCustomerId = document.getString("externalCustomerId").orEmpty(),
+            integrationSyncedAt = document.getDate("integrationSyncedAt"),
+            integrationLastPayload = document.getString("integrationLastPayload").orEmpty()
         )
     }
 }

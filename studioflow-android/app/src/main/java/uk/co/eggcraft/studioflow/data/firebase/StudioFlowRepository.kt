@@ -615,6 +615,17 @@ class StudioFlowRepository(
             .await()
     }
 
+    // Replays the payload the store last sent for this customer — the store's
+    // values win (web parity). Returns how many fields the server applied.
+    // The callable fails with failed-precondition when nothing is stored yet.
+    suspend fun resyncIntegrationCustomer(companyId: String, customerId: String): Int {
+        val result = functions.getHttpsCallable("resyncIntegrationCustomer")
+            .call(mapOf("companyId" to companyId, "customerId" to customerId))
+            .await()
+        val data = result.data as? Map<*, *>
+        return (data?.get("applied") as? Number)?.toInt() ?: 0
+    }
+
     // Creates a brand-new customer via the same callable the web uses. The customerId
     // key is omitted (no id yet — Firestore mints one); the payload otherwise mirrors
     // the contact fields the update callable sends.
