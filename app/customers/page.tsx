@@ -63,6 +63,25 @@ function formatDate(date: Date | null) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
+function formatDateTime(date: Date | null) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+// "1 order" vs "2 orders". Languages that don't inflect after a numeral
+// (Turkish among them) simply translate both keys to the same word.
+function countLabel(count: number, singularKey: string, pluralKey: string, t: (text: string) => string) {
+  return `${count} ${t(count === 1 ? singularKey : pluralKey)}`;
+}
+
+// Where a customer record came from. Only external origins get a badge —
+// a manual record needs no explanation.
+const CUSTOMER_SOURCE_LABEL: Record<string, string> = {
+  shopify: "Shopify",
+  woocommerce: "WooCommerce",
+  inbound: "API"
+};
+
 function initials(value: string) {
   return customerDisplayName(value).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "C";
 }
@@ -313,6 +332,23 @@ export default function CustomersPage() {
     try {
       const cleanForm = cleanCustomerForm(form);
       if (formMode === "create") {
+        // The whole directory is already client-side; a same-email or
+        // same-phone record is almost always the same person twice.
+        const email = (cleanForm.email || "").trim().toLowerCase();
+        const phone = (cleanForm.phone || "").replace(/[^0-9+]/g, "");
+        const duplicate = customers.find(existing =>
+          (email.length > 3 && existing.email.trim().toLowerCase() === email) ||
+          (phone.length >= 7 && existing.phone.replace(/[^0-9+]/g, "") === phone)
+        );
+        if (duplicate) {
+          const proceed = window.confirm(
+            `${t("Possible duplicate customer")}: ${customerDisplayName(duplicate.name)} ${email && duplicate.email.trim().toLowerCase() === email ? `(${duplicate.email})` : `(${duplicate.phone})`}. ${t("Create anyway?")}`
+          );
+          if (!proceed) {
+            setActionStatus("");
+            return;
+          }
+        }
         const result = await createCustomerFromWeb(workspace, cleanForm);
         await refreshCustomers(result.customerId || undefined);
         setActionStatus("Customer created.");
@@ -429,7 +465,7 @@ export default function CustomersPage() {
           <div className="orders-sidebar-toolbar">
             <div>
               <p className="orders-kicker">{t("Customers")}</p>
-              <h1>{customers.length} {t("customers")}</h1>
+              <h1>{countLabel(customers.length, "customer", "customers", t)}</h1>
               <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="customers-toolbar-actions">
@@ -606,8 +642,9 @@ function CustomerListCard({
           </span>
         ) : null}
         <span className="customer-list-meta">
-          <span className="studio-pill">{customer.orderCount} {t("orders")}</span>
-          <span className="studio-pill">{formatDate(customer.lastContactDate)}</span>
+          <span className="studio-pill">{countLabel(customer.orderCount, "order", "orders", t)}</span>
+          <span className="studio-pill">{t("Last contact")}: {formatDate(customer.lastContactDate)}</span>
+          {CUSTOMER_SOURCE_LABEL[customer.source] ? <span className="studio-pill">{CUSTOMER_SOURCE_LABEL[customer.source]}</span> : null}
           {canSeeFinance ? <span className="studio-pill">{money(customer.totalValue, hideNumbers, moneySettings)}</span> : null}
         </span>
       </span>
@@ -640,6 +677,7 @@ function CustomerDetail({
   const uploadingPhoto = savingInlineField === "Customer photo";
 
   const [activeTab, setActiveTab] = useState<"Orders" | "Files" | "Notes" | "Activity">("Orders");
+  const [activityLimit, setActivityLimit] = useState(30);
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -694,13 +732,18 @@ function CustomerDetail({
           />
           <p>
             {canSeeFinance ? `${money(customer.totalValue, hideNumbers, moneySettings)} ${t("total value")} - ` : ""}
-            {customer.orderCount} {t("orders")}
+            {countLabel(customer.orderCount, "order", "orders", t)}
+            {CUSTOMER_SOURCE_LABEL[customer.source] ? <span className="studio-pill" style={{ marginLeft: 8 }}>{CUSTOMER_SOURCE_LABEL[customer.source]}</span> : null}
           </p>
         </div>
       </section>
 
       <div className="customer-stats-row">
-        <CustomerStatCard emoji="🛍️" tint="#34c759" label={t("Total Spent")} value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"} valueClass="positive" />
+        {/* Order value is not money received — the report's distinction, kept
+            visible: value, what was actually paid, and what is still owed. */}
+        <CustomerStatCard emoji="🛍️" tint="#34c759" label={t("Total Order Value")} value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"} valueClass="positive" />
+        <CustomerStatCard emoji="💷" tint="#2f6df6" label={t("Paid")} value={canSeeFinance ? money(customer.totalPaid, hideNumbers, moneySettings) : "—"} valueClass="positive" />
+        <CustomerStatCard emoji="⏳" tint="#ff3b30" label={t("Outstanding")} value={canSeeFinance ? money(Math.max(customer.totalValue - customer.totalPaid, 0), hideNumbers, moneySettings) : "—"} />
         <CustomerStatCard emoji="📦" tint="#2f6df6" label={t("Total Orders")} value={String(customer.orderCount)} />
         <CustomerStatCard emoji="📅" tint="#af52de" label={t("Last Order")} value={lastOrderDate ? formatDate(lastOrderDate) : "—"} />
         <CustomerStatCard emoji="🕐" tint="#ff9500" label={t("Customer Since")} value={customerSinceDate ? formatMonthYear(customerSinceDate) : "—"} />
@@ -725,8 +768,12 @@ function CustomerDetail({
         <div className="customer-card-stack">
           <section className="card app-card customer-detail-card">
             <div className="customer-card-head">
-              <CardTitle icon="orders" eyebrow={t("Order History")} title={`${customer.orderCount} ${t("orders")}`} />
-              {orders.length > 0 ? <Link href="/orders" className="customer-view-all">{t("View All Orders")}</Link> : null}
+              <CardTitle icon="orders" eyebrow={t("Order History")} title={countLabel(customer.orderCount, "order", "orders", t)} />
+              {orders.length > 0 ? (
+                <Link href={`/orders?customerName=${encodeURIComponent(customer.name)}`} className="customer-view-all">
+                  {t("View All Orders")}
+                </Link>
+              ) : null}
             </div>
             <div className="customer-order-list">
               {orders.length === 0 ? (
@@ -738,7 +785,7 @@ function CustomerDetail({
           </section>
 
           <section className="card app-card customer-detail-card">
-            <CardTitle icon="notes" eyebrow={t("Customer Notes")} title={t("Notes")} />
+            <CardTitle icon="notes" eyebrow={t("Notes")} title={t("Customer Notes")} />
             <CustomerInlineNotes
               value={customer.notes}
               disabled={!canManageCustomers}
@@ -758,7 +805,9 @@ function CustomerDetail({
               className={`customer-tab${activeTab === tab ? " is-active" : ""}`}
               onClick={() => setActiveTab(tab)}
             >
-              {t(tab)}
+              {/* Two things called "Notes" on one screen confuse — the tab is
+                  order notes, the card above is the customer's own note. */}
+              {t(tab === "Notes" ? "Order Notes" : tab)}
             </button>
           ))}
         </div>
@@ -822,16 +871,24 @@ function CustomerDetail({
           ) : (
             allActivity.length === 0 ? <CustomerTabEmpty text={t("No activity yet.")} /> : (
               <div className="customer-activity-list">
-                {allActivity.map(({ order, entry }) => (
+                {allActivity.slice(0, activityLimit).map(({ order, entry }) => (
                   <div key={order.id + entry.id} className="customer-activity-row">
                     <span className="customer-activity-dot" aria-hidden="true" />
                     <span className="customer-activity-main">
                       <strong>{t(entry.title)}</strong>
                       {entry.oldValue || entry.newValue ? <small className="customer-activity-change">{entry.oldValue || "—"} → {entry.newValue || "—"}</small> : null}
-                      <small>{(order.invoiceNumber || order.designName)} • {formatDate(entry.createdAt)}</small>
+                      <small>
+                        {(order.invoiceNumber || order.designName)} • {formatDateTime(entry.createdAt)}
+                        {entry.byEmail ? ` • ${entry.byEmail}` : ""}
+                      </small>
                     </span>
                   </div>
                 ))}
+                {allActivity.length > activityLimit ? (
+                  <button type="button" className="customer-view-all" onClick={() => setActivityLimit(limit => limit + 50)}>
+                    {t("Load more")} ({allActivity.length - activityLimit})
+                  </button>
+                ) : null}
               </div>
             )
           )}
@@ -927,7 +984,9 @@ function CustomerDetailsForm({
 
   const fields: Array<{ label: string; field: keyof CustomerFormInput; type?: string }> = [
     { label: "Email", field: "email", type: "email" },
-    { label: "WhatsApp", field: "phone" },
+    // The order's general phone lands here — it is NOT a verified WhatsApp
+    // number, so the label must not claim one.
+    { label: "Phone / WhatsApp", field: "phone" },
     { label: "Instagram", field: "instagram" },
     { label: "Street", field: "streetAddress" },
     { label: "City", field: "city" },

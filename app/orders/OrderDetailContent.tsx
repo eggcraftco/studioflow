@@ -212,9 +212,17 @@ function uploadSafetyAcceptanceAtKey(workspaceId: string) {
   return `studioflow-upload-policy-accepted-at:${workspaceId}`;
 }
 
+// LOCAL calendar day, never toISOString: the value round-trips through
+// dateFromInputValue (local) and the optimistic patch. Under BST the UTC
+// slice sat one day behind the local parse, so a freshly typed Created Date
+// re-rendered as the previous day — reading exactly like "it didn't save"
+// while the server had in fact stored the right date.
 function dateInputValue(date: Date | null) {
   if (!date) return "";
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function dateFromInputValue(value: string | undefined) {

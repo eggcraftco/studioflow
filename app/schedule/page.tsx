@@ -62,8 +62,13 @@ function startOfDay(date: Date) {
   return copy;
 }
 
+// Calendar stepping, never millisecond stepping: on the DST fall-back day a
+// 24h step lands on the same calendar date twice and the range loses its last
+// day (the "two Sun 25 Oct, no Sat 31 Oct" bug).
 function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * DAY_MS);
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
 }
 
 function isoDateValue(date: Date) {
@@ -267,7 +272,9 @@ function countdownText(order: ScheduleOrderItem) {
   if (orderIsCancelled(order) || orderIsCompleted(order) || order.isDispatched) return "";
   const days = daysBetween(startOfDay(new Date()), orderDueDate(order));
   const signedDays = Math.round((orderDueDate(order).getTime() - startOfDay(new Date()).getTime()) / DAY_MS);
-  if (signedDays > 0) return `${days}d`;
+  // "45d" alone read as the project duration; it is the time LEFT until the
+  // due date, and the label now says so.
+  if (signedDays > 0) return `${days}d left`;
   if (signedDays === 0) return "Today";
   return `${Math.abs(signedDays)}d late`;
 }
@@ -888,7 +895,7 @@ export default function SchedulePage() {
           <div className="orders-sidebar-toolbar">
             <div>
               <p className="orders-kicker">{t("Schedule Orders")}</p>
-              <h1>{filteredOrders.length} {t("orders")}</h1>
+              <h1>{filteredOrders.length} {t(filteredOrders.length === 1 ? "order" : "orders")}</h1>
               <p>{selectedOrder ? `${t("Selected:")} ${selectedOrder.customerName}` : workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
             </div>
             <div className="sidebar-toolbar-actions">
@@ -1024,7 +1031,7 @@ export default function SchedulePage() {
             </label>
 
             <label className="schedule-control schedule-search-control schedule-search-desktop">
-              <span>{t("Search Tasks")}</span>
+              <span>{t("Search Orders")}</span>
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Customer, design, status...")} />
             </label>
 
@@ -1032,6 +1039,18 @@ export default function SchedulePage() {
               <button type="button" onClick={() => moveRange(-1)} aria-label={t("Previous range")}>{"<"}</button>
               <strong>{rangeText}</strong>
               <button type="button" onClick={() => moveRange(1)} aria-label={t("Next range")}>{">"}</button>
+              <button type="button" className="schedule-range-shortcut" onClick={() => setAnchorDate(new Date())} title={t("Today")}>{t("Today")}</button>
+              {selectedOrder ? (
+                <button
+                  type="button"
+                  className="schedule-range-shortcut"
+                  onClick={() => setAnchorDate(orderStartDate(selectedOrder))}
+                  aria-label={t("Jump to selected order")}
+                  title={t("Jump to selected order")}
+                >
+                  ⌖
+                </button>
+              ) : null}
             </div>
 
             <div className="schedule-zoom-control" role="group" aria-label={t("Timeline zoom")} title={t("Timeline zoom")}>
@@ -1054,7 +1073,7 @@ export default function SchedulePage() {
                 onClick={() => setMobileSearchOpen(current => !current)}
                 aria-label={t("Search schedule")}
                 aria-expanded={mobileSearchOpen}
-                title={t("Search Tasks")}
+                title={t("Search Orders")}
               >
                 ⌕
               </button>
@@ -1062,7 +1081,7 @@ export default function SchedulePage() {
 
             {mobileSearchOpen ? (
               <label className="schedule-control schedule-search-control schedule-search-mobile">
-                <span>{t("Search Tasks")}</span>
+                <span>{t("Search Orders")}</span>
                 <input ref={mobileSearchInputRef} value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Customer, design, status...")} />
               </label>
             ) : null}
@@ -1391,7 +1410,7 @@ export default function SchedulePage() {
               <div className="schedule-timeline-canvas" style={{ width: timelineWidth }}>
                 <div className="schedule-timeline-title-row">
                   <strong>{rangeText}</strong>
-                  <span>{visibleOrders.length} {t("orders")}</span>
+                  <span>{visibleOrders.length} {t(visibleOrders.length === 1 ? "order" : "orders")}</span>
                 </div>
                 <div className="schedule-day-header">
                   {visibleDays.map(day => (
@@ -1474,8 +1493,9 @@ function ScheduleTimelineRow({
   onResizeTrailing: (deltaDays: number) => void;
 }) {
   const { hideNumbers } = usePricePrivacy();
-  const interactionRef = useRef<{ mode: "move" | "leading" | "trailing"; startX: number; moved: boolean } | null>(null);
+  const interactionRef = useRef<{ mode: "move" | "leading" | "trailing"; startX: number; startScrollLeft: number; moved: boolean } | null>(null);
   const lastClickAtRef = useRef(0);
+  const [dragPreview, setDragPreview] = useState<{ mode: "move" | "leading" | "trailing"; delta: number } | null>(null);
   const start = orderStartDate(order);
   const end = addDays(start, Math.max(order.deliveryTime, 1));
   const clippedStart = start.getTime() < visibleStart.getTime() ? visibleStart : start;
@@ -1483,18 +1503,36 @@ function ScheduleTimelineRow({
   const offsetDays = daysBetween(visibleStart, clippedStart);
   const durationDays = Math.max(1, daysBetween(clippedStart, clippedEnd));
   const x = offsetDays * dayWidth + 7;
-  const width = Math.min(Math.max(132, durationDays * dayWidth - 14), timelineWidth - x - 7);
+  // The rows sit inside the canvas' 16px padding and 1px borders. Clamping
+  // against the full canvas width let a long bar run into .schedule-rows'
+  // hidden overflow — and took the trailing resize handle with it, unreachable
+  // exactly when an order outlasted the visible range.
+  const rowInnerRight = timelineWidth - 34;
+  const width = Math.max(48, Math.min(Math.max(132, durationDays * dayWidth - 14), rowInnerRight - x));
   const tone = scheduleTone(order);
   const status = scheduleStatusLabel(order);
   const statusClass = `schedule-status-badge ${statusTone(order)}`;
   const countdown = countdownText(order);
+
+  function timelineScroller(target: HTMLElement) {
+    return target.closest(".schedule-timeline-scroll") as HTMLElement | null;
+  }
+
+  // Pointer distance alone lies once the container scrolls under the drag;
+  // the day delta is pointer travel PLUS how far the timeline slid.
+  function interactionDelta(event: ReactPointerEvent<HTMLElement>, interaction: { startX: number; startScrollLeft: number }) {
+    const scroller = timelineScroller(event.currentTarget);
+    const scrollDelta = scroller ? scroller.scrollLeft - interaction.startScrollLeft : 0;
+    return Math.round((event.clientX - interaction.startX + scrollDelta) / dayWidth);
+  }
 
   function startInteraction(event: ReactPointerEvent<HTMLElement>, mode: "move" | "leading" | "trailing") {
     if (!canEdit || saving) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
-    interactionRef.current = { mode, startX: event.clientX, moved: false };
+    const scroller = timelineScroller(event.currentTarget);
+    interactionRef.current = { mode, startX: event.clientX, startScrollLeft: scroller?.scrollLeft ?? 0, moved: false };
   }
 
   function updateInteraction(event: ReactPointerEvent<HTMLElement>) {
@@ -1503,13 +1541,26 @@ function ScheduleTimelineRow({
     if (Math.abs(event.clientX - interaction.startX) > 4) {
       interaction.moved = true;
     }
+    // Dragging against the container's edge scrolls the timeline so long
+    // ranges can be reached without letting go.
+    const scroller = timelineScroller(event.currentTarget);
+    if (scroller && interaction.moved) {
+      const bounds = scroller.getBoundingClientRect();
+      if (event.clientX > bounds.right - 48) scroller.scrollLeft += Math.max(8, dayWidth / 6);
+      else if (event.clientX < bounds.left + 48) scroller.scrollLeft -= Math.max(8, dayWidth / 6);
+    }
+    if (interaction.moved) {
+      const delta = interactionDelta(event, interaction);
+      setDragPreview(current => current && current.delta === delta && current.mode === interaction.mode ? current : { mode: interaction.mode, delta });
+    }
   }
 
   function finishInteraction(event: ReactPointerEvent<HTMLElement>) {
     const interaction = interactionRef.current;
     if (!interaction) return;
     interactionRef.current = null;
-    const deltaDays = Math.round((event.clientX - interaction.startX) / dayWidth);
+    setDragPreview(null);
+    const deltaDays = interactionDelta(event, interaction);
     if (deltaDays === 0) {
       if (interaction.mode === "move" && !interaction.moved) {
         const now = Date.now();
@@ -1530,6 +1581,24 @@ function ScheduleTimelineRow({
 
   function cancelInteraction() {
     interactionRef.current = null;
+    setDragPreview(null);
+  }
+
+  // What the drop WOULD save, mirroring the exact clamps the save paths use.
+  function previewLabel(preview: { mode: "move" | "leading" | "trailing"; delta: number }) {
+    const duration = Math.max(order.deliveryTime, 1);
+    let previewStart = start;
+    let previewDuration = duration;
+    if (preview.mode === "move") {
+      previewStart = addDays(start, preview.delta);
+    } else if (preview.mode === "leading") {
+      const clamped = Math.min(Math.max(preview.delta, -365), duration - 1);
+      previewStart = addDays(start, clamped);
+      previewDuration = duration - clamped;
+    } else {
+      previewDuration = Math.min(730, Math.max(1, duration + preview.delta));
+    }
+    return `${shortDate(previewStart)} – ${shortDate(addDays(previewStart, previewDuration))} · ${previewDuration}d`;
   }
 
   return (
@@ -1551,6 +1620,7 @@ function ScheduleTimelineRow({
         onPointerUp={finishInteraction}
         onPointerCancel={cancelInteraction}
       >
+        {dragPreview ? <span className="schedule-drag-preview">{previewLabel(dragPreview)}</span> : null}
         {canEdit ? (
           <span
             className="schedule-resize-handle leading"
@@ -1573,7 +1643,7 @@ function ScheduleTimelineRow({
             {countdown ? <span>{countdown}</span> : null}
           </span>
         </span>
-        {canSeeFinance ? <span className="schedule-order-money">{money(order.remainingAmount, hideNumbers, moneySettings)}</span> : null}
+        {canSeeFinance ? <span className="schedule-order-money">{`Due ${money(order.remainingAmount, hideNumbers, moneySettings)}`}</span> : null}
         {canEdit ? (
           <>
             <span className="schedule-order-grip" aria-hidden="true">≡</span>

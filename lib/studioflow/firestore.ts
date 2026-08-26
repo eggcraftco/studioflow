@@ -332,6 +332,9 @@ export type CustomerOrderActivity = {
   oldValue: string;
   newValue: string;
   createdAt: Date | null;
+  // Who and where from — present on newer history entries, "" on older ones.
+  byEmail: string;
+  source: string;
 };
 
 export type CustomerOrderSummary = {
@@ -374,6 +377,8 @@ export type CustomerDirectoryItem = {
   notes: string;
   profileImageUrl: string;
   lastContactDate: Date | null;
+  // Where this customer record originated: "web" | "woocommerce" | "shopify" | "inbound" | "".
+  source: string;
   orderCount: number;
   totalPaid: number;
   totalValue: number;
@@ -1423,7 +1428,9 @@ function parseCustomerOrderActivity(raw: unknown): CustomerOrderActivity[] {
         title,
         oldValue: stringValue(item.oldValue, ""),
         newValue: stringValue(item.newValue, ""),
-        createdAt: dateValue(item.createdAt)
+        createdAt: dateValue(item.createdAt),
+        byEmail: stringValue(item.createdByEmail, ""),
+        source: stringValue(item.source, "")
       };
     })
     .filter((item): item is CustomerOrderActivity => item !== null)
@@ -1517,6 +1524,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       notes: stringValue(data.notes, ""),
       profileImageUrl: stringValue(data.profileImageUrl, ""),
       lastContactDate: dateValue(data.lastContactDate),
+      source: stringValue(data.source, ""),
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
