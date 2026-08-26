@@ -46,6 +46,7 @@ const STATUS_NEXT: Record<InventoryStatus, InventoryStatus[]> = {
   incoming: ["available", "archived"],
   used: ["available", "archived"],
   sold: ["archived"],
+  removed: ["available", "archived"],
   archived: ["available"]
 };
 
@@ -56,7 +57,8 @@ const KIND_LABEL: Record<string, string> = {
   stocktake: "Stocktake",
   used: "Used",
   sold: "Sold",
-  removed: "Removed"
+  removed: "Removed",
+  moved: "Moved"
 };
 
 const STATUS_LABEL: Record<InventoryStatus, string> = {
@@ -65,6 +67,7 @@ const STATUS_LABEL: Record<InventoryStatus, string> = {
   incoming: "Incoming",
   used: "Used",
   sold: "Sold",
+  removed: "Removed",
   archived: "Archived"
 };
 

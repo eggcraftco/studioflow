@@ -40,7 +40,7 @@
 const REGION = "europe-west2";
 
 const TRACKING_TYPES = ["unique", "quantity"];
-const ITEM_STATUSES = ["available", "reserved", "incoming", "used", "sold", "archived"];
+const ITEM_STATUSES = ["available", "reserved", "incoming", "used", "sold", "removed", "archived"];
 const OWNERSHIPS = ["business", "customer"];
 const DEFAULT_CATEGORIES = [
   "Watches", "Dials", "Movements", "Bracelets", "Straps",
@@ -50,11 +50,14 @@ const DEFAULT_CATEGORIES = [
 // Where an item may go next. Written down rather than left to the client so a
 // stale screen cannot walk an item backwards out of "sold".
 const STATUS_TRANSITIONS = {
-  incoming: ["available", "archived"],
-  available: ["reserved", "used", "sold", "incoming", "archived"],
-  reserved: ["available", "used", "sold", "archived"],
+  incoming: ["available", "removed", "archived"],
+  available: ["reserved", "used", "sold", "incoming", "removed", "archived"],
+  reserved: ["available", "used", "sold", "removed", "archived"],
   used: ["available", "archived"],
   sold: ["archived"],
+  // A stocktake can write "removed" (a unique item counted as gone); an
+  // accidental removal must be restorable.
+  removed: ["available", "archived"],
   archived: ["available"]
 };
 
@@ -226,7 +229,8 @@ function createInventoryFunctions({
     "stocktake",      // a physical count corrected it
     "used",           // consumed on a job
     "sold",           // sold on
-    "removed"         // archived or deleted
+    "removed",        // archived or deleted
+    "moved"           // relocated — zero quantity change, but the trail matters
   ];
 
   /**
@@ -239,11 +243,16 @@ function createInventoryFunctions({
   }) {
     if (!MOVEMENT_KINDS.includes(kind)) return;
     const amount = roundSigned(delta);
-    if (amount === 0) return;
+    // A relocation changes no quantity but must still leave a trail — the
+    // report's ask ("old and new location visible in History"). Every other
+    // zero-delta line is still dropped as noise.
+    if (amount === 0 && kind !== "moved") return;
     const cost = roundUnitMoney(unitCost);
     // Stamped on the item at the same moment, so "nothing has happened to this
     // for six months" is a fact the report can read without walking the ledger.
-    if (itemId) {
+    // Deliberately NOT stamped for "moved": shuffling a box between shelves
+    // must not hide the item from the dead-stock report.
+    if (itemId && kind !== "moved") {
       writer.set(itemsRef(companyId).doc(String(itemId)),
         { lastMovementAtMs: Number(at) || Date.now() }, { merge: true });
     }
@@ -335,6 +344,21 @@ function createInventoryFunctions({
         note: existing ? "Corrected by hand" : ""
       });
 
+      // Relocations get their own ledger line (from → to), otherwise a move
+      // is invisible in History.
+      const previousLocation = existing ? clean(existing.location, "", 80) : "";
+      if (existing && previousLocation !== fields.location) {
+        recordMovement(tx, companyId, {
+          item: { ...fields, number },
+          itemId: ref.id,
+          kind: "moved",
+          delta: 0,
+          unitCost: 0,
+          at: now, uid, email,
+          note: `${previousLocation || "—"} → ${fields.location || "—"}`
+        });
+      }
+
       return { itemId: ref.id, number };
     });
 
@@ -373,7 +397,7 @@ function createInventoryFunctions({
 
       // Only some status changes move stock. Reserving does not — the part is
       // still on the shelf, just spoken for. Using, selling or archiving does.
-      const LEAVES_THE_SHELF = { used: "used", sold: "sold", archived: "removed" };
+      const LEAVES_THE_SHELF = { used: "used", sold: "sold", removed: "removed", archived: "removed" };
       const wasOnShelf = !Object.keys(LEAVES_THE_SHELF).includes(from);
       const nowOff = Object.keys(LEAVES_THE_SHELF).includes(status);
       if (wasOnShelf !== nowOff) return;
@@ -452,7 +476,7 @@ function createInventoryFunctions({
       const onHand = isUnique ? 1 : Number((item.quantity || {}).onHand) || 0;
       const lineValue = isUnique ? value : roundMoney(value * onHand);
 
-      if (["sold", "used"].includes(status)) return; // no longer on the shelf
+      if (["sold", "used", "removed"].includes(status)) return; // no longer on the shelf
 
       if (status === "incoming") {
         summary.incomingCount += 1;

@@ -7,11 +7,11 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 // what a thing cost.
 
 export type InventoryTrackingType = "unique" | "quantity";
-export type InventoryStatus = "available" | "reserved" | "incoming" | "used" | "sold" | "archived";
+export type InventoryStatus = "available" | "reserved" | "incoming" | "used" | "sold" | "removed" | "archived";
 export type InventoryOwnership = "business" | "customer";
 
 export const INVENTORY_STATUSES: InventoryStatus[] = [
-  "available", "reserved", "incoming", "used", "sold", "archived"
+  "available", "reserved", "incoming", "used", "sold", "removed", "archived"
 ];
 
 export const INVENTORY_CATEGORIES = [
@@ -542,7 +542,7 @@ export async function readOpeningStock(
 
 export type MovementKind =
   | "openingStock" | "purchase" | "adjustment" | "stocktake"
-  | "used" | "sold" | "removed";
+  | "used" | "sold" | "removed" | "moved";
 
 export type InventoryMovement = {
   id: string;
