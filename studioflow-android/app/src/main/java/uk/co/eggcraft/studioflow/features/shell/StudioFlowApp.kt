@@ -396,6 +396,7 @@ private fun StudioFlowAppContent(
             onRestoreOrder = viewModel::restoreOrder,
             onCreateCustomer = viewModel::createCustomer,
             onUpdateCustomer = viewModel::updateCustomer,
+            onUpdateCustomerPrefs = viewModel::updateCustomerPrefs,
             onResyncCustomer = viewModel::resyncIntegrationCustomer,
             onUploadCustomerPhoto = viewModel::uploadCustomerPhoto,
             onDeleteCustomer = viewModel::deleteCustomer,

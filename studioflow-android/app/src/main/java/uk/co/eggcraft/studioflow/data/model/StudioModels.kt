@@ -1461,7 +1461,16 @@ data class StudioCustomer(
     val source: String = "",
     val externalCustomerId: String = "",
     val integrationSyncedAt: Date? = null,
-    val integrationLastPayload: String = ""
+    val integrationLastPayload: String = "",
+    // Segments + contact preferences (web parity): workspace tags like "VIP",
+    // preferred outreach channel (""|"phone"|"whatsapp"|"email"|"instagram"),
+    // the do-not-contact flag, marketing opt-in (""|"subscribed"|"unsubscribed")
+    // and the next follow-up date.
+    val tags: List<String> = emptyList(),
+    val preferredChannel: String = "",
+    val doNotContact: Boolean = false,
+    val marketingOptIn: String = "",
+    val nextFollowUpDate: Date? = null
 ) {
     companion object {
         fun fromDocument(document: DocumentSnapshot): StudioCustomer = StudioCustomer(
@@ -1490,10 +1499,31 @@ data class StudioCustomer(
             source = document.getString("source").orEmpty(),
             externalCustomerId = document.getString("externalCustomerId").orEmpty(),
             integrationSyncedAt = document.getDate("integrationSyncedAt"),
-            integrationLastPayload = document.getString("integrationLastPayload").orEmpty()
+            integrationLastPayload = document.getString("integrationLastPayload").orEmpty(),
+            tags = stringList(document.get("tags")).map { it.trim() }.filter { it.isNotEmpty() },
+            preferredChannel = document.getString("preferredChannel").orEmpty(),
+            doNotContact = document.getBoolean("doNotContact") == true,
+            marketingOptIn = document.getString("marketingOptIn").orEmpty(),
+            nextFollowUpDate = document.getDate("nextFollowUpDate")
         )
     }
 }
+
+// A partial update for a customer's segments/contact preferences. Only the
+// non-null members are sent to updateWebCustomer, matching the callable's
+// key-present semantics — every omitted key stays unchanged on the server,
+// so the plain contact-field autosave can never wipe these fields.
+data class StudioCustomerPrefsPatch(
+    val tags: List<String>? = null,
+    val preferredChannel: String? = null,
+    val doNotContact: Boolean? = null,
+    val marketingOptIn: String? = null,
+    // The follow-up date is tri-state: both unset omits the key entirely,
+    // millis sets a date, clearNextFollowUp sends an explicit null so the
+    // server erases the stored Timestamp.
+    val nextFollowUpDateMillis: Long? = null,
+    val clearNextFollowUp: Boolean = false
+)
 
 private fun stringList(value: Any?): List<String> {
     return (value as? List<*>)?.mapNotNull { it as? String }.orEmpty()

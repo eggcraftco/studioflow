@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -50,9 +51,14 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +75,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.graphics.Color
@@ -86,8 +93,11 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
+import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.features.shell.SectionHeader
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
@@ -111,20 +121,38 @@ private fun customerSourceLabel(source: String): String = when (source) {
     else -> ""
 }
 
+// Same suggestion list the web offers in its segment datalist.
+private val SEGMENT_SUGGESTIONS = listOf(
+    "VIP", "High value", "Repeat customer", "New customer", "Inactive",
+    "Outstanding balance", "Waiting for response", "Marketing subscribed", "Wholesale"
+)
+
+// Web palette for the segment/preference accents.
+private val SegmentBlue = Color(0xFF2F6DF6)
+private val DangerRed = Color(0xFFDC2626)
+private val AmberText = Color(0xFFB45309)
+private val AmberBorder = Color(0xFFF59E0B)
+
 @Composable
 fun CustomersScreen(
     state: StudioFlowUiState,
     focusedCustomerName: String = "",
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
     onUpdateCustomer: (StudioCustomer) -> Unit = {},
+    onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
     onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit = { _, _, _ -> },
     onDeleteCustomer: (String) -> Unit = {},
-    onOpenOrder: (StudioOrder) -> Unit = {}
+    onOpenOrder: (StudioOrder) -> Unit = {},
+    onOpenQuickReply: () -> Unit = {}
 ) {
     var selectedCustomerId by rememberSaveable { mutableStateOf<String?>(null) }
     var searchText by rememberSaveable { mutableStateOf("") }
     var sortByOrders by rememberSaveable { mutableStateOf(false) }
+    // Single-select segment filter (web parity) — lives here so it survives
+    // the wide/narrow layout switch.
+    var segmentFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    val showAiReply = state.workspace?.quickReplyMenuEnabled ?: true
 
     LaunchedEffect(focusedCustomerName) {
         if (focusedCustomerName.isNotBlank()) searchText = focusedCustomerName
@@ -154,6 +182,8 @@ fun CustomersScreen(
                         onSearchChange = { searchText = it },
                         sortByOrders = sortByOrders,
                         onToggleSort = { sortByOrders = it },
+                        segmentFilter = segmentFilter,
+                        onSetSegmentFilter = { segmentFilter = it },
                         onCreateCustomer = onCreateCustomer,
                         onOpen = { selectedCustomerId = it.id }
                     )
@@ -194,6 +224,9 @@ fun CustomersScreen(
                             onBack = { selectedCustomerId = null },
                             showBack = false,
                             onUpdateCustomer = onUpdateCustomer,
+                            onUpdateCustomerPrefs = onUpdateCustomerPrefs,
+                            showAiReply = showAiReply,
+                            onOpenQuickReply = onOpenQuickReply,
                             onResyncCustomer = onResyncCustomer,
                             onUploadCustomerPhoto = onUploadCustomerPhoto,
                             onDelete = {
@@ -219,6 +252,9 @@ fun CustomersScreen(
                 currencySymbol = state.workspaceSettings.selectedCurrency,
                 onBack = { selectedCustomerId = null },
                 onUpdateCustomer = onUpdateCustomer,
+                onUpdateCustomerPrefs = onUpdateCustomerPrefs,
+                showAiReply = showAiReply,
+                onOpenQuickReply = onOpenQuickReply,
                 onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDelete = {
@@ -234,6 +270,8 @@ fun CustomersScreen(
                 onSearchChange = { searchText = it },
                 sortByOrders = sortByOrders,
                 onToggleSort = { sortByOrders = it },
+                segmentFilter = segmentFilter,
+                onSetSegmentFilter = { segmentFilter = it },
                 onCreateCustomer = onCreateCustomer,
                 onOpen = { selectedCustomerId = it.id }
             )
@@ -248,6 +286,8 @@ private fun CustomerListView(
     onSearchChange: (String) -> Unit,
     sortByOrders: Boolean,
     onToggleSort: (Boolean) -> Unit,
+    segmentFilter: String? = null,
+    onSetSegmentFilter: (String?) -> Unit = {},
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onOpen: (StudioCustomer) -> Unit
 ) {
@@ -261,9 +301,17 @@ private fun CustomerListView(
     val ordersByName = remember(state.orders) {
         state.orders.groupBy { customerKey(it.customerName) }
     }
-    val visible = remember(state.customers, searchText, sortByOrders, orderCountByName, ordersByName) {
+    // Segments: the union of workspace tags, with counts, for the filter row.
+    val allSegments = remember(state.customers) {
+        val counts = LinkedHashMap<String, Int>()
+        state.customers.forEach { c -> c.tags.forEach { tag -> counts[tag] = (counts[tag] ?: 0) + 1 } }
+        counts.entries.sortedByDescending { it.value }.map { it.key to it.value }
+    }
+    val visible = remember(state.customers, searchText, sortByOrders, segmentFilter, orderCountByName, ordersByName) {
         val query = searchText.trim().lowercase(Locale.UK)
-        val filtered = if (query.isBlank()) state.customers else state.customers.filter { c ->
+        val bySegment = if (segmentFilter == null) state.customers
+        else state.customers.filter { it.tags.contains(segmentFilter) }
+        val filtered = if (query.isBlank()) bySegment else bySegment.filter { c ->
             listOf(
                 c.name, c.email, c.phone, c.instagram,
                 c.address, c.streetAddress, c.city, c.postalCode, c.country
@@ -357,6 +405,60 @@ private fun CustomerListView(
             }
             IconButton(onClick = { showCreate = true }) {
                 Icon(Icons.Filled.Add, contentDescription = t("Add Customer"), tint = StudioBlue)
+            }
+        }
+        if (allSegments.isNotEmpty()) {
+            // Segment filter chips (single-select toggle) — union of workspace
+            // tags with counts, mirroring the web row above the list.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                allSegments.forEach { (tag, count) ->
+                    val selected = segmentFilter == tag
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (selected) SegmentBlue.copy(alpha = 0.1f) else Color.Transparent,
+                        border = BorderStroke(1.dp, if (selected) SegmentBlue else MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { onSetSegmentFilter(if (selected) null else tag) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⬖ $tag",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) SegmentBlue else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                count.toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = (if (selected) SegmentBlue else MaterialTheme.colorScheme.onSurface).copy(alpha = 0.55f)
+                            )
+                        }
+                    }
+                }
+                if (segmentFilter != null) {
+                    Text(
+                        "✕ ${t("Clear")}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .clickable { onSetSegmentFilter(null) }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
         LazyColumn(
@@ -531,6 +633,24 @@ private fun CustomerRow(customer: StudioCustomer, designs: String, matchHint: St
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold
                 )
+                if (customer.tags.isNotEmpty()) {
+                    // Up to 3 segment chips on the card (web parity).
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        customer.tags.take(3).forEach { tag ->
+                            Surface(shape = RoundedCornerShape(999.dp), color = SegmentBlue.copy(alpha = 0.1f)) {
+                                Text(
+                                    "⬖ $tag",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SegmentBlue,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                }
                 Text(
                     text = customer.lastContactDate?.let { dateFormatter.format(it) } ?: "-",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -553,6 +673,7 @@ private fun CustomerRow(customer: StudioCustomer, designs: String, matchHint: St
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomerDetail(
     customer: StudioCustomer,
@@ -561,6 +682,9 @@ private fun CustomerDetail(
     onBack: () -> Unit,
     showBack: Boolean = true,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
+    showAiReply: Boolean = false,
+    onOpenQuickReply: () -> Unit = {},
     onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDelete: () -> Unit,
@@ -574,6 +698,8 @@ private fun CustomerDetail(
     var dirty by remember(customer.id) { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var uploadingPhoto by remember(customer.id) { mutableStateOf(false) }
+    var showAddSegment by remember(customer.id) { mutableStateOf(false) }
+    var showFollowUpPicker by remember(customer.id) { mutableStateOf(false) }
 
     // When a new photo URL arrives from the cloud (after upload, or a change on another
     // device) reflect it on the avatar without disturbing in-progress text edits.
@@ -654,7 +780,11 @@ private fun CustomerDetail(
         val waDigits = phoneDigits.removePrefix("+").removePrefix("00")
         val instagram = editable.instagram.trim().removePrefix("@")
         val email = editable.email.trim()
-        if (phone.isBlank() && email.isBlank() && instagram.isBlank()) return
+        // "Do not contact" wins over every outreach shortcut — the chips stay
+        // visible but inert and dimmed, so the flag is impossible to miss.
+        val blocked = customer.doNotContact
+        val followUp = customer.nextFollowUpDate
+        if (phone.isBlank() && email.isBlank() && instagram.isBlank() && !blocked && followUp == null) return
         fun open(intent: Intent) {
             runCatching { context.startActivity(intent) }
         }
@@ -662,17 +792,91 @@ private fun CustomerDetail(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (phone.isNotBlank()) {
-                QuickActionChip("📞 ${t("Call")}") { open(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneDigits"))) }
-                QuickActionChip("💬 WhatsApp") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))) }
+                QuickActionChip("📞 ${t("Call")}", enabled = !blocked, highlighted = customer.preferredChannel == "phone") { open(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneDigits"))) }
+                QuickActionChip("💬 WhatsApp", enabled = !blocked, highlighted = customer.preferredChannel == "whatsapp") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waDigits"))) }
             }
             if (email.isNotBlank()) {
-                QuickActionChip("✉️ ${t("Email")}") { open(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:$email"))) }
+                QuickActionChip("✉️ ${t("Email")}", enabled = !blocked, highlighted = customer.preferredChannel == "email") { open(Intent(Intent.ACTION_VIEW, Uri.parse("mailto:$email"))) }
             }
             if (instagram.isNotBlank()) {
-                QuickActionChip("◎ Instagram") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/${Uri.encode(instagram)}"))) }
+                QuickActionChip("◎ Instagram", enabled = !blocked, highlighted = customer.preferredChannel == "instagram") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/${Uri.encode(instagram)}"))) }
+            }
+            if (showAiReply) {
+                QuickActionChip("✨ ${t("AI Reply")}", enabled = !blocked) { onOpenQuickReply() }
+            }
+            if (blocked) {
+                StatusPill(
+                    "⛔ ${t("Do not contact")}",
+                    textColor = DangerRed,
+                    borderColor = DangerRed.copy(alpha = 0.4f),
+                    background = DangerRed.copy(alpha = 0.06f)
+                )
+            }
+            if (followUp != null) {
+                // Amber follow-up reminder pill — red when the date has passed.
+                val overdue = followUp.time < System.currentTimeMillis()
+                StatusPill(
+                    "⏰ ${t("Follow-up")}: ${dateFormatter.format(followUp)}",
+                    textColor = if (overdue) DangerRed else AmberText,
+                    borderColor = AmberBorder.copy(alpha = 0.4f),
+                    background = AmberBorder.copy(alpha = 0.06f)
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun segmentsRow() {
+        // Segments (workspace tags like "VIP") — removable chips + an add
+        // control with the same suggestion list the web offers.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            customer.tags.forEach { tag ->
+                Surface(shape = RoundedCornerShape(999.dp), color = SegmentBlue.copy(alpha = 0.1f)) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text("⬖ $tag", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SegmentBlue)
+                        Text(
+                            "✕",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SegmentBlue.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable {
+                                    onUpdateCustomerPrefs(
+                                        editable,
+                                        StudioCustomerPrefsPatch(tags = customer.tags.filter { it != tag })
+                                    )
+                                }
+                                .padding(horizontal = 3.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Transparent,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.clip(RoundedCornerShape(999.dp)).clickable { showAddSegment = true }
+            ) {
+                Text(
+                    "＋ ${t("Add segment")}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
             }
         }
     }
@@ -780,6 +984,85 @@ private fun CustomerDetail(
             CustomerField(t("Postal Code"), editable.shippingPostalCode) { editable = editable.copy(shippingPostalCode = it); dirty = true }
             CustomerField(t("Country"), editable.shippingCountry) { editable = editable.copy(shippingCountry = it); dirty = true }
             CustomerField(t("Shipping Phone"), editable.shippingPhone) { editable = editable.copy(shippingPhone = it); dirty = true }
+
+            // Contact preferences (web parity) — each control saves its own
+            // field through the callable's key-present patch semantics, so a
+            // preference edit can never clobber anything else.
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            PreferenceMenuField(
+                label = t("Preferred channel"),
+                value = customer.preferredChannel,
+                options = listOf(
+                    "" to "—",
+                    "phone" to t("Call"),
+                    "whatsapp" to "WhatsApp",
+                    "email" to t("Email"),
+                    "instagram" to "Instagram"
+                ),
+                onSelect = { onUpdateCustomerPrefs(editable, StudioCustomerPrefsPatch(preferredChannel = it)) }
+            )
+            PreferenceMenuField(
+                label = t("Marketing"),
+                value = customer.marketingOptIn,
+                options = listOf(
+                    "" to "—",
+                    "subscribed" to t("Subscribed"),
+                    "unsubscribed" to t("Unsubscribed")
+                ),
+                onSelect = { onUpdateCustomerPrefs(editable, StudioCustomerPrefsPatch(marketingOptIn = it)) }
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    t("Next follow-up"),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(104.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                        .clickable { showFollowUpPicker = true }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        customer.nextFollowUpDate?.let { dateFormatter.format(it) } ?: "—",
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (customer.nextFollowUpDate != null) {
+                        Text(
+                            "✕ ${t("Clear")}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .clickable {
+                                    onUpdateCustomerPrefs(editable, StudioCustomerPrefsPatch(clearNextFollowUp = true))
+                                }
+                                .padding(horizontal = 4.dp)
+                        )
+                    }
+                }
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = customer.doNotContact,
+                    onCheckedChange = { onUpdateCustomerPrefs(editable, StudioCustomerPrefsPatch(doNotContact = it)) }
+                )
+                Text(
+                    t("Do not contact"),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (customer.doNotContact) DangerRed else MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
     }
 
@@ -1059,6 +1342,8 @@ private fun CustomerDetail(
 
             quickActionsRow()
 
+            segmentsRow()
+
             statCardsSection()
 
             integrationCard()
@@ -1106,6 +1391,58 @@ private fun CustomerDetail(
                 TextButton(onClick = { confirmDelete = false }) { Text(t("Cancel")) }
             }
         )
+    }
+
+    if (showAddSegment) {
+        AddSegmentDialog(
+            existingTags = customer.tags,
+            onDismiss = { showAddSegment = false },
+            onAdd = { value ->
+                showAddSegment = false
+                val trimmed = value.trim()
+                if (trimmed.isNotEmpty() && !customer.tags.contains(trimmed)) {
+                    onUpdateCustomerPrefs(editable, StudioCustomerPrefsPatch(tags = customer.tags + trimmed))
+                }
+            }
+        )
+    }
+
+    if (showFollowUpPicker) {
+        // The material picker works in UTC-midnight millis; the web stores the
+        // pick as a local noon (new Date(y, m-1, d, 12:00)) so timezone shifts
+        // can't move the day — convert both ways accordingly.
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = customer.nextFollowUpDate?.let { current ->
+                val local = Calendar.getInstance().apply { time = current }
+                Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                    clear()
+                    set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+                }.timeInMillis
+            } ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showFollowUpPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val picked = pickerState.selectedDateMillis
+                    showFollowUpPicker = false
+                    if (picked != null) {
+                        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = picked }
+                        val localNoon = Calendar.getInstance().apply {
+                            clear()
+                            set(utc.get(Calendar.YEAR), utc.get(Calendar.MONTH), utc.get(Calendar.DAY_OF_MONTH), 12, 0, 0)
+                        }
+                        onUpdateCustomerPrefs(
+                            editable,
+                            StudioCustomerPrefsPatch(nextFollowUpDateMillis = localNoon.timeInMillis)
+                        )
+                    }
+                }) { Text(t("Done"), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFollowUpPicker = false }) { Text(t("Cancel")) }
+            }
+        ) { DatePicker(state = pickerState) }
     }
 }
 
@@ -1191,13 +1528,26 @@ private fun fileSizeText(bytes: Long): String {
 }
 
 @Composable
-private fun QuickActionChip(label: String, onClick: () -> Unit) {
+private fun QuickActionChip(
+    label: String,
+    enabled: Boolean = true,
+    highlighted: Boolean = false,
+    onClick: () -> Unit
+) {
     // Pill-shaped one-tap contact action — mirrors the web quick-action chips.
+    // Dimmed and inert when the customer is flagged "Do not contact"; a thicker
+    // blue border marks the customer's preferred channel.
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = Color.Transparent,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.clip(RoundedCornerShape(999.dp)).clickable { onClick() }
+        border = BorderStroke(
+            if (highlighted) 2.dp else 1.dp,
+            if (highlighted) StudioBlue.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant
+        ),
+        modifier = Modifier
+            .alpha(if (enabled) 1f else 0.35f)
+            .clip(RoundedCornerShape(999.dp))
+            .clickable(enabled = enabled) { onClick() }
     ) {
         Text(
             label,
@@ -1206,6 +1556,138 @@ private fun QuickActionChip(label: String, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
+}
+
+@Composable
+private fun StatusPill(label: String, textColor: Color, borderColor: Color, background: Color) {
+    // Non-interactive status pill (⛔ do-not-contact / ⏰ follow-up), web parity.
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = background,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Text(
+            label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+private fun PreferenceMenuField(
+    label: String,
+    value: String,
+    options: List<Pair<String, String>>,
+    onSelect: (String) -> Unit
+) {
+    // Label + filled dropdown row, styled like CustomerField so the preferences
+    // sit naturally under the contact form (web puts them in the same card).
+    var open by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(104.dp)
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .clickable { open = true }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    options.firstOrNull { it.first == value }?.second ?: "—",
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text("▾", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { (optionValue, optionLabel) ->
+                    DropdownMenuItem(
+                        text = { Text(optionLabel) },
+                        onClick = {
+                            open = false
+                            if (optionValue != value) onSelect(optionValue)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddSegmentDialog(
+    existingTags: List<String>,
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit
+) {
+    val lang = LocalStudioLanguage.current
+    val t: (String) -> String = { studioT(it, lang) }
+    var value by remember { mutableStateOf("") }
+    val suggestions = SEGMENT_SUGGESTIONS.filter { it !in existingTags }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Segments"), fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    placeholder = { Text(t("Add segment")) }
+                )
+                if (suggestions.isNotEmpty()) {
+                    // Same suggestion list the web offers in its datalist —
+                    // tapping one adds it right away.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        suggestions.forEach { suggestion ->
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = SegmentBlue.copy(alpha = 0.1f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable { onAdd(suggestion) }
+                            ) {
+                                Text(
+                                    "⬖ $suggestion",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SegmentBlue,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = value.trim().isNotEmpty(), onClick = { onAdd(value.trim()) }) {
+                Text(t("Add"), fontWeight = FontWeight.ExtraBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(t("Cancel")) }
+        }
+    )
 }
 
 @Composable

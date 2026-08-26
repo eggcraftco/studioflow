@@ -122,6 +122,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
+import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.WorkspaceMemberAccess
@@ -193,6 +194,7 @@ fun StudioFlowMainScreen(
     onRestoreOrder: (StudioOrder) -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
     onResyncCustomer: (StudioCustomer) -> Unit,
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDeleteCustomer: (String) -> Unit,
@@ -542,9 +544,14 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
+                    onOpenQuickReply = {
+                        settingsStartKey = null
+                        section = StudioSection.QuickReply
+                    },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
+                    onUpdateCustomerPrefs = onUpdateCustomerPrefs,
                     onResyncCustomer = onResyncCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
                     onDeleteCustomer = onDeleteCustomer,
@@ -688,9 +695,14 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
+                    onOpenQuickReply = {
+                        settingsStartKey = null
+                        section = StudioSection.QuickReply
+                    },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
+                    onUpdateCustomerPrefs = onUpdateCustomerPrefs,
                     onResyncCustomer = onResyncCustomer,
                     onUploadCustomerPhoto = onUploadCustomerPhoto,
                     onDeleteCustomer = onDeleteCustomer,
@@ -1382,9 +1394,11 @@ private fun StudioSectionContent(
     onRestoreOrder: (StudioOrder) -> Unit,
     focusedCustomerName: String,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    onOpenQuickReply: () -> Unit = {},
     onCreateOrder: () -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
+    onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
     onResyncCustomer: (StudioCustomer) -> Unit,
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDeleteCustomer: (String) -> Unit,
@@ -1510,10 +1524,12 @@ private fun StudioSectionContent(
                 focusedCustomerName = focusedCustomerName,
                 onCreateCustomer = onCreateCustomer,
                 onUpdateCustomer = onUpdateCustomer,
+                onUpdateCustomerPrefs = onUpdateCustomerPrefs,
                 onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDeleteCustomer = onDeleteCustomer,
-                onOpenOrder = onOpenOrderFromFiles
+                onOpenOrder = onOpenOrderFromFiles,
+                onOpenQuickReply = onOpenQuickReply
             )
             StudioSection.Files -> uk.co.eggcraft.studioflow.features.files.ClientFilesScreen(
                 state = state,

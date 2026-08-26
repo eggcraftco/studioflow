@@ -19,6 +19,9 @@ struct MusterilerView: View {
 
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: MusteriSiralamaTuru = .sonGorusme
+    // Segment filter: a single selected tag narrows the customer list (mirrors
+    // the web's filter chip row — tap again to clear).
+    @State private var seciliSegment: String? = nil
     @State private var phoneShowsCustomerDetail: Bool = false
     @State private var showCustomerLimitAlert: Bool = false
     @AppStorage("ordersSidebarWidth") private var ordersSidebarWidth: Double = 380
@@ -36,15 +39,40 @@ struct MusterilerView: View {
         min(max(temporaryOrdersSidebarWidth ?? ordersSidebarWidth, minOrdersSidebarWidth), maxOrdersSidebarWidth)
     }
     
+    /// Union of workspace segment tags with member counts, most used first —
+    /// feeds the filter chip row (mirrors the web's `allSegments`).
+    var tumSegmentler: [(tag: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for musteri in firebaseManager.musteriler {
+            for tag in musteri.segmentTags { counts[tag, default: 0] += 1 }
+        }
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedAscending
+            }
+            .map { (tag: $0.key, count: $0.value) }
+    }
+
     var aramaSonuclari: [Musteri] {
+        // Segment filter narrows the pool first; the text search runs on top.
+        // A stale selection (last member untagged) is ignored rather than
+        // filtering the list down to nothing with no chip left to clear.
+        let kaynak: [Musteri]
+        if let segment = seciliSegment,
+           firebaseManager.musteriler.contains(where: { $0.segmentTags.contains(segment) }) {
+            kaynak = firebaseManager.musteriler.filter { $0.segmentTags.contains(segment) }
+        } else {
+            kaynak = firebaseManager.musteriler
+        }
         let filtrelenmis: [Musteri]
         if aramaMetni.isEmpty {
-            filtrelenmis = firebaseManager.musteriler
+            filtrelenmis = kaynak
         } else {
             // Mirrors the web's widened customer search: a hit on one of the
             // customer's orders (invoice number or design name) also matches.
             let siparisEslesenAnahtarlar = matchingOrderCustomerKeys(for: aramaMetni)
-            filtrelenmis = firebaseManager.musteriler.filter {
+            filtrelenmis = kaynak.filter {
                 $0.name.localizedStandardContains(aramaMetni) ||
                 $0.email.localizedStandardContains(aramaMetni) ||
                 $0.phone.localizedStandardContains(aramaMetni) ||
@@ -209,6 +237,7 @@ struct MusterilerView: View {
                             Spacer()
                             addCustomerButton(compact: false)
                         }
+                        segmentFilterRow
                     }.padding(20)
                     Divider().background(Color.primary.opacity(0.1))
                     ScrollView {
@@ -418,6 +447,8 @@ struct MusterilerView: View {
                 .padding(10)
                 .background(Color.primary.opacity(0.05))
                 .cornerRadius(8)
+
+                segmentFilterRow
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -460,6 +491,54 @@ struct MusterilerView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(bgSidebar)
+        }
+    }
+
+    /// Filter chip row above the customer list: the union of workspace segment
+    /// tags with counts. Single-select — tapping the active chip clears it
+    /// (mirrors the web's segment filter row).
+    @ViewBuilder
+    private var segmentFilterRow: some View {
+        let segmentler = tumSegmentler
+        if !segmentler.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(segmentler, id: \.tag) { segment in
+                        let isSelected = seciliSegment == segment.tag
+                        Button {
+                            seciliSegment = isSelected ? nil : segment.tag
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("⬖ \(segment.tag)")
+                                Text("\(segment.count)").opacity(0.55)
+                            }
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(isSelected ? .blue : .primary)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(isSelected ? Color.blue.opacity(0.10) : Color.clear)
+                            )
+                            .overlay(
+                                Capsule().stroke(isSelected ? Color.blue : Color.primary.opacity(0.25), lineWidth: 1)
+                            )
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if seciliSegment != nil {
+                        Button {
+                            seciliSegment = nil
+                        } label: {
+                            Text("✕ \(t("Clear", lang: seciliDil))")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 1)
+            }
         }
     }
 
@@ -573,6 +652,21 @@ struct MusteriKarti: View {
                     }
                 }
 
+                // Up to 3 segment chips, like the web's list cards.
+                if !musteri.segmentTags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(Array(musteri.segmentTags.prefix(3)), id: \.self) { tag in
+                            Text("⬖ \(tag)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.blue.opacity(0.10)))
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
                 HStack(spacing: 4) {
                     Image(systemName: "calendar")
                     Text(musteri.lastContactDate, format: .dateTime.day().month().year())
@@ -629,7 +723,23 @@ struct MusteriDetayView: View {
     @State private var resyncStatusMessage: String? = nil
     @State private var resyncErrorMessage: String? = nil
     @State private var showRawStoreData = false
+    // Segments + contact preferences (web parity slice): the add-segment draft,
+    // a single in-flight flag that disables the inline controls while the
+    // updateWebCustomer callable runs, and its error surface.
+    @State private var segmentInput: String = ""
+    @State private var isSavingCustomerInlineField = false
+    @State private var customerInlineSaveError: String? = nil
     @Environment(\.openURL) private var openURL
+
+    /// Owner/admin/member can manage customers — same gate as the web's
+    /// `canManageCustomersForRole` (viewer and workflow-only cannot).
+    private var canManageCustomers: Bool {
+        let role = firebaseManager.currentWorkspaceRole
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "[\\s_-]+", with: "", options: .regularExpression)
+        return ["owner", "admin", "member"].contains(role)
+    }
 
     var musteriSiparisleri: [Siparis] { firebaseManager.siparisler.filter { $0.customerName.lowercased() == musteri.name.lowercased() }.sorted { $0.paymentDate > $1.paymentDate } }
     var toplamHarcama: Double { musteriSiparisleri.reduce(0) { $0 + $1.paidAmount + $1.remainingAmount } }
@@ -680,6 +790,9 @@ struct MusteriDetayView: View {
             resyncStatusMessage = nil
             resyncErrorMessage = nil
             showRawStoreData = false
+            // Same for the segments/preferences slice.
+            segmentInput = ""
+            customerInlineSaveError = nil
         }
         .onDisappear { flushMusteriAutosave() }
     }
@@ -723,6 +836,13 @@ struct MusteriDetayView: View {
                     .lineLimit(1)
 
                 customerQuickActionsRow
+                customerSegmentsRow
+                if let error = customerInlineSaveError {
+                    Text(error)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 0)
@@ -753,33 +873,72 @@ struct MusteriDetayView: View {
 
     /// One-tap ways to reach the customer, built from what the profile already
     /// knows — plain URLs, no dialer integration (tel: opens FaceTime on macOS).
+    /// "Do not contact" wins over every outreach shortcut: the chips stay
+    /// visible but inert and dimmed, so the flag is impossible to miss. The
+    /// preferred channel's chip gets a highlight ring (mirrors the web).
     @ViewBuilder
     private var customerQuickActionsRow: some View {
         let phone = musteri.phone.trimmingCharacters(in: .whitespacesAndNewlines)
         let email = musteri.email.trimmingCharacters(in: .whitespacesAndNewlines)
         let instagram = quickActionInstagramHandle
-        if !phone.isEmpty || !email.isEmpty || !instagram.isEmpty {
+        let blocked = musteri.isDoNotContact
+        let preferred = musteri.preferredChannel ?? ""
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 if !phone.isEmpty {
-                    quickActionChip(icon: "phone.fill", label: t("Call", lang: seciliDil), urlString: "tel:\(quickActionPhoneDigits)")
-                    quickActionChip(icon: "message.fill", label: "WhatsApp", urlString: "https://wa.me/\(quickActionWhatsAppDigits)")
+                    quickActionChip(icon: "phone.fill", label: t("Call", lang: seciliDil), urlString: "tel:\(quickActionPhoneDigits)",
+                                    highlighted: preferred == "phone", blocked: blocked)
+                    quickActionChip(icon: "message.fill", label: "WhatsApp", urlString: "https://wa.me/\(quickActionWhatsAppDigits)",
+                                    highlighted: preferred == "whatsapp", blocked: blocked)
                 }
                 if !email.isEmpty {
-                    quickActionChip(icon: "envelope.fill", label: t("Email", lang: seciliDil), urlString: "mailto:\(email)")
+                    quickActionChip(icon: "envelope.fill", label: t("Email", lang: seciliDil), urlString: "mailto:\(email)",
+                                    highlighted: preferred == "email", blocked: blocked)
                 }
                 if !instagram.isEmpty {
                     let encoded = instagram.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? instagram
-                    quickActionChip(icon: "at", label: "Instagram", urlString: "https://instagram.com/\(encoded)")
+                    quickActionChip(icon: "at", label: "Instagram", urlString: "https://instagram.com/\(encoded)",
+                                    highlighted: preferred == "instagram", blocked: blocked)
+                }
+                quickActionChip(icon: "bubble.left.fill", label: t("Messages", lang: seciliDil), blocked: blocked) {
+                    withAnimation { aktifSekme = "Messages" }
+                }
+                quickActionChip(icon: "sparkles", label: t("AI Reply", lang: seciliDil), blocked: blocked) {
+                    withAnimation { aktifSekme = "QuickReply" }
+                }
+                if blocked {
+                    Text("⛔ \(t("Do not contact", lang: seciliDil))")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.red.opacity(0.06)))
+                        .overlay(Capsule().stroke(Color.red.opacity(0.4), lineWidth: 1))
+                }
+                if let followUp = musteri.nextFollowUpDate {
+                    let overdue = followUp < Date()
+                    Text("⏰ \(t("Follow-up", lang: seciliDil)): \(followUp.formatted(.dateTime.day().month(.abbreviated).year()))")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(overdue ? .red : Color(red: 180 / 255, green: 83 / 255, blue: 9 / 255))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.orange.opacity(0.06)))
+                        .overlay(Capsule().stroke(Color.orange.opacity(0.4), lineWidth: 1))
                 }
             }
-            .padding(.top, 2)
+            .padding(2) // room for the highlight ring inside the scroll view
+        }
+        .padding(.top, 2)
+    }
+
+    private func quickActionChip(icon: String, label: String, urlString: String, highlighted: Bool = false, blocked: Bool = false) -> some View {
+        quickActionChip(icon: icon, label: label, highlighted: highlighted, blocked: blocked) {
+            if let url = URL(string: urlString) { openURL(url) }
         }
     }
 
-    private func quickActionChip(icon: String, label: String, urlString: String) -> some View {
-        Button {
-            if let url = URL(string: urlString) { openURL(url) }
-        } label: {
+    private func quickActionChip(icon: String, label: String, highlighted: Bool = false, blocked: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: icon).font(.system(size: 10, weight: .semibold))
                 Text(label).font(.system(size: 12, weight: .bold))
@@ -788,13 +947,137 @@ struct MusteriDetayView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .background(Capsule().stroke(Color.primary.opacity(0.25), lineWidth: 1))
+            .overlay(
+                // Preferred-channel ring, like the web's blue box shadow.
+                Capsule().stroke(Color.blue.opacity(highlighted ? 0.35 : 0), lineWidth: 2)
+            )
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(blocked)
+        .opacity(blocked ? 0.35 : 1)
         .onHover { hover in
             #if os(macOS)
             if hover { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             #endif
+        }
+    }
+
+    // MARK: - Segments (customer tags)
+
+    /// The web's datalist suggestions, offered from a "+" menu next to the
+    /// free-text add field.
+    private static let segmentSuggestions = [
+        "VIP", "High value", "Repeat customer", "New customer", "Inactive",
+        "Outstanding balance", "Waiting for response", "Marketing subscribed", "Wholesale"
+    ]
+
+    /// Segment chips on the profile header: removable (✕) for members who can
+    /// manage customers, plus an add field with the 9 web suggestions.
+    @ViewBuilder
+    private var customerSegmentsRow: some View {
+        let tags = musteri.segmentTags
+        if !tags.isEmpty || canManageCustomers {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        HStack(spacing: 4) {
+                            Text("⬖ \(tag)")
+                                .font(.system(size: 11, weight: .bold))
+                            if canManageCustomers {
+                                Button {
+                                    saveCustomerSegments(tags.filter { $0 != tag })
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .opacity(0.6)
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isSavingCustomerInlineField)
+                                .help(t("Remove", lang: seciliDil))
+                            }
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.blue.opacity(0.10)))
+                    }
+                    if canManageCustomers {
+                        HStack(spacing: 4) {
+                            TextField("＋ \(t("Add segment", lang: seciliDil))", text: $segmentInput)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 11))
+                                .frame(width: 120)
+                                .disabled(isSavingCustomerInlineField)
+                                .onSubmit { addCustomerSegment(segmentInput) }
+                            Menu {
+                                ForEach(Self.segmentSuggestions.filter { !tags.contains($0) }, id: \.self) { suggestion in
+                                    Button(suggestion) { addCustomerSegment(suggestion) }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .disabled(isSavingCustomerInlineField)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3)
+                        .overlay(
+                            Capsule().stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                                .foregroundColor(Color.primary.opacity(0.4))
+                        )
+                    }
+                }
+                .padding(.vertical, 1)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func addCustomerSegment(_ raw: String) {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = musteri.segmentTags
+        guard !value.isEmpty, !current.contains(value) else {
+            segmentInput = ""
+            return
+        }
+        segmentInput = ""
+        saveCustomerSegments(current + [value])
+    }
+
+    private func saveCustomerSegments(_ tags: [String]) {
+        saveCustomerPreferencePatch(["tags": tags]) { customer in
+            customer.tags = tags
+        }
+    }
+
+    /// Saves segments / contact preferences through the updateWebCustomer
+    /// callable with ONLY the edited key riding on the required contact basics
+    /// (key-present semantics, like the web's cleanCustomerForm pass-through).
+    /// The local model is updated optimistically; the musteriler snapshot
+    /// listener confirms — or restores — the server truth afterwards.
+    private func saveCustomerPreferencePatch(_ extraFields: [String: Any], localMutation: @escaping (inout Musteri) -> Void) {
+        guard canManageCustomers else { return }
+        // A pending autosave carries a full local model — push it out first so
+        // it cannot land after the callable and clobber what it wrote.
+        flushMusteriAutosave()
+        var updated = musteri
+        localMutation(&updated)
+        musteri = updated
+        let customerId = updated.id
+        isSavingCustomerInlineField = true
+        customerInlineSaveError = nil
+        firebaseManager.updateMusteriPreferenceFields(updated, extraFields: extraFields) { ok, message in
+            isSavingCustomerInlineField = false
+            // The user may have switched profiles while the call was in flight.
+            guard musteri.id == customerId else { return }
+            if !ok {
+                customerInlineSaveError = message ?? "Could not update the customer."
+            }
         }
     }
 
@@ -1044,7 +1327,155 @@ struct MusteriDetayView: View {
             DetailField(label: t("Postal Code", lang: seciliDil), value: customerShippingPostalCodeBinding)
             DetailField(label: t("Country", lang: seciliDil), value: customerShippingCountryBinding)
             DetailField(label: t("Shipping Phone", lang: seciliDil), value: customerShippingPhoneBinding)
+            Divider().opacity(0.35)
+            customerPreferencesBlock
         }
+    }
+
+    // MARK: - Contact preferences (preferred channel / marketing / follow-up / do not contact)
+
+    /// The 2×2 preferences block under the contact form (web parity). Every
+    /// control saves immediately through the updateWebCustomer callable with
+    /// only its own key.
+    private var customerPreferencesBlock: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), alignment: .topLeading), GridItem(.flexible(), alignment: .topLeading)], alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                preferenceFieldTitle(t("Preferred channel", lang: seciliDil))
+                Picker("", selection: preferredChannelBinding) {
+                    Text("—").tag("")
+                    Text(t("Call", lang: seciliDil)).tag("phone")
+                    Text("WhatsApp").tag("whatsapp")
+                    Text(t("Email", lang: seciliDil)).tag("email")
+                    Text("Instagram").tag("instagram")
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                preferenceFieldTitle(t("Marketing", lang: seciliDil))
+                Picker("", selection: marketingOptInBinding) {
+                    Text("—").tag("")
+                    Text(t("Subscribed", lang: seciliDil)).tag("subscribed")
+                    Text(t("Unsubscribed", lang: seciliDil)).tag("unsubscribed")
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                preferenceFieldTitle(t("Next follow-up", lang: seciliDil))
+                followUpDateControl
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                preferenceFieldTitle(t("Do not contact", lang: seciliDil))
+                HStack(spacing: 6) {
+                    Toggle("", isOn: doNotContactBinding)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    Text(t("Do not contact", lang: seciliDil))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(musteri.isDoNotContact ? .red : .primary)
+                }
+            }
+        }
+        .disabled(!canManageCustomers || isSavingCustomerInlineField)
+    }
+
+    private func preferenceFieldTitle(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .foregroundColor(.secondary)
+    }
+
+    @ViewBuilder
+    private var followUpDateControl: some View {
+        if musteri.nextFollowUpDate != nil {
+            HStack(spacing: 8) {
+                DatePicker("", selection: followUpDateBinding, displayedComponents: [.date])
+                    .labelsHidden()
+                    .fixedSize()
+                Button {
+                    clearFollowUpDate()
+                } label: {
+                    Text("✕ \(t("Clear", lang: seciliDil))")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(t("Clear", lang: seciliDil))
+            }
+        } else {
+            Button {
+                saveFollowUpDate(Date())
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "calendar.badge.plus").font(.system(size: 10, weight: .semibold))
+                    Text("＋ \(t("Follow-up", lang: seciliDil))").font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .overlay(
+                    Capsule().stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                        .foregroundColor(Color.primary.opacity(0.4))
+                )
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var preferredChannelBinding: Binding<String> {
+        Binding(
+            get: { musteri.preferredChannel ?? "" },
+            set: { newValue in
+                guard newValue != (musteri.preferredChannel ?? "") else { return }
+                saveCustomerPreferencePatch(["preferredChannel": newValue]) { $0.preferredChannel = newValue }
+            }
+        )
+    }
+
+    private var marketingOptInBinding: Binding<String> {
+        Binding(
+            get: { musteri.marketingOptIn ?? "" },
+            set: { newValue in
+                guard newValue != (musteri.marketingOptIn ?? "") else { return }
+                saveCustomerPreferencePatch(["marketingOptIn": newValue]) { $0.marketingOptIn = newValue }
+            }
+        )
+    }
+
+    private var doNotContactBinding: Binding<Bool> {
+        Binding(
+            get: { musteri.isDoNotContact },
+            set: { newValue in
+                guard newValue != musteri.isDoNotContact else { return }
+                saveCustomerPreferencePatch(["doNotContact": newValue]) { $0.doNotContact = newValue }
+            }
+        )
+    }
+
+    private var followUpDateBinding: Binding<Date> {
+        Binding(
+            get: { musteri.nextFollowUpDate ?? Date() },
+            set: { newValue in saveFollowUpDate(newValue) }
+        )
+    }
+
+    /// The web stores the picked day at 12:00 local — mirror that, and skip
+    /// no-op saves when the picker lands on the already-stored day.
+    private func saveFollowUpDate(_ date: Date) {
+        let normalized = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: date) ?? date
+        if let current = musteri.nextFollowUpDate, Calendar.current.isDate(current, inSameDayAs: normalized) { return }
+        let millis = Int(normalized.timeIntervalSince1970 * 1000)
+        saveCustomerPreferencePatch(["nextFollowUpDateMillis": millis]) { $0.nextFollowUpDate = normalized }
+    }
+
+    private func clearFollowUpDate() {
+        guard musteri.nextFollowUpDate != nil else { return }
+        saveCustomerPreferencePatch(["nextFollowUpDateMillis": NSNull()]) { $0.nextFollowUpDate = nil }
     }
 
     private var customerShippingStreetBinding: Binding<String> {

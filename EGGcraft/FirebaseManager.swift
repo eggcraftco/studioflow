@@ -2434,6 +2434,59 @@ class FirebaseManager: ObservableObject {
         #endif
     }
 
+    /// Saves customer segments / contact-preference fields through the
+    /// `updateWebCustomer` callable — the same path the web uses — so its
+    /// KEY-PRESENT semantics apply: only the keys in `extraFields` change
+    /// (`tags`, `preferredChannel`, `doNotContact`, `marketingOptIn`,
+    /// `nextFollowUpDateMillis`; send NSNull() to clear the follow-up date).
+    /// The callable always rewrites the contact basics and requires a name,
+    /// so the customer's current values ride along unchanged.
+    func updateMusteriPreferenceFields(_ musteri: Musteri, extraFields: [String: Any], completion: ((Bool, String?) -> Void)? = nil) {
+        guard !currentCompanyId.isEmpty, let customerId = musteri.id else {
+            completion?(false, nil)
+            return
+        }
+        #if canImport(FirebaseFunctions)
+        let name = musteri.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var payload: [String: Any] = [
+            "companyId": currentCompanyId,
+            "customerId": customerId,
+            "name": name.isEmpty ? "New Project" : name,
+            "email": musteri.email,
+            "phone": musteri.phone,
+            "primaryPhone": musteri.primaryPhone ?? "",
+            "instagram": musteri.instagram,
+            "address": musteri.address,
+            "streetAddress": musteri.streetAddress ?? "",
+            "city": musteri.city ?? "",
+            "postalCode": musteri.postalCode ?? "",
+            "country": musteri.country ?? "",
+            "shippingStreetAddress": musteri.shippingStreetAddress ?? "",
+            "shippingCity": musteri.shippingCity ?? "",
+            "shippingPostalCode": musteri.shippingPostalCode ?? "",
+            "shippingCountry": musteri.shippingCountry ?? "",
+            "shippingPhone": musteri.shippingPhone ?? "",
+            "notes": musteri.notes
+        ]
+        for (key, value) in extraFields { payload[key] = value }
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("updateWebCustomer")
+            .call(payload) { result, error in
+                DispatchQueue.main.async {
+                    if let error {
+                        completion?(false, error.localizedDescription)
+                        return
+                    }
+                    let data = result?.data as? [String: Any]
+                    let ok = (data?["ok"] as? Bool) ?? true
+                    completion?(ok, data?["message"] as? String)
+                }
+            }
+        #else
+        completion?(false, nil)
+        #endif
+    }
+
     private func musteriAnahtari(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }

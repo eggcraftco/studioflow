@@ -33,6 +33,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioMessageThread
 import uk.co.eggcraft.studioflow.data.model.StudioMessageTypingUser
 import uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
+import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
@@ -464,6 +465,18 @@ class StudioFlowViewModel @JvmOverloads constructor(
         // Autosave — stay quiet on success so per-field edits don't spam status.
         viewModelScope.launch {
             runCatching { repository.updateCustomer(workspace.id, customer) }
+                .onFailure { error ->
+                    mutableState.update { it.copy(errorMessage = error.message ?: "Could not save the customer.") }
+                }
+        }
+    }
+
+    fun updateCustomerPrefs(customer: StudioCustomer, patch: StudioCustomerPrefsPatch) {
+        val workspace = mutableState.value.workspace ?: return
+        // Per-field save for segments/contact preferences — quiet on success,
+        // like the contact autosave, so single-field edits don't spam status.
+        viewModelScope.launch {
+            runCatching { repository.updateCustomer(workspace.id, customer, patch) }
                 .onFailure { error ->
                     mutableState.update { it.copy(errorMessage = error.message ?: "Could not save the customer.") }
                 }

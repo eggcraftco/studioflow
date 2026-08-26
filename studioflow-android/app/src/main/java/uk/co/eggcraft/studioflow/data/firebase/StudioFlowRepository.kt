@@ -32,6 +32,7 @@ import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
 import uk.co.eggcraft.studioflow.data.model.StudioBillingPlan
 import uk.co.eggcraft.studioflow.data.model.StudioCompanyNumber
 import uk.co.eggcraft.studioflow.data.model.StudioCustomer
+import uk.co.eggcraft.studioflow.data.model.StudioCustomerPrefsPatch
 import uk.co.eggcraft.studioflow.data.model.StudioCustomRole
 import uk.co.eggcraft.studioflow.data.model.StudioHeadingItem
 import uk.co.eggcraft.studioflow.data.model.StudioJoinRequest
@@ -607,12 +608,38 @@ class StudioFlowRepository(
         "notes" to customer.notes
     )
 
-    suspend fun updateCustomer(companyId: String, customer: StudioCustomer) {
+    suspend fun updateCustomer(
+        companyId: String,
+        customer: StudioCustomer,
+        prefsPatch: StudioCustomerPrefsPatch? = null
+    ) {
         // Note: the profile photo is intentionally omitted here so contact-field autosave
         // never overwrites an avatar set on another device (the backend merges the doc).
+        // Segments/preferences ride along only when a patch carries them — the callable
+        // treats missing keys as "leave unchanged" (web parity), so the plain autosave
+        // (prefsPatch = null) can never wipe them.
         functions.getHttpsCallable("updateWebCustomer")
-            .call(customerCallablePayload(companyId, customer))
+            .call(customerCallablePayload(companyId, customer) + prefsPatchPayload(prefsPatch))
             .await()
+    }
+
+    private fun prefsPatchPayload(patch: StudioCustomerPrefsPatch?): Map<String, Any?> {
+        if (patch == null) return emptyMap()
+        val extras = mutableMapOf<String, Any?>()
+        patch.tags?.let { tags ->
+            // Same cleaning the web applies before sending: trim, drop blanks,
+            // dedupe, cap at 20 (the server re-validates anyway).
+            extras["tags"] = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(20)
+        }
+        patch.preferredChannel?.let { extras["preferredChannel"] = it }
+        patch.doNotContact?.let { extras["doNotContact"] = it }
+        patch.marketingOptIn?.let { extras["marketingOptIn"] = it }
+        if (patch.clearNextFollowUp) {
+            extras["nextFollowUpDateMillis"] = null
+        } else {
+            patch.nextFollowUpDateMillis?.let { extras["nextFollowUpDateMillis"] = it }
+        }
+        return extras
     }
 
     // Replays the payload the store last sent for this customer — the store's

@@ -30,6 +30,19 @@ struct Musteri: Identifiable, Codable, Equatable {
     var externalCustomerId: String?
     var integrationSyncedAt: Date?          // when a store webhook last touched this customer
     var integrationLastPayload: String?     // the store's last normalized payload (JSON string, ≤6KB)
+    // Secondary phone the web/callable path maintains. Decoded (and re-encoded on
+    // full-document saves) so the app's setData writes never wipe it.
+    var primaryPhone: String?
+    // Customer segments ("VIP", "Wholesale"...). Written through the
+    // updateWebCustomer callable with KEY-PRESENT semantics — decoded here so
+    // full-document local writes preserve them.
+    var tags: [String]?
+    // Contact preferences (mirrors the web slice). All optional so pre-feature
+    // customers still decode; full-document local writes re-encode them.
+    var preferredChannel: String?           // "" | "phone" | "whatsapp" | "email" | "instagram"
+    var doNotContact: Bool?
+    var marketingOptIn: String?             // "" | "subscribed" | "unsubscribed"
+    var nextFollowUpDate: Date?             // Timestamp | null on the server
     var notes: String
     var lastContactDate: Date
     var profileImageUrl: String // Profile photo URL
@@ -50,6 +63,10 @@ struct Musteri: Identifiable, Codable, Equatable {
         self.lastContactDate = lastContactDate
         self.profileImageUrl = profileImageUrl
     }
+
+    /// Non-optional views over the preference fields, for UI code.
+    var segmentTags: [String] { tags ?? [] }
+    var isDoNotContact: Bool { doNotContact ?? false }
 
     var detailedAddressText: String {
         [streetAddress, city, postalCode, country]
