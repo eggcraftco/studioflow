@@ -1227,6 +1227,17 @@ function isClientFilePdf(file: ClientFileDetail) {
 // Falls back to these when the workspace has not renamed the intake rows.
 
 
+// Eighteen flat checkboxes made the customize panel a hunt; the report asked
+// for categories. Every card id must appear in exactly one group.
+const CUSTOMIZE_CARD_GROUPS: Array<{ label: string; ids: OrderDetailCardId[] }> = [
+  { label: "Customer", ids: ["customer", "summary", "customerPortal", "preview"] },
+  { label: "Production", ids: ["status", "todo", "workTime", "repairIntake", "materials", "priority"] },
+  { label: "Finance", ids: ["financial", "estimate", "invoiceItems"] },
+  { label: "Delivery", ids: ["delivery", "shipping"] },
+  { label: "Planning", ids: ["schedule"] },
+  { label: "Files & Notes", ids: ["clientFiles", "notes", "historyLog"] }
+];
+
 const CARD_LABELS: Record<OrderDetailCardId, string> = {
   preview: "Preview",
   repairIntake: "Repair Intake & Item",
@@ -1861,6 +1872,10 @@ export function OrderDetailContent({
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [customizeSearch, setCustomizeSearch] = useState("");
+  useEffect(() => {
+    if (customizeOpen) setCustomizeSearch("");
+  }, [customizeOpen]);
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
@@ -2976,6 +2991,34 @@ export function OrderDetailContent({
   function editCardHeading(cardId: OrderDetailCardId) {
     setOpenCardMenuId(null);
     setHeadingEditorCardId(cardId);
+  }
+
+  // The card report's size menu: content-fit, default, column-match and three
+  // fixed steps. All routes flow through the same persistLayout the resize
+  // handles use, so undo/rollback behavior stays identical.
+  function applyCardSizePreset(cardId: OrderDetailCardId, preset: "fit" | "default" | "matchColumn" | number) {
+    setOpenCardMenuId(null);
+    if (!canEditCardLayout || savingLayout) return;
+
+    let nextLayout = cardLayout;
+    if (typeof preset === "number") {
+      nextLayout = layoutWithCardSize(cardLayout, cardId, preset);
+    } else if (preset === "fit") {
+      nextLayout = layoutWithCardSize(cardLayout, cardId, Math.max(160, measuredCardMinimums[cardId] ?? 160));
+    } else if (preset === "default") {
+      const nextHeights = { ...cardLayout.cardHeights };
+      delete nextHeights[cardId];
+      nextLayout = { ...cardLayout, cardHeights: nextHeights };
+    } else {
+      const columns = cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder];
+      const column = columns.find(ids => ids.includes(cardId)) ?? [];
+      const targetHeight = effectiveCardHeight(cardLayout, cardId, measuredCardMinimums);
+      const nextHeights = { ...cardLayout.cardHeights };
+      for (const member of column) nextHeights[member] = targetHeight;
+      nextLayout = { ...cardLayout, cardHeights: nextHeights };
+    }
+
+    void persistLayout(nextLayout, "Card size saved.");
   }
 
   function setCardColor(cardId: OrderDetailCardId, color: string) {
@@ -4873,6 +4916,110 @@ export function OrderDetailContent({
     }
   }
 
+  // One customize row, unchanged — extracted so the grouped panel can
+  // render it per category while Move Up/Down still works on the real order.
+  function renderCustomizeRow(cardId: OrderDetailCardId, index: number) {
+    return (
+                <div
+                  key={cardId}
+                  ref={element => {
+                    if (element) customizeCardRowRefs.current.set(cardId, element);
+                    else customizeCardRowRefs.current.delete(cardId);
+                  }}
+                  className={[
+                    "customize-card-row",
+                    draggingCardId === cardId ? "is-dragging" : "",
+                    dragOverCardId === cardId ? "is-drop-target" : "",
+                    firstProjectGuideStep === 5 && cardId === "financial" ? "first-project-guide-target" : ""
+                  ].filter(Boolean).join(" ")}
+                  style={firstProjectGuideStep === 5 && cardId === "financial" ? {
+                    borderRadius: 18,
+                    background: "rgba(239, 246, 255, 0.96)",
+                    color: "#111827"
+                  } : undefined}
+                  onDragOver={event => handleCardDragOver(event, cardId)}
+                  onDragLeave={event => handleCardDragLeave(event, cardId)}
+                  onDrop={event => handleCardDrop(event, cardId)}
+                >
+                  {firstProjectGuideStep === 5 && cardId === "financial" ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: "50%",
+                        top: "calc(100% + 12px)",
+                        transform: "translateX(-50%)",
+                        zIndex: 150,
+                        width: "min(360px, calc(100vw - 48px))",
+                        display: "grid",
+                        gap: 8,
+                        padding: 16,
+                        borderRadius: 20,
+                        border: "4px solid #2563eb",
+                        background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
+                        color: "#111827",
+                        boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
+                        pointerEvents: "auto"
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: "fit-content",
+                          padding: "4px 9px",
+                          borderRadius: 999,
+                          background: "#2563eb",
+                          color: "white",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase"
+                        }}
+                      >
+                        {`${t("Step")} 5 / 6`}
+                      </span>
+                      <strong style={{ fontSize: 16, color: "#111827" }}>{t("Open Financial Info")}</strong>
+                      <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
+                        {t("Turn on Financial Info to track paid amount, costs, remaining balance and profit for this project.")}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="customize-card-main">
+                    <span className="customize-card-icon" aria-hidden="true">
+                      <CardIconGlyph icon={cardIcon(cardId)} />
+                    </span>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={cardLayout.visibility[cardId]}
+                        disabled={!canEditCardLayout || savingLayout}
+                        onChange={() => toggleCardVisibility(cardId)}
+                      />
+                      <span>{cardLabel(cardId)}</span>
+                    </label>
+                  </div>
+                  {isNarrowLayout ? (
+                    <div className="customize-card-actions">
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={!canEditCardLayout || savingLayout || index === 0}
+                        onClick={() => moveCard(cardId, -1)}
+                      >
+                        Move Up
+                      </button>
+                      <button
+                        className="button secondary"
+                        type="button"
+                        disabled={!canEditCardLayout || savingLayout || index === customizeCardOrder.length - 1}
+                        onClick={() => moveCard(cardId, 1)}
+                      >
+                        Move Down
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+    );
+  }
+
   function renderCardMenu(cardId: OrderDetailCardId) {
     const menuOpen = openCardMenuId === cardId;
     const locked = !canEditCardLayout || !layoutReady;
@@ -4943,6 +5090,23 @@ export function OrderDetailContent({
             >
               Edit Block Headings
             </button>
+            <div className="order-card-menu-label">Size</div>
+            <div className="order-card-size-grid">
+              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "fit")} title="Shrink the card to exactly its content">
+                Fit to content
+              </button>
+              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "default")} title="Return to the default height">
+                Default size
+              </button>
+              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "matchColumn")} title="Give every card in this column this card's height">
+                Match column
+              </button>
+              <div className="order-card-size-steps">
+                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
+                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
+                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+              </div>
+            </div>
             <div className="order-card-menu-label">Color</div>
             <div className="order-card-color-grid">
               {CARD_COLOR_OPTIONS.map(color => (
@@ -8268,106 +8432,29 @@ export function OrderDetailContent({
               </div>
             ) : null}
 
+            <label className="customize-card-search">
+              <span aria-hidden="true">⌕</span>
+              <input
+                value={customizeSearch}
+                onChange={event => setCustomizeSearch(event.target.value)}
+                placeholder="Search cards..."
+              />
+            </label>
+
             <div className="customize-card-list">
-              {customizeCardOrder.map((cardId, index) => (
-                <div
-                  key={cardId}
-                  ref={element => {
-                    if (element) customizeCardRowRefs.current.set(cardId, element);
-                    else customizeCardRowRefs.current.delete(cardId);
-                  }}
-                  className={[
-                    "customize-card-row",
-                    draggingCardId === cardId ? "is-dragging" : "",
-                    dragOverCardId === cardId ? "is-drop-target" : "",
-                    firstProjectGuideStep === 5 && cardId === "financial" ? "first-project-guide-target" : ""
-                  ].filter(Boolean).join(" ")}
-                  style={firstProjectGuideStep === 5 && cardId === "financial" ? {
-                    borderRadius: 18,
-                    background: "rgba(239, 246, 255, 0.96)",
-                    color: "#111827"
-                  } : undefined}
-                  onDragOver={event => handleCardDragOver(event, cardId)}
-                  onDragLeave={event => handleCardDragLeave(event, cardId)}
-                  onDrop={event => handleCardDrop(event, cardId)}
-                >
-                  {firstProjectGuideStep === 5 && cardId === "financial" ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "calc(100% + 12px)",
-                        transform: "translateX(-50%)",
-                        zIndex: 150,
-                        width: "min(360px, calc(100vw - 48px))",
-                        display: "grid",
-                        gap: 8,
-                        padding: 16,
-                        borderRadius: 20,
-                        border: "4px solid #2563eb",
-                        background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-                        color: "#111827",
-                        boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-                        pointerEvents: "auto"
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "fit-content",
-                          padding: "4px 9px",
-                          borderRadius: 999,
-                          background: "#2563eb",
-                          color: "white",
-                          fontSize: 11,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase"
-                        }}
-                      >
-                        {`${t("Step")} 5 / 6`}
-                      </span>
-                      <strong style={{ fontSize: 16, color: "#111827" }}>{t("Open Financial Info")}</strong>
-                      <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
-                        {t("Turn on Financial Info to track paid amount, costs, remaining balance and profit for this project.")}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="customize-card-main">
-                    <span className="customize-card-icon" aria-hidden="true">
-                      <CardIconGlyph icon={cardIcon(cardId)} />
-                    </span>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={cardLayout.visibility[cardId]}
-                        disabled={!canEditCardLayout || savingLayout}
-                        onChange={() => toggleCardVisibility(cardId)}
-                      />
-                      <span>{cardLabel(cardId)}</span>
-                    </label>
-                  </div>
-                  {isNarrowLayout ? (
-                    <div className="customize-card-actions">
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={!canEditCardLayout || savingLayout || index === 0}
-                        onClick={() => moveCard(cardId, -1)}
-                      >
-                        Move Up
-                      </button>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={!canEditCardLayout || savingLayout || index === customizeCardOrder.length - 1}
-                        onClick={() => moveCard(cardId, 1)}
-                      >
-                        Move Down
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+              {CUSTOMIZE_CARD_GROUPS.map(group => {
+                const needle = customizeSearch.trim().toLowerCase();
+                const groupIds = customizeCardOrder
+                  .filter(cardId => group.ids.includes(cardId))
+                  .filter(cardId => !needle || CARD_LABELS[cardId].toLowerCase().includes(needle));
+                if (groupIds.length === 0) return null;
+                return (
+                  <Fragment key={group.label}>
+                    <p className="customize-card-group">{group.label}</p>
+                    {groupIds.map(cardId => renderCustomizeRow(cardId, customizeCardOrder.indexOf(cardId)))}
+                  </Fragment>
+                );
+              })}
             </div>
 
             {savingLayout ? <p className="layout-status">Saving card layout...</p> : null}
@@ -8376,6 +8463,7 @@ export function OrderDetailContent({
           </section>
         </div>
       ) : null}
+
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
 
