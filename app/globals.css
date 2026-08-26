@@ -24303,3 +24303,48 @@ body[data-studio-theme="dark"] .schedule-month-header { background: #141414; }
 body[data-studio-theme="dark"] .studio-toast { background: rgba(240, 242, 248, 0.96); color: #16181f; }
 body[data-studio-theme="dark"] .studio-toast > button { color: #2f6df6; }
 body[data-studio-theme="dark"] .studio-toast > .studio-toast-close { color: rgba(22, 24, 31, 0.55); }
+
+/* ---- Customize panel groups + search; card menu size grid ---- */
+.customize-card-group {
+  margin: 12px 2px 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.customize-card-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--app-border, rgba(0,0,0,0.12));
+  border-radius: 10px;
+  padding: 7px 11px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.customize-card-search input { border: 0; outline: none; background: transparent; flex: 1; color: inherit; }
+.order-card-size-grid { display: grid; gap: 4px; }
+.order-card-size-grid > button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.order-card-size-grid > button:hover { background: rgba(47, 109, 246, 0.10); }
+.order-card-size-steps { display: flex; gap: 6px; padding: 2px 8px 4px; }
+.order-card-size-steps > button {
+  width: 34px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--app-border, rgba(0,0,0,0.14));
+  background: transparent;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+.order-card-size-steps > button:hover { border-color: #2f6df6; color: #2f6df6; }
