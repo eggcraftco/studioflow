@@ -43,6 +43,7 @@ import {
   renameClientFileForOrder,
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
+import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 import {
   DEFAULT_ORDER_DETAIL_CARD_LAYOUT,
   ORDER_WORKSPACE_LAYOUT_KEY,
@@ -1835,6 +1836,18 @@ export function OrderDetailContent({
   }
   const [previewingClientFileId, setPreviewingClientFileId] = useState<string | null>(null);
   const [isClientFileDropTargeted, setIsClientFileDropTargeted] = useState(false);
+  // Central-library files linked to this order — read-only here; management
+  // lives on /files. Loads once per order; failures collapse to an empty list.
+  const [orderLibraryFiles, setOrderLibraryFiles] = useState<LibraryFile[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setOrderLibraryFiles(null);
+    if (!order.id) return () => { cancelled = true; };
+    listLibraryFiles(workspace, { linkKey: `order:${order.id}` })
+      .then(result => { if (!cancelled) setOrderLibraryFiles(result.files ?? []); })
+      .catch(() => { if (!cancelled) setOrderLibraryFiles([]); });
+    return () => { cancelled = true; };
+  }, [workspace, order.id]);
   const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
@@ -7392,6 +7405,37 @@ export function OrderDetailContent({
                   ))}
                 </div>
               )}
+              {orderLibraryFiles && orderLibraryFiles.length > 0 ? (
+                <div className="order-library-files">
+                  <strong className="order-library-files-title">From the Files library</strong>
+                  <ul>
+                    {orderLibraryFiles.map(file => {
+                      const orderLink = file.links.find(link => link.kind === "order" && link.id === order.id);
+                      const audience = orderLink?.audience || "team";
+                      return (
+                        <li key={file.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void libraryFileUrl(file.storagePath)
+                                .then(url => window.open(url, "_blank", "noopener,noreferrer"))
+                                .catch(() => undefined);
+                            }}
+                          >
+                            {orderLink?.displayName || file.displayName}
+                          </button>
+                          {audience === "portal" ? (
+                            <span className="studio-pill">Client portal</span>
+                          ) : audience === "internal" ? (
+                            <span className="studio-pill">Internal only</span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <a href="/files">Manage in the Files library</a>
+                </div>
+              ) : null}
               <p className="app-client-files-note">
                 Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. The size limit follows Settings &gt; Safety &amp; Uploads.
               </p>
