@@ -409,19 +409,54 @@ struct PurchaseLine: Identifiable, Equatable {
     }
 }
 
+/// One purchase line as the server returned it — just enough to receive a
+/// delivery against: what was ordered and how much of it has already landed.
+/// The index is the line's identity; receivePurchase addresses lines by it.
+struct PurchaseReceiptLine: Identifiable, Equatable {
+    let index: Int
+    var id: Int { index }
+    var name: String
+    var trackingType: InventoryTrackingType
+    var quantity: Double
+    var unit: String
+    /// How much has actually landed. Absent on purchases from before slice I3,
+    /// which is the same thing as nothing having been counted in yet.
+    var receivedQuantity: Double
+
+    init(index: Int, _ raw: [String: Any]) {
+        self.index = index
+        name = raw["name"] as? String ?? ""
+        trackingType = InventoryTrackingType(rawValue: raw["trackingType"] as? String ?? "") ?? .unique
+        quantity = (raw["quantity"] as? NSNumber)?.doubleValue ?? 0
+        unit = raw["unit"] as? String ?? ""
+        receivedQuantity = (raw["receivedQuantity"] as? NSNumber)?.doubleValue ?? 0
+    }
+
+    var ordered: Double { trackingType == .unique ? 1 : quantity }
+    /// What the courier still owes on this line, rounded the way the server
+    /// rounds so "0.1 left" never lingers from floating-point dust.
+    var outstanding: Double { max(0, ((ordered - receivedQuantity) * 100).rounded() / 100) }
+}
+
 struct Purchase: Identifiable, Equatable {
     let id: String
     var number: String
     var supplierName: String
     var purchaseDate: String
     var reference: String
-    var lineCount: Int
+    var lines: [PurchaseReceiptLine]
     var goodsTotal: Double
     var shipping: Double
     var otherCosts: Double
     var total: Double
-    var isReceived: Bool
+    /// "ordered" → "partiallyReceived" → "received"; the middle stop arrived
+    /// with slice I3, when a delivery could finally land in pieces.
+    var status: String
     var bankTransactionId: String
+
+    var lineCount: Int { lines.count }
+    var isReceived: Bool { status == "received" }
+    var isPartiallyReceived: Bool { status == "partiallyReceived" }
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
@@ -430,12 +465,13 @@ struct Purchase: Identifiable, Equatable {
         supplierName = raw["supplierName"] as? String ?? ""
         purchaseDate = raw["purchaseDate"] as? String ?? ""
         reference = raw["reference"] as? String ?? ""
-        lineCount = (raw["lines"] as? [[String: Any]])?.count ?? 0
+        lines = (raw["lines"] as? [[String: Any]] ?? []).enumerated()
+            .map { PurchaseReceiptLine(index: $0.offset, $0.element) }
         goodsTotal = (raw["goodsTotal"] as? NSNumber)?.doubleValue ?? 0
         shipping = (raw["shipping"] as? NSNumber)?.doubleValue ?? 0
         otherCosts = (raw["otherCosts"] as? NSNumber)?.doubleValue ?? 0
         total = (raw["total"] as? NSNumber)?.doubleValue ?? 0
-        isReceived = (raw["status"] as? String ?? "") == "received"
+        status = raw["status"] as? String ?? ""
         bankTransactionId = raw["bankTransactionId"] as? String ?? ""
     }
 }
@@ -824,8 +860,14 @@ extension FirebaseManager {
         _ = try await inventoryCall("savePurchase", ["purchase": purchase])
     }
 
-    func receivePurchase(_ purchaseId: String) async throws {
-        _ = try await inventoryCall("receivePurchase", ["purchaseId": purchaseId])
+    /// Without `lines` this receives everything still outstanding. With them it
+    /// receives per line and per quantity — each entry is ["index": Int] for a
+    /// unique line or ["index": Int, "quantity": Double] for a counted one —
+    /// and the purchase stays partiallyReceived until the last piece lands.
+    func receivePurchase(_ purchaseId: String, lines: [[String: Any]]? = nil) async throws {
+        var payload: [String: Any] = ["purchaseId": purchaseId]
+        if let lines { payload["lines"] = lines }
+        _ = try await inventoryCall("receivePurchase", payload)
     }
 
     func deletePurchase(_ purchaseId: String) async throws {
@@ -982,5 +1024,26 @@ extension FirebaseManager {
 
     func releaseStock(itemId: String, orderId: String) async throws {
         _ = try await inventoryCall("releaseInventoryFromOrder", ["itemId": itemId, "orderId": orderId])
+    }
+
+    /// Consuming is the moment the promised part actually goes into the job.
+    /// No quantity means the whole reservation; a smaller quantity leaves the
+    /// rest still promised to this order. The server refuses when nothing is
+    /// reserved here — consumption without a reservation would bypass the
+    /// double-promise guard reserving exists for.
+    func consumeStock(itemId: String, orderId: String, quantity: Double? = nil) async throws {
+        var payload: [String: Any] = ["itemId": itemId, "orderId": orderId]
+        if let quantity { payload["quantity"] = quantity }
+        _ = try await inventoryCall("consumeInventoryForOrder", payload)
+    }
+
+    /// Releases the old item and reserves the new one in ONE server
+    /// transaction, so the order is never left holding neither. Same capacity
+    /// rules as reserving.
+    func swapStock(orderId: String, fromItemId: String, toItemId: String, quantity: Double) async throws {
+        _ = try await inventoryCall(
+            "swapInventoryForOrder",
+            ["orderId": orderId, "fromItemId": fromItemId, "toItemId": toItemId, "quantity": quantity]
+        )
     }
 }

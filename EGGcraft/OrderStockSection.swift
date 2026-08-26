@@ -22,6 +22,9 @@ struct OrderStockSection: View {
     @State private var total: Double = 0
     @State private var loading = true
     @State private var picking = false
+    /// The line being swapped for a different item, if any — the picker opens
+    /// in swap mode while this is set.
+    @State private var swapping: OrderStockLine?
     @State private var error = ""
 
     var body: some View {
@@ -50,10 +53,22 @@ struct OrderStockSection: View {
                                 .font(.system(size: 10)).foregroundColor(.secondary)
                         }
                         Spacer()
-                        Text(inventoryMoney(currencySymbol, line.lineCost)).font(.system(size: 12, weight: .semibold))
-                        if canEdit {
-                            Button(t("Release", lang: lang)) { release(line) }
-                                .font(.system(size: 11)).buttonStyle(.plain).foregroundColor(.red)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(inventoryMoney(currencySymbol, line.lineCost)).font(.system(size: 12, weight: .semibold))
+                            if canEdit {
+                                // Three exits for a reserved part: it goes into
+                                // the job (consume), it becomes a different
+                                // part (swap), or the promise is taken back
+                                // (release).
+                                HStack(spacing: 10) {
+                                    Button(t("Use on the job", lang: lang)) { consume(line) }
+                                        .font(.system(size: 11)).buttonStyle(.plain).foregroundColor(.blue)
+                                    Button(t("Swap…", lang: lang)) { swapping = line }
+                                        .font(.system(size: 11)).buttonStyle(.plain).foregroundColor(.blue)
+                                    Button(t("Release", lang: lang)) { release(line) }
+                                        .font(.system(size: 11)).buttonStyle(.plain).foregroundColor(.red)
+                                }
+                            }
                         }
                     }
                 }
@@ -82,6 +97,20 @@ struct OrderStockSection: View {
                 currencySymbol: currencySymbol,
                 lang: lang,
                 alreadyReserved: lines.map(\.id)
+            ) {
+                Task { await reload() }
+            }
+            .environmentObject(firebaseManager)
+        }
+        .sheet(item: $swapping) { line in
+            // Same picker, swap mode: picking an item releases this line and
+            // reserves the pick in one server transaction.
+            ReserveStockSheet(
+                orderId: orderId,
+                currencySymbol: currencySymbol,
+                lang: lang,
+                alreadyReserved: lines.map(\.id),
+                swapFrom: line
             ) {
                 Task { await reload() }
             }
@@ -128,6 +157,22 @@ struct OrderStockSection: View {
             }
         }
     }
+
+    /// Consuming is the moment the promised part actually goes into the job:
+    /// the whole reserved line leaves the shelf and the ledger names this
+    /// order. The reload also refreshes the total the Financial card is
+    /// offered.
+    private func consume(_ line: OrderStockLine) {
+        Task {
+            do {
+                try await firebaseManager.consumeStock(itemId: line.id, orderId: orderId)
+                await reload()
+            } catch {
+                let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.error = message.isEmpty ? t("The item could not be marked as used.", lang: lang) : message
+            }
+        }
+    }
 }
 
 struct ReserveStockSheet: View {
@@ -137,6 +182,9 @@ struct ReserveStockSheet: View {
     let currencySymbol: String
     let lang: String
     let alreadyReserved: [String]
+    /// When set, picking an item swaps this line for it instead of adding —
+    /// the release and the new reserve happen in one server transaction.
+    var swapFrom: OrderStockLine? = nil
     let onReserved: () -> Void
 
     @State private var items: [InventoryItem] = []
@@ -187,7 +235,7 @@ struct ReserveStockSheet: View {
                             Spacer()
                             if item.trackingType == .quantity {
                                 TextField("0", text: Binding(
-                                    get: { amounts[item.id] ?? formatQuantity(item.freeToReserve) },
+                                    get: { amounts[item.id] ?? formatQuantity(defaultAmount(item)) },
                                     set: { amounts[item.id] = $0 }
                                 ))
                                 .frame(width: 64).multilineTextAlignment(.trailing)
@@ -195,7 +243,7 @@ struct ReserveStockSheet: View {
                             } else {
                                 Text(inventoryMoney(currencySymbol, item.valuationCost)).font(.system(size: 12, weight: .semibold))
                             }
-                            Button(t("Reserve", lang: lang)) { reserve(item) }
+                            Button(t(swapFrom == nil ? "Reserve" : "Swap", lang: lang)) { reserve(item) }
                                 .font(.system(size: 11, weight: .semibold)).buttonStyle(.bordered).disabled(busy)
                         }
                     }
@@ -205,7 +253,7 @@ struct ReserveStockSheet: View {
                     Text(error).font(.system(size: 12)).foregroundColor(.red)
                 }
             }
-            .navigationTitle(t("Reserve stock", lang: lang))
+            .navigationTitle(t(swapFrom == nil ? "Reserve stock" : "Swap to a different item", lang: lang))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(t("Close", lang: lang)) { dismiss() }
@@ -219,19 +267,36 @@ struct ReserveStockSheet: View {
         }
     }
 
+    /// Swap mode pre-fills with what the old line held (capped at what is
+    /// free): the person is replacing like for like, not re-deciding the
+    /// amount.
+    private func defaultAmount(_ item: InventoryItem) -> Double {
+        if let swapFrom, item.trackingType == .quantity {
+            return min(item.freeToReserve, swapFrom.quantity)
+        }
+        return item.freeToReserve
+    }
+
     private func reserve(_ item: InventoryItem) {
         busy = true
         error = ""
         let wanted = item.trackingType == .unique
             ? 1
-            : Double((amounts[item.id] ?? formatQuantity(item.freeToReserve)).replacingOccurrences(of: ",", with: ".")) ?? 0
+            : Double((amounts[item.id] ?? formatQuantity(defaultAmount(item))).replacingOccurrences(of: ",", with: ".")) ?? 0
         Task {
             do {
-                try await firebaseManager.reserveStock(itemId: item.id, orderId: orderId, quantity: wanted)
+                if let swapFrom {
+                    try await firebaseManager.swapStock(
+                        orderId: orderId, fromItemId: swapFrom.id, toItemId: item.id, quantity: wanted)
+                } else {
+                    try await firebaseManager.reserveStock(itemId: item.id, orderId: orderId, quantity: wanted)
+                }
                 onReserved()
                 dismiss()
             } catch {
-                self.error = error.localizedDescription
+                let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.error = !message.isEmpty ? message
+                    : t(swapFrom == nil ? "The item could not be reserved." : "The swap could not be completed.", lang: lang)
                 busy = false
             }
         }

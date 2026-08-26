@@ -462,6 +462,143 @@ struct MatchPaymentSheet: View {
     }
 }
 
+/// Goods arrive in boxes, not in purchase orders. This sheet receives what the
+/// courier actually brought — per line, per quantity — and the rest stays
+/// outstanding, with the purchase reading "Partially received" until the last
+/// piece lands.
+struct ReceiveDeliverySheet: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @Environment(\.dismiss) private var dismiss
+    let purchase: Purchase
+    let lang: String
+    let onReceived: () -> Void
+
+    @State private var amounts: [Int: String] = [:]
+    @State private var arrived: [Int: Bool] = [:]
+    @State private var busy = false
+    @State private var error = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("\(purchase.number) · \(purchase.supplierName.isEmpty ? "—" : purchase.supplierName) — "
+                         + t("enter what the courier actually brought; the rest stays outstanding.", lang: lang))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                }
+
+                Section {
+                    ForEach(purchase.lines) { line in
+                        ReceiveDeliveryRow(
+                            line: line,
+                            lang: lang,
+                            amount: Binding(
+                                get: { amounts[line.index] ?? "" },
+                                set: { amounts[line.index] = $0 }
+                            ),
+                            arrived: Binding(
+                                get: { arrived[line.index] ?? false },
+                                set: { arrived[line.index] = $0 }
+                            )
+                        )
+                    }
+                }
+
+                if !error.isEmpty {
+                    Text(error).font(.system(size: 12)).foregroundColor(.red)
+                }
+
+                Section {
+                    Button(t("Receive what arrived", lang: lang)) { submit() }
+                        .font(.system(size: 13, weight: .semibold))
+                        .disabled(busy)
+                }
+            }
+            .navigationTitle(t("Receive delivery", lang: lang))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(t("Close", lang: lang)) { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        // An empty field means "did not arrive", never "zero out the line" —
+        // only what the user actually entered travels.
+        var payload: [[String: Any]] = []
+        for line in purchase.lines {
+            guard line.outstanding > 0 else { continue }
+            if line.trackingType == .unique {
+                if arrived[line.index] == true { payload.append(["index": line.index]) }
+                continue
+            }
+            let text = (amounts[line.index] ?? "")
+                .replacingOccurrences(of: ",", with: ".")
+                .trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            let wanted = Double(text) ?? 0
+            guard wanted > 0 else { continue }
+            if wanted > line.outstanding {
+                error = "\"\(line.name)\" — " + t("that is more than is still outstanding.", lang: lang)
+                return
+            }
+            payload.append(["index": line.index, "quantity": wanted])
+        }
+        if payload.isEmpty {
+            error = t("Enter what arrived first.", lang: lang)
+            return
+        }
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.receivePurchase(purchase.id, lines: payload)
+                onReceived()
+                dismiss()
+            } catch {
+                self.error = error.localizedDescription
+                busy = false
+            }
+        }
+    }
+}
+
+/// One delivery line: "received / ordered unit" progress, then either a
+/// quantity field (counted stock) or an "Arrived" toggle (a unique piece).
+/// Its own struct — the real-iPhone stack guard chokes on rows inlined into
+/// a sheet body.
+struct ReceiveDeliveryRow: View {
+    let line: PurchaseReceiptLine
+    let lang: String
+    @Binding var amount: String
+    @Binding var arrived: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.name).font(.system(size: 13, weight: .semibold))
+                Text("\(formatQuantity(line.receivedQuantity)) / \(formatQuantity(line.ordered))"
+                     + (line.unit.isEmpty ? "" : " \(line.unit)"))
+                    .font(.system(size: 10)).foregroundColor(.secondary)
+            }
+            Spacer()
+            if line.outstanding <= 0 {
+                Text(t("Received", lang: lang))
+                    .font(.system(size: 10, weight: .bold)).foregroundColor(.green)
+            } else if line.trackingType == .unique {
+                Toggle(t("Arrived", lang: lang), isOn: $arrived)
+                    .font(.system(size: 11))
+                    .fixedSize()
+            } else {
+                TextField(formatQuantity(line.outstanding), text: $amount)
+                    .frame(width: 64).multilineTextAlignment(.trailing)
+                    .font(.system(size: 12))
+            }
+        }
+    }
+}
+
 struct SupplierSheet: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
     @Environment(\.dismiss) private var dismiss

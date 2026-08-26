@@ -77,6 +77,7 @@ struct InventoryView: View {
     @State private var editingSupplier: Supplier?
     @State private var showNewSupplier = false
     @State private var matchingPurchase: Purchase?
+    @State private var receivingPurchase: Purchase?
 
     private var isPhone: Bool { horizontalSizeClass == .compact }
     private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
@@ -169,6 +170,15 @@ struct InventoryView: View {
         .sheet(item: $matchingPurchase) { purchase in
             MatchPaymentSheet(purchase: purchase, currencySymbol: seciliParaBirimi, lang: seciliDil) {
                 Task { await model.loadPurchases(firebaseManager) }
+            }
+            .environmentObject(firebaseManager)
+        }
+        .sheet(item: $receivingPurchase) { purchase in
+            ReceiveDeliverySheet(purchase: purchase, lang: seciliDil) {
+                Task {
+                    await model.loadPurchases(firebaseManager)
+                    await model.loadItems(firebaseManager)
+                }
             }
             .environmentObject(firebaseManager)
         }
@@ -483,11 +493,10 @@ struct InventoryView: View {
                 }
             }
             HStack(spacing: 8) {
-                Text(purchase.isReceived ? t("Received", lang: seciliDil) : t("Ordered", lang: seciliDil))
-                    .font(.system(size: 10, weight: .bold))
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Capsule().fill((purchase.isReceived ? Color.green : Color.blue).opacity(0.14)))
-                    .foregroundColor(purchase.isReceived ? .green : .blue)
+                // Partly landed is a milder fact than still on the road, so
+                // the chip is a lighter shade of the same incoming blue — the
+                // same trick the partiallyReserved item chip plays with amber.
+                purchaseStatusChip(purchase)
 
                 if purchase.bankTransactionId.isEmpty {
                     if canEdit {
@@ -501,7 +510,9 @@ struct InventoryView: View {
                 Spacer()
 
                 if canEdit && !purchase.isReceived {
-                    Button(t("Mark received", lang: seciliDil)) {
+                    // "Receive the rest" once part of the delivery has landed:
+                    // the button always takes everything still outstanding.
+                    Button(t(purchase.isPartiallyReceived ? "Receive the rest" : "Mark received", lang: seciliDil)) {
                         Task {
                             do {
                                 try await firebaseManager.receivePurchase(purchase.id)
@@ -512,22 +523,47 @@ struct InventoryView: View {
                     }
                     .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.blue)
 
-                    Button(t("Delete", lang: seciliDil)) {
-                        Task {
-                            do {
-                                try await firebaseManager.deletePurchase(purchase.id)
-                                await model.loadPurchases(firebaseManager)
-                                await model.loadItems(firebaseManager)
-                            } catch { model.notice = error.localizedDescription }
-                        }
+                    // Line-by-line receiving earns its place once there is
+                    // something to pick apart: several lines, or a delivery
+                    // already half landed. Same rule as the web.
+                    if purchase.lineCount > 1 || purchase.isPartiallyReceived {
+                        Button(t("Receive lines…", lang: seciliDil)) { receivingPurchase = purchase }
+                            .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.blue)
                     }
-                    .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.red)
+
+                    // Once anything has landed the purchase is history, not a
+                    // draft — the server refuses the delete, so the button
+                    // does not pretend.
+                    if purchase.status == "ordered" {
+                        Button(t("Delete", lang: seciliDil)) {
+                            Task {
+                                do {
+                                    try await firebaseManager.deletePurchase(purchase.id)
+                                    await model.loadPurchases(firebaseManager)
+                                    await model.loadItems(firebaseManager)
+                                } catch { model.notice = error.localizedDescription }
+                            }
+                        }
+                        .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.red)
+                    }
                 }
             }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.16)))
+    }
+
+    private func purchaseStatusChip(_ purchase: Purchase) -> some View {
+        let text = purchase.isReceived
+            ? t("Received", lang: seciliDil)
+            : purchase.isPartiallyReceived ? t("Partially received", lang: seciliDil) : t("Ordered", lang: seciliDil)
+        let colour: Color = purchase.isReceived ? .green : purchase.isPartiallyReceived ? .blue.opacity(0.7) : .blue
+        return Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(Capsule().fill(colour.opacity(0.14)))
+            .foregroundColor(colour)
     }
 
     // MARK: Suppliers
