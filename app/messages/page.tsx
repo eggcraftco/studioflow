@@ -9,7 +9,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
-import { loadWorkspaceContext, normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   addMembersToMessageThread,
   createMessageThread,
@@ -105,6 +105,9 @@ export default function MessagesPage() {
   const canEditWorkspace = messageRole === "owner" || messageRole === "admin";
   const canCreateConversations = ["owner", "admin", "member", "workflow"].includes(messageRole);
   const canSendMessageAttachments = ["owner", "admin", "member", "workflow"].includes(messageRole);
+  // Posting into the team-wide thread is its own permission; the server
+  // enforces it, this only keeps the composer honest.
+  const canPostTeamChat = !workspace || workspaceAccessAllows(workspace.memberAccess, "teamChat");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -277,6 +280,10 @@ export default function MessagesPage() {
 
   const handleSend = async () => {
     if (!workspace || !user || !selectedThread) return;
+    if ((selectedThread.id === "team" || selectedThread.type === "team") && !canPostTeamChat) {
+      setErrorMessage("Posting in Team Chat is not enabled for your workspace account.");
+      return;
+    }
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
@@ -799,6 +806,11 @@ export default function MessagesPage() {
                   </span>
                 </div>
               )}
+              {(selectedThread.id === "team" || selectedThread.type === "team") && !canPostTeamChat ? (
+                <div className="muted-copy" style={{ padding: "10px 14px" }}>
+                  {t("You can read Team Chat, but posting here is not enabled for your workspace account.")}
+                </div>
+              ) : (
               <Composer
                 draft={draft}
                 onChange={(v) => {
@@ -820,6 +832,7 @@ export default function MessagesPage() {
                 teamMembers={teamMembers}
                 attachmentsEnabled={workspaceSettings.attachmentsEnabled && canSendMessageAttachments}
               />
+              )}
             </>
           )}
         </section>

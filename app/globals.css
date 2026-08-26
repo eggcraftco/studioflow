@@ -18207,6 +18207,15 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   text-decoration: underline;
 }
 
+/* Inside the app the --public-* tokens do not exist (they are scoped to
+   .public-site), so the links froze on the hardcoded fallback and ignored the
+   dark theme. In app cards they follow the app accent instead, with a visible
+   underline offset so they read as links at a glance. */
+.app-card .about-changelog-link {
+  color: var(--accent, #2f6f6d);
+  text-underline-offset: 3px;
+}
+
 /* User guide — docs layout */
 .guide-layout {
   display: grid;

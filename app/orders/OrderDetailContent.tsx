@@ -207,6 +207,10 @@ function uploadSafetyAcceptanceKey(workspaceId: string) {
   return `studioflow-upload-policy-accepted:${workspaceId}`;
 }
 
+function uploadSafetyAcceptanceAtKey(workspaceId: string) {
+  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
+}
+
 function dateInputValue(date: Date | null) {
   if (!date) return "";
   return date.toISOString().slice(0, 10);
@@ -1948,7 +1952,10 @@ export function OrderDetailContent({
     setFileActionStatus(accepted ? "Upload policy accepted. Choose a file to upload." : null);
     try {
       const key = uploadSafetyAcceptanceKey(workspace.id);
-      if (accepted) window.localStorage.setItem(key, "accepted");
+      if (accepted) {
+        window.localStorage.setItem(key, "accepted");
+        window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+      }
       else window.localStorage.removeItem(key);
     } catch {
       if (accepted) {
@@ -4172,12 +4179,16 @@ export function OrderDetailContent({
       const key = uploadSafetyAcceptanceKey(workspace.id);
       policyAccepted = window.localStorage.getItem(key) === "accepted";
       if (!policyAccepted) {
-        const acceptedNow = window.confirm("Upload Safety: only upload safe, legal, work-related files that belong to this order. Accept this upload policy for this browser?");
+        const policyWording = moneySettings?.uploadSafetyPolicyText
+          ? `${moneySettings.uploadSafetyPolicyText}\n\nAccept this upload policy for this browser?`
+          : "Upload Safety: only upload safe, legal, work-related files that belong to this order. Accept this upload policy for this browser?";
+        const acceptedNow = window.confirm(policyWording);
         if (!acceptedNow) {
           setInlineError("Accept the upload policy before uploading a preview image.");
           return;
         }
         window.localStorage.setItem(key, "accepted");
+        window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
         policyAccepted = true;
       }
     }
@@ -7334,15 +7345,22 @@ export function OrderDetailContent({
                   <span className="studio-pill">Max {clientFileMaxUploadSizeMB} MB</span>
                   <span className="studio-pill">Safe work files only</span>
                   {clientFileRequiresPolicyAcceptance ? (
-                    <label className="upload-safety-check">
-                      <input
-                        type="checkbox"
-                        checked={browserAcceptedUploadPolicy}
-                        onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
-                        disabled={actioningFileId === "upload"}
-                      />
-                      <span>I understand and accept the upload policy for this browser.</span>
-                    </label>
+                    <>
+                      {moneySettings?.uploadSafetyPolicyText ? (
+                        <p className="muted-copy" style={{ flexBasis: "100%", margin: 0 }}>
+                          {moneySettings.uploadSafetyPolicyText}
+                        </p>
+                      ) : null}
+                      <label className="upload-safety-check">
+                        <input
+                          type="checkbox"
+                          checked={browserAcceptedUploadPolicy}
+                          onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
+                          disabled={actioningFileId === "upload"}
+                        />
+                        <span>I understand and accept the upload policy for this browser.</span>
+                      </label>
+                    </>
                   ) : null}
                 </div>
               ) : null}
@@ -10373,4 +10391,120 @@ function LockedInline({ title, note }: { title: string; note: string }) {
       <Link className="button secondary" href="/dashboard" style={{ display: "inline-flex", marginTop: 10 }}>View plan</Link>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Settings ▸ PDF Export live preview.
+//
+// The preview renders through the very same invoiceHtml / orderPdfHtml the real
+// print buttons use — that is the point of it living in this file. The sample
+// order is deliberately full: every toggle in the settings has something to
+// show or hide.
+export function pdfPreviewSampleOrder(): OrderDetail {
+  const paymentDate = new Date("2026-06-02T00:00:00Z");
+  const dueDate = new Date("2026-07-14T00:00:00Z");
+  return {
+    id: "sample-preview-order",
+    companyId: "",
+    assignedToUid: "",
+    assignedToEmail: "",
+    customerName: "Alex Carter",
+    designName: "Engraved Signet Ring",
+    designLink: "",
+    watchRef: "SAMPLE-1042",
+    status: "In Progress",
+    designStatus: "In Progress",
+    priority: "High",
+    risk: "None",
+    riskReason: "-",
+    paymentMethod: "Card",
+    paymentDate,
+    deliveryTime: 42,
+    dueDate,
+    paidAmount: 850,
+    remainingAmount: 350,
+    watchPurchasePrice: 180,
+    paymentFee: 12.75,
+    deliveryCost: 9.5,
+    taxType: "Revenue",
+    taxRate: 20,
+    taxAmount: 200,
+    netProfit: 447.75,
+    emailAddress: "alex@example.com",
+    instagramUsername: "@alexcarter",
+    whatsappNumber: "+44 7700 900123",
+    shippingName: "Alex Carter",
+    shippingStreetAddress: "12 Goldsmith Row",
+    shippingCity: "London",
+    shippingPostalCode: "E2 8QA",
+    shippingCountry: "United Kingdom",
+    shippingPhone: "+44 7700 900123",
+    communication: ["Email"],
+    notes: "Engraving: initials A.C. on the inner band.",
+    invoiceNote: "Thank you for your order.",
+    invBool1: true,
+    invBool2: false,
+    invBool3: false,
+    invBool4: false,
+    invNotes: "",
+    trackingNumber: "TRK-482913",
+    courier: "Royal Mail",
+    isDispatched: true,
+    isDelivered: false,
+    customFields: {},
+    customToggles: {},
+    extraStatuses: {},
+    clientFiles: [],
+    todoItems: [],
+    workSessions: [],
+    historyLog: [],
+    payments: [],
+    lineItems: [
+      { id: "li-1", name: "9ct gold signet ring", quantity: 1, unitPrice: 950, lineTotal: 950 },
+      { id: "li-2", name: "Hand engraving", quantity: 1, unitPrice: 150, lineTotal: 150 },
+      { id: "li-3", name: "Gift box", quantity: 1, unitPrice: 100, lineTotal: 100 }
+    ],
+    invoiceNumber: "INV-2026-0042",
+    orderType: "custom",
+    repairIntake: null,
+    estimates: [],
+    customerPortal: {
+      token: "",
+      active: false,
+      createdAtMs: 0,
+      visibility: { status: false, estimate: false, payments: false, photos: false, expectedDate: false },
+      autoUpdates: { enabled: false, email: false, sms: false }
+    },
+    estimateStatus: ""
+  };
+}
+
+export function invoicePreviewHtml(settings: WorkspaceSettingsOverview | null | undefined): string {
+  return invoiceHtml(pdfPreviewSampleOrder(), settings, null);
+}
+
+export function jobSheetPreviewHtml(
+  settings: WorkspaceSettingsOverview | null | undefined,
+  workspaceName: string
+): string {
+  return orderPdfHtml(pdfPreviewSampleOrder(), workspaceName || "My Studio", {
+    settings,
+    canSeeFinance: true,
+    canSeeAdvancedFinance: true,
+    hideNumbers: false,
+    previewUrl: "",
+    statusSteps: [
+      { title: "Design", value: "Done" },
+      { title: "Casting", value: "In Progress" },
+      { title: "Engraving", value: "Pending" }
+    ],
+    statusToggles: [
+      { title: "Dispatched", value: "Yes" },
+      { title: "Delivered", value: "No" }
+    ],
+    materialItems: [
+      { title: "9ct gold blank", value: "Ready" },
+      { title: "Engraving tool", value: "Ready" }
+    ]
+  });
 }

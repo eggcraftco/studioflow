@@ -66,6 +66,7 @@ export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
   { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
   { key: "customers", label: "Customers", description: "Customer list and contact directory." },
   { key: "messages", label: "Messages", description: "Messages navigation and conversations area." },
+  { key: "teamChat", label: "Team Chat posting", description: "Post in the team-wide chat thread. Reading it stays under Messages." },
   { key: "notes", label: "Notes", description: "Personal Notes navigation area." },
   { key: "quickReply", label: "Quick Reply", description: "Quick Reply page and AI reply tools." },
   { key: "settings", label: "Settings", description: "Main Settings navigation." },
@@ -131,6 +132,8 @@ export type WorkspaceMemberAccess = Record<WorkspaceMemberAccessKey, boolean>;
 export type WorkspaceCustomRole = {
   id: string;
   name: string;
+  /** Optional owner-written note on what this role is for. */
+  description: string;
   baseRole: string;
   access: WorkspaceMemberAccess;
 };
@@ -169,6 +172,7 @@ export type DashboardFinanceOrder = {
 export type WorkspaceSettingsOverview = {
   /** When this workspace last downloaded a backup, so the delete screen can stop guessing. */
   lastBackupExportedAtMs: number;
+  lastBackupExportedHash: string;
   appTheme: string;
   appSubtitle: string;
   appLogoUrl: string;
@@ -205,6 +209,7 @@ export type WorkspaceSettingsOverview = {
   invoiceFooterNote: string;
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
+  uploadSafetyPolicyText: string;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
   businessOnboardingCompleted: boolean;
@@ -239,6 +244,9 @@ export type QuickReplySettings = {
   quickReplyPoliteness: string;
   quickReplyLength: string;
   aiKnowledgeBase: string;
+  /** One previous version, kept server-side on every real change; empty when none. */
+  aiKnowledgeBasePrevious: string;
+  aiKnowledgeBasePreviousSavedAtMs: number;
   hasOpenAIKey: boolean;
   /** When the stored OpenAI key was last checked against OpenAI, and whether it worked. */
   openAIKeyCheckedAtMs: number;
@@ -674,6 +682,7 @@ function customRolesMap(companyData: Record<string, unknown>) {
     roles[roleId] = {
       id: roleId,
       name: stringValue(data.name, "Custom Role"),
+      description: stringValue(data.description, ""),
       baseRole: normalizeWorkspaceRole(data.baseRole, "member") || "member",
       access: normalizeWorkspaceMemberAccess(data.access)
     };
@@ -1062,6 +1071,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     appLogoUrl: stringValue(data.appLogoUrl, ""),
     selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
     lastBackupExportedAtMs: numberValue(data.lastBackupExportedAtMs, 0),
+    lastBackupExportedHash: stringValue(data.lastBackupExportedHash, ""),
     selectedCurrency: stringValue(data.seciliParaBirimi, "£"),
     selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
     feePercentage: numberValue(data.feePercentage, 3),
@@ -1100,6 +1110,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       data.uploadSafetyMaxFileSizeMBV1,
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
+    uploadSafetyPolicyText: stringValue(data.uploadSafetyPolicyText, ""),
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
     businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
@@ -1168,6 +1179,10 @@ export async function loadQuickReplySettings(companyId: string): Promise<QuickRe
     quickReplyPoliteness: stringValue(data.quickReplyPoliteness, "Warm"),
     quickReplyLength: stringValue(data.quickReplyLength, "Short"),
     aiKnowledgeBase: stringValue(data.aiKnowledgeBase, ""),
+    aiKnowledgeBasePrevious: stringValue(data.aiKnowledgeBasePrevious, ""),
+    // Stored as a server Timestamp on the doc; the callable variant hands back millis.
+    aiKnowledgeBasePreviousSavedAtMs: dateValue(data.aiKnowledgeBasePreviousSavedAt)?.getTime()
+      ?? numberValue(data.aiKnowledgeBasePreviousSavedAtMs, 0),
     hasOpenAIKey: booleanValue(data.hasOpenAIKey, false),
     openAIKeyCheckedAtMs: numberValue(data.openAIKeyCheckedAtMs, 0),
     openAIKeyWorks: booleanValue(data.openAIKeyWorks, false),

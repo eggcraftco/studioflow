@@ -14,6 +14,7 @@ import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 export type UploadSafetySettingsInput = {
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
+  uploadSafetyPolicyText?: string;
 };
 
 export type UploadSafetySettingsResult = {
@@ -119,6 +120,8 @@ export type ImportWorkspaceBackupResult = {
   skippedDuplicateOrders?: number;
   skippedDuplicateCustomers?: number;
   importedSettings?: boolean;
+  runId?: string;
+  undoAvailable?: boolean;
 };
 
 export type DeleteWorkspaceDataResult = {
@@ -449,6 +452,7 @@ export type ImportBackupPreview = {
   ok?: boolean;
   fileOrders: number;
   fileCustomers: number;
+  unsupportedCustomers?: number;
   existingOrders: number;
   existingCustomers: number;
   likelyDuplicateOrders: number;
@@ -479,10 +483,16 @@ export async function previewWorkspaceBackupImport(workspace: WorkspaceContext, 
 // The delete screen tells people to export a backup first while having no idea
 // whether they ever did. Two fields, written straight to companySettings —
 // neither is in the rule's blocked list.
-export async function recordWorkspaceBackupExport(workspace: WorkspaceContext) {
+export async function recordWorkspaceBackupExport(workspace: WorkspaceContext, fileHash = "") {
   await setDoc(
     doc(db, "companySettings", workspace.id),
-    { lastBackupExportedAtMs: Date.now(), lastBackupExportedBy: workspace.currentMemberDisplayName || "" },
+    {
+      lastBackupExportedAtMs: Date.now(),
+      lastBackupExportedBy: workspace.currentMemberDisplayName || "",
+      // The SHA-256 of the exported file, so a later import can be checked
+      // against exactly what was downloaded.
+      lastBackupExportedHash: fileHash
+    },
     { merge: true }
   );
 }
@@ -506,6 +516,23 @@ export async function importWorkspaceBackup(
       });
       return result.data;
     }, "Importing workspace backup to cloud.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
+// Takes back exactly what one import created — the record ids were written down
+// at import time. Settings merges are not undone; the server says so in its message.
+export async function undoWorkspaceBackupImport(workspace: WorkspaceContext, runId: string) {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot undo an import.");
+  }
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; removedOrders?: number; removedCustomers?: number; message?: string }>(functions, "undoWorkspaceBackupImport");
+      const result = await callable({ companyId: workspace.id, runId });
+      return result.data;
+    }, "Undoing the backup import.");
   } catch (error) {
     throw new Error(friendlySettingsError(error));
   }
