@@ -93,7 +93,12 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
 ## SONRAYA BIRAKILANLAR (bilinçli — kullanıcı onayıyla)
 
 ### Kart + Customers raporlarından kalan ürün maddeleri (27 Ağu kaydı)
-- Kart: sipariş türüne göre otomatik düzen; kullanıcıya-özel (per-member) düzen.
+- Kart: ~~sipariş türüne göre otomatik düzen~~ 27 Ağu gece 4'te TAMAM
+  (typeWorkspaceSnapshotsJSON; owner 'Save as the repair-order layout' der,
+  her repair siparişi herkes için o düzenle açılır; öncelik bağımsız-sipariş >
+  tür > profil > paylaşılan; emülatör 7/7; web+sunucu canlı — native çözümleme
+  paritesi sonraki mikro-tur). Kullanıcıya-özel düzen ZATEN VAR
+  (workspaceUserProfilesJSON per-user profilleri) — ayrıca iş çıkmadı.
   (Görsel kararlar 1B/2B/3B DÖRT platformda TAMAM — web canlı-doğrulamalı,
   Mac+iPhone xcodebuild ve Android gradle build'leriyle commit'li, 27 Ağu.)
 - Customers ürün — 27 Ağu gece 3'te üçü kapandı (web, canlı yolda; native
@@ -101,8 +106,10 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
   webhook'ta damgalanıyor; resyncIntegrationCustomer mağaza-kazanır replay —
   emülatörde bozulan telefon geri döndü; Connected store/ID/Last synced/ham
   veri) + profil hızlı aksiyonları (Call/WhatsApp/Email/Instagram) + arama
-  vurgusu ("⌕ Matched: Dup Band" kartta). KALAN: segmentler/etiketler;
-  Messages/AI Replies bağlantısı; Overview sekme düzeni.
+  vurgusu ("⌕ Matched: Dup Band" kartta). Native paritesi de TAMAM (iki ajan;
+  Swift BUILD SUCCEEDED ×2 — setData sunucu alanlarını artık ezmiyor;
+  Android BUILD SUCCESSFUL). KALAN: segmentler/etiketler; Messages/AI Replies
+  bağlantısı; Overview sekme düzeni.
 - Envanter/Files 3. aşaması (aşağıdaki eski liste).
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
