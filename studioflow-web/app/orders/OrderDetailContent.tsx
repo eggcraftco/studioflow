@@ -47,6 +47,7 @@ import {
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 import {
   DEFAULT_ORDER_DETAIL_CARD_LAYOUT,
+  ORDER_DETAIL_CARD_IDS,
   ORDER_WORKSPACE_LAYOUT_KEY,
   layoutFromOrderWorkspaceSnapshotJSON,
   loadOrderDetailCardLayout,
@@ -1226,6 +1227,33 @@ function isClientFilePdf(file: ClientFileDetail) {
 
 // Falls back to these when the workspace has not renamed the intake rows.
 
+
+// The card report's number-one ask: one-tap workspace templates. Each names
+// the cards a ROLE actually works with; applying one only flips visibility —
+// order, sizes and colors are the user's own and stay untouched.
+const CARD_TEMPLATES: Array<{ label: string; hint: string; visible: OrderDetailCardId[] }> = [
+  { label: "Owner", hint: "Everything, nothing hidden", visible: [...ORDER_DETAIL_CARD_IDS] },
+  {
+    label: "Designer",
+    hint: "Design, notes and files — no money",
+    visible: ["preview", "customer", "summary", "status", "todo", "notes", "clientFiles", "schedule", "priority"]
+  },
+  {
+    label: "Finance",
+    hint: "Money, invoices and history",
+    visible: ["summary", "customer", "financial", "invoiceItems", "estimate", "historyLog"]
+  },
+  {
+    label: "Workshop",
+    hint: "Production: status, tasks, materials",
+    visible: ["summary", "status", "todo", "workTime", "materials", "repairIntake", "priority", "notes"]
+  },
+  {
+    label: "Compact",
+    hint: "The five essentials only",
+    visible: ["summary", "customer", "status", "todo", "delivery"]
+  }
+];
 
 // Eighteen flat checkboxes made the customize panel a hunt; the report asked
 // for categories. Every card id must appear in exactly one group.
@@ -2991,6 +3019,21 @@ export function OrderDetailContent({
   function editCardHeading(cardId: OrderDetailCardId) {
     setOpenCardMenuId(null);
     setHeadingEditorCardId(cardId);
+  }
+
+  // Applying a template flips visibility only, and always with a way back:
+  // the toast carries Undo to the exact previous layout.
+  function applyCardTemplate(template: (typeof CARD_TEMPLATES)[number]) {
+    if (!canEditCardLayout || savingLayout) return;
+    const previousLayout = cardLayout;
+    const visibility = { ...cardLayout.visibility };
+    for (const id of ORDER_DETAIL_CARD_IDS) visibility[id] = template.visible.includes(id);
+    void persistLayout({ ...cardLayout, visibility }, `${template.label} template applied.`);
+    dispatchStudioToast({
+      message: `${template.label} template applied.`,
+      actionLabel: t("Undo"),
+      onAction: () => { void persistLayout(previousLayout, "Previous layout restored."); }
+    });
   }
 
   // The card report's size menu: content-fit, default, column-match and three
@@ -8431,6 +8474,23 @@ export function OrderDetailContent({
                 </div>
               </div>
             ) : null}
+
+            <div className="customize-templates">
+              <p className="customize-card-group">Templates</p>
+              <div className="customize-templates-row">
+                {CARD_TEMPLATES.map(template => (
+                  <button
+                    key={template.label}
+                    type="button"
+                    disabled={!canEditCardLayout || savingLayout}
+                    title={template.hint}
+                    onClick={() => applyCardTemplate(template)}
+                  >
+                    {template.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <label className="customize-card-search">
               <span aria-hidden="true">⌕</span>

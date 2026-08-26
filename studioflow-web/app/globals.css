@@ -24348,3 +24348,14 @@ body[data-studio-theme="dark"] .studio-toast > .studio-toast-close { color: rgba
   cursor: pointer;
 }
 .order-card-size-steps > button:hover { border-color: #2f6df6; color: #2f6df6; }
+.customize-templates-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.customize-templates-row > button {
+  border: 1px solid var(--app-border, rgba(0,0,0,0.14));
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.customize-templates-row > button:hover { border-color: #2f6df6; color: #2f6df6; }
