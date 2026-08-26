@@ -91,6 +91,14 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
 7'si servis edilen chunk/CSS'te teyitli, 8. poll'da.
 
 ## SONRAYA BIRAKILANLAR (bilinçli — kullanıcı onayıyla)
+
+### Kart + Customers raporlarından kalan ürün maddeleri (27 Ağu kaydı)
+- Kart: sipariş türüne göre otomatik düzen; kullanıcıya-özel (per-member) düzen.
+  (Görsel kararlar 1B/2B/3B UYGULANDI — web canlı, native'ler commit bekliyor.)
+- Customers ürün: segmentler/etiketler; Messages/AI Replies bağlantısı; profil
+  hızlı aksiyonları; Overview sekme düzeni; entegrasyon paneli (last synced /
+  resync / raw data); arama vurgusu (eşleşen alanın öne çıkarılması).
+- Envanter/Files 3. aşaması (aşağıdaki eski liste).
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
 sipariş kartında kullanılan-miktar/swap aksiyonları, hiyerarşik lokasyonlar,
@@ -107,7 +115,48 @@ import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel sto
 
 ---
 
-## SIRADA — üç rapordan KALANLAR (ilk dalga yukarıda tamamlandı)
+## SIRADA — AKTİF KUYRUK: iki yeni rapor (27 Ağu)
+Kaynaklar: NivaDesk_banking.md ve NivaDesk_notes.md (repo kökünde).
+Talimat: iki özellik TEK TEK, detaylıca, TÜM platformlara.
+
+### 1) BANKING (önce bu)
+**Kritik (rapor sırası):** kalıcı bank transaction ID; Pandle transaction ID;
+duplicate önleyen unique constraint (workspace+bank_account+bank_tx_id);
+mevcut Pandle hareketiyle MATCH (asla yeniden oluşturma); idempotent sync
+(idempotency key + attempt log); NivaDesk kategori/VAT modelini provider'dan
+ayırma (connector mapping: Pandle/QB/Xero); review statüleri (Unreviewed →
+Ready → Synced → Confirmed/Error/Ignored); banka verisi (read-only) ile
+NivaDesk enrichment ayrımı.
+**Yüksek:** split transaction; incoming↔order payment eşleştirme (duplicate
+payment üretmeden); transfer/refund/owner-contribution ayrımı; kural formuna
+VAT+scope (form ile tablo tutarsızlığı DOĞRULANMIŞ eksik); receipt'in merkezi
+Files'a bağlanması (Upload new / Choose from Files); sync activity paneli;
+aranabilir order seçici; çoklu hesap filtresi; pending/posted; multi-currency.
+**Orta:** receipt güven skoru; recurring güven+fiyat değişimi; bulk review;
+rule preview/priority; Supplier/Purchase/Inventory bağı; Accounting Review
+ekranı; audit log; custom kategoriler + mapping yönetimi.
+**Dört kesin kural:** read-only scope; provider tx ID benzersiz; Pandle'da
+mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT hard-code değil
+mapping.
+
+### 2) NOTES (banking sonrası)
+**Yüksek:** reminder tarihi kaydedilmiyor (DOĞRULANMIŞ bug — sessiz veri
+kaybı); Personal/Order/Customer/Team not türü ayrımı; Project Notes içinde
+New Note order bağlayabilmeli (tek evrensel form, Seçenek B); Notes reminder ↔
+Order Schedule&Alerts merkezi reminder ilişkisi; internal/client görünürlük
+kesin ayrımı; collaborator yetkileri (workspace-üyesi + view/edit); Project
+Notes sayaç tutarlılığı.
+**Orta:** Customer Notes merkezi görünümü; kronolojik not akışı; created/
+updated by; liste/grid + masonry + Pinned/Others; arama kapsamı + filtreli
+boş-durum mesajı; label yönetimi (rename/sil/renk).
+**İyileştirme:** checklist; recurring reminder/snooze; task'a dönüştürme;
+linked record açma; attachments↔Files; activity; kısayollar.
+**Temel kural:** not BİR kez oluşturulur; Notes menüsü, Order kartı ve
+Customer ekranı aynı kaydı kendi bağlamında gösterir (Files modeliyle aynı).
+
+---
+
+## TAMAMLANAN raporlardan not (eski SIRADA)
 
 ### A. NivaDesk_schedule.md — kalan orta/iyileştirme
 **26 Ağu akşamı eklendi:** hover eşleştirme (kart ↔ çubuk, iki yönlü),
