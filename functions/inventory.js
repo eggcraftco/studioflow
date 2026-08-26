@@ -185,6 +185,13 @@ function createInventoryFunctions({
         : (Array.isArray(input.photos) ? input.photos.slice(0, 12) : [])
             .map((path) => clean(path, "", 600))
             .filter(Boolean),
+      // Key-present semantics, same as customer segments: a form that does not
+      // send tags leaves them alone; sending an empty array clears them.
+      tags: input.tags === undefined && existing
+        ? (Array.isArray(existing.tags) ? existing.tags : [])
+        : (Array.isArray(input.tags) ? input.tags.slice(0, 20) : [])
+            .map((tag) => clean(tag, "", 30))
+            .filter(Boolean),
       quantity,
       ...costs
     };

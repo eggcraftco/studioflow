@@ -487,6 +487,16 @@ export function ItemDetailPanel({
                 ) : (item.location || "—")}
               </dd>
               {item.purchaseDate ? <><dt>{t("Acquisition Date")}</dt><dd>{item.purchaseDate}</dd></> : null}
+              {(item.tags ?? []).length > 0 ? (
+                <>
+                  <dt>{t("Tags")}</dt>
+                  <dd>
+                    {(item.tags ?? []).map(tag => (
+                      <span className="inventory-chip inventory-tag-chip" key={tag}>{tag}</span>
+                    ))}
+                  </dd>
+                </>
+              ) : null}
               <dt>{t("Value")}</dt>
               <dd>{item.ownership === "customer" ? t("Customer's") : money(currencySymbol, inventoryLineValue(item))}</dd>
               {item.currentValueEst > 0 ? <><dt>{t("Current value (est.)")}</dt><dd>{money(currencySymbol, item.currentValueEst)}</dd></> : null}

@@ -90,7 +90,8 @@ function emptyDraft(trackingType: InventoryTrackingType): InventoryItemInput {
     lowStockAt: 0,
     purchasePrice: 0,
     additionalCosts: [],
-    currentValueEst: 0
+    currentValueEst: 0,
+    tags: []
   };
 }
 
@@ -207,11 +208,17 @@ export function InventoryContent({
       if (locationFilter && (item.location || "") !== locationFilter) return false;
       if (supplierFilter && (item.supplierName || "") !== supplierFilter) return false;
       if (!needle) return true;
-      return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number]
+      return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number, (item.tags ?? []).join(" ")]
         .filter(Boolean)
         .some(field => String(field).toLowerCase().includes(needle));
     });
   }, [items, search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter]);
+
+  // Every tag in use, offered back as suggestions so spellings converge.
+  const allTags = useMemo(
+    () => Array.from(new Set(items.flatMap(item => item.tags ?? []).filter(Boolean))).sort(),
+    [items]
+  );
 
   // Distinct values off the loaded list — no locations collection exists yet,
   // and free-text locations are still worth filtering by.
@@ -731,6 +738,7 @@ export function InventoryContent({
         <NewItemModal
           workspace={workspace}
           currencySymbol={currencySymbol}
+          tagSuggestions={allTags}
           onClose={() => setModalOpen(false)}
           onSaved={async () => { setModalOpen(false); await reload(); }}
         />
@@ -740,6 +748,7 @@ export function InventoryContent({
         <NewItemModal
           workspace={workspace}
           currencySymbol={currencySymbol}
+          tagSuggestions={allTags}
           initialItem={editing}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }}
@@ -756,12 +765,15 @@ export function InventoryContent({
 function NewItemModal({
   workspace,
   currencySymbol,
+  tagSuggestions,
   initialItem,
   onClose,
   onSaved
 }: {
   workspace: WorkspaceContext;
   currencySymbol: string;
+  /** Every tag already in use, so spellings converge instead of multiplying. */
+  tagSuggestions: string[];
   /** When set, the form edits this item (or, with a blank id, creates a copy). */
   initialItem?: InventoryItem | null;
   onClose: () => void;
@@ -774,6 +786,7 @@ function NewItemModal({
     initialItem ? inventoryItemToInput(initialItem) : emptyDraft("unique"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [tagInput, setTagInput] = useState("");
 
   const isUnique = draft.trackingType === "unique";
   const set = <K extends keyof InventoryItemInput>(key: K, value: InventoryItemInput[K]) =>
@@ -904,6 +917,40 @@ function NewItemModal({
             <input className="input" value={draft.supplierName ?? ""} onChange={e => set("supplierName", e.target.value)} /></label>
           <label className="inventory-field"><span>{t("Purchase date")}</span>
             <input className="input" type="date" value={draft.purchaseDate ?? ""} onChange={e => set("purchaseDate", e.target.value)} /></label>
+          <div className="inventory-field is-wide">
+            <span>{t("Tags")}</span>
+            <div className="inventory-tag-editor">
+              {(draft.tags ?? []).map(tag => (
+                <span className="inventory-chip inventory-tag-chip" key={tag}>
+                  {tag}
+                  <button
+                    type="button"
+                    aria-label={`${t("Remove")} ${tag}`}
+                    onClick={() => set("tags", (draft.tags ?? []).filter(existing => existing !== tag))}
+                  >×</button>
+                </span>
+              ))}
+              <input
+                className="input"
+                list="inventory-tag-suggestions"
+                value={tagInput}
+                placeholder={t("Add a tag and press Enter")}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const value = tagInput.trim();
+                  if (value && !(draft.tags ?? []).includes(value)) {
+                    set("tags", [...(draft.tags ?? []), value].slice(0, 20));
+                  }
+                  setTagInput("");
+                }}
+              />
+              <datalist id="inventory-tag-suggestions">
+                {tagSuggestions.map(tag => <option key={tag} value={tag} />)}
+              </datalist>
+            </div>
+          </div>
         </div>
 
         <div className="inventory-cost-block">

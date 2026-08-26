@@ -23713,6 +23713,10 @@ body[data-studio-theme="dark"] .inventory-status.is-archived { color: #9ca3af; }
 .inventory-panel-qr { align-items: center; text-align: center; }
 .inventory-panel-qr svg { width: 110px; height: 110px; }
 .inventory-panel-qr span { font-weight: 800; font-size: 13px; }
+.inventory-tag-editor { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.inventory-tag-editor .input { flex: 1 1 160px; min-width: 140px; }
+.inventory-tag-chip { display: inline-flex; align-items: center; gap: 4px; }
+.inventory-tag-chip button { border: none; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: inherit; padding: 0 2px; }
 .inventory-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; white-space: nowrap; }
 .order-stock-actions { display: inline-flex; gap: 10px; align-items: center; }
 .inventory-loss-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(107,114,128,0.28); }
