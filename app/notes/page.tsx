@@ -7,6 +7,9 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { doc, getDoc } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import {
   colorForNote,
   deleteKeepNote,
@@ -159,6 +162,50 @@ export default function NotesPage() {
 
   const pinned = visible.filter((n) => n.isPinned);
   const others = visible.filter((n) => !n.isPinned);
+  // One grouping feeds BOTH the Project tab header count and the list below —
+  // that is what keeps "8 notes" from sitting over a list of 6 (the mismatch
+  // QA caught). Order notes and order-linked app notes land in the same group.
+  const projectGroups = useMemo(() => {
+    const byOrder = new Map<string, { order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string }> }>();
+    for (const o of orders) {
+      if (o.notes?.trim()) byOrder.set(o.id, { order: o, entries: [{ type: "Note", text: o.notes }] });
+    }
+    for (const n of notes) {
+      if (n.isDeleted || n.isArchived || !n.linkedOrderId) continue;
+      const o = orders.find((x) => x.id === n.linkedOrderId);
+      if (!o) continue;
+      const group = byOrder.get(o.id) || { order: o, entries: [] };
+      group.entries.push({ type: "Linked note", text: n.title.trim() ? `${n.title.trim()}\n${n.text}` : n.text, noteId: n.id });
+      byOrder.set(o.id, group);
+    }
+    return Array.from(byOrder.values()).sort((a, b) => (b.order.paymentDate?.getTime() ?? 0) - (a.order.paymentDate?.getTime() ?? 0));
+  }, [orders, notes]);
+  const projectNoteCount = useMemo(() => projectGroups.reduce((acc, g) => acc + g.entries.length, 0), [projectGroups]);
+  // The other reminder system: order Schedule & Alerts items. Surfacing them
+  // here makes Reminders the one central place, instead of two disconnected
+  // lists (the gap the QA report called out).
+  const orderAlerts = useMemo(() => {
+    const SWIFT_REFERENCE_SECONDS = 978307200;
+    const out: Array<{ orderId: string; orderLabel: string; title: string; dueMs: number }> = [];
+    for (const o of orders) {
+      const raw = o.customFields?.["__scheduleAlertItemsV1"];
+      if (!raw) continue;
+      try {
+        const items = JSON.parse(raw) as Array<{ title?: string; dueAt?: number; completedAt?: number | null; status?: string }>;
+        if (!Array.isArray(items)) continue;
+        for (const item of items) {
+          if (!item || typeof item.dueAt !== "number" || item.completedAt) continue;
+          out.push({
+            orderId: o.id,
+            orderLabel: `${o.customerName}${o.designName && o.designName !== "Untitled design" ? ` · ${o.designName}` : ""}`,
+            title: String(item.title || "Reminder"),
+            dueMs: (item.dueAt + SWIFT_REFERENCE_SECONDS) * 1000,
+          });
+        }
+      } catch {}
+    }
+    return out.sort((a, b) => a.dueMs - b.dueMs);
+  }, [orders]);
 
   async function save(note: StudioKeepNote) {
     if (!workspace || !user) return;
@@ -171,10 +218,43 @@ export default function NotesPage() {
             ownerName: user.displayName ?? "",
           }
         : note;
-    await saveKeepNote(workspace.id, user.uid, {
-      ...finalized,
-      updatedAtMillis: Date.now(),
-    });
+    try {
+      await saveKeepNote(workspace.id, user.uid, {
+        ...finalized,
+        updatedAtMillis: Date.now(),
+      });
+    } catch (saveError) {
+      // A rejected write used to disappear without a trace — the editor closed,
+      // the note looked saved, and the data was gone.
+      alert(`${t("The note could not be saved.")} ${saveError instanceof Error ? saveError.message : ""}`.trim());
+      throw saveError;
+    }
+    // Visibility is a separate axis from type: "workspace" fans the note out
+    // through the existing collaboration invites (each member gets the same
+    // record mirrored — the Files model, not a copy-paste).
+    if (finalized.visibility === "workspace") {
+      void shareNoteWithWorkspace(finalized).catch((shareError) => {
+        alert(`${t("The note was saved, but sharing with the team failed.")} ${shareError instanceof Error ? shareError.message : ""}`.trim());
+      });
+    }
+  }
+
+  async function shareNoteWithWorkspace(note: StudioKeepNote) {
+    if (!workspace || !user) return;
+    const companySnap = await getDoc(doc(db, "companies", workspace.id));
+    const members = (companySnap.data()?.members ?? {}) as Record<string, unknown>;
+    const targets = Object.keys(members).filter((memberUid) => memberUid && memberUid !== user.uid);
+    if (!targets.length) return;
+    const invite = httpsCallable(functions, "createPersonalNoteCollaborationInvite");
+    const alreadyShared = new Set(note.sharedWith);
+    for (const targetUserId of targets) {
+      if (alreadyShared.has(targetUserId)) continue;
+      try {
+        await invite({ companyId: workspace.id, noteId: note.id, targetUserId, note: { title: note.title, text: note.text, colorName: note.colorName } });
+      } catch (inviteError) {
+        console.warn("note share invite failed:", targetUserId, inviteError);
+      }
+    }
   }
 
   async function destroy(id: string) {
@@ -300,13 +380,14 @@ export default function NotesPage() {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingLeft: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>{visible.length} note{visible.length === 1 ? "" : "s"}</div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>{(topTab === "project" ? projectNoteCount : visible.length)} note{(topTab === "project" ? projectNoteCount : visible.length) === 1 ? "" : "s"}</div>
           </div>
           <button
             onClick={() =>
-              setEditing(
-                newKeepNote(user.uid, user.email ?? "", user.displayName ?? "")
-              )
+              setEditing({
+                ...newKeepNote(user.uid, user.email ?? "", user.displayName ?? ""),
+                ...(topTab === "project" ? { noteType: "order" as const } : {}),
+              })
             }
             style={{
               background: "#2D7BF4",
@@ -324,7 +405,7 @@ export default function NotesPage() {
         </div>
 
         {topTab === "project" ? (
-          <ProjectNotesView orders={orders} />
+          <ProjectNotesView groups={projectGroups} onOpenNote={(noteId) => { const n = notes.find((x) => x.id === noteId); if (n) setEditing(n); }} />
         ) : (
           <>
             {false && allLabels.length > 0 && (
@@ -381,7 +462,7 @@ export default function NotesPage() {
             )}
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
             <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
-            {visible.length === 0 && (
+            {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {section === "trash"
                   ? t("Trash is empty.")
@@ -391,6 +472,29 @@ export default function NotesPage() {
                   ? t("No reminders.")
                   : t("Click + New Note to create your first note.")}
               </div>
+            )}
+            {section === "reminders" && orderAlerts.length > 0 && (
+              <>
+                <SectionHeader title={t("Order schedule alerts").toUpperCase()} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {orderAlerts.map((alert, index) => (
+                    <div
+                      key={`${alert.orderId}-${index}`}
+                      onClick={() => router.push(`/orders/${alert.orderId}`)}
+                      style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 14px", cursor: "pointer" }}
+                    >
+                      <span style={{ fontSize: 15 }}>⏰</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alert.title}</div>
+                        <div style={{ fontSize: 11, color: "#2D7BF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {alert.orderLabel}</div>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: alert.dueMs < Date.now() ? 800 : 400, color: alert.dueMs < Date.now() ? "#dc2626" : "#6b7280", whiteSpace: "nowrap" }}>
+                        {new Date(alert.dueMs).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}
@@ -407,17 +511,18 @@ export default function NotesPage() {
         {editing && (
           <NoteEditor
             note={editing}
+            orders={orders}
             onClose={() => setEditing(null)}
             onSave={(n) => {
-              save(n);
+              void save(n).catch(() => {});
               setEditing(null);
             }}
-            onUploadImage={async (file) => {
+            onUploadImage={async (file, draft) => {
               if (!workspace || !user) return;
               try {
                 const url = await uploadKeepNoteImage(workspace.id, user.uid, editing.id, file);
                 if (url) {
-                  const next = { ...editing, links: [...editing.links, url] };
+                  const next = { ...draft, links: [...draft.links, url] };
                   setEditing(next);
                   await save(next);
                 }
@@ -857,6 +962,15 @@ function NoteCard({
       {note.collaboratorEmails.length > 0 && (
         <div style={{ fontSize: 11, color: "#6b7280" }}>👥 {note.collaboratorEmails.length} shared</div>
       )}
+      {note.linkedOrderLabel && (
+        <div style={{ fontSize: 11, color: "#2D7BF4", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {note.linkedOrderLabel}</div>
+      )}
+      {note.linkedCustomerName && (
+        <div style={{ fontSize: 11, color: "#0e7a55", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>◉ {note.linkedCustomerName}</div>
+      )}
+      {note.visibility === "workspace" && (
+        <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>\u2302 {t("Workspace")}</div>
+      )}
       {/* Bottom action row — Mac parity (not rendered at all on phones) */}
       <div
         style={{
@@ -954,20 +1068,34 @@ function NoteCard({
   );
 }
 
+// Local calendar date for a date input — never through toISOString, which
+// renders the previous day for evening timestamps east of UTC.
+function localDateInputValue(millis: number): string {
+  const date = new Date(millis);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function NoteEditor({
   note,
+  orders,
   onClose,
   onSave,
   onUploadImage,
 }: {
   note: StudioKeepNote;
+  orders: OrderListItem[];
   onClose: () => void;
   onSave: (n: StudioKeepNote) => void;
-  onUploadImage: (file: File) => Promise<void>;
+  onUploadImage: (file: File, draft: StudioKeepNote) => Promise<void>;
 }) {
   const [title, setTitle] = useState(note.title);
   const [text, setText] = useState(note.text);
   const [colorName, setColorName] = useState(note.colorName);
+  const [noteType, setNoteType] = useState<StudioKeepNote["noteType"]>(note.noteType);
+  const [linkedOrderId, setLinkedOrderId] = useState(note.linkedOrderId);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [customerName, setCustomerName] = useState(note.linkedCustomerName);
+  const [visibility, setVisibility] = useState<StudioKeepNote["visibility"]>(note.visibility);
   const [labels, setLabels] = useState<string[]>(note.labels);
   const [labelInput, setLabelInput] = useState("");
   const [collabs, setCollabs] = useState<string[]>(note.collaboratorEmails);
@@ -1018,6 +1146,79 @@ function NoteEditor({
           style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
         />
 
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Type").toUpperCase()}</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {([["personal", "Personal"], ["order", "Order"], ["customer", "Customer"], ["team", "Team"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => {
+                setNoteType(value);
+                if (value === "team") setVisibility("workspace");
+              }}
+              style={{ padding: "5px 14px", borderRadius: 999, border: noteType === value ? "2px solid #2D7BF4" : "1px solid #e5e7eb", background: noteType === value ? "rgba(45,123,244,0.08)" : "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            >
+              {t(label)}
+            </button>
+          ))}
+        </div>
+        {noteType === "order" && (
+          <div style={{ marginBottom: 10 }}>
+            <input
+              type="search"
+              value={orderSearch}
+              onChange={(e) => setOrderSearch(e.target.value)}
+              placeholder={t("Search orders")}
+              style={{ width: "100%", padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 6, marginBottom: 6, fontSize: 12 }}
+            />
+            <select
+              value={linkedOrderId}
+              onChange={(e) => setLinkedOrderId(e.target.value)}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+            >
+              <option value="">{t("Not linked")}</option>
+              {orders
+                .filter((o) => !orderSearch.trim() || `${o.customerName} ${o.designName}`.toLowerCase().includes(orderSearch.trim().toLowerCase()))
+                .slice(0, 50)
+                .map((o) => (
+                  <option key={o.id} value={o.id}>{o.customerName}{o.designName && o.designName !== "Untitled design" ? ` · ${o.designName}` : ""}</option>
+                ))}
+              {linkedOrderId && !orders.some((o) => o.id === linkedOrderId) ? <option value={linkedOrderId}>{note.linkedOrderLabel || t("Order")}</option> : null}
+            </select>
+          </div>
+        )}
+        {noteType === "customer" && (
+          <div style={{ marginBottom: 10 }}>
+            <input
+              type="text"
+              list="note-customer-names"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder={t("Customer name")}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 6 }}
+            />
+            <datalist id="note-customer-names">
+              {Array.from(new Set(orders.map((o) => o.customerName).filter(Boolean))).slice(0, 100).map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </div>
+        )}
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>{t("Visibility").toUpperCase()}</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
+          {([["only_me", "Only me"], ["workspace", "Workspace members"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setVisibility(value)}
+              style={{ padding: "5px 14px", borderRadius: 999, border: visibility === value ? "2px solid #2D7BF4" : "1px solid #e5e7eb", background: visibility === value ? "rgba(45,123,244,0.08)" : "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            >
+              {t(label)}
+            </button>
+          ))}
+          {visibility === "workspace" && (
+            <span style={{ fontSize: 11, color: "#6b7280" }}>{t("Every member gets an invite to this same note — one record, not copies.")}</span>
+          )}
+        </div>
+
         <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>COLOR</div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
           {NOTE_COLORS.map((c) => (
@@ -1040,10 +1241,21 @@ function NoteEditor({
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
           <input
             type="date"
-            value={reminderMillis ? new Date(reminderMillis).toISOString().slice(0, 10) : ""}
-            onChange={(e) =>
-              setReminderMillis(e.target.value ? new Date(e.target.value).getTime() : null)
-            }
+            value={reminderMillis != null && Number.isFinite(reminderMillis) ? localDateInputValue(reminderMillis) : ""}
+            onChange={(e) => {
+              // Parse the yyyy-mm-dd parts as a LOCAL date at noon. new Date(string)
+              // is UTC for ISO dates (off-by-one under BST) and NaN for anything
+              // else — and a NaN here used to be saved as "no reminder" without a
+              // word. Invalid partial input keeps the current value instead.
+              const value = e.target.value;
+              if (!value) {
+                setReminderMillis(null);
+                return;
+              }
+              const [y, m, d] = value.split("-").map(Number);
+              if (!y || !m || !d) return;
+              setReminderMillis(new Date(y, m - 1, d, 12, 0, 0).getTime());
+            }}
             style={{ padding: 6, border: "1px solid #e5e7eb", borderRadius: 6 }}
           />
           {reminderMillis && (
@@ -1072,7 +1284,17 @@ function NoteEditor({
               style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) onUploadImage(f);
+                // The interim save that stores the image must carry the CURRENT
+                // draft — saving the stale prop used to wipe an unsaved reminder.
+                if (f) onUploadImage(f, {
+                  ...note,
+                  title: title.trim(),
+                  text: text.trim(),
+                  colorName,
+                  labels,
+                  collaboratorEmails: collabs,
+                  reminderDateMillis: reminderMillis,
+                });
                 e.target.value = "";
               }}
             />
@@ -1149,7 +1371,8 @@ function NoteEditor({
             Cancel
           </button>
           <button
-            onClick={() =>
+            onClick={() => {
+              const linkedOrder = noteType === "order" && linkedOrderId ? orders.find((o) => o.id === linkedOrderId) : undefined;
               onSave({
                 ...note,
                 title: title.trim(),
@@ -1158,8 +1381,13 @@ function NoteEditor({
                 labels,
                 collaboratorEmails: collabs,
                 reminderDateMillis: reminderMillis,
-              })
-            }
+                noteType,
+                linkedOrderId: noteType === "order" ? linkedOrderId : "",
+                linkedOrderLabel: linkedOrder ? `${linkedOrder.customerName}${linkedOrder.designName && linkedOrder.designName !== "Untitled design" ? ` · ${linkedOrder.designName}` : ""}` : (noteType === "order" ? note.linkedOrderLabel : ""),
+                linkedCustomerName: noteType === "customer" ? customerName.trim() : "",
+                visibility,
+              });
+            }}
             style={{ padding: "8px 18px", background: "#2D7BF4", color: "white", border: "none", borderRadius: 8, fontWeight: 800, cursor: "pointer" }}
           >
             {t("Save")}
@@ -1170,27 +1398,23 @@ function NoteEditor({
   );
 }
 
-function ProjectNotesView({ orders }: { orders: OrderListItem[] }) {
+function ProjectNotesView({
+  groups,
+  onOpenNote,
+}: {
+  groups: Array<{ order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string }> }>;
+  onOpenNote: (noteId: string) => void;
+}) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
-  const grouped = useMemo(() => {
-    return orders
-      .map((o) => {
-        const entries: Array<{ type: string; text: string }> = [];
-        if (o.notes?.trim()) entries.push({ type: t("Note"), text: o.notes });
-        return { order: o, entries };
-      })
-      .filter((g) => g.entries.length > 0)
-      .sort((a, b) => (b.order.paymentDate?.getTime() ?? 0) - (a.order.paymentDate?.getTime() ?? 0));
-  }, [orders]);
 
-  if (grouped.length === 0) {
-    return <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>No project notes yet.</div>;
+  if (groups.length === 0) {
+    return <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>{t("No project notes yet.")}</div>;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {grouped.map(({ order, entries }) => (
+      {groups.map(({ order, entries }) => (
         <div key={order.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>
             {order.designName?.trim() || order.customerName || t("Project")}
@@ -1199,8 +1423,12 @@ function ProjectNotesView({ orders }: { orders: OrderListItem[] }) {
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>{order.customerName}</div>
           )}
           {entries.map((e, i) => (
-            <div key={i} style={{ marginTop: 6 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: "#2D7BF4" }}>{e.type.toUpperCase()}</div>
+            <div
+              key={e.noteId ?? i}
+              onClick={e.noteId ? () => onOpenNote(e.noteId as string) : undefined}
+              style={{ marginTop: 6, cursor: e.noteId ? "pointer" : undefined, borderRadius: 8, padding: e.noteId ? "4px 6px" : undefined, background: e.noteId ? "rgba(45,123,244,0.05)" : undefined }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 800, color: e.noteId ? "#0e7a55" : "#2D7BF4" }}>{t(e.type).toUpperCase()}</div>
               <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>{e.text}</div>
             </div>
           ))}
