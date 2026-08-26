@@ -8304,10 +8304,14 @@ export function OrderDetailContent({
             ) : null}
             {orderActionsOpen ? (
               <div className="order-actions-menu-panel" style={{ zIndex: 130 }}>
+                {/* Grouped per the card report: what the header shows, the
+                    documents you can export, and the layout tools. */}
+                <div className="order-actions-menu-section-title">{t("Header display")}</div>
                 <div className="order-actions-header-details">
                   {renderHeaderDetailsMenuContent()}
                 </div>
                 <div className="order-actions-menu-divider" />
+                <div className="order-actions-menu-section-title">{t("Documents")}</div>
                 <button
                   type="button"
                   onClick={() => {
@@ -8328,6 +8332,8 @@ export function OrderDetailContent({
                     Invoice PDF
                   </button>
                 ) : null}
+                <div className="order-actions-menu-divider" />
+                <div className="order-actions-menu-section-title">{t("Card layout")}</div>
                 <button
                   type="button"
                   onClick={() => {
