@@ -134,6 +134,11 @@ sistemi; Actions gruplama; reset kapsam ayrımı; sipariş türüne göre düzen
 kullanıcıya özel düzen; "Saving card layout" akışı.
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
+**26 Ağu gece eklendi:** iade/iptal bakiyesi düzeltildi — Outstanding artık
+yalnız borç doğurabilen siparişleri sayıyor (Cancelled + Shopify-refunded
+dışarıda; brüt Total Order Value ve gerçek Paid aynen; emülatörde £800'lük
+iptal kalanı Outstanding'i £0 bıraktı, E2E'li). Outstanding sıralaması da aynı
+alanı kullanıyor.
 **26 Ağu akşamı eklendi:** duplicate birleştirme CANLI — profil seçilince aynı
 e-posta/telefonlu ikiz için uyarı bandı + "Review and merge" diyaloğu (ana kayıt
 seçimi, alan bazında isim/e-posta/telefon galibi, sipariş taşıma, sunucuda tam
