@@ -29,19 +29,41 @@ final class InventoryScreenModel: ObservableObject {
     @Published var suppliers: [Supplier] = []
     @Published var loading = false
     @Published var notice = ""
+    // Where the last page ended, or nil when the whole shelf is loaded. Its
+    // presence is what makes the "Load the next 500 items" row appear.
+    @Published var listCursor: InventoryListCursor?
+    @Published var loadingMore = false
 
     func loadItems(_ manager: FirebaseManager) async {
         loading = true
         do {
-            async let list = manager.loadInventoryItems()
+            async let list = manager.loadInventoryItemsPage()
             async let totals = manager.loadInventorySummary()
-            items = try await list
+            let page = try await list
+            items = page.items
+            listCursor = page.cursor
             summary = try await totals
             notice = ""
         } catch {
             notice = error.localizedDescription
         }
         loading = false
+    }
+
+    /// The next 500 items, appended. Dedupe by id: an item edited between the
+    /// two fetches can move across the page boundary and arrive twice.
+    func loadMoreItems(_ manager: FirebaseManager) async {
+        guard let cursor = listCursor, !loadingMore else { return }
+        loadingMore = true
+        do {
+            let page = try await manager.loadInventoryItemsPage(cursor: cursor)
+            let seen = Set(items.map(\.id))
+            items.append(contentsOf: page.items.filter { !seen.contains($0.id) })
+            listCursor = page.cursor
+        } catch {
+            notice = error.localizedDescription
+        }
+        loadingMore = false
     }
 
     func loadPurchases(_ manager: FirebaseManager) async {
@@ -90,7 +112,14 @@ struct InventoryView: View {
         return model.items.filter { item in
             if !categoryFilter.isEmpty && item.category != categoryFilter { return false }
             if let typeFilter, item.trackingType != typeFilter { return false }
-            if let statusFilter, item.status != statusFilter { return false }
+            // "Reserved" means anything promised to an order — fully or in
+            // part. A quantity item with half its stock promised would
+            // otherwise hide from the one view meant to show promises.
+            if let statusFilter {
+                if statusFilter == .reserved {
+                    if item.status != .reserved && item.status != .partiallyReserved { return false }
+                } else if item.status != statusFilter { return false }
+            }
             if needle.isEmpty { return true }
             return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number]
                 .contains { $0.lowercased().contains(needle) }
@@ -291,6 +320,12 @@ struct InventoryView: View {
             } else {
                 LazyVStack(spacing: 8) {
                     ForEach(visibleItems) { item in itemRow(item) }
+                }
+            }
+
+            if model.listCursor != nil {
+                InventoryLoadMoreRow(loading: model.loadingMore, lang: seciliDil) {
+                    Task { await model.loadMoreItems(firebaseManager) }
                 }
             }
         }
@@ -636,6 +671,30 @@ struct InventoryView: View {
         .padding(.vertical, 34).padding(.horizontal, 16)
         .background(RoundedRectangle(cornerRadius: 13).fill(cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.gray.opacity(0.16)))
+    }
+}
+
+/// The row under the list when the server said there is another page. Its own
+/// struct — the items tab is already deep, and the real-iPhone stack guard
+/// punishes depth.
+struct InventoryLoadMoreRow: View {
+    let loading: Bool
+    let lang: String
+    let onLoadMore: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(t("There is more stock than one page carries.", lang: lang))
+                .font(.system(size: 11)).foregroundColor(.secondary)
+            Button(loading ? t("Loading…", lang: lang) : t("Load the next 500 items", lang: lang)) {
+                onLoadMore()
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .buttonStyle(.plain).foregroundColor(.blue)
+            .disabled(loading)
+            Spacer()
+        }
+        .padding(.top, 2)
     }
 }
 

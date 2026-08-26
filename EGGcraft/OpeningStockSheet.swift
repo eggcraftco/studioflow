@@ -27,11 +27,15 @@ struct OpeningStockSheet: View {
     @State private var saving = false
     @State private var error = ""
     @State private var readToken = 0
+    // What the import should do with rows already on the shelf. Skip is the
+    // default deliberately: the one policy that cannot damage anything.
+    @State private var duplicatePolicy = "skip"
 
     private var willImport: [OpeningStockRow] { Array(read.items.prefix(read.maxRows)) }
     private var overflow: Int { max(0, read.items.count - read.maxRows) }
     private var totalValue: Double { willImport.reduce(0) { $0 + $1.lineValue } }
     private var hasNameColumn: Bool { read.mapping.contains("name") }
+    private var duplicates: Int { willImport.filter(\.matchesExistingStock).count }
 
     var body: some View {
         NavigationStack {
@@ -90,7 +94,12 @@ struct OpeningStockSheet: View {
                             ForEach(willImport.prefix(50)) { row in
                                 HStack(alignment: .top, spacing: 10) {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(row.name).font(.system(size: 13, weight: .semibold))
+                                        HStack(spacing: 6) {
+                                            Text(row.name).font(.system(size: 13, weight: .semibold))
+                                            if row.matchesExistingStock {
+                                                OpeningStockMatchedBadge(number: row.existingNumber, lang: lang)
+                                            }
+                                        }
                                         Text([t(row.category, lang: lang),
                                               row.trackingType == .quantity
                                                 ? "\(formatQuantity(row.onHand))\(row.unit.isEmpty ? "" : " \(row.unit)")"
@@ -98,6 +107,13 @@ struct OpeningStockSheet: View {
                                               row.location]
                                             .filter { !$0.isEmpty }.joined(separator: " · "))
                                             .font(.system(size: 10)).foregroundColor(.secondary)
+                                        if row.matchesExistingStock {
+                                            // Which shelf entry it hit — spelled out
+                                            // rather than tucked into a tooltip, so a
+                                            // phone sees it too.
+                                            Text("\(t("Already on the shelf as", lang: lang)) \(row.existingNumber)")
+                                                .font(.system(size: 10)).foregroundColor(.orange)
+                                        }
                                     }
                                     Spacer()
                                     Text(inventoryMoney(currencySymbol, row.lineValue))
@@ -130,6 +146,11 @@ struct OpeningStockSheet: View {
                                  + (totalValue > 0 ? " · \(inventoryMoney(currencySymbol, totalValue))" : ""))
                                 .font(.system(size: 10)).foregroundColor(.secondary)
                         }
+                    }
+
+                    if duplicates > 0 {
+                        OpeningStockDuplicateSection(
+                            duplicates: duplicates, policy: $duplicatePolicy, lang: lang)
                     }
 
                     if !read.skipped.isEmpty {
@@ -246,13 +267,68 @@ struct OpeningStockSheet: View {
         Task {
             do {
                 let count = try await firebaseManager.importOpeningStock(
-                    items: willImport.map(\.payload), openingDate: openingDate)
+                    items: willImport.map(\.payload), openingDate: openingDate,
+                    duplicatePolicy: duplicates > 0 ? duplicatePolicy : nil)
                 onImported(count)
                 dismiss()
             } catch {
                 self.error = error.localizedDescription
                 saving = false
             }
+        }
+    }
+}
+
+/// The chip a matched preview row wears. Its own struct — the preview row is
+/// already deep, and the real-iPhone stack guard punishes depth.
+private struct OpeningStockMatchedBadge: View {
+    let number: String
+    let lang: String
+
+    var body: some View {
+        Text(t("Already in stock", lang: lang))
+            .font(.system(size: 9, weight: .bold))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.orange.opacity(0.15)))
+            .foregroundColor(.orange)
+            .help("\(t("Already on the shelf as", lang: lang)) \(number)")
+    }
+}
+
+/// The duplicate-policy choice, shown only when the preview matched existing
+/// stock. Skip is the default: the only answer that cannot damage anything.
+/// Its own struct per the sheet rule — every new form section stays shallow.
+private struct OpeningStockDuplicateSection: View {
+    let duplicates: Int
+    @Binding var policy: String
+    let lang: String
+
+    private var explanation: String {
+        switch policy {
+        case "update":
+            return "The sheet becomes the truth about what each item is; its number, status and reservations stay untouched."
+        case "create":
+            return "Every row becomes a new item, even the matched ones."
+        default:
+            return "Matched rows are left out; only new stock is created."
+        }
+    }
+
+    var body: some View {
+        Section {
+            Text(t("Matched by SKU or serial number. Choose what the import should do with them.", lang: lang))
+                .font(.system(size: 11)).foregroundColor(.secondary)
+            Picker("", selection: $policy) {
+                Text(t("Skip them", lang: lang)).tag("skip")
+                Text(t("Update existing", lang: lang)).tag("update")
+                Text(t("Create anyway", lang: lang)).tag("create")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text(t(explanation, lang: lang))
+                .font(.system(size: 11)).foregroundColor(.secondary)
+        } header: {
+            Text("\(duplicates) \(t("rows match stock you already have", lang: lang))")
         }
     }
 }

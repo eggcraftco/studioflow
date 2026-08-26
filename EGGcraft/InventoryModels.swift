@@ -550,6 +550,12 @@ struct OpeningStockRow: Identifiable {
     let purchasePrice: Double
     let location: String
     let lineValue: Double
+    /// Set when the server pre-scanned the shelf and found this row already
+    /// there — matched by serial number first, then SKU. The badge and the
+    /// duplicate-policy picker both key off this.
+    let existingItemId: String
+    let existingNumber: String
+    let matchedBy: String
     /// The raw dictionary the server returned; passed straight to the import.
     let payload: [String: Any]
 
@@ -564,8 +570,13 @@ struct OpeningStockRow: Identifiable {
         purchasePrice = (raw["purchasePrice"] as? NSNumber)?.doubleValue ?? 0
         location = raw["location"] as? String ?? ""
         lineValue = (raw["lineValue"] as? NSNumber)?.doubleValue ?? 0
+        existingItemId = raw["existingItemId"] as? String ?? ""
+        existingNumber = raw["existingNumber"] as? String ?? ""
+        matchedBy = raw["matchedBy"] as? String ?? ""
         payload = raw
     }
+
+    var matchesExistingStock: Bool { !existingItemId.isEmpty }
 }
 
 /// A row that cannot become an item, and the reason as a code — the words
@@ -754,6 +765,21 @@ struct InventoryError: LocalizedError {
     var errorDescription: String? { message }
 }
 
+/// Where the last page of the item list ended. Handed back to the server
+/// verbatim; the pair is the server's sort key (updatedAt desc, then id), so
+/// the client never invents its own idea of "next".
+struct InventoryListCursor: Equatable {
+    let updatedAtMs: Double
+    let id: String
+}
+
+/// One page of the item list. `cursor` is nil when the shelf has been read to
+/// the end — its presence IS the "there is more" signal.
+struct InventoryListPage {
+    let items: [InventoryItem]
+    let cursor: InventoryListCursor?
+}
+
 extension FirebaseManager {
 
     /// Every inventory callable is workspace-scoped and role-checked server-side,
@@ -772,8 +798,27 @@ extension FirebaseManager {
     }
 
     func loadInventoryItems() async throws -> [InventoryItem] {
-        let raw = try await inventoryCall("listInventoryItems", ["limit": 500])
-        return (raw["items"] as? [[String: Any]] ?? []).compactMap(InventoryItem.init)
+        try await loadInventoryItemsPage().items
+    }
+
+    /// One page of the item list — 500 rows, then a cursor. A workshop past
+    /// 500 items used to fall silently off the end of the list; the server now
+    /// hands back a cursor and the screen fetches the next page on request.
+    func loadInventoryItemsPage(cursor: InventoryListCursor? = nil) async throws -> InventoryListPage {
+        var payload: [String: Any] = ["limit": 500]
+        if let cursor {
+            payload["cursor"] = ["updatedAtMs": cursor.updatedAtMs, "id": cursor.id]
+        }
+        let raw = try await inventoryCall("listInventoryItems", payload)
+        let items = (raw["items"] as? [[String: Any]] ?? []).compactMap(InventoryItem.init)
+        var next: InventoryListCursor?
+        if raw["hasMore"] as? Bool == true,
+           let tail = raw["cursor"] as? [String: Any],
+           let id = tail["id"] as? String, !id.isEmpty {
+            next = InventoryListCursor(
+                updatedAtMs: (tail["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0, id: id)
+        }
+        return InventoryListPage(items: items, cursor: next)
     }
 
     func loadInventorySummary() async throws -> InventorySummary {
@@ -928,11 +973,19 @@ extension FirebaseManager {
         return read
     }
 
+    /// Writes the previewed rows. `duplicatePolicy` travels only when the
+    /// preview matched existing stock — "skip", "update" or "create"; the
+    /// server owns what each means. The done-count is created + updated, same
+    /// as the web: both are rows the sheet genuinely landed.
     @discardableResult
-    func importOpeningStock(items: [[String: Any]], openingDate: String) async throws -> Int {
-        let raw = try await inventoryCall(
-            "importOpeningStock", ["items": items, "openingDate": openingDate])
-        return (raw["imported"] as? NSNumber)?.intValue ?? 0
+    func importOpeningStock(
+        items: [[String: Any]], openingDate: String, duplicatePolicy: String? = nil
+    ) async throws -> Int {
+        var payload: [String: Any] = ["items": items, "openingDate": openingDate]
+        if let duplicatePolicy { payload["duplicatePolicy"] = duplicatePolicy }
+        let raw = try await inventoryCall("importOpeningStock", payload)
+        return ((raw["imported"] as? NSNumber)?.intValue ?? 0)
+            + ((raw["updated"] as? NSNumber)?.intValue ?? 0)
     }
 
     // MARK: Item photos
