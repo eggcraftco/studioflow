@@ -386,26 +386,26 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
     val normalizedRole = role.lowercase().replace("_", "").replace("-", "").replace(" ", "")
     val isWorkflowOnly = normalizedRole == "workflow" || normalizedRole == "workflowonly"
     listOf(
-        // Account — personal settings that follow the signed-in user.
-        SettingsSection("profileSecurity", "Profile & Security", "Your name, photo, sign-in email and password.", Icons.Filled.AccountCircle, "Account"),
-        SettingsSection("preferences", "Preferences", "Your personal theme and language.", Icons.Filled.Tune, "Account"),
-        SettingsSection("about", "About", "App version and product information.", Icons.Filled.Info, "Account"),
-        // Workspace — settings shared by every member of the workspace.
-        SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace"),
-        SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workspace"),
-        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace"),
-        SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workspace"),
-        SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat, "Workspace"),
-        SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent, "Workspace"),
-        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Workspace"),
-        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Workspace"),
-        SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email, "Workspace"),
-        SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard, "Workspace"),
-        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People, "Workspace"),
-        SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel, "Workspace"),
+        // Ten narrow groups, matching web and Mac: the menu sorted by what a
+        // mistake there would cost. Section keys are untouched.
+        SettingsSection("profileSecurity", "Profile & Security", "Your name, photo, sign-in email and password.", Icons.Filled.AccountCircle, "Personal"),
+        SettingsSection("preferences", "Preferences", "Your personal theme and language.", Icons.Filled.Tune, "Personal"),
+        SettingsSection("about", "About", "App version and product information.", Icons.Filled.Info, "Personal"),
+        SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace Design"),
+        SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace Design"),
+        SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workflow"),
+        SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workflow"),
+        SettingsSection("financial", "Financial Settings", "Fees, tax and calculations.", Icons.Filled.Percent, "Finance & Tax"),
+        SettingsSection("team", "Team Access", "Members, roles and join requests.", Icons.Filled.People, "Team & Permissions"),
+        SettingsSection("messages", "Message Settings", "Direct messages, group conversations and attachments.", Icons.AutoMirrored.Filled.Chat, "Team & Permissions"),
+        SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Files & Security"),
+        SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Data & Backups"),
+        SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard, "Billing"),
         SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart, "Integrations"),
         SettingsSection("shopify", "Shopify Integration", "Live Shopify orders and webhook setup.", Icons.Filled.ShoppingBag, "Integrations"),
-        SettingsSection("inbound", "Other Platforms", "Connect any store via Zapier, Make or a custom webhook.", Icons.Filled.Link, "Integrations")
+        SettingsSection("inbound", "Other Platforms", "Connect any store via Zapier, Make or a custom webhook.", Icons.Filled.Link, "Integrations"),
+        SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email, "Support"),
+        SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel, "Support")
     ).filter { section ->
         if (isWorkflowOnly) {
             when (section.key) {

@@ -476,6 +476,43 @@ function createInventoryFunctions({
       }
     });
 
+    // Monthly change, from the ledger: the net value that moved in the last 30
+    // days against the value that was there before it. Honest by construction:
+    // suppressed (changeAvailable=false) when the ledger is younger than the
+    // window or the read hit its cap — "we were not watching yet" must never
+    // print as "+0.0%". Pure revaluations never enter the ledger, so a
+    // price-only edit does not move this number.
+    const windowMs = 30 * 24 * 60 * 60 * 1000;
+    const fromMs = Date.now() - windowMs;
+    try {
+      const [windowSnap, earliestSnap] = await Promise.all([
+        movementsRef(companyId).where("at", ">=", fromMs).limit(3000).get(),
+        movementsRef(companyId).orderBy("at", "asc").limit(1).get()
+      ]);
+      const ledgerStartsMs = earliestSnap.empty
+        ? 0
+        : Number((earliestSnap.docs[0].data() || {}).at) || 0;
+      let netValue30d = 0;
+      windowSnap.docs.forEach((doc) => {
+        netValue30d += Number((doc.data() || {}).valueDelta) || 0;
+      });
+      netValue30d = roundMoney(netValue30d);
+      const baseline = roundMoney(summary.totalValue - netValue30d);
+      const changeAvailable = ledgerStartsMs > 0
+        && ledgerStartsMs <= fromMs
+        && windowSnap.size < 3000
+        && baseline > 0;
+      summary.monthlyChange = {
+        available: changeAvailable,
+        netValue30d,
+        pct: changeAvailable ? Math.round((netValue30d / baseline) * 1000) / 10 : 0,
+        ledgerStartsMs
+      };
+    } catch (error) {
+      console.warn("inventory monthly change failed:", error && error.message ? error.message : error);
+      summary.monthlyChange = { available: false, netValue30d: 0, pct: 0, ledgerStartsMs: 0 };
+    }
+
     return { ok: true, summary };
   });
 

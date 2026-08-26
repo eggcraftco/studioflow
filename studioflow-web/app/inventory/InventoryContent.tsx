@@ -6,6 +6,7 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_STATUSES,
   getInventorySummary,
+  inventoryItemToInput,
   inventoryLineValue,
   inventoryOnHand,
   isInventoryLowStock,
@@ -22,6 +23,7 @@ import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { ItemDetailPanel } from "./ItemDetailPanel";
 import { ItemLabelModal } from "./ItemLabelModal";
 import { ItemPhotosModal } from "./ItemPhotosModal";
 import { OpeningStockModal } from "./OpeningStockModal";
@@ -48,6 +50,20 @@ function money(symbol: string, value: number) {
     maximumFractionDigits: 2
   })}`;
 }
+
+// Small glyphs so a long list scans by shape, not by reading every word.
+const CATEGORY_ICON: Record<string, string> = {
+  "Watches": "\u231A",
+  "Dials": "\u25CE",
+  "Movements": "\u2699",
+  "Parts": "\u2692",
+  "Consumables": "\u2697",
+  "Straps & Bracelets": "\u27B0",
+  "Packaging": "\u25A7",
+  "Tools": "\u2704",
+  "Stones & Gems": "\u25C7",
+  "Other": "\u25AA"
+};
 
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   available: "Available",
@@ -106,6 +122,8 @@ export function InventoryContent({
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [selectedId, setSelectedId] = useState("");
   const [openingOpen, setOpeningOpen] = useState(false);
   const [photosFor, setPhotosFor] = useState<InventoryItem | null>(null);
   const [labelFor, setLabelFor] = useState<InventoryItem | null>(null);
@@ -161,6 +179,11 @@ export function InventoryContent({
     });
   }, [items, search, categoryFilter, typeFilter, statusFilter]);
 
+  const selectedItem = useMemo(
+    () => items.find(entry => entry.id === selectedId) ?? null,
+    [items, selectedId]
+  );
+
   async function changeStatus(item: InventoryItem, status: InventoryStatus) {
     try {
       await setInventoryItemStatus(workspace, item.id, status);
@@ -172,7 +195,14 @@ export function InventoryContent({
 
   const cards: { label: string; value: string; sub?: string; tone?: string }[] = summary
     ? [
-        { label: t("Total Inventory Value"), value: money(currencySymbol, summary.totalValue), tone: "accent" },
+        {
+          label: t("Total Inventory Value"),
+          value: money(currencySymbol, summary.totalValue),
+          tone: "accent",
+          sub: summary.monthlyChange?.available
+            ? `${summary.monthlyChange.pct > 0 ? "+" : ""}${summary.monthlyChange.pct}% ${t("this month")}`
+            : undefined
+        },
         { label: t("Unique Items"), value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue) },
         { label: t("Quantity Items"), value: String(summary.quantityCount), sub: money(currencySymbol, summary.quantityValue) },
         { label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items` },
@@ -281,20 +311,21 @@ export function InventoryContent({
 
       {notice ? <p className="inventory-notice">{notice}</p> : null}
 
+      <div className={selectedItem ? "inventory-body has-panel" : "inventory-body"}>
       <div className="inventory-table-wrap">
         <table className="inventory-table">
           <thead>
             <tr>
               <th>{t("Item")}</th><th>{t("Type")}</th><th>{t("Category")}</th><th>{t("Status")}</th>
-              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th /><th />
+              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th>{t("Updated")}</th><th /><th />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="inventory-empty">{t("Loading…")}</td></tr>
+              <tr><td colSpan={10} className="inventory-empty">{t("Loading…")}</td></tr>
             ) : visible.length === 0 ? (
               <tr>
-                <td colSpan={9} className="inventory-empty">
+                <td colSpan={10} className="inventory-empty">
                   {items.length === 0 ? (
                     <>
                       {t("Nothing in inventory yet.")}{" "}
@@ -308,7 +339,11 @@ export function InventoryContent({
                 </td>
               </tr>
             ) : visible.map(item => (
-              <tr key={item.id}>
+              <tr
+                key={item.id}
+                className={selectedId === item.id ? "is-selected" : undefined}
+                onClick={() => setSelectedId(current => current === item.id ? "" : item.id)}
+              >
                 <td>
                   <strong>{item.name}</strong>
                   <span className="inventory-sub">
@@ -317,7 +352,11 @@ export function InventoryContent({
                   </span>
                 </td>
                 <td><span className="inventory-chip">{item.trackingType === "unique" ? t("Unique") : t("Quantity")}</span></td>
-                <td>{t(item.category)}</td>
+                <td>
+                  <span className="inventory-category">
+                    <span aria-hidden="true">{CATEGORY_ICON[item.category] ?? CATEGORY_ICON.Other}</span> {t(item.category)}
+                  </span>
+                </td>
                 <td>
                   <span className={`inventory-status is-${item.status}`}>
                     {isInventoryLowStock(item) && item.status === "available"
@@ -334,7 +373,10 @@ export function InventoryContent({
                     : money(currencySymbol, inventoryLineValue(item))}
                 </td>
                 <td>{item.location || "—"}</td>
-                <td className="r">
+                <td className="inventory-sub">
+                  {item.updatedAtMs ? new Date(item.updatedAtMs).toLocaleDateString() : "—"}
+                </td>
+                <td className="r" onClick={event => event.stopPropagation()}>
                   <button
                     type="button"
                     className="inventory-link"
@@ -353,7 +395,7 @@ export function InventoryContent({
                     🏷
                   </button>
                 </td>
-                <td className="r">
+                <td className="r" onClick={event => event.stopPropagation()}>
                   {canEdit ? (
                     <select
                       className="inventory-status-select"
@@ -361,7 +403,11 @@ export function InventoryContent({
                       onChange={e => { if (e.target.value) void changeStatus(item, e.target.value as InventoryStatus); }}
                     >
                       <option value="">{t("Move to…")}</option>
-                      {INVENTORY_STATUSES.filter(s => s !== item.status).map(s => (
+                      {/* "reserved" is deliberately not offered here: a bare
+                          status flip links no order and is invisible to
+                          getOrderInventory. Reserving goes through the panel's
+                          Reserve for Order, which writes the reservation. */}
+                      {INVENTORY_STATUSES.filter(s => s !== item.status && s !== "reserved").map(s => (
                         <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>
                       ))}
                     </select>
@@ -371,6 +417,21 @@ export function InventoryContent({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {selectedItem ? (
+        <ItemDetailPanel
+          workspace={workspace}
+          item={selectedItem}
+          currencySymbol={currencySymbol}
+          canEdit={canEdit}
+          onClose={() => setSelectedId("")}
+          onChanged={() => reload()}
+          onEdit={target => setEditing(target)}
+          onPrintLabel={target => setLabelFor(target)}
+          onManagePhotos={target => setPhotosFor(target)}
+        />
+      ) : null}
       </div>
 
         </>
@@ -415,6 +476,16 @@ export function InventoryContent({
           onSaved={async () => { setModalOpen(false); await reload(); }}
         />
       ) : null}
+
+      {editing ? (
+        <NewItemModal
+          workspace={workspace}
+          currencySymbol={currencySymbol}
+          initialItem={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => { setEditing(null); await reload(); }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -426,17 +497,22 @@ export function InventoryContent({
 function NewItemModal({
   workspace,
   currencySymbol,
+  initialItem,
   onClose,
   onSaved
 }: {
   workspace: WorkspaceContext;
   currencySymbol: string;
+  /** When set, the form edits this item (or, with a blank id, creates a copy). */
+  initialItem?: InventoryItem | null;
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
-  const [draft, setDraft] = useState<InventoryItemInput>(() => emptyDraft("unique"));
+  const editingId = initialItem?.id || "";
+  const [draft, setDraft] = useState<InventoryItemInput>(() =>
+    initialItem ? inventoryItemToInput(initialItem) : emptyDraft("unique"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -470,7 +546,7 @@ function NewItemModal({
     setBusy(true);
     setError("");
     try {
-      await saveInventoryItem(workspace, draft);
+      await saveInventoryItem(workspace, draft, editingId || undefined);
       await onSaved();
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : "The item could not be saved.");
@@ -483,7 +559,7 @@ function NewItemModal({
     <div className="modal-backdrop" role="presentation">
       <div className="modal inventory-modal" role="dialog" aria-modal="true" aria-label="Add inventory item">
         <div className="inventory-modal-head">
-          <h2>{t("Add Inventory Item")}</h2>
+          <h2>{editingId ? t("Edit Item") : t("Add Inventory Item")}</h2>
           <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
 
@@ -627,7 +703,7 @@ function NewItemModal({
         <div className="inventory-modal-actions">
           <button type="button" onClick={onClose}>{t("Cancel")}</button>
           <button type="button" className="inventory-primary" disabled={busy} onClick={() => void submit()}>
-            {busy ? t("Saving…") : t("Add Item")}
+            {busy ? t("Saving…") : editingId ? t("Save") : t("Add Item")}
           </button>
         </div>
       </div>

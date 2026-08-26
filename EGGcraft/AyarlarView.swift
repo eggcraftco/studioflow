@@ -405,27 +405,27 @@ struct AyarlarView: View {
     }
 
     private var settingsSections: [(key: String, title: String, icon: String, group: String)] {
+        // Ten narrow groups, matching the web: the menu sorted by what a
+        // mistake there would cost. Section keys are untouched.
         let allSections: [(key: String, title: String, icon: String, group: String)] = [
-            // Account — personal settings that follow the signed-in user.
-            ("Profile & Security", t("Profile & Security", lang: seciliDil), "person.crop.circle", "Account"),
-            ("Preferences", t("Preferences", lang: seciliDil), "slider.horizontal.3", "Account"),
-            ("About", t("About", lang: seciliDil), "info.circle.fill", "Account"),
-            // Workspace — settings shared by every member of the workspace.
-            ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace"),
-            ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workspace"),
-            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace"),
-            ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workspace"),
-            ("Financial", t("Financial Settings", lang: seciliDil), "percent", "Workspace"),
-            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Workspace"),
-            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Workspace"),
-            ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill", "Workspace"),
-            ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill", "Workspace"),
-            ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill", "Workspace"),
-            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill", "Workspace"),
-            ("Legal", t("Legal", lang: seciliDil), "doc.text.fill", "Workspace"),
+            ("Profile & Security", t("Profile & Security", lang: seciliDil), "person.crop.circle", "Personal"),
+            ("Preferences", t("Preferences", lang: seciliDil), "slider.horizontal.3", "Personal"),
+            ("About", t("About", lang: seciliDil), "info.circle.fill", "Personal"),
+            ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace Design"),
+            ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace Design"),
+            ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workflow"),
+            ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workflow"),
+            ("Financial", t("Financial Settings", lang: seciliDil), "percent", "Finance & Tax"),
+            ("Team Access", t("Team Access", lang: seciliDil), "person.2.fill", "Team & Permissions"),
+            ("Message Settings", t("Message Settings", lang: seciliDil), "bubble.left.and.bubble.right.fill", "Team & Permissions"),
+            ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Files & Security"),
+            ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Data & Backups"),
+            ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill", "Billing"),
             ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus", "Integrations"),
             ("Shopify", t("Shopify Integration", lang: seciliDil), "bag.fill", "Integrations"),
-            ("Inbound", t("Other Platforms", lang: seciliDil), "link", "Integrations")
+            ("Inbound", t("Other Platforms", lang: seciliDil), "link", "Integrations"),
+            ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill", "Support"),
+            ("Legal", t("Legal", lang: seciliDil), "doc.text.fill", "Support")
         ]
 
         return allSections.filter { canShowSettingsSection($0.key) }

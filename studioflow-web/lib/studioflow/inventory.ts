@@ -51,6 +51,12 @@ export type InventoryItem = {
   currentValueEst: number;
   lowStockAt: number;
   reservedForOrderId: string;
+  /** Order reservations — the server writes these; every reserved unit names its order. */
+  reservations?: Array<{ orderId: string; quantity: number; createdAtMs: number }>;
+  reservedOrderIds?: string[];
+  /** Set when the item was created by a purchase. */
+  purchaseId?: string;
+  purchaseNumber?: string;
   source: string;
   updatedAtMs: number;
 };
@@ -67,6 +73,8 @@ export type InventorySummary = {
   incomingValue: number;
   lowStockCount: number;
   customerOwnedCount: number;
+  /** Ledger-derived 30-day change; available=false means "not watching long enough", never fake 0%. */
+  monthlyChange?: { available: boolean; netValue30d: number; pct: number; ledgerStartsMs: number };
 };
 
 // What the New Item form collects. Deliberately flat: the branching between a
@@ -130,6 +138,38 @@ export async function getInventorySummary(workspace: WorkspaceContext) {
     { companyId: workspace.id },
     "The inventory totals could not be loaded."
   );
+}
+
+// Maps a stored item back to the input the save callable expects. The server
+// rebuilds the whole document from the input (reservations and status are
+// carried over server-side), so any edit — even "just move it to Drawer 3" —
+// must send every field or the unsent ones are blanked.
+export function inventoryItemToInput(item: InventoryItem): InventoryItemInput {
+  return {
+    name: item.name,
+    category: item.category,
+    trackingType: item.trackingType,
+    ownership: item.ownership,
+    brand: item.brand,
+    model: item.model,
+    reference: item.reference,
+    serialNumber: item.serialNumber,
+    year: item.year,
+    condition: item.condition,
+    description: item.description,
+    sku: item.sku,
+    location: item.location,
+    supplierName: item.supplierName,
+    purchaseDate: item.purchaseDate,
+    notes: item.notes,
+    photos: item.photos,
+    onHand: item.trackingType === "quantity" ? Number(item.quantity?.onHand) || 0 : 1,
+    unit: item.quantity?.unit || "",
+    lowStockAt: item.lowStockAt,
+    purchasePrice: item.purchasePrice,
+    additionalCosts: item.additionalCosts,
+    currentValueEst: item.currentValueEst
+  };
 }
 
 export async function saveInventoryItem(
