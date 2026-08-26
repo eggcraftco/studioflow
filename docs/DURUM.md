@@ -407,3 +407,40 @@ e172d70 (BUILD SUCCESSFUL) — Recipes sekmesi + sipariş kartında "Use a
 recipe…" iki native'de.
 **FAZ 3 KOD İŞLERİ BİTTİ.** Kalan tek karar: Shopify/Woo stok senkronu
 (salt-okunur scope → yazma izni mağaza yeniden-onayı ister — kullanıcıda).
+
+---
+
+## SIRADA — Chatbot/Support yeniden kurgusu (27 Ağu, kullanıcı talimatıyla kaydedildi)
+Kaynak: repo kökünde `NivaDesk_chatbot 2.md` + kullanıcının vereceği "Ask
+NivaDesk" tasarım görseli (koyu yeşil başlık, premium sade; referans ekran
+görüldü). KULLANICI AYRI BİR GÖREVLE BAŞLATACAK — kendiliğinden başlama.
+
+**Akış (görselle birebir):**
+- Pencere açılınca form YOK; direkt sohbet: "Hi 👋 How can I help with
+  NivaDesk today?" + 4 öneri çipi: Plans & pricing · Features · Migrating
+  to NivaDesk · Talk to our team.
+- Başlık: "Ask NivaDesk" / "Get an instant answer, or talk to our team if
+  you need us." Alt bilgi: "Conversations are saved and secure · Privacy
+  policy". Kullanıcı balonunda saat + çift tik; AI balonlarında sparkle
+  avatar, insan cevabında FOTO + isim (örn. "Sarah · 10:47 AM") — AI mı
+  insan mı HER ZAMAN belli.
+- AI önce cevaplar (Knowledge Base arka planda; ayrıca "Search KB" düğmesi
+  YOK). Emin değilse UYDURMAZ: "I'm not fully sure about this one. I can
+  pass this conversation to the NivaDesk team." + [Send to team] [Keep
+  chatting]. Handoff'ta şerit: "Handed to NivaDesk team"; sonrasında AI
+  susar, ekip AYNI thread'e yazar. Küçük "Talk to a person" seçeneği her
+  an erişilebilir. Thread asla forma dönmez/ölmez.
+- Login'li NivaDesk kullanıcısından email/isim İSTENMEZ; destek tarafında
+  bağlam görünür: "Gunes · EGGcraft Ltd / Orders: 42 · Plan: Pro / Current
+  page: Banking → Transactions / Conversation: …".
+- E-posta politikası: TÜM konuşmalar Support inbox'a; email bildirimi
+  YALNIZ needs_human'da, kullanıcı "talk to team" dediğinde ve insan
+  cevabından sonra kullanıcı tekrar yazdığında. AI'nın çözdüğü sorular
+  için email yok; istenirse günlük özet ("Today: 23 AI conversations ·
+  19 resolved · 4 need review").
+- Mevcut "Leave your email and we'll come straight back to you" metni
+  kalkar. Stocksmith'in üç büyük kartı ALINMAZ; yeşil premium tasarım
+  korunur, gerçek chat arayüzüne dönüşür.
+Mevcut altyapı notu: postWebsiteChatMessage canlı (23 Ağu), app-support
+ticket→Hostinger SMTP maili var — bu kurgu o akışın üstünü yeniden yazar
+(email spam'ini needs_human'a indirger).
