@@ -121,6 +121,26 @@ data class BankOcrResult(
     val candidates: List<BankOcrCandidate>
 )
 
+/** One order-payment candidate from bankMatchIncomingToOrder (suggest / needsChoice). */
+data class BankPaymentCandidate(
+    val id: String,
+    val amount: Double,
+    val method: String,
+    val note: String,
+    val dateMs: Long
+)
+
+/** What bankMatchIncomingToOrder came back with — candidates to pick from, or what was done. */
+data class BankIncomingMatchResult(
+    val orderLabel: String = "",
+    val candidates: List<BankPaymentCandidate> = emptyList(),
+    val needsChoice: Boolean = false,
+    val linked: Boolean = false,
+    val created: Boolean = false,
+    val unlinked: Boolean = false,
+    val already: Boolean = false
+)
+
 class StudioFlowRepository(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -2871,6 +2891,57 @@ class StudioFlowRepository(
 
     suspend fun bankSetReceiptNotNeeded(workspaceId: String, transactionId: String, value: Boolean) {
         bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "receiptNotNeeded" to value))
+    }
+
+    /** Classifies an incoming payment ("order_payment", "transfer"…; "" clears). */
+    suspend fun bankSetIncomingKind(workspaceId: String, transactionId: String, kind: String) {
+        bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "incomingKind" to kind))
+    }
+
+    /** Splits one payment across categories/orders. The server requires 2–12
+     *  lines summing exactly (±0.005) to the amount; an empty list clears. */
+    suspend fun bankSetTransactionSplits(workspaceId: String, transactionId: String, splits: List<Map<String, Any?>>) {
+        bankCall("bankSetTransactionSplits", workspaceId, mapOf("transactionId" to transactionId, "splits" to splits))
+    }
+
+    /**
+     * Matches an incoming bank payment to an order payment. Modes: "suggest"
+     * (returns candidates), "link" (stamps one payment; needs paymentId unless
+     * exactly one candidate — may come back needsChoice), "create" (appends a
+     * NEW payment on the order, idempotent per bank tx) and "unlink".
+     */
+    suspend fun bankMatchIncomingToOrder(
+        workspaceId: String, transactionId: String, mode: String, orderId: String = "", paymentId: String = ""
+    ): BankIncomingMatchResult {
+        val payload = mutableMapOf<String, Any?>("transactionId" to transactionId, "mode" to mode)
+        if (mode != "unlink" && orderId.isNotBlank()) payload["orderId"] = orderId
+        if (paymentId.isNotBlank()) payload["paymentId"] = paymentId
+        val raw = bankCall("bankMatchIncomingToOrder", workspaceId, payload)
+        val candidates = (raw["candidates"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            BankPaymentCandidate(
+                id = (row["id"] as? String) ?: return@mapNotNull null,
+                amount = (row["amount"] as? Number)?.toDouble() ?: 0.0,
+                method = (row["method"] as? String) ?: "",
+                note = (row["note"] as? String) ?: "",
+                dateMs = (row["dateMs"] as? Number)?.toLong() ?: 0L
+            )
+        }
+        return BankIncomingMatchResult(
+            orderLabel = (raw["orderLabel"] as? String) ?: "",
+            candidates = candidates,
+            needsChoice = (raw["needsChoice"] as? Boolean) == true,
+            linked = (raw["linked"] as? Boolean) == true,
+            created = (raw["created"] as? Boolean) == true,
+            unlinked = (raw["unlinked"] as? Boolean) == true,
+            already = (raw["already"] as? Boolean) == true
+        )
+    }
+
+    /** Attaches a central Files-library record as the receipt — the file is
+     *  referenced, never copied or re-uploaded. */
+    suspend fun bankAttachReceiptFromLibrary(workspaceId: String, transactionId: String, fileRecordId: String) {
+        bankCall("bankSetTransactionReceipt", workspaceId, mapOf("transactionId" to transactionId, "fileRecordId" to fileRecordId))
     }
 
     suspend fun bankLinkOrder(workspaceId: String, transactionId: String, orderId: String) {

@@ -41,7 +41,16 @@ data class StudioBankTransaction(
     val vatCodeAuto: String = "",              // rule-applied VAT
     val pandleStatus: String = "",             // "confirmed" / "matched" / "error"
     val pandleBankTransactionId: String = "",
-    val pandleLastError: String = ""
+    val pandleLastError: String = "",
+    // ---- B2 slice: splits, incoming classification, Files-library receipt ----
+    /** One payment split into several categories/orders; empty = not split. */
+    val splits: List<StudioBankSplitLine> = emptyList(),
+    /** What an incoming payment actually is ("order_payment", "transfer"…; "" = unclassified). */
+    val incomingKind: String = "",
+    /** Set when this incoming payment is matched to one payment entry on the linked order. */
+    val linkedPaymentId: String = "",
+    /** Set when the receipt references a central Files-library record instead of an upload. */
+    val receiptFileRecordId: String = ""
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
@@ -54,6 +63,16 @@ data class StudioBankTransaction(
     val effectiveReviewStatus: String
         get() = reviewStatus.ifBlank { if (pandleStatus == "confirmed") "confirmed" else "unreviewed" }
 }
+
+/** One line of a split transaction — amounts sum exactly to the payment. */
+data class StudioBankSplitLine(
+    val amount: Double,
+    val category: String,
+    val vatCode: String = "",
+    val note: String = "",
+    val orderId: String = "",
+    val orderLabel: String = ""
+)
 
 /** Categorisation rule: "merchant contains keyword → category". */
 data class StudioBankRule(val id: String, val keyword: String, val category: String)
@@ -181,7 +200,21 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         vatCodeAuto = ((data["vatCodeAuto"] as? String) ?: "").uppercase(),
         pandleStatus = (pandle?.get("status") as? String) ?: "",
         pandleBankTransactionId = (pandle?.get("bankTransactionId") as? String) ?: "",
-        pandleLastError = (pandle?.get("lastError") as? String) ?: ""
+        pandleLastError = (pandle?.get("lastError") as? String) ?: "",
+        splits = (data["splits"] as? List<*>)?.mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            StudioBankSplitLine(
+                amount = (row["amount"] as? Number)?.toDouble() ?: 0.0,
+                category = (row["category"] as? String) ?: "",
+                vatCode = ((row["vatCode"] as? String) ?: "").uppercase(),
+                note = (row["note"] as? String) ?: "",
+                orderId = (row["orderId"] as? String) ?: "",
+                orderLabel = (row["orderLabel"] as? String) ?: ""
+            )
+        } ?: emptyList(),
+        incomingKind = (data["incomingKind"] as? String) ?: "",
+        linkedPaymentId = (data["linkedPaymentId"] as? String) ?: "",
+        receiptFileRecordId = (data["receiptFileRecordId"] as? String) ?: ""
     )
 }
 

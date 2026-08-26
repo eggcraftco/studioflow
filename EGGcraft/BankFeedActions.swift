@@ -37,6 +37,36 @@ struct BankReceiptMatchResult {
     let candidates: [BankReceiptCandidate]
 }
 
+/// One payment already recorded on an order, offered as a match for an
+/// incoming bank transaction (bankMatchIncomingToOrder mode "suggest").
+struct BankPaymentCandidate: Identifiable, Equatable {
+    let id: String
+    let amount: Double
+    let method: String
+    let note: String
+    let dateMs: Double
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String else { return nil }
+        self.id = id
+        amount = (raw["amount"] as? NSNumber)?.doubleValue ?? 0
+        method = (raw["method"] as? String) ?? ""
+        note = (raw["note"] as? String) ?? ""
+        dateMs = (raw["dateMs"] as? NSNumber)?.doubleValue ?? 0
+    }
+}
+
+/// What bankMatchIncomingToOrder answered — either a candidate list to choose
+/// from, or which terminal action actually happened.
+struct BankIncomingMatchResult {
+    let orderLabel: String
+    let candidates: [BankPaymentCandidate]
+    let needsChoice: Bool
+    let linked: Bool
+    let created: Bool
+    let unlinked: Bool
+}
+
 struct BankFeedError: LocalizedError {
     let message: String
     var errorDescription: String? { message }
@@ -101,6 +131,38 @@ extension FirebaseManager {
         try await bankCall("bankLinkTransactionToOrder", payload)
     }
 
+    /// Splits one spending payment into several category/order lines. The
+    /// server enforces 2–12 lines summing exactly to the amount; an empty
+    /// array clears the split (same contract as the web drawer).
+    func bankSetSplits(transactionId: String, splits: [[String: Any]]) async throws {
+        try await bankCall("bankSetTransactionSplits", ["transactionId": transactionId, "splits": splits])
+    }
+
+    /// Classifies an incoming payment ("" clears). transfer/owner_contribution/
+    /// loan drop out of the Incoming total — money in, but not revenue.
+    func bankSetIncomingKind(transactionId: String, kind: String) async throws {
+        try await bankCall("bankUpdateTransaction", ["transactionId": transactionId, "incomingKind": kind])
+    }
+
+    /// One call, four modes: "suggest" lists the order's same-amount payments
+    /// not yet bank-linked, "link" stamps one of them, "create" appends a NEW
+    /// payment (idempotent per bank transaction), "unlink" clears the link but
+    /// keeps the payment on the order.
+    func bankMatchIncoming(transactionId: String, mode: String, orderId: String, paymentId: String? = nil) async throws -> BankIncomingMatchResult {
+        var payload: [String: Any] = ["transactionId": transactionId, "mode": mode]
+        if mode != "unlink", !orderId.isEmpty { payload["orderId"] = orderId }
+        if let paymentId, !paymentId.isEmpty { payload["paymentId"] = paymentId }
+        let raw = try await bankCall("bankMatchIncomingToOrder", payload)
+        return BankIncomingMatchResult(
+            orderLabel: (raw["orderLabel"] as? String) ?? "",
+            candidates: (raw["candidates"] as? [[String: Any]] ?? []).compactMap(BankPaymentCandidate.init),
+            needsChoice: (raw["needsChoice"] as? Bool) ?? false,
+            linked: (raw["linked"] as? Bool) ?? false,
+            created: (raw["created"] as? Bool) ?? false,
+            unlinked: (raw["unlinked"] as? Bool) ?? false
+        )
+    }
+
     func bankSetCategoryBulk(transactionIds: [String], category: String) async throws {
         try await bankCall("bankSetTransactionCategoryBulk", ["transactionIds": transactionIds, "category": category])
     }
@@ -121,6 +183,12 @@ extension FirebaseManager {
         let path = "companies/\(currentCompanyId)/bank_receipts/\(transactionId)/\(Int(Date().timeIntervalSince1970 * 1000))_\(safe)"
         try await bankUpload(path: path, data: data, contentType: contentType)
         try await bankCall("bankSetTransactionReceipt", ["transactionId": transactionId, "storagePath": path, "fileName": fileName])
+    }
+
+    /// Attaches a central Files-library file as the receipt by REFERENCE —
+    /// no bytes are copied, the transaction just points at the fileRecord.
+    func bankAttachLibraryReceipt(transactionId: String, fileRecordId: String) async throws {
+        try await bankCall("bankSetTransactionReceipt", ["transactionId": transactionId, "fileRecordId": fileRecordId])
     }
 
     func bankRemoveReceipt(transactionId: String) async throws {

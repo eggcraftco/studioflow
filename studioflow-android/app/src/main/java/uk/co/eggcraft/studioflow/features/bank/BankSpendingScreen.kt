@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -87,6 +90,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -94,9 +98,12 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import uk.co.eggcraft.studioflow.data.firebase.BankIncomingMatchResult
 import uk.co.eggcraft.studioflow.data.firebase.BankOcrResult
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.BANK_CATEGORIES
+import uk.co.eggcraft.studioflow.data.model.BANK_INCOMING_KINDS
+import uk.co.eggcraft.studioflow.data.model.BANK_NON_REVENUE_INCOMING_KINDS
 import uk.co.eggcraft.studioflow.data.model.BANK_REVIEW_STATUSES
 import uk.co.eggcraft.studioflow.data.model.BANK_VAT_CODES
 import uk.co.eggcraft.studioflow.data.model.BankCadence
@@ -107,8 +114,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioBankConnection
 import uk.co.eggcraft.studioflow.data.model.StudioBankRule
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
 import uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt
+import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.bankDetectDuplicates
 import uk.co.eggcraft.studioflow.data.model.bankDetectRecurring
+import uk.co.eggcraft.studioflow.data.model.bankIncomingKindLabel
 import uk.co.eggcraft.studioflow.data.model.bankIsoDay
 import uk.co.eggcraft.studioflow.data.model.bankRankOrders
 import uk.co.eggcraft.studioflow.data.model.bankReceiptKind
@@ -254,6 +263,8 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     var error by remember { mutableStateOf<String?>(null) }
     var ocr by remember { mutableStateOf<BankOcrResult?>(null) }
     var pendingAttachTxId by remember { mutableStateOf<String?>(null) }
+    // Candidates returned by bankMatchIncomingToOrder("suggest") for the open sheet.
+    var incomingSuggest by remember { mutableStateOf<BankIncomingMatchResult?>(null) }
 
     val transactions = state.bankTransactions
     val connections = state.bankConnections
@@ -366,7 +377,9 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     val spending = visible.filter { it.isSpending }
     val spentTotal = spending.sumOf { abs(it.amount) }
     val previousSpent = transactions.filter { it.isSpending && inPrevious(it.bookingDate) }.sumOf { abs(it.amount) }
-    val incomingTotal = visible.filter { it.amount > 0 }.sumOf { it.amount }
+    // Transfers between the owner's own accounts, owner contributions and loans
+    // are money in, but not revenue — once marked, they leave this total.
+    val incomingTotal = visible.filter { it.amount > 0 && it.incomingKind !in BANK_NON_REVENUE_INCOMING_KINDS }.sumOf { it.amount }
     val incomingCount = visible.count { it.amount > 0 }
     val delta = if (previousSpent > 0) (spentTotal - previousSpent) / previousSpent * 100 else null
     val vendors = state.bankVendors
@@ -875,6 +888,9 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
         }
     }
 
+    // A fresh selection must never inherit the previous row's candidate list.
+    LaunchedEffect(selectedTxId) { incomingSuggest = null }
+
     if (selectedTx != null) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = { selectedTxId = null }, sheetState = sheetState) {
@@ -922,7 +938,37 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 onAttach = { pendingAttachTxId = selectedTx.id; pickFile.launch("*/*") },
                 onOpenReceipt = { scope.launch { runCatching { uriHandler.openUri(repository.bankReceiptUrl(selectedTx.receiptPath)) } } },
                 onRemoveReceipt = { run("receipt-${selectedTx.id}") { repository.bankRemoveReceipt(workspaceId, selectedTx.id); t("Invoice removed.") } },
-                onToggleNotNeeded = { run("receipt-${selectedTx.id}") { repository.bankSetReceiptNotNeeded(workspaceId, selectedTx.id, it); null } }
+                onToggleNotNeeded = { run("receipt-${selectedTx.id}") { repository.bankSetReceiptNotNeeded(workspaceId, selectedTx.id, it); null } },
+                onSaveSplits = { lines ->
+                    run("splits") {
+                        repository.bankSetTransactionSplits(workspaceId, selectedTx.id, lines)
+                        if (lines.isEmpty()) t("Split removed.") else t("Split saved.")
+                    }
+                },
+                loadLibraryFiles = { repository.libraryAllFiles(workspaceId).filter { it.trashedAtMs == 0L } },
+                onAttachLibraryFile = { fileId ->
+                    run("receipt-pick") {
+                        repository.bankAttachReceiptFromLibrary(workspaceId, selectedTx.id, fileId)
+                        t("Receipt attached from Files.")
+                    }
+                },
+                onIncomingKind = { kind ->
+                    run("incoming-kind") { repository.bankSetIncomingKind(workspaceId, selectedTx.id, kind); t("Transaction saved.") }
+                },
+                incomingSuggest = incomingSuggest,
+                onDismissSuggest = { incomingSuggest = null },
+                onIncomingAction = { mode, incomingOrderId, paymentId ->
+                    run("incoming") {
+                        val result = repository.bankMatchIncomingToOrder(workspaceId, selectedTx.id, mode, incomingOrderId, paymentId)
+                        when {
+                            mode == "suggest" || result.needsChoice -> { incomingSuggest = result; null }
+                            result.created -> { incomingSuggest = null; t("Payment recorded on the order.") }
+                            result.linked || result.already -> { incomingSuggest = null; t("Matched to the order's existing payment — nothing was recorded twice.") }
+                            result.unlinked -> { incomingSuggest = null; t("Match removed — the payment entry stays on the order.") }
+                            else -> null
+                        }
+                    }
+                }
             )
         }
     }
@@ -936,6 +982,20 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
 private fun cadenceLabel(cadence: BankCadence): String = when (cadence) {
     BankCadence.Weekly -> "Weekly"; BankCadence.Monthly -> "Monthly"; BankCadence.Yearly -> "Yearly"
 }
+
+/** One editable line of the split editor — amount kept as text while typing. */
+private data class BankSplitDraft(
+    val amount: String,
+    val category: String,
+    val vatCode: String,
+    val note: String,
+    val orderId: String
+)
+
+/** "Customer" or "Customer · Design" — the same label the order pickers use. */
+private fun orderOptionLabel(order: uk.co.eggcraft.studioflow.data.model.StudioOrder): String =
+    if (order.designName.isBlank() || order.designName == "Untitled design") order.customerName
+    else "${order.customerName} · ${order.designName}"
 
 // ---- Shared pieces ---------------------------------------------------------
 
@@ -1127,6 +1187,7 @@ private fun TransactionRow(
                 if (isRecurring) Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(tx.merchant.ifBlank { "—" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (isDuplicate) Chip(t("Duplicate?"), AMBER)
+                if (tx.isSpending && tx.splits.isNotEmpty()) Chip("⑃ ${t("Split")} (${tx.splits.size})", PURPLE)
                 if (tx.linkedOrderLabel.isNotBlank()) Icon(Icons.Filled.Link, contentDescription = null, modifier = Modifier.size(12.dp), tint = BLUE)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1378,7 +1439,18 @@ private fun TransactionDetailSheet(
     vendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor>, busy: String?,
     onMarkRecurring: (String, String) -> Unit, onUnmarkRecurring: (String) -> Unit,
     onSave: (String, String, String, String, String, Boolean, String) -> Unit,
-    onAttach: () -> Unit, onOpenReceipt: () -> Unit, onRemoveReceipt: () -> Unit, onToggleNotNeeded: (Boolean) -> Unit
+    onAttach: () -> Unit, onOpenReceipt: () -> Unit, onRemoveReceipt: () -> Unit, onToggleNotNeeded: (Boolean) -> Unit,
+    /** Sends the split lines to bankSetTransactionSplits — an empty list clears the split. */
+    onSaveSplits: (List<Map<String, Any?>>) -> Unit,
+    /** Lists the central Files library (already filtered of trashed records). */
+    loadLibraryFiles: suspend () -> List<StudioLibraryFile>,
+    onAttachLibraryFile: (String) -> Unit,
+    /** Classifies the incoming payment (bankUpdateTransaction incomingKind). */
+    onIncomingKind: (String) -> Unit,
+    incomingSuggest: BankIncomingMatchResult?,
+    onDismissSuggest: () -> Unit,
+    /** (mode, orderId, paymentId) → bankMatchIncomingToOrder. */
+    onIncomingAction: (String, String, String) -> Unit
 ) {
     var category by remember(tx.id) { mutableStateOf(tx.category.ifBlank { tx.categoryAuto }) }
     var vat by remember(tx.id) { mutableStateOf(tx.vatCode) }
@@ -1398,7 +1470,42 @@ private fun TransactionDetailSheet(
     val canSuggestRule = tx.isSpending && isOwner && category.isNotBlank() &&
         rules.none { "${tx.counterparty} ${tx.description}".lowercase().contains(it.keyword) }
 
-    Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // Split editor draft; null = not editing (the saved lines show read-only).
+    var splitRows by remember(tx.id) { mutableStateOf<List<BankSplitDraft>?>(null) }
+    // Files-library receipt picker.
+    val sheetScope = rememberCoroutineScope()
+    var filesPickerOpen by remember(tx.id) { mutableStateOf(false) }
+    var filesPickerLoading by remember { mutableStateOf(false) }
+    var filesPickerError by remember { mutableStateOf<String?>(null) }
+    var libraryFiles by remember { mutableStateOf<List<StudioLibraryFile>>(emptyList()) }
+    var fileSearch by remember { mutableStateOf("") }
+    // Incoming ↔ order payment flow.
+    var incomingOrderId by remember(tx.id) { mutableStateOf("") }
+    var confirmCreatePayment by remember(tx.id) { mutableStateOf(false) }
+
+    fun openFilesPicker() {
+        filesPickerOpen = true; filesPickerLoading = true; filesPickerError = null; fileSearch = ""
+        sheetScope.launch {
+            runCatching { loadLibraryFiles() }
+                .onSuccess { libraryFiles = it; filesPickerLoading = false }
+                .onFailure { filesPickerError = it.message ?: "The file library could not be loaded."; filesPickerLoading = false }
+        }
+    }
+
+    fun startSplitEditor() {
+        val required = abs(tx.amount)
+        splitRows = if (tx.splits.isNotEmpty()) {
+            tx.splits.map { BankSplitDraft(String.format(Locale.UK, "%.2f", it.amount), it.category, it.vatCode, it.note, it.orderId) }
+        } else listOf(
+            BankSplitDraft(String.format(Locale.UK, "%.2f", required), category, vat, "", ""),
+            BankSplitDraft("0.00", "", "", "", "")
+        )
+    }
+
+    Column(
+        Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Avatar(tx.merchant, 38)
             Column(Modifier.weight(1f)) {
@@ -1522,12 +1629,60 @@ private fun TransactionDetailSheet(
                         if (isOwner) IconButton(onClick = onRemoveReceipt) { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 } else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (tx.receiptNotNeeded) t("No receipt needed") else "! ${t("Missing receipt")}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                            color = if (tx.receiptNotNeeded) MaterialTheme.colorScheme.onSurfaceVariant else RED, modifier = Modifier.weight(1f))
-                        if (isOwner) AssistChip(onClick = onAttach, label = { Text(t("Attach"), fontSize = 12.sp) },
-                            leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                            colors = AssistChipDefaults.assistChipColors())
+                    Text(if (tx.receiptNotNeeded) t("No receipt needed") else "! ${t("Missing receipt")}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        color = if (tx.receiptNotNeeded) MaterialTheme.colorScheme.onSurfaceVariant else RED)
+                    if (isOwner) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(onClick = onAttach, label = { Text(t("Upload new"), fontSize = 12.sp) },
+                                leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                colors = AssistChipDefaults.assistChipColors())
+                            AssistChip(onClick = { openFilesPicker() }, enabled = !filesPickerLoading,
+                                label = { Text(if (filesPickerLoading) t("Loading…") else t("Choose from Files"), fontSize = 12.sp) },
+                                leadingIcon = { Icon(Icons.Filled.InsertDriveFile, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                colors = AssistChipDefaults.assistChipColors())
+                        }
+                    }
+                    if (filesPickerOpen) {
+                        Surface(shape = RoundedCornerShape(10.dp), color = BLUE.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(t("Choose from Files"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { filesPickerOpen = false }, modifier = Modifier.size(26.dp)) {
+                                        Icon(Icons.Filled.Close, contentDescription = t("Cancel"), modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = fileSearch, onValueChange = { fileSearch = it },
+                                    placeholder = { Text(t("Search files"), fontSize = 12.sp) },
+                                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                                )
+                                filesPickerError?.let { Text(it, fontSize = 11.sp, color = RED) }
+                                val needle = fileSearch.trim().lowercase()
+                                val shown = libraryFiles
+                                    .filter { needle.isBlank() || "${it.displayName} ${it.fileName}".lowercase().contains(needle) }
+                                    .take(40)
+                                Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
+                                    shown.forEach { file ->
+                                        Row(
+                                            Modifier.fillMaxWidth().clickable(enabled = busy != "receipt-pick") {
+                                                filesPickerOpen = false
+                                                onAttachLibraryFile(file.id)
+                                            }.padding(vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            FileBadge(file.fileName, 22)
+                                            Text(file.displayName.ifBlank { file.fileName }, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                    if (!filesPickerLoading && filesPickerError == null && shown.isEmpty()) {
+                                        Text(t("The library is empty."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Text(t("The file is referenced, not copied — an invoice already on a purchase is never uploaded twice."),
+                                    fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                     if (isOwner) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1536,6 +1691,241 @@ private fun TransactionDetailSheet(
                         }
                     }
                 }
+            }
+            // ---- Split transaction: one payment, several categories/orders ----
+            val editingRows = splitRows
+            if (editingRows != null) {
+                val required = abs(tx.amount)
+                val total = editingRows.sumOf { it.amount.replace(",", ".").toDoubleOrNull() ?: 0.0 }
+                val balanced = abs(total - required) <= 0.005
+                Surface(shape = RoundedCornerShape(10.dp), color = BLUE.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("⑃ ${t("Split transaction")}", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        editingRows.forEachIndexed { index, row ->
+                            Surface(shape = RoundedCornerShape(9.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedTextField(
+                                            value = row.amount,
+                                            onValueChange = { value -> splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(amount = value) else r } },
+                                            label = { Text(t("Amount"), fontSize = 11.sp) }, singleLine = true,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                            modifier = Modifier.width(110.dp)
+                                        )
+                                        Box(Modifier.weight(1f)) {
+                                            CategoryPicker(row.category, categoryOptions, t) { value ->
+                                                splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(category = value) else r }
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = { if (editingRows.size > 2) splitRows = editingRows.filterIndexed { i, _ -> i != index } },
+                                            enabled = editingRows.size > 2
+                                        ) { Icon(Icons.Filled.Delete, contentDescription = t("Remove"), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        var lineVatMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedButton(onClick = { lineVatMenu = true }) {
+                                                Text(if (row.vatCode.isBlank()) "${t("VAT")}…" else t(bankVatLabel(row.vatCode)), fontSize = 11.sp, maxLines = 1)
+                                            }
+                                            DropdownMenu(expanded = lineVatMenu, onDismissRequest = { lineVatMenu = false }) {
+                                                DropdownMenuItem(text = { Text("${t("VAT")}…") }, onClick = {
+                                                    splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(vatCode = "") else r }; lineVatMenu = false
+                                                })
+                                                BANK_VAT_CODES.forEach { (code, label) ->
+                                                    DropdownMenuItem(text = { Text(t(label)) }, onClick = {
+                                                        splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(vatCode = code) else r }; lineVatMenu = false
+                                                    })
+                                                }
+                                            }
+                                        }
+                                        var lineOrderMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedButton(onClick = { lineOrderMenu = true }) {
+                                                Text(
+                                                    rankedOrders.firstOrNull { it.id == row.orderId }?.let { orderOptionLabel(it) } ?: t("Not linked"),
+                                                    fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            DropdownMenu(expanded = lineOrderMenu, onDismissRequest = { lineOrderMenu = false }) {
+                                                DropdownMenuItem(text = { Text(t("Not linked")) }, onClick = {
+                                                    splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(orderId = "") else r }; lineOrderMenu = false
+                                                })
+                                                rankedOrders.forEach { order ->
+                                                    DropdownMenuItem(text = { Text(orderOptionLabel(order)) }, onClick = {
+                                                        splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(orderId = order.id) else r }; lineOrderMenu = false
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+                                    OutlinedTextField(
+                                        value = row.note,
+                                        onValueChange = { value -> splitRows = editingRows.mapIndexed { i, r -> if (i == index) r.copy(note = value) else r } },
+                                        label = { Text(t("Note"), fontSize = 11.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { splitRows = editingRows + BankSplitDraft("0.00", "", "", "", "") }, contentPadding = PaddingValues(0.dp)) {
+                                Text("＋ ${t("Add line")}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Text("${fmt(total, tx.currency)} / ${fmt(required, tx.currency)}",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (balanced) GREEN else RED)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { splitRows = null }) { Text(t("Cancel"), fontSize = 12.sp) }
+                            Button(onClick = {
+                                val lines = editingRows
+                                    .filter { (it.amount.replace(",", ".").toDoubleOrNull() ?: 0.0) > 0 || it.category.isNotBlank() }
+                                    .map { row ->
+                                        mapOf<String, Any?>(
+                                            "amount" to (row.amount.replace(",", ".").toDoubleOrNull() ?: 0.0),
+                                            "category" to row.category,
+                                            "vatCode" to row.vatCode,
+                                            "note" to row.note,
+                                            "orderId" to row.orderId
+                                        )
+                                    }
+                                splitRows = null
+                                onSaveSplits(lines)
+                            }, enabled = balanced && busy != "splits") {
+                                Text(if (busy == "splits") t("Saving…") else t("Save split"), fontSize = 12.sp)
+                            }
+                        }
+                        if (!balanced) Text(t("Split lines must add up to the exact transaction amount."), fontSize = 10.sp, color = RED)
+                    }
+                }
+            } else if (tx.splits.isNotEmpty()) {
+                Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("⑃ ${t("Split transaction")} (${tx.splits.size})", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+                            if (isOwner) {
+                                TextButton(onClick = { startSplitEditor() }, contentPadding = PaddingValues(0.dp)) { Text(t("Edit"), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                TextButton(onClick = { onSaveSplits(emptyList()) }, enabled = busy != "splits", contentPadding = PaddingValues(0.dp)) {
+                                    Text(t("Remove"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = RED)
+                                }
+                            }
+                        }
+                        tx.splits.forEach { line ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(fmt(line.amount, tx.currency), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 68.dp))
+                                if (line.category.isNotBlank()) Chip(t(line.category), categoryColor(line.category))
+                                if (line.vatCode.isNotBlank()) Text(t(bankVatLabel(line.vatCode)), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (line.orderLabel.isNotBlank()) Text("⛓ ${line.orderLabel}", fontSize = 10.sp, color = BLUE, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                if (line.note.isNotBlank()) Text(line.note, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            }
+                        }
+                    }
+                }
+            } else if (isOwner) {
+                TextButton(onClick = { startSplitEditor() }, contentPadding = PaddingValues(0.dp)) {
+                    Text("⑃ ${t("Split this transaction into several categories or orders")}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        if (tx.amount > 0) {
+            // ---- Incoming ↔ order payment: what this money actually is ----
+            Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("⇥ ${t("Match to")}", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        var kindMenu by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(onClick = { kindMenu = true }, enabled = isOwner && busy != "incoming-kind") {
+                                Text(t(bankIncomingKindLabel(tx.incomingKind)), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            DropdownMenu(expanded = kindMenu, onDismissRequest = { kindMenu = false }) {
+                                BANK_INCOMING_KINDS.forEach { (code, label) ->
+                                    DropdownMenuItem(text = { Text(t(label)) }, onClick = {
+                                        kindMenu = false
+                                        // "Order payment" is chosen through the order flow below.
+                                        if (code != "order_payment") onIncomingKind(code)
+                                    })
+                                }
+                            }
+                        }
+                        if (tx.incomingKind in BANK_NON_REVENUE_INCOMING_KINDS) {
+                            Text(t("Not counted as revenue."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (tx.incomingKind == "order_payment" && tx.linkedPaymentId.isNotBlank()) {
+                        Text("✓ ${t("Matched to the order's existing payment — nothing was recorded twice.")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (tx.linkedOrderLabel.isNotBlank()) Text("⛓ ${tx.linkedOrderLabel}", fontSize = 11.sp, color = BLUE, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            if (isOwner) {
+                                TextButton(onClick = { onIncomingAction("unlink", "", "") }, enabled = busy != "incoming", contentPadding = PaddingValues(0.dp)) {
+                                    Text(t("Unlink"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    } else if (isOwner) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            var incomingOrderMenu by remember { mutableStateOf(false) }
+                            Box(Modifier.weight(1f)) {
+                                OutlinedButton(onClick = { incomingOrderMenu = true }) {
+                                    Text(
+                                        rankedOrders.firstOrNull { it.id == incomingOrderId }?.let { orderOptionLabel(it) } ?: "${t("Order")}…",
+                                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                DropdownMenu(expanded = incomingOrderMenu, onDismissRequest = { incomingOrderMenu = false }) {
+                                    rankedOrders.forEach { order ->
+                                        DropdownMenuItem(text = { Text(orderOptionLabel(order)) }, onClick = {
+                                            incomingOrderId = order.id; incomingOrderMenu = false; onDismissSuggest()
+                                        })
+                                    }
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { onIncomingAction("suggest", incomingOrderId, "") },
+                                enabled = incomingOrderId.isNotBlank() && busy != "incoming"
+                            ) { Text(if (busy == "incoming") t("Loading…") else t("Find matching payment"), fontSize = 12.sp) }
+                        }
+                        if (incomingSuggest != null) {
+                            incomingSuggest.candidates.forEach { candidate ->
+                                Surface(shape = RoundedCornerShape(9.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                                    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(fmt(candidate.amount, tx.currency), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                listOfNotNull(
+                                                    candidate.method.ifBlank { null },
+                                                    candidate.dateMs.takeIf { it > 0 }?.let { SimpleDateFormat("d MMM yyyy", locale).format(Date(it)) }
+                                                ).joinToString(" · "),
+                                                fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        TextButton(onClick = { onIncomingAction("link", incomingOrderId, candidate.id) }, enabled = busy != "incoming") {
+                                            Text("✓ ${t("Match this payment")}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GREEN)
+                                        }
+                                    }
+                                }
+                            }
+                            if (incomingSuggest.candidates.isEmpty()) {
+                                Text(t("No unmatched payment with this amount on the order."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            TextButton(onClick = { confirmCreatePayment = true }, enabled = busy != "incoming", contentPadding = PaddingValues(0.dp)) {
+                                Text("＋ ${t("Record as a new payment on this order")}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+            if (confirmCreatePayment) {
+                AlertDialog(
+                    onDismissRequest = { confirmCreatePayment = false },
+                    text = { Text("${t("Record a NEW payment on this order?")} (${fmt(tx.amount, tx.currency)})", fontSize = 13.sp) },
+                    confirmButton = {
+                        TextButton(onClick = { confirmCreatePayment = false; onIncomingAction("create", incomingOrderId, "") }) {
+                            Text(t("Record as a new payment on this order"), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmCreatePayment = false }) { Text(t("Cancel")) } }
+                )
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

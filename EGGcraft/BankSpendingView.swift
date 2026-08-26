@@ -14,6 +14,26 @@ import UniformTypeIdentifiers
 
 // MARK: - Models
 
+/// One line of a split spending payment: the server guarantees the amounts
+/// sum exactly to the transaction and that every line has a category.
+struct StudioBankSplitLine: Equatable {
+    let amount: Double
+    let category: String
+    let vatCode: String
+    let note: String
+    let orderId: String
+    let orderLabel: String
+
+    init(_ raw: [String: Any]) {
+        amount = (raw["amount"] as? NSNumber)?.doubleValue ?? 0
+        category = (raw["category"] as? String) ?? ""
+        vatCode = ((raw["vatCode"] as? String) ?? "").uppercased()
+        note = (raw["note"] as? String) ?? ""
+        orderId = (raw["orderId"] as? String) ?? ""
+        orderLabel = (raw["orderLabel"] as? String) ?? ""
+    }
+}
+
 struct StudioBankTransaction: Identifiable, Equatable {
     let id: String
     let amount: Double
@@ -31,6 +51,15 @@ struct StudioBankTransaction: Identifiable, Equatable {
     let receiptNotNeeded: Bool
     let linkedOrderId: String
     let linkedOrderLabel: String
+    /// Incoming side of the ledger: what the money actually was, and — for
+    /// order payments — which existing payment entry it was matched to.
+    let incomingKind: String
+    let linkedPaymentId: String
+    /// Set when the receipt references a central Files-library record
+    /// instead of a copied upload.
+    let receiptFileRecordId: String
+    /// A spending payment divided into several category/order lines.
+    let splits: [StudioBankSplitLine]
     let vatCode: String
     let vatCodeAuto: String
     let note: String
@@ -67,6 +96,10 @@ struct StudioBankTransaction: Identifiable, Equatable {
         receiptNotNeeded = (data["receiptNotNeeded"] as? Bool) ?? false
         linkedOrderId = (data["linkedOrderId"] as? String) ?? ""
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?? ""
+        incomingKind = (data["incomingKind"] as? String) ?? ""
+        linkedPaymentId = (data["linkedPaymentId"] as? String) ?? ""
+        receiptFileRecordId = (data["receiptFileRecordId"] as? String) ?? ""
+        splits = (data["splits"] as? [[String: Any]] ?? []).map(StudioBankSplitLine.init)
         vatCode = ((data["vatCode"] as? String) ?? "").uppercased()
         vatCodeAuto = ((data["vatCodeAuto"] as? String) ?? "").uppercased()
         note = (data["note"] as? String) ?? ""
@@ -371,7 +404,10 @@ struct BankDerived {
         let visible = transactions.filter { inRange($0.bookingDate) }
         let previous = transactions.filter { inPrevious($0.bookingDate) && $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
         let spent = visible.filter(\.isSpending).reduce(0) { $0 + abs($1.amount) }
-        let incoming = visible.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount }
+        // Transfers between own accounts, owner contributions and loans are
+        // money in, but not revenue — once marked, they leave the Incoming
+        // total (the count keeps showing every credit, mirror of the web).
+        let incoming = visible.filter { $0.amount > 0 && !bankNonRevenueIncomingKinds.contains($0.incomingKind) }.reduce(0) { $0 + $1.amount }
         let recurring = bankDetectRecurring(transactions, vendors: vendors)
         let duplicates = bankDetectDuplicates(visible)
 
@@ -1182,7 +1218,13 @@ struct BankTransactionRow: View {
                     if tx.status == "pending" { Text("· \(fmt.t("pending"))").font(.system(size: 10.5)).foregroundColor(.secondary) }
                     if let meta { BankChip(text: meta.translate ? fmt.t(meta.label) : meta.label, color: meta.color) }
                     if tx.isSpending {
-                        BankChip(text: category.isEmpty ? fmt.t("Uncategorised") : fmt.t(category), color: category.isEmpty ? .gray : bankCategoryColor(category))
+                        // A split payment shows the split badge where the
+                        // category chip would sit — the lines carry the categories.
+                        if !tx.splits.isEmpty {
+                            BankChip(text: "⑃ \(fmt.t("Split")) (\(tx.splits.count))", color: .blue)
+                        } else {
+                            BankChip(text: category.isEmpty ? fmt.t("Uncategorised") : fmt.t(category), color: category.isEmpty ? .gray : bankCategoryColor(category))
+                        }
                     }
                     if !tx.linkedOrderLabel.isEmpty { Image(systemName: "link").font(.system(size: 9)).foregroundColor(.accentColor) }
                 }
@@ -1350,6 +1392,7 @@ struct BankTransactionDetail: View {
     @State private var note = ""
     @State private var ruleKeyword = ""
     @State private var showBankData = false
+    @State private var showLibraryPicker = false
     @Environment(\.openURL) private var openURL
 
     private var pickableCategories: [String] {
@@ -1395,6 +1438,11 @@ struct BankTransactionDetail: View {
                 } label: {
                     Text("\(fmt.t("Bank data")) · \(fmt.t("Read-only"))").font(.system(size: 11.5, weight: .bold)).foregroundColor(.secondary)
                 }
+            }
+            // Incoming money: classify it, and — for order payments — match it
+            // to the payment already recorded on the order (never twice).
+            if tx.amount > 0 {
+                BankIncomingMatchSection(tx: tx, model: model, fmt: fmt, isOwner: isOwner, orders: orders)
             }
             if tx.isSpending {
                 Section {
@@ -1449,6 +1497,14 @@ struct BankTransactionDetail: View {
                             if isOwner { attachMenu }
                         }
                         if isOwner {
+                            // An invoice already in the central Files library is
+                            // referenced, never re-uploaded.
+                            Button { showLibraryPicker.toggle() } label: {
+                                Label(fmt.t("Choose from Files"), systemImage: "folder").font(.system(size: 12, weight: .semibold))
+                            }
+                            if showLibraryPicker {
+                                BankLibraryPicker(tx: tx, model: model, fmt: fmt, onClose: { showLibraryPicker = false })
+                            }
                             Toggle(fmt.t("No receipt needed"), isOn: Binding(get: { tx.receiptNotNeeded }, set: { value in
                                 guard let manager = model.manager else { return }
                                 model.run("receipt-\(tx.id)") { try await manager.bankSetReceiptNotNeeded(transactionId: tx.id, value: value); return nil }
@@ -1456,6 +1512,9 @@ struct BankTransactionDetail: View {
                         }
                     }
                 } header: { Text(fmt.t("Receipt / attachment")) }
+
+                // One payment, several categories/orders — the split editor.
+                BankSplitSection(tx: tx, model: model, fmt: fmt, isOwner: isOwner, categoryOptions: pickableCategories, orders: rankedOrders)
             }
             Section {
                 Picker(fmt.t("Review status"), selection: $review) {
@@ -1589,7 +1648,7 @@ struct BankTransactionDetail: View {
             PhotosPicker(selection: $photoItem, matching: .images) { Label(fmt.t("Photo library"), systemImage: "photo") }
                 .simultaneousGesture(TapGesture().onEnded { model.pendingAttachTxId = tx.id })
             Button { model.pendingAttachTxId = tx.id; showFileImporter = true } label: { Label(fmt.t("Choose a file"), systemImage: "doc") }
-        } label: { Label(fmt.t("Attach"), systemImage: "paperclip").font(.system(size: 12, weight: .bold)) }
+        } label: { Label(fmt.t("Upload new"), systemImage: "paperclip").font(.system(size: 12, weight: .bold)) }
         .menuStyle(.borderlessButton).fixedSize()
     }
 
@@ -1600,6 +1659,7 @@ struct BankTransactionDetail: View {
         orderId = tx.linkedOrderId
         note = tx.note
         ruleKeyword = bankSuggestRuleKeyword(tx)
+        showLibraryPicker = false
     }
 
     /// Resolves the account name from the connection's accounts when available.
@@ -1673,6 +1733,429 @@ struct BankTransactionDetail: View {
         guard let manager = model.manager else { return }
         let id = tx.id, fmt = self.fmt
         model.run("receipt-\(id)") { try await manager.bankRemoveReceipt(transactionId: id); return fmt.t("Invoice removed.") }
+    }
+}
+
+/// Picker title for an order — customer, plus the design when it says something.
+func bankOrderPickTitle(_ order: Siparis) -> String {
+    order.designName.isEmpty || order.designName == "Untitled design" ? order.customerName : "\(order.customerName) · \(order.designName)"
+}
+
+// MARK: - Split transaction (detail panel, spending)
+
+/// One editable row of the split editor. Amounts stay text until Save so the
+/// owner can type freely; the live total keeps the truth visible.
+private struct BankSplitDraftLine: Identifiable, Equatable {
+    let id = UUID()
+    var amount: String
+    var category: String
+    var vatCode: String
+    var note: String
+    var orderId: String
+}
+
+/// The "Split transaction" area of the detail panel. Separate struct on
+/// purpose — deeply nested SwiftUI bodies overflow the stack on real iPhones.
+struct BankSplitSection: View {
+    let tx: StudioBankTransaction
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let isOwner: Bool
+    let categoryOptions: [String]
+    let orders: [Siparis]
+
+    @State private var editing = false
+    @State private var drafts: [BankSplitDraftLine] = []
+
+    private var required: Double { abs(tx.amount) }
+    private var total: Double { drafts.reduce(0) { $0 + parsedAmount($1.amount) } }
+    /// Same tolerance as the server: the lines must sum EXACTLY (±0.005).
+    private var balanced: Bool { abs(total - required) <= 0.005 }
+    private var busy: Bool { model.busy == "splits" }
+
+    private func parsedAmount(_ text: String) -> Double {
+        Double(text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    var body: some View {
+        if isOwner || !tx.splits.isEmpty {
+            Section {
+                splitContent
+                    .onChange(of: tx.id) { _ in editing = false; drafts = [] }
+            } header: { Text("⑃ \(fmt.t("Split transaction"))") }
+        }
+    }
+
+    @ViewBuilder private var splitContent: some View {
+        if editing {
+            editor
+        } else if !tx.splits.isEmpty {
+            summary
+        } else {
+            Button { startEditor() } label: {
+                Label(fmt.t("Split this transaction into several categories or orders"), systemImage: "arrow.triangle.branch")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+        }
+    }
+
+    /// Saved lines: amount, category chip, VAT label, order label, note.
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Text("⑃ \(fmt.t("Split transaction")) (\(tx.splits.count))").font(.system(size: 12.5, weight: .bold))
+                Spacer()
+                if isOwner {
+                    Button(fmt.t("Edit")) { startEditor() }
+                        .buttonStyle(.plain).font(.system(size: 12, weight: .bold)).foregroundColor(.accentColor)
+                    Button(fmt.t("Remove")) { removeSplits() }
+                        .buttonStyle(.plain).font(.system(size: 12, weight: .bold)).foregroundColor(.red).disabled(busy)
+                }
+            }
+            ForEach(Array(tx.splits.enumerated()), id: \.offset) { _, row in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(fmt.money(row.amount, tx.currency)).font(.system(size: 12, weight: .bold)).monospacedDigit()
+                        BankChip(text: fmt.t(row.category), color: bankCategoryColor(row.category))
+                        if !row.vatCode.isEmpty {
+                            Text(fmt.t(bankVatLabel(row.vatCode))).font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
+                        }
+                    }
+                    if !row.orderLabel.isEmpty { Text("⛓ \(row.orderLabel)").font(.system(size: 10.5)).foregroundColor(.accentColor).lineLimit(1) }
+                    if !row.note.isEmpty { Text(row.note).font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1) }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach($drafts) { $row in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        TextField(fmt.t("Amount"), text: $row.amount)
+                            .textFieldStyle(.roundedBorder).font(.system(size: 12)).monospacedDigit().frame(width: 84)
+                        Picker("", selection: $row.category) {
+                            Text("\(fmt.t("Category"))…").tag("")
+                            ForEach(categoryOptions, id: \.self) { Text(fmt.t($0)).tag($0) }
+                        }
+                        .labelsHidden().frame(maxWidth: .infinity)
+                        if drafts.count > 2 {
+                            Button { drafts.removeAll { $0.id == row.id } } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        Picker("", selection: $row.vatCode) {
+                            Text("\(fmt.t("VAT"))…").tag("")
+                            ForEach(bankVatCodes, id: \.code) { Text(fmt.t($0.label)).tag($0.code) }
+                        }
+                        .labelsHidden().frame(maxWidth: .infinity)
+                        Picker("", selection: $row.orderId) {
+                            Text(fmt.t("Not linked")).tag("")
+                            ForEach(orders, id: \.id) { order in Text(bankOrderPickTitle(order)).tag(order.id ?? "") }
+                            if !row.orderId.isEmpty && !orders.contains(where: { $0.id == row.orderId }) { Text(fmt.t("Order")).tag(row.orderId) }
+                        }
+                        .labelsHidden().frame(maxWidth: .infinity)
+                    }
+                    TextField(fmt.t("Note"), text: $row.note).textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    Divider()
+                }
+            }
+            Button { drafts.append(BankSplitDraftLine(amount: "0.00", category: "", vatCode: "", note: "", orderId: "")) } label: {
+                Label(fmt.t("Add line"), systemImage: "plus").font(.system(size: 12, weight: .bold))
+            }
+            .buttonStyle(.plain).foregroundColor(.accentColor).disabled(drafts.count >= 12)
+            HStack(spacing: 8) {
+                // Live "total / required" — Save stays off until they match.
+                Text("\(fmt.money(total, tx.currency)) / \(fmt.money(required, tx.currency))")
+                    .font(.system(size: 12.5, weight: .bold)).monospacedDigit()
+                    .foregroundColor(balanced ? .green : .red)
+                Spacer()
+                Button(fmt.t("Cancel")) { editing = false; drafts = [] }.disabled(busy)
+                Button(busy ? fmt.t("Saving…") : fmt.t("Save split")) { save() }
+                    .buttonStyle(.borderedProminent).disabled(!balanced || busy)
+            }
+            if !balanced {
+                Text(fmt.t("Split lines must add up to the exact transaction amount.")).font(.system(size: 11)).foregroundColor(.red)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// Seeds the editor: existing lines, or the full amount plus an empty line
+    /// (mirror of the web's startSplitEditor).
+    private func startEditor() {
+        drafts = tx.splits.isEmpty
+            ? [BankSplitDraftLine(amount: String(format: "%.2f", required), category: tx.effectiveCategory, vatCode: tx.vatCode, note: "", orderId: ""),
+               BankSplitDraftLine(amount: "0.00", category: "", vatCode: "", note: "", orderId: "")]
+            : tx.splits.map { BankSplitDraftLine(amount: String(format: "%.2f", $0.amount), category: $0.category, vatCode: $0.vatCode, note: $0.note, orderId: $0.orderId) }
+        editing = true
+    }
+
+    private func save() {
+        guard let manager = model.manager else { return }
+        let payload: [[String: Any]] = drafts
+            .filter { parsedAmount($0.amount) > 0 || !$0.category.isEmpty }
+            .map { ["amount": parsedAmount($0.amount), "category": $0.category, "vatCode": $0.vatCode, "note": $0.note, "orderId": $0.orderId] }
+        let txId = tx.id, fmt = self.fmt
+        model.run("splits") {
+            try await manager.bankSetSplits(transactionId: txId, splits: payload)
+            await MainActor.run { editing = false; drafts = [] }
+            return payload.isEmpty ? fmt.t("Split removed.") : fmt.t("Split saved.")
+        }
+    }
+
+    private func removeSplits() {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, fmt = self.fmt
+        model.run("splits") {
+            try await manager.bankSetSplits(transactionId: txId, splits: [])
+            return fmt.t("Split removed.")
+        }
+    }
+}
+
+// MARK: - Incoming ↔ order payment (detail panel, incoming)
+
+/// The "Match to" area for money coming in: classify the kind, and for order
+/// payments match the bank line to the payment already recorded on the order
+/// — or record a new one, exactly once. Separate struct on purpose (stack).
+struct BankIncomingMatchSection: View {
+    let tx: StudioBankTransaction
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let isOwner: Bool
+    let orders: [Siparis]
+
+    @State private var kind = ""
+    @State private var orderId = ""
+    @State private var orderSearch = ""
+    @State private var suggest: BankIncomingMatchResult?
+    @State private var confirmCreate = false
+
+    private var busy: Bool { model.busy == "incoming" }
+
+    private var rankedOrders: [Siparis] {
+        let ranked = bankRankOrders(for: tx, orders: orders.filter { $0.id != nil }).map(\.order)
+        let needle = orderSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        let filtered = needle.isEmpty ? ranked : ranked.filter { "\($0.customerName) \($0.designName)".lowercased().contains(needle) }
+        return Array(filtered.prefix(40))
+    }
+
+    var body: some View {
+        Section {
+            Picker(fmt.t("Match to"), selection: $kind) {
+                Text(fmt.t("Unclassified income")).tag("")
+                ForEach(bankIncomingKinds, id: \.code) { Text(fmt.t($0.label)).tag($0.code) }
+            }
+            .disabled(!isOwner || busy)
+            .onAppear(perform: load)
+            .onChange(of: tx.id) { _ in load() }
+            .onChange(of: tx.incomingKind) { newValue in kind = newValue }
+            .onChange(of: kind) { newValue in
+                guard newValue != tx.incomingKind else { return }
+                if newValue == "order_payment" { return } // saved through the order flow below
+                saveKind(newValue)
+            }
+            if bankNonRevenueIncomingKinds.contains(kind) {
+                Text(fmt.t("Not counted as revenue.")).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            if kind == "order_payment" {
+                if tx.incomingKind == "order_payment", !tx.linkedPaymentId.isEmpty {
+                    linkedView
+                } else if isOwner {
+                    matchFlow
+                }
+            }
+        } header: { Text("⇥ \(fmt.t("Match to"))") }
+    }
+
+    private var linkedView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("✓ \(fmt.t("Matched to the order's existing payment — nothing was recorded twice."))")
+                .font(.system(size: 11.5, weight: .semibold)).foregroundColor(.green)
+            if !tx.linkedOrderLabel.isEmpty {
+                Text("⛓ \(tx.linkedOrderLabel)").font(.system(size: 11.5)).foregroundColor(.accentColor).lineLimit(2)
+            }
+            if isOwner {
+                Button(fmt.t("Unlink")) { callIncoming("unlink") }
+                    .buttonStyle(.plain).font(.system(size: 12, weight: .bold)).foregroundColor(.red).disabled(busy)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder private var matchFlow: some View {
+        TextField(fmt.t("Search orders"), text: $orderSearch).textFieldStyle(.roundedBorder).font(.system(size: 12))
+        Picker(fmt.t("Order"), selection: $orderId) {
+            Text("\(fmt.t("Order"))…").tag("")
+            ForEach(rankedOrders, id: \.id) { order in Text(bankOrderPickTitle(order)).tag(order.id ?? "") }
+            if !orderId.isEmpty && !rankedOrders.contains(where: { $0.id == orderId }) { Text(fmt.t("Order")).tag(orderId) }
+        }
+        .onChange(of: orderId) { _ in suggest = nil }
+        Button { callIncoming("suggest") } label: {
+            Label(busy ? fmt.t("Loading…") : fmt.t("Find matching payment"), systemImage: "magnifyingglass").font(.system(size: 12, weight: .semibold))
+        }
+        .disabled(orderId.isEmpty || busy)
+        if let suggest {
+            ForEach(suggest.candidates) { candidate in
+                HStack(spacing: 8) {
+                    Text(fmt.money(candidate.amount, tx.currency)).font(.system(size: 12, weight: .bold)).monospacedDigit()
+                    Text(candidateDetail(candidate)).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    Spacer()
+                    Button("✓ \(fmt.t("Match this payment"))") { callIncoming("link", paymentId: candidate.id) }
+                        .buttonStyle(.plain).font(.system(size: 11.5, weight: .bold)).foregroundColor(.green).disabled(busy)
+                }
+            }
+            if suggest.candidates.isEmpty {
+                Text(fmt.t("No unmatched payment with this amount on the order.")).font(.system(size: 11.5)).foregroundColor(.secondary)
+            }
+            Button { confirmCreate = true } label: {
+                Label(fmt.t("Record as a new payment on this order"), systemImage: "plus").font(.system(size: 12, weight: .semibold))
+            }
+            .disabled(busy)
+            .alert("\(fmt.t("Record a NEW payment on this order?")) (\(fmt.money(tx.amount, tx.currency)))", isPresented: $confirmCreate) {
+                Button(fmt.t("Cancel"), role: .cancel) {}
+                Button(fmt.t("Record as a new payment on this order")) { callIncoming("create") }
+            }
+        }
+    }
+
+    private func load() {
+        kind = tx.incomingKind
+        orderId = tx.linkedOrderId
+        orderSearch = ""
+        suggest = nil
+    }
+
+    private func candidateDetail(_ candidate: BankPaymentCandidate) -> String {
+        var parts: [String] = []
+        if !candidate.method.isEmpty { parts.append(candidate.method) }
+        if candidate.dateMs > 0 {
+            let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
+            parts.append(fmt.date(formatter.string(from: Date(timeIntervalSince1970: candidate.dateMs / 1000)), short: true))
+        }
+        if !candidate.note.isEmpty { parts.append(candidate.note) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func saveKind(_ value: String) {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, fmt = self.fmt
+        model.run("incoming") {
+            try await manager.bankSetIncomingKind(transactionId: txId, kind: value)
+            return fmt.t("Transaction saved.")
+        }
+    }
+
+    private func callIncoming(_ mode: String, paymentId: String? = nil) {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, orderId = self.orderId, fmt = self.fmt
+        model.run("incoming") {
+            let result = try await manager.bankMatchIncoming(transactionId: txId, mode: mode, orderId: orderId, paymentId: paymentId)
+            return await MainActor.run { () -> String? in
+                if mode == "suggest" || result.needsChoice {
+                    suggest = result
+                    return nil
+                }
+                if result.linked || result.created {
+                    suggest = nil
+                    return result.created ? fmt.t("Payment recorded on the order.") : fmt.t("Matched to the order's existing payment — nothing was recorded twice.")
+                }
+                if result.unlinked {
+                    suggest = nil
+                    return fmt.t("Match removed — the payment entry stays on the order.")
+                }
+                return nil
+            }
+        }
+    }
+}
+
+// MARK: - Receipt from the central Files library
+
+/// Inline picker over the workspace's Files library: the chosen invoice is
+/// attached by REFERENCE (fileRecordId) — nothing is uploaded twice.
+struct BankLibraryPicker: View {
+    let tx: StudioBankTransaction
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let onClose: () -> Void
+
+    @State private var files: [LibraryFile] = []
+    @State private var search = ""
+    @State private var loading = true
+    @State private var loadError = ""
+
+    private var shown: [LibraryFile] {
+        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let live = files.filter { $0.trashedAtMs <= 0 }
+        let filtered = needle.isEmpty ? live : live.filter { "\($0.displayName) \($0.fileName)".lowercased().contains(needle) }
+        return Array(filtered.prefix(40))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(fmt.t("Choose from Files")).font(.system(size: 12.5, weight: .bold))
+                Spacer()
+                Button(action: onClose) { Image(systemName: "xmark") }.buttonStyle(.plain)
+            }
+            TextField(fmt.t("Search files"), text: $search).textFieldStyle(.roundedBorder).font(.system(size: 12))
+            if loading {
+                Text(fmt.t("Loading…")).font(.system(size: 12)).foregroundColor(.secondary)
+            } else if !loadError.isEmpty {
+                Text(loadError).font(.system(size: 11.5)).foregroundColor(.red)
+            } else if shown.isEmpty {
+                Text(fmt.t("The library is empty.")).font(.system(size: 12)).foregroundColor(.secondary)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(shown) { file in
+                            Button { attach(file) } label: {
+                                HStack(spacing: 8) {
+                                    BankFileBadge(name: file.fileName, size: 22)
+                                    Text(file.displayName.isEmpty ? file.fileName : file.displayName).font(.system(size: 12)).lineLimit(1)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 4).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain).disabled(model.busy == "receipt-pick")
+                        }
+                    }
+                }
+                .frame(maxHeight: 180)
+            }
+            Text(fmt.t("The file is referenced, not copied — an invoice already on a purchase is never uploaded twice."))
+                .font(.system(size: 10.5)).foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
+        .onAppear(perform: loadFiles)
+    }
+
+    private func loadFiles() {
+        guard let manager = model.manager else { return }
+        loading = true; loadError = ""
+        Task {
+            do {
+                let list = try await manager.loadLibraryFiles(trashed: false)
+                await MainActor.run { files = list; loading = false }
+            } catch {
+                await MainActor.run { loadError = error.localizedDescription; loading = false }
+            }
+        }
+    }
+
+    private func attach(_ file: LibraryFile) {
+        guard let manager = model.manager else { return }
+        let txId = tx.id, fileId = file.id, fmt = self.fmt
+        model.run("receipt-pick") {
+            try await manager.bankAttachLibraryReceipt(transactionId: txId, fileRecordId: fileId)
+            await MainActor.run { onClose() }
+            return fmt.t("Receipt attached from Files.")
+        }
     }
 }
 

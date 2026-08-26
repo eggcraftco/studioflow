@@ -51,6 +51,26 @@ val BANK_REVIEW_STATUSES = listOf(
 fun bankReviewStatusLabel(code: String): String =
     BANK_REVIEW_STATUSES.firstOrNull { it.first == code }?.second ?: BANK_REVIEW_STATUSES.first().second
 
+// What an incoming payment actually is (bankUpdateTransaction's incomingKind).
+// Labels are English source keys, t()'d at render time — same list as the web.
+val BANK_INCOMING_KINDS = listOf(
+    "" to "Unclassified income",
+    "order_payment" to "Order payment",
+    "invoice" to "Invoice",
+    "deposit" to "Deposit",
+    "refund_received" to "Refund received",
+    "owner_contribution" to "Owner contribution",
+    "loan" to "Loan",
+    "transfer" to "Transfer between own accounts",
+    "other_income" to "Other income"
+)
+
+/** Money in, but not revenue — these kinds leave every Incoming total. */
+val BANK_NON_REVENUE_INCOMING_KINDS = setOf("transfer", "owner_contribution", "loan")
+
+fun bankIncomingKindLabel(code: String): String =
+    BANK_INCOMING_KINDS.firstOrNull { it.first == code }?.second ?: BANK_INCOMING_KINDS.first().second
+
 /** Pandle's default nominal mapping — used until the workspace saves its own. */
 val BANK_DEFAULT_CATEGORY_TAX = mapOf(
     "Materials" to "ST", "Equipment" to "ST", "Shipping" to "ST", "Software" to "ST", "Subscriptions" to "ST",
