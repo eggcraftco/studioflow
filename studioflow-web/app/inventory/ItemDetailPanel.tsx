@@ -37,11 +37,13 @@ type PanelTab = "details" | "history" | "purchases" | "photos";
 
 // Mirrors the server's STATUS_TRANSITIONS so buttons that would be refused are
 // not offered. (functions/inventory.js — sold can only be archived, etc.)
+// The server's STATUS_TRANSITIONS verbatim, minus "reserved" as a target —
+// reserving must go through reserveInventoryForOrder, never a bare flip.
 const STATUS_NEXT: Record<InventoryStatus, InventoryStatus[]> = {
-  available: ["used", "sold", "archived"],
-  reserved: ["available", "used", "sold"],
+  available: ["used", "sold", "incoming", "archived"],
+  reserved: ["available", "used", "sold", "archived"],
   incoming: ["available", "archived"],
-  used: ["archived"],
+  used: ["available", "archived"],
   sold: ["archived"],
   archived: ["available"]
 };
@@ -208,10 +210,15 @@ export function ItemDetailPanel({
     return () => { cancelled = true; };
   }, [workspace.id, item.purchaseId, item.purchaseNumber]);
 
-  const reservations = useMemo(
-    () => (item.reservations || []).filter(row => row && row.orderId),
-    [item.reservations]
-  );
+  const reservations = useMemo(() => {
+    const rows = (item.reservations || []).filter(row => row && row.orderId);
+    // Items reserved before the reservations array existed carry only
+    // reservedForOrderId; show the link rather than an empty card.
+    if (rows.length === 0 && item.reservedForOrderId) {
+      return [{ orderId: item.reservedForOrderId, quantity: 1, createdAtMs: 0 }];
+    }
+    return rows;
+  }, [item.reservations, item.reservedForOrderId]);
 
   async function run(action: () => Promise<unknown>, failText: string) {
     setBusy(true);

@@ -126,7 +126,11 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
     var notice by remember { mutableStateOf<String?>(null) }
-    var showNewItem by remember { mutableStateOf(false) }
+    // The item form serves three doors: Add (no prefill), Edit (prefill + the
+    // item's id) and Duplicate (prefill with identity cleared, blank id so the
+    // server assigns a fresh INV number).
+    var itemEditor by remember { mutableStateOf<Pair<StudioInventoryItem?, String>?>(null) }
+    var detailItemId by remember { mutableStateOf<String?>(null) }
     var showOpeningStock by remember { mutableStateOf(false) }
     var photosFor by remember { mutableStateOf<StudioInventoryItem?>(null) }
     var showNewPurchase by remember { mutableStateOf(false) }
@@ -190,7 +194,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
             if (canEdit && tab != InventoryTab.Stocktake && tab != InventoryTab.Reports) {
                 Button(onClick = {
                     when (tab) {
-                        InventoryTab.Items -> showNewItem = true
+                        InventoryTab.Items -> itemEditor = null to ""
                         InventoryTab.Purchases -> showNewPurchase = true
                         InventoryTab.Suppliers -> showNewSupplier = true
                         else -> Unit
@@ -249,7 +253,8 @@ fun InventoryScreen(state: StudioFlowUiState) {
                         } catch (error: Exception) { notice = error.message }
                     }
                 },
-                onPhotos = { photosFor = it }
+                onPhotos = { photosFor = it },
+                onOpen = { detailItemId = it.id }
             )
 
             InventoryTab.Purchases -> PurchasesTab(
@@ -327,20 +332,39 @@ fun InventoryScreen(state: StudioFlowUiState) {
         )
     }
 
-    if (showNewItem) {
+    itemEditor?.let { (prefill, editingItemId) ->
         NewInventoryItemDialog(
             symbol = symbol,
             t = t,
-            onDismiss = { showNewItem = false },
-            onSave = { payload ->
+            existing = prefill,
+            itemId = editingItemId,
+            onDismiss = { itemEditor = null },
+            onSave = { payload, savingItemId ->
                 scope.launch {
                     try {
-                        repository.inventorySaveItem(workspaceId, payload)
-                        showNewItem = false
+                        repository.inventorySaveItem(workspaceId, payload, savingItemId)
+                        itemEditor = null
                         reloadItems()
                     } catch (error: Exception) { notice = error.message }
                 }
             }
+        )
+    }
+
+    // The detail sheet reads the live row, so a save or a release redraws it
+    // without reopening. If the item vanishes from the list, the sheet goes.
+    items.firstOrNull { it.id == detailItemId }?.let { detailItem ->
+        ItemDetailSheet(
+            workspaceId = workspaceId,
+            item = detailItem,
+            orders = state.orders,
+            symbol = symbol,
+            canEdit = canEdit,
+            t = t,
+            onDismiss = { detailItemId = null },
+            onChanged = { scope.launch { reloadItems() } },
+            onEdit = { prefill, editItemId -> itemEditor = prefill to editItemId },
+            onPhotos = { photosFor = it }
         )
     }
 
@@ -418,10 +442,19 @@ private fun ItemsTab(
     canEdit: Boolean,
     t: (String) -> String,
     onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit,
-    onPhotos: (StudioInventoryItem) -> Unit
+    onPhotos: (StudioInventoryItem) -> Unit,
+    onOpen: (StudioInventoryItem) -> Unit
 ) {
+    // The 30-day change rides under the total only when the server vouches for
+    // it — a ledger younger than the window would make the percentage a lie.
+    val change = summary.monthlyChange
+    val changeSub = if (change.available) {
+        val pct = if (change.pct == change.pct.toLong().toDouble())
+            change.pct.toLong().toString() else change.pct.toString()
+        (if (change.pct > 0) "+" else "") + pct + "% " + t("this month")
+    } else ""
     val cards = listOf(
-        Triple(t("Total Inventory Value"), inventoryMoney(symbol, summary.totalValue), ""),
+        Triple(t("Total Inventory Value"), inventoryMoney(symbol, summary.totalValue), changeSub),
         Triple(t("Unique Items"), summary.uniqueCount.toString(), inventoryMoney(symbol, summary.uniqueValue)),
         Triple(t("Quantity Items"), summary.quantityCount.toString(), inventoryMoney(symbol, summary.quantityValue)),
         Triple(t("Reserved for Orders"), inventoryMoney(symbol, summary.reservedValue), "${summary.reservedCount} " + t("items")),
@@ -477,7 +510,7 @@ private fun ItemsTab(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(items, key = { it.id }) { item ->
-                    InventoryItemRow(item, symbol, canEdit, t, onChangeStatus, onPhotos)
+                    InventoryItemRow(item, symbol, canEdit, t, onChangeStatus, onPhotos, onOpen)
                 }
             }
         }
@@ -491,10 +524,15 @@ private fun InventoryItemRow(
     canEdit: Boolean,
     t: (String) -> String,
     onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit,
-    onPhotos: (StudioInventoryItem) -> Unit
+    onPhotos: (StudioInventoryItem) -> Unit,
+    onOpen: (StudioInventoryItem) -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp)) {
+    Card(
+        colors = inventoryCardColors(),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.clickable { onOpen(item) }
+    ) {
         Row(Modifier.fillMaxWidth().padding(12.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(item.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -545,7 +583,11 @@ private fun InventoryItemRow(
                             Text(t("Move to…"), fontSize = 11.sp)
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            StudioInventoryStatus.entries.filter { it != item.status }.forEach { status ->
+                            // Only moves the server will accept — and never
+                            // "reserved": reserving must go through
+                            // reserveInventoryForOrder (which links an order);
+                            // a bare status flip would reserve it for nothing.
+                            inventoryStatusNext(item.status).forEach { status ->
                                 DropdownMenuItem(
                                     text = { Text(t(status.label), fontSize = 13.sp) },
                                     onClick = { menuOpen = false; onChangeStatus(item, status) }

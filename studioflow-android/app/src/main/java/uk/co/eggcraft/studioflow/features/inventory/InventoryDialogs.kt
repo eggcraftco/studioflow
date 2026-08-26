@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioPurchase
 import uk.co.eggcraft.studioflow.data.model.StudioPurchaseLineDraft
 import uk.co.eggcraft.studioflow.data.model.StudioSupplier
@@ -97,42 +98,59 @@ private fun TrackingTypeChips(selected: StudioTrackingType, t: (String) -> Strin
     }
 }
 
+/**
+ * Create AND edit form. Pass [existing] to prefill (with [itemId] blank this is
+ * a duplicate: the server assigns a fresh INV number); pass [itemId] to save
+ * over an existing item. When editing, the payload deliberately carries EVERY
+ * field — including ones this form has no input for, like description, photos
+ * and the estimated current value — because the server rebuilds the whole
+ * document from the input and blanks whatever is not sent.
+ */
 @Composable
 fun NewInventoryItemDialog(
     symbol: String,
     t: (String) -> String,
+    existing: StudioInventoryItem? = null,
+    itemId: String = "",
     onDismiss: () -> Unit,
-    onSave: (Map<String, Any?>) -> Unit
+    onSave: (Map<String, Any?>, String) -> Unit
 ) {
-    var trackingType by remember { mutableStateOf(StudioTrackingType.Unique) }
-    var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Other") }
-    var brand by remember { mutableStateOf("") }
-    var model by remember { mutableStateOf("") }
-    var reference by remember { mutableStateOf("") }
-    var serialNumber by remember { mutableStateOf("") }
-    var year by remember { mutableStateOf("") }
-    var condition by remember { mutableStateOf("") }
-    var sku by remember { mutableStateOf("") }
-    var onHand by remember { mutableStateOf("") }
-    var unit by remember { mutableStateOf("") }
-    var lowStockAt by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var supplierName by remember { mutableStateOf("") }
-    var purchaseDate by remember { mutableStateOf("") }
-    var purchasePrice by remember { mutableStateOf("") }
+    fun numberText(value: Double): String = if (value <= 0.0) "" else inventoryQuantity(value)
+
+    var trackingType by remember { mutableStateOf(existing?.trackingType ?: StudioTrackingType.Unique) }
+    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
+    var category by remember { mutableStateOf(existing?.category ?: "Other") }
+    var brand by remember { mutableStateOf(existing?.brand.orEmpty()) }
+    var model by remember { mutableStateOf(existing?.model.orEmpty()) }
+    var reference by remember { mutableStateOf(existing?.reference.orEmpty()) }
+    var serialNumber by remember { mutableStateOf(existing?.serialNumber.orEmpty()) }
+    var year by remember { mutableStateOf(existing?.year.orEmpty()) }
+    var condition by remember { mutableStateOf(existing?.condition.orEmpty()) }
+    var sku by remember { mutableStateOf(existing?.sku.orEmpty()) }
+    var onHand by remember { mutableStateOf(numberText(existing?.onHand ?: 0.0)) }
+    var unit by remember { mutableStateOf(existing?.unit.orEmpty()) }
+    var lowStockAt by remember { mutableStateOf(numberText(existing?.lowStockAt ?: 0.0)) }
+    var location by remember { mutableStateOf(existing?.location.orEmpty()) }
+    var supplierName by remember { mutableStateOf(existing?.supplierName.orEmpty()) }
+    var purchaseDate by remember { mutableStateOf(existing?.purchaseDate.orEmpty()) }
+    var purchasePrice by remember { mutableStateOf(numberText(existing?.purchasePrice ?: 0.0)) }
     var extraLabel by remember { mutableStateOf("") }
     var extraAmount by remember { mutableStateOf("") }
-    val extras = remember { mutableListOf<Pair<String, Double>>().toMutableStateList() }
-    var isCustomerOwned by remember { mutableStateOf(false) }
-    var notes by remember { mutableStateOf("") }
+    val extras = remember { existing?.additionalCosts.orEmpty().toMutableList().toMutableStateList() }
+    var isCustomerOwned by remember { mutableStateOf(existing?.isCustomerOwned ?: false) }
+    var notes by remember { mutableStateOf(existing?.notes.orEmpty()) }
 
     val extrasTotal = extras.sumOf { it.second }
     val internalTotal = inventoryParse(purchasePrice) + extrasTotal
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(t("Add Item"), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                if (itemId.isBlank()) t("Add Item") else t("Edit Item"),
+                fontSize = 17.sp, fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 460.dp)) {
                 Text(t("What kind of thing is this?"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
@@ -265,8 +283,15 @@ fun NewInventoryItemDialog(
                             "onHand" to if (trackingType == StudioTrackingType.Unique) 1.0 else inventoryParse(onHand),
                             "unit" to unit, "lowStockAt" to inventoryParse(lowStockAt),
                             "purchasePrice" to inventoryParse(purchasePrice),
-                            "additionalCosts" to extras.map { mapOf("label" to it.first, "amount" to it.second) }
-                        )
+                            "additionalCosts" to extras.map { mapOf("label" to it.first, "amount" to it.second) },
+                            // Fields the form has no input for, carried through
+                            // untouched — the server blanks whatever an edit
+                            // does not send.
+                            "description" to existing?.description.orEmpty(),
+                            "photos" to existing?.photos.orEmpty(),
+                            "currentValueEst" to (existing?.currentValueEst ?: 0.0)
+                        ),
+                        itemId
                     )
                 }
             ) { Text(t("Save")) }

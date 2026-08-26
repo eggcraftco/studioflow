@@ -35,6 +35,26 @@ val studioInventoryCategories = listOf(
     "Parts", "Consumables", "Packaging", "Tools", "Other"
 )
 
+/** One order holding a piece of this item. Written only by the server's
+ *  reserveInventoryForOrder — never assembled client-side. */
+data class StudioInventoryReservation(
+    val orderId: String,
+    val quantity: Double,
+    val createdAtMs: Long
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryReservation? {
+            val orderId = raw["orderId"] as? String ?: return null
+            if (orderId.isBlank()) return null
+            return StudioInventoryReservation(
+                orderId = orderId,
+                quantity = (raw["quantity"] as? Number)?.toDouble() ?: 1.0,
+                createdAtMs = (raw["createdAtMs"] as? Number)?.toLong() ?: 0L
+            )
+        }
+    }
+}
+
 data class StudioInventoryItem(
     val id: String,
     val number: String,
@@ -47,17 +67,29 @@ data class StudioInventoryItem(
     val model: String,
     val reference: String,
     val serialNumber: String,
+    val year: String,
+    val condition: String,
+    val description: String,
     val sku: String,
     val location: String,
+    val supplierName: String,
+    val purchaseDate: String,
+    val notes: String,
     val onHand: Double,
     val reserved: Double,
     val unit: String,
     val lowStockAt: Double,
     val purchasePrice: Double,
+    val additionalCosts: List<Pair<String, Double>>,
     val additionalCostsTotal: Double,
     val internalTotalCost: Double,
     val valuationCost: Double,
-    val photos: List<String>
+    val currentValueEst: Double,
+    val photos: List<String>,
+    val reservations: List<StudioInventoryReservation>,
+    val purchaseId: String,
+    val purchaseNumber: String,
+    val updatedAtMs: Long
 ) {
     /** A unique item is one object, whatever a stale record happens to say. */
     val displayOnHand: Double get() = if (trackingType == StudioTrackingType.Unique) 1.0 else onHand
@@ -85,6 +117,40 @@ data class StudioInventoryItem(
             else -> maxOf(0.0, onHand - reserved)
         }
 
+    /**
+     * EVERY field the server's saveInventoryItem understands, mirrored from the
+     * web's inventoryItemToInput. The server rebuilds the whole document from
+     * the input (normalizeItemInput) — reservations, status and number are
+     * carried over server-side, but any other field left out is blanked. So an
+     * edit, even a location-only one, must start from this map and never from a
+     * hand-picked subset.
+     */
+    fun toInput(): Map<String, Any?> = mapOf(
+        "name" to name,
+        "category" to category,
+        "trackingType" to trackingType.raw,
+        "ownership" to if (isCustomerOwned) "customer" else "business",
+        "brand" to brand,
+        "model" to model,
+        "reference" to reference,
+        "serialNumber" to serialNumber,
+        "year" to year,
+        "condition" to condition,
+        "description" to description,
+        "sku" to sku,
+        "location" to location,
+        "supplierName" to supplierName,
+        "purchaseDate" to purchaseDate,
+        "notes" to notes,
+        "photos" to photos,
+        "onHand" to if (trackingType == StudioTrackingType.Quantity) onHand else 1.0,
+        "unit" to if (trackingType == StudioTrackingType.Quantity) unit else "",
+        "lowStockAt" to lowStockAt,
+        "purchasePrice" to purchasePrice,
+        "additionalCosts" to additionalCosts.map { mapOf("label" to it.first, "amount" to it.second) },
+        "currentValueEst" to currentValueEst
+    )
+
     companion object {
         fun from(raw: Map<*, *>): StudioInventoryItem? {
             val id = raw["id"] as? String ?: return null
@@ -101,19 +167,55 @@ data class StudioInventoryItem(
                 model = raw["model"] as? String ?: "",
                 reference = raw["reference"] as? String ?: "",
                 serialNumber = raw["serialNumber"] as? String ?: "",
+                year = raw["year"] as? String ?: "",
+                condition = raw["condition"] as? String ?: "",
+                description = raw["description"] as? String ?: "",
                 sku = raw["sku"] as? String ?: "",
                 location = raw["location"] as? String ?: "",
+                supplierName = raw["supplierName"] as? String ?: "",
+                purchaseDate = raw["purchaseDate"] as? String ?: "",
+                notes = raw["notes"] as? String ?: "",
                 onHand = (quantity["onHand"] as? Number)?.toDouble() ?: 0.0,
                 reserved = (quantity["reserved"] as? Number)?.toDouble() ?: 0.0,
                 unit = quantity["unit"] as? String ?: "",
                 lowStockAt = (raw["lowStockAt"] as? Number)?.toDouble() ?: 0.0,
                 purchasePrice = (raw["purchasePrice"] as? Number)?.toDouble() ?: 0.0,
+                additionalCosts = (raw["additionalCosts"] as? List<*> ?: emptyList<Any?>()).mapNotNull { row ->
+                    (row as? Map<*, *>)?.let {
+                        (it["label"] as? String ?: "") to ((it["amount"] as? Number)?.toDouble() ?: 0.0)
+                    }
+                },
                 additionalCostsTotal = (raw["additionalCostsTotal"] as? Number)?.toDouble() ?: 0.0,
                 internalTotalCost = (raw["internalTotalCost"] as? Number)?.toDouble() ?: 0.0,
                 valuationCost = (raw["valuationCost"] as? Number)?.toDouble() ?: 0.0,
-                photos = (raw["photos"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String }
+                currentValueEst = (raw["currentValueEst"] as? Number)?.toDouble() ?: 0.0,
+                photos = (raw["photos"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String },
+                reservations = (raw["reservations"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryReservation::from) },
+                purchaseId = raw["purchaseId"] as? String ?: "",
+                purchaseNumber = raw["purchaseNumber"] as? String ?: "",
+                updatedAtMs = (raw["updatedAtMs"] as? Number)?.toLong() ?: 0L
             )
         }
+    }
+}
+
+/** How the shelf value moved over the last 30 days. `available` is the server
+ *  saying the figure is honest — the ledger covers the whole window and the
+ *  baseline is real — so a screen shows the change only when it is true. */
+data class StudioInventoryMonthlyChange(
+    val available: Boolean = false,
+    val netValue30d: Double = 0.0,
+    val pct: Double = 0.0,
+    val ledgerStartsMs: Long = 0L
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryMonthlyChange = StudioInventoryMonthlyChange(
+            available = raw["available"] == true,
+            netValue30d = (raw["netValue30d"] as? Number)?.toDouble() ?: 0.0,
+            pct = (raw["pct"] as? Number)?.toDouble() ?: 0.0,
+            ledgerStartsMs = (raw["ledgerStartsMs"] as? Number)?.toLong() ?: 0L
+        )
     }
 }
 
@@ -128,10 +230,13 @@ data class StudioInventorySummary(
     val incomingCount: Int = 0,
     val incomingValue: Double = 0.0,
     val lowStockCount: Int = 0,
-    val customerOwnedCount: Int = 0
+    val customerOwnedCount: Int = 0,
+    val monthlyChange: StudioInventoryMonthlyChange = StudioInventoryMonthlyChange()
 ) {
     companion object {
         fun from(raw: Map<*, *>): StudioInventorySummary = StudioInventorySummary(
+            monthlyChange = StudioInventoryMonthlyChange.from(
+                raw["monthlyChange"] as? Map<*, *> ?: emptyMap<String, Any?>()),
             totalValue = (raw["totalValue"] as? Number)?.toDouble() ?: 0.0,
             uniqueCount = (raw["uniqueCount"] as? Number)?.toInt() ?: 0,
             uniqueValue = (raw["uniqueValue"] as? Number)?.toDouble() ?: 0.0,
@@ -327,6 +432,34 @@ val studioOpeningStockFields: List<Pair<String, String>> = listOf(
     "location" to "Location", "supplierName" to "Supplier",
     "purchaseDate" to "Purchase date", "notes" to "Notes"
 )
+
+/** One line of the movement ledger, as listInventoryMovements returns it. The
+ *  kind stays a raw string — the detail sheet maps the ones it knows to words
+ *  and shows the rest as-is, so a new server kind never hides a row. */
+data class StudioInventoryMovement(
+    val id: String,
+    val kind: String,
+    val delta: Double,
+    val valueDelta: Double,
+    val at: Long,
+    val byEmail: String,
+    val note: String
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryMovement? {
+            val id = raw["id"] as? String ?: return null
+            return StudioInventoryMovement(
+                id = id,
+                kind = raw["kind"] as? String ?: "",
+                delta = (raw["delta"] as? Number)?.toDouble() ?: 0.0,
+                valueDelta = (raw["valueDelta"] as? Number)?.toDouble() ?: 0.0,
+                at = (raw["at"] as? Number)?.toLong() ?: 0L,
+                byEmail = raw["byEmail"] as? String ?: "",
+                note = raw["note"] as? String ?: ""
+            )
+        }
+    }
+}
 
 enum class StudioMovementKind(val raw: String, val label: String) {
     OpeningStock("openingStock", "Opening stock"),

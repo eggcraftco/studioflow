@@ -55,6 +55,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioOrderStockLine
@@ -2688,19 +2689,22 @@ class StudioFlowRepository(
         return path
     }
 
-    /** Saves just the photo list. Every other field rides through untouched
-     *  because the server keeps what the form does not send. */
+    /** Saves the photo list by sending the WHOLE item with only the photos
+     *  swapped. The server rebuilds the document from the input and blanks any
+     *  field the form does not send (except reservations/status/number), so a
+     *  partial map here would quietly wipe brand, serial, notes and the rest. */
     suspend fun inventorySavePhotos(workspaceId: String, item: StudioInventoryItem, photos: List<String>) {
         inventoryCall("saveInventoryItem", workspaceId, mapOf(
             "itemId" to item.id,
-            "item" to mapOf(
-                "name" to item.name,
-                "category" to item.category,
-                "trackingType" to item.trackingType.raw,
-                "ownership" to if (item.isCustomerOwned) "customer" else "business",
-                "photos" to photos
-            )
+            "item" to item.toInput() + mapOf("photos" to photos)
         ))
+    }
+
+    /** The movement ledger for one item — what happened to it, when, by whom. */
+    suspend fun inventoryMovements(workspaceId: String, itemId: String): List<StudioInventoryMovement> {
+        val raw = inventoryCall("listInventoryMovements", workspaceId, mapOf("itemId" to itemId))
+        return (raw["movements"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryMovement::from) }
     }
 
     // ---- Stocktake and reporting ----

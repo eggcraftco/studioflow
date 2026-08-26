@@ -10,11 +10,27 @@ private func parseAmount(_ text: String) -> Double {
     Double(text.replacingOccurrences(of: ",", with: ".").filter { "0123456789.".contains($0) }) ?? 0
 }
 
+
+// Prefills must round-trip: the server stores up to 4 decimal places, and a
+// 2dp display format here would silently rewrite onHand/prices on any edit.
+private func editPrecise(_ value: Double) -> String {
+    if value == value.rounded() { return String(Int(value)) }
+    var text = String(format: "%.4f", value)
+    while text.hasSuffix("0") { text.removeLast() }
+    if text.hasSuffix(".") { text.removeLast() }
+    return text
+}
+
 struct NewInventoryItemSheet: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
     @Environment(\.dismiss) private var dismiss
     let currencySymbol: String
     let lang: String
+    /// When set, the form opens prefilled from this item. With a non-empty
+    /// `itemId` that is an edit; with an empty one it is a duplicate — the
+    /// server assigns a fresh INV number.
+    let existing: InventoryItem?
+    let itemId: String
     let onSaved: () -> Void
 
     @State private var trackingType: InventoryTrackingType = .unique
@@ -39,6 +55,41 @@ struct NewInventoryItemSheet: View {
     @State private var notes = ""
     @State private var saving = false
     @State private var error = ""
+
+    init(
+        currencySymbol: String,
+        lang: String,
+        existing: InventoryItem? = nil,
+        itemId: String = "",
+        onSaved: @escaping () -> Void
+    ) {
+        self.currencySymbol = currencySymbol
+        self.lang = lang
+        self.existing = existing
+        self.itemId = itemId
+        self.onSaved = onSaved
+        guard let item = existing else { return }
+        _trackingType = State(initialValue: item.trackingType)
+        _name = State(initialValue: item.name)
+        _category = State(initialValue: item.category)
+        _brand = State(initialValue: item.brand)
+        _model = State(initialValue: item.model)
+        _reference = State(initialValue: item.reference)
+        _serialNumber = State(initialValue: item.serialNumber)
+        _year = State(initialValue: item.year)
+        _condition = State(initialValue: item.condition)
+        _sku = State(initialValue: item.sku)
+        _onHand = State(initialValue: item.trackingType == .quantity ? editPrecise(item.onHand) : "")
+        _unit = State(initialValue: item.unit)
+        _lowStockAt = State(initialValue: item.lowStockAt > 0 ? editPrecise(item.lowStockAt) : "")
+        _location = State(initialValue: item.location)
+        _supplierName = State(initialValue: item.supplierName)
+        _purchaseDate = State(initialValue: item.purchaseDate)
+        _purchasePrice = State(initialValue: item.purchasePrice > 0 ? editPrecise(item.purchasePrice) : "")
+        _extras = State(initialValue: item.additionalCosts)
+        _isCustomerOwned = State(initialValue: item.ownership == .customer)
+        _notes = State(initialValue: item.notes)
+    }
 
     private var extrasTotal: Double { extras.reduce(0) { $0 + $1.amount } }
     private var internalTotal: Double { parseAmount(purchasePrice) + extrasTotal }
@@ -125,7 +176,7 @@ struct NewInventoryItemSheet: View {
                     Text(error).font(.system(size: 12)).foregroundColor(.red)
                 }
             }
-            .navigationTitle(t("Add Item", lang: lang))
+            .navigationTitle(itemId.isEmpty ? t("Add Item", lang: lang) : t("Edit Item", lang: lang))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(t("Cancel", lang: lang)) { dismiss() }
@@ -141,6 +192,10 @@ struct NewInventoryItemSheet: View {
     private func save() {
         saving = true
         error = ""
+        // The server rebuilds the WHOLE document from this payload — any field
+        // not sent is blanked. Fields the form does not show (description,
+        // current value estimate, photos) still have to travel, carried over
+        // from the item being edited.
         let payload: [String: Any] = [
             "name": name, "category": category, "trackingType": trackingType.rawValue,
             "ownership": isCustomerOwned ? "customer" : "business",
@@ -150,11 +205,14 @@ struct NewInventoryItemSheet: View {
             "onHand": trackingType == .unique ? 1 : parseAmount(onHand),
             "unit": unit, "lowStockAt": parseAmount(lowStockAt),
             "purchasePrice": parseAmount(purchasePrice),
-            "additionalCosts": extras.map { ["label": $0.label, "amount": $0.amount] }
+            "additionalCosts": extras.map { ["label": $0.label, "amount": $0.amount] },
+            "description": existing?.description ?? "",
+            "currentValueEst": existing?.currentValueEst ?? 0,
+            "photos": existing?.photos ?? []
         ]
         Task {
             do {
-                try await firebaseManager.saveInventoryItem(payload)
+                try await firebaseManager.saveInventoryItem(payload, itemId: itemId)
                 onSaved()
                 dismiss()
             } catch {

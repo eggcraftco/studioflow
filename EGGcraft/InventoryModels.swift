@@ -60,6 +60,21 @@ struct InventoryAdditionalCost: Identifiable, Equatable {
     var amount: Double
 }
 
+/// One reservation row on an item — the server writes these; every reserved
+/// unit names the order it is promised to.
+struct InventoryReservation: Equatable {
+    let orderId: String
+    let quantity: Double
+    let createdAtMs: Double
+
+    init?(_ raw: [String: Any]) {
+        guard let orderId = raw["orderId"] as? String, !orderId.isEmpty else { return nil }
+        self.orderId = orderId
+        quantity = (raw["quantity"] as? NSNumber)?.doubleValue ?? 0
+        createdAtMs = (raw["createdAtMs"] as? NSNumber)?.doubleValue ?? 0
+    }
+}
+
 struct InventoryItem: Identifiable, Equatable {
     let id: String
     var number: String
@@ -88,6 +103,13 @@ struct InventoryItem: Identifiable, Equatable {
     var internalTotalCost: Double
     var valuationCost: Double
     var photos: [String]
+    var description: String
+    var currentValueEst: Double
+    var additionalCosts: [InventoryAdditionalCost]
+    var reservations: [InventoryReservation]
+    var purchaseId: String
+    var purchaseNumber: String
+    var updatedAtMs: Double
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
@@ -119,6 +141,18 @@ struct InventoryItem: Identifiable, Equatable {
         internalTotalCost = (raw["internalTotalCost"] as? NSNumber)?.doubleValue ?? 0
         valuationCost = (raw["valuationCost"] as? NSNumber)?.doubleValue ?? 0
         photos = (raw["photos"] as? [String]) ?? []
+        description = raw["description"] as? String ?? ""
+        currentValueEst = (raw["currentValueEst"] as? NSNumber)?.doubleValue ?? 0
+        additionalCosts = (raw["additionalCosts"] as? [[String: Any]] ?? []).map {
+            InventoryAdditionalCost(
+                label: $0["label"] as? String ?? "",
+                amount: ($0["amount"] as? NSNumber)?.doubleValue ?? 0
+            )
+        }
+        reservations = (raw["reservations"] as? [[String: Any]] ?? []).compactMap(InventoryReservation.init)
+        purchaseId = raw["purchaseId"] as? String ?? ""
+        purchaseNumber = raw["purchaseNumber"] as? String ?? ""
+        updatedAtMs = (raw["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0
     }
 
     /// A unique item is one object, whatever a stale record happens to say.
@@ -143,6 +177,101 @@ struct InventoryItem: Identifiable, Equatable {
         if trackingType == .unique { return status == .available ? 1 : 0 }
         return max(0, onHand - reserved)
     }
+
+    /// The server's STATUS_TRANSITIONS, mirrored so no button or menu entry is
+    /// offered that the callable would refuse. "reserved" is deliberately never
+    /// a target: reserving must go through reserveInventoryForOrder, which
+    /// writes the reservation arrays — a bare status flip would promise the
+    /// item to no order at all.
+    var allowedNextStatuses: [InventoryStatus] {
+        switch status {
+        case .available: return [.used, .sold, .incoming, .archived]
+        case .reserved: return [.available, .used, .sold, .archived]
+        case .incoming: return [.available, .archived]
+        case .used: return [.available, .archived]
+        case .sold: return [.archived]
+        case .archived: return [.available]
+        }
+    }
+
+    /// EVERY field the server's saveInventoryItem expects, mirroring the web's
+    /// inventoryItemToInput. The server rebuilds the WHOLE document from this
+    /// input (normalizeItemInput) — reservations, status and number are carried
+    /// over server-side, but any field left out of the payload is blanked. So
+    /// even a location-only edit must send everything.
+    var inventoryItemInput: [String: Any] {
+        [
+            "name": name, "category": category,
+            "trackingType": trackingType.rawValue, "ownership": ownership.rawValue,
+            "brand": brand, "model": model, "reference": reference,
+            "serialNumber": serialNumber, "year": year, "condition": condition,
+            "description": description, "sku": sku, "location": location,
+            "supplierName": supplierName, "purchaseDate": purchaseDate, "notes": notes,
+            "photos": photos,
+            "onHand": trackingType == .quantity ? onHand : 1,
+            "unit": trackingType == .quantity ? unit : "",
+            "lowStockAt": lowStockAt,
+            "purchasePrice": purchasePrice,
+            "additionalCosts": additionalCosts.map { ["label": $0.label, "amount": $0.amount] },
+            "currentValueEst": currentValueEst
+        ]
+    }
+}
+
+/// One line of the movement ledger, as listInventoryMovements returns it.
+struct InventoryMovement: Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let delta: Double
+    let valueDelta: Double
+    let at: Double
+    let byEmail: String
+    let note: String
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String else { return nil }
+        self.id = id
+        kind = raw["kind"] as? String ?? ""
+        delta = (raw["delta"] as? NSNumber)?.doubleValue ?? 0
+        valueDelta = (raw["valueDelta"] as? NSNumber)?.doubleValue ?? 0
+        at = (raw["at"] as? NSNumber)?.doubleValue ?? 0
+        byEmail = raw["byEmail"] as? String ?? ""
+        note = raw["note"] as? String ?? ""
+    }
+
+    /// The same words the web item panel uses for its history list, so the
+    /// translation table needs one entry per kind, not one per platform.
+    var kindLabel: String {
+        switch kind {
+        case "openingStock": return "Opening stock"
+        case "purchase": return "Purchase"
+        case "adjustment": return "Adjustment"
+        case "stocktake": return "Stocktake"
+        case "used": return "Used"
+        case "sold": return "Sold"
+        case "removed": return "Removed"
+        default: return kind
+        }
+    }
+}
+
+/// What the shelf value did over the last 30 days. `available` is false while
+/// the ledger is younger than the window — a percentage computed over a period
+/// the ledger does not cover would be an invented number.
+struct InventoryMonthlyChange {
+    var available: Bool = false
+    var netValue30d: Double = 0
+    var pct: Double = 0
+    var ledgerStartsMs: Double = 0
+
+    init() {}
+
+    init(_ raw: [String: Any]) {
+        available = (raw["available"] as? Bool) ?? false
+        netValue30d = (raw["netValue30d"] as? NSNumber)?.doubleValue ?? 0
+        pct = (raw["pct"] as? NSNumber)?.doubleValue ?? 0
+        ledgerStartsMs = (raw["ledgerStartsMs"] as? NSNumber)?.doubleValue ?? 0
+    }
 }
 
 struct InventorySummary {
@@ -157,6 +286,7 @@ struct InventorySummary {
     var incomingValue: Double = 0
     var lowStockCount: Int = 0
     var customerOwnedCount: Int = 0
+    var monthlyChange = InventoryMonthlyChange()
 
     init(_ raw: [String: Any]) {
         totalValue = (raw["totalValue"] as? NSNumber)?.doubleValue ?? 0
@@ -170,6 +300,7 @@ struct InventorySummary {
         incomingValue = (raw["incomingValue"] as? NSNumber)?.doubleValue ?? 0
         lowStockCount = (raw["lowStockCount"] as? NSNumber)?.intValue ?? 0
         customerOwnedCount = (raw["customerOwnedCount"] as? NSNumber)?.intValue ?? 0
+        monthlyChange = InventoryMonthlyChange(raw["monthlyChange"] as? [String: Any] ?? [:])
     }
 }
 
@@ -524,6 +655,13 @@ extension FirebaseManager {
         _ = try await inventoryCall("setInventoryItemStatus", ["itemId": itemId, "status": status.rawValue])
     }
 
+    /// The movement ledger for one item, newest first. companyId travels via
+    /// inventoryCall like every other inventory callable.
+    func loadInventoryMovements(itemId: String) async throws -> [InventoryMovement] {
+        let raw = try await inventoryCall("listInventoryMovements", ["itemId": itemId])
+        return (raw["movements"] as? [[String: Any]] ?? []).compactMap(InventoryMovement.init)
+    }
+
     func loadPurchases() async throws -> [Purchase] {
         let raw = try await inventoryCall("listPurchases")
         return (raw["purchases"] as? [[String: Any]] ?? []).compactMap(Purchase.init)
@@ -622,19 +760,14 @@ extension FirebaseManager {
         return path
     }
 
-    /// Saves just the photo list. Every other field rides through untouched
-    /// because the server keeps what the form does not send.
+    /// Saves the photo list — riding on the FULL item payload, because the
+    /// server rebuilds the whole document from the input and blanks any field
+    /// that does not travel (photos are the one field it carries over, nothing
+    /// else is).
     func saveInventoryPhotos(item: InventoryItem, photos: [String]) async throws {
-        _ = try await inventoryCall("saveInventoryItem", [
-            "itemId": item.id,
-            "item": [
-                "name": item.name,
-                "category": item.category,
-                "trackingType": item.trackingType.rawValue,
-                "ownership": item.ownership.rawValue,
-                "photos": photos
-            ]
-        ])
+        var input = item.inventoryItemInput
+        input["photos"] = photos
+        _ = try await inventoryCall("saveInventoryItem", ["itemId": item.id, "item": input])
     }
 
     // MARK: Stocktake and reporting

@@ -72,6 +72,7 @@ struct InventoryView: View {
     @State private var showNewItem = false
     @State private var showOpeningStock = false
     @State private var photosFor: InventoryItem?
+    @State private var detailItem: InventoryItem?
     @State private var showNewPurchase = false
     @State private var editingSupplier: Supplier?
     @State private var showNewSupplier = false
@@ -122,6 +123,17 @@ struct InventoryView: View {
             .padding(isPhone ? 14 : 22)
         }
         .task { await model.loadItems(firebaseManager) }
+        .sheet(item: $detailItem) { item in
+            ItemDetailSheet(
+                item: item,
+                currencySymbol: seciliParaBirimi,
+                lang: seciliDil,
+                canEdit: canEdit
+            ) {
+                Task { await model.loadItems(firebaseManager) }
+            }
+            .environmentObject(firebaseManager)
+        }
         .sheet(item: $photosFor) { item in
             ItemPhotosSheet(item: item, lang: seciliDil, canEdit: canEdit) {
                 Task { await model.loadItems(firebaseManager) }
@@ -279,9 +291,19 @@ struct InventoryView: View {
         return "\(count) " + t("customer-owned items are held here and deliberately valued at zero — they are the customer's property, not stock.", lang: seciliDil)
     }
 
+    /// "+2.3% this month" — only when the ledger covers the whole window, same
+    /// rule as the web. A percentage over a period the ledger does not cover
+    /// would be an invented number, so it is simply not shown.
+    private var monthlyChangeLine: String {
+        let change = model.summary.monthlyChange
+        guard change.available else { return "" }
+        let pct = change.pct == change.pct.rounded() ? String(Int(change.pct)) : String(change.pct)
+        return (change.pct > 0 ? "+" : "") + pct + "% " + t("this month", lang: seciliDil)
+    }
+
     private var statsGrid: some View {
         let cards: [(String, String, String)] = [
-            (t("Total Inventory Value", lang: seciliDil), inventoryMoney(seciliParaBirimi, model.summary.totalValue), ""),
+            (t("Total Inventory Value", lang: seciliDil), inventoryMoney(seciliParaBirimi, model.summary.totalValue), monthlyChangeLine),
             (t("Unique Items", lang: seciliDil), "\(model.summary.uniqueCount)", inventoryMoney(seciliParaBirimi, model.summary.uniqueValue)),
             (t("Quantity Items", lang: seciliDil), "\(model.summary.quantityCount)", inventoryMoney(seciliParaBirimi, model.summary.quantityValue)),
             (t("Reserved for Orders", lang: seciliDil), inventoryMoney(seciliParaBirimi, model.summary.reservedValue), "\(model.summary.reservedCount) " + t("items", lang: seciliDil)),
@@ -373,8 +395,13 @@ struct InventoryView: View {
                      : "")
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 if canEdit {
+                    // Only the transitions the server's map accepts — and never
+                    // "reserved": reserving must go through the Reserve for
+                    // Order flow (reserveInventoryForOrder), which links an
+                    // order; a bare status flip would promise the item to
+                    // nobody and the order screens would never see it.
                     Menu(t("Move to…", lang: seciliDil)) {
-                        ForEach(InventoryStatus.allCases.filter { $0 != item.status }, id: \.self) { status in
+                        ForEach(item.allowedNextStatuses, id: \.self) { status in
                             Button(t(status.label, lang: seciliDil)) {
                                 Task {
                                     do {
@@ -392,6 +419,11 @@ struct InventoryView: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.16)))
+        // The whole row opens the item; the photo button and the status menu
+        // inside it keep their own taps — SwiftUI gives controls priority over
+        // the container gesture.
+        .contentShape(Rectangle())
+        .onTapGesture { detailItem = item }
     }
 
     private func statusPill(_ item: InventoryItem) -> some View {
