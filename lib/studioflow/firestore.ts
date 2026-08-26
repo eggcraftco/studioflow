@@ -364,6 +364,7 @@ export type CustomerDirectoryItem = {
   name: string;
   email: string;
   phone: string;
+  primaryPhone: string;
   instagram: string;
   address: string;
   streetAddress: string;
@@ -1522,6 +1523,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       name,
       email: stringValue(data.email, ""),
       phone: stringValue(data.phone, ""),
+      primaryPhone: stringValue(data.primaryPhone, ""),
       instagram: stringValue(data.instagram, ""),
       address: stringValue(data.address, ""),
       streetAddress: firstStringValue(data.streetAddress, data.addressLine1, data.street),

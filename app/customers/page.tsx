@@ -40,6 +40,7 @@ const EMPTY_CUSTOMER_FORM: CustomerFormInput = {
   name: "",
   email: "",
   phone: "",
+  primaryPhone: "",
   instagram: "",
   address: "",
   streetAddress: "",
@@ -100,6 +101,7 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
     name: customerDisplayName(input.name),
     email: input.email.trim(),
     phone: input.phone.trim(),
+    primaryPhone: input.primaryPhone.trim(),
     instagram: input.instagram.trim(),
     address: input.address.trim(),
     streetAddress: input.streetAddress.trim(),
@@ -126,6 +128,7 @@ function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
     name: customer.name,
     email: customer.email,
     phone: customer.phone,
+    primaryPhone: customer.primaryPhone,
     instagram: customer.instagram,
     address: customer.address,
     streetAddress: customer.streetAddress || customer.address,
@@ -229,6 +232,7 @@ export default function CustomersPage() {
           customer.name,
           customer.email,
           customer.phone,
+          customer.primaryPhone,
           customer.instagram,
           customer.address,
           customer.streetAddress,
@@ -276,11 +280,15 @@ export default function CustomersPage() {
   const selectedDuplicate = useMemo(() => {
     if (!selectedCustomer) return null;
     const email = selectedCustomer.email.trim().toLowerCase();
-    const phone = selectedCustomer.phone.replace(/[^0-9+]/g, "");
+    const phonesOf = (customer: CustomerDirectoryItem) => [customer.phone, customer.primaryPhone]
+      .map(value => value.replace(/[^0-9+]/g, ""))
+      .filter(value => value.length >= 7);
+    const ownPhones = phonesOf(selectedCustomer);
     for (const other of customers) {
       if (other.id === selectedCustomer.id) continue;
       if (email.length > 3 && other.email.trim().toLowerCase() === email) return { other, reason: "email" as const };
-      if (phone.length >= 7 && other.phone.replace(/[^0-9+]/g, "") === phone) return { other, reason: "phone" as const };
+      const otherPhones = phonesOf(other);
+      if (ownPhones.some(value => otherPhones.includes(value))) return { other, reason: "phone" as const };
     }
     return null;
   }, [customers, selectedCustomer]);
@@ -325,7 +333,7 @@ export default function CustomersPage() {
   async function handleMergeCustomers(
     primaryId: string,
     mergedId: string,
-    keep: Partial<Record<"name" | "email" | "phone", "primary" | "merged">>
+    keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone", "primary" | "merged">>
   ) {
     if (!workspace || mergingCustomers) return;
     setMergingCustomers(true);
@@ -1074,6 +1082,7 @@ function CustomerDetailsForm({
 
   const fields: Array<{ label: string; field: keyof CustomerFormInput; type?: string }> = [
     { label: "Email", field: "email", type: "email" },
+    { label: "Primary Phone", field: "primaryPhone" },
     // The order's general phone lands here — it is NOT a verified WhatsApp
     // number, so the label must not claim one.
     { label: "Phone / WhatsApp", field: "phone" },
@@ -1406,15 +1415,21 @@ function CustomerFormModal({
               <input className="input" type="email" value={form.email} onChange={event => updateField("email", event.target.value)} disabled={saving} />
             </label>
             <label>
-              WhatsApp / Phone
-              <input className="input" value={form.phone} onChange={event => updateField("phone", event.target.value)} disabled={saving} />
+              Primary Phone
+              <input className="input" value={form.primaryPhone} onChange={event => updateField("primaryPhone", event.target.value)} disabled={saving} />
             </label>
           </div>
 
-          <label>
-            Instagram
-            <input className="input" value={form.instagram} onChange={event => updateField("instagram", event.target.value)} disabled={saving} />
-          </label>
+          <div className="add-order-two-col">
+            <label>
+              WhatsApp / Phone
+              <input className="input" value={form.phone} onChange={event => updateField("phone", event.target.value)} disabled={saving} />
+            </label>
+            <label>
+              Instagram
+              <input className="input" value={form.instagram} onChange={event => updateField("instagram", event.target.value)} disabled={saving} />
+            </label>
+          </div>
 
           <label>
             Address
@@ -1484,7 +1499,7 @@ function MergeCustomersModal({
   moneySettings: StudioMoneySettings;
   language: string;
   onClose: () => void;
-  onMerge: (primaryId: string, mergedId: string, keep: Partial<Record<"name" | "email" | "phone", "primary" | "merged">>) => Promise<void>;
+  onMerge: (primaryId: string, mergedId: string, keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone", "primary" | "merged">>) => Promise<void>;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const t = (text: string) => studioT(text, language);
@@ -1495,6 +1510,7 @@ function MergeCustomersModal({
   const [keepName, setKeepName] = useState<"primary" | "merged">("primary");
   const [keepEmail, setKeepEmail] = useState<"primary" | "merged">("primary");
   const [keepPhone, setKeepPhone] = useState<"primary" | "merged">("primary");
+  const [keepPrimaryPhone, setKeepPrimaryPhone] = useState<"primary" | "merged">("primary");
 
   function fieldPicker(
     label: string,
@@ -1530,6 +1546,7 @@ function MergeCustomersModal({
           setKeepName("primary");
           setKeepEmail("primary");
           setKeepPhone("primary");
+          setKeepPrimaryPhone("primary");
         }}
         disabled={merging}
       >
@@ -1562,6 +1579,7 @@ function MergeCustomersModal({
         {fieldPicker(t("Name"), customerDisplayName(primary.name), customerDisplayName(other.name), keepName, setKeepName)}
         {fieldPicker(t("Email"), primary.email, other.email, keepEmail, setKeepEmail)}
         {fieldPicker(t("Phone / WhatsApp"), primary.phone, other.phone, keepPhone, setKeepPhone)}
+        {fieldPicker(t("Primary Phone"), primary.primaryPhone, other.primaryPhone, keepPrimaryPhone, setKeepPrimaryPhone)}
 
         <p className="muted-copy customer-merge-summary">
           {countLabel(other.orderCount, "order", "orders", t)} → <strong>{customerDisplayName(primary.name)}</strong>
@@ -1575,7 +1593,7 @@ function MergeCustomersModal({
             className="button"
             type="button"
             disabled={merging}
-            onClick={() => void onMerge(primary.id, other.id, { name: keepName, email: keepEmail, phone: keepPhone })}
+            onClick={() => void onMerge(primary.id, other.id, { name: keepName, email: keepEmail, phone: keepPhone, primaryPhone: keepPrimaryPhone })}
           >
             {merging ? t("Merging customers...") : t("Merge customers")}
           </button>
