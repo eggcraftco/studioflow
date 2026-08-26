@@ -96,8 +96,11 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
 - Kart: ~~sipariş türüne göre otomatik düzen~~ 27 Ağu gece 4'te TAMAM
   (typeWorkspaceSnapshotsJSON; owner 'Save as the repair-order layout' der,
   her repair siparişi herkes için o düzenle açılır; öncelik bağımsız-sipariş >
-  tür > profil > paylaşılan; emülatör 7/7; web+sunucu canlı — native çözümleme
-  paritesi sonraki mikro-tur). Kullanıcıya-özel düzen ZATEN VAR
+  tür > profil > paylaşılan; emülatör 7/7; web+sunucu canlı; NATIVE ÇÖZÜMLEME
+  DE TAMAM — Swift'te activeWorkspaceLayoutIsTypeManaged muhafızı ile clobber
+  koruması + logout cache hijyeni, Android'de jestler sipariş-bağımsız düzene
+  yönlenir; Overview açıklaması + Purchase→Inventory satırı da iki native'de,
+  gerçek navigasyonla). Kullanıcıya-özel düzen ZATEN VAR
   (workspaceUserProfilesJSON per-user profilleri) — ayrıca iş çıkmadı.
   (Görsel kararlar 1B/2B/3B DÖRT platformda TAMAM — web canlı-doğrulamalı,
   Mac+iPhone xcodebuild ve Android gradle build'leriyle commit'li, 27 Ağu.)
@@ -109,7 +112,9 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
   vurgusu ("⌕ Matched: Dup Band" kartta). Native paritesi de TAMAM (iki ajan;
   Swift BUILD SUCCEEDED ×2 — setData sunucu alanlarını artık ezmiyor;
   Android BUILD SUCCESSFUL). KALAN: segmentler/etiketler; Messages/AI Replies
-  bağlantısı; Overview sekme düzeni.
+  bağlantısı; Overview sekme düzeni. Segmentler de TAMAM (27 Ağu gece 5,
+  web+sunucu canlı yolda; tags[] anahtar-varsa yazımı, chip editörü + filtre
+  satırı + kart chip'leri; native segment UI'ı sonraki tur).
 - Envanter/Files 3. aşaması (aşağıdaki eski liste).
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
