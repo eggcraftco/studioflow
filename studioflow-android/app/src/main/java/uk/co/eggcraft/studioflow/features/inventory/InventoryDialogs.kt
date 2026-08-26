@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
@@ -39,6 +40,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioPurchase
@@ -437,6 +440,123 @@ fun NewPurchaseDialog(
                     )
                 }
             ) { Text(t("Save")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
+    )
+}
+
+/**
+ * Goods arrive in boxes, not in purchase orders. This dialog receives what the
+ * courier actually brought — per line, per quantity. The rest stays outstanding
+ * and the purchase says "Partially received" until the last piece lands.
+ * Counted lines take an amount (empty means "not in this box"); a unique line
+ * either arrived or it did not.
+ */
+@Composable
+fun ReceiveDeliveryDialog(
+    workspaceId: String,
+    purchase: StudioPurchase,
+    t: (String) -> String,
+    onDismiss: () -> Unit,
+    onReceived: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val repository = remember { StudioFlowRepository() }
+    var amounts by remember { mutableStateOf<Map<Int, String>>(emptyMap()) }
+    var checked by remember { mutableStateOf<Map<Int, Boolean>>(emptyMap()) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun submit() {
+        val payload = mutableListOf<Map<String, Any?>>()
+        for ((index, line) in purchase.lines.withIndex()) {
+            if (line.outstanding <= 0) continue
+            if (line.trackingType == StudioTrackingType.Unique) {
+                if (checked[index] == true) payload.add(mapOf("index" to index))
+                continue
+            }
+            val wanted = inventoryParse(amounts[index].orEmpty())
+            if (wanted <= 0) continue
+            if (wanted > line.outstanding + 0.000001) {
+                error = "\"${line.name}\" — " + t("that is more than is still outstanding.")
+                return
+            }
+            payload.add(mapOf("index" to index, "quantity" to wanted))
+        }
+        if (payload.isEmpty()) {
+            error = t("Enter what arrived first.")
+            return
+        }
+        saving = true
+        error = null
+        scope.launch {
+            try {
+                repository.inventoryReceivePurchase(workspaceId, purchase.id, payload)
+                onReceived()
+            } catch (failure: Exception) {
+                error = failure.message
+                saving = false
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Receive delivery"), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 420.dp)) {
+                Text(
+                    "${purchase.number} · ${purchase.supplierName.ifBlank { "—" }} — " +
+                        t("enter what the courier actually brought; the rest stays outstanding."),
+                    fontSize = 12.sp, color = Color.Gray
+                )
+                Spacer(Modifier.height(10.dp))
+
+                purchase.lines.forEachIndexed { index, line ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(line.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            // "2 / 10 pcs" — how much of this line has landed so
+                            // far, so the box being unpacked has its context.
+                            Text(
+                                inventoryQuantity(line.receivedQuantity) + " / " + inventoryQuantity(line.ordered) +
+                                    (if (line.unit.isBlank()) "" else " ${line.unit}"),
+                                fontSize = 11.sp, color = Color.Gray
+                            )
+                        }
+                        when {
+                            line.outstanding <= 0 -> Text(
+                                t("Received"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StudioGreen
+                            )
+                            line.trackingType == StudioTrackingType.Unique -> Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = checked[index] ?: false,
+                                    onCheckedChange = { checked = checked + (index to it) }
+                                )
+                                Text(t("Arrived"), fontSize = 12.sp)
+                            }
+                            else -> OutlinedTextField(
+                                value = amounts[index] ?: "",
+                                onValueChange = { amounts = amounts + (index to it) },
+                                placeholder = { Text(inventoryQuantity(line.outstanding), fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier.width(78.dp)
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                }
+
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, fontSize = 12.sp, color = StudioRed)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !saving, onClick = { submit() }) {
+                Text(if (saving) t("Saving…") else t("Receive what arrived"))
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )

@@ -2699,8 +2699,17 @@ class StudioFlowRepository(
         inventoryCall("savePurchase", workspaceId, mapOf("purchase" to purchase))
     }
 
-    suspend fun inventoryReceivePurchase(workspaceId: String, purchaseId: String) {
-        inventoryCall("receivePurchase", workspaceId, mapOf("purchaseId" to purchaseId))
+    /** Without [lines] this receives everything still outstanding — the old
+     *  one-click receive. With them it receives only what the courier actually
+     *  brought: each entry is {index, quantity?} into the purchase's lines
+     *  (unique lines just {index}), and the purchase stays partially received
+     *  until the last piece lands. */
+    suspend fun inventoryReceivePurchase(
+        workspaceId: String, purchaseId: String, lines: List<Map<String, Any?>>? = null
+    ) {
+        val payload = mutableMapOf<String, Any?>("purchaseId" to purchaseId)
+        if (lines != null) payload["lines"] = lines
+        inventoryCall("receivePurchase", workspaceId, payload)
     }
 
     suspend fun inventoryDeletePurchase(workspaceId: String, purchaseId: String) {
@@ -2929,6 +2938,25 @@ class StudioFlowRepository(
 
     suspend fun inventoryRelease(workspaceId: String, itemId: String, orderId: String) {
         inventoryCall("releaseInventoryFromOrder", workspaceId, mapOf("itemId" to itemId, "orderId" to orderId))
+    }
+
+    /** Consuming is the moment the promised part actually goes into the job:
+     *  this order's whole reservation leaves the shelf and the ledger names
+     *  the order. Unique items go to "used"; counted items lose the amount. */
+    suspend fun inventoryConsume(workspaceId: String, itemId: String, orderId: String) {
+        inventoryCall("consumeInventoryForOrder", workspaceId, mapOf("itemId" to itemId, "orderId" to orderId))
+    }
+
+    /** Releases the old item and reserves the new one in one server
+     *  transaction, so the order is never left holding neither. */
+    suspend fun inventorySwap(
+        workspaceId: String, orderId: String, fromItemId: String, toItemId: String, quantity: Double
+    ) {
+        inventoryCall(
+            "swapInventoryForOrder",
+            workspaceId,
+            mapOf("orderId" to orderId, "fromItemId" to fromItemId, "toItemId" to toItemId, "quantity" to quantity)
+        )
     }
 
     /** Stock leaving for a reason that is not a sale or a job — returned,

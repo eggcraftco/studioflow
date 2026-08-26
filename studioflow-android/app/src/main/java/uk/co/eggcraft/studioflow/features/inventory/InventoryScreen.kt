@@ -138,6 +138,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var showNewSupplier by remember { mutableStateOf(false) }
     var editingSupplier by remember { mutableStateOf<StudioSupplier?>(null) }
     var matchingPurchase by remember { mutableStateOf<StudioPurchase?>(null) }
+    var receivingPurchase by remember { mutableStateOf<StudioPurchase?>(null) }
 
     suspend fun reloadItems() {
         try {
@@ -271,6 +272,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
                         } catch (error: Exception) { notice = error.message }
                     }
                 },
+                onReceiveLines = { receivingPurchase = it },
                 onDelete = { purchase ->
                     scope.launch {
                         try {
@@ -383,6 +385,19 @@ fun InventoryScreen(state: StudioFlowUiState) {
                         reloadPurchases(); reloadItems()
                     } catch (error: Exception) { notice = error.message }
                 }
+            }
+        )
+    }
+
+    receivingPurchase?.let { purchase ->
+        ReceiveDeliveryDialog(
+            workspaceId = workspaceId,
+            purchase = purchase,
+            t = t,
+            onDismiss = { receivingPurchase = null },
+            onReceived = {
+                receivingPurchase = null
+                scope.launch { reloadPurchases(); reloadItems() }
             }
         )
     }
@@ -610,6 +625,7 @@ private fun PurchasesTab(
     canEdit: Boolean,
     t: (String) -> String,
     onReceive: (StudioPurchase) -> Unit,
+    onReceiveLines: (StudioPurchase) -> Unit,
     onDelete: (StudioPurchase) -> Unit,
     onMatch: (StudioPurchase) -> Unit
 ) {
@@ -647,8 +663,14 @@ private fun PurchasesTab(
                             }
                             Spacer(Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                // A partial delivery is still awaited, so its
+                                // pill stays in the incoming tone, not green.
                                 InventoryPill(
-                                    text = if (purchase.isReceived) t("Received") else t("Ordered"),
+                                    text = when {
+                                        purchase.isReceived -> t("Received")
+                                        purchase.isPartiallyReceived -> t("Partially received")
+                                        else -> t("Ordered")
+                                    },
                                     colour = if (purchase.isReceived) StudioGreen else StudioBlue
                                 )
                                 Spacer(Modifier.width(8.dp))
@@ -664,18 +686,36 @@ private fun PurchasesTab(
                                     Text(t("Payment matched"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = StudioGreen)
                                 }
                                 Spacer(Modifier.weight(1f))
-                                if (canEdit && !purchase.isReceived) {
+                            }
+                            if (canEdit && !purchase.isReceived) {
+                                // On their own row: three receive actions in
+                                // eleven languages never fit beside the pill.
+                                Spacer(Modifier.height(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        t("Mark received"),
+                                        t(if (purchase.isPartiallyReceived) "Receive the rest" else "Mark received"),
                                         fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
                                         modifier = Modifier.clickable { onReceive(purchase) }
                                     )
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        t("Delete"),
-                                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = StudioRed,
-                                        modifier = Modifier.clickable { onDelete(purchase) }
-                                    )
+                                    if (purchase.lineCount > 1 || purchase.isPartiallyReceived) {
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            t("Receive lines…"),
+                                            fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
+                                            modifier = Modifier.clickable { onReceiveLines(purchase) }
+                                        )
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    // Once anything has landed the purchase is
+                                    // history, not a draft — the server refuses
+                                    // the delete, so the door is not shown.
+                                    if (purchase.status == "ordered") {
+                                        Text(
+                                            t("Delete"),
+                                            fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = StudioRed,
+                                            modifier = Modifier.clickable { onDelete(purchase) }
+                                        )
+                                    }
                                 }
                             }
                         }

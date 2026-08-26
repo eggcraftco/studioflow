@@ -282,19 +282,50 @@ data class StudioPurchaseLineDraft(
     )
 }
 
+/** One line of a purchase order, as the server stores it. [receivedQuantity]
+ *  is how much of it has already landed — absent on old purchases, which means
+ *  zero: nothing had partially arrived before the field existed. */
+data class StudioPurchaseLine(
+    val name: String,
+    val trackingType: StudioTrackingType,
+    val quantity: Double,
+    val unit: String,
+    val receivedQuantity: Double
+) {
+    /** A unique line is always one thing, whatever its quantity field says. */
+    val ordered: Double get() = if (trackingType == StudioTrackingType.Unique) 1.0 else quantity
+    val outstanding: Double get() = (ordered - receivedQuantity).coerceAtLeast(0.0)
+
+    companion object {
+        fun from(raw: Map<*, *>): StudioPurchaseLine = StudioPurchaseLine(
+            name = raw["name"] as? String ?: "",
+            trackingType = StudioTrackingType.from(raw["trackingType"] as? String),
+            quantity = (raw["quantity"] as? Number)?.toDouble() ?: 0.0,
+            unit = raw["unit"] as? String ?: "",
+            receivedQuantity = (raw["receivedQuantity"] as? Number)?.toDouble() ?: 0.0
+        )
+    }
+}
+
 data class StudioPurchase(
     val id: String,
     val number: String,
     val supplierName: String,
     val purchaseDate: String,
     val reference: String,
-    val lineCount: Int,
+    val lines: List<StudioPurchaseLine>,
     val shipping: Double,
     val otherCosts: Double,
     val total: Double,
-    val isReceived: Boolean,
+    val status: String,
     val bankTransactionId: String
 ) {
+    val lineCount: Int get() = lines.size
+    val isReceived: Boolean get() = status == "received"
+    /** Between ordered and received: some of the delivery is on the shelf, the
+     *  rest is still with the courier. */
+    val isPartiallyReceived: Boolean get() = status == "partiallyReceived"
+
     companion object {
         fun from(raw: Map<*, *>): StudioPurchase? {
             val id = raw["id"] as? String ?: return null
@@ -304,11 +335,12 @@ data class StudioPurchase(
                 supplierName = raw["supplierName"] as? String ?: "",
                 purchaseDate = raw["purchaseDate"] as? String ?: "",
                 reference = raw["reference"] as? String ?: "",
-                lineCount = (raw["lines"] as? List<*>)?.size ?: 0,
+                lines = (raw["lines"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { (it as? Map<*, *>)?.let(StudioPurchaseLine::from) },
                 shipping = (raw["shipping"] as? Number)?.toDouble() ?: 0.0,
                 otherCosts = (raw["otherCosts"] as? Number)?.toDouble() ?: 0.0,
                 total = (raw["total"] as? Number)?.toDouble() ?: 0.0,
-                isReceived = (raw["status"] as? String) == "received",
+                status = raw["status"] as? String ?: "",
                 bankTransactionId = raw["bankTransactionId"] as? String ?: ""
             )
         }

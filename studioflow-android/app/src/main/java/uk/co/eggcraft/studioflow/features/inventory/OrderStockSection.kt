@@ -66,6 +66,8 @@ fun OrderStockSection(
     var total by remember(orderId) { mutableStateOf(0.0) }
     var loading by remember(orderId) { mutableStateOf(true) }
     var picking by remember { mutableStateOf(false) }
+    var swapFrom by remember { mutableStateOf<StudioOrderStockLine?>(null) }
+    var busyId by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
     suspend fun reload() {
@@ -127,16 +129,43 @@ fun OrderStockSection(
                             if (meta.isNotBlank()) Text(meta, fontSize = 11.sp, color = Color.Gray)
                         }
                         Text(inventoryMoney(currencySymbol, line.lineCost), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        if (canEdit) {
-                            Spacer(Modifier.width(12.dp))
+                    }
+                    if (canEdit) {
+                        // Three fates for a reserved part, on their own row so
+                        // the labels survive a phone width in every language.
+                        Row(Modifier.fillMaxWidth().padding(bottom = 5.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            // Consuming is the moment the promised part actually
+                            // goes into the job: the whole reserved line leaves
+                            // the shelf and the ledger names this order.
+                            Text(
+                                t("Use on the job"), fontSize = 12.sp, color = StudioBlue,
+                                modifier = Modifier.clickable(enabled = busyId == null) {
+                                    busyId = line.id
+                                    scope.launch {
+                                        try {
+                                            repository.inventoryConsume(workspaceId, line.id, orderId)
+                                            reload()
+                                        } catch (failure: Exception) {
+                                            error = failure.message ?: t("The item could not be marked as used.")
+                                        }
+                                        busyId = null
+                                    }
+                                }
+                            )
+                            Text(
+                                t("Swap…"), fontSize = 12.sp, color = StudioBlue,
+                                modifier = Modifier.clickable(enabled = busyId == null) { swapFrom = line }
+                            )
                             Text(
                                 t("Release"), fontSize = 12.sp, color = StudioRed,
-                                modifier = Modifier.clickable {
+                                modifier = Modifier.clickable(enabled = busyId == null) {
+                                    busyId = line.id
                                     scope.launch {
                                         try {
                                             repository.inventoryRelease(workspaceId, line.id, orderId)
                                             reload()
                                         } catch (failure: Exception) { error = failure.message }
+                                        busyId = null
                                     }
                                 }
                             )
@@ -169,16 +198,18 @@ fun OrderStockSection(
         }
     }
 
-    if (picking) {
+    if (picking || swapFrom != null) {
         ReserveStockDialog(
             workspaceId = workspaceId,
             orderId = orderId,
             currencySymbol = currencySymbol,
             alreadyReserved = lines.map { it.id },
+            swapFrom = swapFrom,
             t = t,
-            onDismiss = { picking = false },
+            onDismiss = { picking = false; swapFrom = null },
             onReserved = {
                 picking = false
+                swapFrom = null
                 scope.launch { reload() }
             }
         )
@@ -191,6 +222,10 @@ private fun ReserveStockDialog(
     orderId: String,
     currencySymbol: String,
     alreadyReserved: List<String>,
+    /** When set, picking an item swaps this line for it instead of adding —
+     *  the server releases the old reservation and takes the new one in a
+     *  single transaction. */
+    swapFrom: StudioOrderStockLine? = null,
     t: (String) -> String,
     onDismiss: () -> Unit,
     onReserved: () -> Unit
@@ -223,7 +258,12 @@ private fun ReserveStockDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(t("Reserve stock"), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                t(if (swapFrom != null) "Swap to a different item" else "Reserve stock"),
+                fontSize = 17.sp, fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()).heightIn(max = 420.dp)) {
                 OutlinedTextField(
@@ -243,6 +283,12 @@ private fun ReserveStockDialog(
                         fontSize = 12.sp, color = Color.Gray
                     )
                     else -> choices.forEach { item ->
+                        // In swap mode the sensible default is what the old
+                        // line held (capped at what the new item can give),
+                        // not everything the new item has free.
+                        val fallback = if (swapFrom != null && item.trackingType == StudioTrackingType.Quantity)
+                            minOf(item.freeToReserve, swapFrom.quantity)
+                        else item.freeToReserve
                         Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(item.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
@@ -257,7 +303,7 @@ private fun ReserveStockDialog(
                             }
                             if (item.trackingType == StudioTrackingType.Quantity) {
                                 OutlinedTextField(
-                                    value = amounts[item.id] ?: inventoryQuantity(item.freeToReserve),
+                                    value = amounts[item.id] ?: inventoryQuantity(fallback),
                                     onValueChange = { amounts = amounts + (item.id to it) },
                                     singleLine = true,
                                     modifier = Modifier.width(78.dp)
@@ -275,18 +321,23 @@ private fun ReserveStockDialog(
                                     busy = true
                                     error = null
                                     val wanted = if (item.trackingType == StudioTrackingType.Unique) 1.0
-                                    else inventoryParse(amounts[item.id] ?: inventoryQuantity(item.freeToReserve))
+                                    else inventoryParse(amounts[item.id] ?: inventoryQuantity(fallback))
                                     scope.launch {
                                         try {
-                                            repository.inventoryReserve(workspaceId, item.id, orderId, wanted)
+                                            if (swapFrom != null) {
+                                                repository.inventorySwap(workspaceId, orderId, swapFrom.id, item.id, wanted)
+                                            } else {
+                                                repository.inventoryReserve(workspaceId, item.id, orderId, wanted)
+                                            }
                                             onReserved()
                                         } catch (failure: Exception) {
                                             error = failure.message
+                                                ?: t(if (swapFrom != null) "The swap could not be completed." else "The item could not be reserved.")
                                             busy = false
                                         }
                                     }
                                 }
-                            ) { Text(t("Reserve"), fontSize = 12.sp) }
+                            ) { Text(t(if (swapFrom != null) "Swap" else "Reserve"), fontSize = 12.sp) }
                         }
                         HorizontalDivider()
                     }
