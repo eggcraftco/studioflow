@@ -44,6 +44,8 @@ const EMPTY_CUSTOMER_FORM: CustomerFormInput = {
   email: "",
   phone: "",
   primaryPhone: "",
+  whatsappNumber: "",
+  company: "",
   instagram: "",
   address: "",
   streetAddress: "",
@@ -105,6 +107,8 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
     email: input.email.trim(),
     phone: input.phone.trim(),
     primaryPhone: input.primaryPhone.trim(),
+    whatsappNumber: input.whatsappNumber.trim(),
+    company: input.company.trim(),
     instagram: input.instagram.trim(),
     address: input.address.trim(),
     streetAddress: input.streetAddress.trim(),
@@ -141,6 +145,8 @@ function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
     email: customer.email,
     phone: customer.phone,
     primaryPhone: customer.primaryPhone,
+    whatsappNumber: customer.whatsappNumber,
+    company: customer.company,
     instagram: customer.instagram,
     address: customer.address,
     streetAddress: customer.streetAddress || customer.address,
@@ -267,6 +273,8 @@ export default function CustomersPage() {
           customer.email,
           customer.phone,
           customer.primaryPhone,
+          customer.whatsappNumber,
+          customer.company,
           customer.instagram,
           customer.address,
           customer.streetAddress,
@@ -275,6 +283,7 @@ export default function CustomersPage() {
           customer.country
         ].some(value => value.toLowerCase().includes(term))
           // The report's ask: find a customer by what they ordered.
+          || customer.tags.some(tag => tag.toLowerCase().includes(term))
           || customer.orders.some(order =>
             order.invoiceNumber.toLowerCase().includes(term)
             || order.designName.toLowerCase().includes(term)))
@@ -324,7 +333,7 @@ export default function CustomersPage() {
   const selectedDuplicate = useMemo(() => {
     if (!selectedCustomer) return null;
     const email = selectedCustomer.email.trim().toLowerCase();
-    const phonesOf = (customer: CustomerDirectoryItem) => [customer.phone, customer.primaryPhone]
+    const phonesOf = (customer: CustomerDirectoryItem) => [customer.phone, customer.primaryPhone, customer.whatsappNumber]
       .map(value => value.replace(/[^0-9+]/g, ""))
       .filter(value => value.length >= 7);
     const ownPhones = phonesOf(selectedCustomer);
@@ -374,7 +383,7 @@ export default function CustomersPage() {
       if (customer.name.toLowerCase().includes(term)) continue;
       let hint = "";
       if (customer.email.toLowerCase().includes(term)) hint = `${studioT("Email", language)}: ${customer.email}`;
-      else if (customer.phone.toLowerCase().includes(term) || customer.primaryPhone.toLowerCase().includes(term)) hint = `${studioT("Phone", language)}: ${customer.primaryPhone || customer.phone}`;
+      else if (customer.phone.toLowerCase().includes(term) || customer.primaryPhone.toLowerCase().includes(term) || customer.whatsappNumber.toLowerCase().includes(term)) hint = `${studioT("Phone", language)}: ${customer.whatsappNumber || customer.primaryPhone || customer.phone}`;
       else if (customer.instagram.toLowerCase().includes(term)) hint = `Instagram: ${customer.instagram}`;
       else {
         const order = customer.orders.find(item => item.invoiceNumber.toLowerCase().includes(term));
@@ -427,7 +436,7 @@ export default function CustomersPage() {
   async function handleMergeCustomers(
     primaryId: string,
     mergedId: string,
-    keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone", "primary" | "merged">>
+    keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone" | "whatsappNumber", "primary" | "merged">>
   ) {
     if (!workspace || mergingCustomers) return;
     setMergingCustomers(true);
@@ -457,6 +466,8 @@ export default function CustomersPage() {
         email: customer.email,
         phone: customer.phone,
         primaryPhone: customer.primaryPhone,
+        whatsappNumber: customer.whatsappNumber,
+        company: customer.company,
         instagram: customer.instagram,
         address: customer.address,
         streetAddress: customer.streetAddress,
@@ -1080,7 +1091,10 @@ function CustomerDetail({
             // already knows — no dialer/app integration, plain links.
             const phone = (customer.primaryPhone || customer.phone).trim();
             const phoneDigits = phone.replace(/[^0-9+]/g, "");
-            const waDigits = phoneDigits.replace(/^\+/, "").replace(/^00/, "");
+            // The dedicated WhatsApp number wins; the store-fed phone is only
+            // a fallback guess.
+            const waSource = (customer.whatsappNumber || customer.phone || customer.primaryPhone).trim();
+            const waDigits = waSource.replace(/[^0-9+]/g, "").replace(/^\+/, "").replace(/^00/, "");
             const instagram = customer.instagram.trim().replace(/^@/, "");
             const quickAction: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 12px", border: "1px solid rgba(120,120,140,0.28)", textDecoration: "none", color: "inherit" };
             // "Do not contact" wins over every outreach shortcut — the links
@@ -1092,11 +1106,11 @@ function CustomerDetail({
             return (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                 {phone ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("phone") }} href={`tel:${phoneDigits}`}>📞 {t("Call")}</a> : null}
-                {phone ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("whatsapp") }} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
+                {waDigits ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("whatsapp") }} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
                 {customer.email ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("email") }} href={`mailto:${customer.email}`}>✉️ {t("Email")}</a> : null}
                 {instagram ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("instagram") }} href={`https://instagram.com/${encodeURIComponent(instagram)}`} target="_blank" rel="noopener noreferrer">◎ Instagram</a> : null}
                 <Link style={{ ...quickAction, ...blockedStyle }} href={`/messages?q=${encodeURIComponent(customerDisplayName(customer.name))}`}>🗨 {t("Messages")}</Link>
-                <Link style={{ ...quickAction, ...blockedStyle }} href="/quick-reply">✨ {t("AI Reply")}</Link>
+                <Link style={{ ...quickAction, ...blockedStyle }} href={`/quick-reply?customer=${encodeURIComponent(customerDisplayName(customer.name))}`}>✨ {t("AI Reply")}</Link>
                 {blocked ? <span style={{ ...quickAction, borderColor: "rgba(220,38,38,0.4)", color: "#dc2626", background: "rgba(220,38,38,0.06)" }}>⛔ {t("Do not contact")}</span> : null}
                 {customer.nextFollowUpDate ? (
                   <span style={{ ...quickAction, borderColor: "rgba(245,158,11,0.4)", color: customer.nextFollowUpDate.getTime() < Date.now() ? "#dc2626" : "#b45309", background: "rgba(245,158,11,0.06)" }}>
@@ -1159,7 +1173,16 @@ function CustomerDetail({
       <div className="customer-stats-row">
         {/* Order value is not money received — the report's distinction, kept
             visible: value, what was actually paid, and what is still owed. */}
-        <CustomerStatCard emoji="🛍️" tint="#34c759" label={t("Total Order Value")} value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"} valueClass="positive" />
+        <CustomerStatCard
+          emoji="🛍️"
+          tint="#34c759"
+          label={t("Total Order Value")}
+          value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"}
+          sub={canSeeFinance && customer.totalRefunded > 0.004
+            ? `${t("incl.")} ${money(customer.totalRefunded, hideNumbers, moneySettings)} ${t("cancelled or refunded")}`
+            : undefined}
+          valueClass="positive"
+        />
         <CustomerStatCard emoji="💷" tint="#2f6df6" label={t("Paid")} value={canSeeFinance ? money(customer.totalPaid, hideNumbers, moneySettings) : "—"} valueClass="positive" />
         <CustomerStatCard emoji="⏳" tint="#ff3b30" label={t("Outstanding")} value={canSeeFinance ? money(Math.max(customer.totalOutstanding, 0), hideNumbers, moneySettings) : "—"} />
         <CustomerStatCard emoji="📦" tint="#2f6df6" label={t("Total Orders")} value={String(customer.orderCount)} />
@@ -1390,12 +1413,13 @@ function CustomerDetail({
   );
 }
 
-function CustomerStatCard({ emoji, tint, label, value, valueClass }: { emoji: string; tint: string; label: string; value: string; valueClass?: string }) {
+function CustomerStatCard({ emoji, tint, label, value, sub, valueClass }: { emoji: string; tint: string; label: string; value: string; sub?: string; valueClass?: string }) {
   return (
     <div className="customer-stat-card">
       <span className="customer-stat-chip" style={{ backgroundColor: `${tint}26`, color: tint }}>{emoji}</span>
       <span className="customer-stat-label">{label}</span>
       <span className={`customer-stat-value${valueClass ? ` ${valueClass}` : ""}`}>{value}</span>
+      {sub ? <span className="customer-stat-sub">{sub}</span> : null}
     </div>
   );
 }
@@ -1484,9 +1508,12 @@ function CustomerDetailsForm({
   const fields: Array<{ label: string; field: keyof CustomerFormInput; type?: string }> = [
     { label: "Email", field: "email", type: "email" },
     { label: "Primary Phone", field: "primaryPhone" },
+    // The customer's own WhatsApp number, kept apart from the store-fed phone.
+    { label: "WhatsApp Number", field: "whatsappNumber" },
     // The order's general phone lands here — it is NOT a verified WhatsApp
-    // number, so the label must not claim one.
-    { label: "Phone / WhatsApp", field: "phone" },
+    // number, so the label stays honest about that.
+    { label: "Phone (from orders)", field: "phone" },
+    { label: "Company", field: "company" },
     { label: "Instagram", field: "instagram" },
     { label: "Street", field: "streetAddress" },
     { label: "City", field: "city" },
@@ -1825,12 +1852,20 @@ function CustomerFormModal({
 
           <div className="add-order-two-col">
             <label>
-              WhatsApp / Phone
+              WhatsApp Number
+              <input className="input" value={form.whatsappNumber} onChange={event => updateField("whatsappNumber", event.target.value)} disabled={saving} />
+            </label>
+            <label>
+              Phone (from orders)
               <input className="input" value={form.phone} onChange={event => updateField("phone", event.target.value)} disabled={saving} />
             </label>
             <label>
               Instagram
               <input className="input" value={form.instagram} onChange={event => updateField("instagram", event.target.value)} disabled={saving} />
+            </label>
+            <label>
+              Company
+              <input className="input" value={form.company} onChange={event => updateField("company", event.target.value)} disabled={saving} />
             </label>
           </div>
 
@@ -1903,7 +1938,7 @@ function MergeCustomersModal({
   moneySettings: StudioMoneySettings;
   language: string;
   onClose: () => void;
-  onMerge: (primaryId: string, mergedId: string, keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone", "primary" | "merged">>) => Promise<void>;
+  onMerge: (primaryId: string, mergedId: string, keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone" | "whatsappNumber", "primary" | "merged">>) => Promise<void>;
 }) {
   const { hideNumbers } = usePricePrivacy();
   const t = (text: string) => studioT(text, language);
@@ -1915,6 +1950,7 @@ function MergeCustomersModal({
   const [keepEmail, setKeepEmail] = useState<"primary" | "merged">("primary");
   const [keepPhone, setKeepPhone] = useState<"primary" | "merged">("primary");
   const [keepPrimaryPhone, setKeepPrimaryPhone] = useState<"primary" | "merged">("primary");
+  const [keepWhatsapp, setKeepWhatsapp] = useState<"primary" | "merged">("primary");
 
   function fieldPicker(
     label: string,
@@ -1984,6 +2020,7 @@ function MergeCustomersModal({
         {fieldPicker(t("Email"), primary.email, other.email, keepEmail, setKeepEmail)}
         {fieldPicker(t("Phone / WhatsApp"), primary.phone, other.phone, keepPhone, setKeepPhone)}
         {fieldPicker(t("Primary Phone"), primary.primaryPhone, other.primaryPhone, keepPrimaryPhone, setKeepPrimaryPhone)}
+        {fieldPicker(t("WhatsApp Number"), primary.whatsappNumber, other.whatsappNumber, keepWhatsapp, setKeepWhatsapp)}
 
         <p className="muted-copy customer-merge-summary">
           {countLabel(other.orderCount, "order", "orders", t)} → <strong>{customerDisplayName(primary.name)}</strong>
@@ -1997,7 +2034,7 @@ function MergeCustomersModal({
             className="button"
             type="button"
             disabled={merging}
-            onClick={() => void onMerge(primary.id, other.id, { name: keepName, email: keepEmail, phone: keepPhone, primaryPhone: keepPrimaryPhone })}
+            onClick={() => void onMerge(primary.id, other.id, { name: keepName, email: keepEmail, phone: keepPhone, primaryPhone: keepPrimaryPhone, whatsappNumber: keepWhatsapp })}
           >
             {merging ? t("Merging customers...") : t("Merge customers")}
           </button>
