@@ -570,7 +570,7 @@ function createInventoryFunctions({
     ["model", ["model"]],
     ["reference", ["reference", "ref", "ref."]],
     ["serialNumber", ["serial", "serial number", "serial no", "serialno"]],
-    ["sku", ["sku", "code", "part number", "part no"]],
+    ["sku", ["sku", "code", "part number", "part no", "barcode", "ean", "upc"]],
     ["onHand", ["on hand", "onhand", "qty", "quantity", "stock", "count", "amount"]],
     ["unit", ["unit", "units", "uom"]],
     ["lowStockAt", ["reorder at", "reorder", "min", "minimum", "low stock"]],
@@ -578,7 +578,13 @@ function createInventoryFunctions({
     ["location", ["location", "where", "shelf", "bin", "storage"]],
     ["supplierName", ["supplier", "vendor", "from", "bought from"]],
     ["purchaseDate", ["purchase date", "date", "bought", "acquired"]],
-    ["notes", ["notes", "note", "comment", "comments"]]
+    ["notes", ["notes", "note", "comment", "comments"]],
+    // Listed after name on purpose: "description" maps to the name column when
+    // the sheet has no name header, and to its own field when it has both.
+    ["ownership", ["ownership", "owner", "owned by"]],
+    ["condition", ["condition", "state", "grade"]],
+    ["year", ["year", "yr"]],
+    ["description", ["description", "details", "desc", "long description"]]
   ];
 
   function splitDelimited(text) {
@@ -661,7 +667,7 @@ function createInventoryFunctions({
    * language the client is in.
    */
   const parseOpeningStock = onCall({ region: REGION }, async (request) => {
-    await requireInventoryAccess(request);
+    const { companyId } = await requireInventoryAccess(request);
     const data = request.data || {};
     // 400k of text is far more than 500 rows of stock and keeps one paste from
     // becoming a denial of service.
@@ -722,6 +728,10 @@ function createInventoryFunctions({
           supplierName: pick("supplierName"),
           purchaseDate: pick("purchaseDate"),
           notes: pick("notes"),
+          ownership: pick("ownership").toLowerCase().startsWith("c") ? "customer" : "business",
+          condition: pick("condition"),
+          year: pick("year"),
+          description: pick("description"),
           unit: isUnique ? "" : pick("unit"),
           onHand: isUnique ? 1 : spreadsheetNumber(pick("onHand")),
           lowStockAt: isUnique ? 0 : spreadsheetNumber(pick("lowStockAt")),
@@ -750,6 +760,35 @@ function createInventoryFunctions({
       });
     }
 
+    // Duplicate pre-scan: a sheet exported twice should not become the same
+    // stock twice. A row that carries a SKU or a serial is checked against what
+    // is already on the shelf, and comes back marked — the import policy
+    // (create / update / skip) is the person's call, made with that knowledge.
+    const needsScan = items.some((row) => row.sku || row.serialNumber);
+    if (needsScan) {
+      const shelf = await itemsRef(companyId)
+        .select("sku", "serialNumber", "number").limit(5000).get();
+      const bySku = new Map();
+      const bySerial = new Map();
+      shelf.docs.forEach((doc) => {
+        const data = doc.data() || {};
+        const sku = String(data.sku || "").trim().toLowerCase();
+        const serial = String(data.serialNumber || "").trim().toLowerCase();
+        if (sku && !bySku.has(sku)) bySku.set(sku, { id: doc.id, number: data.number || "" });
+        if (serial && !bySerial.has(serial)) bySerial.set(serial, { id: doc.id, number: data.number || "" });
+      });
+      items.forEach((row) => {
+        const serial = String(row.serialNumber || "").trim().toLowerCase();
+        const sku = String(row.sku || "").trim().toLowerCase();
+        const hit = (serial && bySerial.get(serial)) || (sku && bySku.get(sku)) || null;
+        if (hit) {
+          row.existingItemId = hit.id;
+          row.existingNumber = hit.number;
+          row.matchedBy = serial && bySerial.get(serial) ? "serialNumber" : "sku";
+        }
+      });
+    }
+
     return {
       ok: true,
       grid,
@@ -760,6 +799,7 @@ function createInventoryFunctions({
       fields: OPENING_STOCK_ALIASES.map(([key]) => key),
       items,
       skipped,
+      duplicates: items.filter((row) => row.existingItemId).length,
       maxRows: 500
     };
   });
@@ -771,9 +811,18 @@ function createInventoryFunctions({
       : [];
     if (rows.length === 0) throw new HttpsError("invalid-argument", "No items to import.");
     const openingDate = clean(request.data && request.data.openingDate, "", 40);
+    // What to do with a row parseOpeningStock matched to existing stock:
+    // create it anyway (the old behaviour), skip it, or update the existing
+    // item so the sheet becomes the truth.
+    const policy = ["create", "skip", "update"].includes(String(request.data && request.data.duplicatePolicy))
+      ? String(request.data.duplicatePolicy)
+      : "create";
     const now = Date.now();
 
     let written = 0;
+    let updated = 0;
+    let skippedDuplicates = 0;
+    let conflicts = 0;
     // Chunked so one oversized import cannot exceed a transaction's limits.
     for (let start = 0; start < rows.length; start += 100) {
       const chunk = rows.slice(start, start + 100);
@@ -781,8 +830,62 @@ function createInventoryFunctions({
       await db().runTransaction(async (tx) => {
         const ref = companyRef(companyId);
         const snap = await tx.get(ref);
+        // Firestore wants every read before any write, so the docs an update
+        // policy will touch are all read up front.
+        const existingSnaps = new Map();
+        if (policy === "update") {
+          for (const row of chunk) {
+            const existingId = clean(row && row.existingItemId, "", 80);
+            if (existingId && !existingSnaps.has(existingId)) {
+              // eslint-disable-next-line no-await-in-loop
+              existingSnaps.set(existingId, await tx.get(itemsRef(companyId).doc(existingId)));
+            }
+          }
+        }
         let counter = Number((snap.exists ? snap.data() || {} : {}).inventoryCounter) || 0;
         for (const row of chunk) {
+          const existingId = clean(row && row.existingItemId, "", 80);
+          if (existingId && policy === "skip") { skippedDuplicates += 1; continue; }
+
+          if (existingId && policy === "update") {
+            const existingSnap = existingSnaps.get(existingId);
+            if (!existingSnap || !existingSnap.exists) { conflicts += 1; continue; }
+            const existing = existingSnap.data() || {};
+            const fields = normalizeItemInput(row, existing);
+            if (!fields.name) continue;
+            const isUnique = String(existing.trackingType) === "unique";
+            const oldOnHand = isUnique ? 1 : cleanQuantity((existing.quantity || {}).onHand);
+            const newOnHand = isUnique ? 1 : fields.quantity.onHand;
+            const reserved = cleanQuantity((existing.quantity || {}).reserved);
+            // A sheet cannot pull the shelf below what orders already hold.
+            if (!isUnique && newOnHand < reserved) { conflicts += 1; continue; }
+            tx.set(existingSnap.ref, {
+              ...fields,
+              // The sheet updates what a thing IS; what has HAPPENED to it —
+              // number, status, reservations, provenance — stays untouched.
+              trackingType: existing.trackingType,
+              quantity: isUnique
+                ? existing.quantity
+                : { ...(existing.quantity || {}), onHand: newOnHand, unit: fields.quantity.unit || (existing.quantity || {}).unit || "" },
+              updatedAtMs: now,
+              updatedByUid: uid
+            }, { merge: true });
+            const delta = roundSigned(newOnHand - oldOnHand);
+            if (!isUnique && delta !== 0) {
+              recordMovement(tx, companyId, {
+                item: { ...existing, ...fields },
+                itemId: existingSnap.id,
+                kind: "adjustment",
+                delta,
+                unitCost: fields.valuationCost,
+                at: now, uid, email,
+                note: "Import update"
+              });
+            }
+            updated += 1;
+            continue;
+          }
+
           const fields = normalizeItemInput(row, null);
           if (!fields.name) continue;
           counter += 1;
@@ -821,7 +924,7 @@ function createInventoryFunctions({
       });
     }
 
-    return { ok: true, imported: written };
+    return { ok: true, imported: written, updated, skippedDuplicates, conflicts };
   });
 
   // -------------------------------------------------------------------------
