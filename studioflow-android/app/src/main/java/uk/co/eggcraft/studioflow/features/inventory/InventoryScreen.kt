@@ -201,7 +201,8 @@ fun InventoryScreen(state: StudioFlowUiState) {
     val visible = items.filter { item ->
         val needle = search.trim().lowercase()
         needle.isBlank() || listOf(
-            item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number
+            item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number,
+            item.tags.joinToString(" ")
         ).any { it.lowercase().contains(needle) }
     }
 
@@ -826,6 +827,14 @@ private fun SuppliersTab(
                             val contact = listOf(supplier.email, supplier.phone)
                                 .filter { it.isNotBlank() }.joinToString(" · ")
                             if (contact.isNotBlank()) Text(contact, fontSize = 11.sp, color = Color.Gray)
+                            // The paperwork line, same shape as the web card:
+                            // code · VAT number: X · currency.
+                            val paperwork = listOf(
+                                supplier.code,
+                                if (supplier.vatNumber.isBlank()) "" else t("VAT number") + ": " + supplier.vatNumber,
+                                supplier.currency
+                            ).filter { it.isNotBlank() }.joinToString(" · ")
+                            if (paperwork.isNotBlank()) Text(paperwork, fontSize = 11.sp, color = Color.Gray)
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 SupplierStat(t("Spent"), inventoryMoney(symbol, supplier.spent))

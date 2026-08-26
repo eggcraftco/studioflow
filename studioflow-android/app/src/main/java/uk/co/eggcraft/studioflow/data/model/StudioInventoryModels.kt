@@ -81,6 +81,7 @@ data class StudioInventoryItem(
     val supplierName: String,
     val purchaseDate: String,
     val notes: String,
+    val tags: List<String>,
     val onHand: Double,
     val reserved: Double,
     val unit: String,
@@ -148,6 +149,10 @@ data class StudioInventoryItem(
         "supplierName" to supplierName,
         "purchaseDate" to purchaseDate,
         "notes" to notes,
+        // Tags have key-present semantics on the server: leaving the key out
+        // keeps the stored ones, but the full-input path always sends them so
+        // an edit round-trips exactly what the form showed.
+        "tags" to tags,
         "photos" to photos,
         "onHand" to if (trackingType == StudioTrackingType.Quantity) onHand else 1.0,
         "unit" to if (trackingType == StudioTrackingType.Quantity) unit else "",
@@ -181,6 +186,7 @@ data class StudioInventoryItem(
                 supplierName = raw["supplierName"] as? String ?: "",
                 purchaseDate = raw["purchaseDate"] as? String ?: "",
                 notes = raw["notes"] as? String ?: "",
+                tags = (raw["tags"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String },
                 onHand = (quantity["onHand"] as? Number)?.toDouble() ?: 0.0,
                 reserved = (quantity["reserved"] as? Number)?.toDouble() ?: 0.0,
                 unit = quantity["unit"] as? String ?: "",
@@ -374,6 +380,12 @@ data class StudioSupplier(
     val email: String,
     val phone: String,
     val website: String,
+    val notes: String,
+    /** The paperwork fields: what an invoice or a customs form asks for. */
+    val code: String,
+    val address: String,
+    val vatNumber: String,
+    val currency: String,
     /** True when this supplier exists only because a purchase names it. The
      *  buying is what makes a supplier real; the card is extra detail. */
     val isImplied: Boolean,
@@ -394,6 +406,11 @@ data class StudioSupplier(
                 email = raw["email"] as? String ?: "",
                 phone = raw["phone"] as? String ?: "",
                 website = raw["website"] as? String ?: "",
+                notes = raw["notes"] as? String ?: "",
+                code = raw["code"] as? String ?: "",
+                address = raw["address"] as? String ?: "",
+                vatNumber = raw["vatNumber"] as? String ?: "",
+                currency = raw["currency"] as? String ?: "",
                 isImplied = raw["implied"] == true,
                 spent = (stats["total"] as? Number)?.toDouble() ?: 0.0,
                 purchaseCount = (stats["count"] as? Number)?.toInt() ?: 0,

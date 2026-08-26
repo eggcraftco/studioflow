@@ -9,21 +9,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -60,12 +69,14 @@ private fun InventoryField(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    placeholder: String = "",
     onChange: (String) -> Unit
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label, fontSize = 12.sp) },
+        placeholder = if (placeholder.isBlank()) null else ({ Text(placeholder, fontSize = 12.sp) }),
         singleLine = true,
         modifier = modifier.fillMaxWidth()
     )
@@ -142,6 +153,16 @@ fun NewInventoryItemDialog(
     val extras = remember { existing?.additionalCosts.orEmpty().toMutableList().toMutableStateList() }
     var isCustomerOwned by remember { mutableStateOf(existing?.isCustomerOwned ?: false) }
     var notes by remember { mutableStateOf(existing?.notes.orEmpty()) }
+    val tags = remember { existing?.tags.orEmpty().toMutableList().toMutableStateList() }
+    var tagInput by remember { mutableStateOf("") }
+
+    // The same caps the server enforces (20 tags of 30 characters), applied
+    // here so nothing typed is silently shortened after the save.
+    fun addTag() {
+        val value = tagInput.trim().take(30)
+        if (value.isNotBlank() && value !in tags && tags.size < 20) tags.add(value)
+        tagInput = ""
+    }
 
     val extrasTotal = extras.sumOf { it.second }
     val internalTotal = inventoryParse(purchasePrice) + extrasTotal
@@ -254,6 +275,33 @@ fun NewInventoryItemDialog(
                 Spacer(Modifier.height(8.dp))
                 InventoryField(t("Purchase date (YYYY-MM-DD)"), purchaseDate) { purchaseDate = it }
 
+                Spacer(Modifier.height(8.dp))
+                if (tags.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        tags.forEach { tag ->
+                            InputChip(
+                                selected = false,
+                                onClick = { tags.remove(tag) },
+                                label = { Text(tag, fontSize = 11.sp) },
+                                trailingIcon = { Icon(Icons.Filled.Close, null, modifier = Modifier.size(14.dp)) }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = tagInput,
+                    onValueChange = { tagInput = it },
+                    label = { Text(t("Tags"), fontSize = 12.sp) },
+                    placeholder = { Text(t("Add a tag and press Enter"), fontSize = 12.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addTag() }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
@@ -287,6 +335,9 @@ fun NewInventoryItemDialog(
                             "unit" to unit, "lowStockAt" to inventoryParse(lowStockAt),
                             "purchasePrice" to inventoryParse(purchasePrice),
                             "additionalCosts" to extras.map { mapOf("label" to it.first, "amount" to it.second) },
+                            // Always sent (key-present semantics): an empty list
+                            // is a deliberate clearing, a missing key is not.
+                            "tags" to tags.toList(),
                             // Fields the form has no input for, carried through
                             // untouched — the server blanks whatever an edit
                             // does not send.
@@ -638,7 +689,12 @@ fun SupplierDialog(
     var email by remember { mutableStateOf(supplier?.email.orEmpty()) }
     var phone by remember { mutableStateOf(supplier?.phone.orEmpty()) }
     var website by remember { mutableStateOf(supplier?.website.orEmpty()) }
-    var notes by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf(supplier?.notes.orEmpty()) }
+    // The paperwork fields: what an invoice or a customs form asks for.
+    var code by remember { mutableStateOf(supplier?.code.orEmpty()) }
+    var vatNumber by remember { mutableStateOf(supplier?.vatNumber.orEmpty()) }
+    var currency by remember { mutableStateOf(supplier?.currency.orEmpty()) }
+    var address by remember { mutableStateOf(supplier?.address.orEmpty()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -658,6 +714,20 @@ fun SupplierDialog(
                 Spacer(Modifier.height(8.dp))
                 InventoryField(t("Website"), website) { website = it }
                 Spacer(Modifier.height(8.dp))
+                InventoryField(t("Supplier code"), code, placeholder = t("Your reference for them")) { code = it }
+                Spacer(Modifier.height(8.dp))
+                InventoryField(t("VAT number"), vatNumber) { vatNumber = it }
+                Spacer(Modifier.height(8.dp))
+                InventoryField(t("Currency"), currency, placeholder = "GBP, EUR…") { currency = it }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text(t("Address"), fontSize = 12.sp) },
+                    minLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
                 InventoryField(t("Notes"), notes) { notes = it }
             }
         },
@@ -666,7 +736,13 @@ fun SupplierDialog(
                 enabled = name.isNotBlank(),
                 onClick = {
                     onSave(
-                        mapOf("name" to name, "email" to email, "phone" to phone, "website" to website, "notes" to notes),
+                        mapOf(
+                            "name" to name, "email" to email, "phone" to phone, "website" to website,
+                            "notes" to notes, "code" to code, "address" to address, "vatNumber" to vatNumber,
+                            // Uppercased on save, like the web — a currency code
+                            // is written GBP, whatever was typed.
+                            "currency" to currency.trim().uppercase()
+                        ),
                         supplier?.id.orEmpty()
                     )
                 }

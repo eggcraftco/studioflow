@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -364,6 +365,18 @@ fun ItemDetailSheet(
                             DetailRow(t("Location"), item.location.ifBlank { "—" })
                         }
                         if (item.purchaseDate.isNotBlank()) DetailRow(t("Acquisition Date"), item.purchaseDate)
+                        if (item.tags.isNotEmpty()) {
+                            Row(Modifier.padding(vertical = 3.dp)) {
+                                Text(t("Tags"), fontSize = 12.sp, color = Color.Gray, modifier = Modifier.width(130.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    item.tags.forEach { tag -> InventoryPill(tag, StudioBlue) }
+                                }
+                            }
+                        }
                         DetailRow(
                             t("Value"),
                             if (item.isCustomerOwned) t("Customer's") else inventoryMoney(symbol, item.lineValue)
