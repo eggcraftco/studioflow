@@ -38,6 +38,10 @@ export type CustomerFormInput = {
   phone: string;
   // A landline/primary number distinct from the WhatsApp-capable one.
   primaryPhone: string;
+  // The customer's own WhatsApp number — the store-fed "phone" stays untouched.
+  whatsappNumber: string;
+  // Trade customers: the business the person buys for.
+  company: string;
   instagram: string;
   address: string;
   streetAddress: string;
@@ -138,7 +142,7 @@ export async function mergeCustomersFromWeb(
   workspace: WorkspaceContext,
   primaryId: string,
   mergedId: string,
-  keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone", "primary" | "merged">> = {}
+  keep: Partial<Record<"name" | "email" | "phone" | "primaryPhone" | "whatsappNumber", "primary" | "merged">> = {}
 ) {
   if (!canManageCustomersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot merge customers.");

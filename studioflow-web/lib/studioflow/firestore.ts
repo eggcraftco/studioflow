@@ -367,6 +367,10 @@ export type CustomerDirectoryItem = {
   email: string;
   phone: string;
   primaryPhone: string;
+  /** The customer's own WhatsApp number — separate from the store-fed phone. */
+  whatsappNumber: string;
+  /** Trade customers: the business the person buys for. */
+  company: string;
   instagram: string;
   address: string;
   streetAddress: string;
@@ -399,6 +403,9 @@ export type CustomerDirectoryItem = {
   totalValue: number;
   // What the customer still owes, counting only orders that can owe.
   totalOutstanding: number;
+  // The slice of totalValue sitting in cancelled/refunded orders — shown so
+  // the gross figure cannot quietly overstate a customer's worth.
+  totalRefunded: number;
   orders: CustomerOrderSummary[];
 };
 
@@ -1537,6 +1544,8 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       email: stringValue(data.email, ""),
       phone: stringValue(data.phone, ""),
       primaryPhone: stringValue(data.primaryPhone, ""),
+      whatsappNumber: stringValue(data.whatsappNumber, ""),
+      company: stringValue(data.company, ""),
       instagram: stringValue(data.instagram, ""),
       address: stringValue(data.address, ""),
       streetAddress: firstStringValue(data.streetAddress, data.addressLine1, data.street),
@@ -1566,6 +1575,10 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
       totalOutstanding: customerOrders.reduce(
         (total, order) => order.countsTowardBalance ? total + order.remainingAmount + order.customRemainingTotal : total,
+        0
+      ),
+      totalRefunded: customerOrders.reduce(
+        (total, order) => order.countsTowardBalance ? total : total + order.paidAmount + order.remainingAmount + order.customRemainingTotal,
         0
       ),
       orders: customerOrders

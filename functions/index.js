@@ -12119,6 +12119,11 @@ function cleanCustomerPayload(data = {}, requireName = true) {
     email: cleanOrderText(data.email, "", 220),
     phone: cleanOrderText(data.phone, "", 80),
     primaryPhone: cleanOrderText(data.primaryPhone, "", 80),
+    // The order-fed "phone" column has historically carried whatever the store
+    // sent; this is the customer's OWN verified WhatsApp number, kept apart so
+    // "Phone / WhatsApp" stops being one ambiguous box.
+    whatsappNumber: cleanOrderText(data.whatsappNumber, "", 80),
+    company: cleanOrderText(data.company, "", 160),
     instagram: cleanOrderText(data.instagram, "", 120),
     address,
     streetAddress,
@@ -12522,6 +12527,8 @@ exports.anonymizeWebCustomer = onCall({ region: "europe-west2" }, async (request
     email: "",
     phone: "",
     primaryPhone: "",
+    whatsappNumber: "",
+    company: "",
     instagram: "",
     address: "",
     streetAddress: "",
@@ -12671,6 +12678,8 @@ exports.mergeWebCustomers = onCall({ region: "europe-west2" }, async (request) =
       email: pick("email", 220),
       phone: pick("phone", 80),
       primaryPhone: pick("primaryPhone", 80),
+      whatsappNumber: pick("whatsappNumber", 80),
+      company: pick("company", 160),
       instagram: pick("instagram", 120),
       address: pick("address", 1000),
       streetAddress: pick("streetAddress", 300),

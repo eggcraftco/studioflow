@@ -97,6 +97,14 @@ export default function QuickReplyPage() {
   const [error, setError] = useState("");
   const [replyError, setReplyError] = useState("");
 
+  // A profile's "AI Reply" shortcut arrives with ?customer=<name> so the reply
+  // starts already addressed — the person only pastes the message.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const fromLink = new URLSearchParams(window.location.search).get("customer");
+    if (fromLink && fromLink.trim()) setCustomerName(fromLink.trim());
+  }, []);
+
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
