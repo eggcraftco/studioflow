@@ -145,7 +145,14 @@ seçimi, alan bazında isim/e-posta/telefon galibi, sipariş taşıma, sunucuda 
 anlık görüntü `customerMergeLog` — istemciye kapalı, 403 testli).
 `mergeWebCustomers` deploy edildi; `customer-merge.mjs` 14 assert TÜMÜ GEÇTİ;
 14+1 string × 11 dil.
-**Kritik kalan:** alan bazlı kaynak/sync çatışma politikası (Store/NivaDesk/newest/ask);
+**27 Ağu gece eklendi:** Primary Phone gerçek alanı (profil formu + yeni-müşteri
+modalı + arama + mükerrer tespiti çapraz telefon + merge seçicisi + sunucu;
+3 callable redeploy, emülatörde ayrı alan olarak kaydolduğu doğrulandı) ve
+SYNC ÇATIŞMA POLİTİKASI: integrationCustomerSync ("store" varsayılan /
+"nivadesk" = atölye düzenlemesi kazanır, mağaza yalnız boşluk doldurur) — 5
+webhook'ta zorlanıyor, Woo+Shopify ayar bölümlerinde kart, suite'te iki yönlü
+kanıt (atölye telefonu korundu + boş city doldu / store'da yeniden yazdı).
+**Kritik kalan:**
 telefon–WhatsApp gerçek alan ayrımı (şema işi); GDPR export/anonymize/delete
 akışları (Shopify redact kısmen var); iade/refund'un müşteri değerine
 yansıması. **Orta:** ek sıralamalar (Last Order/Highest Value/Outstanding…);
