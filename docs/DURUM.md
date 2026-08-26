@@ -85,7 +85,10 @@ kademeleri E2E'li); ayırıcı 22px görünmez tutma alanı + çift-tık varsay�
 bulut genişliği artık EKRAN BAŞINA (schedule/customers kendi alanlarını yazar,
 eski alan fallback; saveWorkspaceSidebarLayout deploy edildi); Schedule
 varsayılanı 320px; kart resize'da canlı "384 × 497" rozeti; kilit tooltip'i
-"yalnız bu cihazda" diyor. 11+1 yeni string × 11 dil.
+"yalnız bu cihazda" diyor; DESI/BOYA rozetlerinde tam-ad tooltip'i; Customers'ta
+6'lı sıralama (Last contact/Last Order/Most Orders/Highest Value/Outstanding/
+Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayının
+7'si servis edilen chunk/CSS'te teyitli, 8. poll'da.
 
 ## SONRAYA BIRAKILANLAR (bilinçli — kullanıcı onayıyla)
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
@@ -116,8 +119,8 @@ tarih değişikliğinde Undo (toast altyapısı yok — önce o); ilk-kullanım 
 (Not: Duration/Remaining ikili gösterimi bilinçli tek "Xd left" ile çözüldü.)
 
 ### B. NivaDesk_order_kart_sistemi.md — kalan iyileştirmeler
-Kart sol durum şeridi + tamamlanan/iptal zemin ayrımı; kısaltma (DESI/BOYA)
-hover'da tam ad (OrderListCard.tsx:159 hardcoded kısaltma haritası); hızlı
+Kart sol durum şeridi + tamamlanan/iptal zemin ayrımı (görsel karar — birlikte
+bakalım); hızlı
 sekmeler (Aktif/Geciken/Benden aksiyon/Tamamlanan); ⋮ ayırıcı tutamacı;
 "taşındı—geri al" bildirimi + klavye taşıma (toast altyapısı gerekir); kart
 menüsü boyut seçenekleri (içeriğe sığdır/varsayılan/eşitle/S-M-L); renk+etiket
