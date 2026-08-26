@@ -391,3 +391,19 @@ eziyordu (artık round-trip); Swift'te alanlar Codable tam-yazımlara girdi.
 Reçete paritesi ajanları (Swift+Android) başlatıldı.
 **Bekletilen tek kod işi:** Files depolama yolu göçü — canlı storage
 nesnelerini taşıyan geri-dönüşsüz bir göç; kullanıcı onayıyla ayrı oturumda.
+
+**Files depolama yolu göçü KAPANDI (27 Ağu sabahı, kullanıcı onayıyla):**
+storage.rules'a companies/{id}/library/ bloğu (read+create only; nesneler
+değişmez, silme sunucunun çöp-önce işi) deploy edildi; web yüklemeleri artık
+kendi yoluna iniyor (round 24 canlı: yeni yol bundle'da, eski squat çıktı).
+Üretim taraması (kuru + canlı, tüm şirketler): eski yolda SIFIR nesne —
+kütüphane 1 günlük, göç fiilen no-op. Süpürme kalıcı araç olarak
+functions/scripts/migrate-library-storage.mjs'te (idempotent: kopyala →
+kayıt → portal-URL yeniden bas → orijinali sil). Tek seferlik anahtar-korumalı
+HTTPS fonksiyonu işini bitirip üretimden silindi (404 teyitli), kaynağa hiç
+commit'lenmedi.
+**Reçete paritesi TAMAM:** Swift ad39d4a (BUILD SUCCEEDED ×2) + Android
+e172d70 (BUILD SUCCESSFUL) — Recipes sekmesi + sipariş kartında "Use a
+recipe…" iki native'de.
+**FAZ 3 KOD İŞLERİ BİTTİ.** Kalan tek karar: Shopify/Woo stok senkronu
+(salt-okunur scope → yazma izni mağaza yeniden-onayı ister — kullanıcıda).
