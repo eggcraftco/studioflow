@@ -379,3 +379,15 @@ makinesi eklemek çözdüğü olmayan bir problemi çözerdi. (Aynı-SKU partile
 tek karta birleştirme istenirse o ayrı bir tasarım kararı — kullanıcıyla.)
 **Native reçete paritesi:** birleşik parite turu (konumlar+whatsapp+bank
 Activity) bittikten sonra ayrı turla.
+
+**Birleşik native parite TAMAM (27 Ağu gece):** Swift 1c2ec0d (iki build
+SUCCEEDED) + Android 197b848 (BUILD SUCCESSFUL) — konum ağacı sekmesi
+(sayaçlar/Rename-Move/öneriler), müşteri WhatsApp+Company alanları
+("Phone (from orders)" dürüst etiketi, WhatsApp aksiyonu doğru numarayı
+çevirir, refund alt satırı iki platformda da VERİYLE yapıldı), bank
+Connection activity listesi. İki ajan da birer gizli veri-kaybı yolu
+yakalayıp kapattı: Android save-path'i web'de girilen primaryPhone'u
+eziyordu (artık round-trip); Swift'te alanlar Codable tam-yazımlara girdi.
+Reçete paritesi ajanları (Swift+Android) başlatıldı.
+**Bekletilen tek kod işi:** Files depolama yolu göçü — canlı storage
+nesnelerini taşıyan geri-dönüşsüz bir göç; kullanıcı onayıyla ayrı oturumda.
