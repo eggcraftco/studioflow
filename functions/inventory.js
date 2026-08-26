@@ -1890,6 +1890,184 @@ function createInventoryFunctions({
     return { ok: true, ...outcome };
   });
 
+  // ---------------------------------------------------------------------------
+  // Consuming and swapping reserved stock
+  //
+  // Reserving promised the part; consuming is the moment it actually goes into
+  // the job. Only what THIS order holds can be consumed — consumption without a
+  // reservation would bypass the double-promise guard reserving exists for.
+  // ---------------------------------------------------------------------------
+
+  const consumeInventoryForOrder = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    if (!itemId || !orderId) throw new HttpsError("invalid-argument", "itemId and orderId are required.");
+
+    const ref = itemsRef(companyId).doc(itemId);
+    const now = Date.now();
+    const outcome = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Inventory item not found.");
+      const item = snap.data() || {};
+      const reservations = cleanReservations(item.reservations);
+      const mine = reservations.find((row) => row.orderId === orderId);
+      if (!mine) throw new HttpsError("failed-precondition", "Nothing is reserved for this order on that item.");
+
+      const isUnique = String(item.trackingType) === "unique";
+      if (isUnique) {
+        tx.set(ref, {
+          status: "used",
+          reservations: [],
+          reservedOrderIds: [],
+          reservedForOrderId: "",
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+        recordMovement(tx, companyId, {
+          item, itemId: ref.id, kind: "used",
+          delta: -1,
+          unitCost: Number(item.valuationCost) || 0,
+          at: now, uid, email, ref: orderId, note: ""
+        });
+        return { consumed: 1 };
+      }
+
+      // Default is the whole reservation; a smaller quantity consumes part and
+      // leaves the rest still promised to this order.
+      const requested = cleanQuantity(request.data && request.data.quantity);
+      const consuming = requested > 0 ? requested : mine.quantity;
+      if (consuming > mine.quantity) {
+        throw new HttpsError("failed-precondition", `Only ${mine.quantity} is reserved for this order.`);
+      }
+      const onHand = cleanQuantity((item.quantity || {}).onHand);
+      if (consuming > onHand) {
+        throw new HttpsError("failed-precondition", `Only ${onHand} on hand.`);
+      }
+
+      const keptMine = roundMoney(mine.quantity - consuming);
+      const next = reservations
+        .map((row) => (row.orderId === orderId ? { ...row, quantity: keptMine } : row))
+        .filter((row) => row.quantity > 0);
+      const totalReserved = roundMoney(next.reduce((sum, row) => sum + row.quantity, 0));
+      const nextOnHand = roundMoney(onHand - consuming);
+      tx.set(ref, {
+        reservations: next,
+        reservedOrderIds: next.map((row) => row.orderId),
+        quantity: { ...(item.quantity || {}), onHand: nextOnHand, reserved: totalReserved },
+        status: reservationStatus(item, totalReserved, nextOnHand),
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+      recordMovement(tx, companyId, {
+        item, itemId: ref.id, kind: "used",
+        delta: roundSigned(-consuming),
+        unitCost: Number(item.valuationCost) || 0,
+        at: now, uid, email, ref: orderId, note: ""
+      });
+      return { consumed: consuming, remaining: nextOnHand, stillReserved: keptMine };
+    });
+
+    return { ok: true, ...outcome };
+  });
+
+  // Wrong part picked, right one found: one transaction moves the promise so
+  // there is no moment where the order holds both or neither.
+  const swapInventoryForOrder = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    const fromItemId = clean(request.data && request.data.fromItemId, "", 80);
+    const toItemId = clean(request.data && request.data.toItemId, "", 80);
+    if (!orderId || !fromItemId || !toItemId) {
+      throw new HttpsError("invalid-argument", "orderId, fromItemId and toItemId are required.");
+    }
+    if (fromItemId === toItemId) throw new HttpsError("invalid-argument", "Pick a different item to swap to.");
+
+    const fromRef = itemsRef(companyId).doc(fromItemId);
+    const toRef = itemsRef(companyId).doc(toItemId);
+    const now = Date.now();
+
+    const outcome = await db().runTransaction(async (tx) => {
+      const [fromSnap, toSnap] = await Promise.all([tx.get(fromRef), tx.get(toRef)]);
+      if (!fromSnap.exists || !toSnap.exists) throw new HttpsError("not-found", "Inventory item not found.");
+      const fromItem = fromSnap.data() || {};
+      const toItem = toSnap.data() || {};
+
+      const fromReservations = cleanReservations(fromItem.reservations);
+      const mine = fromReservations.find((row) => row.orderId === orderId);
+      if (!mine) throw new HttpsError("failed-precondition", "Nothing is reserved for this order on that item.");
+
+      if (String(toItem.ownership) === "customer") {
+        throw new HttpsError("failed-precondition", "A customer's own item is not stock and cannot be reserved.");
+      }
+      if (["sold", "used", "archived", "removed"].includes(String(toItem.status))) {
+        throw new HttpsError("failed-precondition", "That item is no longer available to reserve.");
+      }
+
+      const toIsUnique = String(toItem.trackingType) === "unique";
+      const toReservations = cleanReservations(toItem.reservations).filter((row) => row.orderId !== orderId);
+      const requested = cleanQuantity(request.data && request.data.quantity);
+      const wanted = toIsUnique ? 1 : (requested > 0 ? requested : mine.quantity);
+
+      if (toIsUnique) {
+        if (toReservations.length > 0) {
+          throw new HttpsError("failed-precondition", "That item is already reserved for another order.");
+        }
+      } else {
+        const toOnHand = cleanQuantity((toItem.quantity || {}).onHand);
+        const reservedElsewhere = toReservations.reduce((sum, row) => sum + row.quantity, 0);
+        const free = roundMoney(toOnHand - reservedElsewhere);
+        if (wanted <= 0) throw new HttpsError("invalid-argument", "Enter how much to reserve.");
+        if (wanted > free) {
+          throw new HttpsError(
+            "failed-precondition",
+            `Only ${free} available to reserve — ${reservedElsewhere} is already promised to other orders.`
+          );
+        }
+      }
+
+      // Release side.
+      const fromNext = fromReservations.filter((row) => row.orderId !== orderId);
+      const fromReserved = roundMoney(fromNext.reduce((sum, row) => sum + row.quantity, 0));
+      const fromIsUnique = String(fromItem.trackingType) === "unique";
+      tx.set(fromRef, {
+        reservations: fromNext,
+        reservedOrderIds: fromNext.map((row) => row.orderId),
+        reservedForOrderId: fromIsUnique ? "" : clean(fromItem.reservedForOrderId, "", 200),
+        quantity: fromIsUnique ? fromItem.quantity : { ...(fromItem.quantity || {}), reserved: fromReserved },
+        status: reservationStatus(fromItem, fromReserved),
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+
+      // Reserve side.
+      if (toIsUnique) {
+        tx.set(toRef, {
+          status: "reserved",
+          reservedForOrderId: orderId,
+          reservations: [{ orderId, quantity: 1, createdAtMs: now }],
+          reservedOrderIds: [orderId],
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+      } else {
+        const toNext = [...toReservations, { orderId, quantity: wanted, createdAtMs: now }];
+        const toReserved = roundMoney(toNext.reduce((sum, row) => sum + row.quantity, 0));
+        tx.set(toRef, {
+          reservations: toNext,
+          reservedOrderIds: toNext.map((row) => row.orderId),
+          quantity: { ...(toItem.quantity || {}), reserved: toReserved },
+          status: reservationStatus(toItem, toReserved),
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+      }
+      return { released: mine.quantity, reserved: wanted };
+    });
+
+    return { ok: true, ...outcome };
+  });
+
   return {
     saveInventoryItem,
     setInventoryItemStatus,
@@ -1917,6 +2095,8 @@ function createInventoryFunctions({
     releaseInventoryFromOrder,
     getOrderInventory,
     recordInventoryLoss,
+    consumeInventoryForOrder,
+    swapInventoryForOrder,
     _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }
