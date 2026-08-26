@@ -8,7 +8,7 @@ import SwiftUI
 
 
 enum InventoryTab: String, CaseIterable {
-    case items, purchases, suppliers, stocktake, locations, reports
+    case items, purchases, suppliers, stocktake, locations, recipes, reports
 
     var label: String {
         switch self {
@@ -17,6 +17,7 @@ enum InventoryTab: String, CaseIterable {
         case .suppliers: return "Suppliers"
         case .stocktake: return "Stocktake"
         case .locations: return "Locations"
+        case .recipes: return "Recipes"
         case .reports: return "Reports"
         }
     }
@@ -178,6 +179,9 @@ struct InventoryView: View {
                         }
                     }
                     .environmentObject(firebaseManager)
+                case .recipes:
+                    RecipesTab(lang: seciliDil, items: model.items, canEdit: canEdit)
+                        .environmentObject(firebaseManager)
                 case .reports:
                     ReportsTab(currencySymbol: seciliParaBirimi, lang: seciliDil)
                         .environmentObject(firebaseManager)
@@ -283,7 +287,7 @@ struct InventoryView: View {
                 case .suppliers:
                     Button { showNewSupplier = true } label: { Label(t("New Supplier", lang: seciliDil), systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
-                case .stocktake, .locations, .reports:
+                case .stocktake, .locations, .recipes, .reports:
                     EmptyView()
                 }
             }
@@ -303,9 +307,10 @@ struct InventoryView: View {
                             await model.loadPurchases(firebaseManager)
                             if model.suppliers.isEmpty { await model.loadSuppliers(firebaseManager) }
                         case .suppliers: await model.loadSuppliers(firebaseManager)
-                        // The tree is cheap to fetch fresh; the standing-item
-                        // counts ride on the already-loaded item list.
-                        case .locations: if model.items.isEmpty { await model.loadItems(firebaseManager) }
+                        // The tree and the recipe list are cheap to fetch
+                        // fresh; the standing-item counts and the recipes'
+                        // line summaries ride on the already-loaded item list.
+                        case .locations, .recipes: if model.items.isEmpty { await model.loadItems(firebaseManager) }
                         case .stocktake, .reports: break
                         }
                     }

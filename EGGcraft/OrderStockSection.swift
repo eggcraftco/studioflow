@@ -25,6 +25,8 @@ struct OrderStockSection: View {
     /// The line being swapped for a different item, if any — the picker opens
     /// in swap mode while this is set.
     @State private var swapping: OrderStockLine?
+    /// The "Use a recipe" sheet: a whole parts list reserved in one act.
+    @State private var applyingRecipe = false
     @State private var error = ""
 
     var body: some View {
@@ -35,6 +37,8 @@ struct OrderStockSection: View {
                 Spacer()
                 if canEdit {
                     Button(t("Reserve stock", lang: lang)) { picking = true }
+                        .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.blue)
+                    Button(t("Use a recipe…", lang: lang)) { applyingRecipe = true }
                         .font(.system(size: 11, weight: .semibold)).buttonStyle(.plain).foregroundColor(.blue)
                 }
             }
@@ -112,6 +116,12 @@ struct OrderStockSection: View {
                 alreadyReserved: lines.map(\.id),
                 swapFrom: line
             ) {
+                Task { await reload() }
+            }
+            .environmentObject(firebaseManager)
+        }
+        .sheet(isPresented: $applyingRecipe) {
+            UseRecipeSheet(orderId: orderId, lang: lang) {
                 Task { await reload() }
             }
             .environmentObject(firebaseManager)
@@ -297,6 +307,110 @@ struct ReserveStockSheet: View {
                 let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                 self.error = !message.isEmpty ? message
                     : t(swapFrom == nil ? "The item could not be reserved." : "The swap could not be completed.", lang: lang)
+                busy = false
+            }
+        }
+    }
+}
+
+/// "Use a recipe": pick a written parts list, say how many jobs' worth, and
+/// the server reserves EVERY line in one transaction — all or nothing. A
+/// refusal names the part that did not fit, and that text is the message.
+/// Mirrors the web's ApplyRecipeModal: same words, same guards, same call.
+struct UseRecipeSheet: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @Environment(\.dismiss) private var dismiss
+    let orderId: String
+    let lang: String
+    let onApplied: () -> Void
+
+    @State private var recipes: [InventoryRecipe] = []
+    @State private var recipeId = ""
+    @State private var multiplier = "1"
+    @State private var loading = true
+    @State private var busy = false
+    @State private var error = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if loading {
+                    Text(t("Loading…", lang: lang)).font(.system(size: 12)).foregroundColor(.secondary)
+                } else if recipes.isEmpty {
+                    Text(t("No recipes yet — write one under Inventory → Recipes.", lang: lang))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                } else {
+                    Section {
+                        Picker(t("Recipe", lang: lang), selection: $recipeId) {
+                            Text(t("Choose a recipe…", lang: lang)).tag("")
+                            ForEach(recipes) { recipe in
+                                Text("\(recipe.name) · \(recipe.lines.count) \(t("lines", lang: lang))")
+                                    .tag(recipe.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .font(.system(size: 13))
+
+                        HStack {
+                            Text(t("How many jobs' worth", lang: lang)).font(.system(size: 13))
+                            Spacer()
+                            TextField("1", text: $multiplier)
+                                .frame(width: 64).multilineTextAlignment(.trailing)
+                                .font(.system(size: 13))
+                        }
+                    }
+
+                    Section {
+                        Button(t(busy ? "Saving…" : "Reserve the parts", lang: lang), action: apply)
+                            .font(.system(size: 13, weight: .semibold))
+                            .disabled(busy)
+                    }
+                }
+
+                if !error.isEmpty {
+                    Text(error).font(.system(size: 12)).foregroundColor(.red)
+                }
+            }
+            .navigationTitle(t("Use a recipe", lang: lang))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(t("Close", lang: lang)) { dismiss() }
+                }
+            }
+            .task {
+                do {
+                    recipes = try await firebaseManager.listInventoryRecipes()
+                    // One recipe is no choice at all — pre-pick it, like the web.
+                    if recipes.count == 1 { recipeId = recipes[0].id }
+                } catch {
+                    let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.error = message.isEmpty ? t("Recipes could not be loaded.", lang: lang) : t(message, lang: lang)
+                }
+                loading = false
+            }
+        }
+    }
+
+    private func apply() {
+        guard !recipeId.isEmpty else {
+            error = t("Choose a recipe first.", lang: lang)
+            return
+        }
+        // Same reading as the web's Number(multiplier) || 1: nonsense or zero
+        // means one job's worth. The server caps it at 100.
+        let parsed = Double(multiplier.replacingOccurrences(of: ",", with: ".")) ?? 0
+        let times = parsed > 0 ? parsed : 1
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.applyRecipeToOrder(
+                    recipeId: recipeId, orderId: orderId, multiplier: times)
+                onApplied()
+                dismiss()
+            } catch {
+                let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.error = message.isEmpty ? t("The recipe could not be applied.", lang: lang) : t(message, lang: lang)
                 busy = false
             }
         }

@@ -818,6 +818,43 @@ struct InventoryLocation: Identifiable, Equatable {
     }
 }
 
+/// One line of a recipe: this part, this much of it. Only the id travels —
+/// the name, unit and availability are read off the live item at draw time,
+/// so a renamed part never leaves a stale name inside a recipe.
+struct InventoryRecipeLine: Equatable {
+    var itemId: String
+    var quantity: Double
+
+    init(itemId: String, quantity: Double) {
+        self.itemId = itemId
+        self.quantity = quantity
+    }
+
+    init?(_ raw: [String: Any]) {
+        guard let itemId = raw["itemId"] as? String, !itemId.isEmpty else { return nil }
+        self.itemId = itemId
+        quantity = (raw["quantity"] as? NSNumber)?.doubleValue ?? 0
+    }
+}
+
+/// A job's parts list, written once — "1 buckle + 20cm leather + 2 screws".
+/// Applying it to an order reserves every line in ONE server transaction,
+/// all or nothing; this client only writes the lists and shows refusals.
+struct InventoryRecipe: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let notes: String
+    let lines: [InventoryRecipeLine]
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String, !id.isEmpty else { return nil }
+        self.id = id
+        name = raw["name"] as? String ?? ""
+        notes = raw["notes"] as? String ?? ""
+        lines = (raw["lines"] as? [[String: Any]] ?? []).compactMap(InventoryRecipeLine.init)
+    }
+}
+
 extension FirebaseManager {
 
     /// Every inventory callable is workspace-scoped and role-checked server-side,
@@ -1001,6 +1038,40 @@ extension FirebaseManager {
     /// the refusal text is the user-facing message.
     func deleteInventoryLocation(_ locationId: String) async throws {
         _ = try await inventoryCall("deleteInventoryLocation", ["locationId": locationId])
+    }
+
+    // MARK: Recipes (BOM)
+
+    /// Every recipe, name-sorted by the server.
+    func listInventoryRecipes() async throws -> [InventoryRecipe] {
+        let raw = try await inventoryCall("listInventoryRecipes")
+        return (raw["recipes"] as? [[String: Any]] ?? []).compactMap(InventoryRecipe.init)
+    }
+
+    /// Creates (empty `recipeId`) or rewrites a recipe. The server owns the
+    /// guards — at most 30 lines, every quantity above zero — and its readable
+    /// refusals are the user-facing message.
+    func saveInventoryRecipe(
+        name: String, notes: String, lines: [InventoryRecipeLine], recipeId: String = ""
+    ) async throws {
+        _ = try await inventoryCall(
+            "saveInventoryRecipe",
+            ["recipeId": recipeId,
+             "recipe": ["name": name, "notes": notes,
+                        "lines": lines.map { ["itemId": $0.itemId, "quantity": $0.quantity] }]])
+    }
+
+    func deleteInventoryRecipe(_ recipeId: String) async throws {
+        _ = try await inventoryCall("deleteInventoryRecipe", ["recipeId": recipeId])
+    }
+
+    /// Reserves EVERY line of the recipe for the order in one server
+    /// transaction — all or nothing. A failure comes back as a readable
+    /// message naming the part that did not fit; show it verbatim.
+    func applyRecipeToOrder(recipeId: String, orderId: String, multiplier: Double) async throws {
+        _ = try await inventoryCall(
+            "applyRecipeToOrder",
+            ["recipeId": recipeId, "orderId": orderId, "multiplier": multiplier])
     }
 
     /// Asks the server what a pasted list would become. The preview and the
