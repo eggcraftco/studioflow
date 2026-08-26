@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -95,10 +97,12 @@ import kotlinx.coroutines.withContext
 import uk.co.eggcraft.studioflow.data.firebase.BankOcrResult
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.BANK_CATEGORIES
+import uk.co.eggcraft.studioflow.data.model.BANK_REVIEW_STATUSES
 import uk.co.eggcraft.studioflow.data.model.BANK_VAT_CODES
 import uk.co.eggcraft.studioflow.data.model.BankCadence
 import uk.co.eggcraft.studioflow.data.model.BankReceiptKind
 import uk.co.eggcraft.studioflow.data.model.BankRecurringSpend
+import uk.co.eggcraft.studioflow.data.model.StudioBankAccount
 import uk.co.eggcraft.studioflow.data.model.StudioBankConnection
 import uk.co.eggcraft.studioflow.data.model.StudioBankRule
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
@@ -109,6 +113,7 @@ import uk.co.eggcraft.studioflow.data.model.bankIsoDay
 import uk.co.eggcraft.studioflow.data.model.bankRankOrders
 import uk.co.eggcraft.studioflow.data.model.bankReceiptKind
 import uk.co.eggcraft.studioflow.data.model.bankRecurringMerchantKey
+import uk.co.eggcraft.studioflow.data.model.bankReviewStatusLabel
 import uk.co.eggcraft.studioflow.data.model.bankRuleStats
 import uk.co.eggcraft.studioflow.data.model.bankStartOfWeek
 import uk.co.eggcraft.studioflow.data.model.bankSuggestCategory
@@ -161,6 +166,17 @@ private fun categoryColor(name: String): Color {
     var hash = 0L
     for (ch in name) hash = (hash * 31 + ch.code) and 0xFFFFFFFFL
     return CATEGORY_PALETTE[(hash % CATEGORY_PALETTE.size).toInt()]
+}
+
+/** Chip/dot colour per review status — same palette as the web table. */
+private fun reviewStatusColor(code: String): Color = when (code) {
+    "needs_info" -> Color(0xFFB45309)
+    "ready" -> Color(0xFF2563EB)
+    "synced" -> Color(0xFF0E7A55)
+    "confirmed" -> Color(0xFF16A34A)
+    "sync_error" -> Color(0xFFDC2626)
+    "ignored" -> Color(0xFF9CA3AF)
+    else -> Color(0xFF6B7280)  // unreviewed
 }
 
 private data class TxTypeMeta(val label: String, val color: Color, val translate: Boolean)
@@ -244,6 +260,17 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     val rules = state.bankRules
     val waiting = state.bankWaitingReceipts
     val categoryTax = state.bankCategoryTax
+    val customCategories = state.bankCustomCategories
+    // Every pickable category: presets + the workspace's own active records +
+    // whatever the feed already uses. A deactivated record drops out of the
+    // pickers but keeps colouring existing rows.
+    val categoryOptions = remember(customCategories, transactions, rules) {
+        val set = LinkedHashSet(BANK_CATEGORIES)
+        customCategories.forEach { if (it.active) set.add(it.name) else set.remove(it.name) }
+        transactions.forEach { tx -> tx.effectiveCategory.takeIf { it.isNotBlank() }?.let(set::add) }
+        rules.forEach { rule -> rule.category.takeIf { it.isNotBlank() }?.let(set::add) }
+        set.toList()
+    }
     val linked = connections.filter { it.isLinked }
     val currencyCode = transactions.firstOrNull()?.currency ?: "GBP"
     val fmt: (Double, String?) -> String = { value, code -> money(value, code ?: currencyCode, decimalSeparator, hideNumbers) }
@@ -776,7 +803,7 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                             Card {
                                 Text(t("New rule"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 OutlinedTextField(value = newRuleKeyword, onValueChange = { newRuleKeyword = it }, label = { Text(t("If merchant contains"), fontSize = 12.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                CategoryPicker(newRuleCategory, BANK_CATEGORIES, t) { newRuleCategory = it }
+                                CategoryPicker(newRuleCategory, categoryOptions, t) { newRuleCategory = it }
                                 if (newRuleCategory.isNotBlank()) categoryTax[newRuleCategory]?.let { Text("${t("VAT")}: ${t(bankVatLabel(it))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = { showNewRule = false }) { Text(t("Cancel"), fontSize = 12.sp) }
@@ -853,7 +880,9 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
         ModalBottomSheet(onDismissRequest = { selectedTxId = null }, sheetState = sheetState) {
             TransactionDetailSheet(
                 tx = selectedTx, t = t, locale = locale, fmt = fmt, isOwner = isOwner,
-                categoryTax = categoryTax, rules = rules, orders = state.orders,
+                categoryTax = categoryTax, categoryOptions = categoryOptions,
+                accounts = connections.flatMap { it.accounts },
+                rules = rules, orders = state.orders,
                 suggestion = suggestions[selectedTx.id], orderSuggestion = orderSuggestions[selectedTx.id],
                 isRecurring = recurringKeys.contains(bankRecurringMerchantKey(selectedTx)) ||
                     vendors.any { it.keys.contains(bankRecurringMerchantKey(selectedTx)) },
@@ -876,9 +905,9 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                         t("No longer treated as recurring.")
                     }
                 },
-                onSave = { category, vat, note, orderId, createRule, keyword ->
+                onSave = { category, vat, note, orderId, reviewStatus, createRule, keyword ->
                     run("drawer") {
-                        repository.bankUpdateTransaction(workspaceId, selectedTx.id, category, vat, note)
+                        repository.bankUpdateTransaction(workspaceId, selectedTx.id, category, vat, note, reviewStatus)
                         if (orderId != selectedTx.linkedOrderId) {
                             if (selectedTx.linkedOrderId.isNotBlank()) repository.bankLinkOrder(workspaceId, selectedTx.id, "")
                             if (orderId.isNotBlank()) repository.bankLinkOrder(workspaceId, selectedTx.id, orderId)
@@ -1090,6 +1119,11 @@ private fun TransactionRow(
         Avatar(tx.merchant, 30)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                // Review-status dot — only once the row left "unreviewed", same as the web table.
+                val reviewStatus = tx.effectiveReviewStatus
+                if (reviewStatus != "unreviewed") {
+                    Box(Modifier.size(7.dp).background(reviewStatusColor(reviewStatus), CircleShape))
+                }
                 if (isRecurring) Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(tx.merchant.ifBlank { "—" }, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (isDuplicate) Chip(t("Duplicate?"), AMBER)
@@ -1336,22 +1370,26 @@ private fun OcrCard(
 @Composable
 private fun TransactionDetailSheet(
     tx: StudioBankTransaction, t: (String) -> String, locale: Locale, fmt: (Double, String?) -> String, isOwner: Boolean,
-    categoryTax: Map<String, String>, rules: List<StudioBankRule>, orders: List<uk.co.eggcraft.studioflow.data.model.StudioOrder>,
+    categoryTax: Map<String, String>, categoryOptions: List<String>, accounts: List<StudioBankAccount>,
+    rules: List<StudioBankRule>, orders: List<uk.co.eggcraft.studioflow.data.model.StudioOrder>,
     suggestion: uk.co.eggcraft.studioflow.data.model.BankCategorySuggestion?,
     orderSuggestion: uk.co.eggcraft.studioflow.data.model.BankOrderLinkSuggestion?,
     isRecurring: Boolean,
     vendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor>, busy: String?,
     onMarkRecurring: (String, String) -> Unit, onUnmarkRecurring: (String) -> Unit,
-    onSave: (String, String, String, String, Boolean, String) -> Unit,
+    onSave: (String, String, String, String, String, Boolean, String) -> Unit,
     onAttach: () -> Unit, onOpenReceipt: () -> Unit, onRemoveReceipt: () -> Unit, onToggleNotNeeded: (Boolean) -> Unit
 ) {
     var category by remember(tx.id) { mutableStateOf(tx.category.ifBlank { tx.categoryAuto }) }
     var vat by remember(tx.id) { mutableStateOf(tx.vatCode) }
     var note by remember(tx.id) { mutableStateOf(tx.note) }
     var orderId by remember(tx.id) { mutableStateOf(tx.linkedOrderId) }
+    var review by remember(tx.id) { mutableStateOf(tx.effectiveReviewStatus) }
     var ruleKeyword by remember(tx.id) { mutableStateOf(bankSuggestRuleKeyword(tx)) }
+    var bankDataOpen by remember(tx.id) { mutableStateOf(false) }
     var vatMenu by remember { mutableStateOf(false) }
     var orderMenu by remember { mutableStateOf(false) }
+    var reviewMenu by remember { mutableStateOf(false) }
     var cadenceMenu by remember { mutableStateOf(false) }
     var vendorMenu by remember { mutableStateOf(false) }
     val merchantKey = remember(tx.id) { bankRecurringMerchantKey(tx) }
@@ -1376,12 +1414,49 @@ private fun TransactionDetailSheet(
             Text(t("Raw bank description"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(tx.description.ifBlank { "—" }, fontSize = 12.sp)
         }
+        // The read-only bank layer, kept visibly apart from NivaDesk's own
+        // enrichment: what the bank said never changes here.
+        Surface(shape = RoundedCornerShape(10.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { bankDataOpen = !bankDataOpen },
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("${t("Bank data")} · ${t("Read-only")}", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Icon(if (bankDataOpen) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null,
+                        modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (bankDataOpen) {
+                    val account = accounts.firstOrNull { it.id == tx.accountId }
+                    listOf(
+                        t("Bank transaction ID") to tx.providerTransactionId.ifBlank { tx.id },
+                        t("Bank account") to (account?.let { "${it.name}${if (it.currency.isNotBlank()) " · ${it.currency}" else ""}" } ?: tx.accountId.ifBlank { "—" }),
+                        t("Status") to if (tx.status == "pending") t("pending") else t("Booked"),
+                        t("Bank reference") to tx.providerReference.ifBlank { "—" },
+                        t("Open Banking provider") to if (tx.provider == "truelayer") "TrueLayer" else tx.provider.ifBlank { "—" },
+                        t("First imported") to (tx.firstImportedAtMillis?.let { SimpleDateFormat("d MMM yyyy", locale).format(Date(it)) } ?: "—"),
+                        t("Last updated") to (tx.importedAtMillis?.let { SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(it)) } ?: "—")
+                    ).forEach { (label, value) ->
+                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(130.dp))
+                            Text(value, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Text(t("Bank data can never be edited — everything below is NivaDesk's own enrichment."),
+                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         if (tx.isSpending) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(t("Bookkeeping"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(t("Category"), fontSize = 12.sp, modifier = Modifier.width(110.dp))
-                    CategoryPicker(category, (BANK_CATEGORIES + rules.map { it.category }).distinct(), t) { category = it }
+                    CategoryPicker(category, (categoryOptions + listOfNotNull(category.ifBlank { null })).distinct(), t) { category = it }
+                }
+                if (tx.category.isBlank() && tx.categoryAuto.isNotBlank()) {
+                    Text("⚡ ${t("Auto-applied")}: ${t(tx.categoryAuto)}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (category.isBlank() && suggestion != null) {
                     TextButton(onClick = { category = suggestion.category }, contentPadding = PaddingValues(0.dp)) {
@@ -1401,6 +1476,10 @@ private fun TransactionDetailSheet(
                             }
                         }
                     }
+                }
+                if (tx.vatCode.isBlank() && tx.vatCodeAuto.isNotBlank()) {
+                    // A rule filled the VAT in — effective VAT is vatCode || vatCodeAuto || category default.
+                    Text("⚡ ${t("Auto-applied")}: ${t(bankVatLabel(tx.vatCodeAuto))}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(t("Linked order or project"), fontSize = 12.sp, modifier = Modifier.width(110.dp))
@@ -1459,6 +1538,20 @@ private fun TransactionDetailSheet(
                 }
             }
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("Review status"), fontSize = 12.sp, modifier = Modifier.width(110.dp))
+            Box {
+                OutlinedButton(onClick = { reviewMenu = true }, enabled = isOwner) {
+                    Text(t(bankReviewStatusLabel(review)), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                DropdownMenu(expanded = reviewMenu, onDismissRequest = { reviewMenu = false }) {
+                    BANK_REVIEW_STATUSES.forEach { (code, label) ->
+                        DropdownMenuItem(text = { Text(t(label)) }, onClick = { review = code; reviewMenu = false })
+                    }
+                }
+            }
+            Chip(t(bankReviewStatusLabel(review)), reviewStatusColor(review))
+        }
         OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text(t("Notes"), fontSize = 12.sp) },
             placeholder = { Text(t("Internal note for this transaction"), fontSize = 12.sp) }, enabled = isOwner, modifier = Modifier.fillMaxWidth())
         if (canSuggestRule) {
@@ -1466,7 +1559,7 @@ private fun TransactionDetailSheet(
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("✦ ${t("Rule suggestion")}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     OutlinedTextField(value = ruleKeyword, onValueChange = { ruleKeyword = it }, label = { Text(t("If merchant contains"), fontSize = 11.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Button(onClick = { onSave(category, vat, note, orderId, true, ruleKeyword.trim().lowercase()) }, enabled = busy != "drawer") {
+                    Button(onClick = { onSave(category, vat, note, orderId, review, true, ruleKeyword.trim().lowercase()) }, enabled = busy != "drawer") {
                         Text(t("Create rule"), fontSize = 12.sp)
                     }
                 }
@@ -1521,10 +1614,28 @@ private fun TransactionDetailSheet(
                 }
             }
         }
-        Text("${t("Activity & sync")}: ${if (tx.pandleConfirmed) "✓ ${t("Confirmed in Pandle")}" else t("Not synced to Pandle yet")}",
-            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("⇄ ${t("Activity & sync")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when (tx.pandleStatus) {
+                "confirmed" -> {
+                    Text("✓ ${t("Confirmed in Pandle")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GREEN)
+                    if (tx.pandleBankTransactionId.isNotBlank()) {
+                        Text("${t("Pandle transaction ID")}: ${tx.pandleBankTransactionId}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                "error" -> {
+                    Text("! ${t("Sync error")}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = RED)
+                    if (tx.pandleLastError.isNotBlank()) {
+                        Text(tx.pandleLastError, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(t("Nothing was lost — fix the issue and sync again."), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                "matched" -> Text(t("Matched to an existing Pandle transaction"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BLUE)
+                else -> Text(t("Not synced to Pandle yet"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         if (isOwner) {
-            Button(onClick = { onSave(category, vat, note, orderId, false, "") }, enabled = busy != "drawer", modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onSave(category, vat, note, orderId, review, false, "") }, enabled = busy != "drawer", modifier = Modifier.fillMaxWidth()) {
                 Text(if (busy == "drawer") t("Saving…") else t("Save"), fontSize = 14.sp)
             }
         }

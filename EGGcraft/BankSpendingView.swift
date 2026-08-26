@@ -32,12 +32,23 @@ struct StudioBankTransaction: Identifiable, Equatable {
     let linkedOrderId: String
     let linkedOrderLabel: String
     let vatCode: String
+    let vatCodeAuto: String
     let note: String
-    let pandleConfirmed: Bool
+    let reviewStatus: String
+    let pandleStatus: String
+    let pandleBankTransactionId: String
+    let pandleLastError: String
     /// Set when this payment has been matched to a purchase, so a row can show
     /// what it actually bought and the matcher can skip rows already spoken for.
     let purchaseId: String
     let purchaseNumber: String
+    // Permanent identities + the read-only bank layer shown in the detail panel.
+    let accountId: String
+    let provider: String
+    let providerTransactionId: String
+    let providerReference: String
+    let firstImportedAt: Date?
+    let importedAt: Date?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -57,10 +68,21 @@ struct StudioBankTransaction: Identifiable, Equatable {
         linkedOrderId = (data["linkedOrderId"] as? String) ?? ""
         linkedOrderLabel = (data["linkedOrderLabel"] as? String) ?? ""
         vatCode = ((data["vatCode"] as? String) ?? "").uppercased()
+        vatCodeAuto = ((data["vatCodeAuto"] as? String) ?? "").uppercased()
         note = (data["note"] as? String) ?? ""
-        pandleConfirmed = ((data["pandle"] as? [String: Any])?["status"] as? String) == "confirmed"
+        reviewStatus = (data["reviewStatus"] as? String) ?? ""
+        let pandle = data["pandle"] as? [String: Any]
+        pandleStatus = (pandle?["status"] as? String) ?? ""
+        pandleBankTransactionId = (pandle?["bankTransactionId"] as? String) ?? ""
+        pandleLastError = (pandle?["lastError"] as? String) ?? ""
         purchaseId = (data["purchaseId"] as? String) ?? ""
         purchaseNumber = (data["purchaseNumber"] as? String) ?? ""
+        accountId = (data["accountId"] as? String) ?? ""
+        provider = (data["provider"] as? String) ?? ""
+        providerTransactionId = (data["providerTransactionId"] as? String) ?? ""
+        providerReference = (data["providerReference"] as? String) ?? ""
+        firstImportedAt = (data["firstImportedAt"] as? Timestamp)?.dateValue()
+        importedAt = (data["importedAt"] as? Timestamp)?.dateValue()
     }
 
     var effectiveCategory: String { category.isEmpty ? categoryAuto : category }
@@ -68,6 +90,19 @@ struct StudioBankTransaction: Identifiable, Equatable {
     var year: Int { Int(bookingDate.prefix(4)) ?? 0 }
     var month: Int { Int(bookingDate.dropFirst(5).prefix(2)) ?? 0 }
     var isSpending: Bool { amount < 0 }
+    var pandleConfirmed: Bool { pandleStatus == "confirmed" }
+    /// The field is enrichment; a confirmed Pandle push implies "confirmed"
+    /// even on rows saved before review statuses existed (mirror of the web).
+    var effectiveReviewStatus: String {
+        if !reviewStatus.isEmpty { return reviewStatus }
+        return pandleStatus == "confirmed" ? "confirmed" : "unreviewed"
+    }
+}
+
+struct StudioBankAccountInfo: Equatable {
+    let id: String
+    let name: String
+    let currency: String
 }
 
 struct StudioBankConnection: Identifiable, Equatable {
@@ -75,7 +110,7 @@ struct StudioBankConnection: Identifiable, Equatable {
     let providerName: String
     let providerLogo: String
     let status: String
-    let accountCount: Int
+    let accounts: [StudioBankAccountInfo]
     let lastSyncedAt: Date?
     /// Server-written consent health: "ok", "needs_reconsent" or "error".
     let syncState: String
@@ -85,10 +120,14 @@ struct StudioBankConnection: Identifiable, Equatable {
         providerName = (data["providerName"] as? String) ?? ""
         providerLogo = (data["providerLogo"] as? String) ?? ""
         status = (data["status"] as? String) ?? ""
-        accountCount = (data["accounts"] as? [Any])?.count ?? 0
+        accounts = ((data["accounts"] as? [[String: Any]]) ?? []).map {
+            StudioBankAccountInfo(id: ($0["id"] as? String) ?? "", name: ($0["name"] as? String) ?? "", currency: ($0["currency"] as? String) ?? "")
+        }
         lastSyncedAt = (data["lastSyncedAt"] as? Timestamp)?.dateValue()
         syncState = (data["syncState"] as? String) ?? "ok"
     }
+
+    var accountCount: Int { accounts.count }
 
     var isLinked: Bool { status == "linked" }
     var needsReconnect: Bool { isLinked && syncState == "needs_reconsent" }
@@ -120,6 +159,19 @@ func bankCategoryColor(_ name: String) -> Color {
     return bankCategoryPalette[Int(hash % UInt32(bankCategoryPalette.count))]
 }
 let bankUncategorisedColor = Color(red: 0.36, green: 0.43, blue: 0.91)
+
+/// Review status chip/dot colours — the same hexes the web table uses.
+func bankReviewStatusColor(_ code: String) -> Color {
+    switch code {
+    case "needs_info": return Color(red: 0.71, green: 0.33, blue: 0.04)   // #b45309
+    case "ready": return Color(red: 0.15, green: 0.39, blue: 0.92)        // #2563eb
+    case "synced": return Color(red: 0.05, green: 0.48, blue: 0.33)       // #0e7a55
+    case "confirmed": return Color(red: 0.09, green: 0.64, blue: 0.29)    // #16a34a
+    case "sync_error": return Color(red: 0.86, green: 0.15, blue: 0.15)   // #dc2626
+    case "ignored": return Color(red: 0.61, green: 0.64, blue: 0.69)      // #9ca3af
+    default: return Color(red: 0.42, green: 0.45, blue: 0.50)             // #6b7280 (unreviewed)
+    }
+}
 
 func bankCurrencySymbol(_ code: String) -> String {
     switch code.uppercased() {
@@ -422,6 +474,8 @@ struct BankSpendingView: View {
         let derived = BankDerived.make(transactions: firebaseManager.bankTransactions, rules: firebaseManager.bankRules,
                                        vendors: firebaseManager.bankVendors, orders: firebaseManager.siparisler, model: model, lang: seciliDil)
         let selected = firebaseManager.bankTransactions.first { $0.id == model.selectedTxId }
+        let categoryOptions = bankCategoryOptions(custom: firebaseManager.bankCustomCategories,
+                                                  inUse: firebaseManager.bankTransactions.map(\.effectiveCategory) + firebaseManager.bankRules.map(\.category))
         HStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: isPhone ? 12 : 16) {
@@ -452,7 +506,7 @@ struct BankSpendingView: View {
                                 BankReceiptsSection(d: derived, model: model, fmt: fmt, background: cardBackground, isPhone: isPhone, isOwner: isOwner,
                                                     waiting: firebaseManager.bankWaitingReceipts, showFileImporter: $showFileImporter, photoItem: $photoItem)
                             case .rules:
-                                BankRulesSection(d: derived, rules: firebaseManager.bankRules, categoryTax: firebaseManager.bankCategoryTax,
+                                BankRulesSection(d: derived, rules: firebaseManager.bankRules, categoryTax: firebaseManager.bankCategoryTax, categoryOptions: categoryOptions,
                                                  model: model, fmt: fmt, background: cardBackground, isPhone: isPhone, isOwner: isOwner)
                             }
                         }
@@ -465,6 +519,7 @@ struct BankSpendingView: View {
             if !isPhone, let tx = selected {
                 Divider()
                 BankTransactionDetail(tx: tx, d: derived, model: model, fmt: fmt, isOwner: isOwner, categoryTax: firebaseManager.bankCategoryTax,
+                                      categoryOptions: categoryOptions, connections: firebaseManager.bankConnections,
                                       orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, vendors: firebaseManager.bankVendors,
                                       showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: false)
                     .frame(width: 380)
@@ -473,6 +528,7 @@ struct BankSpendingView: View {
         .sheet(isPresented: Binding(get: { isPhone && selected != nil }, set: { if !$0 { model.selectedTxId = nil } })) {
             if let tx = selected {
                 BankTransactionDetail(tx: tx, d: derived, model: model, fmt: fmt, isOwner: isOwner, categoryTax: firebaseManager.bankCategoryTax,
+                                      categoryOptions: categoryOptions, connections: firebaseManager.bankConnections,
                                       orders: firebaseManager.siparisler, rules: firebaseManager.bankRules, vendors: firebaseManager.bankVendors,
                                       showFileImporter: $showFileImporter, photoItem: $photoItem, asSheet: true)
                     .environmentObject(firebaseManager)
@@ -1113,6 +1169,10 @@ struct BankTransactionRow: View {
             BankAvatar(name: tx.merchant, size: compact ? 30 : 32)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
+                    if tx.effectiveReviewStatus != "unreviewed" {
+                        Circle().fill(bankReviewStatusColor(tx.effectiveReviewStatus)).frame(width: 7, height: 7)
+                            .accessibilityLabel(fmt.t(bankReviewStatusLabel(tx.effectiveReviewStatus)))
+                    }
                     if isRecurring { Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9)).foregroundColor(.secondary) }
                     Text(tx.merchant).font(.system(size: 13, weight: .bold)).lineLimit(1)
                     if isDuplicate { BankChip(text: fmt.t("Duplicate?"), color: .orange) }
@@ -1274,6 +1334,8 @@ struct BankTransactionDetail: View {
     let fmt: BankFormat
     let isOwner: Bool
     let categoryTax: [String: String]
+    let categoryOptions: [String]
+    let connections: [StudioBankConnection]
     let orders: [Siparis]
     let rules: [StudioBankRule]
     let vendors: [StudioBankVendor]
@@ -1283,14 +1345,15 @@ struct BankTransactionDetail: View {
 
     @State private var category = ""
     @State private var vat = ""
+    @State private var review = ""
     @State private var orderId = ""
     @State private var note = ""
     @State private var ruleKeyword = ""
+    @State private var showBankData = false
     @Environment(\.openURL) private var openURL
 
-    private var categoryOptions: [String] {
-        var list = bankCategories
-        for rule in rules where !list.contains(rule.category) { list.append(rule.category) }
+    private var pickableCategories: [String] {
+        var list = categoryOptions
         if !category.isEmpty && !list.contains(category) { list.append(category) }
         return list
     }
@@ -1316,11 +1379,28 @@ struct BankTransactionDetail: View {
                 }
                 LabeledContent(fmt.t("Raw bank description")) { Text(tx.description.isEmpty ? "—" : tx.description).font(.system(size: 12)).foregroundColor(.secondary).multilineTextAlignment(.trailing) }
             }
+            // The read-only bank layer, kept visibly apart from NivaDesk's own
+            // enrichment: what the bank said never changes here.
+            Section {
+                DisclosureGroup(isExpanded: $showBankData) {
+                    bankDataRow(fmt.t("Bank transaction ID"), tx.providerTransactionId.isEmpty ? tx.id : tx.providerTransactionId)
+                    bankDataRow(fmt.t("Bank account"), bankAccountLabel)
+                    bankDataRow(fmt.t("Status"), tx.status == "pending" ? fmt.t("pending") : fmt.t("Booked"))
+                    bankDataRow(fmt.t("Bank reference"), tx.providerReference.isEmpty ? "—" : tx.providerReference)
+                    bankDataRow(fmt.t("Open Banking provider"), tx.provider == "truelayer" ? "TrueLayer" : (tx.provider.isEmpty ? "—" : tx.provider))
+                    bankDataRow(fmt.t("First imported"), tx.firstImportedAt.map { fmt.date(bankIsoDayString($0)) } ?? "—")
+                    bankDataRow(fmt.t("Last updated"), tx.importedAt.map { fmt.time($0) } ?? "—")
+                    Text(fmt.t("Bank data can never be edited — everything below is NivaDesk's own enrichment."))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                } label: {
+                    Text("\(fmt.t("Bank data")) · \(fmt.t("Read-only"))").font(.system(size: 11.5, weight: .bold)).foregroundColor(.secondary)
+                }
+            }
             if tx.isSpending {
                 Section {
                     Picker(fmt.t("Category"), selection: $category) {
                         Text(fmt.t("Uncategorised")).tag("")
-                        ForEach(categoryOptions, id: \.self) { Text(fmt.t($0)).tag($0) }
+                        ForEach(pickableCategories, id: \.self) { Text(fmt.t($0)).tag($0) }
                     }
                     if tx.category.isEmpty, !tx.categoryAuto.isEmpty {
                         Text("⚡ \(fmt.t("Auto-applied")): \(fmt.t(tx.categoryAuto))").font(.system(size: 11)).foregroundColor(.secondary)
@@ -1333,6 +1413,9 @@ struct BankTransactionDetail: View {
                     Picker(fmt.t("VAT / Tax code"), selection: $vat) {
                         Text("\(fmt.t("Use category default"))\(categoryTax[category].map { " (\(fmt.t(bankVatLabel($0))))" } ?? "")").tag("")
                         ForEach(bankVatCodes, id: \.code) { Text(fmt.t($0.label)).tag($0.code) }
+                    }
+                    if tx.vatCode.isEmpty, !tx.vatCodeAuto.isEmpty {
+                        Text("⚡ \(fmt.t("Auto-applied")): \(fmt.t(bankVatLabel(tx.vatCodeAuto)))").font(.system(size: 11)).foregroundColor(.secondary)
                     }
                     Picker(fmt.t("Linked order or project"), selection: $orderId) {
                         Text(fmt.t("Not linked")).tag("")
@@ -1373,6 +1456,21 @@ struct BankTransactionDetail: View {
                         }
                     }
                 } header: { Text(fmt.t("Receipt / attachment")) }
+            }
+            Section {
+                Picker(fmt.t("Review status"), selection: $review) {
+                    ForEach(bankReviewStatuses, id: \.code) { Text(fmt.t($0.label)).tag($0.code) }
+                }
+                .disabled(!isOwner)
+                HStack {
+                    Spacer()
+                    Text(fmt.t(bankReviewStatusLabel(review)).uppercased())
+                        .font(.system(size: 10, weight: .heavy))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(bankReviewStatusColor(review).opacity(0.12))
+                        .foregroundColor(bankReviewStatusColor(review))
+                        .clipShape(Capsule())
+                }
             }
             Section {
                 TextField(fmt.t("Internal note for this transaction"), text: $note, axis: .vertical).lineLimit(2...5).disabled(!isOwner)
@@ -1426,7 +1524,25 @@ struct BankTransactionDetail: View {
                         }
                     }
                     LabeledContent(fmt.t("Activity & sync")) {
-                        Text(tx.pandleConfirmed ? "✓ \(fmt.t("Confirmed in Pandle"))" : fmt.t("Not synced to Pandle yet")).font(.system(size: 11.5)).foregroundColor(tx.pandleConfirmed ? .green : .secondary)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            switch tx.pandleStatus {
+                            case "confirmed":
+                                Text("✓ \(fmt.t("Confirmed in Pandle"))").font(.system(size: 11.5)).foregroundColor(.green)
+                                if !tx.pandleBankTransactionId.isEmpty {
+                                    Text("\(fmt.t("Pandle transaction ID")): \(tx.pandleBankTransactionId)").font(.system(size: 10.5)).foregroundColor(.secondary)
+                                }
+                            case "error":
+                                Text("! \(fmt.t("Sync error"))").font(.system(size: 11.5, weight: .bold)).foregroundColor(.red)
+                                if !tx.pandleLastError.isEmpty {
+                                    Text(tx.pandleLastError).font(.system(size: 10.5)).foregroundColor(.red).multilineTextAlignment(.trailing)
+                                }
+                                Text(fmt.t("Nothing was lost — fix the issue and sync again.")).font(.system(size: 10.5)).foregroundColor(.secondary).multilineTextAlignment(.trailing)
+                            case "matched":
+                                Text(fmt.t("Matched to an existing Pandle transaction")).font(.system(size: 11.5)).foregroundColor(.blue).multilineTextAlignment(.trailing)
+                            default:
+                                Text(fmt.t("Not synced to Pandle yet")).font(.system(size: 11.5)).foregroundColor(.secondary)
+                            }
+                        }
                     }
                 }
             }
@@ -1480,9 +1596,30 @@ struct BankTransactionDetail: View {
     private func load() {
         category = tx.category.isEmpty ? tx.categoryAuto : tx.category
         vat = tx.vatCode
+        review = tx.effectiveReviewStatus
         orderId = tx.linkedOrderId
         note = tx.note
         ruleKeyword = bankSuggestRuleKeyword(tx)
+    }
+
+    /// Resolves the account name from the connection's accounts when available.
+    private var bankAccountLabel: String {
+        if let account = connections.flatMap(\.accounts).first(where: { $0.id == tx.accountId }) {
+            return account.currency.isEmpty ? account.name : "\(account.name) · \(account.currency)"
+        }
+        return tx.accountId.isEmpty ? "—" : tx.accountId
+    }
+
+    private func bankIsoDayString(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter.string(from: date)
+    }
+
+    private func bankDataRow(_ label: String, _ value: String) -> some View {
+        LabeledContent(label) {
+            Text(value).font(.system(size: 11.5)).foregroundColor(.secondary).multilineTextAlignment(.trailing).textSelection(.enabled)
+        }
+        .font(.system(size: 11.5))
     }
 
     private func step(_ delta: Int) {
@@ -1495,9 +1632,9 @@ struct BankTransactionDetail: View {
     private func save(createRule: Bool) {
         guard let manager = model.manager else { return }
         let keyword = ruleKeyword.trimmingCharacters(in: .whitespaces).lowercased()
-        let category = self.category, vat = self.vat, orderId = self.orderId, note = self.note, tx = self.tx, fmt = self.fmt
+        let category = self.category, vat = self.vat, review = self.review, orderId = self.orderId, note = self.note, tx = self.tx, fmt = self.fmt
         model.run("drawer") {
-            try await manager.bankUpdateTransaction(transactionId: tx.id, category: category, vatCode: vat, note: note)
+            try await manager.bankUpdateTransaction(transactionId: tx.id, category: category, vatCode: vat, note: note, reviewStatus: review)
             if orderId != tx.linkedOrderId {
                 if !tx.linkedOrderId.isEmpty { try await manager.bankLinkOrder(transactionId: tx.id, orderId: "") }
                 if !orderId.isEmpty { try await manager.bankLinkOrder(transactionId: tx.id, orderId: orderId) }
@@ -1922,6 +2059,7 @@ private struct BankRulesSection: View {
     let d: BankDerived
     let rules: [StudioBankRule]
     let categoryTax: [String: String]
+    let categoryOptions: [String]
     @ObservedObject var model: BankScreenModel
     let fmt: BankFormat
     let background: Color
@@ -1965,7 +2103,7 @@ private struct BankRulesSection: View {
                     Text("→").foregroundColor(.secondary)
                     Picker("", selection: $model.newRuleCategory) {
                         Text("\(fmt.t("Category"))…").tag("")
-                        ForEach(bankCategories, id: \.self) { Text(fmt.t($0)).tag($0) }
+                        ForEach(categoryOptions, id: \.self) { Text(fmt.t($0)).tag($0) }
                     }.frame(maxWidth: 200)
                     if let tax = categoryTax[model.newRuleCategory], !model.newRuleCategory.isEmpty { Text("\(fmt.t("VAT")): \(fmt.t(bankVatLabel(tax)))").font(.system(size: 11)).foregroundColor(.secondary) }
                     Spacer()

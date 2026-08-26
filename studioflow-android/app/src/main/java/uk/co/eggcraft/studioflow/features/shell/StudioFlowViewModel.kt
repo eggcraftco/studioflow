@@ -54,7 +54,8 @@ private data class BankFeedBundle(
     val rules: List<uk.co.eggcraft.studioflow.data.model.StudioBankRule>,
     val waiting: List<uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt>,
     val categoryTax: Map<String, String>,
-    val vendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor> = emptyList()
+    val vendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor> = emptyList(),
+    val customCategories: List<uk.co.eggcraft.studioflow.data.model.StudioBankCategory> = emptyList()
 )
 
 data class StudioFlowUiState(
@@ -104,6 +105,7 @@ data class StudioFlowUiState(
     val bankRules: List<uk.co.eggcraft.studioflow.data.model.StudioBankRule> = emptyList(),
     val bankWaitingReceipts: List<uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt> = emptyList(),
     val bankVendors: List<uk.co.eggcraft.studioflow.data.model.StudioBankVendor> = emptyList(),
+    val bankCustomCategories: List<uk.co.eggcraft.studioflow.data.model.StudioBankCategory> = emptyList(),
     val bankCategoryTax: Map<String, String> = uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX,
     val keepNotesSearch: String = "",
     val keepNotesSection: String = "notes",
@@ -2076,8 +2078,11 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     ) { transactions, connections, rules, waiting, categoryTax ->
                         BankFeedBundle(transactions, connections, rules, waiting, categoryTax)
                     },
-                    repository.bankVendorsFlow(workspace.id)
-                ) { bundle, vendors -> bundle.copy(vendors = vendors) }
+                    repository.bankVendorsFlow(workspace.id),
+                    repository.bankCategoriesFlow(workspace.id)
+                ) { bundle, vendors, customCategories ->
+                    bundle.copy(vendors = vendors, customCategories = customCategories)
+                }
                     .catch { }
                     .collect { bundle ->
                         mutableState.update {
@@ -2087,7 +2092,8 @@ class StudioFlowViewModel @JvmOverloads constructor(
                                 bankRules = bundle.rules,
                                 bankWaitingReceipts = bundle.waiting,
                                 bankCategoryTax = bundle.categoryTax,
-                                bankVendors = bundle.vendors
+                                bankVendors = bundle.vendors,
+                                bankCustomCategories = bundle.customCategories
                             )
                         }
                     }
@@ -2096,7 +2102,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
             mutableState.update {
                 it.copy(
                     bankTransactions = emptyList(), bankConnections = emptyList(), bankRules = emptyList(),
-                    bankWaitingReceipts = emptyList(), bankVendors = emptyList(),
+                    bankWaitingReceipts = emptyList(), bankVendors = emptyList(), bankCustomCategories = emptyList(),
                     bankCategoryTax = uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX
                 )
             }

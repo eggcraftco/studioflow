@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioT } from "@/lib/studioflow/language";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 
@@ -58,6 +59,10 @@ type BankTransaction = {
   providerTransactionId: string;
   providerReference: string;
   reviewStatus: string;
+  incomingKind: string;
+  linkedPaymentId: string;
+  receiptFileRecordId: string;
+  splits: Array<{ amount: number; category: string; vatCode?: string; note?: string; orderId?: string; orderLabel?: string }>;
   pandleBankTransactionId: string;
   pandleLastError: string;
   firstImportedAt: Date | null;
@@ -255,6 +260,12 @@ function BankPageContent() {
   const [categoryTax, setCategoryTax] = useState<Record<string, string>>({});
   const [bulkVat, setBulkVat] = useState("");
   const [bulkReview, setBulkReview] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
+  const [drawerOrderSearch, setDrawerOrderSearch] = useState("");
+  const [drawerSplits, setDrawerSplits] = useState<Array<{ amount: string; category: string; vatCode: string; note: string; orderId: string }> | null>(null);
+  const [incomingSuggest, setIncomingSuggest] = useState<{ orderLabel: string; candidates: Array<{ id: string; amount: number; method: string; note: string; dateMs: number }> } | null>(null);
+  const [incomingOrderId, setIncomingOrderId] = useState("");
+  const [filesPicker, setFilesPicker] = useState<{ open: boolean; loading: boolean; files: Array<{ id: string; displayName: string; fileName: string; fileType: string }>; search: string }>({ open: false, loading: false, files: [], search: "" });
   const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
   // Banking tabs + the transaction drawer.
   type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules";
@@ -360,6 +371,10 @@ function BankPageContent() {
             providerTransactionId: String(data.providerTransactionId || ""),
             providerReference: String(data.providerReference || ""),
             reviewStatus: String(data.reviewStatus || ""),
+            incomingKind: String(data.incomingKind || ""),
+            linkedPaymentId: String(data.linkedPaymentId || ""),
+            receiptFileRecordId: String(data.receiptFileRecordId || ""),
+            splits: Array.isArray(data.splits) ? (data.splits as BankTransaction["splits"]) : [],
             pandleBankTransactionId: String((data.pandle as { bankTransactionId?: string } | undefined)?.bankTransactionId || ""),
             pandleLastError: String((data.pandle as { lastError?: string } | undefined)?.lastError || ""),
             firstImportedAt: toDate(data.firstImportedAt),
@@ -767,6 +782,105 @@ function BankPageContent() {
     }
   }
 
+  // ---- Split transaction ----------------------------------------------------
+  function startSplitEditor(tx: BankTransaction) {
+    const abs = Math.abs(tx.amount);
+    setDrawerSplits(tx.splits.length
+      ? tx.splits.map(row => ({ amount: String(row.amount), category: row.category, vatCode: row.vatCode || "", note: row.note || "", orderId: row.orderId || "" }))
+      : [
+        { amount: abs.toFixed(2), category: effectiveCategory(tx) || "", vatCode: tx.vatCode || "", note: "", orderId: "" },
+        { amount: "0.00", category: "", vatCode: "", note: "", orderId: "" }
+      ]);
+  }
+  async function saveSplits() {
+    if (!drawerTx || !drawerSplits) return;
+    setBusy("splits");
+    setError(null);
+    try {
+      const splits = drawerSplits
+        .filter(row => Number(row.amount) > 0 || row.category)
+        .map(row => ({ amount: Number(row.amount) || 0, category: row.category, vatCode: row.vatCode, note: row.note, orderId: row.orderId }));
+      const result = await call<{ lines?: number; cleared?: boolean }>("bankSetTransactionSplits", { transactionId: drawerTx.id, splits });
+      setDrawerSplits(null);
+      setStatus(result.cleared ? t("Split removed.") : t("Split saved."));
+    } catch (splitError) {
+      setError(splitError instanceof Error ? splitError.message : "Could not save the split.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function removeSplits() {
+    if (!drawerTx) return;
+    setBusy("splits");
+    try {
+      await call("bankSetTransactionSplits", { transactionId: drawerTx.id, splits: [] });
+      setDrawerSplits(null);
+      setStatus(t("Split removed."));
+    } catch (splitError) {
+      setError(splitError instanceof Error ? splitError.message : "Could not save the split.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ---- Receipt from the central Files library --------------------------------
+  async function openFilesPicker() {
+    if (!workspace) return;
+    setFilesPicker({ open: true, loading: true, files: [], search: "" });
+    try {
+      const result = await listLibraryFiles(workspace);
+      setFilesPicker({
+        open: true, loading: false, search: "",
+        files: (result.files || [])
+          .filter(file => !file.trashedAtMs)
+          .map(file => ({ id: file.id, displayName: file.displayName || file.fileName, fileName: file.fileName, fileType: file.fileType }))
+      });
+    } catch (pickError) {
+      setFilesPicker(prev => ({ ...prev, open: false, loading: false }));
+      setError(pickError instanceof Error ? pickError.message : "The file library could not be loaded.");
+    }
+  }
+  async function chooseLibraryReceipt(fileId: string) {
+    if (!drawerTx) return;
+    setBusy("receipt-pick");
+    setError(null);
+    try {
+      await call("bankSetTransactionReceipt", { transactionId: drawerTx.id, fileRecordId: fileId });
+      setFilesPicker(prev => ({ ...prev, open: false }));
+      setStatus(t("Receipt attached from Files."));
+    } catch (pickError) {
+      setError(pickError instanceof Error ? pickError.message : "Could not attach the file.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ---- Incoming ↔ order payment ----------------------------------------------
+  async function incomingCall(mode: "suggest" | "link" | "create" | "unlink", paymentId?: string) {
+    if (!drawerTx) return;
+    setBusy("incoming");
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = { transactionId: drawerTx.id, mode };
+      if (mode !== "unlink") payload.orderId = incomingOrderId;
+      if (paymentId) payload.paymentId = paymentId;
+      const result = await call<{ ok: boolean; orderLabel?: string; candidates?: Array<{ id: string; amount: number; method: string; note: string; dateMs: number }>; needsChoice?: boolean; linked?: boolean; created?: boolean; unlinked?: boolean; already?: boolean }>("bankMatchIncomingToOrder", payload);
+      if (mode === "suggest" || result.needsChoice) {
+        setIncomingSuggest({ orderLabel: result.orderLabel || "", candidates: result.candidates || [] });
+      } else if (result.linked || result.created) {
+        setIncomingSuggest(null);
+        setStatus(result.created ? t("Payment recorded on the order.") : t("Matched to the order's existing payment — nothing was recorded twice."));
+      } else if (result.unlinked) {
+        setIncomingSuggest(null);
+        setStatus(t("Match removed — the payment entry stays on the order."));
+      }
+    } catch (matchError) {
+      setError(matchError instanceof Error ? matchError.message : "Could not match the payment.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const effectiveVat = (tx: BankTransaction) => tx.vatCode || tx.vatCodeAuto || categoryTax[effectiveCategory(tx)] || "";
   async function applyVat(ids: string[], vatCode: string) {
     if (ids.length === 0) return;
@@ -875,6 +989,7 @@ function BankPageContent() {
     rules.forEach(rule => { if (rule.category) set.add(rule.category); });
     return Array.from(set);
   }, [transactions, rules]);
+  const allAccounts = useMemo(() => connections.flatMap(item => item.accounts), [connections]);
   // Every pickable category: presets + the workspace's own active records +
   // whatever the feed already uses. A deactivated record drops out of the
   // pickers but keeps colouring existing rows.
@@ -1045,6 +1160,11 @@ function BankPageContent() {
     setDrawerOrderId(tx.linkedOrderId);
     setDrawerRuleKeyword(suggestions.get(tx.id)?.keyword || suggestRuleKeyword(tx));
     setCategoryPickerTxId(null);
+    setDrawerOrderSearch("");
+    setDrawerSplits(null);
+    setIncomingSuggest(null);
+    setIncomingOrderId(tx.linkedOrderId || "");
+    setFilesPicker(prev => ({ ...prev, open: false, search: "" }));
   }
   function drawerStep(direction: -1 | 1) {
     if (!drawerTx) return;
@@ -1203,8 +1323,10 @@ function BankPageContent() {
   }
 
   const currency0 = transactions[0]?.currency || "GBP";
+  // Transfers between the owner's own accounts, owner contributions and loans
+  // are money in, but not revenue — once marked, they leave this tile.
   const incomingTotal = useMemo(() => visibleTransactions
-    .filter(item => item.amount > 0)
+    .filter(item => item.amount > 0 && !["transfer", "owner_contribution", "loan"].includes(item.incomingKind))
     .reduce((acc, item) => acc + item.amount, 0), [visibleTransactions]);
 
   // Sparkline for the "Total spent" tile: daily in month view, monthly in year view.
@@ -1242,6 +1364,7 @@ function BankPageContent() {
 
   const sortedTransactions = useMemo(() => {
     const list = visibleTransactions.filter(item => {
+      if (accountFilter && item.accountId !== accountFilter) return false;
       if (txFlow === "in" && item.amount <= 0) return false;
       if (txFlow === "out" && item.amount >= 0) return false;
       if (txAttention === "uncategorised" && !(item.amount < 0 && !effectiveCategory(item))) return false;
@@ -1254,7 +1377,7 @@ function BankPageContent() {
     });
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc, txFlow, txAttention, txSearch, duplicateIds]);
+  }, [visibleTransactions, sortAsc, txFlow, txAttention, txSearch, duplicateIds, accountFilter]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
@@ -1768,6 +1891,12 @@ function BankPageContent() {
                         aria-label={t("Search transactions")}
                         style={{ border: 0, outline: "none", background: "transparent", color: "inherit", fontSize: 12.5, width: "100%" }} />
                     </span>
+                    {allAccounts.length > 1 ? (
+                      <select value={accountFilter} onChange={event => setAccountFilter(event.target.value)} style={{ ...pickerInput, flex: "0 1 170px", fontSize: 12 }} aria-label={t("Accounts")}>
+                        <option value="">{t("All accounts")}</option>
+                        {allAccounts.map(account => <option key={account.id} value={account.id}>{account.name}{account.currency ? ` · ${account.currency}` : ""}</option>)}
+                      </select>
+                    ) : null}
                     {isOwner ? (
                       <button type="button" onClick={() => { setSelectMode(value => !value); setSelectedIds(new Set()); }}
                         title={t("Bulk review")}
@@ -1905,7 +2034,13 @@ function BankPageContent() {
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
                                 <td style={tdStyle}>
-                                  {transaction.amount < 0 && !isOwner ? (
+                                  {transaction.amount < 0 && transaction.splits.length ? (
+                                    <span title={transaction.splits.map(row => `${row.category}: ${row.amount.toFixed(2)}`).join(" · ")}
+                                      style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(37,99,235,0.12)", color: "#2563eb", cursor: "pointer" }}
+                                      onClick={() => openDrawer(transaction)}>
+                                      ⑃ {t("Split")} ({transaction.splits.length})
+                                    </span>
+                                  ) : transaction.amount < 0 && !isOwner ? (
                                     <span style={category
                                       ? { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${catColor}1a`, color: catColor }
                                       : { fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.13)", opacity: 0.75 }}>
@@ -2719,9 +2854,15 @@ function BankPageContent() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <label>
                     <div style={drawerLabel}>{t("Linked order or project")}</div>
+                    <input type="search" value={drawerOrderSearch} disabled={!isOwner} onChange={event => setDrawerOrderSearch(event.target.value)} placeholder={t("Search orders")}
+                      style={{ ...pickerInput, width: "100%", marginBottom: 4, fontSize: 11.5, padding: "4px 8px" }} aria-label={t("Search orders")} />
                     <select value={drawerOrderId} disabled={!isOwner} onChange={event => setDrawerOrderId(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
                       <option value="">{t("Not linked")}</option>
-                      {(orderOptions ? rankOrdersForTransaction(drawerTx, orderOptions).slice(0, 40).map(item => item.order) : []).map(order => (
+                      {(orderOptions
+                        ? rankOrdersForTransaction(drawerTx, orderOptions).map(item => item.order)
+                          .filter(order => !drawerOrderSearch.trim() || `${order.customerName} ${order.designName}`.toLowerCase().includes(drawerOrderSearch.trim().toLowerCase()))
+                          .slice(0, 40)
+                        : []).map(order => (
                         <option key={order.id} value={order.id}>{order.customerName}{order.designName && order.designName !== "Untitled design" ? ` · ${order.designName}` : ""}</option>
                       ))}
                       {drawerOrderId && orderOptions && !orderOptions.some(order => order.id === drawerOrderId) ? <option value={drawerOrderId}>{drawerTx.linkedOrderLabel || t("Order")}</option> : null}
@@ -2747,13 +2888,178 @@ function BankPageContent() {
                       ) : (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: drawerTx.receiptNotNeeded ? "inherit" : "#dc2626", fontWeight: 700, opacity: drawerTx.receiptNotNeeded ? 0.6 : 1 }}>{drawerTx.receiptNotNeeded ? t("No receipt needed") : `! ${t("Missing receipt")}`}</span>
-                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={13} color="#2563eb" /> {t("Attach")}</button> : null}
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => { setPendingAttachTxId(drawerTx.id); document.getElementById("bank-receipt-input")?.click(); }}><AttachIcon size={13} color="#2563eb" /> {t("Upload new")}</button> : null}
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} disabled={filesPicker.loading} onClick={() => void openFilesPicker()}>{filesPicker.loading ? t("Loading…") : `▤ ${t("Choose from Files")}`}</button> : null}
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
+                {filesPicker.open ? (
+                  <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.05)", fontSize: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <strong>{t("Choose from Files")}</strong>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" className="finance-payments-delete" onClick={() => setFilesPicker(prev => ({ ...prev, open: false }))} aria-label={t("Close")}>✕</button>
+                    </div>
+                    <input type="search" value={filesPicker.search} onChange={event => setFilesPicker(prev => ({ ...prev, search: event.target.value }))} placeholder={t("Search files")}
+                      style={{ ...pickerInput, width: "100%", marginBottom: 6, fontSize: 11.5, padding: "4px 8px" }} aria-label={t("Search files")} />
+                    <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+                      {filesPicker.files
+                        .filter(file => !filesPicker.search.trim() || `${file.displayName} ${file.fileName}`.toLowerCase().includes(filesPicker.search.trim().toLowerCase()))
+                        .slice(0, 40)
+                        .map(file => (
+                          <button key={file.id} type="button" disabled={busy === "receipt-pick"} onClick={() => void chooseLibraryReceipt(file.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 8, border: 0, background: "transparent", cursor: "pointer", textAlign: "left", padding: "4px 6px", borderRadius: 7, color: "inherit" }}>
+                            <FileBadge name={file.fileName} size={24} />
+                            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 12 }}>{file.displayName}</span>
+                          </button>
+                        ))}
+                      {!filesPicker.loading && filesPicker.files.length === 0 ? <span style={{ opacity: 0.6 }}>{t("The library is empty.")}</span> : null}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 10.5, opacity: 0.55 }}>{t("The file is referenced, not copied — an invoice already on a purchase is never uploaded twice.")}</div>
+                  </div>
+                ) : null}
+                {(() => {
+                  // Split transaction: one payment, several categories/orders.
+                  const abs = Math.abs(drawerTx.amount);
+                  if (drawerSplits) {
+                    const total = drawerSplits.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
+                    const balanced = Math.abs(total - abs) <= 0.005;
+                    return (
+                      <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.05)", fontSize: 12 }}>
+                        <div style={{ fontWeight: 800, marginBottom: 6 }}>⑃ {t("Split transaction")}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {drawerSplits.map((row, index) => (
+                            <div key={index} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                              <input type="number" step="0.01" min="0" value={row.amount} onChange={event => setDrawerSplits(rows => rows ? rows.map((r, i) => i === index ? { ...r, amount: event.target.value } : r) : rows)}
+                                style={{ ...pickerInput, flex: "0 1 90px", fontVariantNumeric: "tabular-nums" }} aria-label={t("Amount")} />
+                              <select value={row.category} onChange={event => setDrawerSplits(rows => rows ? rows.map((r, i) => i === index ? { ...r, category: event.target.value } : r) : rows)} style={{ ...pickerInput, flex: "1 1 120px" }} aria-label={t("Category")}>
+                                <option value="">{t("Category")}…</option>
+                                {categoryOptions.map(name => <option key={name} value={name}>{t(name)}</option>)}
+                              </select>
+                              <select value={row.vatCode} onChange={event => setDrawerSplits(rows => rows ? rows.map((r, i) => i === index ? { ...r, vatCode: event.target.value } : r) : rows)} style={{ ...pickerInput, flex: "0 1 120px" }} aria-label={t("VAT / Tax code")}>
+                                <option value="">{t("VAT")}…</option>
+                                {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                              </select>
+                              <select value={row.orderId} onChange={event => setDrawerSplits(rows => rows ? rows.map((r, i) => i === index ? { ...r, orderId: event.target.value } : r) : rows)} style={{ ...pickerInput, flex: "1 1 130px" }} aria-label={t("Linked order or project")}>
+                                <option value="">{t("Not linked")}</option>
+                                {(orderOptions ?? []).slice(0, 60).map(order => <option key={order.id} value={order.id}>{order.customerName}{order.designName && order.designName !== "Untitled design" ? ` · ${order.designName}` : ""}</option>)}
+                              </select>
+                              <input type="text" value={row.note} onChange={event => setDrawerSplits(rows => rows ? rows.map((r, i) => i === index ? { ...r, note: event.target.value } : r) : rows)} placeholder={t("Note")}
+                                style={{ ...pickerInput, flex: "1 1 110px" }} aria-label={t("Note")} />
+                              <button type="button" className="finance-payments-delete" onClick={() => setDrawerSplits(rows => rows && rows.length > 2 ? rows.filter((_, i) => i !== index) : rows)} aria-label={t("Remove")} style={{ fontSize: 10 }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => setDrawerSplits(rows => rows ? [...rows, { amount: "0.00", category: "", vatCode: "", note: "", orderId: "" }] : rows)}>＋ {t("Add line")}</button>
+                          <span style={{ flex: 1 }} />
+                          <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: balanced ? "#16a34a" : "#dc2626" }}>
+                            {money(total, drawerTx.currency)} / {money(abs, drawerTx.currency)}
+                          </span>
+                          <button type="button" style={bankBtnSm} onClick={() => setDrawerSplits(null)}>{t("Cancel")}</button>
+                          <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "splits" || !balanced} onClick={() => void saveSplits()}>
+                            {busy === "splits" ? t("Saving…") : t("Save split")}
+                          </button>
+                        </div>
+                        {!balanced ? <div style={{ marginTop: 4, fontSize: 10.5, color: "#dc2626" }}>{t("Split lines must add up to the exact transaction amount.")}</div> : null}
+                      </div>
+                    );
+                  }
+                  if (drawerTx.splits.length) {
+                    return (
+                      <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)", fontSize: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <strong>⑃ {t("Split transaction")} ({drawerTx.splits.length})</strong>
+                          <span style={{ flex: 1 }} />
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} onClick={() => startSplitEditor(drawerTx)}>{t("Edit")}</button> : null}
+                          {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5, color: "#dc2626" }} disabled={busy === "splits"} onClick={() => void removeSplits()}>{t("Remove")}</button> : null}
+                        </div>
+                        {drawerTx.splits.map((row, index) => (
+                          <div key={index} style={{ display: "flex", gap: 8, alignItems: "center", padding: "2px 0" }}>
+                            <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, minWidth: 70 }}>{money(row.amount, drawerTx.currency)}</span>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "2px 9px", background: `${categoryColor(row.category)}1a`, color: categoryColor(row.category) }}>{t(row.category)}</span>
+                            {row.vatCode ? <span style={{ opacity: 0.65 }}>{t(vatLabel(row.vatCode))}</span> : null}
+                            {row.orderLabel ? <span style={{ color: "#2563eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {row.orderLabel}</span> : null}
+                            {row.note ? <span style={{ opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.note}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return isOwner ? (
+                    <button type="button" style={{ ...attentionLink, fontSize: 12, textAlign: "left" }} onClick={() => startSplitEditor(drawerTx)}>
+                      ⑃ {t("Split this transaction into several categories or orders")}
+                    </button>
+                  ) : null;
+                })()}
               </>
+            ) : null}
+            {drawerTx.amount > 0 ? (
+              <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)", fontSize: 12 }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>⇥ {t("Match to")}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={drawerTx.incomingKind || ""} disabled={!isOwner || busy === "incoming"}
+                    onChange={event => {
+                      const kind = event.target.value;
+                      if (kind === "order_payment") return; // chosen through the order flow below
+                      void call("bankUpdateTransaction", { transactionId: drawerTx.id, incomingKind: kind }).then(() => setStatus(t("Transaction saved."))).catch(err => setError(err instanceof Error ? err.message : "Could not save the transaction."));
+                    }}
+                    style={{ ...pickerInput, flex: "0 1 210px" }} aria-label={t("Match to")}>
+                    <option value="">{t("Unclassified income")}</option>
+                    <option value="order_payment">{t("Order payment")}</option>
+                    <option value="invoice">{t("Invoice")}</option>
+                    <option value="deposit">{t("Deposit")}</option>
+                    <option value="refund_received">{t("Refund received")}</option>
+                    <option value="owner_contribution">{t("Owner contribution")}</option>
+                    <option value="loan">{t("Loan")}</option>
+                    <option value="transfer">{t("Transfer between own accounts")}</option>
+                    <option value="other_income">{t("Other income")}</option>
+                  </select>
+                  {["transfer", "owner_contribution", "loan"].includes(drawerTx.incomingKind) ? (
+                    <span style={{ fontSize: 11, opacity: 0.65 }}>{t("Not counted as revenue.")}</span>
+                  ) : null}
+                </div>
+                {drawerTx.incomingKind === "order_payment" && drawerTx.linkedPaymentId ? (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ color: "#16a34a", fontWeight: 700 }}>✓ {t("Matched to the order's existing payment — nothing was recorded twice.")}</span>
+                    <span style={{ color: "#2563eb" }}>⛓ {drawerTx.linkedOrderLabel}</span>
+                    {isOwner ? <button type="button" style={{ ...attentionLink, fontSize: 11.5 }} disabled={busy === "incoming"} onClick={() => void incomingCall("unlink")}>{t("Unlink")}</button> : null}
+                  </div>
+                ) : isOwner ? (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      <select value={incomingOrderId} onChange={event => { setIncomingOrderId(event.target.value); setIncomingSuggest(null); }} style={{ ...pickerInput, flex: "1 1 220px" }} aria-label={t("Order")}>
+                        <option value="">{t("Order")}…</option>
+                        {(orderOptions ? rankOrdersForTransaction(drawerTx, orderOptions).map(item => item.order).slice(0, 40) : []).map(order => (
+                          <option key={order.id} value={order.id}>{order.customerName}{order.designName && order.designName !== "Untitled design" ? ` · ${order.designName}` : ""}</option>
+                        ))}
+                      </select>
+                      <button type="button" style={bankBtnSm} disabled={!incomingOrderId || busy === "incoming"} onClick={() => void incomingCall("suggest")}>
+                        {busy === "incoming" ? t("Loading…") : t("Find matching payment")}
+                      </button>
+                    </div>
+                    {incomingSuggest ? (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                        {incomingSuggest.candidates.map(candidate => (
+                          <div key={candidate.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.18)" }}>
+                            <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{money(candidate.amount, drawerTx.currency)}</span>
+                            <span style={{ opacity: 0.7 }}>{candidate.method}{candidate.dateMs ? ` · ${new Date(candidate.dateMs).toLocaleDateString()}` : ""}</span>
+                            <span style={{ flex: 1 }} />
+                            <button type="button" style={{ ...bankBtnSm, color: "#16a34a", borderColor: "rgba(22,163,74,0.4)" }} disabled={busy === "incoming"} onClick={() => void incomingCall("link", candidate.id)}>✓ {t("Match this payment")}</button>
+                          </div>
+                        ))}
+                        {incomingSuggest.candidates.length === 0 ? <span style={{ fontSize: 11.5, opacity: 0.7 }}>{t("No unmatched payment with this amount on the order.")}</span> : null}
+                        <button type="button" style={{ ...attentionLink, fontSize: 11.5, textAlign: "left" }} disabled={busy === "incoming"}
+                          onClick={() => { if (window.confirm(`${t("Record a NEW payment on this order?")} (${money(drawerTx.amount, drawerTx.currency)})`)) void incomingCall("create"); }}>
+                          ＋ {t("Record as a new payment on this order")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <label>

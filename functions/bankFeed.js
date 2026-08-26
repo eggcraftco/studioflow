@@ -56,8 +56,17 @@ const BANK_REVIEW_STATUSES = ["unreviewed", "needs_info", "ready", "synced", "co
 // own data. Carried across when a pending row books under a new provider id.
 const ENRICHMENT_FIELDS = [
   "category", "vatCode", "note", "receiptPath", "receiptName", "receiptNotNeeded",
-  "linkedOrderId", "linkedOrderLabel", "purchaseId", "purchaseNumber",
-  "reviewStatus", "reviewedAt", "pandle"
+  "receiptFileRecordId", "linkedOrderId", "linkedOrderLabel", "linkedPaymentId",
+  "purchaseId", "purchaseNumber", "reviewStatus", "reviewedAt", "pandle",
+  "splits", "incomingKind"
+];
+
+// What an incoming payment actually is — a transfer between the owner's own
+// accounts or an owner contribution is not revenue, and only an explicit
+// order_payment may touch an order's payment ledger.
+const INCOMING_KINDS = [
+  "order_payment", "invoice", "deposit", "refund_received",
+  "owner_contribution", "loan", "transfer", "other_income"
 ];
 
 function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany }) {
@@ -593,10 +602,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { deleted: true };
   });
 
-  // Records (or clears) the receipt/invoice attached to a transaction. The
-  // file itself is uploaded by the owner's client straight to Storage under
-  // companies/{companyId}/bank_receipts/{transactionId}/ — this callable only
-  // validates and stamps the transaction doc, and deletes the object on clear.
+  // Records (or clears) the receipt/invoice attached to a transaction. Two
+  // sources: a fresh upload under companies/{id}/bank_receipts/{txId}/, or an
+  // EXISTING file from the central Files library (fileRecordId) — the same
+  // invoice already sitting on a Purchase is referenced, never re-uploaded.
+  // Cleanup only ever deletes bank_receipts uploads; a library file referenced
+  // here is shared and must survive the receipt being swapped or cleared.
   const bankSetTransactionReceipt = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const transactionId = cleanText(request.data?.transactionId, 250);
@@ -605,22 +616,41 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const txDoc = await txRef.get();
     if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
 
-    const storagePath = cleanText(request.data?.storagePath, 500);
-    const fileName = cleanText(request.data?.fileName, 200);
+    let storagePath = cleanText(request.data?.storagePath, 500);
+    let fileName = cleanText(request.data?.fileName, 200);
+    const fileRecordId = cleanText(request.data?.fileRecordId, 80);
     const previousPath = cleanText((txDoc.data() || {}).receiptPath, 500);
+    const ownUploadPrefix = `companies/${companyId}/bank_receipts/`;
 
-    if (storagePath) {
-      const expectedPrefix = `companies/${companyId}/bank_receipts/${transactionId}/`;
+    if (fileRecordId) {
+      const recordDoc = await db().collection("companies").doc(companyId).collection("fileRecords").doc(fileRecordId).get();
+      const record = recordDoc.data();
+      if (!record) throw new HttpsError("not-found", "That file was not found in the library.");
+      if ((Number(record.trashedAtMs) || 0) > 0) throw new HttpsError("failed-precondition", "That file is in the library trash.");
+      storagePath = cleanText(record.storagePath, 500);
+      fileName = cleanText(record.displayName || record.fileName, 200) || fileName;
+      if (!storagePath) throw new HttpsError("failed-precondition", "That library file has no stored object.");
+      await txRef.set({
+        receiptPath: storagePath,
+        receiptName: fileName || storagePath.split("/").pop() || "receipt",
+        receiptFileRecordId: fileRecordId
+      }, { merge: true });
+    } else if (storagePath) {
+      const expectedPrefix = `${ownUploadPrefix}${transactionId}/`;
       if (!storagePath.startsWith(expectedPrefix)) {
         throw new HttpsError("invalid-argument", "storagePath does not belong to this transaction.");
       }
-      await txRef.set({ receiptPath: storagePath, receiptName: fileName || storagePath.split("/").pop() || "receipt" }, { merge: true });
+      await txRef.set({
+        receiptPath: storagePath,
+        receiptName: fileName || storagePath.split("/").pop() || "receipt",
+        receiptFileRecordId: admin.firestore.FieldValue.delete()
+      }, { merge: true });
     } else {
-      await txRef.set({ receiptPath: "", receiptName: "" }, { merge: true });
+      await txRef.set({ receiptPath: "", receiptName: "", receiptFileRecordId: admin.firestore.FieldValue.delete() }, { merge: true });
     }
 
-    // Best-effort cleanup of a replaced/removed file.
-    if (previousPath && previousPath !== storagePath) {
+    // Best-effort cleanup of a replaced/removed file — bank uploads only.
+    if (previousPath && previousPath !== storagePath && previousPath.startsWith(ownUploadPrefix)) {
       try { await admin.storage().bucket().file(previousPath).delete(); } catch { /* already gone */ }
     }
 
@@ -693,6 +723,176 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const orderLabel = cleanText(orderData.designName, 80) || cleanText(orderData.customerName, 80) || orderId;
     await txRef.set({ linkedOrderId: orderId, linkedOrderLabel: orderLabel }, { merge: true });
     return { linked: true, orderLabel };
+  });
+
+  // One payment, several purposes: an Amazon charge can be part Materials for
+  // one order, part Packaging for another, part plain office expense. Splits
+  // are enrichment lines on top of the untouched bank amount, and their total
+  // must equal that amount to the penny. Order references on split lines are
+  // annotations; the money-level order expense still flows through
+  // bankLinkTransactionToOrder so it is never counted twice.
+  const bankSetTransactionSplits = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 250);
+    if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
+    const txRef = transactionsRef(companyId).doc(transactionId);
+    const txDoc = await txRef.get();
+    if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    const tx = txDoc.data() || {};
+
+    const raw = Array.isArray(request.data?.splits) ? request.data.splits.slice(0, 12) : [];
+    if (!raw.length) {
+      await txRef.set({ splits: admin.firestore.FieldValue.delete(), reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return { ok: true, cleared: true };
+    }
+
+    const splits = [];
+    for (const item of raw) {
+      const amount = round2(Math.abs(Number(item?.amount) || 0));
+      const category = cleanText(item?.category, 60);
+      if (!(amount > 0)) throw new HttpsError("invalid-argument", "Every split line needs an amount.");
+      if (!category) throw new HttpsError("invalid-argument", "Every split line needs a category.");
+      const vatCode = cleanText(item?.vatCode, 4).toUpperCase();
+      if (vatCode && !BANK_VAT_CODES.includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+      const split = { amount, category };
+      if (vatCode) split.vatCode = vatCode;
+      const note = cleanText(item?.note, 200);
+      if (note) split.note = note;
+      const orderId = cleanText(item?.orderId, 120);
+      if (orderId) {
+        const orderDoc = await db().collection("siparisler").doc(orderId).get();
+        const orderData = orderDoc.data();
+        if (!orderData || cleanText(orderData.companyId, 120) !== companyId) {
+          throw new HttpsError("not-found", "A split line points at an order that is not in this workspace.");
+        }
+        split.orderId = orderId;
+        split.orderLabel = cleanText(orderData.designName, 80) || cleanText(orderData.customerName, 80) || orderId;
+      }
+      splits.push(split);
+    }
+    if (splits.length < 2) throw new HttpsError("invalid-argument", "A split needs at least two lines.");
+    const total = round2(splits.reduce((acc, item) => acc + item.amount, 0));
+    const txAbs = round2(Math.abs(Number(tx.amount) || 0));
+    if (Math.abs(total - txAbs) > 0.005) {
+      throw new HttpsError("invalid-argument", `Split lines add up to ${total.toFixed(2)} but the transaction is ${txAbs.toFixed(2)} — they must match exactly.`);
+    }
+
+    await txRef.set({ splits, reviewedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { ok: true, lines: splits.length };
+  });
+
+  // Incoming payments: what landed in the bank must be MATCHED to the payment
+  // the order already recorded, never recorded twice. "suggest" lists the
+  // order's unlinked payments with the same amount; "link" stamps one of them
+  // with the bank transaction id; "create" appends a new payment entry (only
+  // when nothing matched) — guarded so the same bank row can never create two;
+  // "unlink" undoes the link but never deletes a payment.
+  const bankMatchIncomingToOrder = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId, uid } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 250);
+    const mode = cleanText(request.data?.mode, 12) || "suggest";
+    if (!transactionId) throw new HttpsError("invalid-argument", "transactionId is required.");
+    const txRef = transactionsRef(companyId).doc(transactionId);
+    const txDoc = await txRef.get();
+    if (!txDoc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    const tx = txDoc.data() || {};
+    const amount = round2(Number(tx.amount) || 0);
+    if (!(amount > 0)) throw new HttpsError("failed-precondition", "Only incoming transactions can be matched to order payments.");
+
+    if (mode === "unlink") {
+      const previousOrderId = cleanText(tx.linkedOrderId, 120);
+      const previousPaymentId = cleanText(tx.linkedPaymentId, 80);
+      if (previousOrderId && previousPaymentId) {
+        const orderRef = db().collection("siparisler").doc(previousOrderId);
+        const orderDoc = await orderRef.get();
+        const orderData = orderDoc.data();
+        if (orderData && cleanText(orderData.companyId, 120) === companyId && Array.isArray(orderData.payments)) {
+          const payments = orderData.payments.map((entry) =>
+            entry && cleanText(entry.id, 80) === previousPaymentId ? { ...entry, bankTransactionId: "" } : entry);
+          await orderRef.set({ payments }, { merge: true });
+        }
+      }
+      await txRef.set({
+        linkedOrderId: "", linkedOrderLabel: "", linkedPaymentId: "",
+        incomingKind: admin.firestore.FieldValue.delete()
+      }, { merge: true });
+      return { ok: true, unlinked: true };
+    }
+
+    const orderId = cleanText(request.data?.orderId, 120);
+    if (!orderId) throw new HttpsError("invalid-argument", "orderId is required.");
+    const orderRef = db().collection("siparisler").doc(orderId);
+    const orderDoc = await orderRef.get();
+    const orderData = orderDoc.data();
+    if (!orderData || cleanText(orderData.companyId, 120) !== companyId) {
+      throw new HttpsError("not-found", "Order not found in this workspace.");
+    }
+    const orderLabel = cleanText(orderData.designName, 80) || cleanText(orderData.customerName, 80) || orderId;
+    const payments = Array.isArray(orderData.payments) ? orderData.payments : [];
+
+    // The same bank row already created/linked a payment on this order →
+    // idempotent success, nothing is written twice.
+    const existing = payments.find((entry) => entry && cleanText(entry.bankTransactionId, 250) === transactionId);
+    if (existing) {
+      await txRef.set({ incomingKind: "order_payment", linkedOrderId: orderId, linkedOrderLabel: orderLabel, linkedPaymentId: cleanText(existing.id, 80) }, { merge: true });
+      return { ok: true, linked: true, paymentId: cleanText(existing.id, 80), already: true };
+    }
+
+    const candidates = payments
+      .filter((entry) => entry && !cleanText(entry.bankTransactionId, 250) && Math.abs(round2(Number(entry.amount) || 0) - amount) <= 0.01)
+      .map((entry) => ({
+        id: cleanText(entry.id, 80),
+        amount: round2(Number(entry.amount) || 0),
+        method: cleanText(entry.method, 60),
+        note: cleanText(entry.note, 200),
+        dateMs: entry.date?.toMillis ? entry.date.toMillis() : 0
+      }));
+
+    if (mode === "suggest") {
+      return { ok: true, orderLabel, candidates };
+    }
+
+    if (mode === "link") {
+      const paymentId = cleanText(request.data?.paymentId, 80) || (candidates.length === 1 ? candidates[0].id : "");
+      if (!paymentId) {
+        // Zero or several candidates and no explicit choice — the client must
+        // ask the owner instead of guessing at money.
+        return { ok: false, needsChoice: true, orderLabel, candidates };
+      }
+      const target = payments.find((entry) => entry && cleanText(entry.id, 80) === paymentId);
+      if (!target) throw new HttpsError("not-found", "That payment entry was not found on the order.");
+      if (cleanText(target.bankTransactionId, 250)) throw new HttpsError("failed-precondition", "That payment is already matched to another bank transaction.");
+      const nextPayments = payments.map((entry) =>
+        entry && cleanText(entry.id, 80) === paymentId ? { ...entry, bankTransactionId: transactionId } : entry);
+      await orderRef.set({ payments: nextPayments }, { merge: true });
+      await txRef.set({ incomingKind: "order_payment", linkedOrderId: orderId, linkedOrderLabel: orderLabel, linkedPaymentId: paymentId }, { merge: true });
+      return { ok: true, linked: true, paymentId };
+    }
+
+    if (mode === "create") {
+      const entry = {
+        id: crypto.randomUUID(),
+        amount,
+        date: tx.bookingDate ? admin.firestore.Timestamp.fromDate(new Date(`${cleanText(tx.bookingDate, 10)}T12:00:00Z`)) : admin.firestore.Timestamp.now(),
+        method: "Bank transfer",
+        note: cleanText(tx.counterparty || tx.description, 160),
+        createdByUid: uid || "",
+        createdByEmail: "",
+        bankTransactionId: transactionId
+      };
+      const paidAmount = round2((Number(orderData.paidAmount) || 0) + amount);
+      const remainingAmount = Math.max(0, round2((Number(orderData.remainingAmount) || 0) - amount));
+      await orderRef.set({
+        payments: payments.concat([entry]).slice(-200),
+        paidAmount,
+        remainingAmount,
+        orderValue: round2(paidAmount + remainingAmount)
+      }, { merge: true });
+      await txRef.set({ incomingKind: "order_payment", linkedOrderId: orderId, linkedOrderLabel: orderLabel, linkedPaymentId: entry.id }, { merge: true });
+      return { ok: true, created: true, paymentId: entry.id };
+    }
+
+    throw new HttpsError("invalid-argument", "Unknown mode.");
   });
 
   // Manual category on a single transaction ("" clears it back to auto).
@@ -771,6 +971,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       const reviewStatus = cleanText(data.reviewStatus, 20).toLowerCase();
       if (reviewStatus && !BANK_REVIEW_STATUSES.includes(reviewStatus)) throw new HttpsError("invalid-argument", "Unknown review status.");
       patch.reviewStatus = reviewStatus && reviewStatus !== "unreviewed" ? reviewStatus : admin.firestore.FieldValue.delete();
+    }
+    if (data.incomingKind !== undefined) {
+      const incomingKind = cleanText(data.incomingKind, 24).toLowerCase();
+      if (incomingKind && !INCOMING_KINDS.includes(incomingKind)) throw new HttpsError("invalid-argument", "Unknown incoming kind.");
+      patch.incomingKind = incomingKind || admin.firestore.FieldValue.delete();
     }
     if (!Object.keys(patch).length) throw new HttpsError("invalid-argument", "Nothing to update.");
     patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
@@ -1301,6 +1506,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankDeleteConnection,
     bankSetTransactionReceipt,
     bankLinkTransactionToOrder,
+    bankSetTransactionSplits,
+    bankMatchIncomingToOrder,
     bankSetTransactionCategory,
     bankSetTransactionCategoryBulk,
     bankSetTransactionVatBulk,

@@ -37,6 +37,25 @@ struct StudioBankRule: Identifiable, Equatable {
     }
 }
 
+/// Workspace-defined category record (rename/deactivate/default VAT), written
+/// server-side by bankSaveCategory. Category MANAGEMENT stays web-only — the
+/// native apps only merge the active names into their pickers.
+struct StudioBankCategoryRecord: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let type: String
+    let defaultVatCode: String
+    let active: Bool
+
+    init(id: String, data: [String: Any]) {
+        self.id = id
+        name = (data["name"] as? String) ?? ""
+        type = (data["type"] as? String) ?? "expense"
+        defaultVatCode = ((data["defaultVatCode"] as? String) ?? "").uppercased()
+        active = (data["active"] as? Bool) ?? true
+    }
+}
+
 /// A receipt uploaded before its payment reached the feed; the server attaches
 /// it after a sync (or "Match now") once a single confident match exists.
 struct StudioBankWaitingReceipt: Identifiable, Equatable {
@@ -68,10 +87,39 @@ struct StudioBankWaitingReceipt: Identifiable, Equatable {
 
 let bankCategories: [String] = ["Materials", "Equipment", "Shipping", "Software", "Subscriptions", "Fees", "Marketing", "Travel", "Utilities", "Rent", "Staff", "Tax", "Other"]
 
+/// Every pickable category: presets + the workspace's own active records +
+/// whatever the feed already uses. A deactivated record drops out of the
+/// pickers but keeps colouring existing rows (mirrors the web categoryOptions).
+func bankCategoryOptions(custom: [StudioBankCategoryRecord], inUse: [String]) -> [String] {
+    var list = bankCategories
+    for record in custom where !record.name.isEmpty {
+        if record.active {
+            if !list.contains(record.name) { list.append(record.name) }
+        } else {
+            list.removeAll { $0 == record.name }
+        }
+    }
+    for name in inUse where !name.isEmpty && !list.contains(name) { list.append(name) }
+    return list
+}
+
+/// NivaDesk's own VAT treatments — the accounting connector translates them
+/// per provider at push time, nothing here is a Pandle code. Zero-rated and
+/// exempt are different VAT-return boxes, so they are separate on purpose.
 let bankVatCodes: [(code: String, label: String)] = [
-    ("ST", "VAT 20%"), ("RR", "VAT 5%"), ("RC", "Reverse charge"), ("NV", "No VAT"), ("EX", "Exempt / 0%")
+    ("ST", "Standard rate (20%)"), ("RR", "Reduced rate (5%)"), ("ZR", "Zero-rated (0%)"), ("EX", "Exempt"),
+    ("OS", "Outside scope"), ("NR", "No VAT receipt"), ("RC", "Reverse charge"), ("IM", "Import VAT"),
+    ("MX", "Mixed / split VAT"), ("NV", "No VAT")
 ]
 func bankVatLabel(_ code: String) -> String { bankVatCodes.first { $0.code == code }?.label ?? code }
+
+/// Where a transaction stands on its way to the accountant (field
+/// `reviewStatus`, absent = unreviewed). Labels are t()'d at render time.
+let bankReviewStatuses: [(code: String, label: String)] = [
+    ("unreviewed", "Unreviewed"), ("needs_info", "Needs information"), ("ready", "Ready for accounting"),
+    ("synced", "Synced"), ("confirmed", "Confirmed in accounting"), ("sync_error", "Sync error"), ("ignored", "Ignored")
+]
+func bankReviewStatusLabel(_ code: String) -> String { bankReviewStatuses.first { $0.code == code }?.label ?? bankReviewStatuses[0].label }
 
 /// Pandle's default nominal mapping — used until the workspace saves its own.
 let bankDefaultCategoryTax: [String: String] = [

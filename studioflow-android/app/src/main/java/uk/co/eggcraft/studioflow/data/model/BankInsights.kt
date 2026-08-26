@@ -17,11 +17,39 @@ val BANK_CATEGORIES = listOf(
     "Marketing", "Travel", "Utilities", "Rent", "Staff", "Tax", "Other"
 )
 
+// NivaDesk's own VAT treatments — the accounting connector translates them
+// per provider at push time, nothing here is a Pandle code. Zero-rated and
+// exempt are different VAT-return boxes, so they are separate on purpose.
 val BANK_VAT_CODES = listOf(
-    "ST" to "VAT 20%", "RR" to "VAT 5%", "RC" to "Reverse charge", "NV" to "No VAT", "EX" to "Exempt / 0%"
+    "ST" to "Standard rate (20%)",
+    "RR" to "Reduced rate (5%)",
+    "ZR" to "Zero-rated (0%)",
+    "EX" to "Exempt",
+    "OS" to "Outside scope",
+    "NR" to "No VAT receipt",
+    "RC" to "Reverse charge",
+    "IM" to "Import VAT",
+    "MX" to "Mixed / split VAT",
+    "NV" to "No VAT"
 )
 
 fun bankVatLabel(code: String): String = BANK_VAT_CODES.firstOrNull { it.first == code }?.second ?: code
+
+// Where a transaction stands on its way to the accountant; "unreviewed" is
+// the absent default. Labels are English source keys (t()'d at render time),
+// colours live with the UI.
+val BANK_REVIEW_STATUSES = listOf(
+    "unreviewed" to "Unreviewed",
+    "needs_info" to "Needs information",
+    "ready" to "Ready for accounting",
+    "synced" to "Synced",
+    "confirmed" to "Confirmed in accounting",
+    "sync_error" to "Sync error",
+    "ignored" to "Ignored"
+)
+
+fun bankReviewStatusLabel(code: String): String =
+    BANK_REVIEW_STATUSES.firstOrNull { it.first == code }?.second ?: BANK_REVIEW_STATUSES.first().second
 
 /** Pandle's default nominal mapping — used until the workspace saves its own. */
 val BANK_DEFAULT_CATEGORY_TAX = mapOf(

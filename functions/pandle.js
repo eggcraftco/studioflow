@@ -569,6 +569,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         vatCode: cleanText(data.vatCode, 4) || cleanText(data.vatCodeAuto, 4),
         hasReceipt: Boolean(data.receiptPath),
         linkedOrderLabel: cleanText(data.linkedOrderLabel, 120),
+        hasSplits: Array.isArray(data.splits) && data.splits.length > 0,
         pandleStatus: cleanText(data.pandle?.status, 20),
         // An ignored transaction is out of the accounting flow entirely.
         reviewStatusIgnored: cleanText(data.reviewStatus, 20) === "ignored",
@@ -579,7 +580,9 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
 
     const { matches } = matchFeeds(nivaRows, pandleRows);
     const items = matches.map(({ niva, pandle, score, drift, manual }) => {
-      const resolved = niva.category ? resolveMapping(connection, niva.category, niva.vatCode, customCategories) : { error: "uncategorised" };
+      const resolved = niva.hasSplits
+        ? { error: "split" }
+        : niva.category ? resolveMapping(connection, niva.category, niva.vatCode, customCategories) : { error: "uncategorised" };
       // A pair is pushed without asking only when the owner confirmed it or
       // the automatic score is clearly safe; everything else needs Confirm.
       const needsConfirm = !manual && score < 80;
@@ -689,6 +692,12 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       if (!tx) { results.push({ ...item, ok: false, error: "Transaction not found." }); continue; }
       if (tx.pandle?.status === "confirmed") { results.push({ ...item, ok: true, skipped: true }); continue; }
       if (cleanText(tx.reviewStatus, 20) === "ignored") { results.push({ ...item, ok: false, error: "This transaction is marked Ignored." }); continue; }
+      if (Array.isArray(tx.splits) && tx.splits.length) {
+        const message = "Split transactions can't be pushed to Pandle yet — confirm this one inside Pandle.";
+        await stampFailure(txDoc.ref, message);
+        results.push({ ...item, ok: false, error: message });
+        continue;
+      }
       const category = cleanText(tx.category, 60) || cleanText(tx.categoryAuto, 60);
       const vatOverride = cleanText(tx.vatCode, 4) || cleanText(tx.vatCodeAuto, 4);
       const resolved = category ? resolveMapping(connection, category, vatOverride, customCategories) : { error: "uncategorised" };

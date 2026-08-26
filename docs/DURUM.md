@@ -121,24 +121,38 @@ Kaynaklar: NivaDesk_banking.md ve NivaDesk_notes.md (repo kökünde).
 Talimat: iki özellik TEK TEK, detaylıca, TÜM platformlara.
 
 ### 1) BANKING (önce bu)
-**Kritik (rapor sırası):** kalıcı bank transaction ID; Pandle transaction ID;
-duplicate önleyen unique constraint (workspace+bank_account+bank_tx_id);
-mevcut Pandle hareketiyle MATCH (asla yeniden oluşturma); idempotent sync
-(idempotency key + attempt log); NivaDesk kategori/VAT modelini provider'dan
-ayırma (connector mapping: Pandle/QB/Xero); review statüleri (Unreviewed →
-Ready → Synced → Confirmed/Error/Ignored); banka verisi (read-only) ile
-NivaDesk enrichment ayrımı.
-**Yüksek:** split transaction; incoming↔order payment eşleştirme (duplicate
-payment üretmeden); transfer/refund/owner-contribution ayrımı; kural formuna
-VAT+scope (form ile tablo tutarsızlığı DOĞRULANMIŞ eksik); receipt'in merkezi
-Files'a bağlanması (Upload new / Choose from Files); sync activity paneli;
-aranabilir order seçici; çoklu hesap filtresi; pending/posted; multi-currency.
-**Orta:** receipt güven skoru; recurring güven+fiyat değişimi; bulk review;
-rule preview/priority; Supplier/Purchase/Inventory bağı; Accounting Review
-ekranı; audit log; custom kategoriler + mapping yönetimi.
-**Dört kesin kural:** read-only scope; provider tx ID benzersiz; Pandle'da
-mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT hard-code değil
-mapping.
+**Kritik 1-8 TAMAM (27 Ağu, sunucu+web CANLI):** kalıcı provider tx kimlikleri
+(provider/providerTransactionId/normalisedProviderId/providerReference +
+firstImportedAt) ve normalised id ile pending→booked hayalet mutabakatı;
+Pandle kimlikleri (importedId/bankTransactionId + attempts/lastError izi);
+deterministik doc-id = unique constraint; Pandle match sırası (manuel onay >
+referans > tutar+tarih, ret listesi) + pandleConfirmMatch/pandleRejectMatch +
+push'ta sunucu-tarafı eşleşme muhafızı (yön+kuruş+tarih toleransı);
+requestId'li idempotent push (pandleSyncRuns defteri, tekrar = stored result);
+provider-bağımsız model: 10 kodluk NivaDesk VAT listesi (ZR≠EX, MX=split
+gerekir) + bankCategories kayıtları (rename kaskadı, aktif/pasif, Pandle/QB/
+Xero mapping + tax fallback çevirisi); 7 review statüsü (tekli+toplu+otomatik
+confirmed/sync_error geçişleri); drawer'da BANK DATA (salt-okunur) bölümü.
+Ekstra kapanan Yüksek/Orta maddeler: kural formu VAT+appliesTo (vatCodeAuto
+ile uygulanıyor; DOĞRULANMIŞ tutarsızlık kapandı), sync activity paneli
+(drawer'da Pandle ID/hata/eşleşme durumu), pending/posted gösterimi, custom
+kategoriler + mapping yönetimi (Rules sekmesi), review bulk. Emülatör:
+banking-core.mjs 45 assert; web drawer/kategori/kural formu tarayıcıda
+uçtan uca doğrulandı. 14 fonksiyon + firestore.rules deploy edildi; 51 yeni
+anahtar × 11 dil. Native parite ajanları (Swift+Kotlin) bu dilim için çalıştı.
+**Kalan Yüksek:** split transaction; incoming↔order payment eşleştirme
+(duplicate payment üretmeden; Match-to seçici: order payment/invoice/transfer/
+owner contribution); transfer/refund/owner-contribution ayrımı; receipt'in
+merkezi Files'a bağlanması (Upload new / Choose from Files); aranabilir order
+seçici; çoklu hesap filtresi; multi-currency alanları.
+**Kalan Orta:** receipt güven skoru UI (Suggested match %); recurring güven+
+fiyat değişimi alanları; rule priority/conflict; Supplier/Purchase/Inventory
+bağı (purchase bağlama var, panelde genişletme); Accounting Review ekranı;
+audit log; consent ID/expiry saklama + bağlantı kartı zenginleştirme;
+Disconnect confirmation metni; Overview soruları (dönem/pending/transfer).
+**Dört kesin kural (uygulandı):** read-only scope; provider tx ID benzersiz;
+Pandle'da mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT
+hard-code değil mapping.
 
 ### 2) NOTES (banking sonrası)
 **Yüksek:** reminder tarihi kaydedilmiyor (DOĞRULANMIŞ bug — sessiz veri

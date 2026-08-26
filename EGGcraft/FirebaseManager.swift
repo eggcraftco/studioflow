@@ -977,6 +977,7 @@ class FirebaseManager: ObservableObject {
     private var bankRulesListenerRegistration: ListenerRegistration?
     private var bankInboxListenerRegistration: ListenerRegistration?
     private var bankVendorsListenerRegistration: ListenerRegistration?
+    private var bankCategoriesListenerRegistration: ListenerRegistration?
     private var bankPandleListenerRegistration: ListenerRegistration?
     private var bankFeedCompanyId: String = ""
     private var activityNotificationsCompanyId: String = ""
@@ -1003,6 +1004,9 @@ class FirebaseManager: ObservableObject {
     @Published var bankRules: [StudioBankRule] = []
     @Published var bankWaitingReceipts: [StudioBankWaitingReceipt] = []
     @Published var bankVendors: [StudioBankVendor] = []
+    /// Workspace-defined category records (managed on the web; pickers here
+    /// only merge the active names into the built-in list).
+    @Published var bankCustomCategories: [StudioBankCategoryRecord] = []
     /// Category → default VAT code (Pandle mapping when saved, else the built-in defaults).
     @Published var bankCategoryTax: [String: String] = bankDefaultCategoryTax
     @Published var currentWorkspaceRole: String = "owner"
@@ -3324,6 +3328,11 @@ class FirebaseManager: ObservableObject {
                 let items = (snapshot?.documents ?? []).map { StudioBankVendor(id: $0.documentID, data: $0.data()) }
                 DispatchQueue.main.async { self?.bankVendors = items }
             }
+        bankCategoriesListenerRegistration = base.collection("bankCategories")
+            .addSnapshotListener { [weak self] snapshot, _ in
+                let items = (snapshot?.documents ?? []).map { StudioBankCategoryRecord(id: $0.documentID, data: $0.data()) }
+                DispatchQueue.main.async { self?.bankCustomCategories = items }
+            }
         bankInboxListenerRegistration = base.collection("bankReceiptInbox")
             .addSnapshotListener { [weak self] snapshot, _ in
                 let items = (snapshot?.documents ?? []).map { StudioBankWaitingReceipt(id: $0.documentID, data: $0.data()) }
@@ -3349,12 +3358,14 @@ class FirebaseManager: ObservableObject {
         bankRulesListenerRegistration?.remove()
         bankInboxListenerRegistration?.remove()
         bankVendorsListenerRegistration?.remove()
+        bankCategoriesListenerRegistration?.remove()
         bankPandleListenerRegistration?.remove()
         bankTransactionsListenerRegistration = nil
         bankConnectionsListenerRegistration = nil
         bankRulesListenerRegistration = nil
         bankInboxListenerRegistration = nil
         bankVendorsListenerRegistration = nil
+        bankCategoriesListenerRegistration = nil
         bankPandleListenerRegistration = nil
         bankFeedCompanyId = ""
         if clearData {
@@ -3363,6 +3374,7 @@ class FirebaseManager: ObservableObject {
             bankRules = []
             bankWaitingReceipts = []
             bankVendors = []
+            bankCustomCategories = []
             bankCategoryTax = bankDefaultCategoryTax
         }
     }

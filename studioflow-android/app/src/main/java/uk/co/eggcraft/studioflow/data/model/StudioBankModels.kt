@@ -28,13 +28,31 @@ data class StudioBankTransaction(
     /** Set when this payment has been matched to a purchase, so a row can show
      *  what it actually bought and the matcher can skip rows already spoken for. */
     val purchaseId: String = "",
-    val purchaseNumber: String = ""
+    val purchaseNumber: String = "",
+    // ---- The permanent, read-only bank layer (server-written, never edited) ----
+    val accountId: String = "",
+    val provider: String = "",                 // "truelayer"
+    val providerTransactionId: String = "",
+    val providerReference: String = "",
+    val firstImportedAtMillis: Long? = null,   // first time the sync saw it
+    val importedAtMillis: Long? = null,        // last time the sync touched it
+    // ---- NivaDesk's own enrichment ----
+    val reviewStatus: String = "",             // absent = unreviewed
+    val vatCodeAuto: String = "",              // rule-applied VAT
+    val pandleStatus: String = "",             // "confirmed" / "matched" / "error"
+    val pandleBankTransactionId: String = "",
+    val pandleLastError: String = ""
 ) {
     val effectiveCategory: String get() = category.ifBlank { categoryAuto }
     val merchant: String get() = counterparty.ifBlank { description }
     val year: Int get() = bookingDate.take(4).toIntOrNull() ?: 0
     val month: Int get() = bookingDate.drop(5).take(2).toIntOrNull() ?: 0
     val isSpending: Boolean get() = amount < 0
+
+    /** Where the row stands on its way to the accountant. A confirmed Pandle
+     *  push implies "confirmed" even on rows saved before review statuses existed. */
+    val effectiveReviewStatus: String
+        get() = reviewStatus.ifBlank { if (pandleStatus == "confirmed") "confirmed" else "unreviewed" }
 }
 
 /** Categorisation rule: "merchant contains keyword → category". */
@@ -90,6 +108,10 @@ fun bankWaitingReceiptFromDocument(id: String, data: Map<String, Any?>): StudioB
     createdAtMillis = (data["createdAt"] as? Timestamp)?.toDate()?.time
 )
 
+/** One account inside a connection — used to show a friendly name for a
+ *  transaction's accountId in the read-only bank-data panel. */
+data class StudioBankAccount(val id: String, val name: String, val currency: String)
+
 data class StudioBankConnection(
     val id: String,
     val providerName: String,
@@ -98,12 +120,32 @@ data class StudioBankConnection(
     val accountCount: Int,
     val lastSyncedAtMillis: Long?,
     /** Server-written consent health: "ok", "needs_reconsent" or "error". */
-    val syncState: String = "ok"
+    val syncState: String = "ok",
+    val accounts: List<StudioBankAccount> = emptyList()
 ) {
     val isLinked: Boolean get() = status == "linked"
     val needsReconnect: Boolean get() = isLinked && syncState == "needs_reconsent"
     val isSyncFailing: Boolean get() = isLinked && syncState != "ok"
 }
+
+/** A workspace-defined category record (rename/deactivate/default VAT).
+ *  Server-written via bankSaveCategory on the web; Android only reads it to
+ *  merge active custom names into the category pickers. */
+data class StudioBankCategory(
+    val id: String,
+    val name: String,
+    val type: String,            // "expense" / "income" / "transfer"
+    val defaultVatCode: String,
+    val active: Boolean
+)
+
+fun bankCategoryFromDocument(id: String, data: Map<String, Any?>): StudioBankCategory = StudioBankCategory(
+    id = id,
+    name = (data["name"] as? String) ?: "",
+    type = ((data["type"] as? String) ?: "expense").let { if (it in listOf("expense", "income", "transfer")) it else "expense" },
+    defaultVatCode = ((data["defaultVatCode"] as? String) ?: "").uppercase(),
+    active = (data["active"] as? Boolean) != false
+)
 
 fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBankTransaction {
     val pandle = data["pandle"] as? Map<*, *>
@@ -128,18 +170,38 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         note = (data["note"] as? String) ?: "",
         pandleConfirmed = (pandle?.get("status") as? String) == "confirmed",
         purchaseId = (data["purchaseId"] as? String) ?: "",
-        purchaseNumber = (data["purchaseNumber"] as? String) ?: ""
+        purchaseNumber = (data["purchaseNumber"] as? String) ?: "",
+        accountId = (data["accountId"] as? String) ?: "",
+        provider = (data["provider"] as? String) ?: "",
+        providerTransactionId = (data["providerTransactionId"] as? String) ?: "",
+        providerReference = (data["providerReference"] as? String) ?: "",
+        firstImportedAtMillis = (data["firstImportedAt"] as? Timestamp)?.toDate()?.time,
+        importedAtMillis = (data["importedAt"] as? Timestamp)?.toDate()?.time,
+        reviewStatus = (data["reviewStatus"] as? String) ?: "",
+        vatCodeAuto = ((data["vatCodeAuto"] as? String) ?: "").uppercase(),
+        pandleStatus = (pandle?.get("status") as? String) ?: "",
+        pandleBankTransactionId = (pandle?.get("bankTransactionId") as? String) ?: "",
+        pandleLastError = (pandle?.get("lastError") as? String) ?: ""
     )
 }
 
 fun bankConnectionFromDocument(id: String, data: Map<String, Any?>): StudioBankConnection {
+    val accounts = (data["accounts"] as? List<*>)?.mapNotNull { entry ->
+        val row = entry as? Map<*, *> ?: return@mapNotNull null
+        StudioBankAccount(
+            id = (row["id"] as? String) ?: "",
+            name = (row["name"] as? String) ?: "",
+            currency = (row["currency"] as? String) ?: ""
+        )
+    } ?: emptyList()
     return StudioBankConnection(
         id = id,
         providerName = (data["providerName"] as? String) ?: "",
         providerLogo = (data["providerLogo"] as? String) ?: "",
         status = (data["status"] as? String) ?: "",
-        accountCount = (data["accounts"] as? List<*>)?.size ?: 0,
+        accountCount = accounts.size,
         lastSyncedAtMillis = (data["lastSyncedAt"] as? Timestamp)?.toDate()?.time,
-        syncState = (data["syncState"] as? String) ?: "ok"
+        syncState = (data["syncState"] as? String) ?: "ok",
+        accounts = accounts
     )
 }

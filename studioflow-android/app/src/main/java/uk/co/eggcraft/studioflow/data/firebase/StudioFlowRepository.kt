@@ -2537,6 +2537,22 @@ class StudioFlowRepository(
         awaitClose { registration.remove() }
     }
 
+    /** Workspace-defined category records (rename/deactivate/default VAT).
+     *  Active custom names merge into the pickers; active=false hides a
+     *  matching built-in name. Server-written, owner-readable. */
+    fun bankCategoriesFlow(workspaceId: String): Flow<List<uk.co.eggcraft.studioflow.data.model.StudioBankCategory>> = callbackFlow {
+        if (workspaceId.isBlank()) { trySend(emptyList()); awaitClose {}; return@callbackFlow }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("bankCategories")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { trySend(emptyList()); return@addSnapshotListener }
+                trySend(snapshot?.documents?.map {
+                    uk.co.eggcraft.studioflow.data.model.bankCategoryFromDocument(it.id, it.data.orEmpty())
+                }?.filter { it.name.isNotBlank() }?.sortedBy { it.name } ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
     /** Category → default VAT code (Pandle mapping when saved, else the built-in defaults). */
     fun bankCategoryTaxFlow(workspaceId: String): Flow<Map<String, String>> = callbackFlow {
         if (workspaceId.isBlank()) { trySend(BANK_DEFAULT_CATEGORY_TAX); awaitClose {}; return@callbackFlow }
@@ -2843,9 +2859,15 @@ class StudioFlowRepository(
     private fun bankSafeFileName(name: String): String =
         name.map { if (it.isLetterOrDigit() || it in "._-") it else '_' }.joinToString("").take(120).ifBlank { "receipt" }
 
-    suspend fun bankUpdateTransaction(workspaceId: String, transactionId: String, category: String, vatCode: String, note: String) {
-        bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "category" to category, "vatCode" to vatCode, "note" to note))
+    suspend fun bankUpdateTransaction(workspaceId: String, transactionId: String, category: String, vatCode: String, note: String, reviewStatus: String? = null) {
+        val payload = mutableMapOf<String, Any?>("transactionId" to transactionId, "category" to category, "vatCode" to vatCode, "note" to note)
+        if (reviewStatus != null) payload["reviewStatus"] = reviewStatus
+        bankCall("bankUpdateTransaction", workspaceId, payload)
     }
+
+    /** Sets one review status on many transactions at once. Returns how many rows the server updated. */
+    suspend fun bankSetReviewStatusBulk(workspaceId: String, transactionIds: List<String>, reviewStatus: String): Int =
+        ((bankCall("bankSetReviewStatusBulk", workspaceId, mapOf("transactionIds" to transactionIds, "reviewStatus" to reviewStatus))["updated"] as? Number)?.toInt()) ?: 0
 
     suspend fun bankSetReceiptNotNeeded(workspaceId: String, transactionId: String, value: Boolean) {
         bankCall("bankUpdateTransaction", workspaceId, mapOf("transactionId" to transactionId, "receiptNotNeeded" to value))

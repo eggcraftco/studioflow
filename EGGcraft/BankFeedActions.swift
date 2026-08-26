@@ -85,9 +85,9 @@ extension FirebaseManager {
         try await bankCall("bankSetTransactionCategory", ["transactionId": transactionId, "category": category])
     }
 
-    /// Category + VAT + note in one go (the drawer's Save).
-    func bankUpdateTransaction(transactionId: String, category: String, vatCode: String, note: String) async throws {
-        try await bankCall("bankUpdateTransaction", ["transactionId": transactionId, "category": category, "vatCode": vatCode, "note": note])
+    /// Category + VAT + note + review status in one go (the drawer's Save).
+    func bankUpdateTransaction(transactionId: String, category: String, vatCode: String, note: String, reviewStatus: String) async throws {
+        try await bankCall("bankUpdateTransaction", ["transactionId": transactionId, "category": category, "vatCode": vatCode, "note": note, "reviewStatus": reviewStatus])
     }
 
     func bankSetReceiptNotNeeded(transactionId: String, value: Bool) async throws {
@@ -103,6 +103,10 @@ extension FirebaseManager {
 
     func bankSetCategoryBulk(transactionIds: [String], category: String) async throws {
         try await bankCall("bankSetTransactionCategoryBulk", ["transactionIds": transactionIds, "category": category])
+    }
+
+    func bankSetReviewStatusBulk(transactionIds: [String], reviewStatus: String) async throws {
+        try await bankCall("bankSetReviewStatusBulk", ["transactionIds": transactionIds, "reviewStatus": reviewStatus])
     }
 
     func bankSync() async throws -> Int {
