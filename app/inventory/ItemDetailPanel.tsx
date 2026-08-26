@@ -602,7 +602,11 @@ export function ItemDetailPanel({
                 <li key={file.id}>
                   <strong>{file.displayName}</strong>
                   <span className="inventory-sub">
-                    {file.fileSize >= 1024 ? `${Math.round(file.fileSize / 1024)} KB` : `${file.fileSize} B`}
+                    {file.fileSize >= 1024 * 1024
+                      ? `${(file.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                      : file.fileSize >= 1024
+                        ? `${Math.round(file.fileSize / 1024)} KB`
+                        : `${file.fileSize} B`}
                     {file.updatedAtMs ? ` · ${new Date(file.updatedAtMs).toLocaleDateString()}` : ""}
                   </span>
                   <button

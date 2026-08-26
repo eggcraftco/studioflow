@@ -540,7 +540,7 @@ export default function FilesPage() {
         <div className="files-main">
 
       {pageView !== "classic" && workspace ? (
-        <FilesLibraryView workspace={workspace} view={pageView} canEdit={canManageClientFiles} />
+        <FilesLibraryView workspace={workspace} view={pageView} canEdit={canManageClientFiles} canDelete={canDeleteClientFiles} />
       ) : null}
 
       {pageView === "classic" ? (<>
