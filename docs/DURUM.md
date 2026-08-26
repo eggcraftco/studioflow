@@ -294,3 +294,39 @@ manuel form genişletme (shipping/company/consent); ülke standardizasyonu;
 arama kapsamı (sipariş no/etiket/posta kodu). **Ürün:** segmentler/etiketler,
 Messages/AI Replies bağı, hızlı aksiyonlar, Overview sekme düzeni, profil
 entegrasyon paneli (last synced/resync/raw data).
+
+## Inventory Faz 3 (NivaDesk_inventory_files.md haritasından) — 27 Ağu gecesi
+
+**TAMAM — dört platformda:**
+- I0 harita kusurları: "removed" tanınan statü + konum taşıması ledger'da
+  "moved" izi (lastMovementAtMs'e dokunmaz).
+- I1 dürüst rezervasyon: partiallyReserved statüsü, reservedValue gerçek
+  rezerve miktarla, sipariş kartında "5 / 15 pcs · Vault Z", recordInventoryLoss
+  (returned/damaged/lost/wastage — sebep ledger'da; rezerve stok korumalı).
+- I2 tüketim+takas: consumeInventoryForOrder (kısmi/tam; ledger "used" ref=sipariş),
+  swapInventoryForOrder (tek transaction bırak+tut); sipariş kartında
+  "Use on the job" / "Swap…".
+- I3 kısmi mal kabulü: receivePurchase satır+miktar bazlı, partiallyReceived
+  statüsü, satırda receivedQuantity, ürün onHand=gelen/incoming=kalan;
+  "Receive lines…" + "Receive the rest"; kısmen alınmış satın alma
+  düzenlenemez/silinemez.
+- I4 içe aktarma çift-kayıt: parse SKU/seri ön-taraması ("Already in stock"
+  rozeti) + create/skip/update politikaları (update sayfayı gerçek yapar ama
+  numara/statü/rezervasyona dokunmaz, rezervin altına çekemez); yeni sütun
+  takma adları barcode/ean/upc→sku + ownership/condition/year/description.
+- I5 sayfalama: listInventoryItems cursor+hasMore (çift DESC, indeks gerekmez);
+  web/Mac/iPhone/Android'de "Load the next 500 items".
+- Tedarikçi evrak alanları: code/address/vatNumber/currency (form+kart).
+- Envanter etiketleri: items.tags (müşteri segment deseni), form chip editörü,
+  detay paneli, aramada eşleşme.
+- Test: functions/test/inventory 10 suite (hepsi düz node script) — 10/10.
+- Yayın: round 14–19 canlıda chunk-doğrulamalı; fonksiyonlar isimle deploy edildi.
+
+**Faz 3 kalan (büyük/dizayn işleri):**
+- Hiyerarşik konumlar (yeni koleksiyon + kurallar + alt-ağaçla taşıma) — büyük.
+- BOM / reçete (net-yeni) — büyük.
+- Shopify/Woo stok senkronu — BLOKE: nivadesk-order-management/shopify.app.toml
+  salt-okunur scope; kullanıcı kararı gerek (scope genişletme yeniden onay ister).
+- Files kütüphanesi depolama yolu göçü — ayrı faz.
+- Native parite: tedarikçi alanları + etiketler ajan turu 27 Ağu gecesi
+  başlatıldı (Swift+Android; commit bekliyor olabilir — git log'a bak).
