@@ -40,7 +40,7 @@
 const REGION = "europe-west2";
 
 const TRACKING_TYPES = ["unique", "quantity"];
-const ITEM_STATUSES = ["available", "reserved", "incoming", "used", "sold", "removed", "archived"];
+const ITEM_STATUSES = ["available", "partiallyReserved", "reserved", "incoming", "used", "sold", "removed", "archived"];
 const OWNERSHIPS = ["business", "customer"];
 const DEFAULT_CATEGORIES = [
   "Watches", "Dials", "Movements", "Bracelets", "Straps",
@@ -51,8 +51,9 @@ const DEFAULT_CATEGORIES = [
 // stale screen cannot walk an item backwards out of "sold".
 const STATUS_TRANSITIONS = {
   incoming: ["available", "removed", "archived"],
-  available: ["reserved", "used", "sold", "incoming", "removed", "archived"],
-  reserved: ["available", "used", "sold", "removed", "archived"],
+  available: ["reserved", "partiallyReserved", "used", "sold", "incoming", "removed", "archived"],
+  partiallyReserved: ["available", "reserved", "used", "sold", "removed", "archived"],
+  reserved: ["available", "partiallyReserved", "used", "sold", "removed", "archived"],
   used: ["available", "archived"],
   sold: ["archived"],
   // A stocktake can write "removed" (a unique item counted as gone); an
@@ -230,7 +231,11 @@ function createInventoryFunctions({
     "used",           // consumed on a job
     "sold",           // sold on
     "removed",        // archived or deleted
-    "moved"           // relocated — zero quantity change, but the trail matters
+    "moved",          // relocated — zero quantity change, but the trail matters
+    "returned",       // sent back to the supplier
+    "damaged",        // broken — the reason matters, not just the number
+    "lost",           // gone without explanation
+    "wastage"         // normal consumption loss (fire)
   ];
 
   /**
@@ -494,9 +499,12 @@ function createInventoryFunctions({
         const lowAt = Number(item.lowStockAt) || 0;
         if (lowAt > 0 && onHand <= lowAt) summary.lowStockCount += 1;
       }
-      if (status === "reserved") {
+      if (status === "reserved" || status === "partiallyReserved") {
         summary.reservedCount += 1;
-        summary.reservedValue = roundMoney(summary.reservedValue + lineValue);
+        // Only what is actually promised counts as reserved value — 3 of 10
+        // held must not read as all 10.
+        const reservedQty = isUnique ? 1 : Number((item.quantity || {}).reserved) || 0;
+        summary.reservedValue = roundMoney(summary.reservedValue + (isUnique ? lineValue : roundMoney(value * reservedQty)));
       }
     });
 
@@ -1652,6 +1660,18 @@ function createInventoryFunctions({
       .filter((row) => row.orderId && row.quantity > 0);
   }
 
+  // "3 of 10 held" is not the same fact as "all 10 held" — the status now
+  // says which (the report's partiallyReserved ask). Off-the-shelf statuses
+  // are never resurrected here.
+  function reservationStatus(item, totalReserved, onHandOverride) {
+    const current = String(item.status || "available");
+    if (["used", "sold", "removed", "archived", "incoming"].includes(current)) return current;
+    if (String(item.trackingType) === "unique") return totalReserved > 0 ? "reserved" : "available";
+    const onHand = onHandOverride !== undefined ? onHandOverride : cleanQuantity((item.quantity || {}).onHand);
+    if (totalReserved <= 0) return "available";
+    return totalReserved >= onHand ? "reserved" : "partiallyReserved";
+  }
+
   const reserveInventoryForOrder = onCall({ region: REGION }, async (request) => {
     const { uid, companyId } = await requireInventoryAccess(request, { write: true });
     const itemId = clean(request.data && request.data.itemId, "", 80);
@@ -1709,7 +1729,7 @@ function createInventoryFunctions({
         reservations: next,
         reservedOrderIds: next.map((row) => row.orderId),
         quantity: { ...(item.quantity || {}), reserved: totalReserved },
-        status: totalReserved > 0 ? "reserved" : "available",
+        status: reservationStatus(item, totalReserved),
         updatedAtMs: now,
         updatedByUid: uid
       }, { merge: true });
@@ -1741,9 +1761,7 @@ function createInventoryFunctions({
         quantity: isUnique ? item.quantity : { ...(item.quantity || {}), reserved: totalReserved },
         // Releasing puts it back on the shelf, but never resurrects something
         // already used or sold.
-        status: ["used", "sold", "archived"].includes(String(item.status))
-          ? item.status
-          : (totalReserved > 0 ? "reserved" : "available"),
+        status: reservationStatus(item, totalReserved),
         updatedAtMs: now,
         updatedByUid: uid
       }, { merge: true });
@@ -1774,6 +1792,7 @@ function createInventoryFunctions({
         ? unitCost
         : roundMoney(unitCost * quantity);
       total = roundMoney(total + lineCost);
+      const onHand = String(item.trackingType) === "unique" ? 1 : cleanQuantity((item.quantity || {}).onHand);
       return {
         id: doc.id,
         number: item.number || "",
@@ -1783,12 +1802,92 @@ function createInventoryFunctions({
         unit: (item.quantity || {}).unit || "",
         status: item.status || "available",
         quantity,
+        onHand,
+        location: clean(item.location, "", 80),
         unitCost,
         lineCost
       };
     });
 
     return { ok: true, orderId, items, totalCost: total };
+  });
+
+  // Iade / hasar / kayıp / fire: stock leaving the shelf with its REASON on
+  // the ledger — "adjustment" used to swallow all four, and the difference is
+  // exactly what a stocktake argument needs. A unique item goes as a whole
+  // (status "removed", kind tells why); a quantity item can lose part of the
+  // pile, but never what is promised to orders — release first.
+  const LOSS_KINDS = ["returned", "damaged", "lost", "wastage"];
+  const recordInventoryLoss = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    const kind = clean(request.data && request.data.kind, "", 20);
+    const note = clean(request.data && request.data.note, "", 300);
+    const orderRef = clean(request.data && request.data.orderId, "", 200);
+    if (!itemId || !LOSS_KINDS.includes(kind)) {
+      throw new HttpsError("invalid-argument", "itemId and a valid kind (returned/damaged/lost/wastage) are required.");
+    }
+
+    const ref = itemsRef(companyId).doc(itemId);
+    const now = Date.now();
+    const outcome = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Inventory item not found.");
+      const item = snap.data() || {};
+      if (["sold", "used", "removed", "archived"].includes(String(item.status))) {
+        throw new HttpsError("failed-precondition", "That item has already left the shelf.");
+      }
+
+      const isUnique = String(item.trackingType) === "unique";
+      if (isUnique) {
+        if (cleanReservations(item.reservations).length > 0) {
+          throw new HttpsError("failed-precondition", "That item is reserved for an order — release it first.");
+        }
+        tx.set(ref, {
+          status: "removed",
+          reservedForOrderId: "",
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+        recordMovement(tx, companyId, {
+          item, itemId: ref.id, kind,
+          delta: -1,
+          unitCost: Number(item.valuationCost) || 0,
+          at: now, uid, email, ref: orderRef, note
+        });
+        return { removed: 1 };
+      }
+
+      const quantity = cleanQuantity(request.data && request.data.quantity);
+      if (quantity <= 0) throw new HttpsError("invalid-argument", "Enter how much was lost.");
+      const onHand = cleanQuantity((item.quantity || {}).onHand);
+      const reserved = roundMoney(cleanReservations(item.reservations).reduce((sum, row) => sum + row.quantity, 0));
+      if (quantity > onHand) {
+        throw new HttpsError("failed-precondition", `Only ${onHand} on hand.`);
+      }
+      const nextOnHand = roundMoney(onHand - quantity);
+      if (nextOnHand < reserved) {
+        throw new HttpsError(
+          "failed-precondition",
+          `${reserved} is promised to orders — release reservations before recording this loss.`
+        );
+      }
+      tx.set(ref, {
+        quantity: { ...(item.quantity || {}), onHand: nextOnHand },
+        status: reservationStatus(item, reserved, nextOnHand),
+        updatedAtMs: now,
+        updatedByUid: uid
+      }, { merge: true });
+      recordMovement(tx, companyId, {
+        item, itemId: ref.id, kind,
+        delta: roundSigned(-quantity),
+        unitCost: Number(item.valuationCost) || 0,
+        at: now, uid, email, ref: orderRef, note
+      });
+      return { lost: quantity, remaining: nextOnHand };
+    });
+
+    return { ok: true, ...outcome };
   });
 
   return {
@@ -1817,6 +1916,7 @@ function createInventoryFunctions({
     reserveInventoryForOrder,
     releaseInventoryFromOrder,
     getOrderInventory,
+    recordInventoryLoss,
     _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }

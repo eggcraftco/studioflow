@@ -52,6 +52,36 @@ const ok = (l, c, e = "") => { if (!c) fail++; console.log(`${c ? "PASS" : "FAIL
   await api.saveInventoryItem(req({ itemId: b.itemId, item: { name: "Zemberek 2", trackingType: "quantity", onHand: 40, purchasePrice: 2, location: "Safe B" } }));
   ok("konum değişmeyince moved satırı yok", movements().length === before2, String(movements().length - before2));
 
+  console.log("\n=== 3) kısmi rezervasyon kendi statüsünü söyler ===");
+  const c = await api.saveInventoryItem(req({ item: { name: "Tel", trackingType: "quantity", onHand: 10, purchasePrice: 1 } }));
+  await api.reserveInventoryForOrder(req({ itemId: c.itemId, orderId: "ORD-A", quantity: 3 }));
+  ok("3/10 → partiallyReserved", item(c.itemId).status === "partiallyReserved", item(c.itemId).status);
+  await api.reserveInventoryForOrder(req({ itemId: c.itemId, orderId: "ORD-B", quantity: 7 }));
+  ok("10/10 → reserved", item(c.itemId).status === "reserved", item(c.itemId).status);
+  await api.releaseInventoryFromOrder(req({ itemId: c.itemId, orderId: "ORD-B" }));
+  ok("geri 3/10 → partiallyReserved", item(c.itemId).status === "partiallyReserved", item(c.itemId).status);
+  await api.releaseInventoryFromOrder(req({ itemId: c.itemId, orderId: "ORD-A" }));
+  ok("0/10 → available", item(c.itemId).status === "available", item(c.itemId).status);
+
+  console.log("\n=== 4) kayıp türleri: sebep defterde ===");
+  const d = await api.saveInventoryItem(req({ item: { name: "Lake", trackingType: "quantity", onHand: 82, purchasePrice: 0.5, unit: "ml" } }));
+  await api.recordInventoryLoss(req({ itemId: d.itemId, kind: "wastage", quantity: 3, note: "fire" }));
+  ok("fire onHand'ı 79'a düşürdü", item(d.itemId).quantity.onHand === 79, String(item(d.itemId).quantity.onHand));
+  const w = movements().find((m) => m.kind === "wastage");
+  ok("wastage satırı sebebiyle yazıldı", !!w && w.delta === -3 && w.note === "fire", w ? JSON.stringify({d:w.delta,n:w.note}) : "-");
+  await api.reserveInventoryForOrder(req({ itemId: d.itemId, orderId: "ORD-C", quantity: 78 }));
+  // Sahte HttpsError sınıfı mesajı değil kodu taşır; 5 < 79 olduğundan burada
+  // tetiklenebilecek tek muhafız rezervasyon muhafızıdır.
+  let threw = "";
+  try { await api.recordInventoryLoss(req({ itemId: d.itemId, kind: "lost", quantity: 5 })); } catch (e) { threw = e.message; }
+  ok("rezerve stok kayba yazılamaz", threw === "failed-precondition", threw || "hata fırlamadı");
+  ok("onHand kayıpla DEĞİŞMEDİ", item(d.itemId).quantity.onHand === 79, String(item(d.itemId).quantity.onHand));
+  const e2 = await api.saveInventoryItem(req({ item: { name: "Mineli Kadran", trackingType: "unique", purchasePrice: 700 } }));
+  await api.recordInventoryLoss(req({ itemId: e2.itemId, kind: "damaged", note: "düştü" }));
+  ok("unique hasar → removed", item(e2.itemId).status === "removed", item(e2.itemId).status);
+  const dmg = movements().find((m) => m.kind === "damaged");
+  ok("damaged satırı -1 × 700", !!dmg && dmg.delta === -1 && dmg.valueDelta === -700, dmg ? JSON.stringify({d:dmg.delta,v:dmg.valueDelta}) : "-");
+
   console.log(fail === 0 ? "\n✅ FAZ-3 AÇILIŞ DÜZELTMELERİ GEÇTİ" : `\n❌ ${fail} BAŞARISIZ`);
   process.exit(fail === 0 ? 0 : 1);
 })();
