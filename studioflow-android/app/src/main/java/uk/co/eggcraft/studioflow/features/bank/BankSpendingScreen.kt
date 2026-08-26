@@ -89,9 +89,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -108,6 +111,7 @@ import uk.co.eggcraft.studioflow.data.model.BANK_REVIEW_STATUSES
 import uk.co.eggcraft.studioflow.data.model.BANK_VAT_CODES
 import uk.co.eggcraft.studioflow.data.model.BankCadence
 import uk.co.eggcraft.studioflow.data.model.BankReceiptKind
+import uk.co.eggcraft.studioflow.data.model.BankConfidence
 import uk.co.eggcraft.studioflow.data.model.BankRecurringSpend
 import uk.co.eggcraft.studioflow.data.model.StudioBankAccount
 import uk.co.eggcraft.studioflow.data.model.StudioBankConnection
@@ -627,12 +631,25 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                             HorizontalDivider()
                             upcoming.take(6).forEach { item ->
                                 Row(Modifier.padding(horizontal = 16.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(displayDate(item.nextExpected, locale, true), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(58.dp))
-                                    Text(item.merchant, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text("${t("around")} ${displayDate(item.nextExpected, locale, true)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.widthIn(min = 74.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(item.merchant, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        // "Based on the last <n> monthly payments" — cadence word matches the pattern.
+                                        val cadenceWord = when (item.cadence) {
+                                            BankCadence.Weekly -> "weekly"
+                                            BankCadence.Yearly -> "yearly"
+                                            else -> "monthly"
+                                        }
+                                        Text("${t("Based on the last")} ${item.occurrences} ${t(cadenceWord)} ${t("payments").lowercase()}",
+                                            fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
                                     Text(fmt(item.typicalAmount, item.currency), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             }
+                            Text(t("These are estimates, not booked payments."),
+                                Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -1324,8 +1341,36 @@ private fun RecurringRow(item: BankRecurringSpend, t: (String) -> String, locale
                     Chip("${if (current > previous) "↑" else "↓"} ${fmt(previous, item.currency)} → ${fmt(current, item.currency)}", if (current > previous) RED else GREEN)
                 }
             }
-            Text("${t(cadenceLabel(item.cadence))} · ${item.occurrences}× · ${t("next")} ${displayDate(item.nextExpected, locale, true)}",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (item.active) {
+                // Web parity: "Monthly · around the 15." plus a detection detail line.
+                val aroundDay = item.expectedDayOfMonth?.let { " · ${t("around the")} $it." } ?: ""
+                Text("${t(cadenceLabel(item.cadence))}$aroundDay · ${t("next")} ${displayDate(item.nextExpected, locale, true)}",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val range = if (item.amountMax - item.amountMin > 0.01)
+                    " · ${fmt(item.amountMin, item.currency)}–${fmt(item.amountMax, item.currency)}" else ""
+                val confidenceColor = when (item.confidence) {
+                    BankConfidence.High -> GREEN
+                    BankConfidence.Medium -> BLUE
+                    BankConfidence.Low -> AMBER
+                }
+                val confidenceLabel = when (item.confidence) {
+                    BankConfidence.High -> t("High")
+                    BankConfidence.Medium -> t("Medium")
+                    BankConfidence.Low -> t("Low")
+                }
+                Text(
+                    buildAnnotatedString {
+                        append("${t("Detected from")} ${item.occurrences} ${t("payments").lowercase()}$range · ")
+                        withStyle(SpanStyle(color = confidenceColor, fontWeight = FontWeight.Bold)) {
+                            append("${t("Confidence")}: $confidenceLabel")
+                        }
+                    },
+                    fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2
+                )
+            } else {
+                Text("${t(cadenceLabel(item.cadence))} · ${item.occurrences}× · ${t("next")} ${displayDate(item.nextExpected, locale, true)}",
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(fmt(item.typicalAmount, item.currency), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)

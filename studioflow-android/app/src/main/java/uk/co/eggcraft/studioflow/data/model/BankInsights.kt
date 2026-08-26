@@ -85,6 +85,9 @@ val BANK_DEFAULT_CATEGORY_TAX = mapOf(
 
 enum class BankCadence { Weekly, Monthly, Yearly }
 
+/** High = 4+ agreeing payments with stable amounts; Medium = detected; Low = owner-marked with little history. */
+enum class BankConfidence { High, Medium, Low }
+
 data class BankRecurringSpend(
     val key: String,
     val merchant: String,
@@ -97,7 +100,15 @@ data class BankRecurringSpend(
     val active: Boolean,
     val monthlyEquivalent: Double,
     val priceChange: Pair<Double, Double>?,  // previous → current
-    val vendorId: String = ""                // set when the owner marked this payee
+    val vendorId: String = "",               // set when the owner marked this payee
+    // Report §23 fields (web parity): when the pattern was first seen, how much
+    // the amount wanders, roughly which day it lands on, and how sure we are.
+    val firstDate: String = "",
+    val amountMin: Double = 0.0,
+    val amountMax: Double = 0.0,
+    /** For monthly patterns: the typical day-of-month payments land on (1-31). */
+    val expectedDayOfMonth: Int? = null,
+    val confidence: BankConfidence = BankConfidence.Medium
 ) {
     /** True when this row exists because the owner said so, not because the detector found a pattern. */
     val manual: Boolean get() = vendorId.isNotBlank()
@@ -205,6 +216,25 @@ fun bankDetectRecurring(transactions: List<StudioBankTransaction>, vendors: List
         val priceChange = if (previousTypical > 0 && abs(lastAmount - previousTypical) >= maxOf(0.5, previousTypical * 0.05))
             previousTypical to lastAmount else null
 
+        val stableCount = amounts.count { abs(it - typical) <= typical * 0.3 }
+        val confidence = when {
+            vendor != null && unique.size < 3 -> BankConfidence.Low
+            unique.size >= 4 && stableCount.toDouble() / amounts.size >= 0.8 -> BankConfidence.High
+            else -> BankConfidence.Medium
+        }
+        // Monthly cadence only: the most frequent day-of-month (first seen wins ties,
+        // matching the web's stable sort).
+        val expectedDayOfMonth = if (cadence == BankCadence.Monthly) {
+            val dayCounts = LinkedHashMap<Int, Int>()
+            for (tx in unique) {
+                val calendar = Calendar.getInstance()
+                calendar.timeInMillis = parseDay(tx.bookingDate)
+                val day = calendar.get(Calendar.DAY_OF_MONTH)
+                dayCounts[day] = (dayCounts[day] ?: 0) + 1
+            }
+            dayCounts.entries.maxByOrNull { it.value }?.key
+        } else null
+
         results.add(
             BankRecurringSpend(
                 key = key,
@@ -218,7 +248,12 @@ fun bankDetectRecurring(transactions: List<StudioBankTransaction>, vendors: List
                 active = now - lastTime <= (expected * DAY_MS * (if (vendor != null) 2.4 else 1.6)).toLong(),
                 monthlyEquivalent = typical * monthlyFactor(cadence),
                 priceChange = priceChange,
-                vendorId = vendor?.id ?: ""
+                vendorId = vendor?.id ?: "",
+                firstDate = unique.first().bookingDate,
+                amountMin = amounts.minOrNull() ?: typical,
+                amountMax = amounts.maxOrNull() ?: typical,
+                expectedDayOfMonth = expectedDayOfMonth,
+                confidence = confidence
             )
         )
     }

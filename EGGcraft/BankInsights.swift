@@ -143,6 +143,10 @@ let bankDefaultCategoryTax: [String: String] = [
 
 enum BankRecurringCadence: String { case weekly, monthly, yearly }
 
+/// high = 4+ agreeing payments with stable amounts; medium = detected;
+/// low = owner-marked with little history (mirrors the web's RecurringSpend).
+enum BankRecurringConfidence: String { case high, medium, low }
+
 struct BankRecurringSpend: Identifiable, Equatable {
     var id: String { key }
     let key: String
@@ -158,6 +162,14 @@ struct BankRecurringSpend: Identifiable, Equatable {
     let active: Bool
     let monthlyEquivalent: Double
     let priceChange: (previous: Double, current: Double)?
+    // Report §23 fields: when the pattern was first seen, how much the amount
+    // wanders, roughly which day it lands on, and how sure we are.
+    let firstDate: String
+    let amountMin: Double
+    let amountMax: Double
+    /// For monthly patterns: the typical day-of-month payments land on (1-31).
+    let expectedDayOfMonth: Int?
+    let confidence: BankRecurringConfidence
 
     var manual: Bool { vendorId != nil }
 
@@ -285,6 +297,28 @@ func bankDetectRecurring(_ transactions: [StudioBankTransaction], vendors: [Stud
         let lastAmount = amounts[amounts.count - 1]
         let priceChange: (Double, Double)? = previousTypical > 0 && abs(lastAmount - previousTypical) >= max(0.5, previousTypical * 0.05)
             ? (previousTypical, lastAmount) : nil
+        // Report §23: how sure we are — an owner-marked vendor with little
+        // history is a guess; 4+ payments with stable amounts is near-certain.
+        let stableCount = amounts.filter { abs($0 - typical) <= typical * 0.3 }.count
+        let confidence: BankRecurringConfidence = vendor != nil && unique.count < 3
+            ? .low
+            : unique.count >= 4 && Double(stableCount) / Double(amounts.count) >= 0.8 ? .high : .medium
+        // Monthly patterns: the most frequent day-of-month across the payments.
+        var expectedDayOfMonth: Int? = nil
+        if cadence == .monthly {
+            var dayCounts: [Int: Int] = [:]
+            var order: [Int] = []
+            for entry in unique {
+                let day = Calendar.current.component(.day, from: Date(timeIntervalSince1970: entry.time))
+                if dayCounts[day] == nil { order.append(day) }
+                dayCounts[day, default: 0] += 1
+            }
+            // Strictly-greater keeps the first-seen day on ties, matching the
+            // web's stable sort over Map insertion order.
+            var best: Int? = nil
+            for day in order where best == nil || dayCounts[day]! > dayCounts[best!]! { best = day }
+            expectedDayOfMonth = best
+        }
         results.append(BankRecurringSpend(
             key: key,
             merchant: vendor.map { $0.name.isEmpty ? last.tx.merchant : $0.name } ?? (last.tx.counterparty.isEmpty ? last.tx.description : last.tx.counterparty),
@@ -298,7 +332,12 @@ func bankDetectRecurring(_ transactions: [StudioBankTransaction], vendors: [Stud
             // Hand-paid vendors get a longer grace period before they read as stopped.
             active: now - last.time <= expected * bankDayMs * (vendor != nil ? 2.4 : 1.6),
             monthlyEquivalent: typical * bankMonthlyFactor(cadence),
-            priceChange: priceChange
+            priceChange: priceChange,
+            firstDate: unique[0].tx.bookingDate,
+            amountMin: amounts.min() ?? typical,
+            amountMax: amounts.max() ?? typical,
+            expectedDayOfMonth: expectedDayOfMonth,
+            confidence: confidence
         ))
     }
     return results.sorted { $0.monthlyEquivalent > $1.monthlyEquivalent }

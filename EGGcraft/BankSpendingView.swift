@@ -1272,14 +1272,26 @@ private struct BankUpcomingCard: View {
             }
             ForEach(d.upcoming.prefix(6)) { item in
                 HStack(spacing: 10) {
-                    Text(fmt.date(item.nextExpected, short: true)).font(.system(size: 12)).foregroundColor(.secondary).frame(width: 60, alignment: .leading)
-                    Text(item.merchant).font(.system(size: 12.5, weight: .bold)).lineLimit(1)
+                    // "around 12 Sep" — the date is an estimate, and says so.
+                    Text("\(fmt.t("around")) \(fmt.date(item.nextExpected, short: true))")
+                        .font(.system(size: 11)).foregroundColor(.secondary).frame(width: 96, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.merchant).font(.system(size: 12.5, weight: .bold)).lineLimit(1)
+                        Text("\(fmt.t("Based on the last")) \(item.occurrences) \(fmt.t(item.cadence == .weekly ? "weekly" : item.cadence == .yearly ? "yearly" : "monthly")) \(fmt.t("payments").lowercased())")
+                            .font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                    }
                     Spacer()
                     Text(fmt.money(item.typicalAmount, item.currency)).font(.system(size: 12.5, weight: .bold)).monospacedDigit()
                     Text("/ \(fmt.t("month"))").font(.system(size: 9.5)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 9)
                 Divider().opacity(0.5)
+            }
+            if !d.upcoming.isEmpty {
+                // Web parity: the estimates disclaimer under the list.
+                Text(fmt.t("These are estimates, not booked payments."))
+                    .font(.system(size: 10.5)).foregroundColor(.secondary)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
         .background(background).cornerRadius(14)
@@ -2374,6 +2386,30 @@ private struct BankRecurringRow: View {
     let fmt: BankFormat
     let compact: Bool
     let onShow: () -> Void
+
+    /// "Monthly · around the 5. · last 12 Aug · next 12 Sep" — the web's
+    /// cadence cell first line, with the dates the web keeps in own columns.
+    private var cadenceLine: String {
+        var line = fmt.t(item.cadence == .weekly ? "Weekly" : item.cadence == .yearly ? "Yearly" : "Monthly")
+        if let day = item.expectedDayOfMonth { line += " · \(fmt.t("around the")) \(day)." }
+        line += " · \(fmt.t("last")) \(fmt.date(item.lastDate, short: true)) · \(fmt.t("next")) \(fmt.date(item.nextExpected, short: true))"
+        return line
+    }
+
+    /// "Detected from 6 payments · £12–£14 · Confidence: High" with the web's
+    /// green/blue/amber confidence colours. Range only when the amounts wander.
+    private var detailLine: Text {
+        var lead = "\(fmt.t("Detected from")) \(item.occurrences) \(fmt.t("payments").lowercased())"
+        if item.amountMax - item.amountMin > 0.01 {
+            lead += " · \(fmt.money(item.amountMin, item.currency))–\(fmt.money(item.amountMax, item.currency))"
+        }
+        lead += " · "
+        let label = item.confidence == .high ? "High" : item.confidence == .medium ? "Medium" : "Low"
+        let color: Color = item.confidence == .high ? .green : item.confidence == .medium ? .blue : .orange
+        return Text(lead).foregroundColor(.secondary)
+            + Text("\(fmt.t("Confidence")): \(fmt.t(label))").foregroundColor(color).fontWeight(.bold)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             BankAvatar(name: item.merchant, size: 30)
@@ -2386,8 +2422,15 @@ private struct BankRecurringRow: View {
                         BankChip(text: "\(change.current > change.previous ? "↑" : "↓") \(fmt.money(change.previous, item.currency)) → \(fmt.money(change.current, item.currency))", color: change.current > change.previous ? .red : .green)
                     }
                 }
-                Text("\(fmt.t(item.cadence == .weekly ? "Weekly" : item.cadence == .yearly ? "Yearly" : "Monthly")) · \(item.occurrences)× · \(fmt.t("last")) \(fmt.date(item.lastDate, short: true)) · \(fmt.t("next")) \(fmt.date(item.nextExpected, short: true))")
-                    .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                if item.active {
+                    // Mirrors the web's two-line cadence cell (report §23):
+                    // cadence + landing day, then how the pattern was detected.
+                    Text(cadenceLine).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    detailLine.font(.system(size: 10.5)).lineLimit(1)
+                } else {
+                    Text("\(fmt.t(item.cadence == .weekly ? "Weekly" : item.cadence == .yearly ? "Yearly" : "Monthly")) · \(item.occurrences)× · \(fmt.t("last")) \(fmt.date(item.lastDate, short: true)) · \(fmt.t("next")) \(fmt.date(item.nextExpected, short: true))")
+                        .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
