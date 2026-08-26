@@ -17,6 +17,7 @@ import {
   OPENING_STOCK_MAX_ROWS,
   importOpeningStock,
   readOpeningStock,
+  type ImportDuplicatePolicy,
   type OpeningStockPreviewItem,
   type OpeningStockSkip,
   type InventoryTrackingType,
@@ -64,6 +65,7 @@ export function OpeningStockModal({
   // by their position in the paste so it survives a remap.
   const [typeOverrides, setTypeOverrides] = useState<Record<number, InventoryTrackingType>>({});
   const [openingDate, setOpeningDate] = useState(today());
+  const [duplicatePolicy, setDuplicatePolicy] = useState<ImportDuplicatePolicy>("skip");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -131,6 +133,7 @@ export function OpeningStockModal({
   const maxRows = read?.maxRows ?? OPENING_STOCK_MAX_ROWS;
   const overflow = Math.max(0, usable.length - maxRows);
   const willImport = usable.slice(0, maxRows);
+  const duplicates = willImport.filter(item => item.existingItemId).length;
   // The server works out what each line is worth; adding it up here from the
   // parts would be a second opinion nobody asked for.
   const totalValue = willImport.reduce((sum, item) => sum + (item.lineValue || 0), 0);
@@ -156,8 +159,13 @@ export function OpeningStockModal({
     setBusy(true);
     setError("");
     try {
-      const result = await importOpeningStock(workspace, willImport, openingDate);
-      onImported(Number(result?.imported) || 0);
+      const result = await importOpeningStock(
+        workspace,
+        willImport,
+        openingDate,
+        duplicates > 0 ? duplicatePolicy : undefined
+      );
+      onImported((Number(result?.imported) || 0) + (Number(result?.updated) || 0));
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : t("The opening stock could not be imported."));
       setBusy(false);
@@ -297,7 +305,16 @@ export function OpeningStockModal({
                       <tbody>
                         {willImport.slice(0, 50).map((item, index) => (
                           <tr key={index}>
-                            <td><strong>{item.name}</strong></td>
+                            <td>
+                              <strong>{item.name}</strong>
+                              {item.existingItemId ? (
+                                <span
+                                  className="inventory-chip"
+                                  data-status="incoming"
+                                  title={`${t("Already on the shelf as")} ${item.existingNumber || ""}`}
+                                >{t("Already in stock")}</span>
+                              ) : null}
+                            </td>
                             <td>
                               <button
                                 type="button"
@@ -329,6 +346,39 @@ export function OpeningStockModal({
                   </p>
                 ) : null}
               </div>
+
+              {duplicates > 0 ? (
+                <div className="inventory-section">
+                  <h3>{duplicates} {t("rows match stock you already have")}</h3>
+                  <p className="inventory-hint">
+                    {t("Matched by SKU or serial number. Choose what the import should do with them.")}
+                  </p>
+                  <div className="inventory-toggle inventory-toggle-small">
+                    <button
+                      type="button"
+                      data-active={duplicatePolicy === "skip"}
+                      onClick={() => setDuplicatePolicy("skip")}
+                    >{t("Skip them")}</button>
+                    <button
+                      type="button"
+                      data-active={duplicatePolicy === "update"}
+                      onClick={() => setDuplicatePolicy("update")}
+                    >{t("Update existing")}</button>
+                    <button
+                      type="button"
+                      data-active={duplicatePolicy === "create"}
+                      onClick={() => setDuplicatePolicy("create")}
+                    >{t("Create anyway")}</button>
+                  </div>
+                  <p className="inventory-sub">
+                    {duplicatePolicy === "update"
+                      ? t("The sheet becomes the truth about what each item is; its number, status and reservations stay untouched.")
+                      : duplicatePolicy === "skip"
+                        ? t("Matched rows are left out; only new stock is created.")
+                        : t("Every row becomes a new item, even the matched ones.")}
+                  </p>
+                </div>
+              ) : null}
 
               {skipped.length > 0 ? (
                 <div className="inventory-section">

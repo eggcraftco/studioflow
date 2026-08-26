@@ -208,11 +208,12 @@ export async function deleteInventoryItem(workspace: WorkspaceContext, itemId: s
 export async function importOpeningStock(
   workspace: WorkspaceContext,
   items: InventoryItemInput[],
-  openingDate: string
+  openingDate: string,
+  duplicatePolicy?: "create" | "skip" | "update"
 ) {
-  return call<{ ok?: boolean; imported?: number }>(
+  return call<{ ok?: boolean; imported?: number; updated?: number; skippedDuplicates?: number; conflicts?: number }>(
     "importOpeningStock",
-    { companyId: workspace.id, items, openingDate },
+    { companyId: workspace.id, items, openingDate, ...(duplicatePolicy ? { duplicatePolicy } : {}) },
     "The opening stock could not be imported."
   );
 }
@@ -547,6 +548,10 @@ export type OpeningStockPreviewItem = InventoryItemInput & {
   rowIndex: number;
   /** What this line is worth on the shelf, worked out by the server. */
   lineValue: number;
+  /** Set when the pre-scan matched this row to stock already on the shelf. */
+  existingItemId?: string;
+  existingNumber?: string;
+  matchedBy?: "sku" | "serialNumber";
 };
 
 export type OpeningStockRead = {
@@ -557,8 +562,12 @@ export type OpeningStockRead = {
   guessedMapping: Array<OpeningStockFieldKey | "">;
   items: OpeningStockPreviewItem[];
   skipped: OpeningStockSkip[];
+  /** How many rows matched existing stock by SKU or serial. */
+  duplicates?: number;
   maxRows: number;
 };
+
+export type ImportDuplicatePolicy = "create" | "skip" | "update";
 
 /**
  * Asks the server what this list would become. The preview a person approves
