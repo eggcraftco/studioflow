@@ -80,6 +80,25 @@ export default function NotesPage() {
     Array.from(selectedIds).forEach((id) => destroy(id));
     clearSelection();
   }
+  // Labels live on the notes themselves, so managing one means rewriting
+  // every note that carries it — done here so the sidebar can offer
+  // rename/delete like a real label manager.
+  function renameLabel(label: string) {
+    const next = prompt(`${t("Rename label")}: ${label}`, label)?.trim();
+    if (!next || next === label) return;
+    notes.filter((n) => n.labels.includes(label)).forEach((n) => {
+      void save({ ...n, labels: Array.from(new Set(n.labels.map((l) => (l === label ? next : l)))) }).catch(() => {});
+    });
+    if (labelFilter === label) setLabelFilter(next);
+  }
+  function deleteLabel(label: string) {
+    const count = notes.filter((n) => n.labels.includes(label)).length;
+    if (!confirm(`${t("Remove this label from every note?")} (${label} · ${count})`)) return;
+    notes.filter((n) => n.labels.includes(label)).forEach((n) => {
+      void save({ ...n, labels: n.labels.filter((l) => l !== label) }).catch(() => {});
+    });
+    if (labelFilter === label) setLabelFilter(null);
+  }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -128,7 +147,11 @@ export default function NotesPage() {
       })
       .filter((n) => {
         if (!q) return true;
-        return n.title.toLowerCase().includes(q) || n.text.toLowerCase().includes(q);
+        return n.title.toLowerCase().includes(q)
+          || n.text.toLowerCase().includes(q)
+          || n.labels.some((l) => l.toLowerCase().includes(q))
+          || n.linkedOrderLabel.toLowerCase().includes(q)
+          || n.linkedCustomerName.toLowerCase().includes(q);
       })
       .filter((n) => (labelFilter ? n.labels.includes(labelFilter) : true))
       .sort((a, b) => {
@@ -341,7 +364,13 @@ export default function NotesPage() {
             <>
               <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "10px 14px 4px" }}>{t("LABELS")}</div>
               {allLabels.map((l) => (
-                <SideItem key={l} icon="tag" label={l} count={counts.labels[l] || 0} active={labelFilter === l} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(l); if (isPhone) setDrawerOpen(false); }} />
+                <div key={l} style={{ position: "relative" }} className="notes-label-row">
+                  <SideItem icon="tag" label={l} count={counts.labels[l] || 0} active={labelFilter === l} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(l); if (isPhone) setDrawerOpen(false); }} />
+                  <span style={{ position: "absolute", right: 34, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 2 }}>
+                    <button title={t("Rename label")} onClick={(e) => { e.stopPropagation(); renameLabel(l); }} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, opacity: 0.45, padding: 2 }}>✎</button>
+                    <button title={t("Remove this label from every note?")} onClick={(e) => { e.stopPropagation(); deleteLabel(l); }} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, opacity: 0.45, padding: 2 }}>✕</button>
+                  </span>
+                </div>
               ))}
             </>
           )}
@@ -464,12 +493,16 @@ export default function NotesPage() {
             <NotesGrid notes={others} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroy} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
-                {section === "trash"
+                {search.trim()
+                  ? t("No notes match your search.")
+                  : section === "trash"
                   ? t("Trash is empty.")
                   : section === "archive"
                   ? t("No archived notes.")
                   : section === "reminders"
                   ? t("No reminders.")
+                  : labelFilter
+                  ? t("No notes carry this label.")
                   : t("Click + New Note to create your first note.")}
               </div>
             )}
