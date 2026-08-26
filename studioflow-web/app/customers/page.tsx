@@ -240,7 +240,11 @@ export default function CustomersPage() {
           customer.city,
           customer.postalCode,
           customer.country
-        ].some(value => value.toLowerCase().includes(term)))
+        ].some(value => value.toLowerCase().includes(term))
+          // The report's ask: find a customer by what they ordered.
+          || customer.orders.some(order =>
+            order.invoiceNumber.toLowerCase().includes(term)
+            || order.designName.toLowerCase().includes(term)))
       : customers;
 
     return [...filtered].sort((lhs, rhs) => {
