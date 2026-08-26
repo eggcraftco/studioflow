@@ -423,7 +423,7 @@ export default function SchedulePage() {
     scrollTop: number;
   } | null>(null);
   const [scheduleTimelinePanning, setScheduleTimelinePanning] = useState(false);
-  const sidebar = useResizableSidebar({ storageKey: "studioflow-schedule-sidebar", workspaceId: workspace?.id, initialWidth: 360, maxWidth: 720 });
+  const sidebar = useResizableSidebar({ storageKey: "studioflow-schedule-sidebar", workspaceId: workspace?.id, initialWidth: 320, maxWidth: 720 });
   const pathname = usePathname();
   const teamMode = pathname === "/team-schedule";
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
@@ -955,6 +955,7 @@ export default function SchedulePage() {
           aria-label={t("Resize schedule order list")}
           title={t("Resize schedule order list")}
           onPointerDown={sidebar.startResize}
+          onDoubleClick={sidebar.resetWidth}
         />
         </>)}
 

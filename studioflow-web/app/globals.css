@@ -24158,3 +24158,33 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
   background: rgba(23, 25, 35, 0.92); color: #fff; border-radius: 7px;
   padding: 3px 9px; font-size: 11px; font-weight: 800; white-space: nowrap;
 }
+
+/* ---- Order list density follows the divider's real position (report: the
+   same card, quieter as the list narrows — never a second card design). ---- */
+.orders-sidebar, .customers-sidebar { container-type: inline-size; }
+@container (max-width: 420px) {
+  .order-list-badges > *:nth-child(2) { display: none; }
+  .order-list-assignee { display: none; }
+}
+@container (max-width: 360px) {
+  .order-list-thumbnail { display: none; }
+  .order-list-card-content { grid-template-columns: minmax(0, 1fr); }
+}
+@container (max-width: 310px) {
+  .order-list-amount { display: none; }
+  .order-list-date-line { display: none; }
+  .order-list-badges { display: none; }
+}
+@container (max-width: 330px) {
+  .customer-list-designs { display: none; }
+}
+
+/* The divider's visible line stays 2px; the grab zone grows past the track. */
+.workspace-sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  right: -6px;
+}

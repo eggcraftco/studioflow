@@ -6414,11 +6414,17 @@ exports.saveWorkspaceSidebarLayout = onCall({ region: "europe-west2" }, async (r
   const { uid, companyId } = await requireWorkspaceForBilling(request, false);
   const visible = request.data?.visible !== false;
   const width = cleanSidebarWidth(request.data?.width, 380);
+  // One cloud width per SCREEN: Orders, Schedule and Customers each remember
+  // their own divider. Older clients that send no screen keep writing the
+  // Orders fields, which double as the fallback for the other two.
+  const screen = ["orders", "schedule", "customers"].includes(String(request.data?.screen))
+    ? String(request.data.screen)
+    : "orders";
   const settingsRef = companySettingsDocRef(companyId);
 
   await settingsRef.set({
-    ordersSidebarWidth: width,
-    ordersSidebarVisible: visible,
+    [`${screen}SidebarWidth`]: width,
+    [`${screen}SidebarVisible`]: visible,
     workspaceSidebarLayoutUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     workspaceSidebarLayoutUpdatedBy: uid
   }, { merge: true });

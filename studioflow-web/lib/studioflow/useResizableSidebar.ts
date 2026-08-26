@@ -32,6 +32,13 @@ export function useResizableSidebar({
   const widthRef = useRef(initialWidth);
   const collapsedRef = useRef(false);
   const resizingRef = useRef(false);
+  // Each screen keeps its own cloud width; the legacy shared Orders fields
+  // stay as the fallback so nothing jumps for existing workspaces.
+  const screen = storageKey === "studioflow-schedule-sidebar"
+    ? "schedule"
+    : storageKey === "studioflow-customers-sidebar"
+      ? "customers"
+      : "orders";
 
   function applyWidth(nextWidth: number) {
     const clean = clamp(nextWidth, minWidth, maxWidth);
@@ -58,7 +65,8 @@ export function useResizableSidebar({
       const response = await callable({
         companyId: workspaceId,
         width: cleanWidth,
-        visible: !nextCollapsed
+        visible: !nextCollapsed,
+        screen
       });
 
       if (response.data?.ok === false) {
@@ -90,12 +98,12 @@ export function useResizableSidebar({
     return onSnapshot(doc(db, "companySettings", workspaceId), snapshot => {
       if (resizingRef.current) return;
       const data = snapshot.exists() ? snapshot.data() : {};
-      const cloudWidth = Number(data.ordersSidebarWidth);
-      const cloudVisible = data.ordersSidebarVisible;
+      const cloudWidth = Number(data[`${screen}SidebarWidth`] ?? data.ordersSidebarWidth);
+      const cloudVisible = data[`${screen}SidebarVisible`] ?? data.ordersSidebarVisible;
       if (Number.isFinite(cloudWidth) && cloudWidth > 0) applyWidth(cloudWidth);
       if (typeof cloudVisible === "boolean") applyCollapsed(!cloudVisible);
     });
-  }, [maxWidth, minWidth, workspaceId]);
+  }, [maxWidth, minWidth, screen, workspaceId]);
 
   useEffect(() => {
     if (!storageKey || typeof window === "undefined") return;
@@ -127,6 +135,12 @@ export function useResizableSidebar({
     document.addEventListener("pointerup", handleUp);
   }, [maxWidth, minWidth, saveCloudLayout]);
 
+  // Double-clicking the divider snaps back to the screen's default width.
+  const resetWidth = useCallback(() => {
+    const clean = applyWidth(initialWidth);
+    saveCloudLayout(clean, collapsedRef.current);
+  }, [initialWidth, saveCloudLayout]);
+
   const workspaceStyle = useMemo(() => ({
     "--studio-sidebar-width": `${collapsed ? collapsedWidth : width}px`
   }) as CSSProperties, [collapsed, collapsedWidth, width]);
@@ -135,6 +149,7 @@ export function useResizableSidebar({
     collapsed,
     setCollapsed,
     startResize,
+    resetWidth,
     workspaceStyle
   };
 }
