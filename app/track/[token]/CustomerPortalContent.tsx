@@ -28,6 +28,9 @@ type PortalView = {
   estimate: { number: string; total: number; status: string } | null;
   payments: { paid: number; remaining: number; total: number } | null;
   photos: string[];
+  // Library files the workshop explicitly shared to the portal; absent on
+  // older server builds.
+  files?: { name: string; url: string; fileType: string; fileSize: number }[];
 };
 
 function money(currency: string, value: number) {
@@ -156,6 +159,26 @@ export function CustomerPortalContent({ token }: { token: string }) {
               <img key={url} src={url} alt="" />
             ))}
           </div>
+        </div>
+      ) : null}
+
+      {(portal.files ?? []).length > 0 ? (
+        <div className="portal-shell-card">
+          <span className="portal-shell-label">Files</span>
+          <ul className="portal-shell-files">
+            {(portal.files ?? []).map(file => (
+              <li key={file.url}>
+                <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a>
+                {file.fileSize > 0 ? (
+                  <span className="portal-shell-muted">
+                    {" "}· {file.fileSize >= 1024 * 1024
+                      ? `${(file.fileSize / (1024 * 1024)).toFixed(1)} MB`
+                      : `${Math.max(1, Math.round(file.fileSize / 1024))} KB`}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
