@@ -105,10 +105,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }).filter((rule) => rule.keyword && rule.category);
   }
 
+  // Most specific rule wins: candidates are tried longest-keyword-first, so
+  // "google workspace" beats "google" instead of whichever was created first.
   function matchRule(rules, tx) {
     const haystack = `${tx.counterparty || ""} ${tx.description || ""}`.toLowerCase();
     const direction = Number(tx.amount) >= 0 ? "in" : "out";
-    return rules.find((rule) =>
+    return [...rules].sort((a, b) => b.keyword.length - a.keyword.length).find((rule) =>
       (rule.appliesTo === "both" || rule.appliesTo === direction) && haystack.includes(rule.keyword)
     ) || null;
   }
@@ -206,6 +208,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const auto = matchRule(rules, normalized);
     if (auto) {
       normalized.categoryAuto = cleanText(auto.category, 60);
+      // The audit trail: which rule made this decision.
+      normalized.categoryAutoRule = cleanText(auto.keyword, 120);
       if (auto.vatCode) normalized.vatCodeAuto = cleanText(auto.vatCode, 4);
     }
     return normalized;
@@ -399,7 +403,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       providerLogo: cleanText(provider.logo_uri, 500),
       accounts,
       linkedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastSyncedAt: admin.firestore.FieldValue.serverTimestamp()
+      lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Open Banking consent runs 90 days from authorisation; storing the
+      // deadline lets every client show "renew by" before the feed dies.
+      consentExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 90 * 24 * 60 * 60 * 1000)
     }, { merge: true });
 
     // Registers the workspace for the scheduled background sync.
@@ -572,12 +579,31 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }
   });
 
+  // Two different intents, kept apart on purpose (the report's rule):
+  // "disconnect" only revokes the consent — the transaction history stays,
+  // nothing already imported is touched. "purge" is the destructive path that
+  // also removes every imported transaction of this connection.
   const bankDeleteConnection = onCall({ region: REGION, secrets: [TL_CLIENT_ID, TL_CLIENT_SECRET], timeoutSeconds: 180 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const connectionId = cleanText(request.data?.requisitionId, 120);
     if (!connectionId) throw new HttpsError("invalid-argument", "requisitionId is required.");
     const connectionDoc = await connectionsRef(companyId).doc(connectionId).get();
     if (!connectionDoc.exists) throw new HttpsError("not-found", "Bank connection not found.");
+
+    const mode = cleanText(request.data?.mode, 12) === "purge" ? "purge" : "disconnect";
+    if (mode === "disconnect") {
+      await tokensRef(companyId).doc(connectionId).delete();
+      await connectionsRef(companyId).doc(connectionId).set({
+        status: "disconnected",
+        syncState: "disconnected",
+        disconnectedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      const stillLinked = await connectionsRef(companyId).where("status", "==", "linked").limit(1).get();
+      if (stillLinked.empty) {
+        await db().collection("companies").doc(companyId).set({ bankFeedEnabled: false }, { merge: true });
+      }
+      return { disconnected: true, kept: true };
+    }
 
     // Drop the stored consent first so no further data can be fetched, then
     // remove this connection's transactions in pages.
@@ -1121,9 +1147,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
         const hit = matchRule(rules, data);
         const nextCategory = hit ? cleanText(hit.category, 60) : "";
         const nextVat = hit && hit.vatCode ? cleanText(hit.vatCode, 4) : "";
-        if (nextCategory !== cleanText(data.categoryAuto, 60) || nextVat !== cleanText(data.vatCodeAuto, 4)) {
+        const nextRule = hit ? cleanText(hit.keyword, 120) : "";
+        if (nextCategory !== cleanText(data.categoryAuto, 60) || nextVat !== cleanText(data.vatCodeAuto, 4) || nextRule !== cleanText(data.categoryAutoRule, 120)) {
           batch.set(doc.ref, {
             categoryAuto: nextCategory || admin.firestore.FieldValue.delete(),
+            categoryAutoRule: nextRule || admin.firestore.FieldValue.delete(),
             vatCodeAuto: nextVat || admin.firestore.FieldValue.delete()
           }, { merge: true });
           touched += 1;
