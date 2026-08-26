@@ -24256,3 +24256,50 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
   opacity: 0.7;
 }
 body[data-studio-theme="dark"] .schedule-month-header { background: #141414; }
+
+/* ---- App-wide toast stack (bottom center, one action max) ---- */
+.studio-toast-stack {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  pointer-events: none;
+}
+.studio-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+  background: rgba(23, 25, 35, 0.94);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(23, 25, 35, 0.35);
+  max-width: min(560px, calc(100vw - 32px));
+}
+.studio-toast > button {
+  border: 0;
+  background: transparent;
+  color: #7db2ff;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.studio-toast > .studio-toast-close { color: rgba(255, 255, 255, 0.6); font-size: 16px; line-height: 1; }
+.schedule-zoom-preset {
+  border: 0;
+  background: transparent;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+body[data-studio-theme="dark"] .studio-toast { background: rgba(240, 242, 248, 0.96); color: #16181f; }
+body[data-studio-theme="dark"] .studio-toast > button { color: #2f6df6; }
+body[data-studio-theme="dark"] .studio-toast > .studio-toast-close { color: rgba(22, 24, 31, 0.55); }
