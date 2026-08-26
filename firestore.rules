@@ -632,6 +632,7 @@ service cloud.firestore {
         && collectionId != 'stocktakes'
         && collectionId != 'integrationSecrets'
         && collectionId != 'financeBulkRuns'
+        && collectionId != 'fileRecords'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -660,6 +661,7 @@ service cloud.firestore {
         && collectionId != 'stocktakes'
         && collectionId != 'integrationSecrets'
         && collectionId != 'financeBulkRuns'
+        && collectionId != 'fileRecords'
         && canWriteCompanyData(companyId);
     }
 

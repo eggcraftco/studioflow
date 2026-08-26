@@ -30,6 +30,7 @@ import {
   type WorkspaceSettingsOverview,
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
+import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -205,6 +206,9 @@ export default function FilesPage() {
   const [fileSearch, setFileSearch] = useState("");
   const [fileSort, setFileSort] = useState<"newest" | "name" | "size">("newest");
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  // "classic" is the original per-order upload/browse experience; everything
+  // else is a view over the central library registry.
+  const [pageView, setPageView] = useState<LibraryView | "classic">("all");
 
   async function handleDownloadAll() {
     if (!workspace || downloadingAll) return;
@@ -502,8 +506,8 @@ export default function FilesPage() {
       {loadingFiles ? <LoadingScreen /> : null}
 
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>
-        <div className="pill">{t("Every client file in this workspace")}</div>
-        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>Client Files</h1>
+        <div className="pill">{t("Every file in this workspace, linked to its records")}</div>
+        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>{t("Files")}</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
           {workspace ? `${workspace.name} - ${workspace.billingPlanName}` : "Loading workspace..."}
         </p>
@@ -515,6 +519,31 @@ export default function FilesPage() {
           <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
         </section>
       ) : null}
+
+      <div className="inventory-shell files-shell">
+        <nav className="inventory-nav" aria-label={t("File views")}>
+          <p className="inventory-nav-group">{t("Library")}</p>
+          <button type="button" data-active={pageView === "all"} onClick={() => setPageView("all")}>{t("All Files")}</button>
+          <button type="button" data-active={pageView === "recent"} onClick={() => setPageView("recent")}>{t("Recent")}</button>
+          <button type="button" data-active={pageView === "sharedClients"} onClick={() => setPageView("sharedClients")}>{t("Shared with Clients")}</button>
+          <button type="button" data-active={pageView === "internalOnly"} onClick={() => setPageView("internalOnly")}>{t("Internal Only")}</button>
+          <button type="button" data-active={pageView === "unlinked"} onClick={() => setPageView("unlinked")}>{t("Unlinked")}</button>
+          <p className="inventory-nav-group">{t("By Connection")}</p>
+          <button type="button" data-active={pageView === "classic"} onClick={() => setPageView("classic")}>{t("Client & Orders")}</button>
+          <button type="button" data-active={pageView === "connInventory"} onClick={() => setPageView("connInventory")}>{t("Inventory")}</button>
+          <button type="button" data-active={pageView === "connPurchases"} onClick={() => setPageView("connPurchases")}>{t("Purchases")}</button>
+          <button type="button" data-active={pageView === "connSuppliers"} onClick={() => setPageView("connSuppliers")}>{t("Suppliers")}</button>
+          <button type="button" data-active={pageView === "connBank"} onClick={() => setPageView("connBank")}>{t("Bank Transactions")}</button>
+          <p className="inventory-nav-group">{t("Manage")}</p>
+          <button type="button" data-active={pageView === "trash"} onClick={() => setPageView("trash")}>{t("Trash")}</button>
+        </nav>
+        <div className="files-main">
+
+      {pageView !== "classic" && workspace ? (
+        <FilesLibraryView workspace={workspace} view={pageView} canEdit={canManageClientFiles} />
+      ) : null}
+
+      {pageView === "classic" ? (<>
 
       {workspace && !canUseClientFiles ? (
         <section className="card locked-panel" style={{ padding: 22, marginBottom: 18 }}>
@@ -761,6 +790,11 @@ export default function FilesPage() {
           </div>
         )}
       </section>
+
+      </>) : null}
+
+        </div>
+      </div>
 
       {activePreview ? (
         <FilesPreviewModal

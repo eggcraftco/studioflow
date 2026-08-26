@@ -46,6 +46,8 @@ const ORDER = "QA-ORDER-1";
   for (const doc of staleTickets.docs) await doc.ref.delete();
   const staleSupport = await db.collection("supportTickets").where("companyId", "==", COMPANY).get();
   for (const doc of staleSupport.docs) await doc.ref.delete();
+  const staleFileRecords = await db.collection("companies").doc(COMPANY).collection("fileRecords").get();
+  for (const doc of staleFileRecords.docs) await doc.ref.delete();
   for (const kind of ["app", "workspace"]) {
     await db.collection("supportTicketDedupe").doc(`${kind}_${COMPANY}_${UID}`).delete().catch(() => {});
   }

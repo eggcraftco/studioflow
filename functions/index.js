@@ -5006,6 +5006,24 @@ const inventoryExports = createInventoryFunctions({
 const { _internal: inventoryInternal, ...inventoryCallables } = inventoryExports;
 Object.assign(exports, inventoryCallables);
 
+// The central file library: one file, many links; sharing is a separate,
+// deliberate act. Lives in its own module for the same reason inventory does.
+const { createFilesLibraryFunctions } = require("./filesLibrary");
+Object.assign(exports, createFilesLibraryFunctions({
+  admin,
+  onCall,
+  HttpsError,
+  cleanText: cleanOrderText,
+  requireWorkspace: async (request, { area = "clientFiles", write = false } = {}) => {
+    const context = await requireWorkspaceForBilling(request, false);
+    requireWorkspaceAreaAccess(context.companyData, context.uid, area);
+    if (write && !canFullyEditOrder(workspaceOrderRole(context.companyData, context.uid))) {
+      throw new HttpsError("permission-denied", "Your workspace role cannot change files.");
+    }
+    return context;
+  }
+}));
+
 // Pandle bookkeeping bridge: confirms NivaDesk-categorised bank transactions
 // in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
 const { createPandleFunctions } = require("./pandle");

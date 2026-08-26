@@ -24133,3 +24133,14 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 /* Three engine names told you nothing about what each could do. */
 .quick-reply-engine-compare { margin-top: 10px; }
 .quick-reply-engine-compare strong { text-align: left; font-weight: 600; font-size: 12.5px; }
+
+/* ---- Files library (central registry views) ---- */
+.library-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.library-body.has-panel { grid-template-columns: minmax(0, 1fr) 360px; }
+@media (max-width: 1100px) { .library-body.has-panel { grid-template-columns: 1fr; } }
+.library-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.library-toolbar .input { max-width: 260px; }
+.library-table td strong { display: block; }
+.library-table td .inventory-sub { display: block; margin-top: 2px; }
+.library-table tbody tr { cursor: pointer; }
+.inventory-panel-inline-edit { display: flex; gap: 8px; align-items: center; }
