@@ -24195,3 +24195,28 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 }
 .customers-sort-select { display: grid; gap: 4px; font-size: 12px; font-weight: 800; }
 .customers-sort-select select { min-width: 150px; }
+
+/* ---- Customer duplicate banner + merge modal ---- */
+.customer-duplicate-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border: 1px solid rgba(255, 149, 0, 0.45); background: rgba(255, 149, 0, 0.10);
+  border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px;
+}
+.customer-duplicate-banner > button {
+  border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 800; font-size: 12px;
+  background: #ff9500; color: #fff; cursor: pointer;
+}
+.customer-merge-modal { max-width: min(560px, calc(100vw - 28px)); display: grid; gap: 14px; }
+.customer-merge-profiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.customer-merge-profile {
+  display: grid; gap: 4px; text-align: left; padding: 12px; border-radius: 12px;
+  border: 1.5px solid var(--app-border, rgba(0,0,0,0.12)); background: transparent; cursor: pointer;
+}
+.customer-merge-profile.is-primary { border-color: #2f6df6; background: rgba(47, 109, 246, 0.07); }
+.customer-merge-profile small { opacity: 0.72; overflow: hidden; text-overflow: ellipsis; }
+.customer-merge-primary-pill { font-size: 11px; font-weight: 800; opacity: 0.8; }
+.customer-merge-profile.is-primary .customer-merge-primary-pill { color: #2f6df6; opacity: 1; }
+.customer-merge-field { display: grid; gap: 6px; font-size: 13px; }
+.customer-merge-field-label { font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.6; }
+.customer-merge-field label { display: flex; align-items: center; gap: 8px; }
+.customer-merge-summary strong { color: #2f6df6; }

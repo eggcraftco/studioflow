@@ -24,6 +24,7 @@ import {
   canManageCustomersForRole,
   createCustomerFromWeb,
   deleteCustomerFromWeb,
+  mergeCustomersFromWeb,
   updateCustomerFromWeb,
   uploadCustomerPhoto,
   CUSTOMER_PHOTO_ACCEPT,
@@ -158,6 +159,8 @@ export default function CustomersPage() {
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [form, setForm] = useState<CustomerFormInput>(EMPTY_CUSTOMER_FORM);
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergingCustomers, setMergingCustomers] = useState(false);
   const [savingInlineField, setSavingInlineField] = useState("");
   const [actionStatus, setActionStatus] = useState("");
   const [actionError, setActionError] = useState("");
@@ -270,6 +273,20 @@ export default function CustomersPage() {
     [customerContextMenu, customers]
   );
 
+  // The whole directory is client-side, so suspected twins cost nothing to
+  // spot: another record sharing this customer's email or phone.
+  const selectedDuplicate = useMemo(() => {
+    if (!selectedCustomer) return null;
+    const email = selectedCustomer.email.trim().toLowerCase();
+    const phone = selectedCustomer.phone.replace(/[^0-9+]/g, "");
+    for (const other of customers) {
+      if (other.id === selectedCustomer.id) continue;
+      if (email.length > 3 && other.email.trim().toLowerCase() === email) return { other, reason: "email" as const };
+      if (phone.length >= 7 && other.phone.replace(/[^0-9+]/g, "") === phone) return { other, reason: "phone" as const };
+    }
+    return null;
+  }, [customers, selectedCustomer]);
+
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canManageCustomers = Boolean(workspace && canManageCustomersForRole(workspace.role));
   const language = moneySettings?.selectedLanguage ?? "English";
@@ -304,6 +321,28 @@ export default function CustomersPage() {
       setSelectedCustomerId(selectCustomerId);
     } else if (!loadedCustomers.some(customer => customer.id === selectedCustomerId)) {
       setSelectedCustomerId(loadedCustomers[0]?.id || "");
+    }
+  }
+
+  async function handleMergeCustomers(
+    primaryId: string,
+    mergedId: string,
+    keep: Partial<Record<"name" | "email" | "phone", "primary" | "merged">>
+  ) {
+    if (!workspace || mergingCustomers) return;
+    setMergingCustomers(true);
+    setActionStatus(t("Merging customers..."));
+    setActionError("");
+    try {
+      const result = await mergeCustomersFromWeb(workspace, primaryId, mergedId, keep);
+      await refreshCustomers(primaryId);
+      setMergeOpen(false);
+      setActionStatus(`${t("Customers merged.")} ${t("Orders moved")}: ${Number(result.movedOrderCount) || 0}`);
+    } catch (mergeError) {
+      setActionStatus("");
+      setActionError(mergeError instanceof Error ? mergeError.message : t("The customers could not be merged."));
+    } finally {
+      setMergingCustomers(false);
     }
   }
 
@@ -567,6 +606,8 @@ export default function CustomersPage() {
               moneySettings={moneySettings}
               savingInlineField={savingInlineField}
               language={language}
+              duplicate={selectedDuplicate}
+              onReviewMerge={() => setMergeOpen(true)}
               onSaveDetails={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
               onUploadPhoto={file => handleCustomerPhotoUpload(selectedCustomer, file)}
             />
@@ -590,6 +631,23 @@ export default function CustomersPage() {
             if (!savingCustomer) setFormMode(null);
           }}
           onSubmit={handleSaveCustomer}
+        />
+      ) : null}
+
+      {mergeOpen && selectedCustomer && selectedDuplicate ? (
+        <MergeCustomersModal
+          left={selectedCustomer}
+          right={selectedDuplicate.other}
+          reason={selectedDuplicate.reason}
+          merging={mergingCustomers}
+          error={actionError}
+          canSeeFinance={canSeeFinance}
+          moneySettings={moneySettings ?? ({} as StudioMoneySettings)}
+          language={language}
+          onClose={() => {
+            if (!mergingCustomers) setMergeOpen(false);
+          }}
+          onMerge={handleMergeCustomers}
         />
       ) : null}
 
@@ -677,6 +735,8 @@ function CustomerDetail({
   moneySettings,
   savingInlineField,
   language,
+  duplicate,
+  onReviewMerge,
   onSaveDetails,
   onUploadPhoto
 }: {
@@ -686,6 +746,8 @@ function CustomerDetail({
   moneySettings: StudioMoneySettings;
   savingInlineField: string;
   language: string;
+  duplicate: { other: CustomerDirectoryItem; reason: "email" | "phone" } | null;
+  onReviewMerge: () => void;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
   onUploadPhoto: (file: File) => Promise<void>;
 }) {
@@ -755,6 +817,18 @@ function CustomerDetail({
           </p>
         </div>
       </section>
+
+      {duplicate ? (
+        <div className="customer-duplicate-banner" role="status">
+          <span>
+            ⚠️ {t("Possible duplicate customer")} · {t(duplicate.reason === "email" ? "Same email as" : "Same phone as")}{" "}
+            <strong>{customerDisplayName(duplicate.other.name)}</strong>
+          </span>
+          {canManageCustomers ? (
+            <button type="button" onClick={onReviewMerge}>{t("Review and merge")}</button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="customer-stats-row">
         {/* Order value is not money received — the report's distinction, kept
@@ -1383,6 +1457,132 @@ function CustomerFormModal({
           </div>
         </form>
       </section>
+    </div>
+  );
+}
+
+// Merging is a decision, not a guess: the user picks which record survives
+// and which conflicting values win. No copies, no automatic overwrites — the
+// server keeps the primary's values, fills gaps from the duplicate, and moves
+// the duplicate's orders under the surviving name.
+function MergeCustomersModal({
+  left,
+  right,
+  reason,
+  merging,
+  error,
+  canSeeFinance,
+  moneySettings,
+  language,
+  onClose,
+  onMerge
+}: {
+  left: CustomerDirectoryItem;
+  right: CustomerDirectoryItem;
+  reason: "email" | "phone";
+  merging: boolean;
+  error: string;
+  canSeeFinance: boolean;
+  moneySettings: StudioMoneySettings;
+  language: string;
+  onClose: () => void;
+  onMerge: (primaryId: string, mergedId: string, keep: Partial<Record<"name" | "email" | "phone", "primary" | "merged">>) => Promise<void>;
+}) {
+  const { hideNumbers } = usePricePrivacy();
+  const t = (text: string) => studioT(text, language);
+  // The record with more history survives by default.
+  const [primaryId, setPrimaryId] = useState(right.orderCount > left.orderCount ? right.id : left.id);
+  const primary = primaryId === left.id ? left : right;
+  const other = primaryId === left.id ? right : left;
+  const [keepName, setKeepName] = useState<"primary" | "merged">("primary");
+  const [keepEmail, setKeepEmail] = useState<"primary" | "merged">("primary");
+  const [keepPhone, setKeepPhone] = useState<"primary" | "merged">("primary");
+
+  function fieldPicker(
+    label: string,
+    primaryValue: string,
+    otherValue: string,
+    value: "primary" | "merged",
+    onChange: (next: "primary" | "merged") => void
+  ) {
+    if (!primaryValue.trim() || !otherValue.trim() || primaryValue.trim() === otherValue.trim()) return null;
+    return (
+      <div className="customer-merge-field">
+        <span className="customer-merge-field-label">{label}</span>
+        <label>
+          <input type="radio" checked={value === "primary"} onChange={() => onChange("primary")} disabled={merging} />
+          <span>{primaryValue}</span>
+        </label>
+        <label>
+          <input type="radio" checked={value === "merged"} onChange={() => onChange("merged")} disabled={merging} />
+          <span>{otherValue}</span>
+        </label>
+      </div>
+    );
+  }
+
+  function profileCard(customer: CustomerDirectoryItem) {
+    const isPrimary = customer.id === primaryId;
+    return (
+      <button
+        type="button"
+        className={isPrimary ? "customer-merge-profile is-primary" : "customer-merge-profile"}
+        onClick={() => {
+          setPrimaryId(customer.id);
+          setKeepName("primary");
+          setKeepEmail("primary");
+          setKeepPhone("primary");
+        }}
+        disabled={merging}
+      >
+        <strong>{customerDisplayName(customer.name)}</strong>
+        <small>{customer.email || customer.phone || t("No contact details")}</small>
+        <small>
+          {countLabel(customer.orderCount, "order", "orders", t)}
+          {canSeeFinance ? ` · ${money(customer.totalValue, hideNumbers, moneySettings)}` : ""}
+          {CUSTOMER_SOURCE_LABEL[customer.source] ? ` · ${CUSTOMER_SOURCE_LABEL[customer.source]}` : ""}
+        </small>
+        <span className="customer-merge-primary-pill">{isPrimary ? t("Kept as primary") : t("Will be merged")}</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal customer-merge-modal" role="dialog" aria-modal="true" aria-label={t("Merge customers")}>
+        <CardTitle icon="customer" eyebrow={t("Possible duplicate customer")} title={t("Merge customers")} />
+        <p className="muted-copy">
+          {t(reason === "email" ? "These two records share the same email address." : "These two records share the same phone number.")}{" "}
+          {t("Merging keeps one profile, fills its gaps from the other, and moves all orders under it. A snapshot is kept on the server.")}
+        </p>
+
+        <div className="customer-merge-profiles">
+          {profileCard(left)}
+          {profileCard(right)}
+        </div>
+
+        {fieldPicker(t("Name"), customerDisplayName(primary.name), customerDisplayName(other.name), keepName, setKeepName)}
+        {fieldPicker(t("Email"), primary.email, other.email, keepEmail, setKeepEmail)}
+        {fieldPicker(t("Phone / WhatsApp"), primary.phone, other.phone, keepPhone, setKeepPhone)}
+
+        <p className="muted-copy customer-merge-summary">
+          {countLabel(other.orderCount, "order", "orders", t)} → <strong>{customerDisplayName(primary.name)}</strong>
+        </p>
+
+        {error ? <p className="layout-error">{error}</p> : null}
+
+        <div className="add-order-actions" style={{ display: "flex", gap: 10 }}>
+          <button className="button secondary" type="button" onClick={onClose} disabled={merging}>{t("Cancel")}</button>
+          <button
+            className="button"
+            type="button"
+            disabled={merging}
+            onClick={() => void onMerge(primary.id, other.id, { name: keepName, email: keepEmail, phone: keepPhone })}
+          >
+            {merging ? t("Merging customers...") : t("Merge customers")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

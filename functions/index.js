@@ -12392,6 +12392,125 @@ exports.deleteWebCustomer = onCall({ region: "europe-west2" }, async (request) =
   };
 });
 
+// Fold a duplicate customer into a primary one. The primary's non-empty
+// fields win, gaps fill from the duplicate, and the caller may explicitly
+// pick whose name/email/phone survives. Orders join customers by NAME, so
+// the duplicate's orders move under the primary through the same sync the
+// rename flow uses. Before anything is deleted, a full snapshot of both
+// records lands in customerMergeLog (server-only collection) so the merge
+// can be reconstructed by hand or a future undo.
+exports.mergeWebCustomers = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidCanEditWorkspaceCustomers(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot merge customers.");
+  }
+
+  const primaryId = String(request.data?.primaryId || "").trim();
+  const mergedId = String(request.data?.mergedId || "").trim();
+  if (!primaryId || !mergedId) throw new HttpsError("invalid-argument", "primaryId and mergedId are required.");
+  if (primaryId === mergedId) throw new HttpsError("invalid-argument", "A customer cannot be merged into itself.");
+  const keep = request.data?.keep && typeof request.data.keep === "object" ? request.data.keep : {};
+
+  const db = admin.firestore();
+  const primaryRef = db.collection("musteriler").doc(primaryId);
+  const mergedRef = db.collection("musteriler").doc(mergedId);
+  const email = String(request.auth?.token?.email || "");
+
+  let mergedName = "";
+  let finalContact = null;
+
+  await db.runTransaction(async (transaction) => {
+    const [primarySnap, mergedSnap] = await Promise.all([
+      transaction.get(primaryRef),
+      transaction.get(mergedRef)
+    ]);
+    if (!primarySnap.exists || !mergedSnap.exists) {
+      throw new HttpsError("not-found", "Customer not found.");
+    }
+    const primaryData = primarySnap.data() || {};
+    const mergedData = mergedSnap.data() || {};
+    if (String(primaryData.companyId || "").trim() !== companyId || String(mergedData.companyId || "").trim() !== companyId) {
+      throw new HttpsError("permission-denied", "These customers do not belong to the active workspace.");
+    }
+    mergedName = cleanOrderText(mergedData.name, "", 180);
+
+    const pick = (field, maxLength = 300) => {
+      const fromPrimary = cleanOrderText(primaryData[field], "", maxLength);
+      const fromMerged = cleanOrderText(mergedData[field], "", maxLength);
+      if (keep[field] === "merged") return fromMerged || fromPrimary;
+      return fromPrimary || fromMerged;
+    };
+
+    const updates = {
+      name: pick("name", 180),
+      email: pick("email", 220),
+      phone: pick("phone", 80),
+      instagram: pick("instagram", 120),
+      address: pick("address", 1000),
+      streetAddress: pick("streetAddress", 300),
+      city: pick("city", 160),
+      postalCode: pick("postalCode", 40),
+      country: pick("country", 120),
+      shippingAddress: pick("shippingAddress", 1000),
+      shippingStreetAddress: pick("shippingStreetAddress", 300),
+      shippingCity: pick("shippingCity", 160),
+      shippingPostalCode: pick("shippingPostalCode", 40),
+      shippingCountry: pick("shippingCountry", 120),
+      shippingPhone: pick("shippingPhone", 80),
+      profileImageUrl: cleanOrderText(primaryData.profileImageUrl, "", 600) || cleanOrderText(mergedData.profileImageUrl, "", 600),
+      externalCustomerId: cleanOrderText(primaryData.externalCustomerId, "", 80) || cleanOrderText(mergedData.externalCustomerId, "", 80),
+      source: cleanOrderText(primaryData.source, "", 40) || cleanOrderText(mergedData.source, "", 40),
+      mergedFromCustomerId: mergedId,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedByUid: uid,
+      updatedByEmail: email
+    };
+    // Notes from two real people rarely deserve to overwrite each other.
+    const primaryNotes = cleanOrderNotes(primaryData.notes);
+    const mergedNotes = cleanOrderNotes(mergedData.notes);
+    updates.notes = primaryNotes && mergedNotes && primaryNotes !== mergedNotes
+      ? `${primaryNotes}\n— — —\n${mergedNotes}`
+      : (primaryNotes || mergedNotes);
+    const primaryContactMs = dateFromFirestore(primaryData.lastContactDate, new Date(0)).getTime();
+    const mergedContactMs = dateFromFirestore(mergedData.lastContactDate, new Date(0)).getTime();
+    if (mergedContactMs > primaryContactMs && mergedData.lastContactDate) {
+      updates.lastContactDate = mergedData.lastContactDate;
+    }
+
+    transaction.set(db.collection("companies").doc(companyId).collection("customerMergeLog").doc(), {
+      primaryId,
+      mergedId,
+      primaryBefore: primaryData,
+      mergedSnapshot: mergedData,
+      mergedAt: admin.firestore.FieldValue.serverTimestamp(),
+      mergedByUid: uid,
+      mergedByEmail: email
+    });
+    transaction.set(primaryRef, updates, { merge: true });
+    transaction.delete(mergedRef);
+    finalContact = updates;
+  });
+
+  // The duplicate's orders follow the surviving name and contact details.
+  const movedOrderCount = await syncCustomerContactToOrders(companyId, mergedName, {
+    name: finalContact.name,
+    email: finalContact.email,
+    phone: finalContact.phone,
+    instagram: finalContact.instagram,
+    address: finalContact.address,
+    notes: finalContact.notes
+  }, uid, email);
+
+  return {
+    ok: true,
+    companyId,
+    primaryId,
+    mergedId,
+    movedOrderCount,
+    message: "Customers merged."
+  };
+});
+
 exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceOrders(companyData, uid)) {

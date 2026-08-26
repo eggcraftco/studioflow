@@ -121,6 +121,38 @@ export async function updateCustomerFromWeb(workspace: WorkspaceContext, custome
   }
 }
 
+// Folds a duplicate record into the primary. `keep` names the fields where
+// the duplicate's value should win (e.g. { email: "merged" }); everything
+// else keeps the primary's value, gaps fill from the duplicate.
+export async function mergeCustomersFromWeb(
+  workspace: WorkspaceContext,
+  primaryId: string,
+  mergedId: string,
+  keep: Partial<Record<"name" | "email" | "phone", "primary" | "merged">> = {}
+) {
+  if (!canManageCustomersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot merge customers.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, CustomerActionResult & { movedOrderCount?: number }>(functions, "mergeWebCustomers");
+      const response = await callable({
+        companyId: workspace.id,
+        primaryId,
+        mergedId,
+        keep
+      });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "The customers could not be merged.");
+      }
+      return response.data;
+    }, "Merging customers in cloud.");
+  } catch (error) {
+    throw new Error(friendlyCustomerError(error, "The customers could not be merged."));
+  }
+}
+
 export async function uploadCustomerPhoto(workspace: WorkspaceContext, file: File) {
   if (!canManageCustomersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot edit customers.");
