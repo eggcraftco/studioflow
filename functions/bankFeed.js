@@ -13,8 +13,18 @@
 //   companies/{companyId}/bankTokens/{connectionId}
 //     refreshToken — never client-readable (rules deny all client access).
 //   companies/{companyId}/bankTransactions/{docId}
-//     accountId, connectionId, amount (Number, signed), currency, bookingDate,
-//     description, counterparty, status, importedAt — owner-readable.
+//     Two layers on one doc, and the split is what makes re-syncs safe:
+//     BANK DATA (sync-owned, rewritten on every sync): accountId, connectionId,
+//       amount (Number, signed), currency, bookingDate, description,
+//       counterparty, txType, status (booked|pending), provider,
+//       providerTransactionId, normalisedProviderId, providerReference,
+//       firstImportedAt (first sync only), importedAt (= last synced).
+//     NIVADESK ENRICHMENT (only written by the enrichment callables):
+//       category, vatCode, note, receiptPath/receiptName, receiptNotNeeded,
+//       linkedOrderId/Label, purchaseId/Number, reviewStatus, pandle{…}.
+//   companies/{companyId}/bankCategories/{id}
+//     Workspace-defined category records: name, type, defaultVatCode, active,
+//     reportingGroup, mappings {pandle|quickbooks|xero} — owner-readable.
 //
 // Secrets: NIVADESK_TL_CLIENT_ID / NIVADESK_TL_CLIENT_SECRET (TrueLayer
 // Console → NivaDesk app → Settings, LIVE environment).
@@ -33,6 +43,23 @@ const REDIRECT_URL = "https://nivadesk.app/bank";
 // younger than this is served from Firestore instead of re-fetching.
 const MIN_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
+// One VAT list for every write path. Zero-rated (ZR) and exempt (EX) are
+// different VAT-return boxes, so they are separate codes on purpose; MX marks
+// a mixed receipt that can only reach an accounting provider after a split.
+const BANK_VAT_CODES = ["ST", "RR", "ZR", "EX", "OS", "NR", "RC", "NV", "IM", "MX"];
+
+// Where a transaction stands on its way to the accountant. "unreviewed" is
+// the absent-field default; sync_error and ignored sit outside the happy path.
+const BANK_REVIEW_STATUSES = ["unreviewed", "needs_info", "ready", "synced", "confirmed", "sync_error", "ignored"];
+
+// The enrichment layer: everything the workspace adds on top of the bank's
+// own data. Carried across when a pending row books under a new provider id.
+const ENRICHMENT_FIELDS = [
+  "category", "vatCode", "note", "receiptPath", "receiptName", "receiptNotNeeded",
+  "linkedOrderId", "linkedOrderLabel", "purchaseId", "purchaseNumber",
+  "reviewStatus", "reviewedAt", "pandle"
+];
+
 function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany }) {
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
@@ -50,22 +77,31 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     db().collection("companies").doc(companyId).collection("bankRules");
 
   // Categorisation rules: "if the counterparty/description contains <keyword>,
-  // auto-categorise as <category>". Auto results live in `categoryAuto`; a
-  // manual choice lives in `category` and always wins on the client, so a
-  // re-sync can safely recompute categoryAuto without touching manual picks.
+  // auto-categorise as <category> (optionally with a VAT treatment)". Auto
+  // results live in `categoryAuto`/`vatCodeAuto`; manual choices live in
+  // `category`/`vatCode` and always win on the client, so a re-sync can safely
+  // recompute the auto pair without touching manual picks. appliesTo scopes a
+  // rule to money out ("out", the default), money in ("in") or both.
   async function loadRules(companyId) {
     const snap = await rulesRef(companyId).limit(200).get();
-    return snap.docs.map((doc) => ({
-      id: doc.id,
-      keyword: String((doc.data() || {}).keyword || "").toLowerCase(),
-      category: String((doc.data() || {}).category || "")
-    })).filter((rule) => rule.keyword && rule.category);
+    return snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        keyword: String(data.keyword || "").toLowerCase(),
+        category: String(data.category || ""),
+        vatCode: String(data.vatCode || "").toUpperCase(),
+        appliesTo: ["out", "in", "both"].includes(String(data.appliesTo)) ? String(data.appliesTo) : "out"
+      };
+    }).filter((rule) => rule.keyword && rule.category);
   }
 
   function matchRule(rules, tx) {
     const haystack = `${tx.counterparty || ""} ${tx.description || ""}`.toLowerCase();
-    const hit = rules.find((rule) => haystack.includes(rule.keyword));
-    return hit ? hit.category : "";
+    const direction = Number(tx.amount) >= 0 ? "in" : "out";
+    return rules.find((rule) =>
+      (rule.appliesTo === "both" || rule.appliesTo === direction) && haystack.includes(rule.keyword)
+    ) || null;
   }
 
   async function requireOwner(request) {
@@ -148,10 +184,21 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       // How the money moved: PURCHASE / DIRECT_DEBIT / STANDING_ORDER /
       // TRANSFER / BILL_PAYMENT / ATM / … straight from TrueLayer.
       txType: cleanText(tx.transaction_category, 40).toUpperCase(),
+      // Permanent provider identity. The doc id is derived from these, but
+      // they live as fields too: the identity survives the id sanitisation,
+      // can be shown in the detail panel and queried, and the normalised id
+      // is stable across the pending→booked flip when the raw id is not.
+      provider: "truelayer",
+      providerTransactionId: cleanText(tx.transaction_id, 160),
+      normalisedProviderId: cleanText(tx.normalised_provider_transaction_id || tx.meta?.normalised_provider_transaction_id, 160),
+      providerReference: cleanText(tx.meta?.provider_reference, 200),
       importedAt: admin.firestore.FieldValue.serverTimestamp()
     };
     const auto = matchRule(rules, normalized);
-    if (auto) normalized.categoryAuto = cleanText(auto, 60);
+    if (auto) {
+      normalized.categoryAuto = cleanText(auto.category, 60);
+      if (auto.vatCode) normalized.vatCodeAuto = cleanText(auto.vatCode, 4);
+    }
     return normalized;
   }
 
@@ -192,14 +239,73 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     for (const tx of booked) writes.push({ id: transactionDocId(accountId, tx), data: normalizeTransaction(accountId, connectionId, tx, "booked", rules) });
     for (const tx of pending) writes.push({ id: transactionDocId(accountId, tx), data: normalizeTransaction(accountId, connectionId, tx, "pending", rules) });
 
+    // Which of these ids already exist? One id-only query per account, so a
+    // brand-new row gets a firstImportedAt that later syncs never touch
+    // (importedAt is rewritten every sync and doubles as "last updated").
+    const existingIds = new Set();
+    try {
+      const prefix = `${accountId}_`.replace(/[^A-Za-z0-9_-]/g, "-");
+      const idField = admin.firestore.FieldPath.documentId();
+      const idSnap = await transactionsRef(companyId)
+        .where(idField, ">=", prefix)
+        .where(idField, "<", `${prefix}`)
+        .select()
+        .get();
+      idSnap.docs.forEach((doc) => existingIds.add(doc.id));
+    } catch (error) {
+      console.warn("bank sync id scan failed:", error?.message || error);
+    }
+
     for (let i = 0; i < writes.length; i += 450) {
       const batch = db().batch();
       for (const { id, data } of writes.slice(i, i + 450)) {
+        if (!existingIds.has(id)) data.firstImportedAt = admin.firestore.FieldValue.serverTimestamp();
         batch.set(transactionsRef(companyId).doc(id), data, { merge: true });
       }
       await batch.commit();
     }
+
+    try {
+      await reconcilePendingToBooked(companyId, accountId, writes.filter((write) => write.data.status === "booked"));
+    } catch (error) {
+      console.warn("bank sync pending reconcile failed:", error?.message || error);
+    }
     return writes.length;
+  }
+
+  // Banks often re-issue a different transaction_id when a pending payment
+  // books, which would leave a ghost "pending" doc next to the booked one.
+  // TrueLayer's normalised provider id is stable across that flip, so any
+  // pending doc whose normalised id now belongs to a booked doc under another
+  // id has its enrichment carried over and is then removed.
+  async function reconcilePendingToBooked(companyId, accountId, bookedWrites) {
+    const bookedByNorm = new Map();
+    for (const write of bookedWrites) {
+      const norm = cleanText(write.data.normalisedProviderId, 160);
+      if (norm) bookedByNorm.set(norm, write.id);
+    }
+    if (!bookedByNorm.size) return 0;
+    const pendingSnap = await transactionsRef(companyId)
+      .where("accountId", "==", accountId)
+      .where("status", "==", "pending")
+      .limit(500)
+      .get();
+    let moved = 0;
+    for (const doc of pendingSnap.docs) {
+      const data = doc.data() || {};
+      const targetId = bookedByNorm.get(cleanText(data.normalisedProviderId, 160));
+      if (!targetId || targetId === doc.id) continue;
+      const targetRef = transactionsRef(companyId).doc(targetId);
+      const target = (await targetRef.get()).data() || {};
+      const carry = {};
+      for (const field of ENRICHMENT_FIELDS) {
+        if (data[field] !== undefined && target[field] === undefined) carry[field] = data[field];
+      }
+      if (Object.keys(carry).length) await targetRef.set(carry, { merge: true });
+      await doc.ref.delete();
+      moved += 1;
+    }
+    return moved;
   }
 
   // Builds the TrueLayer consent link. TrueLayer's own auth dialog contains the
@@ -618,15 +724,15 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return { ok: true, updated };
   });
 
-  // VAT treatment per transaction (Pandle tax codes: ST 20%, RR 5%, RC reverse
-  // charge, NV no VAT, EX exempt/zero). Empty = fall back to the category default.
+  // VAT treatment per transaction (NivaDesk's own codes — the connector maps
+  // them per provider at push time). Empty = fall back to the category default.
   const bankSetTransactionVatBulk = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
     const { companyId } = await requireOwner(request);
     const ids = Array.from(new Set((Array.isArray(request.data?.transactionIds) ? request.data.transactionIds : [])
       .map((id) => cleanText(id, 250)).filter(Boolean))).slice(0, 200);
     if (!ids.length) throw new HttpsError("invalid-argument", "transactionIds is required.");
     const vatCode = cleanText(request.data?.vatCode, 4).toUpperCase();
-    if (vatCode && !["ST", "RR", "RC", "NV", "EX"].includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+    if (vatCode && !BANK_VAT_CODES.includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
     const value = vatCode ? { vatCode } : { vatCode: admin.firestore.FieldValue.delete() };
     const docs = await db().getAll(...ids.map((id) => transactionsRef(companyId).doc(id)));
     const batch = db().batch();
@@ -651,7 +757,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     }
     if (data.vatCode !== undefined) {
       const vatCode = cleanText(data.vatCode, 4).toUpperCase();
-      if (vatCode && !["ST", "RR", "RC", "NV", "EX"].includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+      if (vatCode && !BANK_VAT_CODES.includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
       patch.vatCode = vatCode || admin.firestore.FieldValue.delete();
     }
     if (data.note !== undefined) {
@@ -661,9 +767,135 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     if (data.receiptNotNeeded !== undefined) {
       patch.receiptNotNeeded = data.receiptNotNeeded === true ? true : admin.firestore.FieldValue.delete();
     }
+    if (data.reviewStatus !== undefined) {
+      const reviewStatus = cleanText(data.reviewStatus, 20).toLowerCase();
+      if (reviewStatus && !BANK_REVIEW_STATUSES.includes(reviewStatus)) throw new HttpsError("invalid-argument", "Unknown review status.");
+      patch.reviewStatus = reviewStatus && reviewStatus !== "unreviewed" ? reviewStatus : admin.firestore.FieldValue.delete();
+    }
     if (!Object.keys(patch).length) throw new HttpsError("invalid-argument", "Nothing to update.");
     patch.reviewedAt = admin.firestore.FieldValue.serverTimestamp();
     await txRef.set(patch, { merge: true });
+    return { ok: true };
+  });
+
+  // Review workflow, in bulk so "Mark reviewed" / "Ready for accounting" work
+  // straight from a table selection. "unreviewed" (or empty) clears the field.
+  const bankSetReviewStatusBulk = onCall({ region: REGION, timeoutSeconds: 120 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const ids = Array.from(new Set((Array.isArray(request.data?.transactionIds) ? request.data.transactionIds : [])
+      .map((id) => cleanText(id, 250)).filter(Boolean))).slice(0, 200);
+    if (!ids.length) throw new HttpsError("invalid-argument", "transactionIds is required.");
+    const reviewStatus = cleanText(request.data?.reviewStatus, 20).toLowerCase();
+    if (reviewStatus && !BANK_REVIEW_STATUSES.includes(reviewStatus)) throw new HttpsError("invalid-argument", "Unknown review status.");
+    const value = reviewStatus && reviewStatus !== "unreviewed"
+      ? { reviewStatus, reviewedAt: admin.firestore.FieldValue.serverTimestamp() }
+      : { reviewStatus: admin.firestore.FieldValue.delete() };
+    const docs = await db().getAll(...ids.map((id) => transactionsRef(companyId).doc(id)));
+    const batch = db().batch();
+    let updated = 0;
+    docs.forEach((doc) => { if (doc.exists) { batch.set(doc.ref, value, { merge: true }); updated += 1; } });
+    if (updated) await batch.commit();
+    return { ok: true, updated };
+  });
+
+  // ---- Categories ----------------------------------------------------------
+  // The built-in names every client ships are a starting set, not the model:
+  // a workspace can add its own categories, rename them, deactivate them, give
+  // each a default VAT treatment and map it per accounting provider. Nothing
+  // is hard-coded to Pandle/QuickBooks/Xero — connectors read the mapping at
+  // push time and translate then.
+
+  const categoriesRef = (companyId) =>
+    db().collection("companies").doc(companyId).collection("bankCategories");
+  const CATEGORY_TYPES = ["expense", "income", "transfer"];
+
+  function normalizeCategoryMappings(value) {
+    const src = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const out = {};
+    if (src.pandle && typeof src.pandle === "object") {
+      out.pandle = {
+        nominalCode: cleanText(src.pandle.nominalCode, 12),
+        taxCode: cleanText(src.pandle.taxCode, 12).toUpperCase()
+      };
+    }
+    if (src.quickbooks && typeof src.quickbooks === "object") {
+      out.quickbooks = { accountId: cleanText(src.quickbooks.accountId, 40) };
+    }
+    if (src.xero && typeof src.xero === "object") {
+      out.xero = { accountCode: cleanText(src.xero.accountCode, 12) };
+    }
+    return out;
+  }
+
+  // Renaming follows through: transactions and rules that carried the old
+  // name move to the new one, otherwise the rename would orphan them.
+  async function renameCategoryEverywhere(companyId, oldName, newName) {
+    let renamed = 0;
+    for (const field of ["category", "categoryAuto"]) {
+      let cursor = null;
+      for (let page = 0; page < 10; page += 1) {
+        let queryRef = transactionsRef(companyId).where(field, "==", oldName).orderBy("__name__").limit(400);
+        if (cursor) queryRef = queryRef.startAfter(cursor);
+        const snap = await queryRef.get();
+        if (snap.empty) break;
+        const batch = db().batch();
+        snap.docs.forEach((doc) => batch.set(doc.ref, { [field]: newName }, { merge: true }));
+        await batch.commit();
+        renamed += snap.size;
+        cursor = snap.docs[snap.docs.length - 1];
+        if (snap.size < 400) break;
+      }
+    }
+    const rules = await rulesRef(companyId).where("category", "==", oldName).get();
+    for (const doc of rules.docs) await doc.ref.set({ category: newName }, { merge: true });
+    return renamed;
+  }
+
+  const bankSaveCategory = onCall({ region: REGION, timeoutSeconds: 300 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const name = cleanText(request.data?.name, 60);
+    if (!name) throw new HttpsError("invalid-argument", "name is required.");
+    const categoryId = cleanText(request.data?.categoryId, 120);
+    const rawType = cleanText(request.data?.type, 20).toLowerCase();
+    const type = CATEGORY_TYPES.includes(rawType) ? rawType : "expense";
+    const defaultVatCode = cleanText(request.data?.defaultVatCode, 4).toUpperCase();
+    if (defaultVatCode && !BANK_VAT_CODES.includes(defaultVatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+    const reportingGroup = cleanText(request.data?.reportingGroup, 60);
+    const active = request.data?.active !== false;
+    const mappings = normalizeCategoryMappings(request.data?.mappings);
+
+    // One record per name.
+    const clash = await categoriesRef(companyId).where("name", "==", name).limit(1).get();
+    if (!clash.empty && clash.docs[0].id !== categoryId) {
+      throw new HttpsError("already-exists", "A category with this name already exists.");
+    }
+
+    const ref = categoryId ? categoriesRef(companyId).doc(categoryId) : categoriesRef(companyId).doc();
+    const previousDoc = categoryId ? await ref.get() : null;
+    if (categoryId && !previousDoc.exists) throw new HttpsError("not-found", "Category not found.");
+    const previous = previousDoc ? previousDoc.data() || {} : {};
+    await ref.set({
+      name, type, defaultVatCode, reportingGroup, active, mappings,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: previous.createdAt || admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    let renamed = 0;
+    const oldName = cleanText(previous.name, 60);
+    if (oldName && oldName !== name) {
+      renamed = await renameCategoryEverywhere(companyId, oldName, name);
+    }
+    return { ok: true, categoryId: ref.id, renamed };
+  });
+
+  // Removes the record. Transactions keep their category as a plain string
+  // (it simply becomes an unmanaged name again) — deactivating via
+  // bankSaveCategory({active:false}) is the softer option.
+  const bankDeleteCategory = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const categoryId = cleanText(request.data?.categoryId, 120);
+    if (!categoryId) throw new HttpsError("invalid-argument", "categoryId is required.");
+    await categoriesRef(companyId).doc(categoryId).delete();
     return { ok: true };
   });
 
@@ -681,10 +913,14 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       let touched = 0;
       for (const doc of snap.docs) {
         const data = doc.data() || {};
-        const auto = matchRule(rules, data);
-        const currentAuto = cleanText(data.categoryAuto, 60);
-        if (auto !== currentAuto) {
-          batch.set(doc.ref, { categoryAuto: auto || admin.firestore.FieldValue.delete() }, { merge: true });
+        const hit = matchRule(rules, data);
+        const nextCategory = hit ? cleanText(hit.category, 60) : "";
+        const nextVat = hit && hit.vatCode ? cleanText(hit.vatCode, 4) : "";
+        if (nextCategory !== cleanText(data.categoryAuto, 60) || nextVat !== cleanText(data.vatCodeAuto, 4)) {
+          batch.set(doc.ref, {
+            categoryAuto: nextCategory || admin.firestore.FieldValue.delete(),
+            vatCodeAuto: nextVat || admin.firestore.FieldValue.delete()
+          }, { merge: true });
           touched += 1;
         }
       }
@@ -700,10 +936,17 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const category = cleanText(request.data?.category, 60);
     if (!keyword || keyword.length < 2) throw new HttpsError("invalid-argument", "The rule keyword must be at least 2 characters.");
     if (!category) throw new HttpsError("invalid-argument", "category is required.");
-    // One rule per keyword: saving again overwrites the category.
+    const vatCode = cleanText(request.data?.vatCode, 4).toUpperCase();
+    if (vatCode && !BANK_VAT_CODES.includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
+    const appliesTo = ["out", "in", "both"].includes(cleanText(request.data?.appliesTo, 8)) ? cleanText(request.data?.appliesTo, 8) : "out";
+    // One rule per keyword: saving again overwrites the category/VAT/scope.
     const existing = await rulesRef(companyId).where("keyword", "==", keyword).limit(1).get();
     const ruleRef = existing.empty ? rulesRef(companyId).doc() : existing.docs[0].ref;
-    await ruleRef.set({ keyword, category, createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await ruleRef.set({
+      keyword, category, appliesTo,
+      vatCode: vatCode || admin.firestore.FieldValue.delete(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
     await recomputeAutoCategories(companyId);
     return { ok: true, ruleId: ruleRef.id };
   });
@@ -1061,6 +1304,9 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankSetTransactionCategory,
     bankSetTransactionCategoryBulk,
     bankSetTransactionVatBulk,
+    bankSetReviewStatusBulk,
+    bankSaveCategory,
+    bankDeleteCategory,
     bankUpdateTransaction,
     bankSaveRule,
     bankDeleteRule,
@@ -1072,8 +1318,8 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     bankMatchWaitingReceipts,
     bankDeleteInboxReceipt,
     scheduledBankSync,
-    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts }
+    _internal: { visionOcrText, parseReceiptText, scoreReceiptCandidates, assignInboxReceipt, queueInboxReceipt, matchWaitingReceipts, normalizeTransaction, transactionDocId, reconcilePendingToBooked }
   };
 }
 
-module.exports = { createBankFeedFunctions };
+module.exports = { createBankFeedFunctions, BANK_VAT_CODES, BANK_REVIEW_STATUSES };

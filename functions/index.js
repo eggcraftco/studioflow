@@ -4955,7 +4955,7 @@ const { _internal: stripeBillingInternal, ...stripeBillingExports } = createStri
 Object.assign(exports, stripeBillingExports);
 const { cancelWorkspaceStripeSubscriptionsForDeletion } = stripeBillingInternal;
 
-// Bank spending feed (GoCardless Bank Account Data / Open Banking, read-only).
+// Bank spending feed (TrueLayer Open Banking data API, read-only).
 const { createBankFeedFunctions } = require("./bankFeed");
 const bankFeedExports = createBankFeedFunctions({
   admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner,

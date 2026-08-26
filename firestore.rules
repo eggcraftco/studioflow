@@ -525,6 +525,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Workspace-defined bank categories (name, type, default VAT, connector
+    // mappings) — owner-readable, written only through the callables.
+    match /companies/{companyId}/bankCategories/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Accounting-connector idempotency ledger — server-only.
+    match /companies/{companyId}/pandleSyncRuns/{document=**} {
+      allow read, write: if false;
+    }
+
     // Receipts waiting for their bank transaction — owner-readable, server-written.
     match /companies/{companyId}/bankReceiptInbox/{document=**} {
       allow read: if canReadBankFeed(companyId);
@@ -625,6 +637,8 @@ service cloud.firestore {
         && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
+        && collectionId != 'pandleSyncRuns'
+        && collectionId != 'bankCategories'
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
         && collectionId != 'suppliers'
@@ -655,6 +669,8 @@ service cloud.firestore {
         && collectionId != 'bankVendors'
         && collectionId != 'pandleConnection'
         && collectionId != 'pandleTokens'
+        && collectionId != 'pandleSyncRuns'
+        && collectionId != 'bankCategories'
         && collectionId != 'inventoryItems'
         && collectionId != 'purchases'
         && collectionId != 'suppliers'

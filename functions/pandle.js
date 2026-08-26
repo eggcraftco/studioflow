@@ -26,8 +26,16 @@
 //   companies/{companyId}/pandleTokens/main                 no client access
 //     accessToken, refreshToken, expiresAt (ms epoch)
 //   companies/{companyId}/bankTransactions/{id}.pandle     nested object
-//     {status: "confirmed", importedId, bankTransactionId, nominalCode,
-//      taxCode, pushedAt}
+//     {status: "matched"|"confirmed"|"error", importedId, bankTransactionId,
+//      nominalCode, taxCode, pushedAt, matchedImportedId, matchedAt,
+//      rejectedImportedIds[], attempts, lastAttemptAt, lastError, lastRequestId}
+//     importedId = Pandle's imported-bank-transaction id;
+//     bankTransactionId = the confirmed Pandle bank transaction id — together
+//     with the provider name these are the accounting-side identities the
+//     duplicate rule keys on: an id already stored is never pushed again.
+//   companies/{companyId}/pandleSyncRuns/{requestId}         no client access
+//     Idempotency ledger: {status, itemCount, attempts, startedAt, finishedAt,
+//     result, resultSample} — pressing Sync twice replays the stored result.
 //
 // Secrets: NIVADESK_PANDLE_CLIENT_ID / NIVADESK_PANDLE_CLIENT_SECRET.
 
@@ -44,6 +52,14 @@ const REGION = "europe-west2";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 30; // 3000 unconfirmed rows is far beyond any realistic queue
 const MATCH_DAY_TOLERANCE = 2; // Plaid vs TrueLayer booking dates can drift a day or two
+// Beyond the confident window a pair can still be suggested, but it must be
+// confirmed by the owner before any push touches it.
+const MATCH_DAY_TOLERANCE_MAX = 4;
+
+// NivaDesk VAT codes Pandle's chart may not carry verbatim, tried in order
+// against the connected company's live tax-code list. MX (mixed) can never be
+// confirmed as one line — it needs a split first, so it resolves to an error.
+const TAX_CODE_FALLBACKS = { ZR: ["Z", "EX"], OS: ["NV"], NR: ["NV"], IM: [] };
 
 // NivaDesk preset categories → Pandle's default UK chart of accounts.
 // Codes (not ids) so the mapping can be saved before Pandle is connected;
@@ -72,6 +88,10 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     db().collection("companies").doc(companyId).collection("pandleTokens").doc("main");
   const transactionsRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankTransactions");
+  const categoriesRef = (companyId) =>
+    db().collection("companies").doc(companyId).collection("bankCategories");
+  const syncRunsRef = (companyId) =>
+    db().collection("companies").doc(companyId).collection("pandleSyncRuns");
 
   const cleanText = (value, max = 300) => String(value || "").trim().slice(0, max);
   const round2 = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -260,15 +280,41 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     return out;
   }
 
+  // The workspace's own bank category records (bankCategories) carry the
+  // provider mappings; the connection's saved mapping list and the built-in
+  // defaults are the fallbacks. Nothing about Pandle is hard-coded into the
+  // category itself.
+  async function loadCustomCategories(companyId) {
+    const snap = await categoriesRef(companyId).limit(300).get();
+    const map = new Map();
+    snap.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (data.name) map.set(String(data.name), data);
+    });
+    return map;
+  }
+
   // vatOverride: the transaction's own VAT treatment (set in NivaDesk) wins
-  // over the category's default tax code.
-  function resolveMapping(connection, category, vatOverride = "") {
+  // over the category record's default, which wins over the mapping's default.
+  function resolveMapping(connection, category, vatOverride = "", customCategories = null) {
+    const custom = customCategories ? customCategories.get(category) : null;
+    const customPandle = custom && custom.mappings && typeof custom.mappings === "object" ? custom.mappings.pandle : null;
     const mappings = Array.isArray(connection.mappings) && connection.mappings.length ? connection.mappings : DEFAULT_MAPPINGS;
-    const mapping = mappings.find((item) => item.category === category);
-    if (!mapping || !mapping.nominalCode) return { error: "unmapped" };
-    const nominal = (connection.categories || []).find((item) => item.code === mapping.nominalCode);
-    const taxCode = cleanText(vatOverride, 4).toUpperCase() || mapping.taxCode;
-    const tax = (connection.taxCodes || []).find((item) => item.code === taxCode);
+    const mapping = mappings.find((item) => item.category === category) || null;
+    const nominalCode = cleanText(customPandle?.nominalCode, 12) || (mapping ? mapping.nominalCode : "");
+    if (!nominalCode) return { error: "unmapped" };
+    const nominal = (connection.categories || []).find((item) => item.code === nominalCode);
+    const requestedTax = cleanText(vatOverride, 4).toUpperCase()
+      || cleanText(customPandle?.taxCode, 12).toUpperCase()
+      || cleanText(custom?.defaultVatCode, 4).toUpperCase()
+      || (mapping ? mapping.taxCode : "");
+    if (requestedTax === "MX") return { error: "mixed-vat", mapping };
+    const candidates = [requestedTax, ...(TAX_CODE_FALLBACKS[requestedTax] || [])].filter(Boolean);
+    let tax = null;
+    for (const code of candidates) {
+      tax = (connection.taxCodes || []).find((item) => item.code === code) || null;
+      if (tax) break;
+    }
     if (!nominal) return { error: "nominal-missing", mapping };
     if (!tax) return { error: "tax-missing", mapping };
     return { mapping, nominal, tax };
@@ -297,33 +343,54 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     };
   }
 
-  // Greedy one-to-one assignment, best score first. Amount must match to the
-  // penny and direction must agree; the date may drift a couple of days.
+  // Greedy one-to-one assignment, best score first. The match order follows
+  // the report: a stored manual confirmation wins outright; then, within the
+  // selected account, exact amount + direction is a hard requirement, date
+  // may drift (scored down), the bank reference is a strong signal, merchant
+  // words a weak one. A pair the owner explicitly rejected is never offered
+  // again. Anything outside the confident window comes back needsConfirm.
   function matchFeeds(nivaRows, pandleRows) {
+    const pandleById = new Map(pandleRows.map((row) => [row.id, row]));
+    const usedNiva = new Set();
+    const usedPandle = new Set();
+    const matches = [];
+
+    for (const niva of nivaRows) {
+      const manual = niva.matchedImportedId ? pandleById.get(niva.matchedImportedId) : null;
+      if (manual && !manual.ignored && !usedPandle.has(manual.id)) {
+        usedNiva.add(niva.id);
+        usedPandle.add(manual.id);
+        matches.push({ niva, pandle: manual, score: 200, drift: 0, manual: true });
+      }
+    }
+
     const candidates = [];
     for (const niva of nivaRows) {
+      if (usedNiva.has(niva.id)) continue;
       const nivaAbs = round2(Math.abs(niva.amount));
       const nivaDay = dayNumber(niva.bookingDate);
       if (!nivaAbs || nivaDay === null) continue;
       const nivaWords = words(`${niva.counterparty} ${niva.description}`);
+      const reference = String(niva.providerReference || "").toLowerCase().trim();
+      const rejected = Array.isArray(niva.rejectedImportedIds) ? niva.rejectedImportedIds : [];
       for (const pandle of pandleRows) {
-        if (pandle.ignored) continue;
+        if (pandle.ignored || usedPandle.has(pandle.id)) continue;
+        if (rejected.includes(pandle.id)) continue;
         const pandleAbs = niva.amount < 0 ? pandle.moneyOut : pandle.moneyIn;
         if (round2(pandleAbs) !== nivaAbs) continue;
         const pandleDay = dayNumber(pandle.date);
         if (pandleDay === null) continue;
         const drift = Math.abs(pandleDay - nivaDay);
-        if (drift > MATCH_DAY_TOLERANCE) continue;
+        if (drift > MATCH_DAY_TOLERANCE_MAX) continue;
+        const pandleText = `${pandle.payee} ${pandle.description}`.toLowerCase();
         let overlap = 0;
-        for (const word of words(`${pandle.payee} ${pandle.description}`)) if (nivaWords.has(word)) overlap += 1;
-        const score = 100 - drift * 20 + Math.min(overlap, 3) * 5;
-        candidates.push({ niva, pandle, score, drift });
+        for (const word of words(pandleText)) if (nivaWords.has(word)) overlap += 1;
+        const referenceHit = reference.length >= 4 && pandleText.includes(reference);
+        const score = 100 - drift * 20 + Math.min(overlap, 3) * 5 + (referenceHit ? 25 : 0);
+        candidates.push({ niva, pandle, score, drift, manual: false });
       }
     }
     candidates.sort((a, b) => b.score - a.score);
-    const usedNiva = new Set();
-    const usedPandle = new Set();
-    const matches = [];
     for (const candidate of candidates) {
       if (usedNiva.has(candidate.niva.id) || usedPandle.has(candidate.pandle.id)) continue;
       usedNiva.add(candidate.niva.id);
@@ -486,6 +553,7 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     const pandleRows = (await listAll(companyId, `/companies/${connection.pandleCompanyId}/bank_accounts/${connection.bankAccountId}/imported_bank_transactions`))
       .map(normalizeImported);
 
+    const customCategories = await loadCustomCategories(companyId);
     const snap = await transactionsRef(companyId).orderBy("bookingDate", "desc").limit(3000).get();
     const nivaRows = snap.docs.map((doc) => {
       const data = doc.data() || {};
@@ -496,17 +564,25 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         bookingDate: cleanText(data.bookingDate, 10),
         description: cleanText(data.description, 300),
         counterparty: cleanText(data.counterparty, 160),
+        providerReference: cleanText(data.providerReference, 200),
         category: cleanText(data.category, 60) || cleanText(data.categoryAuto, 60),
-        vatCode: cleanText(data.vatCode, 4),
+        vatCode: cleanText(data.vatCode, 4) || cleanText(data.vatCodeAuto, 4),
         hasReceipt: Boolean(data.receiptPath),
         linkedOrderLabel: cleanText(data.linkedOrderLabel, 120),
-        pandleStatus: cleanText(data.pandle?.status, 20)
+        pandleStatus: cleanText(data.pandle?.status, 20),
+        // An ignored transaction is out of the accounting flow entirely.
+        reviewStatusIgnored: cleanText(data.reviewStatus, 20) === "ignored",
+        matchedImportedId: cleanText(data.pandle?.matchedImportedId, 40),
+        rejectedImportedIds: Array.isArray(data.pandle?.rejectedImportedIds) ? data.pandle.rejectedImportedIds.map((id) => cleanText(id, 40)) : []
       };
-    }).filter((row) => row.pandleStatus !== "confirmed");
+    }).filter((row) => row.pandleStatus !== "confirmed" && row.reviewStatusIgnored !== true);
 
     const { matches } = matchFeeds(nivaRows, pandleRows);
-    const items = matches.map(({ niva, pandle, score, drift }) => {
-      const resolved = niva.category ? resolveMapping(connection, niva.category, niva.vatCode) : { error: "uncategorised" };
+    const items = matches.map(({ niva, pandle, score, drift, manual }) => {
+      const resolved = niva.category ? resolveMapping(connection, niva.category, niva.vatCode, customCategories) : { error: "uncategorised" };
+      // A pair is pushed without asking only when the owner confirmed it or
+      // the automatic score is clearly safe; everything else needs Confirm.
+      const needsConfirm = !manual && score < 80;
       return {
         transactionId: niva.id,
         importedId: pandle.id,
@@ -522,8 +598,11 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         hasReceipt: niva.hasReceipt,
         linkedOrderLabel: niva.linkedOrderLabel,
         score,
-        ready: !resolved.error,
-        problem: resolved.error || "",
+        confidence: manual ? 100 : Math.max(0, Math.min(99, Math.round(score))),
+        manual: Boolean(manual),
+        needsConfirm,
+        ready: !resolved.error && !needsConfirm,
+        problem: resolved.error || (needsConfirm ? "needs-confirm" : ""),
         nominalCode: resolved.nominal ? resolved.nominal.code : (resolved.mapping?.nominalCode || ""),
         nominalName: resolved.nominal ? resolved.nominal.name : "",
         taxCode: resolved.tax ? resolved.tax.code : (resolved.mapping?.taxCode || "")
@@ -535,12 +614,16 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       nivaCandidates: nivaRows.length,
       matched: items.length,
       ready: items.filter((item) => item.ready).length,
+      needsConfirm: items.filter((item) => item.needsConfirm).length,
       items
     };
   });
 
   // Confirms the chosen matches in Pandle. Each item is re-validated against
   // the live mapping; a failure on one row does not stop the others.
+  // Idempotent: pass a client-generated requestId and a repeat call replays
+  // the stored result instead of confirming anything twice (the per-item
+  // pandle.status === "confirmed" guard is the second layer).
   const pandlePush = onCall({ region: REGION, secrets: [PANDLE_CLIENT_ID, PANDLE_CLIENT_SECRET], timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
     const { companyId } = await requireOwner(request);
     const connection = await loadConnection(companyId);
@@ -551,6 +634,53 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       .slice(0, 200);
     if (!items.length) throw new HttpsError("invalid-argument", "items is required.");
 
+    const requestId = cleanText(request.data?.requestId, 80).replace(/[^A-Za-z0-9_-]/g, "");
+    let runRef = null;
+    if (requestId) {
+      runRef = syncRunsRef(companyId).doc(requestId);
+      const previousRun = await db().runTransaction(async (txn) => {
+        const doc = await txn.get(runRef);
+        if (doc.exists) return doc.data() || {};
+        txn.set(runRef, {
+          status: "running",
+          itemCount: items.length,
+          attempts: 1,
+          startedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return null;
+      });
+      if (previousRun) {
+        if (previousRun.status === "done" && previousRun.result) {
+          return { ...previousRun.result, results: previousRun.resultSample || [], requestId, replayed: true };
+        }
+        const startedMs = previousRun.startedAt?.toMillis ? previousRun.startedAt.toMillis() : 0;
+        if (previousRun.status === "running" && Date.now() - startedMs < 9 * 60 * 1000) {
+          throw new HttpsError("already-exists", "A Pandle sync with this request id is already running.");
+        }
+        // An earlier attempt died mid-run — safe to retry (confirmed rows skip).
+        await runRef.set({
+          status: "running",
+          attempts: admin.firestore.FieldValue.increment(1),
+          startedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+    }
+
+    const customCategories = await loadCustomCategories(companyId);
+    // A per-row failure flips the review status to sync_error and keeps the
+    // attempt trail on the doc; local enrichment is never lost, the push can
+    // simply be tried again.
+    const stampFailure = (ref, message) => ref.set({
+      reviewStatus: "sync_error",
+      pandle: {
+        status: "error",
+        lastError: cleanText(message, 300),
+        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastRequestId: requestId || "",
+        attempts: admin.firestore.FieldValue.increment(1)
+      }
+    }, { merge: true }).catch((error) => console.warn("pandlePush failure stamp failed:", error?.message || error));
+
     const base = `/companies/${connection.pandleCompanyId}/bank_accounts/${connection.bankAccountId}/imported_bank_transactions`;
     const results = [];
     for (const item of items) {
@@ -558,9 +688,18 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
       const tx = txDoc.data();
       if (!tx) { results.push({ ...item, ok: false, error: "Transaction not found." }); continue; }
       if (tx.pandle?.status === "confirmed") { results.push({ ...item, ok: true, skipped: true }); continue; }
+      if (cleanText(tx.reviewStatus, 20) === "ignored") { results.push({ ...item, ok: false, error: "This transaction is marked Ignored." }); continue; }
       const category = cleanText(tx.category, 60) || cleanText(tx.categoryAuto, 60);
-      const resolved = category ? resolveMapping(connection, category, cleanText(tx.vatCode, 4)) : { error: "uncategorised" };
-      if (resolved.error) { results.push({ ...item, ok: false, error: `Category "${category || "—"}" is not mapped to a Pandle category.` }); continue; }
+      const vatOverride = cleanText(tx.vatCode, 4) || cleanText(tx.vatCodeAuto, 4);
+      const resolved = category ? resolveMapping(connection, category, vatOverride, customCategories) : { error: "uncategorised" };
+      if (resolved.error) {
+        const message = resolved.error === "mixed-vat"
+          ? "Mixed VAT cannot be confirmed as one line — split the transaction first."
+          : `Category "${category || "—"}" is not mapped to a Pandle category.`;
+        await stampFailure(txDoc.ref, message);
+        results.push({ ...item, ok: false, error: message });
+        continue;
+      }
 
       // Re-read the Pandle row so the amount and direction come from Pandle
       // itself, never from our side of the match.
@@ -569,12 +708,34 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         const json = await api(companyId, "GET", `${base}/${item.importedId}`);
         imported = normalizeImported(flatten(json?.data));
       } catch (error) {
+        await stampFailure(txDoc.ref, error.message || "Pandle row not found.");
         results.push({ ...item, ok: false, error: error.message || "Pandle row not found." });
         continue;
       }
       const isPayment = imported.moneyOut > 0;
       const total = round2(isPayment ? imported.moneyOut : imported.moneyIn);
-      if (!total) { results.push({ ...item, ok: false, error: "Pandle row has no amount." }); continue; }
+      if (!total) {
+        await stampFailure(txDoc.ref, "Pandle row has no amount.");
+        results.push({ ...item, ok: false, error: "Pandle row has no amount." });
+        continue;
+      }
+
+      // Hard server-side guard for "match the existing transaction, never
+      // recreate": whatever pair the client sent must still look like the same
+      // real-world payment — same direction, same amount to the penny, dates
+      // within tolerance — unless the owner confirmed this exact pair by hand.
+      const manualMatch = cleanText(tx.pandle?.matchedImportedId, 40) === item.importedId;
+      const txAbs = round2(Math.abs(Number(tx.amount) || 0));
+      const txIsPayment = Number(tx.amount) < 0;
+      const txDay = dayNumber(tx.bookingDate);
+      const pandleDay = dayNumber(imported.date);
+      const drift = txDay !== null && pandleDay !== null ? Math.abs(txDay - pandleDay) : 99;
+      if (!manualMatch && (txIsPayment !== isPayment || total !== txAbs || drift > MATCH_DAY_TOLERANCE_MAX)) {
+        const message = "The Pandle row no longer matches this transaction — re-run the preview and confirm the match.";
+        await stampFailure(txDoc.ref, message);
+        results.push({ ...item, ok: false, error: message });
+        continue;
+      }
       const rate = Number(resolved.tax.rate) || 0;
       const tax = rate > 0 ? round2(total - total / (1 + rate)) : 0;
       const net = round2(total - tax);
@@ -602,17 +763,23 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         const created = Array.isArray(json?.data) ? json.data[0] : json?.data;
         const bankTransactionId = cleanText(created?.id, 40);
         await txDoc.ref.set({
+          reviewStatus: "confirmed",
           pandle: {
             status: "confirmed",
             importedId: item.importedId,
             bankTransactionId,
             nominalCode: resolved.nominal.code,
             taxCode: resolved.tax.code,
-            pushedAt: admin.firestore.FieldValue.serverTimestamp()
+            pushedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastRequestId: requestId || "",
+            attempts: admin.firestore.FieldValue.increment(1),
+            lastError: admin.firestore.FieldValue.delete()
           }
         }, { merge: true });
         results.push({ ...item, ok: true, bankTransactionId });
       } catch (error) {
+        await stampFailure(txDoc.ref, error.message || "Pandle rejected the confirmation.");
         results.push({ ...item, ok: false, error: error.message || "Pandle rejected the confirmation." });
       }
     }
@@ -625,7 +792,65 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     }
-    return { confirmed, failed: results.filter((row) => !row.ok).length, results };
+    const summary = { confirmed, failed: results.filter((row) => !row.ok).length };
+    if (runRef) {
+      await runRef.set({
+        status: "done",
+        finishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        result: summary,
+        resultSample: results.slice(0, 50)
+      }, { merge: true }).catch((error) => console.warn("pandlePush run stamp failed:", error?.message || error));
+    }
+    return { ...summary, results, requestId };
+  });
+
+  // The owner's answer to "Possible Pandle match — is this the same payment?".
+  // Confirm stores the pair so every later preview and push honours it;
+  // reject remembers the refusal so the same suggestion never comes back.
+  const pandleConfirmMatch = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 260);
+    const importedId = cleanText(request.data?.importedId, 40);
+    if (!transactionId || !importedId) throw new HttpsError("invalid-argument", "transactionId and importedId are required.");
+    const ref = transactionsRef(companyId).doc(transactionId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    if ((doc.data() || {}).pandle?.status === "confirmed") {
+      throw new HttpsError("failed-precondition", "This transaction is already confirmed in Pandle.");
+    }
+    await ref.set({
+      pandle: {
+        status: "matched",
+        matchedImportedId: importedId,
+        matchedAt: admin.firestore.FieldValue.serverTimestamp()
+      }
+    }, { merge: true });
+    return { ok: true };
+  });
+
+  const pandleRejectMatch = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+    const { companyId } = await requireOwner(request);
+    const transactionId = cleanText(request.data?.transactionId, 260);
+    const importedId = cleanText(request.data?.importedId, 40);
+    if (!transactionId || !importedId) throw new HttpsError("invalid-argument", "transactionId and importedId are required.");
+    const ref = transactionsRef(companyId).doc(transactionId);
+    const doc = await ref.get();
+    if (!doc.exists) throw new HttpsError("not-found", "Transaction not found.");
+    const pandle = (doc.data() || {}).pandle || {};
+    if (pandle.status === "confirmed") {
+      throw new HttpsError("failed-precondition", "This transaction is already confirmed in Pandle.");
+    }
+    const patch = {
+      pandle: {
+        rejectedImportedIds: admin.firestore.FieldValue.arrayUnion(importedId)
+      }
+    };
+    if (cleanText(pandle.matchedImportedId, 40) === importedId) {
+      patch.pandle.matchedImportedId = admin.firestore.FieldValue.delete();
+      if (pandle.status === "matched") patch.pandle.status = admin.firestore.FieldValue.delete();
+    }
+    await ref.set(patch, { merge: true });
+    return { ok: true };
   });
 
   return {
@@ -636,7 +861,9 @@ function createPandleFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner })
     pandleSelectBankAccount,
     pandleSaveMappings,
     pandlePreview,
-    pandlePush
+    pandlePush,
+    pandleConfirmMatch,
+    pandleRejectMatch
   };
 }
 

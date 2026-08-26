@@ -39,13 +39,17 @@ type PreviewItem = {
   category: string;
   hasReceipt: boolean;
   linkedOrderLabel: string;
+  score: number;
+  confidence: number;
+  manual: boolean;
+  needsConfirm: boolean;
   ready: boolean;
   problem: string;
   nominalCode: string;
   nominalName: string;
   taxCode: string;
 };
-type Preview = { pandleQueue: number; nivaCandidates: number; matched: number; ready: number; items: PreviewItem[] };
+type Preview = { pandleQueue: number; nivaCandidates: number; matched: number; ready: number; needsConfirm: number; items: PreviewItem[] };
 type PushResult = { confirmed: number; failed: number; results: Array<{ transactionId: string; ok: boolean; error?: string }> };
 
 // Mirrors functions/pandle.js DEFAULT_MAPPINGS (Pandle's default UK chart).
@@ -191,7 +195,9 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
     if (!items.length) return;
     if (!window.confirm(`${t("Confirm these transactions in Pandle?")} (${items.length})`)) return;
     void run("push", async () => {
-      const result = await call<PushResult>("pandlePush", { items });
+      // Idempotency: the same request id can be retried without confirming
+      // anything twice — the server replays the stored result.
+      const result = await call<PushResult>("pandlePush", { items, requestId: crypto.randomUUID() });
       setPushResult(result);
       const okIds = new Set(result.results.filter(row => row.ok).map(row => row.transactionId));
       setPreview(prev => prev ? { ...prev, items: prev.items.filter(item => !okIds.has(item.transactionId)), matched: prev.matched - okIds.size, ready: prev.ready - okIds.size } : prev);
@@ -209,12 +215,30 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
     return next;
   });
 
+  // The owner's verdict on an uncertain pair. Both answers are remembered on
+  // the transaction, then the preview is rebuilt against the stored decision.
+  const confirmMatch = (item: PreviewItem) => run(`confirm-${item.transactionId}`, async () => {
+    await call("pandleConfirmMatch", { transactionId: item.transactionId, importedId: item.importedId });
+    const result = await call<Preview>("pandlePreview");
+    setPreview(result);
+    setSelected(prev => new Set([...prev, item.transactionId]));
+    setStatus(t("Match confirmed."));
+  });
+  const rejectMatch = (item: PreviewItem) => run(`confirm-${item.transactionId}`, async () => {
+    await call("pandleRejectMatch", { transactionId: item.transactionId, importedId: item.importedId });
+    const result = await call<Preview>("pandlePreview");
+    setPreview(result);
+    setStatus(t("Noted — that pair won't be suggested again."));
+  });
+
   const problemLabel = (problem: string) => {
     switch (problem) {
       case "uncategorised": return t("No category in NivaDesk");
       case "unmapped": return t("Category not mapped");
       case "nominal-missing": return t("Pandle category code not found");
       case "tax-missing": return t("Tax code not found");
+      case "mixed-vat": return t("Mixed VAT needs a split first");
+      case "needs-confirm": return t("Possible match — confirm it");
       default: return problem;
     }
   };
@@ -322,7 +346,7 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
             </button>
             {preview ? (
               <span style={{ fontSize: 12, opacity: 0.7 }}>
-                {preview.pandleQueue} {t("waiting in Pandle")} · {preview.matched} {t("matched")} · {preview.ready} {t("ready")}
+                {preview.pandleQueue} {t("waiting in Pandle")} · {preview.matched} {t("matched")} · {preview.ready} {t("ready")}{preview.needsConfirm ? ` · ${preview.needsConfirm} ${t("to confirm")}` : ""}
               </span>
             ) : null}
             <span style={{ flex: 1 }} />
@@ -383,9 +407,17 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
                         </td>
                         <td style={tdCell}>{item.category ? t(item.category) : <span style={{ opacity: 0.5 }}>—</span>}</td>
                         <td style={tdCell}>
+                          <span title={`${t("Match confidence")}: ${item.confidence}%`} style={{ marginRight: 6, fontSize: 10, fontWeight: 800, borderRadius: 999, padding: "1px 7px", background: item.manual ? "rgba(37,99,235,0.14)" : item.confidence >= 80 ? "rgba(22,163,74,0.12)" : "rgba(245,158,11,0.16)", color: item.manual ? "#2563eb" : item.confidence >= 80 ? "#16a34a" : "#b45309" }}>
+                            {item.manual ? t("Confirmed by you") : `${item.confidence}%`}
+                          </span>
                           {item.ready ? (
                             <span style={{ whiteSpace: "nowrap" }}>
                               <strong>{item.nominalCode}</strong> {item.nominalName} · <strong>{item.taxCode}</strong>
+                            </span>
+                          ) : item.needsConfirm ? (
+                            <span style={{ whiteSpace: "nowrap" }}>
+                              <button type="button" style={{ ...btnSm, padding: "2px 9px", fontSize: 11, color: "#16a34a", borderColor: "rgba(22,163,74,0.4)" }} disabled={busy === `confirm-${item.transactionId}`} onClick={() => void confirmMatch(item)}>✓ {t("Confirm match")}</button>{" "}
+                              <button type="button" style={{ ...btnSm, padding: "2px 9px", fontSize: 11, opacity: 0.75 }} disabled={busy === `confirm-${item.transactionId}`} onClick={() => void rejectMatch(item)}>{t("Not the same")}</button>
                             </span>
                           ) : (
                             <span style={{ color: "#b45309", fontWeight: 700 }}>{problemLabel(item.problem)}</span>

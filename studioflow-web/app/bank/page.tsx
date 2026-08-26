@@ -4,7 +4,7 @@
 // Owner-only: connect a business bank account, see the live transaction feed.
 // Read-only account information — the app can never move money.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
@@ -48,9 +48,20 @@ type BankTransaction = {
   categoryAuto: string;
   txType: string;
   vatCode: string;
+  vatCodeAuto: string;
   note: string;
   receiptNotNeeded: boolean;
   pandleStatus: string;
+  // Permanent identities + the read-only bank layer shown in the drawer.
+  accountId: string;
+  provider: string;
+  providerTransactionId: string;
+  providerReference: string;
+  reviewStatus: string;
+  pandleBankTransactionId: string;
+  pandleLastError: string;
+  firstImportedAt: Date | null;
+  importedAt: Date | null;
 };
 
 // TrueLayer transaction_category → coloured badge (short label, t()'d at
@@ -69,25 +80,66 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   CREDIT: { label: "Incoming", color: "#16a34a", translate: true },
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
-type BankRule = { id: string; keyword: string; category: string };
+type BankRule = { id: string; keyword: string; category: string; vatCode: string; appliesTo: "out" | "in" | "both" };
 // A receipt uploaded before its payment reached the bank feed; the server
 // re-scores it after every sync and attaches it when a confident match lands.
 type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
 
-// Pandle's UK tax codes; the label is what the owner sees on a transaction.
+// NivaDesk's own VAT treatments — the accounting connector translates them
+// per provider at push time, nothing here is a Pandle code. Zero-rated and
+// exempt are different VAT-return boxes, so they are separate on purpose.
 const VAT_CODES: Array<{ code: string; label: string }> = [
-  { code: "ST", label: "VAT 20%" },
-  { code: "RR", label: "VAT 5%" },
+  { code: "ST", label: "Standard rate (20%)" },
+  { code: "RR", label: "Reduced rate (5%)" },
+  { code: "ZR", label: "Zero-rated (0%)" },
+  { code: "EX", label: "Exempt" },
+  { code: "OS", label: "Outside scope" },
+  { code: "NR", label: "No VAT receipt" },
   { code: "RC", label: "Reverse charge" },
-  { code: "NV", label: "No VAT" },
-  { code: "EX", label: "Exempt / 0%" }
+  { code: "IM", label: "Import VAT" },
+  { code: "MX", label: "Mixed / split VAT" },
+  { code: "NV", label: "No VAT" }
 ];
 const vatLabel = (code: string) => VAT_CODES.find(item => item.code === code)?.label || code;
+
+// Where a transaction stands on its way to the accountant. The colour keys
+// the chip in the table and the drawer; "unreviewed" is the absent default.
+const REVIEW_STATUSES: Array<{ code: string; label: string; color: string }> = [
+  { code: "unreviewed", label: "Unreviewed", color: "#6b7280" },
+  { code: "needs_info", label: "Needs information", color: "#b45309" },
+  { code: "ready", label: "Ready for accounting", color: "#2563eb" },
+  { code: "synced", label: "Synced", color: "#0e7a55" },
+  { code: "confirmed", label: "Confirmed in accounting", color: "#16a34a" },
+  { code: "sync_error", label: "Sync error", color: "#dc2626" },
+  { code: "ignored", label: "Ignored", color: "#9ca3af" }
+];
+const reviewStatusMeta = (code: string) => REVIEW_STATUSES.find(item => item.code === code) || REVIEW_STATUSES[0];
+// The field is enrichment; a confirmed Pandle push implies "confirmed" even
+// on rows saved before review statuses existed.
+function effectiveReviewStatus(tx: { reviewStatus: string; pandleStatus: string }) {
+  if (tx.reviewStatus) return tx.reviewStatus;
+  return tx.pandleStatus === "confirmed" ? "confirmed" : "unreviewed";
+}
 
 const BANK_CATEGORIES = [
   "Materials", "Equipment", "Shipping", "Software", "Subscriptions", "Fees",
   "Marketing", "Travel", "Utilities", "Rent", "Staff", "Tax", "Other"
 ] as const;
+
+// A workspace-defined category record: rename/deactivate/default VAT +
+// per-provider mapping. Server-written (bankSaveCategory), owner-readable.
+type BankCategoryRecord = {
+  id: string;
+  name: string;
+  type: "expense" | "income" | "transfer";
+  defaultVatCode: string;
+  reportingGroup: string;
+  active: boolean;
+  pandleNominalCode: string;
+  pandleTaxCode: string;
+  quickbooksAccountId: string;
+  xeroAccountCode: string;
+};
 
 // Deterministic, readable chip colour per category name.
 const CATEGORY_PALETTE = ["#2563eb", "#0e7a55", "#b45309", "#7c3aed", "#be185d", "#0f766e", "#b91c1c", "#4d7c0f", "#a21caf", "#1d4ed8", "#92400e", "#6b7280"];
@@ -142,6 +194,7 @@ function BankPageContent() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [connections, setConnections] = useState<BankConnection[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
+  const [customCategories, setCustomCategories] = useState<BankCategoryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<"week" | "month" | "year">("month");
   // Week view: Monday of the selected week (local time).
@@ -181,6 +234,18 @@ function BankPageContent() {
   const [newRuleOpen, setNewRuleOpen] = useState(false);
   const [newRuleKeyword, setNewRuleKeyword] = useState("");
   const [newRuleCategory, setNewRuleCategory] = useState("");
+  const [newRuleVat, setNewRuleVat] = useState("");
+  const [newRuleAppliesTo, setNewRuleAppliesTo] = useState<BankRule["appliesTo"]>("out");
+  // Category manager (Rules tab): one shared form for add + edit.
+  const [catFormOpen, setCatFormOpen] = useState(false);
+  const [catFormId, setCatFormId] = useState("");
+  const [catFormName, setCatFormName] = useState("");
+  const [catFormType, setCatFormType] = useState<BankCategoryRecord["type"]>("expense");
+  const [catFormVat, setCatFormVat] = useState("");
+  const [catFormPandleNominal, setCatFormPandleNominal] = useState("");
+  const [catFormXero, setCatFormXero] = useState("");
+  const [catFormQuickbooks, setCatFormQuickbooks] = useState("");
+  const [catFormActive, setCatFormActive] = useState(true);
   // Bulk review: selected spending rows + the category to apply to all of them.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
@@ -189,6 +254,7 @@ function BankPageContent() {
   // Category → default VAT code (from the Pandle mapping, falls back to defaults).
   const [categoryTax, setCategoryTax] = useState<Record<string, string>>({});
   const [bulkVat, setBulkVat] = useState("");
+  const [bulkReview, setBulkReview] = useState("");
   const [vatPickerTxId, setVatPickerTxId] = useState<string | null>(null);
   // Banking tabs + the transaction drawer.
   type BankTab = "overview" | "transactions" | "recurring" | "receipts" | "rules";
@@ -200,6 +266,7 @@ function BankPageContent() {
   const [drawerTxId, setDrawerTxId] = useState<string | null>(null);
   const [drawerCategory, setDrawerCategory] = useState("");
   const [drawerVat, setDrawerVat] = useState("");
+  const [drawerReview, setDrawerReview] = useState("unreviewed");
   const [drawerNote, setDrawerNote] = useState("");
   const [drawerOrderId, setDrawerOrderId] = useState("");
   const [drawerRuleKeyword, setDrawerRuleKeyword] = useState("");
@@ -284,19 +351,57 @@ function BankPageContent() {
             categoryAuto: String(data.categoryAuto || ""),
             txType: String(data.txType || ""),
             vatCode: String(data.vatCode || ""),
+            vatCodeAuto: String(data.vatCodeAuto || ""),
             note: String(data.note || ""),
             receiptNotNeeded: data.receiptNotNeeded === true,
-            pandleStatus: String((data.pandle as { status?: string } | undefined)?.status || "")
+            pandleStatus: String((data.pandle as { status?: string } | undefined)?.status || ""),
+            accountId: String(data.accountId || ""),
+            provider: String(data.provider || ""),
+            providerTransactionId: String(data.providerTransactionId || ""),
+            providerReference: String(data.providerReference || ""),
+            reviewStatus: String(data.reviewStatus || ""),
+            pandleBankTransactionId: String((data.pandle as { bankTransactionId?: string } | undefined)?.bankTransactionId || ""),
+            pandleLastError: String((data.pandle as { lastError?: string } | undefined)?.lastError || ""),
+            firstImportedAt: toDate(data.firstImportedAt),
+            importedAt: toDate(data.importedAt)
           };
         }));
       }
+    );
+    const unsubCategories = onSnapshot(
+      collection(db, "companies", companyId, "bankCategories"),
+      snap => {
+        setCustomCategories(snap.docs.map(docSnap => {
+          const data = docSnap.data() as Record<string, unknown>;
+          const mappings = (data.mappings || {}) as { pandle?: { nominalCode?: string; taxCode?: string }; quickbooks?: { accountId?: string }; xero?: { accountCode?: string } };
+          return {
+            id: docSnap.id,
+            name: String(data.name || ""),
+            type: (["expense", "income", "transfer"].includes(String(data.type)) ? String(data.type) : "expense") as BankCategoryRecord["type"],
+            defaultVatCode: String(data.defaultVatCode || ""),
+            reportingGroup: String(data.reportingGroup || ""),
+            active: data.active !== false,
+            pandleNominalCode: String(mappings.pandle?.nominalCode || ""),
+            pandleTaxCode: String(mappings.pandle?.taxCode || ""),
+            quickbooksAccountId: String(mappings.quickbooks?.accountId || ""),
+            xeroAccountCode: String(mappings.xero?.accountCode || "")
+          };
+        }).filter(item => item.name).sort((a, b) => a.name.localeCompare(b.name)));
+      },
+      () => setCustomCategories([])
     );
     const unsubRules = onSnapshot(
       collection(db, "companies", companyId, "bankRules"),
       snap => {
         setRules(snap.docs.map(doc => {
           const data = doc.data() as Record<string, unknown>;
-          return { id: doc.id, keyword: String(data.keyword || ""), category: String(data.category || "") };
+          return {
+            id: doc.id,
+            keyword: String(data.keyword || ""),
+            category: String(data.category || ""),
+            vatCode: String(data.vatCode || ""),
+            appliesTo: (["out", "in", "both"].includes(String(data.appliesTo)) ? String(data.appliesTo) : "out") as BankRule["appliesTo"]
+          };
         }));
       },
       () => setRules([])
@@ -344,7 +449,7 @@ function BankPageContent() {
       const source = mappings.length ? mappings : PANDLE_DEFAULT_MAPPINGS;
       setCategoryTax(Object.fromEntries(source.map(item => [item.category, item.taxCode])));
     }, () => setCategoryTax(Object.fromEntries(PANDLE_DEFAULT_MAPPINGS.map(item => [item.category, item.taxCode]))));
-    return () => { unsubConnections(); unsubTransactions(); unsubRules(); unsubVendors(); unsubWaiting(); unsubPandle(); };
+    return () => { unsubConnections(); unsubTransactions(); unsubCategories(); unsubRules(); unsubVendors(); unsubWaiting(); unsubPandle(); };
   }, [companyId, canViewBank]);
 
   const call = useCallback(async <T,>(name: string, payload: Record<string, unknown>): Promise<T> => {
@@ -646,7 +751,23 @@ function BankPageContent() {
     }
   }
 
-  const effectiveVat = (tx: BankTransaction) => tx.vatCode || categoryTax[effectiveCategory(tx)] || "";
+  async function applyBulkReview(reviewStatus: string) {
+    if (selectedIds.size === 0) return;
+    setBusy("review");
+    setError(null);
+    try {
+      const result = await call<{ updated: number }>("bankSetReviewStatusBulk", { transactionIds: Array.from(selectedIds), reviewStatus });
+      setStatus(`${result.updated} ${t("transactions updated")}`);
+      setSelectedIds(new Set());
+      setBulkReview("");
+    } catch (bulkError) {
+      setError(bulkError instanceof Error ? bulkError.message : "Could not update the transactions.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const effectiveVat = (tx: BankTransaction) => tx.vatCode || tx.vatCodeAuto || categoryTax[effectiveCategory(tx)] || "";
   async function applyVat(ids: string[], vatCode: string) {
     if (ids.length === 0) return;
     setBusy("vat");
@@ -754,6 +875,15 @@ function BankPageContent() {
     rules.forEach(rule => { if (rule.category) set.add(rule.category); });
     return Array.from(set);
   }, [transactions, rules]);
+  // Every pickable category: presets + the workspace's own active records +
+  // whatever the feed already uses. A deactivated record drops out of the
+  // pickers but keeps colouring existing rows.
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>(BANK_CATEGORIES);
+    customCategories.forEach(item => { if (item.active) set.add(item.name); else set.delete(item.name); });
+    categoriesInUse.forEach(name => set.add(name));
+    return Array.from(set);
+  }, [customCategories, categoriesInUse]);
 
   const categoryBreakdown = useMemo(() => {
     const totals = new Map<string, number>();
@@ -778,7 +908,8 @@ function BankPageContent() {
   const attention = useMemo(() => {
     const spending = visibleTransactions.filter(item => item.amount < 0);
     const uncategorised = spending.filter(item => !effectiveCategory(item));
-    const noReceipt = spending.filter(item => !item.receiptPath);
+    // "Marked no receipt needed" is a resolved state, not an open action.
+    const noReceipt = spending.filter(item => !item.receiptPath && !item.receiptNotNeeded);
     const priceChanged = recurring.filter(item => item.active && item.priceChange);
     const cancelled = recurring.filter(item => !item.active);
     return {
@@ -909,6 +1040,7 @@ function BankPageContent() {
     setDrawerTxId(tx.id);
     setDrawerCategory(tx.category || tx.categoryAuto || "");
     setDrawerVat(tx.vatCode);
+    setDrawerReview(effectiveReviewStatus(tx));
     setDrawerNote(tx.note);
     setDrawerOrderId(tx.linkedOrderId);
     setDrawerRuleKeyword(suggestions.get(tx.id)?.keyword || suggestRuleKeyword(tx));
@@ -925,14 +1057,14 @@ function BankPageContent() {
     setBusy("drawer");
     setError(null);
     try {
-      await call("bankUpdateTransaction", { transactionId: drawerTx.id, category: drawerCategory, vatCode: drawerVat, note: drawerNote });
+      await call("bankUpdateTransaction", { transactionId: drawerTx.id, category: drawerCategory, vatCode: drawerVat, note: drawerNote, reviewStatus: drawerReview });
       if (drawerOrderId !== drawerTx.linkedOrderId) {
         if (drawerTx.linkedOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerTx.linkedOrderId });
         if (drawerOrderId) await call("bankLinkTransactionToOrder", { transactionId: drawerTx.id, orderId: drawerOrderId });
       }
       const keyword = drawerRuleKeyword.trim().toLowerCase();
       if (createRule && drawerCategory && keyword.length >= 2) {
-        await call("bankSaveRule", { keyword, category: drawerCategory });
+        await call("bankSaveRule", { keyword, category: drawerCategory, vatCode: drawerVat, appliesTo: "out" });
         setStatus(t("Category saved and rule created."));
       } else {
         setStatus(t("Transaction saved."));
@@ -995,12 +1127,61 @@ function BankPageContent() {
       setBusy(null);
     }
   }
+  function openCategoryForm(record: BankCategoryRecord | null) {
+    setCatFormOpen(true);
+    setCatFormId(record?.id || "");
+    setCatFormName(record?.name || "");
+    setCatFormType(record?.type || "expense");
+    setCatFormVat(record?.defaultVatCode || "");
+    setCatFormPandleNominal(record?.pandleNominalCode || "");
+    setCatFormXero(record?.xeroAccountCode || "");
+    setCatFormQuickbooks(record?.quickbooksAccountId || "");
+    setCatFormActive(record ? record.active : true);
+  }
+  async function saveCategoryRecord() {
+    const name = catFormName.trim();
+    if (!name) return;
+    setBusy("category-form");
+    setError(null);
+    try {
+      const result = await call<{ renamed: number }>("bankSaveCategory", {
+        categoryId: catFormId,
+        name,
+        type: catFormType,
+        defaultVatCode: catFormVat,
+        active: catFormActive,
+        mappings: {
+          pandle: { nominalCode: catFormPandleNominal.trim(), taxCode: "" },
+          quickbooks: { accountId: catFormQuickbooks.trim() },
+          xero: { accountCode: catFormXero.trim() }
+        }
+      });
+      setStatus(result.renamed > 0 ? `${t("Category saved.")} ${result.renamed} ${t("transactions updated")}` : t("Category saved."));
+      setCatFormOpen(false);
+    } catch (categoryError) {
+      setError(categoryError instanceof Error ? categoryError.message : "Could not save the category.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function deleteCategoryRecord(record: BankCategoryRecord) {
+    if (!window.confirm(`${t("Delete this category record?")} (${record.name})`)) return;
+    setBusy(`category-${record.id}`);
+    try {
+      await call("bankDeleteCategory", { categoryId: record.id });
+      setStatus(t("Category deleted."));
+    } catch (categoryError) {
+      setError(categoryError instanceof Error ? categoryError.message : "Could not delete the category.");
+    } finally {
+      setBusy(null);
+    }
+  }
   async function createRuleFromForm() {
     const keyword = newRuleKeyword.trim().toLowerCase();
     if (keyword.length < 2 || !newRuleCategory) return;
     setBusy("rule-new");
     try {
-      await call("bankSaveRule", { keyword, category: newRuleCategory });
+      await call("bankSaveRule", { keyword, category: newRuleCategory, vatCode: newRuleVat, appliesTo: newRuleAppliesTo });
       setStatus(t("Rule created."));
       setNewRuleKeyword(""); setNewRuleCategory(""); setNewRuleOpen(false);
     } catch (ruleError) {
@@ -1627,7 +1808,7 @@ function BankPageContent() {
                       <strong style={{ fontSize: 12.5 }}>{selectedIds.size} {t("selected")}</strong>
                       <select value={bulkCategory} onChange={event => setBulkCategory(event.target.value)} style={{ ...pickerInput, flex: "0 1 220px" }} aria-label={t("Set category")}>
                         <option value="">{t("Set category")}…</option>
-                        {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                        {categoryOptions.map(name => <option key={name} value={name}>{t(name)}</option>)}
                       </select>
                       <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "bulk" || !bulkCategory} onClick={() => void applyBulkCategory(bulkCategory)}>
                         {busy === "bulk" ? t("Saving…") : t("Apply")}
@@ -1640,6 +1821,13 @@ function BankPageContent() {
                       </select>
                       <button type="button" style={bankBtnSm} disabled={busy === "vat" || !bulkVat} onClick={() => void applyVat(Array.from(selectedIds), bulkVat === "__clear" ? "" : bulkVat)}>
                         {busy === "vat" ? t("Saving…") : t("Apply VAT")}
+                      </button>
+                      <select value={bulkReview} onChange={event => setBulkReview(event.target.value)} style={{ ...pickerInput, flex: "0 1 190px" }} aria-label={t("Review status")}>
+                        <option value="">{t("Review status")}…</option>
+                        {REVIEW_STATUSES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                      </select>
+                      <button type="button" style={bankBtnSm} disabled={busy === "review" || !bulkReview} onClick={() => void applyBulkReview(bulkReview)}>
+                        {busy === "review" ? t("Saving…") : t("Apply status")}
                       </button>
                       <span style={{ flex: 1 }} />
                       <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} onClick={() => setSelectedIds(new Set())}>{t("Clear selection")}</button>
@@ -1684,6 +1872,12 @@ function BankPageContent() {
                                     </span>
                                     <span style={{ minWidth: 0 }}>
                                       <span style={{ display: "block", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                        {(() => {
+                                          const rs = effectiveReviewStatus(transaction);
+                                          if (rs === "unreviewed") return null;
+                                          const meta = reviewStatusMeta(rs);
+                                          return <span title={t(meta.label)} aria-label={t(meta.label)} style={{ display: "inline-block", width: 7, height: 7, borderRadius: 999, background: meta.color, marginRight: 5, verticalAlign: "middle" }} />;
+                                        })()}
                                         {transaction.amount < 0 && recurringKeys.has(recurringMerchantKey(transaction)) ? <span aria-hidden="true" title={t("Recurring spending")} style={{ marginRight: 4, opacity: 0.6, fontSize: 11 }}>↻</span> : null}
                                         {duplicateIds.has(transaction.id) ? <span title={t("Possible duplicates")} style={{ marginRight: 4, fontSize: 9.5, fontWeight: 800, padding: "1px 6px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>{t("Duplicate?")}</span> : null}
                                         {transaction.counterparty || transaction.description || "—"}
@@ -1799,7 +1993,7 @@ function BankPageContent() {
                                     {categoryPickerTxId === transaction.id ? (
                                       <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
                                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                          {BANK_CATEGORIES.map(option => (
+                                          {categoryOptions.map(option => (
                                             <button key={option} type="button" onClick={() => void applyCategory(transaction, option)}
                                               style={{ border: 0, cursor: "pointer", fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "4px 11px", background: `${categoryColor(option)}1a`, color: categoryColor(option) }}>
                                               {t(option)}
@@ -2215,9 +2409,17 @@ function BankPageContent() {
                           <span style={{ fontSize: 12.5, opacity: 0.75 }}>→</span>
                           <select value={newRuleCategory} onChange={event => setNewRuleCategory(event.target.value)} style={{ ...pickerInput, flex: "0 1 200px" }} aria-label={t("Category")}>
                             <option value="">{t("Category")}…</option>
-                            {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                            {categoryOptions.map(name => <option key={name} value={name}>{t(name)}</option>)}
                           </select>
-                          {newRuleCategory && categoryTax[newRuleCategory] ? <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("VAT")}: {t(vatLabel(categoryTax[newRuleCategory]))}</span> : null}
+                          <select value={newRuleVat} onChange={event => setNewRuleVat(event.target.value)} style={{ ...pickerInput, flex: "0 1 190px" }} aria-label={t("VAT / Tax code")}>
+                            <option value="">{t("VAT")}: {newRuleCategory && categoryTax[newRuleCategory] ? `${t(vatLabel(categoryTax[newRuleCategory]))} (${t("category default")})` : t("Use category default")}</option>
+                            {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                          </select>
+                          <select value={newRuleAppliesTo} onChange={event => setNewRuleAppliesTo(event.target.value as BankRule["appliesTo"])} style={{ ...pickerInput, flex: "0 1 150px" }} aria-label={t("Applies to")}>
+                            <option value="out">{t("Money out")}</option>
+                            <option value="in">{t("Money in")}</option>
+                            <option value="both">{t("Money in & out")}</option>
+                          </select>
                           <span style={{ flex: 1 }} />
                           <button type="button" style={bankBtnSm} onClick={() => setNewRuleOpen(false)}>{t("Cancel")}</button>
                           <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "rule-new" || newRuleKeyword.trim().length < 2 || !newRuleCategory} onClick={() => void createRuleFromForm()}>{busy === "rule-new" ? t("Saving…") : t("Create rule")}</button>
@@ -2265,8 +2467,8 @@ function BankPageContent() {
                                         <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rule.keyword.toUpperCase()}</strong>
                                       </td>
                                       <td style={rulesTd}>{ruleChip(rule.category)}</td>
-                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{categoryTax[rule.category] ? t(vatLabel(categoryTax[rule.category])) : `— (${t("No VAT")})`}</td>
-                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{appliesTo(stat?.txType ?? "")}</td>
+                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rule.vatCode ? t(vatLabel(rule.vatCode)) : categoryTax[rule.category] ? `${t(vatLabel(categoryTax[rule.category]))} · ${t("category default")}` : `— (${t("No VAT")})`}</td>
+                                      <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rule.appliesTo === "in" ? t("Money in") : rule.appliesTo === "both" ? t("Money in & out") : appliesTo(stat?.txType ?? "") !== "—" ? appliesTo(stat?.txType ?? "") : t("Money out")}</td>
                                       <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 9px", background: "rgba(22,163,74,0.12)", color: "#16a34a" }}>{t("Active")}</span></td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
@@ -2313,6 +2515,87 @@ function BankPageContent() {
                             </button>
                           ) : null}
                         </div>
+                      </div>
+
+                      {/* ---- category records ---- */}
+                      <div style={{ ...bankCard, padding: "14px 18px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: 220 }}>
+                            <strong style={{ fontSize: 14.5 }}>{t("Categories")}</strong>
+                            <div style={{ fontSize: 11.5, opacity: 0.65, marginTop: 2 }}>{t("Your own category records — renameable, with a default VAT treatment and a mapping per accounting provider. Nothing is hard-coded to Pandle, QuickBooks or Xero.")}</div>
+                          </div>
+                          {isOwner ? <button type="button" style={bankBtnSm} onClick={() => openCategoryForm(null)}>＋ {t("New category")}</button> : null}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                          {BANK_CATEGORIES.filter(name => !customCategories.some(item => item.name === name)).map(name => (
+                            <span key={name} title={t("Built-in category")} style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(name)}12`, color: categoryColor(name), opacity: 0.75 }}>{t(name)}</span>
+                          ))}
+                        </div>
+                        {customCategories.length ? (
+                          <div style={{ overflowX: "auto", marginTop: 10 }}>
+                            <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, minWidth: 640 }}>
+                              <thead>
+                                <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
+                                  <th style={rulesTh}>{t("Category")}</th>
+                                  <th style={rulesTh}>{t("Type")}</th>
+                                  <th style={rulesTh}>{t("Default VAT")}</th>
+                                  <th style={rulesTh}>Pandle</th>
+                                  <th style={rulesTh}>Xero</th>
+                                  <th style={rulesTh}>QuickBooks</th>
+                                  <th style={{ ...rulesTh, width: 74 }}>{t("Status")}</th>
+                                  <th style={{ ...rulesTh, width: 90 }} aria-label={t("Actions")} />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {customCategories.map(record => (
+                                  <tr key={record.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.08)", opacity: record.active ? 1 : 0.55 }}>
+                                    <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(record.name)}1a`, color: categoryColor(record.name) }}>{record.name}</span></td>
+                                    <td style={{ ...rulesTd, opacity: 0.8 }}>{record.type === "income" ? t("Money in") : record.type === "transfer" ? t("Transfer") : t("Money out")}</td>
+                                    <td style={{ ...rulesTd, opacity: 0.8, whiteSpace: "nowrap" }}>{record.defaultVatCode ? t(vatLabel(record.defaultVatCode)) : "—"}</td>
+                                    <td style={{ ...rulesTd, fontVariantNumeric: "tabular-nums" }}>{record.pandleNominalCode || "—"}</td>
+                                    <td style={{ ...rulesTd, fontVariantNumeric: "tabular-nums" }}>{record.xeroAccountCode || "—"}</td>
+                                    <td style={{ ...rulesTd, fontVariantNumeric: "tabular-nums" }}>{record.quickbooksAccountId || "—"}</td>
+                                    <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 9px", background: record.active ? "rgba(22,163,74,0.12)" : "rgba(120,120,140,0.14)", color: record.active ? "#16a34a" : "inherit" }}>{record.active ? t("Active") : t("Inactive")}</span></td>
+                                    <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right" }}>
+                                      {isOwner ? (
+                                        <>
+                                          <button type="button" style={{ ...attentionLink, fontSize: 11.5, marginRight: 8 }} onClick={() => openCategoryForm(record)}>{t("Edit")}</button>
+                                          <button type="button" className="finance-payments-delete" disabled={busy === `category-${record.id}`} onClick={() => void deleteCategoryRecord(record)} aria-label={t("Delete this category record?")} title={t("Delete this category record?")}>✕</button>
+                                        </>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
+                        {catFormOpen && isOwner ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12, padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.05)" }}>
+                            <strong style={{ fontSize: 13 }}>{catFormId ? t("Edit category") : t("New category")}</strong>
+                            <input type="text" value={catFormName} autoFocus placeholder={t("Category")} onChange={event => setCatFormName(event.target.value)} style={{ ...pickerInput, flex: "0 1 170px", fontWeight: 700 }} />
+                            <select value={catFormType} onChange={event => setCatFormType(event.target.value as BankCategoryRecord["type"])} style={{ ...pickerInput, flex: "0 1 130px" }} aria-label={t("Type")}>
+                              <option value="expense">{t("Money out")}</option>
+                              <option value="income">{t("Money in")}</option>
+                              <option value="transfer">{t("Transfer")}</option>
+                            </select>
+                            <select value={catFormVat} onChange={event => setCatFormVat(event.target.value)} style={{ ...pickerInput, flex: "0 1 180px" }} aria-label={t("Default VAT")}>
+                              <option value="">{t("Default VAT")}…</option>
+                              {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                            </select>
+                            <input type="text" value={catFormPandleNominal} placeholder={`Pandle ${t("code")}`} onChange={event => setCatFormPandleNominal(event.target.value)} style={{ ...pickerInput, flex: "0 1 120px" }} />
+                            <input type="text" value={catFormXero} placeholder={`Xero ${t("code")}`} onChange={event => setCatFormXero(event.target.value)} style={{ ...pickerInput, flex: "0 1 110px" }} />
+                            <input type="text" value={catFormQuickbooks} placeholder={`QuickBooks ${t("code")}`} onChange={event => setCatFormQuickbooks(event.target.value)} style={{ ...pickerInput, flex: "0 1 140px" }} />
+                            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                              <input type="checkbox" checked={catFormActive} onChange={event => setCatFormActive(event.target.checked)} /> {t("Active")}
+                            </label>
+                            <span style={{ flex: 1 }} />
+                            <button type="button" style={bankBtnSm} onClick={() => setCatFormOpen(false)}>{t("Cancel")}</button>
+                            <button type="button" style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }} disabled={busy === "category-form" || !catFormName.trim()} onClick={() => void saveCategoryRecord()}>
+                              {busy === "category-form" ? t("Saving…") : t("Save")}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
 
                       {/* ---- rule preview bar ---- */}
@@ -2383,6 +2666,36 @@ function BankPageContent() {
               <div style={drawerLabel}>{t("Raw bank description")}</div>
               <div style={{ fontSize: 12, padding: "8px 10px", borderRadius: 8, background: "rgba(120,120,140,0.1)", wordBreak: "break-word" }}>{drawerTx.description || "—"}</div>
             </div>
+            {(() => {
+              // The read-only bank layer, kept visibly apart from NivaDesk's
+              // own enrichment: what the bank said never changes here.
+              const account = connections.flatMap(item => item.accounts).find(item => item.id === drawerTx.accountId);
+              const rows: Array<[string, string]> = [
+                [t("Bank transaction ID"), drawerTx.providerTransactionId || drawerTx.id],
+                [t("Bank account"), account ? `${account.name}${account.currency ? ` · ${account.currency}` : ""}` : (drawerTx.accountId || "—")],
+                [t("Status"), drawerTx.status === "pending" ? t("pending") : t("Booked")],
+                [t("Bank reference"), drawerTx.providerReference || "—"],
+                [t("Open Banking provider"), drawerTx.provider === "truelayer" ? "TrueLayer" : (drawerTx.provider || "—")],
+                [t("First imported"), drawerTx.firstImportedAt ? drawerTx.firstImportedAt.toLocaleDateString() : "—"],
+                [t("Last updated"), drawerTx.importedAt ? drawerTx.importedAt.toLocaleString() : "—"]
+              ];
+              return (
+                <details style={{ fontSize: 12, border: "1px solid rgba(120,120,140,0.2)", borderRadius: 10, padding: "8px 10px" }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase", opacity: 0.7 }}>
+                    {t("Bank data")} · {t("Read-only")}
+                  </summary>
+                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "5px 12px", marginTop: 8 }}>
+                    {rows.map(([label, value]) => (
+                      <Fragment key={label}>
+                        <span style={{ opacity: 0.6, whiteSpace: "nowrap" }}>{label}</span>
+                        <span style={{ fontVariantNumeric: "tabular-nums", wordBreak: "break-all" }}>{value}</span>
+                      </Fragment>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, opacity: 0.55 }}>{t("Bank data can never be edited — everything below is NivaDesk's own enrichment.")}</div>
+                </details>
+              );
+            })()}
             {drawerTx.amount < 0 ? (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -2390,7 +2703,7 @@ function BankPageContent() {
                     <div style={drawerLabel}>{t("Category")}</div>
                     <select value={drawerCategory} disabled={!isOwner} onChange={event => setDrawerCategory(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
                       <option value="">{t("Uncategorised")}</option>
-                      {Array.from(new Set([...BANK_CATEGORIES, ...categoriesInUse, ...(drawerCategory ? [drawerCategory] : [])])).map(name => <option key={name} value={name}>{t(name)}</option>)}
+                      {Array.from(new Set([...categoryOptions, ...(drawerCategory ? [drawerCategory] : [])])).map(name => <option key={name} value={name}>{t(name)}</option>)}
                     </select>
                     {!drawerTx.category && drawerTx.categoryAuto ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(drawerTx.categoryAuto)}</div> : null}
                   </label>
@@ -2400,6 +2713,7 @@ function BankPageContent() {
                       <option value="">{t("Use category default")}{drawerCategory && categoryTax[drawerCategory] ? ` (${t(vatLabel(categoryTax[drawerCategory]))})` : ""}</option>
                       {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
                     </select>
+                    {!drawerTx.vatCode && drawerTx.vatCodeAuto ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(vatLabel(drawerTx.vatCodeAuto))}</div> : null}
                   </label>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -2441,6 +2755,24 @@ function BankPageContent() {
                 </div>
               </>
             ) : null}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label>
+                <div style={drawerLabel}>{t("Review status")}</div>
+                <select value={drawerReview} disabled={!isOwner} onChange={event => setDrawerReview(event.target.value)} style={{ ...pickerInput, width: "100%" }}>
+                  {REVIEW_STATUSES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                </select>
+              </label>
+              <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                {(() => {
+                  const meta = reviewStatusMeta(drawerReview);
+                  return (
+                    <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", padding: "4px 10px", borderRadius: 999, background: `${meta.color}1a`, color: meta.color }}>
+                      {t(meta.label)}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
             <label>
               <div style={drawerLabel}>{t("Notes")}</div>
               <textarea value={drawerNote} disabled={!isOwner} onChange={event => setDrawerNote(event.target.value)} rows={3} placeholder={t("Internal note for this transaction")} style={{ ...pickerInput, width: "100%", resize: "vertical", fontFamily: "inherit" }} />
@@ -2510,7 +2842,22 @@ function BankPageContent() {
                 })()}
                 <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(120,120,140,0.2)" }}>
                   <div style={{ fontWeight: 700, marginBottom: 2 }}>⇄ {t("Activity & sync")}</div>
-                  {drawerTx.pandleStatus === "confirmed" ? <span style={{ color: "#16a34a" }}>✓ {t("Confirmed in Pandle")}</span> : <span style={{ opacity: 0.65 }}>{t("Not synced to Pandle yet")}</span>}
+                  {drawerTx.pandleStatus === "confirmed" ? (
+                    <div>
+                      <span style={{ color: "#16a34a" }}>✓ {t("Confirmed in Pandle")}</span>
+                      {drawerTx.pandleBankTransactionId ? <div style={{ fontSize: 11, opacity: 0.65, fontVariantNumeric: "tabular-nums" }}>{t("Pandle transaction ID")}: {drawerTx.pandleBankTransactionId}</div> : null}
+                    </div>
+                  ) : drawerTx.pandleStatus === "error" ? (
+                    <div>
+                      <span style={{ color: "#dc2626" }}>! {t("Sync error")}</span>
+                      {drawerTx.pandleLastError ? <div style={{ fontSize: 11, opacity: 0.7, wordBreak: "break-word" }}>{drawerTx.pandleLastError}</div> : null}
+                      <div style={{ fontSize: 11, opacity: 0.55 }}>{t("Nothing was lost — fix the issue and sync again.")}</div>
+                    </div>
+                  ) : drawerTx.pandleStatus === "matched" ? (
+                    <span style={{ color: "#2563eb" }}>{t("Matched to an existing Pandle transaction")}</span>
+                  ) : (
+                    <span style={{ opacity: 0.65 }}>{t("Not synced to Pandle yet")}</span>
+                  )}
                 </div>
               </div>
             ) : null}
