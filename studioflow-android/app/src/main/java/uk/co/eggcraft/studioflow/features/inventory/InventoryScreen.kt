@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import java.util.Locale
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryCursor
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
@@ -126,6 +127,10 @@ fun InventoryScreen(state: StudioFlowUiState) {
     var suppliers by remember { mutableStateOf<List<StudioSupplier>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
+    // A workshop past 500 items used to fall silently off the end of the list;
+    // the server now hands back a cursor and the screen fetches the next page.
+    var listCursor by remember { mutableStateOf<StudioInventoryCursor?>(null) }
+    var loadingMore by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     // The item form serves three doors: Add (no prefill), Edit (prefill + the
     // item's id) and Duplicate (prefill with identity cleared, blank id so the
@@ -142,13 +147,32 @@ fun InventoryScreen(state: StudioFlowUiState) {
 
     suspend fun reloadItems() {
         try {
-            items = repository.inventoryItems(workspaceId)
+            val page = repository.inventoryItemsPage(workspaceId)
+            items = page.items
+            listCursor = page.cursor
             summary = repository.inventorySummary(workspaceId)
             notice = null
         } catch (error: Exception) {
             notice = error.message
         }
         loading = false
+    }
+
+    suspend fun loadMoreItems() {
+        val cursor = listCursor ?: return
+        if (loadingMore) return
+        loadingMore = true
+        try {
+            val page = repository.inventoryItemsPage(workspaceId, cursor)
+            // Deduped by id: an item edited between the two fetches can slide
+            // across the page boundary and arrive twice.
+            val seen = items.map { it.id }.toHashSet()
+            items = items + page.items.filter { it.id !in seen }
+            listCursor = page.cursor
+        } catch (error: Exception) {
+            notice = error.message
+        }
+        loadingMore = false
     }
 
     suspend fun reloadPurchases() {
@@ -245,6 +269,9 @@ fun InventoryScreen(state: StudioFlowUiState) {
                 search = search,
                 onSearch = { search = it },
                 loading = loading,
+                hasMore = listCursor != null,
+                loadingMore = loadingMore,
+                onLoadMore = { scope.launch { loadMoreItems() } },
                 canEdit = canEdit,
                 t = t,
                 onChangeStatus = { item, status ->
@@ -455,6 +482,9 @@ private fun ItemsTab(
     search: String,
     onSearch: (String) -> Unit,
     loading: Boolean,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
     canEdit: Boolean,
     t: (String) -> String,
     onChangeStatus: (StudioInventoryItem, StudioInventoryStatus) -> Unit,
@@ -517,10 +547,18 @@ private fun ItemsTab(
 
         when {
             loading && items.isEmpty() -> Text(t("Loading…"), fontSize = 12.sp, color = Color.Gray)
-            items.isEmpty() -> InventoryEmptyBox(
-                title = if (allCount == 0) t("Nothing in inventory yet") else t("No items match these filters"),
-                body = if (allCount == 0) t("Add your first item, or import your opening stock.") else ""
-            )
+            items.isEmpty() -> Column {
+                InventoryEmptyBox(
+                    title = if (allCount == 0) t("Nothing in inventory yet") else t("No items match these filters"),
+                    body = if (allCount == 0) t("Add your first item, or import your opening stock.") else ""
+                )
+                // A search can empty the page while later pages still hold
+                // matches, so the way to the rest of the stock stays open.
+                if (hasMore) {
+                    Spacer(Modifier.height(10.dp))
+                    InventoryLoadMoreRow(loadingMore, onLoadMore, t)
+                }
+            }
             else -> LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
@@ -528,8 +566,31 @@ private fun ItemsTab(
                 items(items, key = { it.id }) { item ->
                     InventoryItemRow(item, symbol, canEdit, t, onChangeStatus, onPhotos, onOpen)
                 }
+                if (hasMore) {
+                    item(key = "load-more") {
+                        InventoryLoadMoreRow(loadingMore, onLoadMore, t)
+                    }
+                }
             }
         }
+    }
+}
+
+/** The end of a page that is not the end of the stock. */
+@Composable
+private fun InventoryLoadMoreRow(
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    t: (String) -> String
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(t("There is more stock than one page carries."), fontSize = 11.sp, color = Color.Gray)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            if (loadingMore) t("Loading…") else t("Load the next 500 items"),
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
+            modifier = Modifier.clickable(enabled = !loadingMore) { onLoadMore() }.padding(4.dp)
+        )
     }
 }
 

@@ -99,6 +99,10 @@ fun OpeningStockDialog(
     val overflow = (read.items.size - read.maxRows).coerceAtLeast(0)
     val totalValue = willImport.sumOf { it.lineValue }
     val hasNameColumn = read.mapping.contains("name")
+    // Rows the server matched to stock already on the shelf (serial beats SKU).
+    // What happens to them is a choice, and the safe default is to leave them.
+    val duplicates = willImport.count { it.existingItemId.isNotBlank() }
+    var duplicatePolicy by remember { mutableStateOf("skip") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -213,7 +217,19 @@ fun OpeningStockDialog(
                             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(row.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(row.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        if (row.existingItemId.isNotBlank()) {
+                                            Spacer(Modifier.width(6.dp))
+                                            InventoryPill(t("Already in stock"), StudioBlue)
+                                        }
+                                    }
+                                    if (row.existingItemId.isNotBlank()) {
+                                        Text(
+                                            "${t("Already on the shelf as")} ${row.existingNumber}",
+                                            fontSize = 10.sp, color = StudioBlue
+                                        )
+                                    }
                                     Text(
                                         listOf(
                                             t(row.category),
@@ -244,6 +260,45 @@ fun OpeningStockDialog(
                             Text("${t("Showing the first 50 of")} ${willImport.size}.",
                                  fontSize = 11.sp, color = Color.Gray)
                         }
+                    }
+
+                    if (duplicates > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                        Text("$duplicates ${t("rows match stock you already have")}",
+                             fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            t("Matched by SKU or serial number. Choose what the import should do with them."),
+                            fontSize = 11.sp, color = Color.Gray
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            listOf(
+                                "skip" to "Skip them",
+                                "update" to "Update existing",
+                                "create" to "Create anyway"
+                            ).forEach { (key, label) ->
+                                Text(
+                                    t(label),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (duplicatePolicy == key) FontWeight.Bold
+                                                 else FontWeight.Normal,
+                                    color = if (duplicatePolicy == key) StudioBlue else Color.Gray,
+                                    modifier = Modifier.clickable { duplicatePolicy = key }
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            t(when (duplicatePolicy) {
+                                "update" -> "The sheet becomes the truth about what each item is; its number, status and reservations stay untouched."
+                                "create" -> "Every row becomes a new item, even the matched ones."
+                                else -> "Matched rows are left out; only new stock is created."
+                            }),
+                            fontSize = 10.sp, color = Color.Gray
+                        )
                     }
 
                     if (read.skipped.isNotEmpty()) {
@@ -293,7 +348,8 @@ fun OpeningStockDialog(
                     scope.launch {
                         try {
                             val count = repository.inventoryImportOpeningStock(
-                                workspaceId, willImport.map { it.payload }, openingDate)
+                                workspaceId, willImport.map { it.payload }, openingDate,
+                                if (duplicates > 0) duplicatePolicy else null)
                             onImported(count)
                         } catch (failure: Exception) {
                             error = failure.message

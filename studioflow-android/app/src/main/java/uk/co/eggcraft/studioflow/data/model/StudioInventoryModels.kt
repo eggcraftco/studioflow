@@ -206,6 +206,27 @@ data class StudioInventoryItem(
     }
 }
 
+/** Where the item list stopped. Goes back to listInventoryItems verbatim so
+ *  the next page starts exactly where this one ended. */
+data class StudioInventoryCursor(val updatedAtMs: Long, val id: String) {
+    fun payload(): Map<String, Any?> = mapOf("updatedAtMs" to updatedAtMs, "id" to id)
+
+    companion object {
+        fun from(raw: Map<*, *>?): StudioInventoryCursor? {
+            val id = raw?.get("id") as? String ?: return null
+            val updatedAtMs = (raw["updatedAtMs"] as? Number)?.toLong() ?: return null
+            return StudioInventoryCursor(updatedAtMs, id)
+        }
+    }
+}
+
+/** One page of the item list. [cursor] is null when this page is the last —
+ *  a workshop past 500 items used to fall silently off the end of the list. */
+data class StudioInventoryPage(
+    val items: List<StudioInventoryItem> = emptyList(),
+    val cursor: StudioInventoryCursor? = null
+)
+
 /** How the shelf value moved over the last 30 days. `available` is the server
  *  saying the figure is honest — the ledger covers the whole window and the
  *  baseline is real — so a screen shows the change only when it is true. */
@@ -416,7 +437,9 @@ data class StudioOrderStockLine(
 }
 
 /** One row of a pasted list, as the server read it. [payload] goes back to the
- *  import untouched, so what the preview shows is what gets written. */
+ *  import untouched, so what the preview shows is what gets written. A row that
+ *  matched stock already on the shelf (by serial, or failing that SKU) carries
+ *  [existingItemId] and [existingNumber] so the preview can say so. */
 data class StudioOpeningStockRow(
     val rowIndex: Int,
     val name: String,
@@ -427,6 +450,8 @@ data class StudioOpeningStockRow(
     val purchasePrice: Double,
     val location: String,
     val lineValue: Double,
+    val existingItemId: String,
+    val existingNumber: String,
     val payload: Map<String, Any?>
 ) {
     companion object {
@@ -443,6 +468,8 @@ data class StudioOpeningStockRow(
                 purchasePrice = (raw["purchasePrice"] as? Number)?.toDouble() ?: 0.0,
                 location = raw["location"] as? String ?: "",
                 lineValue = (raw["lineValue"] as? Number)?.toDouble() ?: 0.0,
+                existingItemId = raw["existingItemId"] as? String ?: "",
+                existingNumber = raw["existingNumber"] as? String ?: "",
                 payload = raw as Map<String, Any?>
             )
         }

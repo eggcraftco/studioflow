@@ -55,8 +55,10 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketMessage
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryCursor
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryPage
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
 import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
@@ -2670,11 +2672,25 @@ class StudioFlowRepository(
         return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
     }
 
-    suspend fun inventoryItems(workspaceId: String): List<StudioInventoryItem> {
-        val raw = inventoryCall("listInventoryItems", workspaceId, mapOf("limit" to 500))
-        return (raw["items"] as? List<*> ?: emptyList<Any?>())
-            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryItem::from) }
+    /** One page of items — 500 at a time. Pass the previous page's cursor to
+     *  get the next one; the returned cursor is null once everything has been
+     *  handed over. Screens that only need "the stock" take the first page. */
+    suspend fun inventoryItemsPage(
+        workspaceId: String, cursor: StudioInventoryCursor? = null
+    ): StudioInventoryPage {
+        val payload = mutableMapOf<String, Any?>("limit" to 500)
+        if (cursor != null) payload["cursor"] = cursor.payload()
+        val raw = inventoryCall("listInventoryItems", workspaceId, payload)
+        val hasMore = raw["hasMore"] as? Boolean ?: false
+        return StudioInventoryPage(
+            items = (raw["items"] as? List<*> ?: emptyList<Any?>())
+                .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryItem::from) },
+            cursor = if (hasMore) StudioInventoryCursor.from(raw["cursor"] as? Map<*, *>) else null
+        )
     }
+
+    suspend fun inventoryItems(workspaceId: String): List<StudioInventoryItem> =
+        inventoryItemsPage(workspaceId).items
 
     suspend fun inventorySummary(workspaceId: String): StudioInventorySummary {
         val raw = inventoryCall("getInventorySummary", workspaceId)
@@ -2772,14 +2788,21 @@ class StudioFlowRepository(
         )
     }
 
+    /** [duplicatePolicy] — "skip", "update" or "create" — says what to do with
+     *  rows the preview matched to stock already on the shelf; null leaves the
+     *  server's default. The count is created plus updated: everything the
+     *  sheet actually changed. */
     suspend fun inventoryImportOpeningStock(
         workspaceId: String,
         items: List<Map<String, Any?>>,
-        openingDate: String
+        openingDate: String,
+        duplicatePolicy: String? = null
     ): Int {
-        val raw = inventoryCall(
-            "importOpeningStock", workspaceId, mapOf("items" to items, "openingDate" to openingDate))
-        return (raw["imported"] as? Number)?.toInt() ?: 0
+        val payload = mutableMapOf<String, Any?>("items" to items, "openingDate" to openingDate)
+        if (duplicatePolicy != null) payload["duplicatePolicy"] = duplicatePolicy
+        val raw = inventoryCall("importOpeningStock", workspaceId, payload)
+        return ((raw["imported"] as? Number)?.toInt() ?: 0) +
+            ((raw["updated"] as? Number)?.toInt() ?: 0)
     }
 
     // ---- Item photos ----
