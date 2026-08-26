@@ -8297,6 +8297,20 @@ exports.saveUploadSafetySettings = onCall({ region: "europe-west2" }, async (req
   };
 });
 
+// Who wins when a store order updates an existing customer's contact details.
+exports.saveIntegrationSyncSettings = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidCanEditWorkspaceSettings(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot edit Integration settings.");
+  }
+  const policy = String(request.data?.policy) === "nivadesk" ? "nivadesk" : "store";
+  await companySettingsDocRef(companyId).set({
+    integrationCustomerSync: policy,
+    integrationSyncSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+  return { ok: true, companyId, policy, message: "Integration sync policy saved." };
+});
+
 function cleanWorkspaceLogoUrl(value) {
   const cleaned = String(value || "").trim();
   if (!cleaned) return "";
@@ -16456,10 +16470,18 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
   };
 
   if (!snap.empty) {
+    // Field-level conflict policy: by default the store's latest details win;
+    // with integrationCustomerSync = "nivadesk" the studio's own edits win and
+    // the store may only fill fields that are still blank.
+    const existingData = snap.docs[0].data() || {};
+    const settingsSnap = await db.collection("companySettings").doc(companyId).get();
+    const storeWins = !(settingsSnap.exists && settingsSnap.data()?.integrationCustomerSync === "nivadesk");
     const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp(), source };
     if (externalCustomerId) update.externalCustomerId = externalCustomerId;
     for (const [key, value] of Object.entries(fields)) {
-      if (value) update[key] = value;
+      if (!value) continue;
+      if (!storeWins && cleanWooText(existingData[key])) continue;
+      update[key] = value;
     }
     await snap.docs[0].ref.set(update, { merge: true });
     return;

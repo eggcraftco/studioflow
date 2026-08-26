@@ -210,6 +210,8 @@ export type WorkspaceSettingsOverview = {
   uploadSafetyRequirePolicyAcceptance: boolean;
   uploadSafetyMaxFileSizeMB: number;
   uploadSafetyPolicyText: string;
+  // Who wins when a store updates an existing customer: "store" | "nivadesk".
+  integrationCustomerSync: string;
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
   businessOnboardingCompleted: boolean;
@@ -1121,6 +1123,7 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
       numberValue(data.uploadSafetyMaxFileSizeMB, 10)
     ),
     uploadSafetyPolicyText: stringValue(data.uploadSafetyPolicyText, ""),
+    integrationCustomerSync: stringValue(data.integrationCustomerSync, "store"),
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
     businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||

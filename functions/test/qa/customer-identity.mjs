@@ -96,5 +96,32 @@ ok("üçüncü isim de yeni kayıt açmadı", thirdDocs.length === 0, `count=${t
 const emailDocs = (await db.collection("musteriler").where("companyId", "==", companyId).where("email", "==", "identity@example.com").get()).docs;
 ok("e-postada tek müşteri", emailDocs.length === 1, `count=${emailDocs.length}`);
 
+console.log("=== 4) sync politikası: nivadesk seçiliyken atölye düzenlemesi kazanır ===");
+// Atölye, müşterinin telefonunu elle düzeltmiş olsun; şehir alanı boş kalsın.
+const identityDoc = (await db.collection("musteriler")
+  .where("companyId", "==", companyId).where("externalCustomerId", "==", "9911").get()).docs[0];
+await identityDoc.ref.set({ phone: "07999999999", city: "" }, { merge: true });
+await db.collection("companySettings").doc(companyId).set({ integrationCustomerSync: "nivadesk" }, { merge: true });
+const d = await post(wooUrl, {
+  id: 555004, total: "80.00", currency: "GBP", status: "processing", customer_id: 9911,
+  billing: { ...billingBase, first_name: "Identity", last_name: "Tester", phone: "07000000321", city: "Bristol" },
+  line_items: [{ name: "Test Clasp", quantity: 1, total: "80.00" }]
+});
+ok("webhook 200", d.status === 200, JSON.stringify(d.body).slice(0, 120));
+let after = (await identityDoc.ref.get()).data();
+ok("atölyenin telefonu korundu", after.phone === "07999999999", after.phone);
+ok("boş alan mağazadan doldu (city)", after.city === "Bristol", after.city);
+
+console.log("=== 5) politika store'a dönünce mağaza yine kazanır ===");
+await db.collection("companySettings").doc(companyId).set({ integrationCustomerSync: "store" }, { merge: true });
+const e = await post(wooUrl, {
+  id: 555005, total: "90.00", currency: "GBP", status: "processing", customer_id: 9911,
+  billing: { ...billingBase, first_name: "Identity", last_name: "Tester", phone: "07000000321" },
+  line_items: [{ name: "Test Pin", quantity: 1, total: "90.00" }]
+});
+ok("webhook 200", e.status === 200, JSON.stringify(e.body).slice(0, 120));
+after = (await identityDoc.ref.get()).data();
+ok("mağaza telefonu yeniden yazdı", after.phone === "07000000321", after.phone);
+
 console.log(fail === 0 ? "\nTÜMÜ GEÇTİ" : `\n${fail} BAŞARISIZ`);
 process.exit(fail === 0 ? 0 : 1);

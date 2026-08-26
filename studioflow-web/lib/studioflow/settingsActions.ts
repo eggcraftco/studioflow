@@ -179,6 +179,25 @@ export async function saveUploadSafetySettings(workspace: WorkspaceContext, sett
   }
 }
 
+export async function saveIntegrationSyncSettings(workspace: WorkspaceContext, policy: "store" | "nivadesk") {
+  if (!canEditWorkspaceSettingsForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot edit this settings section.");
+  }
+
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; policy?: string; message?: string }>(functions, "saveIntegrationSyncSettings");
+      const result = await callable({ companyId: workspace.id, policy });
+      if (result.data?.ok === false) {
+        throw new Error(result.data?.message || "Could not save the sync policy.");
+      }
+      return result.data;
+    }, "Saving settings to cloud.");
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
 export async function updateWorkspaceBillingPlan(_workspace: WorkspaceContext, _plan: StudioBillingPlan): Promise<UpdateWorkspaceBillingPlanResult> {
   throw new Error("Manual plan switching is disabled. Plans are managed through secure billing.");
 }
