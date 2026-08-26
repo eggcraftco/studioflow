@@ -1616,8 +1616,29 @@ class StudioFlowViewModel @JvmOverloads constructor(
             )
         } else note
         viewModelScope.launch {
-            runCatching { repository.saveKeepNote(workspace.id, user.uid, finalNote) }
-                .onFailure { e -> mutableState.update { it.copy(errorMessage = e.message ?: "Could not save note.") } }
+            val saved = runCatching { repository.saveKeepNote(workspace.id, user.uid, finalNote) }
+                .onFailure { e ->
+                    // A rejected write used to disappear without a trace — surface it.
+                    mutableState.update { it.copy(errorMessage = "The note could not be saved. ${e.message.orEmpty()}".trim()) }
+                }
+                .isSuccess
+            if (!saved) return@launch
+            // Visibility is a separate axis from type: "workspace" fans the note
+            // out through the existing collaboration invites (each member gets
+            // the same record mirrored — one record, not copies). Web parity.
+            if (finalNote.visibility == "workspace") {
+                runCatching {
+                    val alreadyShared = finalNote.sharedWith.toSet()
+                    repository.listWorkspaceMemberUids(workspace.id)
+                        .filter { uid -> uid.isNotBlank() && uid != user.uid && uid !in alreadyShared }
+                        .forEach { targetUid ->
+                            // Individual invite failures are non-fatal (mirrors web).
+                            runCatching { repository.inviteKeepNoteCollaborator(workspace.id, finalNote, targetUid, "") }
+                        }
+                }.onFailure { e ->
+                    mutableState.update { it.copy(errorMessage = "The note was saved, but sharing with the team failed. ${e.message.orEmpty()}".trim()) }
+                }
+            }
         }
     }
 

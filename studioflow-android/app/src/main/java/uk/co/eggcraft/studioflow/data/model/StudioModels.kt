@@ -967,7 +967,15 @@ data class StudioKeepNote(
     val reminderDate: Date? = null,
     val manualOrder: Double = 0.0,
     val createdAt: Date? = null,
-    val updatedAt: Date? = null
+    val updatedAt: Date? = null,
+    // Note classification (web parity). TYPE and VISIBILITY are separate axes:
+    // a personal note can still be workspace-visible, and a team note is
+    // simply a type whose default visibility is "workspace".
+    val noteType: String = "personal", // "personal" | "order" | "customer" | "team"
+    val linkedOrderId: String = "",
+    val linkedOrderLabel: String = "",
+    val linkedCustomerName: String = "",
+    val visibility: String = "only_me" // "only_me" | "workspace"
 ) {
     val isEmpty: Boolean
         get() = title.trim().isEmpty() && text.trim().isEmpty()

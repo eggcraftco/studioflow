@@ -2249,6 +2249,11 @@ class StudioFlowRepository(
             "links" to note.links,
             "reminderDate" to note.reminderDate,
             "manualOrder" to note.manualOrder,
+            "noteType" to note.noteType,
+            "linkedOrderId" to note.linkedOrderId,
+            "linkedOrderLabel" to note.linkedOrderLabel,
+            "linkedCustomerName" to note.linkedCustomerName,
+            "visibility" to note.visibility,
             "createdAt" to (note.createdAt ?: now),
             "updatedAt" to now
         )
@@ -2301,7 +2306,12 @@ class StudioFlowRepository(
             "labels" to note.labels,
             "links" to note.links,
             "manualOrder" to note.manualOrder,
-            "reminderDateMillis" to note.reminderDate?.time
+            "reminderDateMillis" to note.reminderDate?.time,
+            "noteType" to note.noteType,
+            "linkedOrderId" to note.linkedOrderId,
+            "linkedOrderLabel" to note.linkedOrderLabel,
+            "linkedCustomerName" to note.linkedCustomerName,
+            "visibility" to note.visibility
         )
         functions.getHttpsCallable("createPersonalNoteCollaborationInvite")
             .call(mapOf(
@@ -2403,8 +2413,24 @@ class StudioFlowRepository(
             reminderDate = messageDateFromAny(data["reminderDate"]),
             manualOrder = (data["manualOrder"] as? Number)?.toDouble() ?: 0.0,
             createdAt = messageDateFromAny(data["createdAt"]),
-            updatedAt = messageDateFromAny(data["updatedAt"])
+            updatedAt = messageDateFromAny(data["updatedAt"]),
+            noteType = stringValue(data["noteType"], "personal").let {
+                if (it in listOf("personal", "order", "customer", "team")) it else "personal"
+            },
+            linkedOrderId = stringValue(data["linkedOrderId"], ""),
+            linkedOrderLabel = stringValue(data["linkedOrderLabel"], ""),
+            linkedCustomerName = stringValue(data["linkedCustomerName"], ""),
+            visibility = if (stringValue(data["visibility"], "") == "workspace") "workspace" else "only_me"
         )
+    }
+
+    /** Member uids from the company doc `members` map (web parity: the
+     *  workspace-visibility fan-out targets every member except the caller). */
+    suspend fun listWorkspaceMemberUids(workspaceId: String): List<String> {
+        if (workspaceId.isBlank()) return emptyList()
+        val snapshot = db.collection("companies").document(workspaceId).get().await()
+        val members = snapshot.data?.get("members") as? Map<*, *> ?: return emptyList()
+        return members.keys.mapNotNull { (it as? String)?.trim() }.filter { it.isNotEmpty() }
     }
 
     suspend fun markActivityNotificationRead(workspace: StudioWorkspace, notificationId: String) {
@@ -4062,7 +4088,16 @@ private fun messageDateFromAny(value: Any?): Date? {
             val seconds = (value["seconds"] ?: value["_seconds"]) as? Number
             seconds?.let { Date(it.toLong() * 1000L) }
         }
-        is String -> runCatching { Date.from(Instant.parse(value)) }.getOrNull()
+        is String -> {
+            // Tolerate ISO strings AND stringified epoch numbers (seconds or
+            // millis) — reminderDate has arrived in both shapes historically.
+            val trimmed = value.trim()
+            runCatching { Date.from(Instant.parse(trimmed)) }.getOrNull()
+                ?: trimmed.toDoubleOrNull()?.let { raw ->
+                    val millis = if (raw > 1_000_000_000_000.0) raw.toLong() else (raw * 1000.0).toLong()
+                    if (millis <= 0L) null else Date(millis)
+                }
+        }
         else -> null
     }
 }

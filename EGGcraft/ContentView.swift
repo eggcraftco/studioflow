@@ -1409,6 +1409,9 @@ struct StudioProjectNoteItem: Identifiable, Equatable {
     let noteType: String
     let text: String
     let updatedAt: Date?
+    // Non-empty when this entry is a keep-note linked to the order
+    // (noteType == "order" with linkedOrderId). Tapping opens that note's editor.
+    var keepNoteId: String = ""
 
     var displayProjectTitle: String {
         if !projectTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1482,6 +1485,14 @@ struct StudioKeepNote: Identifiable, Equatable {
     var manualOrder: Double
     var createdAt: Date
     var updatedAt: Date
+    // TYPE (what the note is about) and VISIBILITY (who sees it) are separate
+    // axes — mirrors the web model exactly (absent noteType → personal,
+    // absent visibility → only_me).
+    var noteType: String
+    var linkedOrderId: String
+    var linkedOrderLabel: String
+    var linkedCustomerName: String
+    var visibility: String
 
     init(id: String = UUID().uuidString,
          title: String = "",
@@ -1503,7 +1514,12 @@ struct StudioKeepNote: Identifiable, Equatable {
          reminderDate: Date? = nil,
          manualOrder: Double = Date().timeIntervalSince1970,
          createdAt: Date = Date(),
-         updatedAt: Date = Date()) {
+         updatedAt: Date = Date(),
+         noteType: String = "personal",
+         linkedOrderId: String = "",
+         linkedOrderLabel: String = "",
+         linkedCustomerName: String = "",
+         visibility: String = "only_me") {
         self.id = id
         self.title = title
         self.text = text
@@ -1525,6 +1541,15 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.manualOrder = manualOrder
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.noteType = StudioKeepNote.normalizedNoteType(noteType)
+        self.linkedOrderId = linkedOrderId
+        self.linkedOrderLabel = linkedOrderLabel
+        self.linkedCustomerName = linkedCustomerName
+        self.visibility = visibility == "workspace" ? "workspace" : "only_me"
+    }
+
+    static func normalizedNoteType(_ raw: String) -> String {
+        ["personal", "order", "customer", "team"].contains(raw) ? raw : "personal"
     }
 
     init(document: QueryDocumentSnapshot) {
@@ -1550,6 +1575,11 @@ struct StudioKeepNote: Identifiable, Equatable {
         self.isDeleted = data["isDeleted"] as? Bool ?? false
         self.labels = data["labels"] as? [String] ?? []
         self.links = data["links"] as? [String] ?? []
+        self.noteType = StudioKeepNote.normalizedNoteType(data["noteType"] as? String ?? "personal")
+        self.linkedOrderId = data["linkedOrderId"] as? String ?? ""
+        self.linkedOrderLabel = data["linkedOrderLabel"] as? String ?? ""
+        self.linkedCustomerName = data["linkedCustomerName"] as? String ?? ""
+        self.visibility = (data["visibility"] as? String) == "workspace" ? "workspace" : "only_me"
 
         if let timestamp = data["reminderDate"] as? Timestamp {
             self.reminderDate = timestamp.dateValue()
@@ -1865,6 +1895,9 @@ struct StudioKeepNotesView: View {
     @State private var gridMode: Bool = true
     @State private var showLabelManager: Bool = false
     @State private var newLabelText: String = ""
+    @State private var renameLabelTarget: String? = nil
+    @State private var renameLabelText: String = ""
+    @State private var deleteLabelTarget: String? = nil
     @State private var reminderPickerNote: StudioKeepNote?
     @State private var reminderPickerDate: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
     @State private var expandedProjectNoteKeys: Set<String> = []
@@ -1925,7 +1958,10 @@ struct StudioKeepNotesView: View {
 
                 guard !query.isEmpty else { return true }
                 return note.title.lowercased().contains(query) ||
-                    note.text.lowercased().contains(query)
+                    note.text.lowercased().contains(query) ||
+                    note.labels.contains(where: { $0.lowercased().contains(query) }) ||
+                    note.linkedOrderLabel.lowercased().contains(query) ||
+                    note.linkedCustomerName.lowercased().contains(query)
             }
             .sorted { first, second in
                 if selectedSection == "reminders" {
@@ -2091,6 +2127,33 @@ struct StudioKeepNotesView: View {
             }
         }
 
+        // Keep-notes linked to this order live in the SAME group as the order's
+        // own note fields, so the group's header count equals the entries shown
+        // (the "8 notes over a list of 6" mismatch the web slice fixed).
+        let cleanOrderId = (order.id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanOrderId.isEmpty {
+            for note in notes where !note.isDeleted && !note.isArchived && note.linkedOrderId == cleanOrderId {
+                let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                let combined = title.isEmpty ? note.text : "\(title)\n\(note.text)"
+                let clean = combined.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !clean.isEmpty else { continue }
+
+                items.append(
+                    StudioProjectNoteItem(
+                        id: "\(orderKey)-linkedNote-\(note.id)",
+                        orderId: cleanOrderId,
+                        orderKey: orderKey,
+                        projectTitle: projectTitle,
+                        customerName: customerName,
+                        noteType: t("Linked note", lang: seciliDil),
+                        text: clean,
+                        updatedAt: note.updatedAt,
+                        keepNoteId: note.id
+                    )
+                )
+            }
+        }
+
         return items
     }
 
@@ -2116,6 +2179,112 @@ struct StudioKeepNotesView: View {
             return id
         }
         return UUID().uuidString
+    }
+
+    // Same "Customer · Design" label format the web order picker stores.
+    private func keepOrderLinkLabel(customerName: String, designName: String) -> String {
+        let customer = customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasDesign = !design.isEmpty && design != "Untitled design" && design != customer
+
+        if hasDesign {
+            return customer.isEmpty ? design : "\(customer) · \(design)"
+        }
+        return customer.isEmpty ? t("Order", lang: seciliDil) : customer
+    }
+
+    // The other reminder system: order Schedule & Alerts items, surfaced in the
+    // central Reminders view so there is one place, not two disconnected lists.
+    private struct KeepOrderScheduleAlert: Identifiable {
+        let id: String
+        let orderKey: String
+        let orderLabel: String
+        let title: String
+        let dueAt: Date
+    }
+
+    private var keepOrderScheduleAlerts: [KeepOrderScheduleAlert] {
+        var rows: [KeepOrderScheduleAlert] = []
+
+        for order in firebaseManager.siparisler {
+            guard let json = order.customFields?["__scheduleAlertItemsV1"],
+                  let data = json.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([ScheduleAlertItem].self, from: data) else {
+                continue
+            }
+
+            let orderKey = orderSelectionKeyForNotes(order)
+            let orderLabel = keepOrderLinkLabel(customerName: order.customerName, designName: order.designName)
+
+            for item in decoded where item.completedAt == nil && item.status != "Done" {
+                let cleanTitle = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                rows.append(
+                    KeepOrderScheduleAlert(
+                        id: "\(orderKey)-\(item.id.uuidString)",
+                        orderKey: orderKey,
+                        orderLabel: orderLabel,
+                        title: cleanTitle.isEmpty ? t("Reminder", lang: seciliDil) : cleanTitle,
+                        dueAt: item.dueAt
+                    )
+                )
+            }
+        }
+
+        return rows.sorted { $0.dueAt < $1.dueAt }
+    }
+
+    private var orderScheduleAlertsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Order schedule alerts", lang: seciliDil).uppercased())
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundColor(.secondary)
+                .tracking(1.1)
+                .padding(.horizontal, 4)
+
+            ForEach(keepOrderScheduleAlerts) { alert in
+                Button {
+                    onOpenProject?(alert.orderKey)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "alarm")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(alert.dueAt < Date() ? .red : .orange)
+                            .frame(width: 30, height: 30)
+                            .background((alert.dueAt < Date() ? Color.red : Color.orange).opacity(0.12))
+                            .clipShape(Circle())
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(alert.title)
+                                .font(.system(size: 13.5, weight: .bold))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+
+                            Text("⛓ \(alert.orderLabel)")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.blue)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Text(alert.dueAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 12, weight: alert.dueAt < Date() ? .bold : .regular))
+                            .foregroundColor(alert.dueAt < Date() ? .red : .secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(12)
+                    .background(surfaceColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(borderColor, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: 920)
     }
 
     private var pinnedNotes: [StudioKeepNote] {
@@ -2175,12 +2344,18 @@ struct StudioKeepNotesView: View {
                                 ProgressView(t("Loading notes...", lang: seciliDil))
                                     .padding(.top, 60)
                             } else if visibleNotes.isEmpty {
-                                emptyState
-                                    .padding(.top, 70)
+                                if !(selectedSection == "reminders" && !keepOrderScheduleAlerts.isEmpty) {
+                                    emptyState
+                                        .padding(.top, 70)
+                                }
                             } else if gridMode {
                                 notesGrid(availableWidth: max(280, geometry.size.width - (isWide ? 230 : 0) - (isWide ? 56 : 32)))
                             } else {
                                 notesList
+                            }
+
+                            if selectedSection == "reminders" && !isLoading && !keepOrderScheduleAlerts.isEmpty {
+                                orderScheduleAlertsSection
                             }
                         }
                         .padding(.horizontal, isWide ? 28 : 16)
@@ -2284,6 +2459,45 @@ struct StudioKeepNotesView: View {
         }
         .sheet(item: $editingProjectNoteItem) { item in
             projectNoteEditorSheet(for: item)
+        }
+        .alert(
+            t("Rename label", lang: seciliDil),
+            isPresented: Binding(
+                get: { renameLabelTarget != nil },
+                set: { if !$0 { renameLabelTarget = nil } }
+            )
+        ) {
+            TextField(t("Rename label", lang: seciliDil), text: $renameLabelText)
+            Button(t("Cancel", lang: seciliDil), role: .cancel) {
+                renameLabelTarget = nil
+            }
+            Button(t("Save", lang: seciliDil)) {
+                if let target = renameLabelTarget {
+                    renameLabel(target, to: renameLabelText)
+                }
+                renameLabelTarget = nil
+            }
+        }
+        .alert(
+            t("Remove this label from every note?", lang: seciliDil),
+            isPresented: Binding(
+                get: { deleteLabelTarget != nil },
+                set: { if !$0 { deleteLabelTarget = nil } }
+            )
+        ) {
+            Button(t("Cancel", lang: seciliDil), role: .cancel) {
+                deleteLabelTarget = nil
+            }
+            Button(t("Delete", lang: seciliDil), role: .destructive) {
+                if let target = deleteLabelTarget {
+                    deleteLabel(target)
+                }
+                deleteLabelTarget = nil
+            }
+        } message: {
+            if let target = deleteLabelTarget {
+                Text("\(target) · \(noteCount(for: "label:\(target)"))")
+            }
         }
     }
 
@@ -2400,6 +2614,20 @@ struct StudioKeepNotesView: View {
 
                 ForEach(allLabels, id: \.self) { label in
                     sidebarRow(title: label, icon: "tag", section: "label:\(label)")
+                        .contextMenu {
+                            Button {
+                                renameLabelText = label
+                                renameLabelTarget = label
+                            } label: {
+                                Label(t("Rename label", lang: seciliDil), systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                deleteLabelTarget = label
+                            } label: {
+                                Label(t("Delete", lang: seciliDil), systemImage: "trash")
+                            }
+                        }
                 }
             }
 
@@ -2874,6 +3102,11 @@ struct StudioKeepNotesView: View {
             "isDeleted": note.isDeleted,
             "labels": note.labels,
             "links": note.links,
+            "noteType": note.noteType,
+            "linkedOrderId": note.linkedOrderId,
+            "linkedOrderLabel": note.linkedOrderLabel,
+            "linkedCustomerName": note.linkedCustomerName,
+            "visibility": note.visibility,
             "manualOrder": note.manualOrder,
             "createdAt": Timestamp(date: note.createdAt),
             "updatedAt": FieldValue.serverTimestamp()
@@ -2908,6 +3141,11 @@ struct StudioKeepNotesView: View {
             "isDeleted": note.isDeleted,
             "labels": note.labels,
             "links": note.links,
+            "noteType": note.noteType,
+            "linkedOrderId": note.linkedOrderId,
+            "linkedOrderLabel": note.linkedOrderLabel,
+            "linkedCustomerName": note.linkedCustomerName,
+            "visibility": note.visibility,
             "manualOrder": note.manualOrder
         ]
 
@@ -3440,6 +3678,14 @@ struct StudioKeepNotesView: View {
     }
 
     private func beginEditingProjectNote(_ item: StudioProjectNoteItem) {
+        // Linked keep-notes open their own note editor, not the order-field editor.
+        if !item.keepNoteId.isEmpty {
+            if let linkedNote = notes.first(where: { $0.id == item.keepNoteId }) {
+                selectedNote = linkedNote
+            }
+            return
+        }
+
         editingProjectNoteItem = item
         editingProjectNoteText = item.text
     }
@@ -3948,19 +4194,21 @@ struct StudioKeepNotesView: View {
                 .help(keepShortcutText("Copy project note"))
                 .accessibilityLabel(keepShortcutText("Copy project note"))
 
-                Button {
-                    createPersonalNote(from: item)
-                } label: {
-                    Image(systemName: "plus.rectangle.on.folder")
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.055))
-                        .clipShape(Circle())
+                if item.keepNoteId.isEmpty {
+                    Button {
+                        createPersonalNote(from: item)
+                    } label: {
+                        Image(systemName: "plus.rectangle.on.folder")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(keepShortcutText("Save as personal note"))
+                    .accessibilityLabel(keepShortcutText("Save as personal note"))
                 }
-                .buttonStyle(.plain)
-                .help(keepShortcutText("Save as personal note"))
-                .accessibilityLabel(keepShortcutText("Save as personal note"))
 
                 Button {
                     openProjectFromNote(item)
@@ -3987,6 +4235,12 @@ struct StudioKeepNotesView: View {
         .padding(14)
         .background(Color.primary.opacity(0.035))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            if !item.keepNoteId.isEmpty {
+                beginEditingProjectNote(item)
+            }
+        }
     }
 
     private var labelManagerSheet: some View {
@@ -4061,8 +4315,17 @@ struct StudioKeepNotesView: View {
                                 .padding(.vertical, 4)
                                 .background(Color.primary.opacity(0.055))
                                 .clipShape(Capsule())
+                            Button {
+                                renameLabelText = label
+                                renameLabelTarget = label
+                            } label: {
+                                Image(systemName: "pencil")
+                            }
+                            .buttonStyle(.plain)
+                            .help(t("Rename label", lang: seciliDil))
+                            .accessibilityLabel(t("Rename label", lang: seciliDil))
                             Button(role: .destructive) {
-                                deleteLabel(label)
+                                deleteLabelTarget = label
                             } label: {
                                 Image(systemName: "trash")
                             }
@@ -4185,6 +4448,8 @@ struct StudioKeepNotesView: View {
         ]
         .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
+        let cleanOrderId = item.orderId.trimmingCharacters(in: .whitespacesAndNewlines)
+
         let personalNote = StudioKeepNote(
             title: titleParts.joined(separator: " • "),
             text: item.text,
@@ -4197,7 +4462,10 @@ struct StudioKeepNotesView: View {
             reminderDate: nil,
             manualOrder: nextManualOrderValue(),
             createdAt: Date(),
-            updatedAt: Date()
+            updatedAt: Date(),
+            noteType: cleanOrderId.isEmpty ? "personal" : "order",
+            linkedOrderId: cleanOrderId,
+            linkedOrderLabel: cleanOrderId.isEmpty ? "" : keepOrderLinkLabel(customerName: item.customerName, designName: item.projectTitle)
         )
 
         saveNote(personalNote)
@@ -4513,6 +4781,38 @@ struct StudioKeepNotesView: View {
 
             if isKeepUndoVisible {
                 keepUndoBar
+            }
+
+            if !errorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.orange)
+
+                    Text(errorMessage)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer()
+
+                    Button {
+                        errorMessage = ""
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(surfaceColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
         .frame(maxWidth: 920)
@@ -5624,6 +5924,41 @@ struct StudioKeepNotesView: View {
                     .clipShape(Capsule())
             }
 
+            Group {
+                if !note.linkedOrderLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("⛓ \(note.linkedOrderLabel)")
+                        .font(.system(size: 10.8, weight: .bold))
+                        .foregroundColor(.blue)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+
+                if !note.linkedCustomerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("◉ \(note.linkedCustomerName)")
+                        .font(.system(size: 10.8, weight: .bold))
+                        .foregroundColor(Color(red: 0.055, green: 0.478, blue: 0.333))
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color(red: 0.055, green: 0.478, blue: 0.333).opacity(0.10))
+                        .clipShape(Capsule())
+                }
+
+                if note.visibility == "workspace" {
+                    Text("⌂ \(t("Workspace", lang: seciliDil))")
+                        .font(.system(size: 10.8, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
+                }
+            }
+
             if !note.labels.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(note.labels.prefix(3), id: \.self) { label in
@@ -5783,11 +6118,39 @@ struct StudioKeepNotesView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: selectedSection == "trash" ? "trash" : selectedSection == "archive" ? "archivebox" : selectedSection == "reminders" ? "bell" : selectedSection == "projectnotes" ? "doc.text.magnifyingglass" : "lightbulb")
+        let hasSearch = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        let iconName: String
+        let message: String
+
+        if selectedSection == "projectnotes" {
+            iconName = "doc.text.magnifyingglass"
+            message = t("No project notes yet.", lang: seciliDil)
+        } else if hasSearch {
+            iconName = "magnifyingglass"
+            message = t("No notes match your search.", lang: seciliDil)
+        } else if selectedSection == "trash" {
+            iconName = "trash"
+            message = t("Trash is empty", lang: seciliDil)
+        } else if selectedSection == "archive" {
+            iconName = "archivebox"
+            message = t("No archived notes", lang: seciliDil)
+        } else if selectedSection == "reminders" {
+            iconName = "bell"
+            message = t("No reminders", lang: seciliDil)
+        } else if selectedSection.hasPrefix("label:") {
+            iconName = "tag"
+            message = t("No notes carry this label.", lang: seciliDil)
+        } else {
+            iconName = "lightbulb"
+            message = t("Notes you add appear here", lang: seciliDil)
+        }
+
+        return VStack(spacing: 14) {
+            Image(systemName: iconName)
                 .font(.system(size: 46))
                 .foregroundColor(.secondary.opacity(0.65))
-            Text(t(selectedSection == "trash" ? t("Trash is empty", lang: seciliDil) : selectedSection == "archive" ? t("No archived notes", lang: seciliDil) : selectedSection == "reminders" ? t("No reminders", lang: seciliDil) : selectedSection == "projectnotes" ? t("No project notes found", lang: seciliDil) : "Notes you add appear here", lang: seciliDil))
+            Text(message)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(.secondary)
         }
@@ -5961,6 +6324,20 @@ private func saveNote(_ note: StudioKeepNote) {
         var updated = note
         updated.updatedAt = Date()
 
+        // TYPE and VISIBILITY are separate axes; keep the stored fields honest:
+        // link fields only carry data for their own type, and a team note is
+        // always workspace-visible (same finalization the web editor performs).
+        updated.noteType = StudioKeepNote.normalizedNoteType(updated.noteType)
+        if updated.noteType == "team" { updated.visibility = "workspace" }
+        if updated.visibility != "workspace" { updated.visibility = "only_me" }
+        if updated.noteType != "order" {
+            updated.linkedOrderId = ""
+            updated.linkedOrderLabel = ""
+        }
+        if updated.noteType != "customer" {
+            updated.linkedCustomerName = ""
+        }
+
         var payload: [String: Any] = [
             "title": updated.title,
             "text": updated.text,
@@ -5973,6 +6350,11 @@ private func saveNote(_ note: StudioKeepNote) {
             "isDeleted": updated.isDeleted,
             "labels": updated.labels,
             "links": updated.links,
+            "noteType": updated.noteType,
+            "linkedOrderId": updated.linkedOrderId,
+            "linkedOrderLabel": updated.linkedOrderLabel,
+            "linkedCustomerName": updated.linkedCustomerName,
+            "visibility": updated.visibility,
             "manualOrder": updated.manualOrder,
             "createdAt": Timestamp(date: updated.createdAt),
             "updatedAt": FieldValue.serverTimestamp(),
@@ -5986,8 +6368,58 @@ private func saveNote(_ note: StudioKeepNote) {
             payload["reminderDate"] = FieldValue.delete()
         }
 
-        collection.document(updated.id).setData(payload, merge: true)
+        let noteForFanOut = updated
+        collection.document(updated.id).setData(payload, merge: true) { error in
+            DispatchQueue.main.async {
+                if let error {
+                    // A rejected write must not disappear without a trace.
+                    errorMessage = "\(t("The note could not be saved.", lang: seciliDil)) \(error.localizedDescription)"
+                    return
+                }
+
+                // Workspace visibility fans out through the existing
+                // collaboration invites — one record mirrored, not copies.
+                if noteForFanOut.visibility == "workspace" && !noteForFanOut.isDeleted {
+                    shareNoteWithWorkspaceMembers(noteForFanOut)
+                }
+            }
+        }
         syncSharedNoteContentIfNeeded(updated)
+    }
+
+    private func shareNoteWithWorkspaceMembers(_ note: StudioKeepNote) {
+        guard !note.id.isEmpty, !cleanCompanyId.isEmpty else { return }
+
+        let alreadyShared = Set(
+            note.sharedWith.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+        )
+
+        for member in keepWorkspaceMembers {
+            let uid = member.userId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uid.isEmpty, uid != keepCurrentUserId else { continue }
+            guard member.normalizedEmail != keepCurrentUserEmail else { continue }
+            if alreadyShared.contains(uid.lowercased()) || alreadyShared.contains(member.normalizedEmail) { continue }
+            if note.collaboratorEmails.contains(where: { $0.caseInsensitiveCompare(member.normalizedEmail) == .orderedSame }) { continue }
+            if isCollaboratorInvitePending(for: note, email: member.normalizedEmail) { continue }
+
+            markCollaboratorInvitePending(for: note, email: member.normalizedEmail)
+
+            Functions.functions(region: "europe-west2")
+                .httpsCallable("createPersonalNoteCollaborationInvite")
+                .call([
+                    "companyId": cleanCompanyId,
+                    "noteId": note.id,
+                    "targetUserId": uid,
+                    "targetEmail": member.normalizedEmail,
+                    "note": cloudNotePayload(note)
+                ]) { _, error in
+                    if error != nil {
+                        DispatchQueue.main.async {
+                            errorMessage = t("The note was saved, but sharing with the team failed.", lang: seciliDil)
+                        }
+                    }
+                }
+        }
     }
 
     private func togglePin(_ note: StudioKeepNote) {
@@ -6045,6 +6477,28 @@ private func saveNote(_ note: StudioKeepNote) {
 
         saveNote(placeholder)
         selectedSection = "label:\(clean)"
+    }
+
+    // Labels live on the notes themselves, so renaming one means rewriting
+    // every note that carries it — a real label manager, like the web sidebar.
+    private func renameLabel(_ label: String, to newName: String) {
+        let cleanOld = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNew = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanOld.isEmpty, !cleanNew.isEmpty, cleanOld != cleanNew else { return }
+
+        for note in notes where note.labels.contains(where: { $0.caseInsensitiveCompare(cleanOld) == .orderedSame }) {
+            var updated = note
+            updated.labels = updated.labels.map { $0.caseInsensitiveCompare(cleanOld) == .orderedSame ? cleanNew : $0 }
+
+            var seen = Set<String>()
+            updated.labels = updated.labels.filter { seen.insert($0.lowercased()).inserted }
+
+            saveNote(updated)
+        }
+
+        if selectedSection == "label:\(cleanOld)" {
+            selectedSection = "label:\(cleanNew)"
+        }
     }
 
     private func deleteLabel(_ label: String) {
@@ -6208,8 +6662,248 @@ struct StudioKeepNoteEditor: View {
 
     @State private var isImageImporterPresented = false
     @State private var isUploadingImage = false
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @State private var editorOrderSearchText: String = ""
 
     private var noteImageLinks: [String] { note.links.filter { studioNoteLinkIsImage($0) } }
+
+    // TYPE (what the note is about) is a separate axis from VISIBILITY (who
+    // sees it) — the universal note form shipped on web.
+    private let noteTypeOptions: [(value: String, label: String)] = [
+        ("personal", "Personal"),
+        ("order", "Order"),
+        ("customer", "Customer"),
+        ("team", "Team")
+    ]
+
+    private let noteVisibilityOptions: [(value: String, label: String)] = [
+        ("only_me", "Only me"),
+        ("workspace", "Workspace members")
+    ]
+
+    private func editorOrderLabel(_ order: Siparis) -> String {
+        let customer = order.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let design = order.designName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasDesign = !design.isEmpty && design != "Untitled design" && design != customer
+
+        if hasDesign {
+            return customer.isEmpty ? design : "\(customer) · \(design)"
+        }
+        return customer.isEmpty ? t("Order", lang: seciliDil) : customer
+    }
+
+    private var filteredEditorOrders: [Siparis] {
+        let query = editorOrderSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let orders = firebaseManager.siparisler.filter { order in
+            !(order.id ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        guard !query.isEmpty else { return Array(orders.prefix(50)) }
+
+        return Array(
+            orders.filter { order in
+                "\(order.customerName) \(order.designName)".lowercased().contains(query)
+            }
+            .prefix(50)
+        )
+    }
+
+    private var editorCustomerNameSuggestions: [String] {
+        let query = note.linkedCustomerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var seen = Set<String>()
+        var names: [String] = []
+
+        for order in firebaseManager.siparisler {
+            let name = order.customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+            names.append(name)
+        }
+
+        guard !query.isEmpty else { return Array(names.prefix(6)) }
+
+        return Array(
+            names.filter { $0.lowercased().contains(query) && $0.lowercased() != query }
+                .prefix(6)
+        )
+    }
+
+    private func editorChip(_ label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(t(label, lang: seciliDil))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(isSelected ? .blue : .secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.blue.opacity(0.10) : Color.primary.opacity(0.045))
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? Color.blue.opacity(0.55) : Color.primary.opacity(0.12), lineWidth: isSelected ? 1.5 : 1)
+                )
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var noteTypeAndVisibilitySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Type", lang: seciliDil).uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundColor(.secondary)
+                .tracking(1.1)
+
+            HStack(spacing: 6) {
+                ForEach(noteTypeOptions, id: \.value) { option in
+                    editorChip(option.label, isSelected: note.noteType == option.value) {
+                        note.noteType = option.value
+                        if option.value == "team" {
+                            note.visibility = "workspace"
+                        }
+                    }
+                }
+            }
+
+            if note.noteType == "order" {
+                editorOrderPicker
+            }
+
+            if note.noteType == "customer" {
+                editorCustomerField
+            }
+
+            Text(t("Visibility", lang: seciliDil).uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundColor(.secondary)
+                .tracking(1.1)
+                .padding(.top, 4)
+
+            HStack(spacing: 6) {
+                ForEach(noteVisibilityOptions, id: \.value) { option in
+                    editorChip(option.label, isSelected: note.visibility == option.value) {
+                        note.visibility = option.value
+                    }
+                }
+            }
+
+            if note.visibility == "workspace" {
+                Text(t("Every member gets an invite to this same note — one record, not copies.", lang: seciliDil))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var editorOrderPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !note.linkedOrderLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 8) {
+                    Text("⛓ \(note.linkedOrderLabel)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.blue)
+                        .lineLimit(1)
+
+                    Button {
+                        note.linkedOrderId = ""
+                        note.linkedOrderLabel = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("Not linked", lang: seciliDil))
+                    .accessibilityLabel(t("Not linked", lang: seciliDil))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.08))
+                .clipShape(Capsule())
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+
+                TextField(t("Search orders", lang: seciliDil), text: $editorOrderSearchText)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.primary.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            ScrollView {
+                VStack(spacing: 4) {
+                    ForEach(filteredEditorOrders, id: \.id) { order in
+                        let orderId = (order.id ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let isSelected = !orderId.isEmpty && note.linkedOrderId == orderId
+
+                        Button {
+                            note.linkedOrderId = orderId
+                            note.linkedOrderLabel = editorOrderLabel(order)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(editorOrderLabel(order))
+                                    .font(.system(size: 12.5, weight: isSelected ? .bold : .semibold))
+                                    .foregroundColor(isSelected ? .blue : .primary)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                if isSelected {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(isSelected ? Color.blue.opacity(0.08) : Color.primary.opacity(0.03))
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxHeight: 150)
+        }
+    }
+
+    private var editorCustomerField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(t("Customer name", lang: seciliDil), text: $note.linkedCustomerName)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.045))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            if !editorCustomerNameSuggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(editorCustomerNameSuggestions, id: \.self) { name in
+                            Button {
+                                note.linkedCustomerName = name
+                            } label: {
+                                Text(name)
+                                    .font(.system(size: 11.5, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.primary.opacity(0.055))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private func uploadNoteImage(url: URL) {
         isUploadingImage = true
@@ -6375,6 +7069,8 @@ struct StudioKeepNoteEditor: View {
                         .padding(.horizontal, -5)
 
                     noteImageThumbnailStrip()
+
+                    noteTypeAndVisibilitySection
 
                     mobileCollaboratorArea
 
@@ -6688,6 +7384,10 @@ struct StudioKeepNoteEditor: View {
                         .padding(.bottom, 10)
 
                     noteImageThumbnailStrip()
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 10)
+
+                    noteTypeAndVisibilitySection
                         .padding(.horizontal, 16)
                         .padding(.bottom, 10)
 

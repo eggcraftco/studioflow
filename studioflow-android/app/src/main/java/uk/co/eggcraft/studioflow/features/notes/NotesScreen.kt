@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.features.notes
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.layout.offset
@@ -102,7 +104,11 @@ fun NotesScreen(
             }
         }.filter { note ->
             if (query.isEmpty()) true
-            else note.title.lowercase().contains(query) || note.text.lowercase().contains(query)
+            else note.title.lowercase().contains(query) ||
+                note.text.lowercase().contains(query) ||
+                note.labels.any { it.lowercase().contains(query) } ||
+                note.linkedOrderLabel.lowercase().contains(query) ||
+                note.linkedCustomerName.lowercase().contains(query)
         }.filter { note ->
             labelFilter?.let { note.labels.contains(it) } ?: true
         }.sortedWith(
@@ -148,7 +154,15 @@ fun NotesScreen(
             createdAt = Date(),
             updatedAt = Date(),
             manualOrder = System.currentTimeMillis().toDouble(),
-            isPinned = false
+            isPinned = false,
+            // A duplicate is a fresh personal note (web parity): no carried-over
+            // links, no shared audience, no workspace fan-out on save.
+            noteType = "personal",
+            linkedOrderId = "",
+            linkedOrderLabel = "",
+            linkedCustomerName = "",
+            visibility = "only_me",
+            sharedWith = emptyList()
         )
         onSave(copy)
     }
@@ -241,6 +255,58 @@ fun NotesScreen(
     }
     val (sectionCounts, labelCounts) = counts
 
+    // One grouping feeds BOTH the Project tab header count and the list below —
+    // that is what keeps "8 notes" from sitting over a list of 6. Order notes,
+    // inventory notes and order-linked keep-notes land in the same group.
+    val projectGroups = remember(state.orders, state.keepNotes) {
+        val byOrder = linkedMapOf<String, Pair<uk.co.eggcraft.studioflow.data.model.StudioOrder, MutableList<ProjectNoteEntry>>>()
+        state.orders.forEach { order ->
+            val entries = mutableListOf<ProjectNoteEntry>()
+            if (order.notes.isNotBlank()) entries.add(ProjectNoteEntry("Note", order.notes, null))
+            if (order.invNotes.isNotBlank()) entries.add(ProjectNoteEntry("Inventory", order.invNotes, null))
+            if (entries.isNotEmpty()) byOrder[order.id] = order to entries
+        }
+        state.keepNotes.forEach { n ->
+            if (n.isDeleted || n.isArchived || n.linkedOrderId.isBlank()) return@forEach
+            val order = state.orders.firstOrNull { it.id == n.linkedOrderId } ?: return@forEach
+            val group = byOrder.getOrPut(order.id) { order to mutableListOf() }
+            val body = if (n.title.isNotBlank()) "${n.title.trim()}\n${n.text}" else n.text
+            group.second.add(ProjectNoteEntry("Linked note", body, n))
+        }
+        byOrder.values.toList().sortedByDescending { it.first.paymentDate.time }
+    }
+    val projectNoteCount = projectGroups.sumOf { it.second.size }
+
+    // The other reminder system: order Schedule & Alerts items. Surfacing them
+    // in Reminders makes it the one central place instead of two disconnected
+    // lists (web parity). completedAt items are done — skipped.
+    val orderAlerts = remember(state.orders) {
+        state.orders.flatMap { order ->
+            order.scheduleReminders
+                .filter { it.completedAt == null && it.dueAt != null }
+                .map { r -> OrderAlertEntry(order.id, orderLinkLabel(order), r.title, r.dueAt!!.time) }
+        }.sortedBy { it.dueMs }
+    }
+
+    // Label management (rename rewrites the label on every note carrying it,
+    // delete removes it from every note) — the sidebar acts as a label manager.
+    var renameLabelTarget by remember { mutableStateOf<String?>(null) }
+    var deleteLabelTarget by remember { mutableStateOf<String?>(null) }
+    fun renameLabel(oldLabel: String, newLabelRaw: String) {
+        val next = newLabelRaw.trim()
+        if (next.isEmpty() || next == oldLabel) return
+        state.keepNotes.filter { it.labels.contains(oldLabel) }.forEach { n ->
+            onSave(n.copy(labels = n.labels.map { if (it == oldLabel) next else it }.distinct(), updatedAt = Date()))
+        }
+        if (labelFilter == oldLabel) labelFilter = next
+    }
+    fun deleteLabel(label: String) {
+        state.keepNotes.filter { it.labels.contains(label) }.forEach { n ->
+            onSave(n.copy(labels = n.labels - label, updatedAt = Date()))
+        }
+        if (labelFilter == label) labelFilter = null
+    }
+
     @Composable
     fun SidebarItem(
         label: String,
@@ -294,9 +360,31 @@ fun NotesScreen(
                 Text(t("LABELS"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 14.dp))
                 Spacer(modifier = Modifier.height(4.dp))
                 allLabels.forEach { l ->
-                    SidebarItem("#$l", labelCounts[l] ?: 0, labelFilter == l) {
-                        topTab = "personal"; onSetSection("notes"); labelFilter = l; closeDrawer()
-                    }
+                    androidx.compose.material3.NavigationDrawerItem(
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "#$l",
+                                    fontWeight = if (labelFilter == l) FontWeight.ExtraBold else FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                val n = labelCounts[l] ?: 0
+                                if (n > 0) {
+                                    Text(n.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                IconButton(onClick = { renameLabelTarget = l }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Filled.Edit, contentDescription = t("Rename label"), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                }
+                                IconButton(onClick = { deleteLabelTarget = l }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Filled.Close, contentDescription = t("Remove this label from every note?"), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                }
+                            }
+                        },
+                        selected = labelFilter == l,
+                        onClick = { topTab = "personal"; onSetSection("notes"); labelFilter = l; closeDrawer() }
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
@@ -443,15 +531,18 @@ fun NotesScreen(
                 else -> t("Notes")
             }
             Text(pageTitle, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            // The header count and the list below come from the same grouping,
+            // so the number always equals the entries actually listed.
+            val headerCount = if (topTab == "project") projectNoteCount else visible.size
             Text(
-                "${if (topTab == "project") "—" else "${visible.size} note${if (visible.size == 1) "" else "s"}"}",
+                "$headerCount note${if (headerCount == 1) "" else "s"}",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
         if (topTab == "project") {
-            ProjectNotesList(state)
+            ProjectNotesList(groups = projectGroups, onOpenNote = { n -> editingNote = n })
             return@Column
         }
 
@@ -681,6 +772,19 @@ fun NotesScreen(
             }
         }
 
+        // Shared empty-state copy (search and label filters get their own line,
+        // web parity) and whether the reminders section has order alerts to show.
+        val emptyStateText = when {
+            query.isNotEmpty() -> t("No notes match your search.")
+            section == "trash" -> t("Trash is empty.")
+            section == "archive" -> t("No archived notes.")
+            section == "reminders" -> t("No reminders.")
+            labelFilter != null -> t("No notes carry this label.")
+            else -> t("Tap + to create your first note.")
+        }
+        val showOrderAlerts = section == "reminders" && orderAlerts.isNotEmpty()
+        val showEmptyState = visible.isEmpty() && !showOrderAlerts
+
         if (gridMode) {
             // GRID — Reorderable staggered grid (long-press on card body → drag)
             androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid(
@@ -700,10 +804,20 @@ fun NotesScreen(
                     }
                 }
                 staggeredItems(others, key = { it.id }) { renderCard(it) }
-                if (visible.isEmpty()) {
+                if (showEmptyState) {
                     item(key = "__empty", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-                            Text(when (section) { "archive" -> t("No archived notes."); "trash" -> t("Trash is empty."); "reminders" -> t("No reminders."); else -> t("Tap + to create your first note.") }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(emptyStateText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (showOrderAlerts) {
+                    item(key = "__alerts_header", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                        Text(t("Order schedule alerts").uppercase(), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                    }
+                    orderAlerts.forEachIndexed { index, alert ->
+                        item(key = "__alert_${alert.orderId}_$index", span = androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan.FullLine) {
+                            OrderScheduleAlertRow(alert)
                         }
                     }
                 }
@@ -739,22 +853,22 @@ fun NotesScreen(
                 }
             }
             items(others, key = { it.id }) { note -> renderCard(note) }
-            if (visible.isEmpty()) {
+            if (showEmptyState) {
                 item {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            when (section) {
-                                "archive" -> t("No archived notes.")
-                                "trash" -> t("Trash is empty.")
-                                "reminders" -> t("No reminders.")
-                                else -> t("Tap + to create your first note.")
-                            },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(emptyStateText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            }
+            if (showOrderAlerts) {
+                item(key = "__alerts_header") {
+                    Text(t("Order schedule alerts").uppercase(), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                }
+                items(orderAlerts.size, key = { i -> "__alert_${orderAlerts[i].orderId}_$i" }) { i ->
+                    OrderScheduleAlertRow(orderAlerts[i])
                 }
             }
         }
@@ -884,9 +998,49 @@ fun NotesScreen(
         )
     }
 
+    renameLabelTarget?.let { label ->
+        var renameInput by remember(label) { mutableStateOf(label) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { renameLabelTarget = null },
+            title = { Text(t("Rename label"), fontWeight = FontWeight.ExtraBold) },
+            text = {
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    renameLabel(label, renameInput)
+                    renameLabelTarget = null
+                }) { Text("Save", fontWeight = FontWeight.ExtraBold) }
+            },
+            dismissButton = { TextButton(onClick = { renameLabelTarget = null }) { Text(t("Cancel")) } }
+        )
+    }
+
+    deleteLabelTarget?.let { label ->
+        val count = state.keepNotes.count { it.labels.contains(label) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleteLabelTarget = null },
+            title = { Text("#$label", fontWeight = FontWeight.ExtraBold) },
+            text = { Text("${t("Remove this label from every note?")} ($label · $count)") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteLabel(label)
+                    deleteLabelTarget = null
+                }) { Text(t("Delete"), fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteLabelTarget = null }) { Text(t("Cancel")) } }
+        )
+    }
+
     editingNote?.let { note ->
         NoteEditorDialog(
             note = note,
+            orders = state.orders,
             onDismiss = { editingNote = null },
             onSave = { updated ->
                 onSave(updated.copy(updatedAt = Date()))
@@ -894,6 +1048,38 @@ fun NotesScreen(
             },
             onPickImage = { bytes, mime, name -> onUploadImage(note, bytes, mime, name) }
         )
+    }
+}
+
+/** One order Schedule & Alerts item in the central Reminders list — tapping
+ *  routes to the order via the same pending-order mechanism delivery pushes use. */
+@Composable
+private fun OrderScheduleAlertRow(alert: OrderAlertEntry) {
+    val overdue = alert.dueMs < System.currentTimeMillis()
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        onClick = {
+            uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOrderRoute(alert.orderId, "schedule")
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("⏰", fontSize = 15.sp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(alert.title, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("⛓ ${alert.orderLabel}", fontSize = 11.sp, color = Color(0xFF2D7BF4), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                java.text.DateFormat.getDateInstance().format(Date(alert.dueMs)),
+                fontSize = 12.sp,
+                fontWeight = if (overdue) FontWeight.ExtraBold else FontWeight.Normal,
+                color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -1018,6 +1204,38 @@ private fun NoteCard(
                     fontSize = 11.sp,
                     fontWeight = if (isPast) FontWeight.ExtraBold else FontWeight.Normal,
                     color = if (isPast) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            // Link + visibility badges (web parity)
+            if (note.linkedOrderLabel.isNotBlank()) {
+                Text(
+                    "⛓ ${note.linkedOrderLabel}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2D7BF4),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            if (note.linkedCustomerName.isNotBlank()) {
+                Text(
+                    "◉ ${note.linkedCustomerName}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0E7A55),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            if (note.visibility == "workspace") {
+                Text(
+                    "⌂ ${t("Workspace")}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -1256,6 +1474,7 @@ private fun NoteCard(
 @Composable
 private fun NoteEditorDialog(
     note: StudioKeepNote,
+    orders: List<uk.co.eggcraft.studioflow.data.model.StudioOrder> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (StudioKeepNote) -> Unit,
     onPickImage: (ByteArray, String, String) -> Unit = { _, _, _ -> }
@@ -1279,6 +1498,11 @@ private fun NoteEditorDialog(
     var reminderDate by remember(note.id) { mutableStateOf(note.reminderDate) }
     var labels by remember(note.id) { mutableStateOf(note.labels) }
     var collabs by remember(note.id) { mutableStateOf(note.collaboratorEmails) }
+    var noteType by rememberSaveable(note.id) { mutableStateOf(note.noteType) }
+    var linkedOrderId by rememberSaveable(note.id) { mutableStateOf(note.linkedOrderId) }
+    var orderSearch by rememberSaveable(note.id) { mutableStateOf("") }
+    var customerName by rememberSaveable(note.id) { mutableStateOf(note.linkedCustomerName) }
+    var visibility by rememberSaveable(note.id) { mutableStateOf(note.visibility) }
     val labelsForSave = labels
     val collabsForSave = collabs
     val colors = listOf("default", "red", "orange", "yellow", "green", "blue", "purple", "pink")
@@ -1286,7 +1510,7 @@ private fun NoteEditorDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (note.isEmpty) t("New Note") else t("Edit Note"), fontWeight = FontWeight.ExtraBold) },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -1303,6 +1527,131 @@ private fun NoteEditorDialog(
                         .fillMaxWidth()
                         .heightIn(min = 120.dp, max = 220.dp)
                 )
+
+                // TYPE — a separate axis from visibility (web parity).
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(t("Type"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "personal" to "Personal",
+                        "order" to "Order",
+                        "customer" to "Customer",
+                        "team" to "Team"
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = noteType == value,
+                            onClick = {
+                                noteType = value
+                                // A team note's natural home is the whole workspace.
+                                if (value == "team") visibility = "workspace"
+                            },
+                            label = { Text(t(label), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+                if (noteType == "order") {
+                    OutlinedTextField(
+                        value = orderSearch,
+                        onValueChange = { orderSearch = it },
+                        placeholder = { Text(t("Search orders")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                    )
+                    val q = orderSearch.trim().lowercase()
+                    val matches = orders
+                        .filter { q.isEmpty() || "${it.customerName} ${it.designName}".lowercase().contains(q) }
+                        .take(8)
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (linkedOrderId.isBlank()) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (linkedOrderId.isBlank()) StudioBlue else MaterialTheme.colorScheme.outlineVariant),
+                            onClick = { linkedOrderId = "" },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(t("Not linked"), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                        }
+                        // A linked order that fell out of the loaded list keeps its label.
+                        if (linkedOrderId.isNotBlank() && orders.none { it.id == linkedOrderId }) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = StudioBlue.copy(alpha = 0.08f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, StudioBlue),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(note.linkedOrderLabel.ifBlank { t("Order") }, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                            }
+                        }
+                        matches.forEach { order ->
+                            val selected = linkedOrderId == order.id
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) StudioBlue else MaterialTheme.colorScheme.outlineVariant),
+                                onClick = { linkedOrderId = order.id },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(orderLinkLabel(order), fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+                            }
+                        }
+                    }
+                }
+                if (noteType == "customer") {
+                    OutlinedTextField(
+                        value = customerName,
+                        onValueChange = { customerName = it },
+                        placeholder = { Text(t("Customer name")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                    )
+                    val cq = customerName.trim().lowercase()
+                    val suggestions = orders.map { it.customerName }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .filter { it.lowercase().contains(cq) && !it.equals(customerName.trim(), ignoreCase = true) }
+                        .take(6)
+                    if (suggestions.isNotEmpty()) {
+                        androidx.compose.foundation.layout.FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            suggestions.forEach { s ->
+                                AssistChip(onClick = { customerName = s }, label = { Text(s, fontSize = 11.sp) })
+                            }
+                        }
+                    }
+                }
+
+                // VISIBILITY — "workspace" fans out invites to every member.
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(t("Visibility"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "only_me" to "Only me",
+                        "workspace" to "Workspace members"
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = visibility == value,
+                            onClick = { visibility = value },
+                            label = { Text(t(label), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+                if (visibility == "workspace") {
+                    Text(
+                        t("Every member gets an invite to this same note — one record, not copies."),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(t("Color"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(
@@ -1471,13 +1820,20 @@ private fun NoteEditorDialog(
         },
         confirmButton = {
             TextButton(onClick = {
+                val linkedOrder = if (noteType == "order" && linkedOrderId.isNotBlank()) orders.firstOrNull { it.id == linkedOrderId } else null
                 onSave(note.copy(
                     title = title.trim(),
                     text = text.trim(),
                     colorName = colorName,
                     reminderDate = reminderDate,
                     labels = labelsForSave,
-                    collaboratorEmails = collabsForSave
+                    collaboratorEmails = collabsForSave,
+                    noteType = noteType,
+                    linkedOrderId = if (noteType == "order") linkedOrderId else "",
+                    linkedOrderLabel = linkedOrder?.let { orderLinkLabel(it) }
+                        ?: (if (noteType == "order") note.linkedOrderLabel else ""),
+                    linkedCustomerName = if (noteType == "customer") customerName.trim() else "",
+                    visibility = if (visibility == "workspace") "workspace" else "only_me"
                 ))
             }) {
                 Text("Save", fontWeight = FontWeight.ExtraBold)
@@ -1488,62 +1844,90 @@ private fun NoteEditorDialog(
 }
 
 @Composable
-private fun ProjectNotesList(state: StudioFlowUiState) {
+private fun ProjectNotesList(
+    groups: List<Pair<uk.co.eggcraft.studioflow.data.model.StudioOrder, MutableList<ProjectNoteEntry>>>,
+    onOpenNote: (StudioKeepNote) -> Unit
+) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    data class Entry(val orderId: String, val title: String, val customer: String, val noteType: String, val text: String)
-    val entries = remember(state.orders) {
-        state.orders.flatMap { order ->
-            buildList {
-                if (order.notes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, t("Note"), order.notes))
-                if (order.invNotes.isNotBlank()) add(Entry(order.id, order.designName, order.customerName, t("Inventory"), order.invNotes))
-            }
-        }
-    }
-    val grouped = entries.groupBy { it.orderId }.toList().sortedByDescending {
-        state.orders.firstOrNull { o -> o.id == it.first }?.paymentDate?.time ?: 0L
-    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        if (grouped.isEmpty()) {
+        if (groups.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
                     Text(t("No project notes yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        grouped.forEach { (_, items) ->
-            val first = items.first()
-            item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            first.title.ifBlank { first.customer.ifBlank { t("Project") } },
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 17.sp
-                        )
-                        if (first.customer.isNotBlank()) {
-                            Text(first.customer, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        items.forEach { entry ->
-                            Column(modifier = Modifier.padding(top = 4.dp)) {
-                                Text(entry.noteType.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = StudioBlue)
-                                Text(entry.text, fontSize = 14.sp, maxLines = 5, overflow = TextOverflow.Ellipsis)
-                            }
+        items(groups, key = { it.first.id }) { (order, entries) ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        order.designName.ifBlank { order.customerName.ifBlank { t("Project") } },
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp
+                    )
+                    if (order.customerName.isNotBlank()) {
+                        Text(order.customerName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    entries.forEach { entry ->
+                        val linkedNote = entry.note
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .then(
+                                    if (linkedNote != null) Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(StudioBlue.copy(alpha = 0.05f))
+                                        .clickable { onOpenNote(linkedNote) }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                    else Modifier
+                                )
+                        ) {
+                            Text(
+                                t(entry.type).uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (linkedNote != null) Color(0xFF0E7A55) else StudioBlue
+                            )
+                            Text(entry.text, fontSize = 14.sp, maxLines = 5, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
             }
         }
     }
+}
+
+/** One row of the Project Notes tab: an order-field note, an inventory note,
+ *  or an order-linked keep-note (which carries the note so a tap can open it). */
+private data class ProjectNoteEntry(
+    val type: String, // translation key: "Note" | "Inventory" | "Linked note"
+    val text: String,
+    val note: StudioKeepNote?
+)
+
+/** One order Schedule & Alerts item surfaced in the central Reminders list. */
+private data class OrderAlertEntry(
+    val orderId: String,
+    val orderLabel: String,
+    val title: String,
+    val dueMs: Long
+)
+
+/** "CustomerName · DesignName" — the label web/Mac stamp on order links. */
+private fun orderLinkLabel(order: uk.co.eggcraft.studioflow.data.model.StudioOrder): String {
+    val design = order.designName.trim()
+    return if (design.isNotEmpty() && design != "Untitled design") "${order.customerName} · $design" else order.customerName
 }
 
 private val URL_REGEX = Regex("(https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+|www\\.[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=%]+)")
