@@ -48,10 +48,44 @@ Bkz. bellek/commit geçmişi: KDV brüt düzeltmesi, webhook sertleştirme, Sett
 bölüm düzeltmeleri, Quick Reply anahtar durumu, CSV export, fatura kalem-only,
 banka akışı (TrueLayer), onarım kabul kartı, teklif/onay/imza, Twilio SMS, vb.
 
-## DEVAM EDEN (şu an)
-- **Native kütüphane paritesi**: Mac/iPhone + Android'e Library modu (görünümler,
-  arama, detay, Share with Order, çöp/geri yükleme) + sipariş detayında kütüphane
-  şeridi. İki ajan çalışıyor; tam build doğrulaması şart.
+### Native kütüphane paritesi — 26 Ağu, KODDA TAMAM (mağaza sürümü bekler)
+Mac/iPhone (ContentView'da Library modu + LibraryFileDetailSheet + Share sheet;
+iki platformda xcodebuild BUILD SUCCEEDED) ve Android (ClientFilesScreen'de
+Library sekmesi + detay + Share diyaloğu; BUILD SUCCESSFUL). Sipariş detayında
+"From the Files library" şeridi 3 yerlide. Çöp/geri yükleme klasik silme
+kapısıyla; kalıcı silme + sürüm yönetimi + indeksleme bilinçli web-only.
+Çeviriler web tablosundan bayt-bayt.
+
+### Üç yeni rapor — ilk büyük dalga, 26 Ağu, WEB CANLI(yolda)
+**Schedule (3 doğrulanmış bug FIX + E2E):**
+- Sağ tutamaç: bar, satırın gizli taşmasına kırpılıyordu → tutamaç ulaşılmazdı.
+  Genişlik artık satır içine sığar; sürükleme scroll-telafili + kenarda
+  oto-kaydırma + canlı tarih önizleme rozeti. Gerçek fareyle kanıtlı (+3 gün
+  uzatma → 25 Aug-12 Oct, geri alındı).
+- Çift "Sun 25 Oct"/eksik "Sat 31": addDays artık takvim adımı (setDate), 24h
+  milisaniye değil. 92 hücre doğru.
+- Created Date "kaydetmiyor": gerçek bug — toISOString(UTC) yazımı + yerel
+  parse; BST'de bir gün geri gösteriyordu (sunucu doğru kaydediyordu).
+  dateInputValue artık yerel gün. E2E: 11 Jul kaydedildi/gösterildi/geri alındı.
+- Etiketler: "44d left", "Due £X", "Search Orders", Today + seçiliye-atla
+  düğmeleri, "1 order" tekilleri.
+**Customers (hızlı düzeltmeler):** "1 order/1 customer" tekil; kart tarihi
+"Last contact:" etiketli; Total Spent → Total Order Value + Paid + Outstanding
+kartları (totalPaid zaten hesaplanıyordu, hiç gösterilmiyordu); View All Orders
+→ /orders?customerName=… (orders arası bağ çalışıyor, E2E'li); Shopify/Woo/API
+kaynak rozetleri; Activity satırlarında saat+e-posta + Load more; mükerrer
+e-posta/telefonda oluşturma onayı; Notes sekmesi → "Order Notes";
+"Phone / WhatsApp" etiketi.
+**Müşteri kimliği (sunucu):** upsertIntegrationCustomer artık
+externalCustomerId saklıyor (5 webhook çağrı noktası) ve id → e-posta → isim
+sırasıyla eşliyor. customer-identity.mjs emülatörde TÜMÜ GEÇTİ (isim değişse
+de tek kayıt; guest aynı e-posta → mükerrer yok). **DEPLOY BEKLİYOR (reauth).**
+**Kart sistemi:** tek kart bileşeni 3 yoğunluk (container query; 460/380/290
+kademeleri E2E'li); ayırıcı 22px görünmez tutma alanı + çift-tık varsayılan;
+bulut genişliği artık EKRAN BAŞINA (schedule/customers kendi alanlarını yazar,
+eski alan fallback; saveWorkspaceSidebarLayout deploy edildi); Schedule
+varsayılanı 320px; kart resize'da canlı "384 × 497" rozeti; kilit tooltip'i
+"yalnız bu cihazda" diyor. 11+1 yeni string × 11 dil.
 
 ## SONRAYA BIRAKILANLAR (bilinçli — kullanıcı onayıyla)
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
@@ -61,48 +95,43 @@ import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel sto
 (storage.rules `firebase login --reauth` bekliyor), 500-üstü sunucu sayfalaması.
 
 ## KULLANICIYA BAĞLI BEKLEYENLER
+- **`firebase login --reauth` — ARTIK ACİL**: kimlik bilgileri 26 Ağu öğlen
+  doldu; artık TÜM fonksiyon deploy'ları bloklu. Reauth sonrası çıkacaklar:
+  1) 5 webhook (müşteri kimliği): `firebase deploy --only functions:woocommerceOrderWebhook,functions:shopifyOrderWebhook,functions:inboundOrderWebhook,functions:shopifyAppWebhook,functions:shopifyImportOrders`
+  2) storage.rules (kütüphaneye özel depo yolu + envanter fotoğraf yayını).
 - Ana repo push (commit'ler hazır), mağaza sürümleri (iOS/macOS 1.3 review'da,
-  Android 0.1.8), `firebase login --reauth` (storage.rules), VAPID anahtarı
-  (+ App Check yapılandırması — Schedule raporu §17 de bunu doğruladı),
+  Android 0.1.8; native kütüphane + Files sekmesi bir sonraki sürümle),
+  VAPID anahtarı (+ App Check — Schedule raporu §17 de doğruladı),
   "Recalculate Taxes" düğmesi (mağaza sürümlerinden sonra).
 
 ---
 
-## SIRADA — 26 Ağu'da gelen üç rapor
+## SIRADA — üç rapordan KALANLAR (ilk dalga yukarıda tamamlandı)
 
-### A. NivaDesk_schedule.md
-**Yüksek (doğrulanmış bug):**
-1. Sağ resize tutamacı sağa uzatmıyor (teslim tarihi uzatılamıyor).
-2. 3 aylık görünümde 25 Eki çift / 31 Eki yok (yaz saati geçişi; hücreler saat
-   değil salt-tarih tabanlı üretilmeli).
-3. Order → Timeline & Delivery içindeki Created Date editörü kaydetmiyor
-   (Schedule sürüklemesi kaydediyor — tutarsızlık).
-4. VAPID/App Check (kullanıcıya bağlı bölümde).
-**Orta:** kalan-gün etiketi belirsiz (45d → "45d left" / Duration-Remaining ayrımı),
-"Search Tasks" adı, Schedule–Team Schedule ayrım metni, resize'da canlı tarih
-önizleme, seçili siparişi görünür alana alma.
-**Kullanılabilirlik:** Orders/Schedule aynı kart bileşeni + Detailed/Standard/Compact
-yoğunluk (ayırıcı konumuna göre), ekran-başına genişlik hatırlama, ince-ama-kolay
-ayırıcı, Today/Jump to selected, sticky ay başlıkları, zoom presetleri, hover
-eşleştirme, tarih değişikliğinde Undo, çubukta "Due £X" etiketi.
+### A. NivaDesk_schedule.md — kalan orta/iyileştirme
+Schedule–Team Schedule ayrım metni; sticky ay başlıkları (uzun aralıklar);
+zoom presetleri (%75/%100/%125/Fit + fit-selected); hover ile sol kart ↔
+timeline çubuğu eşleştirme; range değişince seçiliyi görünür alana kaydırma;
+tarih değişikliğinde Undo (toast altyapısı yok — önce o); ilk-kullanım rehberi.
+(Not: Duration/Remaining ikili gösterimi bilinçli tek "Xd left" ile çözüldü.)
 
-### B. NivaDesk_order_kart_sistemi.md
-(Doğrulanmış arıza yok — kart taşıma çalışıyor; iyileştirme raporu.)
-Kart sol durum şeridi + tamamlanan/iptal zemin ayrımı, kısaltma tooltip'leri, hızlı
-sekmeler; ayırıcı görünürlüğü (hover mavi, ⋮ tutamaç, çift-tık varsayılan); resize
-canlı ölçü etiketi + tutamaç tooltip'leri + kart menüsü boyut seçenekleri; sürükleme
-ilk-kullanım ipucu + "taşındı—geri al" bildirimi + klavye taşıma; kilit kapsam
-etiketi; renk+etiket anlam sistemi; Actions gruplama; Customize cards kategorileri +
-reset kapsam ayrımı + panel içi arama; şablonlar (Owner/Designer/Finance/Workshop/
-Mobile), sipariş türüne göre düzen, kullanıcıya özel düzen, mobil tek sütun.
+### B. NivaDesk_order_kart_sistemi.md — kalan iyileştirmeler
+Kart sol durum şeridi + tamamlanan/iptal zemin ayrımı; kısaltma (DESI/BOYA)
+hover'da tam ad (OrderListCard.tsx:159 hardcoded kısaltma haritası); hızlı
+sekmeler (Aktif/Geciken/Benden aksiyon/Tamamlanan); ⋮ ayırıcı tutamacı;
+"taşındı—geri al" bildirimi + klavye taşıma (toast altyapısı gerekir); kart
+menüsü boyut seçenekleri (içeriğe sığdır/varsayılan/eşitle/S-M-L); renk+etiket
+anlam sistemi; Actions gruplama; Customize cards kategorileri + reset kapsam
+ayrımı + panel içi arama; şablonlar (Owner/Designer/Finance/Workshop/Mobile);
+sipariş türüne göre düzen; kullanıcıya özel düzen; "Saving card layout" akışı.
 
-### C. NivaDesk_customers.md
-**Kritik:** duplicate tespiti+birleştirme, Shopify/Woo kaynak kimlikleri, alan bazlı
-kaynak/sync çatışma politikası, Total Spent → Order Value/Paid/Outstanding ayrımı,
-"View All Orders" müşteri filtresiyle, telefon–WhatsApp ayrımı, GDPR
-export/anonymize/delete, iade/refund'un müşteri değerine yansıması.
-**Orta:** "1 orders" dilbilgisi, kart tarihinin etiketi, Customer/Order Notes adları,
-Activity'de kişi+saat+kaynak, kaynak rozetleri, ek sıralamalar, uzun proje listesi
-"+N more", manuel form genişletme (shipping/company/consent), ülke standardizasyonu.
-**Ürün:** segmentler/etiketler, Messages/AI Replies bağı, hızlı aksiyonlar,
-Overview sekme düzeni, responsive müşteri listesi.
+### C. NivaDesk_customers.md — kalan kritik/orta/ürün
+**Kritik kalan:** duplicate BİRLEŞTİRME ekranı (uyarı+id-eşleştirme temeli
+hazır); alan bazlı kaynak/sync çatışma politikası (Store/NivaDesk/newest/ask);
+telefon–WhatsApp gerçek alan ayrımı (şema işi); GDPR export/anonymize/delete
+akışları (Shopify redact kısmen var); iade/refund'un müşteri değerine
+yansıması. **Orta:** ek sıralamalar (Last Order/Highest Value/Outstanding…);
+manuel form genişletme (shipping/company/consent); ülke standardizasyonu;
+arama kapsamı (sipariş no/etiket/posta kodu). **Ürün:** segmentler/etiketler,
+Messages/AI Replies bağı, hızlı aksiyonlar, Overview sekme düzeni, profil
+entegrasyon paneli (last synced/resync/raw data).
