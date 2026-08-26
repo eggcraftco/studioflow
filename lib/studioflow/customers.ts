@@ -50,6 +50,9 @@ export type CustomerFormInput = {
   shippingCountry: string;
   shippingPhone: string;
   notes: string;
+  // Optional: only sent when editing segments — omitted on contact autosaves
+  // so the backend never wipes them.
+  tags?: string[];
   // Optional: only sent when changing the customer photo. Omitting it preserves the
   // existing avatar (the backend skips the key and the doc is merged).
   profileImageUrl?: string;

@@ -388,6 +388,8 @@ export type CustomerDirectoryItem = {
   // Integration panel: when the store last spoke, and its last normalized payload (JSON string).
   integrationSyncedAt: Date | null;
   integrationLastPayload: string;
+  // Segments: workspace tags like "VIP" or "Wholesale".
+  tags: string[];
   orderCount: number;
   totalPaid: number;
   totalValue: number;
@@ -1550,6 +1552,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       externalCustomerId: stringValue(data.externalCustomerId, ""),
       integrationSyncedAt: dateValue(data.integrationSyncedAt),
       integrationLastPayload: stringValue(data.integrationLastPayload, ""),
+      tags: Array.isArray(data.tags) ? (data.tags as unknown[]).map(tag => String(tag || "").trim()).filter(Boolean) : [],
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),

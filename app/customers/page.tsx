@@ -123,6 +123,9 @@ function cleanCustomerForm(input: CustomerFormInput): CustomerFormInput {
   if (typeof input.profileImageUrl === "string") {
     cleaned.profileImageUrl = input.profileImageUrl;
   }
+  if (Array.isArray(input.tags)) {
+    cleaned.tags = Array.from(new Set(input.tags.map(tag => tag.trim()).filter(Boolean))).slice(0, 20);
+  }
   return cleaned;
 }
 
@@ -143,7 +146,8 @@ function formFromCustomer(customer: CustomerDirectoryItem): CustomerFormInput {
     shippingPostalCode: customer.shippingPostalCode,
     shippingCountry: customer.shippingCountry,
     shippingPhone: customer.shippingPhone,
-    notes: customer.notes
+    notes: customer.notes,
+    tags: customer.tags
   };
 }
 
@@ -178,6 +182,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<CustomerDirectoryItem[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [search, setSearch] = useState("");
+  const [segmentFilter, setSegmentFilter] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [error, setError] = useState("");
@@ -249,8 +254,9 @@ export default function CustomersPage() {
 
   const filteredCustomers = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const bySegment = segmentFilter ? customers.filter(customer => customer.tags.includes(segmentFilter)) : customers;
     const filtered = term
-      ? customers.filter(customer => [
+      ? bySegment.filter(customer => [
           customer.name,
           customer.email,
           customer.phone,
@@ -266,7 +272,7 @@ export default function CustomersPage() {
           || customer.orders.some(order =>
             order.invoiceNumber.toLowerCase().includes(term)
             || order.designName.toLowerCase().includes(term)))
-      : customers;
+      : bySegment;
 
     return [...filtered].sort((lhs, rhs) => {
       if (sortMode === "orders" && lhs.orderCount !== rhs.orderCount) return rhs.orderCount - lhs.orderCount;
@@ -285,7 +291,7 @@ export default function CustomersPage() {
       if (left !== right) return right - left;
       return lhs.name.localeCompare(rhs.name);
     });
-  }, [customers, search, sortMode]);
+  }, [customers, search, sortMode, segmentFilter]);
 
 
   const selectedCustomer = useMemo(
@@ -344,6 +350,13 @@ export default function CustomersPage() {
   const canManageCustomers = Boolean(workspace && canManageCustomersForRole(workspace.role));
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
+
+  // Segments: the union of workspace tags, with counts, for the filter row.
+  const allSegments = useMemo(() => {
+    const counts = new Map<string, number>();
+    customers.forEach(customer => customer.tags.forEach(tag => counts.set(tag, (counts.get(tag) || 0) + 1)));
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [customers]);
 
   // Which field actually matched the search — shown on the card so a hit on
   // an invoice number or address doesn't look like a random result.
@@ -735,6 +748,23 @@ export default function CustomersPage() {
               </select>
             </label>
           </div>
+          {allSegments.length > 0 ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 14px 10px" }}>
+              {allSegments.map(([tag, count]) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setSegmentFilter(current => current === tag ? null : tag)}
+                  style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 11px", border: segmentFilter === tag ? "1px solid #2f6df6" : "1px solid rgba(120,120,140,0.25)", background: segmentFilter === tag ? "rgba(47,109,246,0.1)" : "transparent", color: segmentFilter === tag ? "#2f6df6" : "inherit" }}
+                >
+                  ⬖ {tag} <span style={{ opacity: 0.55 }}>{count}</span>
+                </button>
+              ))}
+              {segmentFilter ? (
+                <button type="button" onClick={() => setSegmentFilter(null)} style={{ cursor: "pointer", fontSize: 11, border: 0, background: "none", opacity: 0.6 }}>✕ {t("Clear")}</button>
+              ) : null}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="mini-panel compact-mini-panel">
@@ -929,6 +959,13 @@ function CustomerListCard({
             {extraDesignCount > 0 ? <span>+{extraDesignCount} {t("more")}</span> : null}
           </span>
         ) : null}
+        {customer.tags.length > 0 ? (
+          <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {customer.tags.slice(0, 3).map(tag => (
+              <span key={tag} style={{ fontSize: 10, fontWeight: 700, borderRadius: 999, padding: "1px 8px", background: "rgba(47,109,246,0.1)", color: "#2f6df6" }}>⬖ {tag}</span>
+            ))}
+          </span>
+        ) : null}
         <span className="customer-list-meta">
           <span className="studio-pill">{countLabel(customer.orderCount, "order", "orders", t)}</span>
           <span className="studio-pill">{t("Last contact")}: {formatDate(customer.lastContactDate)}</span>
@@ -974,6 +1011,7 @@ function CustomerDetail({
 
   const [activeTab, setActiveTab] = useState<"Orders" | "Files" | "Notes" | "Activity">("Orders");
   const [activityLimit, setActivityLimit] = useState(30);
+  const [segmentInput, setSegmentInput] = useState("");
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1049,6 +1087,33 @@ function CustomerDetail({
               </div>
             );
           })()}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+            {customer.tags.map(tag => (
+              <span key={tag} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(47,109,246,0.1)", color: "#2f6df6" }}>
+                ⬖ {tag}
+                {canManageCustomers ? (
+                  <button type="button" onClick={() => void onSaveDetails({ tags: customer.tags.filter(item => item !== tag) }, "Segments")}
+                    style={{ border: 0, background: "none", cursor: "pointer", color: "inherit", opacity: 0.6, padding: 0, fontSize: 10 }} aria-label={t("Remove")}>✕</button>
+                ) : null}
+              </span>
+            ))}
+            {canManageCustomers ? (
+              <input
+                type="text"
+                value={segmentInput}
+                onChange={event => setSegmentInput(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key !== "Enter") return;
+                  const value = segmentInput.trim();
+                  if (!value || customer.tags.includes(value)) { setSegmentInput(""); return; }
+                  void onSaveDetails({ tags: [...customer.tags, value] }, "Segments");
+                  setSegmentInput("");
+                }}
+                placeholder={`＋ ${t("Add segment")}`}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px dashed rgba(120,120,140,0.4)", background: "transparent", color: "inherit", width: 120 }}
+              />
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -1327,7 +1392,14 @@ function CustomerDetailsForm({
 
   const saved = formFromCustomer(customer);
   const normalizedValue = (value: string) => value.trim();
-  const isDirty = (Object.keys(saved) as Array<keyof CustomerFormInput>).some(key => normalizedValue(draft[key] || "") !== normalizedValue(saved[key] || ""));
+  // The details form edits string fields only; tags are managed by their own
+  // chip editor and must not trip the dirty check.
+  const isDirty = (Object.keys(saved) as Array<keyof CustomerFormInput>).some(key => {
+    const draftValue = draft[key];
+    const savedValue = saved[key];
+    if (Array.isArray(draftValue) || Array.isArray(savedValue)) return false;
+    return normalizedValue((draftValue as string) || "") !== normalizedValue((savedValue as string) || "");
+  });
 
   function updateField(field: keyof CustomerFormInput, value: string) {
     setDraft(current => ({
