@@ -24146,3 +24146,9 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 .inventory-panel-inline-edit { display: flex; gap: 8px; align-items: center; }
 .portal-shell-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .portal-shell-files a { font-weight: 700; text-decoration: underline; }
+.order-library-files { border-top: 1px dashed var(--app-border, rgba(0,0,0,0.12)); margin-top: 12px; padding-top: 10px; display: grid; gap: 6px; }
+.order-library-files-title { font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; opacity: 0.65; }
+.order-library-files ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.order-library-files li { display: flex; align-items: center; gap: 8px; }
+.order-library-files li > button { border: none; background: none; padding: 0; cursor: pointer; font-weight: 700; color: #2563eb; text-align: left; }
+.order-library-files > a { font-size: 12px; opacity: 0.75; text-decoration: underline; width: fit-content; }
