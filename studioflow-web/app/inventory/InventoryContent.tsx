@@ -34,16 +34,6 @@ import { SuppliersPanel } from "./SuppliersPanel";
 
 type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "reports";
 
-// Labels are stored untranslated and translated where they are drawn: this
-// list is module scope, and t() needs the language from the component.
-const TABS: Array<{ key: InventoryTab; label: string }> = [
-  { key: "items", label: "Items" },
-  { key: "purchases", label: "Purchases" },
-  { key: "suppliers", label: "Suppliers" },
-  { key: "stocktake", label: "Stocktake" },
-  { key: "reports", label: "Reports" }
-];
-
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -128,6 +118,19 @@ export function InventoryContent({
   const [photosFor, setPhotosFor] = useState<InventoryItem | null>(null);
   const [labelFor, setLabelFor] = useState<InventoryItem | null>(null);
   const [tab, setTab] = useState<InventoryTab>("items");
+  // The report's call (§28): ONE primary navigation. The sidebar is it; the
+  // old tab strip is gone. Quick views are saved filters over the same list.
+  const [quickView, setQuickView] = useState<"all" | "low" | "incoming" | "reserved">("all");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  // Checkboxes select for BULK work; clicking the row opens the panel. The two
+  // gestures never share a meaning (report §13/§28).
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkLocationOpen, setBulkLocationOpen] = useState(false);
+  const [bulkLocationDraft, setBulkLocationDraft] = useState("");
   const [supplierNames, setSupplierNames] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
@@ -169,20 +172,111 @@ export function InventoryContent({
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return items.filter(item => {
+      if (quickView === "low" && !(isInventoryLowStock(item) && item.status === "available")) return false;
+      if (quickView === "incoming" && item.status !== "incoming") return false;
+      if (quickView === "reserved" && item.status !== "reserved") return false;
       if (categoryFilter && item.category !== categoryFilter) return false;
       if (typeFilter && item.trackingType !== typeFilter) return false;
       if (statusFilter && item.status !== statusFilter) return false;
+      if (locationFilter && (item.location || "") !== locationFilter) return false;
+      if (supplierFilter && (item.supplierName || "") !== supplierFilter) return false;
       if (!needle) return true;
       return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number]
         .filter(Boolean)
         .some(field => String(field).toLowerCase().includes(needle));
     });
-  }, [items, search, categoryFilter, typeFilter, statusFilter]);
+  }, [items, search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter]);
+
+  // Distinct values off the loaded list — no locations collection exists yet,
+  // and free-text locations are still worth filtering by.
+  const locationOptions = useMemo(
+    () => Array.from(new Set(items.map(item => item.location).filter(Boolean))).sort(),
+    [items]
+  );
+  const supplierOptions = useMemo(
+    () => Array.from(new Set(items.map(item => item.supplierName).filter(Boolean))).sort(),
+    [items]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const paged = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize]
+  );
+
+  function openQuickView(next: "all" | "low" | "incoming" | "reserved") {
+    setTab("items");
+    setQuickView(next);
+    setStatusFilter("");
+    setSelectedId("");
+  }
+
+  function openCategory(category: string) {
+    setTab("items");
+    setQuickView("all");
+    setCategoryFilter(category);
+    setSelectedId("");
+  }
 
   const selectedItem = useMemo(
     () => items.find(entry => entry.id === selectedId) ?? null,
     [items, selectedId]
   );
+
+  function toggleChecked(id: string) {
+    setCheckedIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const checkedItems = useMemo(
+    () => items.filter(item => checkedIds.has(item.id)),
+    [items, checkedIds]
+  );
+
+  async function runBulk(action: (item: InventoryItem) => Promise<unknown>, failText: string) {
+    setBulkBusy(true);
+    setNotice("");
+    let failures = 0;
+    for (const item of checkedItems) {
+      try {
+        await action(item);
+      } catch {
+        failures += 1;
+      }
+    }
+    setBulkBusy(false);
+    setCheckedIds(new Set());
+    await reload();
+    if (failures > 0) setNotice(`${failures} ${t(failText)}`);
+  }
+
+  function exportChecked() {
+    const header = ["number", "name", "category", "type", "status", "onHand", "unit", "value", "location", "supplier"];
+    const rows = checkedItems.map(item => [
+      item.number, item.name, item.category, item.trackingType, item.status,
+      String(inventoryOnHand(item)), item.quantity?.unit || "",
+      inventoryLineValue(item).toFixed(2), item.location || "", item.supplierName || ""
+    ]);
+    const csv = [header, ...rows]
+      .map(row => row.map(cell => /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "inventory-selection.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 
   async function changeStatus(item: InventoryItem, status: InventoryStatus) {
     try {
@@ -193,7 +287,10 @@ export function InventoryContent({
     }
   }
 
-  const cards: { label: string; value: string; sub?: string; tone?: string }[] = summary
+  // Each tile says exactly what its number is made of (report §12): every
+  // value is internal PURCHASE COST (price + allocated extras), never sale
+  // price, and customer-owned property is excluded throughout.
+  const cards: { label: string; value: string; sub?: string; tone?: string; hint?: string }[] = summary
     ? [
         {
           label: t("Total Inventory Value"),
@@ -201,13 +298,29 @@ export function InventoryContent({
           tone: "accent",
           sub: summary.monthlyChange?.available
             ? `${summary.monthlyChange.pct > 0 ? "+" : ""}${summary.monthlyChange.pct}% ${t("this month")}`
-            : undefined
+            : undefined,
+          hint: t("Purchase cost of business-owned stock on the shelf (available + reserved). Customer property, incoming, sold and used items are excluded.")
         },
-        { label: t("Unique Items"), value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue) },
-        { label: t("Quantity Items"), value: String(summary.quantityCount), sub: money(currencySymbol, summary.quantityValue) },
-        { label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items` },
-        { label: t("Incoming"), value: `${summary.incomingCount} items`, sub: money(currencySymbol, summary.incomingValue) },
-        { label: t("Low Stock"), value: `${summary.lowStockCount} items`, tone: summary.lowStockCount > 0 ? "warn" : undefined }
+        {
+          label: t("Unique Items"), value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue),
+          hint: t("Serial-tracked pieces on the shelf, and their purchase cost.")
+        },
+        {
+          label: t("Quantity Items"), value: String(summary.quantityCount), sub: money(currencySymbol, summary.quantityValue),
+          hint: t("Counted stock lines (SKUs, not units), and their purchase cost on hand.")
+        },
+        {
+          label: t("Reserved for Orders"), value: money(currencySymbol, summary.reservedValue), sub: `${summary.reservedCount} items`,
+          hint: t("Purchase cost of items currently held for orders, and how many lines are held.")
+        },
+        {
+          label: t("Incoming"), value: `${summary.incomingCount} items`, sub: money(currencySymbol, summary.incomingValue),
+          hint: t("Purchased but not yet received. Counted apart — not in Total Inventory Value until it arrives.")
+        },
+        {
+          label: t("Low Stock"), value: `${summary.lowStockCount} items`, tone: summary.lowStockCount > 0 ? "warn" : undefined,
+          hint: t("Stock lines at or below their reorder point — lines, not missing units.")
+        }
       ]
     : [];
 
@@ -227,21 +340,41 @@ export function InventoryContent({
         ) : null}
       </div>
 
-      <div className="inventory-tabs" role="tablist">
-        {TABS.map(entry => (
+      <div className="inventory-shell">
+      <nav className="inventory-nav" aria-label={t("Inventory")}>
+        <p className="inventory-nav-group">{t("Overview")}</p>
+        <button type="button" data-active={tab === "items" && quickView === "all" && !categoryFilter} onClick={() => { openQuickView("all"); setCategoryFilter(""); }}>
+          {t("All Items")}
+        </button>
+        <button type="button" data-active={tab === "items" && quickView === "low"} onClick={() => openQuickView("low")}>
+          {t("Low Stock")}{summary && summary.lowStockCount > 0 ? <span className="inventory-nav-badge">{summary.lowStockCount}</span> : null}
+        </button>
+        <button type="button" data-active={tab === "items" && quickView === "incoming"} onClick={() => openQuickView("incoming")}>
+          {t("Incoming")}{summary && summary.incomingCount > 0 ? <span className="inventory-nav-badge">{summary.incomingCount}</span> : null}
+        </button>
+        <button type="button" data-active={tab === "items" && quickView === "reserved"} onClick={() => openQuickView("reserved")}>
+          {t("Reserved")}{summary && summary.reservedCount > 0 ? <span className="inventory-nav-badge">{summary.reservedCount}</span> : null}
+        </button>
+        <p className="inventory-nav-group">{t("Items")}</p>
+        {INVENTORY_CATEGORIES.map(category => (
           <button
-            key={entry.key}
+            key={category}
             type="button"
-            role="tab"
-            aria-selected={tab === entry.key}
-            data-active={tab === entry.key}
-            onClick={() => setTab(entry.key)}
+            data-active={tab === "items" && categoryFilter === category}
+            onClick={() => openCategory(category)}
           >
-            {t(entry.label)}
+            <span aria-hidden="true">{CATEGORY_ICON[category] ?? CATEGORY_ICON.Other}</span> {t(category)}
           </button>
         ))}
-      </div>
+        <p className="inventory-nav-group">{t("Purchasing")}</p>
+        <button type="button" data-active={tab === "purchases"} onClick={() => { setTab("purchases"); setSelectedId(""); }}>{t("Purchases")}</button>
+        <button type="button" data-active={tab === "suppliers"} onClick={() => { setTab("suppliers"); setSelectedId(""); }}>{t("Suppliers")}</button>
+        <p className="inventory-nav-group">{t("Manage")}</p>
+        <button type="button" data-active={tab === "stocktake"} onClick={() => { setTab("stocktake"); setSelectedId(""); }}>{t("Stocktake")}</button>
+        <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
+      </nav>
 
+      <div className="inventory-main">
       {tab === "purchases" ? (
         <PurchasesPanel
           workspace={workspace}
@@ -271,7 +404,7 @@ export function InventoryContent({
 
       <div className="inventory-stats">
         {cards.map(card => (
-          <div className="inventory-stat" key={card.label} data-tone={card.tone}>
+          <div className="inventory-stat" key={card.label} data-tone={card.tone} title={card.hint}>
             <span className="inventory-stat-label">{card.label}</span>
             <strong>{card.value}</strong>
             {card.sub ? <span className="inventory-stat-sub">{card.sub}</span> : null}
@@ -307,7 +440,72 @@ export function InventoryContent({
           <option value="">{t("All Status")}</option>
           {INVENTORY_STATUSES.map(s => <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>)}
         </select>
+        <select className="input" value={locationFilter} onChange={e => setLocationFilter(e.target.value)}>
+          <option value="">{t("All Locations")}</option>
+          {locationOptions.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+        </select>
+        <select className="input" value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)}>
+          <option value="">{t("All Suppliers")}</option>
+          {supplierOptions.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
       </div>
+
+      {checkedIds.size > 0 ? (
+        <div className="inventory-bulkbar">
+          <strong>{checkedIds.size} {t("selected")}</strong>
+          <button type="button" disabled={bulkBusy} onClick={() => { setBulkLocationDraft(""); setBulkLocationOpen(true); }}>
+            {t("Move location")}
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => void runBulk(
+              item => setInventoryItemStatus(workspace, item.id, "archived"),
+              "items could not be archived."
+            )}
+          >
+            {t("Archive")}
+          </button>
+          <button type="button" disabled={bulkBusy} onClick={exportChecked}>{t("Export CSV")}</button>
+          <button type="button" disabled={bulkBusy} onClick={() => setCheckedIds(new Set())}>{t("Clear selection")}</button>
+          {bulkBusy ? <span className="inventory-sub">{t("Working…")}</span> : null}
+        </div>
+      ) : null}
+
+      {bulkLocationOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal inventory-modal is-narrow" role="dialog" aria-modal="true" aria-label={t("Move location")}>
+            <div className="inventory-modal-head">
+              <h2>{t("Move location")}</h2>
+              <button type="button" className="inventory-modal-close" onClick={() => setBulkLocationOpen(false)} aria-label={t("Close")}>×</button>
+            </div>
+            <p className="inventory-sub">{checkedIds.size} {t("selected")}</p>
+            <label className="inventory-field is-wide">
+              <span>{t("Location")}</span>
+              <input className="input" value={bulkLocationDraft} onChange={e => setBulkLocationDraft(e.target.value)} placeholder={t("Safe A, Drawer 3…")} />
+            </label>
+            <div className="inventory-modal-actions">
+              <button type="button" onClick={() => setBulkLocationOpen(false)}>{t("Cancel")}</button>
+              <button
+                type="button"
+                className="inventory-primary"
+                disabled={bulkBusy || !bulkLocationDraft.trim()}
+                onClick={() => {
+                  setBulkLocationOpen(false);
+                  // Full payload per item — the server rebuilds the document
+                  // from the input, so a location-only body would blank fields.
+                  void runBulk(
+                    item => saveInventoryItem(workspace, { ...inventoryItemToInput(item), location: bulkLocationDraft.trim() }, item.id),
+                    "items could not be moved."
+                  );
+                }}
+              >
+                {t("Move")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {notice ? <p className="inventory-notice">{notice}</p> : null}
 
@@ -316,16 +514,17 @@ export function InventoryContent({
         <table className="inventory-table">
           <thead>
             <tr>
+              <th className="inventory-check-col" aria-label={t("Select")} />
               <th>{t("Item")}</th><th>{t("Type")}</th><th>{t("Category")}</th><th>{t("Status")}</th>
               <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th>{t("Updated")}</th><th /><th />
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={10} className="inventory-empty">{t("Loading…")}</td></tr>
+              <tr><td colSpan={11} className="inventory-empty">{t("Loading…")}</td></tr>
             ) : visible.length === 0 ? (
               <tr>
-                <td colSpan={10} className="inventory-empty">
+                <td colSpan={11} className="inventory-empty">
                   {items.length === 0 ? (
                     <>
                       {t("Nothing in inventory yet.")}{" "}
@@ -338,12 +537,20 @@ export function InventoryContent({
                   ) : t("No items match these filters.")}
                 </td>
               </tr>
-            ) : visible.map(item => (
+            ) : paged.map(item => (
               <tr
                 key={item.id}
                 className={selectedId === item.id ? "is-selected" : undefined}
                 onClick={() => setSelectedId(current => current === item.id ? "" : item.id)}
               >
+                <td className="inventory-check-col" onClick={event => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={checkedIds.has(item.id)}
+                    onChange={() => toggleChecked(item.id)}
+                    aria-label={t("Select")}
+                  />
+                </td>
                 <td>
                   <strong>{item.name}</strong>
                   <span className="inventory-sub">
@@ -417,6 +624,21 @@ export function InventoryContent({
             ))}
           </tbody>
         </table>
+        {visible.length > 0 ? (
+          <div className="inventory-pager">
+            <span className="inventory-sub">
+              {t("Showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, visible.length)} {t("of")} {visible.length} {t("items")}
+            </span>
+            <div className="inventory-pager-controls">
+              <button type="button" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>‹</button>
+              <span>{page} / {pageCount}</span>
+              <button type="button" disabled={page >= pageCount} onClick={() => setPage(current => current + 1)}>›</button>
+              <select className="input" value={pageSize} onChange={e => setPageSize(Number(e.target.value) || 10)}>
+                {[10, 25, 50].map(size => <option key={size} value={size}>{size} / {t("page")}</option>)}
+              </select>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {selectedItem ? (
@@ -467,6 +689,9 @@ export function InventoryContent({
           }}
         />
       ) : null}
+
+      </div>
+      </div>
 
       {modalOpen ? (
         <NewItemModal
