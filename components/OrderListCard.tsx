@@ -467,7 +467,8 @@ function OrderStatusBadge({ stepName, value, language }: { stepName: string; val
   const displayValue = value.trim() || "Not Yet";
   const tone = statusTone(displayValue);
   return (
-    <span className="order-status-badge-row">
+    // "DESI"/"BOYA" mean nothing to a new user — hovering spells the step out.
+    <span className="order-status-badge-row" title={`${stepName}: ${localizedCardStatus(displayValue, language)}`}>
       <span className="order-status-abbrev">{shortStepTitle(stepName)}</span>
       <span className={`order-status-value ${tone}`}>{localizedCardStatus(displayValue, language)}</span>
     </span>
