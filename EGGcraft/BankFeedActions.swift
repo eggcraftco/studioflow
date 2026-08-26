@@ -176,6 +176,16 @@ extension FirebaseManager {
         return (result["imported"] as? NSNumber)?.intValue ?? 0
     }
 
+    // MARK: Connections
+
+    /// Two very different decisions, kept apart on purpose (same contract as
+    /// the web): mode "disconnect" only revokes the bank consent and KEEPS
+    /// every imported transaction (the connection stays as "disconnected");
+    /// mode "purge" deletes the connection AND all its imported transactions.
+    func bankDeleteConnection(connectionId: String, mode: String) async throws {
+        try await bankCall("bankDeleteConnection", ["requisitionId": connectionId, "mode": mode])
+    }
+
     // MARK: Receipts
 
     func bankAttachReceipt(transactionId: String, data: Data, fileName: String, contentType: String) async throws {

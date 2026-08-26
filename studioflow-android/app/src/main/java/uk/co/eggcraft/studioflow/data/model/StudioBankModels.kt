@@ -38,6 +38,8 @@ data class StudioBankTransaction(
     val importedAtMillis: Long? = null,        // last time the sync touched it
     // ---- NivaDesk's own enrichment ----
     val reviewStatus: String = "",             // absent = unreviewed
+    /** Keyword of the rule that auto-applied [categoryAuto] — longest keyword wins server-side. */
+    val categoryAutoRule: String = "",
     val vatCodeAuto: String = "",              // rule-applied VAT
     val pandleStatus: String = "",             // "confirmed" / "matched" / "error"
     val pandleBankTransactionId: String = "",
@@ -138,11 +140,15 @@ data class StudioBankConnection(
     val status: String,
     val accountCount: Int,
     val lastSyncedAtMillis: Long?,
-    /** Server-written consent health: "ok", "needs_reconsent" or "error". */
+    /** Server-written consent health: "ok", "needs_reconsent", "error" or "disconnected". */
     val syncState: String = "ok",
+    /** When the 90-day Open Banking consent lapses — the bank stops sharing after this. */
+    val consentExpiresAtMillis: Long? = null,
     val accounts: List<StudioBankAccount> = emptyList()
 ) {
     val isLinked: Boolean get() = status == "linked"
+    /** Consent revoked on purpose — the connection is kept only so its imported data stays owned. */
+    val isDisconnected: Boolean get() = status == "disconnected"
     val needsReconnect: Boolean get() = isLinked && syncState == "needs_reconsent"
     val isSyncFailing: Boolean get() = isLinked && syncState != "ok"
 }
@@ -197,6 +203,7 @@ fun bankTransactionFromDocument(id: String, data: Map<String, Any?>): StudioBank
         firstImportedAtMillis = (data["firstImportedAt"] as? Timestamp)?.toDate()?.time,
         importedAtMillis = (data["importedAt"] as? Timestamp)?.toDate()?.time,
         reviewStatus = (data["reviewStatus"] as? String) ?: "",
+        categoryAutoRule = (data["categoryAutoRule"] as? String) ?: "",
         vatCodeAuto = ((data["vatCodeAuto"] as? String) ?: "").uppercase(),
         pandleStatus = (pandle?.get("status") as? String) ?: "",
         pandleBankTransactionId = (pandle?.get("bankTransactionId") as? String) ?: "",
@@ -235,6 +242,7 @@ fun bankConnectionFromDocument(id: String, data: Map<String, Any?>): StudioBankC
         accountCount = accounts.size,
         lastSyncedAtMillis = (data["lastSyncedAt"] as? Timestamp)?.toDate()?.time,
         syncState = (data["syncState"] as? String) ?: "ok",
+        consentExpiresAtMillis = (data["consentExpiresAt"] as? Timestamp)?.toDate()?.time,
         accounts = accounts
     )
 }

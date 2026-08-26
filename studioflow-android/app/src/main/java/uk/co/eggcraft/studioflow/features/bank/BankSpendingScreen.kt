@@ -117,6 +117,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt
 import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.bankDetectDuplicates
 import uk.co.eggcraft.studioflow.data.model.bankDetectRecurring
+import uk.co.eggcraft.studioflow.data.model.bankEffectiveVat
 import uk.co.eggcraft.studioflow.data.model.bankIncomingKindLabel
 import uk.co.eggcraft.studioflow.data.model.bankIsoDay
 import uk.co.eggcraft.studioflow.data.model.bankRankOrders
@@ -249,6 +250,9 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
     var pageSize by rememberSaveable { mutableIntStateOf(10) }
     var showAllCategories by rememberSaveable { mutableStateOf(false) }
     var flow by rememberSaveable { mutableStateOf(BankFlow.All) }
+    // Accounting-review pile filter ("" = off): a review status, or the two
+    // synthetic piles "missing_receipt" / "missing_vat" — same keys as the web.
+    var reviewFilter by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
     var receiptFilter by rememberSaveable { mutableStateOf(BankReceiptFilter.All) }
     var selectedTxId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -411,8 +415,20 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
         .map { (name, amount, _) -> Triple(name, amount, amount / maxOf(spentTotal, 0.01) * 100) }
         .sortedByDescending { it.second }
     val attentionTotal = uncategorised.size + missingReceipt.size + duplicates.size + priceChanged + cancelledRecurring.size + waiting.size + brokenConnections
+    // The accountant's worklist for the selected period — same six piles as the web Overview.
+    val reviewReady = visible.count { it.effectiveReviewStatus == "ready" }
+    val reviewNeedsInfo = visible.count { it.effectiveReviewStatus == "needs_info" }
+    val reviewMissingVat = spending.count { it.effectiveCategory.isNotBlank() && bankEffectiveVat(it, categoryTax).isBlank() }
+    val reviewSyncErrors = visible.count { it.effectiveReviewStatus == "sync_error" }
+    val reviewConfirmed = visible.count { it.effectiveReviewStatus == "confirmed" }
 
     val filtered = visible.filter { tx ->
+        when (reviewFilter) {
+            "" -> Unit
+            "missing_receipt" -> if (!(tx.isSpending && !tx.hasReceipt && !tx.receiptNotNeeded)) return@filter false
+            "missing_vat" -> if (!(tx.isSpending && tx.effectiveCategory.isNotBlank() && bankEffectiveVat(tx, categoryTax).isBlank())) return@filter false
+            else -> if (tx.effectiveReviewStatus != reviewFilter) return@filter false
+        }
         when (flow) {
             BankFlow.Incoming -> if (tx.amount <= 0) return@filter false
             BankFlow.Spending -> if (tx.amount >= 0) return@filter false
@@ -620,6 +636,46 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                         }
                     }
                 }
+                if (isOwner) {
+                    // How ready this period is to hand to the accountant — six
+                    // click-through piles, mirroring the web Overview card.
+                    item {
+                        Card {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(t("Accounting review"), fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                                Text("· $periodLabel", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            val piles = listOf(
+                                ReviewPileSpec(t("Ready for accounting"), reviewReady, "ready", BLUE),
+                                ReviewPileSpec(t("Needs information"), reviewNeedsInfo, "needs_info", AMBER),
+                                ReviewPileSpec(t("Missing receipt"), missingReceipt.size, "missing_receipt", RED),
+                                ReviewPileSpec(t("Missing VAT code"), reviewMissingVat, "missing_vat", AMBER),
+                                ReviewPileSpec(t("Sync error"), reviewSyncErrors, "sync_error", RED),
+                                ReviewPileSpec(t("Confirmed in accounting"), reviewConfirmed, "confirmed", GREEN)
+                            )
+                            val perRow = if (compact) 2 else 3
+                            piles.chunked(perRow).forEach { rowPiles ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    rowPiles.forEach { pile ->
+                                        Surface(
+                                            shape = RoundedCornerShape(11.dp), tonalElevation = 2.dp,
+                                            modifier = Modifier.weight(1f).clickable {
+                                                reviewFilter = pile.filter; flow = BankFlow.All; page = 1; tab = BankTab.Transactions
+                                            }
+                                        ) {
+                                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(pile.count.toString(), fontSize = 19.sp, fontWeight = FontWeight.ExtraBold,
+                                                    color = if (pile.count > 0) pile.color else MaterialTheme.colorScheme.onSurface)
+                                                Text(pile.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        }
+                                    }
+                                    repeat(perRow - rowPiles.size) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             BankTab.Transactions -> {
@@ -631,6 +687,16 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                                 BankFlow.Incoming to t("Incoming"), BankFlow.Spending to t("Spending")
                             ).forEach { (value, label) ->
                                 FilterChip(selected = flow == value, onClick = { flow = value; page = 1 }, label = { Text(label, fontSize = 12.sp) })
+                            }
+                            if (reviewFilter.isNotBlank()) {
+                                // Accounting-review pile filter — one tap clears it.
+                                val reviewChipLabel = when (reviewFilter) {
+                                    "missing_receipt" -> t("Missing receipt")
+                                    "missing_vat" -> t("Missing VAT code")
+                                    else -> t(bankReviewStatusLabel(reviewFilter))
+                                }
+                                FilterChip(selected = true, onClick = { reviewFilter = ""; page = 1 },
+                                    label = { Text("⚑ $reviewChipLabel ✕", fontSize = 12.sp) })
                             }
                         }
                         OutlinedTextField(
@@ -1048,6 +1114,9 @@ private fun FileBadge(name: String, size: Int = 22) {
     }
 }
 
+/** One pile of the Overview "Accounting review" card. */
+private data class ReviewPileSpec(val label: String, val count: Int, val filter: String, val color: Color)
+
 private data class StatTileSpec(
     val title: String,
     val value: String,
@@ -1138,12 +1207,14 @@ private fun ConnectionRow(connection: StudioBankConnection, t: (String) -> Strin
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(connection.providerName.ifBlank { t("Bank") }.uppercase(), fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
                 val stateColor = when {
+                    connection.isDisconnected -> Color(0xFF6B7280)
                     !connection.isLinked -> Color(0xFFF59E0B)
                     connection.needsReconnect -> RED
                     connection.isSyncFailing -> AMBER
                     else -> GREEN
                 }
                 val stateLabel = when {
+                    connection.isDisconnected -> t("Disconnected — data kept")
                     !connection.isLinked -> t("Waiting for bank consent…")
                     connection.needsReconnect -> t("Reconnect needed")
                     connection.isSyncFailing -> t("Sync failing")
@@ -1154,6 +1225,19 @@ private fun ConnectionRow(connection: StudioBankConnection, t: (String) -> Strin
             }
             connection.lastSyncedAtMillis?.let {
                 Text("${t("Last sync")} ${SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(it))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (connection.isLinked) {
+                // 90-day Open Banking consent — amber and bold once renewal is near.
+                connection.consentExpiresAtMillis?.let { expiry ->
+                    val daysLeft = ceil((expiry - System.currentTimeMillis()) / 86_400_000.0).toInt()
+                    val urgent = daysLeft <= 14
+                    Text(
+                        "${t("Consent renews by")} ${SimpleDateFormat("d MMM yyyy", locale).format(Date(expiry))}",
+                        fontSize = 11.sp,
+                        fontWeight = if (urgent) FontWeight.Bold else FontWeight.Normal,
+                        color = if (urgent) AMBER else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
             if (connection.needsReconnect) {
                 Text(t("The bank stopped sharing data — reconnect on the web to resume the feed."), fontSize = 11.sp, color = RED)
@@ -1563,7 +1647,9 @@ private fun TransactionDetailSheet(
                     CategoryPicker(category, (categoryOptions + listOfNotNull(category.ifBlank { null })).distinct(), t) { category = it }
                 }
                 if (tx.category.isBlank() && tx.categoryAuto.isNotBlank()) {
-                    Text("⚡ ${t("Auto-applied")}: ${t(tx.categoryAuto)}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // categoryAutoRule names the rule keyword that applied it (longest keyword wins).
+                    val ruleTrace = if (tx.categoryAutoRule.isNotBlank()) " · “${tx.categoryAutoRule}”" else ""
+                    Text("⚡ ${t("Auto-applied")}: ${t(tx.categoryAuto)}$ruleTrace", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (category.isBlank() && suggestion != null) {
                     TextButton(onClick = { category = suggestion.category }, contentPadding = PaddingValues(0.dp)) {

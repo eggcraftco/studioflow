@@ -43,6 +43,9 @@ struct StudioBankTransaction: Identifiable, Equatable {
     let counterparty: String
     let category: String
     let categoryAuto: String
+    /// Keyword of the rule that auto-applied the category — the audit trail
+    /// behind `categoryAuto` (longest-keyword rule wins server-side).
+    let categoryAutoRule: String
     let txType: String
     let status: String
     let hasReceipt: Bool
@@ -88,6 +91,7 @@ struct StudioBankTransaction: Identifiable, Equatable {
         counterparty = (data["counterparty"] as? String) ?? ""
         category = (data["category"] as? String) ?? ""
         categoryAuto = (data["categoryAuto"] as? String) ?? ""
+        categoryAutoRule = (data["categoryAutoRule"] as? String) ?? ""
         txType = ((data["txType"] as? String) ?? "").uppercased()
         status = (data["status"] as? String) ?? "booked"
         receiptPath = (data["receiptPath"] as? String) ?? ""
@@ -145,8 +149,10 @@ struct StudioBankConnection: Identifiable, Equatable {
     let status: String
     let accounts: [StudioBankAccountInfo]
     let lastSyncedAt: Date?
-    /// Server-written consent health: "ok", "needs_reconsent" or "error".
+    /// Server-written consent health: "ok", "needs_reconsent", "error" or "disconnected".
     let syncState: String
+    /// When the 90-day Open Banking consent lapses (server-written at link time).
+    let consentExpiresAt: Date?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -158,13 +164,22 @@ struct StudioBankConnection: Identifiable, Equatable {
         }
         lastSyncedAt = (data["lastSyncedAt"] as? Timestamp)?.dateValue()
         syncState = (data["syncState"] as? String) ?? "ok"
+        consentExpiresAt = (data["consentExpiresAt"] as? Timestamp)?.dateValue()
     }
 
     var accountCount: Int { accounts.count }
 
     var isLinked: Bool { status == "linked" }
+    /// Consent revoked on purpose — the connection stays with all its imported
+    /// data KEPT, and can be reconnected or purged from here.
+    var isDisconnected: Bool { status == "disconnected" }
     var needsReconnect: Bool { isLinked && syncState == "needs_reconsent" }
     var isSyncFailing: Bool { isLinked && syncState != "ok" }
+    /// Whole days until the consent lapses (ceil, mirror of the web).
+    var consentDaysLeft: Int? {
+        guard let consentExpiresAt else { return nil }
+        return Int(ceil(consentExpiresAt.timeIntervalSinceNow / 86_400))
+    }
 }
 
 // TrueLayer transaction_category → short badge (mirrors the web TX_TYPE_META).
@@ -205,6 +220,17 @@ func bankReviewStatusColor(_ code: String) -> Color {
     default: return Color(red: 0.42, green: 0.45, blue: 0.50)             // #6b7280 (unreviewed)
     }
 }
+
+/// Effective VAT treatment of a spending row: the explicit code, else the
+/// rule's auto code, else the category default (mirror of the web's effectiveVat).
+func bankEffectiveVat(_ tx: StudioBankTransaction, categoryTax: [String: String]) -> String {
+    if !tx.vatCode.isEmpty { return tx.vatCode }
+    if !tx.vatCodeAuto.isEmpty { return tx.vatCodeAuto }
+    return categoryTax[tx.effectiveCategory] ?? ""
+}
+
+/// Amber used for "act soon" states — the web's #b45309.
+let bankAmberColor = Color(red: 0.71, green: 0.33, blue: 0.04)
 
 func bankCurrencySymbol(_ code: String) -> String {
     switch code.uppercased() {
@@ -265,6 +291,10 @@ final class BankScreenModel: ObservableObject {
     @Published var weekStart: Date = BankScreenModel.startOfWeek(Date())
     @Published var txFlow: BankTxFlow = .all
     @Published var txAttention: BankTxAttention = .none
+    /// Accounting-review pile applied to the transactions list: a review
+    /// status code, "missing_receipt" or "missing_vat" ("" = off). Mirrors
+    /// the web's txReview filter.
+    @Published var txReview: String = ""
     @Published var txSearch: String = ""
     @Published var page: Int = 1
     @Published var selectedTxId: String?
@@ -322,6 +352,12 @@ final class BankScreenModel: ObservableObject {
 
     func showAttention(_ queue: BankTxAttention) {
         txAttention = queue; txFlow = .out; tab = .transactions; page = 1
+    }
+
+    /// One tap on an "Accounting review" pile — jump to the transactions list
+    /// filtered to that pile (mirror of the web's openPile).
+    func showReviewPile(_ filter: String) {
+        txReview = filter; txAttention = .none; tab = .transactions; page = 1
     }
 }
 
@@ -481,6 +517,11 @@ struct BankFormat {
         let formatter = DateFormatter(); formatter.locale = studioLocale(lang); formatter.dateStyle = .short; formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+    /// Date only, no time — used for the consent renewal deadline.
+    func day(_ date: Date) -> String {
+        let formatter = DateFormatter(); formatter.locale = studioLocale(lang); formatter.dateStyle = .medium; formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
     func t(_ key: String) -> String { EGGcraftT(key, lang) }
 }
 
@@ -531,11 +572,13 @@ struct BankSpendingView: View {
                             switch model.tab {
                             case .overview:
                                 BankOverviewSection(d: derived, model: model, fmt: fmt, background: cardBackground, isPhone: isPhone,
+                                                    isOwner: isOwner, categoryTax: firebaseManager.bankCategoryTax,
                                                     waiting: firebaseManager.bankWaitingReceipts.count,
                                                     brokenConnections: firebaseManager.bankConnections.filter(\.isSyncFailing).count,
                                                     suggestedRules: derived.suggestedRules.count)
                             case .transactions:
-                                BankTransactionsSection(d: derived, model: model, fmt: fmt, background: cardBackground, isPhone: isPhone, isOwner: isOwner, pageSize: $pageSize)
+                                BankTransactionsSection(d: derived, model: model, fmt: fmt, background: cardBackground, isPhone: isPhone, isOwner: isOwner,
+                                                        categoryTax: firebaseManager.bankCategoryTax, pageSize: $pageSize)
                             case .recurring:
                                 BankRecurringSection(d: derived, model: model, fmt: fmt, background: cardBackground, isPhone: isPhone)
                             case .receipts:
@@ -730,7 +773,7 @@ private struct BankConnectionBar: View {
         if !connections.isEmpty {
             VStack(spacing: 0) {
                 ForEach(connections) { connection in
-                    BankConnectionRow(connection: connection, fmt: fmt, isOwner: isOwner)
+                    BankConnectionRow(connection: connection, fmt: fmt, isOwner: isOwner, model: model)
                     if connection.id != connections.last?.id { Divider().padding(.leading, 52) }
                 }
             }
@@ -744,12 +787,21 @@ private struct BankConnectionRow: View {
     let connection: StudioBankConnection
     let fmt: BankFormat
     let isOwner: Bool
+    @ObservedObject var model: BankScreenModel
     @Environment(\.openURL) private var openURL
+    @State private var confirmDisconnect = false
+    @State private var confirmPurge = false
 
-    private var stateColor: Color { !connection.isLinked ? .orange : connection.needsReconnect ? .red : connection.isSyncFailing ? .orange : .green }
-    private var stateLabel: String {
-        !connection.isLinked ? fmt.t("Waiting for bank consent…") : connection.needsReconnect ? fmt.t("Reconnect needed") : connection.isSyncFailing ? fmt.t("Sync failing") : fmt.t("Connected")
+    private var stateColor: Color {
+        connection.isDisconnected ? .gray : !connection.isLinked ? .orange : connection.needsReconnect ? .red : connection.isSyncFailing ? .orange : .green
     }
+    private var stateLabel: String {
+        connection.isDisconnected ? fmt.t("Disconnected — data kept")
+            : !connection.isLinked ? fmt.t("Waiting for bank consent…")
+            : connection.needsReconnect ? fmt.t("Reconnect needed")
+            : connection.isSyncFailing ? fmt.t("Sync failing") : fmt.t("Connected")
+    }
+    private var busy: Bool { model.busy == "delete-\(connection.id)" }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -768,6 +820,14 @@ private struct BankConnectionRow: View {
                 if let synced = connection.lastSyncedAt {
                     Text("\(fmt.t("Last sync")) \(fmt.time(synced))").font(.system(size: 11)).foregroundColor(.secondary)
                 }
+                // Open Banking consent lasts 90 days — surface the deadline,
+                // and turn amber once renewal is two weeks out (mirror of the web).
+                if connection.isLinked, let expiry = connection.consentExpiresAt {
+                    let soon = (connection.consentDaysLeft ?? 0) <= 14
+                    Text("\(fmt.t("Consent renews by")) \(fmt.day(expiry))")
+                        .font(.system(size: 11, weight: soon ? .bold : .regular))
+                        .foregroundColor(soon ? bankAmberColor : .secondary)
+                }
                 if connection.needsReconnect {
                     Text(fmt.t("The bank stopped sharing data — reconnect on the web to resume the feed.")).font(.system(size: 11)).foregroundColor(.red)
                 }
@@ -776,8 +836,41 @@ private struct BankConnectionRow: View {
             if isOwner && connection.needsReconnect, let url = URL(string: "https://nivadesk.app/bank") {
                 Button { openURL(url) } label: { Label(fmt.t("Reconnect"), systemImage: "arrow.clockwise") }.tint(.red)
             }
+            // Disconnect and delete are different decisions, kept apart on
+            // purpose (same contract as the web): disconnecting only revokes
+            // the bank consent and KEEPS everything already imported; purging
+            // the data is a second, explicit step offered once disconnected.
+            if isOwner && connection.isDisconnected {
+                if let url = URL(string: "https://nivadesk.app/bank") {
+                    Button { openURL(url) } label: { Label(fmt.t("Reconnect"), systemImage: "arrow.clockwise") }
+                }
+                Button(role: .destructive) { confirmPurge = true } label: { Image(systemName: "trash") }
+                    .buttonStyle(.plain).foregroundColor(.secondary).disabled(busy)
+                    .help(fmt.t("Delete imported data"))
+                    .alert(fmt.t("Delete every imported transaction of this connection? This cannot be undone."), isPresented: $confirmPurge) {
+                        Button(fmt.t("Cancel"), role: .cancel) {}
+                        Button(fmt.t("Delete imported data"), role: .destructive) { deleteConnection(mode: "purge") }
+                    }
+            } else if isOwner && !connection.isDisconnected {
+                Button(fmt.t("Disconnect account")) { confirmDisconnect = true }
+                    .font(.system(size: 11)).foregroundColor(.secondary).disabled(busy)
+                    .alert(fmt.t("Disconnect this bank account? Everything already imported stays in NivaDesk, and nothing in Pandle changes. You can reconnect any time."), isPresented: $confirmDisconnect) {
+                        Button(fmt.t("Cancel"), role: .cancel) {}
+                        Button(fmt.t("Disconnect account")) { deleteConnection(mode: "disconnect") }
+                    }
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
+        .opacity(connection.isDisconnected ? 0.75 : 1)
+    }
+
+    private func deleteConnection(mode: String) {
+        guard let manager = model.manager else { return }
+        let id = connection.id, fmt = self.fmt
+        model.run("delete-\(id)") {
+            try await manager.bankDeleteConnection(connectionId: id, mode: mode)
+            return mode == "purge" ? fmt.t("Connection and its imported data removed.") : fmt.t("Bank disconnected — your imported transactions were kept.")
+        }
     }
 }
 
@@ -951,6 +1044,8 @@ private struct BankOverviewSection: View {
     let fmt: BankFormat
     let background: Color
     let isPhone: Bool
+    let isOwner: Bool
+    let categoryTax: [String: String]
     let waiting: Int
     let brokenConnections: Int
     let suggestedRules: Int
@@ -985,6 +1080,9 @@ private struct BankOverviewSection: View {
         }
         BankRecentCard(d: d, model: model, fmt: fmt, background: background, isPhone: isPhone)
         BankUpcomingCard(d: d, fmt: fmt, background: background)
+        if isOwner {
+            BankAccountingReviewCard(d: d, model: model, fmt: fmt, background: background, categoryTax: categoryTax, isPhone: isPhone)
+        }
     }
 
     private func attentionDetail() -> String {
@@ -1188,6 +1286,60 @@ private struct BankUpcomingCard: View {
     }
 }
 
+/// The accountant's worklist for the selected period: how ready this period
+/// is to hand over, with one tap into each pile (mirror of the web's
+/// "Accounting review" card). Separate struct on purpose (stack).
+private struct BankAccountingReviewCard: View {
+    let d: BankDerived
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let background: Color
+    let categoryTax: [String: String]
+    let isPhone: Bool
+
+    private var piles: [(label: String, count: Int, filter: String, color: Color)] {
+        let ready = d.visible.filter { $0.effectiveReviewStatus == "ready" }.count
+        let needsInfo = d.visible.filter { $0.effectiveReviewStatus == "needs_info" }.count
+        let missingVat = d.spending.filter { !$0.effectiveCategory.isEmpty && bankEffectiveVat($0, categoryTax: categoryTax).isEmpty }.count
+        let syncErrors = d.visible.filter { $0.effectiveReviewStatus == "sync_error" }.count
+        let confirmed = d.visible.filter { $0.effectiveReviewStatus == "confirmed" }.count
+        return [
+            (fmt.t("Ready for accounting"), ready, "ready", bankReviewStatusColor("ready")),
+            (fmt.t("Needs information"), needsInfo, "needs_info", bankReviewStatusColor("needs_info")),
+            (fmt.t("Missing receipt"), d.missingReceipt.count, "missing_receipt", bankReviewStatusColor("sync_error")),
+            (fmt.t("Missing VAT code"), missingVat, "missing_vat", bankReviewStatusColor("needs_info")),
+            (fmt.t("Sync error"), syncErrors, "sync_error", bankReviewStatusColor("sync_error")),
+            (fmt.t("Confirmed in accounting"), confirmed, "confirmed", bankReviewStatusColor("confirmed"))
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                BankCardTitle(icon: "checkmark.seal", title: fmt.t("Accounting review"))
+                Text("· \(d.periodLabel)").font(.system(size: 11.5)).foregroundColor(.secondary)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: isPhone ? 104 : 130), spacing: 8)], spacing: 8) {
+                ForEach(piles, id: \.filter) { pile in
+                    Button { model.showReviewPile(pile.filter) } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(pile.count)").font(.system(size: 20, weight: .bold)).monospacedDigit()
+                                .foregroundColor(pile.count > 0 ? pile.color : .primary)
+                            Text(pile.label).font(.system(size: 11)).foregroundColor(.secondary)
+                                .multilineTextAlignment(.leading).lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+                        .padding(10)
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.gray.opacity(0.2)))
+                        .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading).background(background).cornerRadius(14)
+    }
+}
+
 // MARK: - Transactions
 
 struct BankTransactionRow: View {
@@ -1251,11 +1403,23 @@ private struct BankTransactionsSection: View {
     let background: Color
     let isPhone: Bool
     let isOwner: Bool
+    let categoryTax: [String: String]
     @Binding var pageSize: Int
 
     private var filtered: [StudioBankTransaction] {
         let needle = model.txSearch.trimmingCharacters(in: .whitespaces).lowercased()
         return d.visible.filter { tx in
+            // Accounting-review pile filter (mirror of the web's txReview):
+            // two derived piles, otherwise an effective review status match.
+            switch model.txReview {
+            case "": break
+            case "missing_vat":
+                if !(tx.isSpending && !tx.effectiveCategory.isEmpty && bankEffectiveVat(tx, categoryTax: categoryTax).isEmpty) { return false }
+            case "missing_receipt":
+                if !(tx.isSpending && !tx.hasReceipt && !tx.receiptNotNeeded) { return false }
+            default:
+                if tx.effectiveReviewStatus != model.txReview { return false }
+            }
             if model.txFlow == .in && tx.amount <= 0 { return false }
             if model.txFlow == .out && tx.amount >= 0 { return false }
             switch model.txAttention {
@@ -1316,6 +1480,11 @@ private struct BankTransactionsSection: View {
                         BankChip(text: "! \(attentionLabel()) ✕", color: .orange)
                     }.buttonStyle(.plain)
                 }
+                if !model.txReview.isEmpty {
+                    Button { model.txReview = ""; model.page = 1 } label: {
+                        BankChip(text: "⚑ \(reviewLabel()) ✕", color: .blue)
+                    }.buttonStyle(.plain)
+                }
                 Spacer()
                 Text("\(list.count) \(fmt.t("transactions"))").font(.system(size: 12)).foregroundColor(.secondary)
             }
@@ -1351,6 +1520,14 @@ private struct BankTransactionsSection: View {
         case .noReceipt: return fmt.t("No receipt")
         case .duplicate: return fmt.t("Possible duplicates")
         default: return fmt.t("Needs attention")
+        }
+    }
+
+    private func reviewLabel() -> String {
+        switch model.txReview {
+        case "missing_vat": return fmt.t("Missing VAT code")
+        case "missing_receipt": return fmt.t("Missing receipt")
+        default: return fmt.t(bankReviewStatusLabel(model.txReview))
         }
     }
 
@@ -1451,7 +1628,9 @@ struct BankTransactionDetail: View {
                         ForEach(pickableCategories, id: \.self) { Text(fmt.t($0)).tag($0) }
                     }
                     if tx.category.isEmpty, !tx.categoryAuto.isEmpty {
-                        Text("⚡ \(fmt.t("Auto-applied")): \(fmt.t(tx.categoryAuto))").font(.system(size: 11)).foregroundColor(.secondary)
+                        // The audit trail: which rule keyword auto-applied the category.
+                        Text("⚡ \(fmt.t("Auto-applied")): \(fmt.t(tx.categoryAuto))\(tx.categoryAutoRule.isEmpty ? "" : " · \(fmt.t("Rule")) “\(tx.categoryAutoRule)”")")
+                            .font(.system(size: 11)).foregroundColor(.secondary)
                     }
                     if category.isEmpty, let suggestion = d.suggestions[tx.id] {
                         Button { category = suggestion.category } label: {

@@ -51,6 +51,11 @@ val BANK_REVIEW_STATUSES = listOf(
 fun bankReviewStatusLabel(code: String): String =
     BANK_REVIEW_STATUSES.firstOrNull { it.first == code }?.second ?: BANK_REVIEW_STATUSES.first().second
 
+/** Effective VAT treatment — explicit code, else the rule-applied one, else the
+ *  category default. The same fallback chain the web's Accounting review uses. */
+fun bankEffectiveVat(tx: StudioBankTransaction, categoryTax: Map<String, String>): String =
+    tx.vatCode.ifBlank { tx.vatCodeAuto.ifBlank { categoryTax[tx.effectiveCategory] ?: "" } }
+
 // What an incoming payment actually is (bankUpdateTransaction's incomingKind).
 // Labels are English source keys, t()'d at render time — same list as the web.
 val BANK_INCOMING_KINDS = listOf(
