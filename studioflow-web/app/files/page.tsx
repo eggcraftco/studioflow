@@ -44,6 +44,10 @@ function uploadSafetyAcceptanceKey(workspaceId: string) {
   return `studioflow-upload-policy-accepted:${workspaceId}`;
 }
 
+function uploadSafetyAcceptanceAtKey(workspaceId: string) {
+  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
+}
+
 function isFilePdf(file: Pick<ClientFileListItem, "contentType" | "fileName">) {
   return (file.contentType || "").toLowerCase().includes("pdf") || file.fileName.toLowerCase().endsWith(".pdf");
 }
@@ -334,7 +338,10 @@ export default function FilesPage() {
     if (!workspace) return;
     setBrowserAcceptedUploadPolicy(accepted);
     const key = uploadSafetyAcceptanceKey(workspace.id);
-    if (accepted) window.localStorage.setItem(key, "accepted");
+    if (accepted) {
+      window.localStorage.setItem(key, "accepted");
+      window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
+    }
     else window.localStorage.removeItem(key);
   }
 
@@ -508,15 +515,22 @@ export default function FilesPage() {
                 <span className="studio-pill">Max {maxUploadSizeMB} MB</span>
                 <span className="studio-pill">PDF, image, PSD, PSB, ZIP</span>
                 {requireUploadPolicyAcceptance ? (
-                  <label className="upload-safety-check">
-                    <input
-                      type="checkbox"
-                      checked={browserAcceptedUploadPolicy}
-                      onChange={event => updateBrowserUploadPolicyAccepted(event.target.checked)}
-                      disabled={uploading}
-                    />
-                    <span>I understand and accept the upload policy for this browser.</span>
-                  </label>
+                  <>
+                    {uploadSafetySettings?.uploadSafetyPolicyText ? (
+                      <p className="muted-copy" style={{ flexBasis: "100%", margin: 0 }}>
+                        {uploadSafetySettings.uploadSafetyPolicyText}
+                      </p>
+                    ) : null}
+                    <label className="upload-safety-check">
+                      <input
+                        type="checkbox"
+                        checked={browserAcceptedUploadPolicy}
+                        onChange={event => updateBrowserUploadPolicyAccepted(event.target.checked)}
+                        disabled={uploading}
+                      />
+                      <span>I understand and accept the upload policy for this browser.</span>
+                    </label>
+                  </>
                 ) : null}
               </div>
 

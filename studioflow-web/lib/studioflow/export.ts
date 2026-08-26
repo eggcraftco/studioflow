@@ -329,6 +329,10 @@ function appBackupSettings(settings: Record<string, unknown>) {
 function appBackupOrder(document: SerializableFirestoreDocument, generatedAt: string) {
   const data = document.data;
   return {
+    // The exact record identity, so an import can say "this IS that order"
+    // instead of guessing by name and amount. Swift's decoder ignores unknown
+    // keys, so version-2 consumers are unaffected.
+    backupRecordId: document.id,
     customerName: stringValue(data.customerName, "New Project") || "New Project",
     paymentDate: swiftIsoDate(data.paymentDate, generatedAt),
     paidAmount: numberValue(data.paidAmount),
@@ -381,6 +385,7 @@ function appBackupCustomer(document: SerializableFirestoreDocument) {
   const country = stringValue(data.country);
   const detailedAddress = [streetAddress, city, postalCode, country].filter(Boolean).join(", ");
   return {
+    backupRecordId: document.id,
     name: stringValue(data.name || data.customerName),
     phone: stringValue(data.phone || data.whatsappNumber),
     email: stringValue(data.email || data.emailAddress),
@@ -443,7 +448,7 @@ export function appCompatibleBackupJson(data: WorkspaceExportData) {
       siparisler: data.orders.map(order => appBackupOrder(order, data.generatedAt)),
       musteriler: data.customers.map(appBackupCustomer).filter(customer => customer.name.trim().length > 0),
       ...(settings ? { settings } : {}),
-      version: 2,
+      version: 3,
       exportedAt: swiftIsoDate(data.generatedAt, data.generatedAt)
     },
     null,

@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { functions, storage } from "@/lib/firebase/client";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 export type StudioSupportTicketType = "appSupport" | "workspace" | "website";
@@ -32,6 +33,14 @@ export type StudioSupportTicket = {
   readBy?: Record<string, unknown>;
 };
 
+export type StudioSupportTicketAttachment = {
+  id: string;
+  fileName: string;
+  fileURL: string;
+  fileType: string;
+  fileSize: number;
+};
+
 export type StudioSupportTicketMessage = {
   id: string;
   ticketId: string;
@@ -41,6 +50,7 @@ export type StudioSupportTicketMessage = {
   authorName: string;
   authorRole: string;
   createdAtMillis: number;
+  attachments?: StudioSupportTicketAttachment[];
 };
 
 export type SupportTicketFormInput = {
@@ -272,20 +282,52 @@ export async function listWorkspaceSupportTicketMessages(workspace: WorkspaceCon
   }
 }
 
-export async function addNivaDeskSupportTicketReply(workspace: WorkspaceContext, ticketId: string, message: string) {
+// Uploads to the same storage path the Mac app has used all along
+// (companies/{id}/support_files/{ticketId}/...), and the reply callables have
+// accepted attachments since day one — the web just never sent any.
+export async function uploadSupportTicketAttachment(
+  workspace: WorkspaceContext,
+  ticketId: string,
+  file: File
+): Promise<StudioSupportTicketAttachment> {
+  const safeName = (file.name || "attachment").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
+  const path = `companies/${workspace.id}/support_files/${ticketId}/${crypto.randomUUID()}_${safeName}`;
+  const fileRef = storageRef(storage, path);
+  await uploadBytes(fileRef, file, { contentType: file.type || "application/octet-stream" });
+  const fileURL = await getDownloadURL(fileRef);
+  return {
+    id: crypto.randomUUID(),
+    fileName: file.name || safeName,
+    fileURL,
+    fileType: file.type || "application/octet-stream",
+    fileSize: file.size
+  };
+}
+
+export async function addNivaDeskSupportTicketReply(
+  workspace: WorkspaceContext,
+  ticketId: string,
+  message: string,
+  attachments: StudioSupportTicketAttachment[] = []
+) {
   try {
     const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "addSupportTicketReply");
-    const result = await callable({ companyId: workspace.id, ticketId, message });
+    const result = await callable({ companyId: workspace.id, ticketId, message, attachments });
     return result.data;
   } catch (error) {
     throw new Error(supportError(error));
   }
 }
 
-export async function addWorkspaceSupportTicketReply(workspace: WorkspaceContext, ticketId: string, message: string) {
+export async function addWorkspaceSupportTicketReply(
+  workspace: WorkspaceContext,
+  ticketId: string,
+  message: string,
+  attachments: StudioSupportTicketAttachment[] = []
+) {
   try {
     const callable = httpsCallable<Record<string, unknown>, TicketMutationResult>(functions, "addWorkspaceTicketReply");
-    const result = await callable({ companyId: workspace.id, ticketId, message });
+    const result = await callable({ companyId: workspace.id, ticketId, message, attachments });
     return result.data;
   } catch (error) {
     throw new Error(supportError(error));

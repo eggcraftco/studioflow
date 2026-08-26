@@ -31,6 +31,15 @@ function planGuardMessage(result: PlanActionResult) {
   }
 }
 
+export type IntegrationDeliveryLogEntry = {
+  atMs: number;
+  ok: boolean;
+  test: boolean;
+  error: string;
+  orderId: string;
+  source: string;
+};
+
 export type IntegrationWebhookInfo = {
   deliveryUrl: string;
   tokenCreatedAtMs: number;
@@ -38,6 +47,8 @@ export type IntegrationWebhookInfo = {
   lastDeliveryOk: boolean;
   lastDeliveryWasTest: boolean;
   lastDeliveryError: string;
+  /** Short delivery log, newest first, capped at nine on the server. */
+  recentDeliveries: IntegrationDeliveryLogEntry[];
 };
 
 type IntegrationWebhookResponse = {
@@ -48,6 +59,7 @@ type IntegrationWebhookResponse = {
   lastDeliveryOk?: boolean;
   lastDeliveryWasTest?: boolean;
   lastDeliveryError?: string;
+  recentDeliveries?: IntegrationDeliveryLogEntry[];
 };
 
 function integrationWebhookInfo(data: IntegrationWebhookResponse | undefined): IntegrationWebhookInfo {
@@ -57,7 +69,17 @@ function integrationWebhookInfo(data: IntegrationWebhookResponse | undefined): I
     lastDeliveryAtMs: Number(data?.lastDeliveryAtMs || 0),
     lastDeliveryOk: data?.lastDeliveryOk === true,
     lastDeliveryWasTest: data?.lastDeliveryWasTest === true,
-    lastDeliveryError: String(data?.lastDeliveryError || "")
+    lastDeliveryError: String(data?.lastDeliveryError || ""),
+    recentDeliveries: Array.isArray(data?.recentDeliveries)
+      ? data.recentDeliveries.map(entry => ({
+          atMs: Number(entry?.atMs || 0),
+          ok: entry?.ok === true,
+          test: entry?.test === true,
+          error: String(entry?.error || ""),
+          orderId: String(entry?.orderId || ""),
+          source: String(entry?.source || "")
+        }))
+      : []
   };
 }
 
@@ -95,6 +117,20 @@ export type InboundPayloadCheck = {
 export async function sendTestInboundWebhook(companyId: string): Promise<InboundWebhookTestResult> {
   const callable = httpsCallable<{ companyId: string }, InboundWebhookTestResult>(functions, "sendTestInboundWebhook");
   const response = await callable({ companyId });
+  return response.data ?? {};
+}
+
+// The same round-trip test for the shop webhooks: the handler answers test:true
+// and creates nothing.
+export async function sendTestIntegrationWebhook(
+  companyId: string,
+  kind: "woocommerce" | "shopify"
+): Promise<InboundWebhookTestResult> {
+  const callable = httpsCallable<{ companyId: string; kind: string }, InboundWebhookTestResult>(
+    functions,
+    "sendTestIntegrationWebhook"
+  );
+  const response = await callable({ companyId, kind });
   return response.data ?? {};
 }
 

@@ -2252,6 +2252,9 @@ const WORKSPACE_MEMBER_ACCESS_DEFAULTS = Object.freeze({
   schedule: true,
   customers: true,
   messages: true,
+  // Posting into the team-wide thread. Separate from `messages` because the
+  // team thread is a broadcast to everyone; reading it stays under `messages`.
+  teamChat: true,
   notes: true,
   quickReply: true,
   settings: true,
@@ -6614,6 +6617,8 @@ function quickReplySettingsFromData(data = {}) {
     quickReplyPoliteness: cleanQuickReplyOption(data.quickReplyPoliteness, QUICK_REPLY_POLITENESS, "Warm"),
     quickReplyLength: cleanQuickReplyOption(data.quickReplyLength, QUICK_REPLY_LENGTHS, "Short"),
     aiKnowledgeBase: String(data.aiKnowledgeBase || ""),
+    aiKnowledgeBasePrevious: String(data.aiKnowledgeBasePrevious || ""),
+    aiKnowledgeBasePreviousSavedAtMs: integrationMillis(data.aiKnowledgeBasePreviousSavedAt),
     hasOpenAIKey: data.hasOpenAIKey === true || String(data.openAIKey || "").trim().length > 0,
     openAIKeyCheckedAtMs: Number(data.openAIKeyCheckedAtMs || 0),
     openAIKeyWorks: data.openAIKeyWorks === true,
@@ -6777,6 +6782,7 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
     throw new HttpsError("permission-denied", "Only the workspace owner can manage the OpenAI key and Company Knowledge Base.");
   }
 
+  const settingsRef = companySettingsDocRef(companyId);
   const updates = { quickReplySettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp() };
   if (Object.prototype.hasOwnProperty.call(incoming, "replyMode")) {
     updates.replyMode = cleanQuickReplyMode(incoming.replyMode, "AI");
@@ -6789,6 +6795,18 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
   }
   if (Object.prototype.hasOwnProperty.call(incoming, "aiKnowledgeBase")) {
     updates.aiKnowledgeBase = cleanQuickReplyText(incoming.aiKnowledgeBase, 50000);
+    // One previous version, kept on every real change. Not a history system —
+    // a safety net for "I just overwrote three months of answers".
+    try {
+      const beforeSnap = await settingsRef.get();
+      const beforeText = String((beforeSnap.data() || {}).aiKnowledgeBase || "");
+      if (beforeText && beforeText !== updates.aiKnowledgeBase) {
+        updates.aiKnowledgeBasePrevious = beforeText.slice(0, 50000);
+        updates.aiKnowledgeBasePreviousSavedAt = admin.firestore.FieldValue.serverTimestamp();
+      }
+    } catch (error) {
+      console.warn("aiKnowledgeBasePrevious keep failed:", error?.message || error);
+    }
   }
   if (Object.prototype.hasOwnProperty.call(incoming, "products")) {
     updates.customProductsJSON = JSON.stringify(cleanQuickReplyTemplateItems(incoming.products));
@@ -6797,7 +6815,6 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
     updates.customRulesJSON = JSON.stringify(cleanQuickReplyTemplateItems(incoming.rules));
   }
 
-  const settingsRef = companySettingsDocRef(companyId);
   if (Object.prototype.hasOwnProperty.call(incoming, "openAIKey")) {
     const cleanKey = cleanQuickReplyText(incoming.openAIKey, 500);
     if (cleanKey) {
@@ -7089,7 +7106,10 @@ function uploadSafetySettingsFromData(data = {}) {
     uploadSafetyMaxFileSizeMB: cleanUploadSafetyMaxFileSizeMB(
       data.uploadSafetyMaxFileSizeMBV1 ?? data.uploadSafetyMaxFileSizeMB,
       10
-    )
+    ),
+    // The workspace's own wording, shown at the moment of acceptance. Empty
+    // means the built-in wording.
+    uploadSafetyPolicyText: String(data.uploadSafetyPolicyText || "").slice(0, 2000)
   };
 }
 
@@ -7241,6 +7261,11 @@ exports.savePdfExportSettings = onCall({ region: "europe-west2" }, async (reques
     pdfShowShipping: cleanPdfBoolean(incoming.pdfShowShipping, true),
     pdfShowMaterials: cleanPdfBoolean(incoming.pdfShowMaterials, true),
     pdfShowPriority: cleanPdfBoolean(incoming.pdfShowPriority, true),
+    // These two were read back by pdfExportSettingsFromData and sent by the web
+    // client, but never written here — so for owner/manager saves the address
+    // toggles silently reset to their defaults on the next load.
+    pdfShowAddress: cleanPdfBoolean(incoming.pdfShowAddress, true),
+    pdfShowShippingAddress: cleanPdfBoolean(incoming.pdfShowShippingAddress, true),
     companyNumbersJSON: JSON.stringify(cleanCompanyNumbers(incoming.companyNumbers)),
     pdfExportSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
@@ -8223,6 +8248,7 @@ exports.saveUploadSafetySettings = onCall({ region: "europe-west2" }, async (req
     ? incoming.uploadSafetyRequirePolicyAcceptance
     : true;
   const maxFileSizeMB = cleanUploadSafetyMaxFileSizeMB(incoming.uploadSafetyMaxFileSizeMB, 10);
+  const policyText = String(incoming.uploadSafetyPolicyText || "").trim().slice(0, 2000);
 
   const settingsRef = companySettingsDocRef(companyId);
   await settingsRef.set({
@@ -8230,6 +8256,7 @@ exports.saveUploadSafetySettings = onCall({ region: "europe-west2" }, async (req
     uploadSafetyRequirePolicyAcceptance: requirePolicy,
     uploadSafetyMaxFileSizeMBV1: maxFileSizeMB,
     uploadSafetyMaxFileSizeMB: maxFileSizeMB,
+    uploadSafetyPolicyText: policyText,
     uploadSafetySettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
 
@@ -9108,6 +9135,13 @@ async function commitBackupImportWrites(writes) {
 // record id, so the only thing available is a content key — every format writes
 // these five fields. It is a warning, never a silent skip: two genuinely
 // different orders for one customer on one day at one price are indistinguishable.
+// Version-3 backups carry the exact record id, so "this IS that order" beats
+// guessing by name and amount. Older backups fall back to the fuzzy key alone.
+function backupRowKeys(item, fuzzyKey) {
+  const exact = String((item && item.backupRecordId) || "").trim().slice(0, 200);
+  return exact ? [`r:${exact}`, fuzzyKey] : [fuzzyKey];
+}
+
 function backupOrderMatchKey(order = {}) {
   const tracking = String(order.trackingNumber || "").trim().toLowerCase();
   if (tracking) return `t:${tracking}`;
@@ -9166,10 +9200,20 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   if (dryRun || skipDuplicates) {
     existing = await db.collection("siparisler").where("companyId", "==", companyId).get();
     existingOrderKeys = new Set();
-    for (const doc of existing.docs) existingOrderKeys.add(backupOrderMatchKey(doc.data() || {}));
+    for (const doc of existing.docs) {
+      const data = doc.data() || {};
+      existingOrderKeys.add(backupOrderMatchKey(data));
+      existingOrderKeys.add(`r:${doc.id}`);
+      if (data.backupRecordId) existingOrderKeys.add(`r:${String(data.backupRecordId).slice(0, 200)}`);
+    }
     existingCustomers = await db.collection("musteriler").where("companyId", "==", companyId).get();
     existingCustomerKeys = new Set();
-    for (const doc of existingCustomers.docs) existingCustomerKeys.add(backupCustomerMatchKey(doc.data() || {}));
+    for (const doc of existingCustomers.docs) {
+      const data = doc.data() || {};
+      existingCustomerKeys.add(backupCustomerMatchKey(data));
+      existingCustomerKeys.add(`r:${doc.id}`);
+      if (data.backupRecordId) existingCustomerKeys.add(`r:${String(data.backupRecordId).slice(0, 200)}`);
+    }
   }
 
   // Skipping happens before the plan-limit check, so a file that is 90%
@@ -9179,17 +9223,17 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   let skippedDuplicateCustomers = 0;
   if (skipDuplicates && !dryRun) {
     orderItems = orderItems.filter((item) => {
-      const key = backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email));
-      if (existingOrderKeys.has(key)) { skippedDuplicateOrders += 1; return false; }
-      existingOrderKeys.add(key);
+      const keys = backupRowKeys(item, backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email)));
+      if (keys.some((key) => existingOrderKeys.has(key))) { skippedDuplicateOrders += 1; return false; }
+      keys.forEach((key) => existingOrderKeys.add(key));
       return true;
     });
     customerItems = customerItems.filter((item) => {
       const payload = importedCustomerPayload(item, companyId, uid, email);
       if (!payload) return true;
-      const key = backupCustomerMatchKey(payload);
-      if (existingCustomerKeys.has(key)) { skippedDuplicateCustomers += 1; return false; }
-      existingCustomerKeys.add(key);
+      const keys = backupRowKeys(item, backupCustomerMatchKey(payload));
+      if (keys.some((key) => existingCustomerKeys.has(key))) { skippedDuplicateCustomers += 1; return false; }
+      keys.forEach((key) => existingCustomerKeys.add(key));
       return true;
     });
     if (orderItems.length === 0 && customerItems.length === 0 && Object.keys(settingsUpdates).length === 0) {
@@ -9223,9 +9267,8 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
 
     let likelyDuplicateOrders = 0;
     for (const item of orderItems) {
-      if (existingOrderKeys.has(backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email)))) {
-        likelyDuplicateOrders += 1;
-      }
+      const keys = backupRowKeys(item, backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email)));
+      if (keys.some((key) => existingOrderKeys.has(key))) likelyDuplicateOrders += 1;
     }
     let likelyDuplicateCustomers = 0;
     let customerRows = 0;
@@ -9233,7 +9276,8 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
       const payload = importedCustomerPayload(item, companyId, uid, email);
       if (!payload) continue;
       customerRows += 1;
-      if (existingCustomerKeys.has(backupCustomerMatchKey(payload))) likelyDuplicateCustomers += 1;
+      const keys = backupRowKeys(item, backupCustomerMatchKey(payload));
+      if (keys.some((key) => existingCustomerKeys.has(key))) likelyDuplicateCustomers += 1;
     }
 
     return {
@@ -9242,6 +9286,9 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
       dryRun: true,
       fileOrders: orderItems.length,
       fileCustomers: customerRows,
+      // Rows that parsed as nothing usable — named, not silently absorbed into
+      // the file count.
+      unsupportedCustomers: customerItems.length - customerRows,
       existingOrders: existing.size,
       existingCustomers: existingCustomers.size,
       likelyDuplicateOrders,
@@ -9260,7 +9307,14 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   for (const item of orderItems) {
     const ref = db.collection("siparisler").doc();
     importedOrders.push(ref.id);
-    writes.push({ ref, data: importedOrderPayload(item, companyId, uid, email), merge: false });
+    const recordId = String((item && item.backupRecordId) || "").trim().slice(0, 200);
+    writes.push({
+      ref,
+      data: recordId
+        ? { ...importedOrderPayload(item, companyId, uid, email), backupRecordId: recordId }
+        : importedOrderPayload(item, companyId, uid, email),
+      merge: false
+    });
   }
 
   for (const item of customerItems) {
@@ -9268,7 +9322,8 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
     if (!payload) continue;
     const ref = db.collection("musteriler").doc();
     importedCustomers.push(ref.id);
-    writes.push({ ref, data: payload, merge: false });
+    const recordId = String((item && item.backupRecordId) || "").trim().slice(0, 200);
+    writes.push({ ref, data: recordId ? { ...payload, backupRecordId: recordId } : payload, merge: false });
   }
 
   if (Object.keys(settingsUpdates).length > 0) {
@@ -9284,6 +9339,28 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   }
 
   await commitBackupImportWrites(writes);
+
+  // The run is recorded so the import can be taken back. Settings merges are
+  // deliberately not part of the undo — they overwrite in place and keep no
+  // before-image, and the run doc says so.
+  let runId = "";
+  if (importedOrders.length > 0 || importedCustomers.length > 0) {
+    try {
+      const runRef = admin.firestore().collection("companies").doc(companyId).collection("financeBulkRuns").doc();
+      runId = runRef.id;
+      await runRef.set({
+        kind: "backup_import",
+        createdAtMs: Date.now(),
+        byUid: uid,
+        createdOrderIds: importedOrders,
+        createdCustomerIds: importedCustomers,
+        importedSettings: Object.keys(settingsUpdates).length > 0
+      });
+    } catch (error) {
+      runId = "";
+      console.warn("Backup import run record failed:", error?.message || error);
+    }
+  }
 
   try {
     const updatedCompanySnap = await companyRef.get();
@@ -9311,9 +9388,74 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
     droppedCustomers,
     truncated: droppedOrders > 0 || droppedCustomers > 0,
     importedSettings: Object.keys(settingsUpdates).length > 0,
+    runId,
+    undoAvailable: Boolean(runId),
     message: `Import finished. Orders: ${importedOrders.length}. Customers: ${importedCustomers.length}.${Object.keys(settingsUpdates).length > 0 ? " Settings imported." : ""}${skippedNote}${truncatedNote}`
   };
 });
+
+// Takes back exactly what one import created — the record ids were written down
+// at import time, so undo does not have to guess by matching. Settings merges
+// are not undone: they overwrite in place and keep no before-image.
+exports.undoWorkspaceBackupImport = onCall(
+  { region: "europe-west2", timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+    const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+    if (!canFullyEditOrder(role)) {
+      throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot undo an import.`);
+    }
+
+    const runId = cleanOrderText(request.data && request.data.runId, "", 80);
+    if (!runId) throw new HttpsError("invalid-argument", "runId is required.");
+    const runRef = admin.firestore().collection("companies").doc(companyId).collection("financeBulkRuns").doc(runId);
+    const runSnap = await runRef.get();
+    if (!runSnap.exists) throw new HttpsError("not-found", "That import is no longer available to undo.");
+    const run = runSnap.data() || {};
+    if (run.kind !== "backup_import") throw new HttpsError("failed-precondition", "That run is not a backup import.");
+    if (run.undoneAtMs) throw new HttpsError("failed-precondition", "That import has already been undone.");
+
+    const db = admin.firestore();
+    let batch = db.batch();
+    let batchCount = 0;
+    let removedOrders = 0;
+    let removedCustomers = 0;
+    const flush = async () => { if (batchCount > 0) { await batch.commit(); batch = db.batch(); batchCount = 0; } };
+
+    for (const orderId of Array.isArray(run.createdOrderIds) ? run.createdOrderIds : []) {
+      const id = cleanOrderText(orderId, "", 200);
+      if (!id) continue;
+      // Only delete what still belongs to this workspace — an id is not proof.
+      const snap = await db.collection("siparisler").doc(id).get();
+      if (!snap.exists || (snap.data() || {}).companyId !== companyId) continue;
+      batch.delete(db.collection("siparisler").doc(id));
+      removedOrders += 1;
+      batchCount += 1;
+      if (batchCount >= 400) await flush();
+    }
+    for (const customerId of Array.isArray(run.createdCustomerIds) ? run.createdCustomerIds : []) {
+      const id = cleanOrderText(customerId, "", 200);
+      if (!id) continue;
+      const snap = await db.collection("musteriler").doc(id).get();
+      if (!snap.exists || (snap.data() || {}).companyId !== companyId) continue;
+      batch.delete(db.collection("musteriler").doc(id));
+      removedCustomers += 1;
+      batchCount += 1;
+      if (batchCount >= 400) await flush();
+    }
+    await flush();
+    await runRef.set({ undoneAtMs: Date.now(), undoneByUid: uid }, { merge: true });
+
+    const settingsNote = run.importedSettings ? " Settings changes from that import are not undone." : "";
+    return {
+      ok: true,
+      companyId,
+      removedOrders,
+      removedCustomers,
+      message: `Import undone. Removed ${removedOrders} orders and ${removedCustomers} customers.${settingsNote}`
+    };
+  }
+);
 
 async function deleteWorkspaceCollectionDocuments(collectionName, companyId) {
   const db = admin.firestore();
@@ -14088,6 +14230,7 @@ exports.saveWorkspaceCustomRole = onCall({ region: "europe-west2" }, async (requ
   const requestedId = customRoleId(request.data?.roleId);
   const roleId = requestedId || `custom_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
   const name = cleanCustomRoleName(request.data?.name);
+  const description = String(request.data?.description || "").trim().slice(0, 200);
   const normalizedBaseRole = normalizeWorkspaceRole(request.data?.baseRole || "member", "member");
   const baseRole = normalizedBaseRole === "viewOnly"
     ? "viewer"
@@ -14102,6 +14245,7 @@ exports.saveWorkspaceCustomRole = onCall({ region: "europe-west2" }, async (requ
     [`customRoles.${roleId}`]: {
       id: roleId,
       name,
+      description,
       baseRole,
       access,
       updatedBy: uid,
@@ -16239,13 +16383,35 @@ async function mintIntegrationToken(companyId, kind) {
 async function recordIntegrationDelivery(companyId, kind, outcome) {
   if (!INTEGRATION_KINDS[kind] || !companyId) return;
   try {
-    await integrationSecretRef(companyId, kind).set({
+    const ref = integrationSecretRef(companyId, kind);
+    // A short delivery log, newest first, capped at nine — enough to answer
+    // "did last night's orders arrive" without building a logging system. The
+    // read-modify-write is fine at webhook volume; two racing deliveries can at
+    // worst cost one line of history, never a stored order.
+    const entry = {
+      atMs: Date.now(),
+      ok: outcome.ok === true,
+      test: outcome.test === true,
+      error: outcome.ok === true ? "" : String(outcome.error || "unauthorized").slice(0, 200),
+      orderId: String(outcome.orderId || "").slice(0, 120),
+      source: String(outcome.source || "").slice(0, 80)
+    };
+    let recent = [entry];
+    try {
+      const snap = await ref.get();
+      const prior = snap.exists && Array.isArray((snap.data() || {}).recentDeliveries) ? snap.data().recentDeliveries : [];
+      recent = [entry, ...prior].slice(0, 9);
+    } catch {
+      /* keep the single fresh entry */
+    }
+    await ref.set({
       lastDeliveryAt: admin.firestore.FieldValue.serverTimestamp(),
       lastDeliveryOk: outcome.ok === true,
       // Without this a pressed test button paints the same green a real order
       // does, and a broken Zap looks connected forever.
       lastDeliveryWasTest: outcome.test === true,
-      lastDeliveryError: outcome.ok === true ? "" : String(outcome.error || "unauthorized").slice(0, 300)
+      lastDeliveryError: outcome.ok === true ? "" : String(outcome.error || "unauthorized").slice(0, 300),
+      recentDeliveries: recent
     }, { merge: true });
   } catch (error) {
     console.warn("recordIntegrationDelivery failed", { companyId, kind, error: String(error) });
@@ -16258,8 +16424,23 @@ function integrationStatusPayload(data = {}) {
     lastDeliveryAtMs: integrationMillis(data.lastDeliveryAt),
     lastDeliveryOk: data.lastDeliveryOk === true,
     lastDeliveryWasTest: data.lastDeliveryWasTest === true,
-    lastDeliveryError: String(data.lastDeliveryError || "")
+    lastDeliveryError: String(data.lastDeliveryError || ""),
+    recentDeliveries: (Array.isArray(data.recentDeliveries) ? data.recentDeliveries : []).map((d) => ({
+      atMs: Number(d && d.atMs) || 0,
+      ok: Boolean(d && d.ok),
+      test: Boolean(d && d.test),
+      error: String((d && d.error) || ""),
+      orderId: String((d && d.orderId) || ""),
+      source: String((d && d.source) || "")
+    }))
   };
+}
+
+// The requester's address, for the delivery log. Behind Google's front end the
+// first x-forwarded-for hop is the client.
+function integrationRequestSource(req) {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return fwd || String(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || "");
 }
 
 // Rotating invalidates the old URL immediately. That is the point: a token that
@@ -16303,6 +16484,49 @@ exports.sendTestInboundWebhook = onCall({ region: "europe-west2", timeoutSeconds
       status: 0,
       orderCreated: false,
       warnings: [],
+      message: String(error?.name === "AbortError" ? "The delivery URL did not answer in time." : error?.message || error)
+    };
+  }
+});
+
+// The same round-trip proof for the shop webhooks. The handlers answer a
+// nivadeskTest payload with test:true and create nothing; the delivery log
+// marks the line as a test so the green it paints is honest.
+exports.sendTestIntegrationWebhook = onCall({ region: "europe-west2", timeoutSeconds: 60 }, async (request) => {
+  const { companyId } = await requireWorkspaceForBilling(request, true);
+  const kind = String(request.data?.kind || "");
+  if (kind !== "woocommerce" && kind !== "shopify") {
+    throw new HttpsError("invalid-argument", "kind must be woocommerce or shopify.");
+  }
+  const { token } = await readIntegrationSecret(companyId, kind);
+  if (!token) {
+    throw new HttpsError("failed-precondition", "Open this page once so a delivery URL is created, then try again.");
+  }
+  const url = kind === "woocommerce" ? woocommerceDeliveryUrl(companyId, token) : shopifyDeliveryUrl(companyId, token);
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nivadeskTest: true }),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const body = await response.json().catch(() => ({}));
+    return {
+      ok: response.ok && body?.ok === true,
+      status: response.status,
+      orderCreated: body?.orderCreated === true,
+      message: response.ok
+        ? "The delivery URL answered. No order was created."
+        : `The delivery URL answered ${response.status}.`
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      orderCreated: false,
       message: String(error?.name === "AbortError" ? "The delivery URL did not answer in time." : error?.message || error)
     };
   }
@@ -16352,7 +16576,10 @@ exports.rotateIntegrationWebhookToken = onCall({ region: "europe-west2" }, async
     lastDeliveryAt: admin.firestore.FieldValue.delete(),
     lastDeliveryOk: admin.firestore.FieldValue.delete(),
     lastDeliveryWasTest: admin.firestore.FieldValue.delete(),
-    lastDeliveryError: admin.firestore.FieldValue.delete()
+    lastDeliveryError: admin.firestore.FieldValue.delete(),
+    // A new token starts a new story; deliveries made against the old one
+    // would only confuse the picture.
+    recentDeliveries: admin.firestore.FieldValue.delete()
   }, { merge: true });
   const deliveryUrl = kind === "woocommerce"
     ? woocommerceDeliveryUrl(companyId, token)
@@ -16454,14 +16681,21 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
     if (!authed) {
       const reason = workspaceToken ? "invalid token" : "no token in the delivery URL";
       console.warn(`woocommerceOrderWebhook: rejected request — ${reason}.`);
-      await recordIntegrationDelivery(companyId, "woocommerce", { ok: false, error: reason });
+      await recordIntegrationDelivery(companyId, "woocommerce", { ok: false, error: reason, source: integrationRequestSource(req) });
       res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
+    }
+    // A deliberate test press answers like the inbound endpoint: authenticated,
+    // recorded as a test, no order created — so the green it paints is honest.
+    if (req.body && (req.body.nivadeskTest === true || req.body.test === true)) {
+      await recordIntegrationDelivery(companyId, "woocommerce", { ok: true, test: true, source: integrationRequestSource(req) });
+      res.status(200).json({ ok: true, test: true, orderCreated: false });
       return;
     }
     // Recorded here rather than after the order is written: a verification ping
     // that carries no order is still a delivery that arrived and authenticated,
     // which is exactly what "is this connected?" is asking.
-    await recordIntegrationDelivery(companyId, "woocommerce", { ok: true });
+    await recordIntegrationDelivery(companyId, "woocommerce", { ok: true, source: integrationRequestSource(req), orderId: cleanWooText(order?.id || order?.number) });
 
     const wooOrderId = cleanWooText(order?.id || order?.number);
     if (!wooOrderId) {
@@ -16890,14 +17124,21 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     if (!authed) {
       const reason = workspaceToken ? "invalid token" : "no token in the delivery URL";
       console.warn(`shopifyOrderWebhook: rejected request — ${reason}.`);
-      await recordIntegrationDelivery(companyId, "shopify", { ok: false, error: reason });
+      await recordIntegrationDelivery(companyId, "shopify", { ok: false, error: reason, source: integrationRequestSource(req) });
       res.status(401).json({ ok: false, error: "unauthorized" });
+      return;
+    }
+    // A deliberate test press answers like the inbound endpoint: authenticated,
+    // recorded as a test, no order created — so the green it paints is honest.
+    if (req.body && (req.body.nivadeskTest === true || req.body.test === true)) {
+      await recordIntegrationDelivery(companyId, "shopify", { ok: true, test: true, source: integrationRequestSource(req) });
+      res.status(200).json({ ok: true, test: true, orderCreated: false });
       return;
     }
     // Recorded here rather than after the order is written: a verification ping
     // that carries no order is still a delivery that arrived and authenticated,
     // which is exactly what "is this connected?" is asking.
-    await recordIntegrationDelivery(companyId, "shopify", { ok: true });
+    await recordIntegrationDelivery(companyId, "shopify", { ok: true, source: integrationRequestSource(req), orderId: cleanWooText(order?.id || order?.order_number || order?.name) });
 
     const shopifyOrderId = cleanWooText(order?.id || order?.order_number || order?.name);
     if (!shopifyOrderId) {
@@ -17246,7 +17487,8 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     if (!workspaceToken || !nvTimingSafeEqual(providedToken, workspaceToken)) {
       await recordIntegrationDelivery(companyId, "inbound", {
         ok: false,
-        error: workspaceToken ? "invalid token" : "no token in the delivery URL"
+        error: workspaceToken ? "invalid token" : "no token in the delivery URL",
+        source: integrationRequestSource(req)
       });
       console.warn("inboundOrderWebhook: rejected request with missing/invalid token.");
       res.status(401).json({ ok: false, error: "unauthorized" });
@@ -17258,7 +17500,7 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     // carry an orderId still creates nothing.
     const isTestDelivery = payload?.nivadeskTest === true || payload?.test === true;
     if (isTestDelivery) {
-      await recordIntegrationDelivery(companyId, "inbound", { ok: true, test: true });
+      await recordIntegrationDelivery(companyId, "inbound", { ok: true, test: true, source: integrationRequestSource(req) });
       const preview = mapGenericInboundOrderToSiparis(payload, companyId, true);
       res.status(200).json({
         ok: true,
@@ -17278,7 +17520,11 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       return;
     }
 
-    await recordIntegrationDelivery(companyId, "inbound", { ok: true });
+    await recordIntegrationDelivery(companyId, "inbound", {
+      ok: true,
+      source: integrationRequestSource(req),
+      orderId: cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]))
+    });
 
     const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]));
     if (!externalId) {
@@ -18523,6 +18769,11 @@ exports.sendThreadMessage = onCall({ region: "europe-west2" }, async (request) =
 
   if (!text && !fileURL) {
     throw new HttpsError("invalid-argument", "Please write a message or attach a file.");
+  }
+
+  // The team thread reaches everyone; posting into it is its own permission.
+  if (threadId === "team") {
+    requireWorkspaceAreaAccess(companyData, uid, "teamChat", "Posting in Team Chat is not enabled for your workspace account.");
   }
 
   if (fileURL && sendAccess.role === "viewOnly") {
@@ -26453,7 +26704,28 @@ exports.shopifyCompleteConnect = onCall({ region: "europe-west2" }, async (reque
 exports.getShopifyIntegrationsForWorkspace = onCall({ region: "europe-west2" }, async (request) => {
   const { companyId } = await requireWorkspaceForBilling(request, false);
   const storesSnap = await admin.firestore().collection("shopifyStores").where("companyId", "==", companyId).get();
-  const stores = storesSnap.docs.map((docSnap) => shopifyPublicStoreView(docSnap.id, docSnap.data()));
+  // Each store ships its last nine sync rows: "0 failed" alone says nothing
+  // about WHICH orders arrived, and the log has been written all along.
+  const stores = await Promise.all(storesSnap.docs.map(async (docSnap) => {
+    const view = shopifyPublicStoreView(docSnap.id, docSnap.data());
+    try {
+      const logSnap = await docSnap.ref.collection("syncLog").orderBy("ts", "desc").limit(9).get();
+      view.recentSync = logSnap.docs.map((rowSnap) => {
+        const row = rowSnap.data() || {};
+        return {
+          atMs: integrationMillis(row.ts),
+          topic: String(row.topic || ""),
+          status: String(row.status || ""),
+          error: String(row.error || "").slice(0, 200),
+          shopifyOrderNumber: String(row.shopifyOrderNumber || row.shopifyOrderId || "")
+        };
+      });
+    } catch (error) {
+      view.recentSync = [];
+      console.warn("shopify syncLog read failed:", error?.message || error);
+    }
+    return view;
+  }));
   return { ok: true, stores };
 });
 

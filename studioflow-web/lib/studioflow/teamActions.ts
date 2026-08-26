@@ -115,6 +115,7 @@ export async function saveWorkspaceCustomRole(workspace: WorkspaceContext, role:
     companyId: workspace.id,
     roleId: role.id || "",
     name: role.name,
+    description: role.description || "",
     baseRole: role.baseRole || "member",
     access: normalizeAccess(role.access)
   });

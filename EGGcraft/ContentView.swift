@@ -14110,7 +14110,10 @@ struct AccountProfileView: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(authVM.isProfileLoading)
+        // Enabled only when something actually changed — an always-live Save
+        // reads as "there is something to save" when there is not.
+        .disabled(authVM.isProfileLoading
+            || (displayName == authVM.accountDisplayName && companyName == authVM.companyName))
     }
 
     private var resetProfileButton: some View {
@@ -14131,9 +14134,18 @@ struct AccountProfileView: View {
     private var deleteAccountCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle(t("Delete account", lang: seciliDil), icon: "trash.fill")
-            Text(t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone.", lang: seciliDil))
-                .font(.system(size: 12))
-                .foregroundColor(.gray)
+            // Two different losses, two separate lines — "your workspace dies"
+            // and "you leave other people's workspaces" were one gray sentence.
+            Text(t("This deletes your account permanently. It cannot be undone.", lang: seciliDil))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.red)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("• " + t("The workspace you own is deleted with all of its data: orders, customers, notes, messages and files.", lang: seciliDil))
+                Text("• " + t("Your memberships in other teams' workspaces are removed. Their data stays with them.", lang: seciliDil))
+            }
+            .font(.system(size: 12))
+            .foregroundColor(.gray)
+            .fixedSize(horizontal: false, vertical: true)
             TextField(t("Type DELETE to confirm", lang: seciliDil), text: $deleteAccountConfirmText)
                 .textFieldStyle(.plain)
                 .padding(10)
@@ -14254,7 +14266,14 @@ struct AccountProfileView: View {
         Button {
             authVM.sendPasswordResetEmail()
         } label: {
-            Label(t("Send Password Reset Email", lang: seciliDil), systemImage: "envelope.fill")
+            // Names the address the link actually goes to, so pressing it is
+            // never a surprise.
+            Label(
+                authVM.accountEmail.isEmpty
+                    ? t("Send Password Reset Email", lang: seciliDil)
+                    : "\(t("Send reset link to", lang: seciliDil)) \(authVM.accountEmail)",
+                systemImage: "envelope.fill"
+            )
         }
         .buttonStyle(.plain)
         .disabled(authVM.isProfileLoading)

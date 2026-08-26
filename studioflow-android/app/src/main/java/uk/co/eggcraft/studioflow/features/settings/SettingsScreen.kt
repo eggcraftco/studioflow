@@ -2618,7 +2618,12 @@ private fun AccountDetail(
             }
             CopyableValue(t("User ID"), user?.uid.orEmpty(), "Copy")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(onClick = { onUpdateAccountProfile(displayName, companyName) }) {
+                // Enabled only when something actually changed — an always-live
+                // Save reads as "there is something to save" when there is not.
+                TextButton(
+                    onClick = { onUpdateAccountProfile(displayName, companyName) },
+                    enabled = displayName != workspace?.accountDisplayName.orEmpty() || companyName != (workspace?.name ?: "NivaDesk")
+                ) {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(t("Save Profile"))
@@ -2718,7 +2723,10 @@ private fun AccountDetail(
                         OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Filled.Email, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(t("Send Password Reset Email"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (user?.email.isNullOrBlank()) t("Send Password Reset Email") else "${t("Send reset link to")} ${user?.email}",
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.weight(1f)) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
@@ -2731,7 +2739,7 @@ private fun AccountDetail(
                         OutlinedButton(onClick = onSendPasswordResetEmail, enabled = !state.settingsSaving, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Filled.Email, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(t("Send Password Reset Email"))
+                            Text(if (user?.email.isNullOrBlank()) t("Send Password Reset Email") else "${t("Send reset link to")} ${user?.email}")
                         }
                         TextButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
@@ -3364,6 +3372,7 @@ private fun AccessEditor(access: WorkspaceMemberAccess, onChange: (WorkspaceMemb
                 AccessOption("schedule", "Schedule"),
                 AccessOption("customers", "Customers"),
                 AccessOption("messages", "Messages"),
+        AccessOption("teamChat", "Team Chat posting"),
                 AccessOption("notes", "Notes"),
                 AccessOption("quickReply", t("Quick Reply")),
                 AccessOption("settings", "Settings"),
@@ -3532,6 +3541,7 @@ private fun WorkspaceMemberAccess.copyWithKey(key: String, value: Boolean): Work
         "schedule" -> copy(schedule = value)
         "customers" -> copy(customers = value)
         "messages" -> copy(messages = value)
+        "teamChat" -> copy(teamChat = value)
         "notes" -> copy(notes = value)
         "quickReply" -> copy(quickReply = value)
         "settings" -> copy(settings = value)
@@ -7212,8 +7222,21 @@ private fun DeleteAccountCard(onSignOut: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(t("Delete account"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            // Two different losses, two separate lines — "your workspace dies"
+            // and "you leave other people's workspaces" were one gray sentence.
             Text(
-                t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone."),
+                t("This deletes your account permanently. It cannot be undone."),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error
+            )
+            Text(
+                "\u2022 " + t("The workspace you own is deleted with all of its data: orders, customers, notes, messages and files."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "\u2022 " + t("Your memberships in other teams' workspaces are removed. Their data stays with them."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

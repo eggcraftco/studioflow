@@ -38,6 +38,8 @@ data class WorkspaceMemberAccess(
     val schedule: Boolean = true,
     val customers: Boolean = true,
     val messages: Boolean = true,
+    // Posting into the team-wide thread; reading it stays under `messages`.
+    val teamChat: Boolean = true,
     val notes: Boolean = true,
     val quickReply: Boolean = true,
     val settings: Boolean = true,
@@ -86,6 +88,7 @@ data class WorkspaceMemberAccess(
             "schedule" -> schedule
             "customers" -> customers
             "messages" -> messages
+            "teamChat" -> teamChat
             "notes" -> notes
             "quickReply" -> quickReply
             "settings" -> settings

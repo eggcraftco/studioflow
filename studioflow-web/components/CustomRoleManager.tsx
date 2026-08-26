@@ -16,6 +16,7 @@ import { studioT } from "@/lib/studioflow/language";
 type EditableRole = {
   id?: string;
   name: string;
+  description?: string;
   baseRole: string;
   access: WorkspaceMemberAccess;
 };
@@ -43,6 +44,7 @@ function normalizeAccess(access?: Partial<WorkspaceMemberAccess>): WorkspaceMemb
 function defaultRole(): EditableRole {
   return {
     name: "",
+    description: "",
     baseRole: "member",
     access: defaultAccess()
   };
@@ -159,6 +161,17 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
             />
           </label>
           <label>
+            <span>{t("Description (optional)")}</span>
+            <input
+              className="input"
+              value={newRole.description || ""}
+              onChange={event => setNewRole(previous => ({ ...previous, description: event.target.value }))}
+              placeholder={t("e.g. Front desk: sees orders and customers, no finances.")}
+              maxLength={200}
+              disabled={disabled || Boolean(savingKey)}
+            />
+          </label>
+          <label>
             <span>{t("Base behavior")}</span>
             <select
               className="input"
@@ -223,6 +236,7 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
               >
                 <div>
                   <strong>{role.name}</strong>
+                  {role.description ? <small>{role.description}</small> : null}
                   <small>{roleDescription(role, t)}</small>
                 </div>
                 <span className="custom-role-summary-meta">
@@ -239,6 +253,16 @@ export function CustomRoleManager({ roles, disabled = false, savingKey = "", lan
                         className="input"
                         value={draft.name}
                         onChange={event => updateDraft(role.id, { name: event.target.value })}
+                        disabled={disabled || Boolean(savingKey)}
+                      />
+                    </label>
+                    <label>
+                      <span>{t("Description (optional)")}</span>
+                      <input
+                        className="input"
+                        value={draft.description || ""}
+                        onChange={event => updateDraft(role.id, { description: event.target.value })}
+                        maxLength={200}
                         disabled={disabled || Boolean(savingKey)}
                       />
                     </label>

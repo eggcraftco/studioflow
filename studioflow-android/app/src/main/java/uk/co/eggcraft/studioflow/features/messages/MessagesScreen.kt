@@ -152,6 +152,9 @@ fun MessagesScreen(
     val canCreateAnyConversation = !isViewOnlyMember &&
         (workspaceMessageSettings.directMessagesEnabled || workspaceMessageSettings.groupConversationsEnabled)
     val canSendMessageAttachments = workspaceMessageSettings.attachmentsEnabled && !isViewOnlyMember
+    // Posting into the team-wide thread is its own permission; the server
+    // enforces it, this only keeps the composer honest.
+    val canPostTeamChat = state.workspace?.isOwner == true || state.workspace?.memberAccess?.teamChat != false
     val currentUid = state.user?.uid.orEmpty()
     val context = LocalContext.current
     val deletedThreadPreferences = remember { context.getSharedPreferences("studio_message_deleted_threads", Context.MODE_PRIVATE) }
@@ -277,6 +280,7 @@ fun MessagesScreen(
             if (phoneShowingConversation && selectedThread != null) {
                 BackHandler(enabled = true) { phoneShowingConversation = false }
                 ConversationPanel(
+                    canPostTeamChat = canPostTeamChat,
                     thread = selectedThread,
                     allItems = allItems,
                     displayedItems = displayedItems,
@@ -395,6 +399,7 @@ fun MessagesScreen(
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
         ConversationPanel(
+            canPostTeamChat = canPostTeamChat,
             thread = selectedThread,
             allItems = allItems,
             displayedItems = displayedItems,
@@ -747,6 +752,7 @@ private fun ThreadAvatar(
 @Composable
 private fun ConversationPanel(
     thread: StudioMessageThread?,
+    canPostTeamChat: Boolean,
     allItems: List<StudioMessageItem>,
     displayedItems: List<StudioMessageItem>,
     savedIds: Set<String>,
@@ -888,20 +894,29 @@ private fun ConversationPanel(
         if (typingUsers.isNotEmpty()) {
             TypingIndicator(typingUsers)
         }
-        Composer(
-            replyingTo = replyingTo,
-            isSending = isSending,
-            teamMembers = teamMembers,
-            workspaceId = workspaceId,
-            threadId = thread.id,
-            attachmentsEnabled = attachmentsEnabled,
-            onClearReply = onClearReply,
-            onSend = onSendMessage,
-            onSendAttachment = onSendMessageWithAttachment,
-            onTextChanged = onComposerTextChanged,
-            onLoadDraft = onLoadDraft,
-            onSaveDraft = onSaveDraft
-        )
+        if (thread.isTeamThread && !canPostTeamChat) {
+            Text(
+                t("You can read Team Chat, but posting here is not enabled for your workspace account."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(12.dp)
+            )
+        } else {
+            Composer(
+                replyingTo = replyingTo,
+                isSending = isSending,
+                teamMembers = teamMembers,
+                workspaceId = workspaceId,
+                threadId = thread.id,
+                attachmentsEnabled = attachmentsEnabled,
+                onClearReply = onClearReply,
+                onSend = onSendMessage,
+                onSendAttachment = onSendMessageWithAttachment,
+                onTextChanged = onComposerTextChanged,
+                onLoadDraft = onLoadDraft,
+                onSaveDraft = onSaveDraft
+            )
+        }
     }
 }
 

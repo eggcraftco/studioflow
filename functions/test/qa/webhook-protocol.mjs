@@ -91,5 +91,39 @@ const secret = (await db.doc(`companies/${companyId}/integrationSecrets/inbound`
 ok("son teslimat gerçek olarak işaretli", secret.lastDeliveryOk === true && secret.lastDeliveryWasTest === false,
    JSON.stringify({ ok: secret.lastDeliveryOk, test: secret.lastDeliveryWasTest }));
 
+console.log("=== teslimat günlüğü: son dokuz, en yenisi önde ===");
+ok("günlük tutuluyor", Array.isArray(secret.recentDeliveries) && secret.recentDeliveries.length >= 3,
+   `len=${secret.recentDeliveries?.length}`);
+ok("en yeni kayıt gerçek sipariş", secret.recentDeliveries[0].ok === true && secret.recentDeliveries[0].test === false,
+   JSON.stringify(secret.recentDeliveries[0]));
+// Emülatörün taşıma katmanı istemci IP'sini iletmiyor; üretimde Google'ın ön
+// ucu x-forwarded-for'u her zaman koyar. Burada yalnızca alanın var olduğunu
+// sınayabiliyoruz.
+ok("kaynak alanı kayıtta var", typeof secret.recentDeliveries[0].source === "string",
+   JSON.stringify(secret.recentDeliveries[0]));
+ok("günlükte test satırı da var", secret.recentDeliveries.some(d => d.test === true), "test satırı yok");
+ok("günlükte ret satırı da var", secret.recentDeliveries.some(d => d.ok === false), "ret satırı yok");
+
+console.log("=== Woo webhook: nivadeskTest sipariş yaratmıyor ===");
+const wooInfo = await call("getWooCommerceWebhookToken", {});
+const wooToken = new URL(wooInfo.deliveryUrl).searchParams.get("token");
+const wooUrl = `${BASE}/woocommerceOrderWebhook?companyId=${companyId}&token=${wooToken}`;
+const beforeWoo = await orders();
+const wooTest = await post(wooUrl, { nivadeskTest: true, id: 987654, total: "12.00" });
+ok("Woo test 200 + test bayrağı", wooTest.status === 200 && wooTest.body.test === true && wooTest.body.orderCreated === false,
+   JSON.stringify(wooTest.body));
+ok("Woo test sipariş yaratmadı", (await orders()) === beforeWoo, `${beforeWoo} -> ${await orders()}`);
+const wooSecret = (await db.doc(`companies/${companyId}/integrationSecrets/woocommerce`).get()).data();
+ok("Woo günlüğüne test yazıldı", wooSecret.lastDeliveryWasTest === true && wooSecret.recentDeliveries?.[0]?.test === true,
+   JSON.stringify({ t: wooSecret.lastDeliveryWasTest }));
+
+console.log("=== Shopify webhook: nivadeskTest aynı sözleşme ===");
+const shopifyInfo = await call("getShopifyWebhookToken", {});
+const shopifyToken = new URL(shopifyInfo.deliveryUrl).searchParams.get("token");
+const shopifyUrl = `${BASE}/shopifyOrderWebhook?companyId=${companyId}&token=${shopifyToken}`;
+const shopifyTest = await post(shopifyUrl, { nivadeskTest: true });
+ok("Shopify test 200 + bayrak", shopifyTest.status === 200 && shopifyTest.body.test === true && shopifyTest.body.orderCreated === false,
+   JSON.stringify(shopifyTest.body));
+
 console.log(fail === 0 ? "\nTÜMÜ GEÇTİ" : `\n${fail} BAŞARISIZ`);
 process.exit(fail === 0 ? 0 : 1);

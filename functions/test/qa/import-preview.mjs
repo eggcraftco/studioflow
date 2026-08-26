@@ -98,6 +98,39 @@ const noSkip = await call("importWorkspaceBackup", { backup: twiceInFile });
 ok("atlamadan iki kopya daha girdi", noSkip.importedOrders === 2 && (noSkip.skippedDuplicateOrders || 0) === 0,
    JSON.stringify({ i: noSkip.importedOrders, s: noSkip.skippedDuplicateOrders }));
 
+console.log("=== içe aktarma geri alınabiliyor ===");
+const undoBackup = {
+  siparisler: [{ customerName: "Geri Alınacak", designName: "yüzük", paymentDate: "2026-07-01T00:00:00Z", paidAmount: 42, remainingAmount: 0 }],
+  musteriler: [{ name: "Geri Alınacak Müşteri", email: "undo@example.com" }]
+};
+const beforeUndoImport = await orderCount();
+const undoRun = await call("importWorkspaceBackup", { backup: undoBackup });
+ok("koşu kimliği döndü", Boolean(undoRun.runId) && undoRun.undoAvailable === true, JSON.stringify({ r: undoRun.runId, u: undoRun.undoAvailable }));
+ok("bir sipariş girdi", (await orderCount()) === beforeUndoImport + 1, "sayı artmadı");
+const undone = await call("undoWorkspaceBackupImport", { runId: undoRun.runId });
+ok("tam olarak o kayıtlar silindi", undone.removedOrders === 1 && undone.removedCustomers === 1, JSON.stringify(undone));
+ok("sipariş sayısı geri döndü", (await orderCount()) === beforeUndoImport, `şimdi=${await orderCount()}`);
+try {
+  await call("undoWorkspaceBackupImport", { runId: undoRun.runId });
+  ok("ikinci geri alma reddedildi", false, "hata beklendi");
+} catch (e) {
+  ok("ikinci geri alma reddedildi", /already been undone/i.test(e.message), e.message);
+}
+
+console.log("=== v3 kesin kimlik eşleşmesi ===");
+// backupRecordId taşıyan satır: bulanık alanlar farklı olsa bile kesin kimlik yakalar.
+const v3first = {
+  siparisler: [{ backupRecordId: "kesin-kimlik-1", customerName: "V3 Müşteri", designName: "bileklik", paymentDate: "2026-07-02T00:00:00Z", paidAmount: 10, remainingAmount: 0 }]
+};
+await call("importWorkspaceBackup", { backup: v3first });
+const v3second = {
+  siparisler: [{ backupRecordId: "kesin-kimlik-1", customerName: "V3 Müşteri (ADI DEĞİŞTİ)", designName: "bileklik", paymentDate: "2026-07-02T00:00:00Z", paidAmount: 999, remainingAmount: 0 }]
+};
+const v3preview = await call("importWorkspaceBackup", { backup: v3second, dryRun: true });
+ok("adı ve tutarı değişse de yinelenen sayıldı", v3preview.likelyDuplicateOrders === 1, `dup=${v3preview.likelyDuplicateOrders}`);
+const v3skip = await call("importWorkspaceBackup", { backup: v3second, skipDuplicates: true });
+ok("kesin kimlikle atlandı", v3skip.skippedDuplicateOrders === 1 && v3skip.importedOrders === 0, JSON.stringify({ s: v3skip.skippedDuplicateOrders, i: v3skip.importedOrders }));
+
 console.log("=== API anahtarı yedekten içeri girmiyor ===");
 await call("importWorkspaceBackup", { backup: { settings: { strings: { openAIKey: "sk-sizin-anahtariniz", appSubtitle: "Test" } } } });
 const settings = (await db.collection("companySettings").doc(companyId).get()).data();

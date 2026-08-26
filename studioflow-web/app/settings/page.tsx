@@ -17,7 +17,7 @@ import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from 
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
-import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
+import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
 import { PLAN_ENTITLEMENTS, STRIPE_LIST_PRICE_LABELS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
@@ -56,12 +56,14 @@ import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJs
 import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/studioflow/language";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
   addNivaDeskSupportTicketReply,
   addWorkspaceSupportTicketReply,
+  uploadSupportTicketAttachment,
+  type StudioSupportTicketAttachment,
   createNivaDeskSupportTicket,
   createWorkspaceSupportTicket,
   listNivaDeskSupportTicketMessages,
@@ -103,7 +105,17 @@ type SettingsSectionId =
   | "message-settings"
   | "support-tickets";
 
-type SettingsGroup = "account" | "workspace" | "integrations";
+type SettingsGroup =
+  | "personal"
+  | "design"
+  | "workflowGroup"
+  | "finance"
+  | "team"
+  | "files"
+  | "dataGroup"
+  | "billing"
+  | "integrations"
+  | "supportGroup";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -144,32 +156,41 @@ const SETTINGS_ICON_PATHS = {
   sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"]
 };
 
+// The reviewer's point stands: personal preferences, tax rules, destructive
+// data actions and integration secrets carried the same visual weight under
+// two broad headings. Ten narrow groups sort the menu by what a mistake there
+// would cost. Section ids are untouched, so every deep link keeps working.
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  // Account — personal settings that follow the signed-in user across workspaces.
-  { id: "profile-security", title: "Profile & Security", appKey: "Account", description: "Your name, photo, sign-in email and password.", icon: "account", group: "account" },
-  { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "account" },
-  { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "account" },
-  // Workspace — settings shared by every member of the current workspace.
-  { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "workspace" },
-  { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workspace" },
-  { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "workspace" },
-  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workspace" },
-  { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "workspace" },
-  { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "workspace" },
-  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "workspace" },
-  { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "workspace" },
-  { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "workspace" },
-  { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "workspace" },
-  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "workspace" },
+  { id: "profile-security", title: "Profile & Security", appKey: "Account", description: "Your name, photo, sign-in email and password.", icon: "account", group: "personal" },
+  { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "personal" },
+  { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "personal" },
+  { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "design" },
+  { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
+  { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
+  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workflowGroup" },
+  { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
+  { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
+  { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
+  { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "files" },
+  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "dataGroup" },
+  { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
   { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "integrations" },
   { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "integrations" },
-  { id: "inbound", title: "Other Platforms", appKey: "Webhook", description: "Connect any store via Zapier, Make or a custom webhook.", icon: "cart", group: "integrations" }
+  { id: "inbound", title: "Other Platforms", appKey: "Webhook", description: "Connect any store via Zapier, Make or a custom webhook.", icon: "cart", group: "integrations" },
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" }
 ];
 
 const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
-  account: "Account",
-  workspace: "Workspace",
-  integrations: "Integrations"
+  personal: "Personal",
+  design: "Workspace Design",
+  workflowGroup: "Workflow",
+  finance: "Finance & Tax",
+  team: "Team & Permissions",
+  files: "Files & Security",
+  dataGroup: "Data & Backups",
+  billing: "Billing",
+  integrations: "Integrations",
+  supportGroup: "Support"
 };
 
 function formatStorageFromMB(valueMB: number) {
@@ -907,7 +928,7 @@ function AutoLockSection({ language }: { language: string }) {
     <div className="settings-card-stack">
       <section className="card app-card">
         <CardTitle icon="lock" eyebrow={t("Security")} title={t("Auto-lock")} />
-        <p className="muted-copy">{t("Lock NivaDesk after a period of inactivity, then unlock with your password. This applies to this browser only.")}</p>
+        <p className="muted-copy">{t("Lock NivaDesk after a period of inactivity, then unlock with your password or your sign-in provider (Google or Apple). This applies to this browser only.")}</p>
         <label className="quick-reply-settings-label">
           <span>{t("Auto-lock")}</span>
           <select
@@ -986,20 +1007,26 @@ function AppearanceSection({
         <p className="muted-copy">{t("This theme is personal to your account and synchronises across your devices.")}</p>
         <label className="quick-reply-settings-label">
           <span>{t("Theme")}</span>
-          <select
-            className="input"
-            value={appTheme}
-            disabled={saving || !settings}
-            onChange={event => {
-              setAppTheme(event.target.value);
-              setStatus("");
-              setError("");
-            }}
-          >
-            <option value="System">{t("System")}</option>
-            <option value="Light">{t("Light")}</option>
-            <option value="Dark">{t("Dark")}</option>
-          </select>
+          {/* A segmented control instead of a native select: the chosen theme
+              is visibly pressed, and a screen reader hears it via aria-pressed. */}
+          <div className={saving || !settings ? "financial-segmented is-disabled" : "financial-segmented"} role="group" aria-label={t("Theme")}>
+            {(["System", "Light", "Dark"] as const).map(option => (
+              <button
+                key={option}
+                type="button"
+                className={appTheme === option ? "active" : ""}
+                aria-pressed={appTheme === option}
+                disabled={saving || !settings}
+                onClick={() => {
+                  setAppTheme(option);
+                  setStatus("");
+                  setError("");
+                }}
+              >
+                {t(option)}
+              </button>
+            ))}
+          </div>
         </label>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={saving || !settings} onClick={handleSaveTheme}>
@@ -1162,6 +1189,7 @@ function WorkspaceBrandingSection({
   async function handleAcceptPolicyAndUpload() {
     if (!pendingLogoFile) return;
     window.localStorage.setItem(uploadSafetyAcceptanceKey(workspace.id), "accepted");
+    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
@@ -1253,6 +1281,9 @@ function WorkspaceBrandingSection({
               {t("JPG, PNG, HEIC or WEBP. Wide works best — around 512 × 128 pixels.")}
               {" "}
               {t("Maximum")} {maxSizeMB} MB.
+            </p>
+            <p className="muted-copy">
+              {t("Choosing a logo uploads and saves it immediately — it is separate from the Save Branding button, which saves only the name and subtitle.")}
             </p>
             <div className="workspace-logo-actions">
               <input
@@ -1389,6 +1420,7 @@ function LanguageLabelsSection({
         {status ? <p className="success-copy">{status}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
         <p className="muted-copy">{t("This language is personal to your account and synchronises across your devices.")}</p>
+        <p className="muted-copy">{t("The new language applies immediately after you save — no reload needed.")}</p>
       </section>
     </div>
   );
@@ -1635,7 +1667,20 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
 
   function removeListItem(key: WorkflowHeadingListKey, id: string) {
     if (!blockSettings) return;
+    // Deleting a production step ripples into every existing order's status
+    // card and can re-map the summary rows — that one asks first.
+    if (key === "customSteps") {
+      const item = blockSettings[key].find(entry => entry.id === id);
+      setPendingStepRemoval(item ? { id, title: item.title } : null);
+      return;
+    }
     updateList(key, blockSettings[key].filter(item => item.id !== id));
+  }
+
+  function confirmStepRemoval() {
+    if (!blockSettings || !pendingStepRemoval) return;
+    updateList("customSteps", blockSettings.customSteps.filter(item => item.id !== pendingStepRemoval.id));
+    setPendingStepRemoval(null);
   }
 
   function toggleActiveStatus(statusOption: string, enabled: boolean) {
@@ -1731,13 +1776,39 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     void persistWorkflowSettings(nextSettings, "Template applied and saved.");
   }
 
+  function workflowDuplicateTitles(settings: BlockHeadingSettings): string[] {
+    const lists: WorkflowHeadingListKey[] = ["customSteps", "customToggles", "materialsDefaultChecks", "materialsToggles"];
+    const duplicates: string[] = [];
+    for (const key of lists) {
+      const seen = new Map<string, number>();
+      for (const item of settings[key] || []) {
+        const normalized = item.title.trim().toLowerCase();
+        if (!normalized) continue;
+        seen.set(normalized, (seen.get(normalized) || 0) + 1);
+      }
+      for (const [name, count] of seen) {
+        if (count > 1) duplicates.push(name);
+      }
+    }
+    return duplicates;
+  }
+
   async function handleSave(rethrow = false) {
     if (!blockSettings) return;
+    // Two same-named checks are not cosmetic: order cards fall back to
+    // title-keyed storage, so they can read and write each other's value.
+    const duplicates = workflowDuplicateTitles(blockSettings);
+    if (duplicates.length > 0) {
+      setError(`${t("Two rows share the same name. Rename one — same-named rows can overwrite each other on order cards.")} (${duplicates.join(", ")})`);
+      if (rethrow) throw new Error("duplicate workflow titles");
+      return;
+    }
     await persistWorkflowSettings(blockSettings, "Workflow settings saved.", rethrow);
   }
 
   const foreignTrades = useMemo(() => workflowForeignTrades(blockSettings), [blockSettings]);
   const [pendingTemplate, setPendingTemplate] = useState<WorkflowTemplate | null>(null);
+  const [pendingStepRemoval, setPendingStepRemoval] = useState<{ id: string; title: string } | null>(null);
 
   function renderHeadingList(key: WorkflowHeadingListKey, emptyTitle: string, addTitle: string, placeholder: string) {
     const items = blockSettings?.[key] ?? [];
@@ -1754,7 +1825,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
         ) : null}
         {items.map((item, index) => (
           <div className="workflow-settings-row" key={item.id}>
-            <span>{index + 1}</span>
+            <span aria-hidden="true" title={t("Row number — the order these appear in on order cards.")}>{index + 1}</span>
             <input
               className="input"
               value={item.title}
@@ -1762,7 +1833,14 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
               placeholder={placeholder}
               onChange={event => renameListItem(key, item.id, event.target.value)}
             />
-            <button className="icon-action danger" type="button" disabled={!canEdit || saving} onClick={() => removeListItem(key, item.id)} aria-label={t("Remove")}>
+            <button
+              className="icon-action danger"
+              type="button"
+              disabled={!canEdit || saving}
+              onClick={() => removeListItem(key, item.id)}
+              aria-label={t("Remove")}
+              title={t("Remove this row. Existing orders keep their recorded values but stop showing this heading.")}
+            >
               ×
             </button>
           </div>
@@ -1775,7 +1853,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     return (
       <section className="card app-card">
         <CardTitle icon="checklist" eyebrow={t("Workflow Steps")} title={t("Loading workflow settings")} />
-        <p className="muted-copy">{t("Loading app-compatible workspace block settings...")}</p>
+        <p className="muted-copy">{t("Loading your workspace's shared workflow headings...")}</p>
       </section>
     );
   }
@@ -1792,6 +1870,20 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
 
   return (
     <div className="settings-card-stack">
+      {pendingStepRemoval ? (
+        <SettingsDialog
+          eyebrow={t("Workflow Steps")}
+          title={`${t("Delete step")} "${pendingStepRemoval.title}"?`}
+          onDismiss={() => setPendingStepRemoval(null)}
+          actions={[
+            { label: t("Delete step"), tone: "danger" as const, onClick: confirmStepRemoval },
+            { label: t("Keep step"), tone: "secondary" as const, onClick: () => setPendingStepRemoval(null) }
+          ]}
+        >
+          <p>{t("The step disappears from every existing order's status card. Values already recorded for it stay on the orders but stop being displayed.")}</p>
+          <p>{t("Any Order Summary row pointing at it falls back to the first remaining step automatically — deleting the first step also re-maps which status the summary rows show.")}</p>
+        </SettingsDialog>
+      ) : null}
       {pendingTemplate ? (
         <SettingsDialog
           wide
@@ -1861,11 +1953,11 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
             <p className="muted-copy">
               {t("Fields matching these industry templates are also in use:")} {foreignTrades.map(type => studioT(type, language)).join(", ")}.
               {" "}
-              {t("That is fine if you built it deliberately. Applying the standard template replaces them.")}
+              {t("That is fine if you built it deliberately. Applying the standard template replaces them — on existing orders too, since these headings are shared.")}
             </p>
           </div>
         ) : null}
-        <p className="muted-copy">{t("Matches the app’s Business Type template flow. Saving writes to app-compatible workflow and block heading fields.")}</p>
+        <p className="muted-copy">{t("Matches the app’s Business Type template flow. Saving updates these headings for everyone in the workspace, on every device.")}</p>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
@@ -1969,7 +2061,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
       <section className="card app-card quick-reply-settings-actions">
         <div>
           <strong>{t("Shared workflow settings")}</strong>
-          <p className="muted-copy">{t("Saved values write to the same app-compatible companySettings block heading fields used by Mac, iPad, iPhone and web.")}</p>
+          <p className="muted-copy">{t("These headings are shared by your whole workspace: every teammate and every device — Mac, iPhone, iPad, Android and web — sees the same list, on new and existing orders alike.")}</p>
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving || !workflowDirty} onClick={() => { void handleSave(); }}>
@@ -2068,6 +2160,8 @@ function PdfExportSettingsSection({
   // injects three company-number rows with fresh crypto.randomUUID() ids for a
   // workspace that has never saved any, so a document comparison could never
   // match.
+  const [pdfPreview, setPdfPreview] = useState<{ kind: "invoice" | "jobsheet"; html: string } | null>(null);
+
   const { dirty: pdfDirty, markSaved: markPdfSaved } = useUnsavedGuard(
     "pdf",
     draft,
@@ -2083,6 +2177,22 @@ function PdfExportSettingsSection({
     setDraft(current => current ? { ...current, [key]: value } : current);
     setStatus("");
     setError("");
+  }
+
+  // Loaded on demand: the templates live in the order-detail module, which is
+  // the point — the preview and the real print buttons share one generator.
+  async function openPdfPreview(kind: "invoice" | "jobsheet") {
+    if (!draft || !settings) return;
+    try {
+      const mod = await import("@/app/orders/OrderDetailContent");
+      const previewSettings = { ...settings, ...draft } as WorkspaceSettingsOverview;
+      const html = kind === "invoice"
+        ? mod.invoicePreviewHtml(previewSettings)
+        : mod.jobSheetPreviewHtml(previewSettings, workspace.name);
+      setPdfPreview({ kind, html });
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : t("Preview could not be loaded."));
+    }
   }
 
   function updateCompanyNumber(id: string, patch: Partial<CompanyNumberSetting>) {
@@ -2167,12 +2277,38 @@ function PdfExportSettingsSection({
         </section>
       ) : null}
 
+      {pdfPreview ? (
+        <SettingsDialog
+          wide
+          eyebrow={t("PDF Export Settings")}
+          title={pdfPreview.kind === "invoice" ? t("Invoice preview") : t("Job sheet preview")}
+          onDismiss={() => setPdfPreview(null)}
+          actions={[{ label: t("Close"), tone: "secondary" as const, onClick: () => setPdfPreview(null) }]}
+        >
+          <iframe
+            srcDoc={pdfPreview.html}
+            sandbox=""
+            title={t("PDF preview")}
+            style={{ width: "100%", height: "65vh", border: "1px solid rgba(0,0,0,0.15)", borderRadius: 8, background: "#fff" }}
+          />
+        </SettingsDialog>
+      ) : null}
+
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="docText" eyebrow={t("PDF Export Settings")} title={t("Visible PDF sections")} />
         <div className="pdf-settings-grid">
           {visiblePdfToggles.map(([key, label]) => (
             <label className="pdf-settings-toggle" key={key}>
-              <span>{t(label)}</span>
+              <span>
+                {t(label)}
+                {/* Mirrors the server's personal-capable list: finance keys and
+                    company numbers are always workspace-shared. */}
+                <small className="muted-copy" style={{ display: "block", fontSize: 11 }}>
+                  {["pdfShowFinCustomer", "pdfShowPaymentMethod", "pdfShowFinInternal"].includes(String(key))
+                    ? t("Workspace-shared")
+                    : t("Personal for workflow-only roles; shared otherwise")}
+                </small>
+              </span>
               <input
                 type="checkbox"
                 checked={Boolean(draft[key])}
@@ -2228,11 +2364,20 @@ function PdfExportSettingsSection({
           <p className="muted-copy">{t("Your finance-free PDF section preferences are personal. Shared financial and invoice PDF settings remain owner-managed.")}</p>
         </div>
         <div className="settings-action-row">
-          <Link className="button secondary" href="/export">{t("Open Export")}</Link>
+          <button className="button secondary" type="button" onClick={() => { void openPdfPreview("invoice"); }}>
+            {t("Preview invoice")}
+          </button>
+          <button className="button secondary" type="button" onClick={() => { void openPdfPreview("jobsheet"); }}>
+            {t("Preview job sheet")}
+          </button>
+          <Link className="button secondary" href="/export" title={t("Opens the CSV and backup export page. It does not generate a PDF.")}>
+            {t("Open Export page")}
+          </Link>
           <button className="button" type="button" disabled={!canEdit || saving || !pdfDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save PDF Settings")}
           </button>
         </div>
+        <p className="muted-copy">{t("The preview uses a sample order and your current unsaved choices, rendered by the same template the real print buttons use.")}</p>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
@@ -2678,6 +2823,23 @@ function QuickReplySettingsSection({
                   {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { if (!clearOpenAIKey) { setConfirmClearKey(true); return; } setClearOpenAIKey(false); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
                 </div>
                 <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
+                {/* The one previous version the server keeps on every real
+                    change. Restoring only edits the draft — Save is still the
+                    moment anything is written, and the replaced text becomes
+                    the new previous version, so a restore can itself be undone. */}
+                {(settings.aiKnowledgeBasePrevious || "").trim() && settings.aiKnowledgeBasePrevious !== mainKnowledgeBase ? (
+                  <div className="settings-action-row">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={() => setMainKnowledgeBase(settings.aiKnowledgeBasePrevious || "")}
+                    >
+                      {t("Restore previous version")}
+                      {settings.aiKnowledgeBasePreviousSavedAtMs ? ` (${new Date(settings.aiKnowledgeBasePreviousSavedAtMs).toLocaleDateString(studioLocaleTag(language))})` : ""}
+                    </button>
+                    <span className="muted-copy">{t("Puts the previous Knowledge Base text back into the editor. Nothing changes until you save.")}</span>
+                  </div>
+                ) : null}
                 {/* An empty box with a "add your pricing, process, policies"
                     placeholder is a blank page problem: everyone left it empty,
                     which is why the replies came out generic. */}
@@ -2706,7 +2868,9 @@ function QuickReplySettingsSection({
               <section className="quick-reply-settings-panel">
                 <CardTitle icon="notes" eyebrow={t("Team Contributions")} title={t("Additional Knowledge for OpenAI")} />
                 <p className="muted-copy">{t("Add supporting information for shared OpenAI replies without changing the owner-managed Company Knowledge Base.")}</p>
-                <textarea className="quick-reply-settings-textarea" value={contributionDraft} onChange={event => setContributionDraft(event.target.value)} placeholder={t("Add an additional fact or instruction for AI replies...")} />
+                <p className="muted-copy">{t("The AI reads one combined text: the owner's Company Knowledge Base first, then each contribution with its author's name. Nothing overrides anything — if a contribution contradicts the owner text, the AI sees both. Keep contributions consistent with it.")}</p>
+                <textarea className="quick-reply-settings-textarea" value={contributionDraft} maxLength={4000} onChange={event => setContributionDraft(event.target.value)} placeholder={t("Add an additional fact or instruction for AI replies...")} />
+                <span className="muted-copy">{contributionDraft.length.toLocaleString()} / 4,000 {t("characters")}.</span>
                 <button className="button" type="button" disabled={contributionSaving || !contributionDraft.trim()} onClick={addTeamContribution}>{contributionSaving ? t("Adding...") : t("Add Contribution")}</button>
                 <div className="quick-reply-template-list">
                   {contributions.map(item => (
@@ -2767,15 +2931,18 @@ function KnowledgeBaseEditor({
   value,
   disabled,
   onChange,
-  language = "English"
+  language = "English",
+  maxLength = 50000
 }: {
   title: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
   language?: string;
+  maxLength?: number;
 }) {
   const t = (text: string) => studioT(text, language);
+  const nearLimit = value.length > maxLength * 0.9;
   return (
     <label className="quick-reply-settings-label quick-reply-knowledge-panel">
       <span>{t(title)}</span>
@@ -2783,13 +2950,14 @@ function KnowledgeBaseEditor({
         className="quick-reply-settings-textarea"
         value={value}
         disabled={disabled}
+        maxLength={maxLength}
         onChange={event => onChange(event.target.value)}
         placeholder={t("Add your pricing, process, policies, FAQs and common customer answers here...")}
       />
-      <span>
+      <span className={nearLimit ? "layout-error" : undefined}>
         {t("This Knowledge Base is synced across Mac, iPad and iPhone for the same company.")}
         {" "}
-        {value.length.toLocaleString()} {t("characters")}.
+        {value.length.toLocaleString()} / {maxLength.toLocaleString()} {t("characters")}.
       </span>
     </label>
   );
@@ -2868,7 +3036,9 @@ function SafetyUploadsSection({
   const t = (text: string) => studioT(text, language);
   const [requirePolicy, setRequirePolicy] = useState(true);
   const [maxFileSizeMB, setMaxFileSizeMB] = useState(10);
+  const [policyText, setPolicyText] = useState("");
   const [browserAccepted, setBrowserAccepted] = useState(false);
+  const [acceptedAtMs, setAcceptedAtMs] = useState(0);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -2878,25 +3048,36 @@ function SafetyUploadsSection({
     if (!settings) return;
     setRequirePolicy(settings.uploadSafetyRequirePolicyAcceptance);
     setMaxFileSizeMB(Math.min(Math.max(Math.round(settings.uploadSafetyMaxFileSizeMB || 10), 1), 50));
+    setPolicyText(settings.uploadSafetyPolicyText || "");
   }, [settings]);
 
   useEffect(() => {
     const accepted = window.localStorage.getItem(uploadSafetyAcceptanceKey(workspace.id)) === "accepted";
     setBrowserAccepted(accepted);
+    const atRaw = window.localStorage.getItem(uploadSafetyAcceptanceAtKey(workspace.id));
+    setAcceptedAtMs(accepted && atRaw ? Number(atRaw) || 0 : 0);
   }, [workspace.id]);
 
   function updateBrowserAccepted(nextAccepted: boolean) {
     setBrowserAccepted(nextAccepted);
     const key = uploadSafetyAcceptanceKey(workspace.id);
-    if (nextAccepted) window.localStorage.setItem(key, "accepted");
-    else window.localStorage.removeItem(key);
+    const atKey = uploadSafetyAcceptanceAtKey(workspace.id);
+    if (nextAccepted) {
+      window.localStorage.setItem(key, "accepted");
+      window.localStorage.setItem(atKey, String(Date.now()));
+      setAcceptedAtMs(Date.now());
+    } else {
+      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(atKey);
+      setAcceptedAtMs(0);
+    }
   }
 
   // browserAccepted is excluded: it writes to localStorage the moment it
   // changes, so it is never an unsaved edit.
   const { dirty: safetyDirty, markSaved: markSafetySaved } = useUnsavedGuard(
     "safety-uploads",
-    { requirePolicy, maxFileSizeMB },
+    { requirePolicy, maxFileSizeMB, policyText },
     Boolean(settings),
     () => handleSave(true)
   );
@@ -2909,12 +3090,14 @@ function SafetyUploadsSection({
     try {
       const result = await saveUploadSafetySettings(workspace, {
         uploadSafetyRequirePolicyAcceptance: requirePolicy,
-        uploadSafetyMaxFileSizeMB: maxFileSizeMB
+        uploadSafetyMaxFileSizeMB: maxFileSizeMB,
+        uploadSafetyPolicyText: policyText
       });
       onSaved({
         ...settings,
         uploadSafetyRequirePolicyAcceptance: result.settings?.uploadSafetyRequirePolicyAcceptance ?? requirePolicy,
-        uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB
+        uploadSafetyMaxFileSizeMB: result.settings?.uploadSafetyMaxFileSizeMB ?? maxFileSizeMB,
+        uploadSafetyPolicyText: (result.settings as { uploadSafetyPolicyText?: string } | undefined)?.uploadSafetyPolicyText ?? policyText
       });
       markSafetySaved();
       setStatus(result.message || "Upload Safety settings saved.");
@@ -2944,6 +3127,19 @@ function SafetyUploadsSection({
               checked={requirePolicy}
               disabled={!canEdit || saving}
               onChange={event => setRequirePolicy(event.target.checked)}
+            />
+          </label>
+
+          <label className="quick-reply-settings-label">
+            <span>{t("Workspace upload policy text")}</span>
+            <textarea
+              className="input"
+              rows={3}
+              maxLength={2000}
+              value={policyText}
+              disabled={!canEdit || saving}
+              placeholder={t("Optional. Shown to your team when they are asked to accept the upload policy. Leave empty to use the built-in wording.")}
+              onChange={event => setPolicyText(event.target.value)}
             />
           </label>
 
@@ -2989,7 +3185,9 @@ function SafetyUploadsSection({
           <InfoTile label={t("Max file size")} value={`${Math.round(maxFileSizeMB)} MB`} />
         </div>
         <div className="quick-reply-settings-info">
-          <strong>{browserAccepted ? t("Accepted on this browser. Uploads will not ask again until you reset it.") : t("Not accepted on this browser. The next upload will ask you to accept the upload policy.")}</strong>
+          <strong>{browserAccepted
+            ? `${t("Accepted on this browser. Uploads will not ask again until you reset it.")}${acceptedAtMs > 0 ? ` (${new Date(acceptedAtMs).toLocaleDateString(studioLocaleTag(language))})` : ""}`
+            : t("Not accepted on this browser. The next upload will ask you to accept the upload policy.")}</strong>
           <p>{t("Order previews, logos and avatars accept image files. Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP.")}</p>
         </div>
         <div className="settings-action-row">
@@ -3028,6 +3226,9 @@ function SafetyUploadsSection({
         <p className="muted-copy">
           {t("This does not automatically judge the content of a file. It adds clear rules, upload limits and an audit trail. Owners should still review and remove anything unsuitable.")}
         </p>
+        <p className="muted-copy">
+          {t("NivaDesk does not virus-scan uploaded files. Your own device's antivirus still applies when files are downloaded.")}
+        </p>
       </section>
     </div>
   );
@@ -3035,6 +3236,12 @@ function SafetyUploadsSection({
 
 function uploadSafetyAcceptanceKey(workspaceId: string) {
   return `studioflow-upload-policy-accepted:${workspaceId}`;
+}
+
+// The acceptance flag stays the literal "accepted" for compatibility with every
+// existing reader; the WHEN lives beside it under its own key.
+function uploadSafetyAcceptanceAtKey(workspaceId: string) {
+  return `studioflow-upload-policy-accepted-at:${workspaceId}`;
 }
 
 function AccountSection({
@@ -3343,6 +3550,7 @@ function AccountSection({
     if (!pendingLogoFile) return;
     const key = uploadSafetyAcceptanceKey(workspace.id);
     window.localStorage.setItem(key, "accepted");
+    window.localStorage.setItem(uploadSafetyAcceptanceAtKey(workspace.id), String(Date.now()));
     setPolicyAccepted(true);
     const file = pendingLogoFile;
     setPendingLogoFile(null);
@@ -3533,6 +3741,9 @@ function AccountSection({
               {" "}
               {t("Maximum")} {maxSizeMB} MB.
             </p>
+            <p className="muted-copy">
+              {t("Choosing a logo uploads and saves it immediately — it is separate from the Save Branding button, which saves only the name and subtitle.")}
+            </p>
             <div className="workspace-logo-actions">
               <input
                 ref={logoInputRef}
@@ -3621,9 +3832,15 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
   return (
     <section className="card app-card" style={{ borderColor: "rgba(217, 45, 32, 0.4)" }}>
       <CardTitle icon="lock" eyebrow={t("Danger zone")} title={t("Delete account")} />
-      <p className="muted-copy">
-        {t("Permanently deletes your account, your workspace and all of its data (orders, customers, notes, messages and files). This cannot be undone. Memberships in other teams’ workspaces are removed too.")}
+      {/* Two different losses, two separate lines — "your workspace dies" and
+          "you leave other people's workspaces" were buried in one sentence. */}
+      <p style={{ color: "#d92d20", fontWeight: 600, margin: "4px 0 6px" }}>
+        {t("This deletes your account permanently. It cannot be undone.")}
       </p>
+      <ul className="muted-copy" style={{ margin: "0 0 4px", paddingLeft: 18, display: "grid", gap: 4 }}>
+        <li>{t("The workspace you own is deleted with all of its data: orders, customers, notes, messages and files.")}</li>
+        <li>{t("Your memberships in other teams' workspaces are removed. Their data stays with them.")}</li>
+      </ul>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
         <input
           className="input"
@@ -4189,9 +4406,10 @@ function FinancialSettingsSection({
                 disabled={!canEdit || saving}
                 onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
               />
-              <strong>{t("Use Tax Transition Date")}</strong>
+              <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
             </span>
           </label>
+          <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
 
           {draft.taxMilestoneEnabled ? (
             <label className="financial-settings-row wide-control">
@@ -4215,9 +4433,10 @@ function FinancialSettingsSection({
                 disabled={!canEdit || saving}
                 onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
               />
-              <strong>{t("Enable Corporation Tax")}</strong>
+              <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
             </span>
           </label>
+          <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
 
           {draft.corporationTaxEnabled ? (
             <>
@@ -4289,6 +4508,21 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
   const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTest, setWebhookTest] = useState<{ ok?: boolean; message?: string } | null>(null);
+
+  async function runShopWebhookTest() {
+    setTestingWebhook(true);
+    setWebhookTest(null);
+    try {
+      setWebhookTest(await sendTestIntegrationWebhook(companyId, "woocommerce"));
+    } catch (testError) {
+      setWebhookTest({ ok: false, message: testError instanceof Error ? testError.message : t("The test could not be sent.") });
+    } finally {
+      setTestingWebhook(false);
+    }
+  }
+
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -4401,6 +4635,19 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
         <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
+        <p className="muted-copy">{t("Redelivering the same order never creates a copy: the order number is the identity, and a redelivery only updates what the shop owns — production status and tracking stay untouched.")}</p>
+        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL. WooCommerce's own webhook signature is not checked, so treat the URL like a password and replace it if it leaks.")}</p>
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runShopWebhookTest(); }}>
+            {testingWebhook ? t("Testing...") : t("Send test webhook")}
+          </button>
+        </div>
+        {webhookTest ? (
+          <p className={webhookTest.ok ? "success-copy" : "layout-error"}>
+            {webhookTest.message}{" "}
+            {webhookTest.ok ? t("This proves the URL, workspace and token. It does not prove your own tool is pointed at it.") : ""}
+          </p>
+        ) : null}
       </section>
     </div>
   );
@@ -4417,6 +4664,8 @@ type ShopifyStoreView = {
     lastSyncAt?: { _seconds?: number } | null;
     lastWebhookAt?: { _seconds?: number } | null;
   };
+  /** Last nine sync-log rows, newest first — including failures. */
+  recentSync?: Array<{ atMs: number; topic: string; status: string; error: string; shopifyOrderNumber: string }>;
 };
 
 function shopifyTsText(value: unknown): string {
@@ -4459,10 +4708,16 @@ function ShopifyConnectedStoresCard({ workspace, language = "English" }: { works
   async function setStoreState(shop: string, state: "active" | "paused" | "unlinked") {
     if (
       state === "unlinked" &&
-      !window.confirm(t("Remove this store connection? Orders already synced stay in your workspace."))
-    )
-
+      !window.confirm(t("Remove this store connection? New orders stop arriving. Orders already synced stay in your workspace. To reconnect, install the NivaDesk app from the Shopify App Store again."))
+    ) {
       return;
+    }
+    if (
+      state === "paused" &&
+      !window.confirm(t("Pause this store? Orders placed while paused are NOT delivered later — syncing resumes only for new orders after you press Resume."))
+    ) {
+      return;
+    }
     setBusyShop(shop);
     setError("");
     try {
@@ -4556,6 +4811,24 @@ function ShopifyConnectedStoresCard({ workspace, language = "English" }: { works
                     {t("Remove")}
                   </button>
                 </div>
+                {(store.recentSync || []).length > 0 ? (
+                  <details style={{ marginTop: 6 }}>
+                    <summary className="muted-copy" style={{ cursor: "pointer", fontSize: 11.5 }}>
+                      {t("Recent sync activity")} ({(store.recentSync || []).length})
+                    </summary>
+                    <ul className="muted-copy" style={{ margin: "6px 0 0", paddingLeft: 18, display: "grid", gap: 3, fontSize: 11.5 }}>
+                      {(store.recentSync || []).map((row, index) => (
+                        <li key={`${row.atMs}-${index}`}>
+                          {row.atMs > 0 ? new Date(row.atMs).toLocaleString() : "—"}
+                          {" — "}
+                          {row.topic || t("event")} · {row.status}
+                          {row.shopifyOrderNumber ? ` · #${row.shopifyOrderNumber}` : ""}
+                          {row.error ? ` · ${row.error}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
                 {!isOwner ? (
                   <p className="muted-copy" style={{ fontSize: 11.5, marginTop: 6 }}>
                     {t("Only the workspace owner can change this connection.")}
@@ -4582,6 +4855,21 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
   const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTest, setWebhookTest] = useState<{ ok?: boolean; message?: string } | null>(null);
+
+  async function runShopWebhookTest() {
+    setTestingWebhook(true);
+    setWebhookTest(null);
+    try {
+      setWebhookTest(await sendTestIntegrationWebhook(companyId, "shopify"));
+    } catch (testError) {
+      setWebhookTest({ ok: false, message: testError instanceof Error ? testError.message : t("The test could not be sent.") });
+    } finally {
+      setTestingWebhook(false);
+    }
+  }
+
   useEffect(() => {
     if (!companyId) {
       setDeliveryUrl("");
@@ -4690,11 +4978,25 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
           <IntegrationInfoRow number="3" title={t("Paste the Delivery URL")} detail={t("Paste the copied Delivery URL as the webhook URL and save it.")} />
           <IntegrationInfoRow number="4" title={t("Place a test order")} detail={t("Place a paid test order in your store; it appears in Orders within seconds.")} />
         </div>
+        <p className="layout-error">{t("Use the official NivaDesk app OR this manual webhook for a store — never both. Running both delivers every order twice, and the two copies arrive under different identities so they do not merge.")}</p>
       </section>
 
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
         <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
+        <p className="muted-copy">{t("Redelivering the same order never creates a copy: the order number is the identity, and a redelivery only updates what the shop owns — production status and tracking stay untouched.")}</p>
+        <p className="muted-copy">{t("This manual webhook authenticates with the secret token inside the Delivery URL; Shopify's HMAC signature is verified only on the official app connection.")}</p>
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runShopWebhookTest(); }}>
+            {testingWebhook ? t("Testing...") : t("Send test webhook")}
+          </button>
+        </div>
+        {webhookTest ? (
+          <p className={webhookTest.ok ? "success-copy" : "layout-error"}>
+            {webhookTest.message}{" "}
+            {webhookTest.ok ? t("This proves the URL, workspace and token. It does not prove your own tool is pointed at it.") : ""}
+          </p>
+        ) : null}
       </section>
     </div>
   );
@@ -4861,6 +5163,9 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
   "source": "Wix"
 }`}</pre>
         <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. Amounts are shown in your workspace currency.")}</p>
+        <p className="muted-copy">{t("Redelivery is safe: orderId is the identity, so sending the same order again updates it instead of creating a copy — production status and tracking are never overwritten. There is no automatic retry on our side; if your tool retries, that is fine for the same reason.")}</p>
+        <p className="muted-copy">{t("Amounts are rounded to 2 decimal places; both 1,234.56 and 1.234,56 styles are read correctly. schemaVersion says which payload format this is — today it is 1, and future formats will keep 1 working.")}</p>
+        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL — there is no separate signature header. Treat the URL like a password and replace it if it leaks.")}</p>
 
         <div className="settings-action-row">
           <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runWebhookTest(); }}>
@@ -5029,6 +5334,24 @@ function SecretDeliveryUrl({
             : t("No delivery received yet.")}
         </p>
       ) : null}
+      {info && info.recentDeliveries.length > 0 ? (
+        <details className="integration-secret-status">
+          <summary className="muted-copy" style={{ cursor: "pointer" }}>
+            {t("Recent deliveries")} ({info.recentDeliveries.length})
+          </summary>
+          <ul className="muted-copy" style={{ margin: "6px 0 0", paddingLeft: 18, display: "grid", gap: 3 }}>
+            {info.recentDeliveries.map((entry, index) => (
+              <li key={`${entry.atMs}-${index}`}>
+                {new Date(entry.atMs).toLocaleString(studioLocaleTag(language))}
+                {" — "}
+                {entry.ok ? (entry.test ? t("test") : t("delivered")) : `${t("failed")}: ${entry.error}`}
+                {entry.orderId ? ` · ${t("order")} ${entry.orderId}` : ""}
+                {entry.source ? ` · ${entry.source}` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -5073,7 +5396,10 @@ function DataManagementSection({
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ backup: unknown; preview: ImportBackupPreview } | null>(null);
   const [skipDuplicatesChoice, setSkipDuplicatesChoice] = useState(true);
+  const [lastImportRunId, setLastImportRunId] = useState("");
+  const [undoingImport, setUndoingImport] = useState(false);
   const [lastBackupAtMs, setLastBackupAtMs] = useState(settings?.lastBackupExportedAtMs ?? 0);
+  const [lastBackupHash, setLastBackupHash] = useState(settings?.lastBackupExportedHash ?? "");
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [status, setStatus] = useState("");
@@ -5081,6 +5407,11 @@ function DataManagementSection({
   const exportAllowed = workspace.entitlements.features.export_data;
   const canImport = canEditWorkspaceSettingsForRole(workspace.role);
   const canDelete = canDeleteWorkspaceDataForRole(workspace.role);
+
+  async function sha256Hex(text: string) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
 
   async function runExport(kind: "backup" | "webBackup" | "orders" | "customers") {
     if (!exportAllowed) {
@@ -5097,21 +5428,27 @@ function DataManagementSection({
       const date = safeFileDate();
 
       if (kind === "backup") {
-        downloadTextFile(`StudioManager_Backup_${date}.json`, appCompatibleBackupJson(exportData), "application/json");
-        setStatus("App-compatible backup downloaded.");
+        const text = appCompatibleBackupJson(exportData);
+        downloadTextFile(`StudioManager_Backup_${date}.json`, text, "application/json");
+        const hash = await sha256Hex(text);
+        setLastBackupHash(hash);
+        setStatus(`App-compatible backup downloaded. SHA-256 ${hash.slice(0, 12)}…`);
+        await recordWorkspaceBackupExport(workspace, hash).catch(() => undefined);
+        setLastBackupAtMs(Date.now());
       } else if (kind === "webBackup") {
-        downloadTextFile(`${prefix}-web-backup-${date}.json`, fullBackupJson(exportData, userEmail), "application/json");
-        setStatus("Web JSON backup downloaded.");
+        const text = fullBackupJson(exportData, userEmail);
+        downloadTextFile(`${prefix}-web-backup-${date}.json`, text, "application/json");
+        const hash = await sha256Hex(text);
+        setLastBackupHash(hash);
+        setStatus(`Web JSON backup downloaded. SHA-256 ${hash.slice(0, 12)}…`);
+        await recordWorkspaceBackupExport(workspace, hash).catch(() => undefined);
+        setLastBackupAtMs(Date.now());
       } else if (kind === "orders") {
         downloadTextFile(`${prefix}-orders-${date}.csv`, ordersToCsv(exportData.orders), "text/csv");
         setStatus("Orders CSV downloaded.");
       } else {
         downloadTextFile(`${prefix}-customers-${date}.csv`, customersToCsv(exportData.customers), "text/csv");
         setStatus("Customers CSV downloaded.");
-      }
-      if (kind === "backup" || kind === "webBackup") {
-        await recordWorkspaceBackupExport(workspace).catch(() => undefined);
-        setLastBackupAtMs(Date.now());
       }
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : t("Export could not be prepared."));
@@ -5157,11 +5494,28 @@ function DataManagementSection({
         skipDuplicates: hasDuplicates && skipDuplicatesChoice
       });
       await onImported();
+      setLastImportRunId(result.undoAvailable && result.runId ? result.runId : "");
       setStatus(result.message || "Import finished.");
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleUndoImport() {
+    if (!lastImportRunId) return;
+    setUndoingImport(true);
+    setError("");
+    try {
+      const result = await undoWorkspaceBackupImport(workspace, lastImportRunId);
+      setLastImportRunId("");
+      await onImported();
+      setStatus(result.message || t("Import undone."));
+    } catch (undoError) {
+      setError(undoError instanceof Error ? undoError.message : t("Import could not be undone."));
+    } finally {
+      setUndoingImport(false);
     }
   }
 
@@ -5205,6 +5559,11 @@ function DataManagementSection({
             <strong>{pendingImport.preview.likelyDuplicateOrders + pendingImport.preview.likelyDuplicateCustomers}</strong>
           </div>
           <p>{t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup.")}</p>
+          {(pendingImport.preview.unsupportedCustomers ?? 0) > 0 ? (
+            <p className="layout-error">
+              {t("Rows that could not be read as records:")} {pendingImport.preview.unsupportedCustomers}
+            </p>
+          ) : null}
           {pendingImport.preview.likelyDuplicateOrders > 0 || pendingImport.preview.likelyDuplicateCustomers > 0 ? (
             <>
               <label className="settings-toggle-row">
@@ -5251,16 +5610,16 @@ function DataManagementSection({
         </div>
 
         <div className="data-management-actions">
-          <button className="button" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
+          <button className="button" type="button" title={t("Restores into NivaDesk on any device.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("backup")}>
             {exporting === "backup" ? t("Exporting...") : t("Download backup")}
           </button>
-          <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("webBackup")}>
+          <button className="button secondary" type="button" title={t("A raw copy for support and safe keeping. Not for re-import.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("webBackup")}>
             {exporting === "webBackup" ? t("Exporting...") : t("Full web archive")}
           </button>
-          <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("orders")}>
+          <button className="button secondary" type="button" title={t("For spreadsheets. Cannot be imported back.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("orders")}>
             {exporting === "orders" ? t("Exporting...") : t("Orders CSV")}
           </button>
-          <button className="button secondary" type="button" disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("customers")}>
+          <button className="button secondary" type="button" title={t("For spreadsheets. Cannot be imported back.")} disabled={!exportAllowed || Boolean(exporting)} onClick={() => runExport("customers")}>
             {exporting === "customers" ? t("Exporting...") : t("Customers CSV")}
           </button>
           <input
@@ -5278,6 +5637,14 @@ function DataManagementSection({
         <p className="muted-copy">{t("Download backup is the one to keep — it restores into NivaDesk on any device. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
         {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
+        {lastImportRunId ? (
+          <div className="settings-action-row">
+            <button className="button secondary" type="button" disabled={undoingImport} onClick={() => { void handleUndoImport(); }}>
+              {undoingImport ? t("Undoing...") : t("Undo this import")}
+            </button>
+            <span className="muted-copy">{t("Removes exactly the records this import created. Settings changes are not undone.")}</span>
+          </div>
+        ) : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
 
@@ -5381,7 +5748,14 @@ function PlanAccessSection({
               ? `${workspace.billingTeamMemberLimit}`
               : `1 (${t("single-user plan")})`}
           />
-          <InfoTile label={t("Storage (total)")} value={formatStorageFromMB(workspace.billingStorageLimitMB)} />
+          <InfoTile
+            label={t("Storage (total)")}
+            value={workspace.storageAddonMB > 0
+              // A 210 GB total against a 50 GB plan matrix read as a
+              // contradiction; the sum spells itself out now.
+              ? `${formatStorageFromMB(workspace.billingStorageLimitMB)} (${formatStorageFromMB(workspace.billingStorageLimitMB - workspace.storageAddonMB)} + ${formatStorageFromMB(workspace.storageAddonMB)} ${t("add-on")})`
+              : formatStorageFromMB(workspace.billingStorageLimitMB)}
+          />
           {/* Renewal date and billing state were on the company document all
               along; Settings just never showed either. */}
           {workspace.billingCurrentPeriodEndMs > 0 ? (
@@ -6021,6 +6395,8 @@ function SupportTicketsSection({
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [sendingTicket, setSendingTicket] = useState(false);
   const sendingTicketRef = useRef(false);
+  const [replyFilesByTicketId, setReplyFilesByTicketId] = useState<Record<string, File[]>>({});
+  const [pendingTicketFiles, setPendingTicketFiles] = useState<File[]>([]);
   const [loadingMessages, setLoadingMessages] = useState<Record<string, boolean>>({});
   const [sendingReply, setSendingReply] = useState<Record<string, boolean>>({});
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
@@ -6158,6 +6534,24 @@ function SupportTicketsSection({
       const result = isWorkspaceMode
         ? await createWorkspaceSupportTicket(workspace, payload)
         : await createNivaDeskSupportTicket(workspace, payload);
+      // Attachments ride in as a follow-up reply, the same way the Mac app has
+      // always done it: the create callables deliberately take no files.
+      if (result.ticketId && pendingTicketFiles.length > 0) {
+        try {
+          const attachments: StudioSupportTicketAttachment[] = [];
+          for (const file of pendingTicketFiles.slice(0, 6)) {
+            attachments.push(await uploadSupportTicketAttachment(workspace, result.ticketId, file));
+          }
+          await (isWorkspaceMode
+            ? addWorkspaceSupportTicketReply(workspace, result.ticketId, "", attachments)
+            : addNivaDeskSupportTicketReply(workspace, result.ticketId, "", attachments));
+        } catch (attachError) {
+          setError(attachError instanceof Error
+            ? `${t("Ticket sent, but the attachments could not be uploaded.")} ${attachError.message}`
+            : t("Ticket sent, but the attachments could not be uploaded."));
+        }
+      }
+      setPendingTicketFiles([]);
       setTitle("");
       setMessage("");
       setPriority("normal");
@@ -6207,15 +6601,21 @@ function SupportTicketsSection({
 
   async function sendReply(ticket: StudioSupportTicket) {
     const reply = (replyByTicketId[ticket.id] || "").trim();
-    if (!reply) return;
+    const files = replyFilesByTicketId[ticket.id] || [];
+    if (!reply && files.length === 0) return;
     setSendingReply(previous => ({ ...previous, [ticket.id]: true }));
     setError("");
     setStatus("");
     try {
+      const attachments: StudioSupportTicketAttachment[] = [];
+      for (const file of files.slice(0, 6)) {
+        attachments.push(await uploadSupportTicketAttachment(workspace, ticket.id, file));
+      }
       await (isWorkspaceMode
-        ? addWorkspaceSupportTicketReply(workspace, ticket.id, reply)
-        : addNivaDeskSupportTicketReply(workspace, ticket.id, reply));
+        ? addWorkspaceSupportTicketReply(workspace, ticket.id, reply, attachments)
+        : addNivaDeskSupportTicketReply(workspace, ticket.id, reply, attachments));
       setReplyByTicketId(previous => ({ ...previous, [ticket.id]: "" }));
+      setReplyFilesByTicketId(previous => ({ ...previous, [ticket.id]: [] }));
       setMessagesByTicketId(previous => {
         const existing = previous[ticket.id] && previous[ticket.id].length > 0 ? previous[ticket.id] : [ticketStarterMessage(ticket)];
         return { ...previous, [ticket.id]: [...existing, localReplyMessage(ticket, reply)] };
@@ -6332,6 +6732,39 @@ function SupportTicketsSection({
           <textarea className="input" value={message} disabled={sendingTicket} rows={6} maxLength={5000} onChange={event => setMessage(event.target.value)} placeholder={t("Add details, steps, screenshots context or what you expected to happen.")} />
         </label>
         <div className="settings-action-row">
+          {pendingTicketFiles.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, flexBasis: "100%" }}>
+              {pendingTicketFiles.map((file, index) => (
+                <span key={`${file.name}-${index}`} className="studio-pill">
+                  {file.name}
+                  <button
+                    type="button"
+                    className="icon-action"
+                    style={{ marginLeft: 6 }}
+                    aria-label={t("Remove")}
+                    onClick={() => setPendingTicketFiles(previous => previous.filter((_, i) => i !== index))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <label className="button secondary" style={{ cursor: "pointer" }}>
+            {t("Attach file")}
+            <input
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              disabled={sendingTicket}
+              onChange={event => {
+                const picked = Array.from(event.target.files || []);
+                if (picked.length === 0) return;
+                setPendingTicketFiles(previous => [...previous, ...picked].slice(0, 6));
+                event.target.value = "";
+              }}
+            />
+          </label>
           <button className="button" type="button" disabled={sendingTicket || !title.trim() || !message.trim()} onClick={submitTicket}>
             {sendingTicket ? t("Sending...") : t("Send Ticket")}
           </button>
@@ -6431,6 +6864,15 @@ function SupportTicketsSection({
                         <strong style={{ color: "var(--text)" }}>{item.authorName || item.authorEmail || t("Unknown user")}</strong>
                         <small className="muted-copy"> · {t(supportAuthorRoleLabel(item.authorRole))} · {formatSupportDate(item.createdAtMillis)}</small>
                         <p className="muted-copy" style={{ marginTop: 6, marginBottom: 0, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{item.message}</p>
+                        {(item.attachments || []).length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                            {(item.attachments || []).map(attachment => (
+                              <a key={attachment.id} className="studio-pill" href={attachment.fileURL} target="_blank" rel="noopener noreferrer">
+                                {attachment.fileName}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                     <label className="quick-reply-settings-label">
@@ -6444,8 +6886,47 @@ function SupportTicketsSection({
                         placeholder={t("Write a reply...")}
                       />
                     </label>
+                    {(replyFilesByTicketId[ticket.id] || []).length > 0 ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {(replyFilesByTicketId[ticket.id] || []).map((file, index) => (
+                          <span key={`${file.name}-${index}`} className="studio-pill">
+                            {file.name}
+                            <button
+                              type="button"
+                              className="icon-action"
+                              style={{ marginLeft: 6 }}
+                              aria-label={t("Remove")}
+                              onClick={() => setReplyFilesByTicketId(previous => ({
+                                ...previous,
+                                [ticket.id]: (previous[ticket.id] || []).filter((_, i) => i !== index)
+                              }))}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="settings-action-row">
-                      <button className="button" type="button" disabled={Boolean(sendingReply[ticket.id]) || !(replyByTicketId[ticket.id] || "").trim()} onClick={() => void sendReply(ticket)}>
+                      <label className="button secondary" style={{ cursor: "pointer" }}>
+                        {t("Attach file")}
+                        <input
+                          type="file"
+                          multiple
+                          style={{ display: "none" }}
+                          disabled={Boolean(sendingReply[ticket.id])}
+                          onChange={event => {
+                            const picked = Array.from(event.target.files || []);
+                            if (picked.length === 0) return;
+                            setReplyFilesByTicketId(previous => ({
+                              ...previous,
+                              [ticket.id]: [...(previous[ticket.id] || []), ...picked].slice(0, 6)
+                            }));
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <button className="button" type="button" disabled={Boolean(sendingReply[ticket.id]) || (!(replyByTicketId[ticket.id] || "").trim() && (replyFilesByTicketId[ticket.id] || []).length === 0)} onClick={() => void sendReply(ticket)}>
                         {sendingReply[ticket.id] ? t("Sending...") : t("Send Reply")}
                       </button>
                     </div>
@@ -6601,6 +7082,28 @@ function formatSupportDate(value: number) {
 
 function AboutSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
+  const [diagStatus, setDiagStatus] = useState("");
+
+  // One block a support thread can paste in whole: what, where, which plan,
+  // which browser. Nothing here is secret — it is the same data the screen shows.
+  async function copyDiagnostics() {
+    const lines = [
+      `NivaDesk ${CHANGELOG[0]?.version ?? ""} (${CHANGELOG[0]?.date ?? ""})`,
+      `Workspace: ${workspace.name} (${workspace.id})`,
+      `Role: ${workspace.roleLabel}`,
+      `Plan: ${workspace.billingPlanName} · ${workspace.billingStatus}`,
+      `Language: ${language}`,
+      typeof navigator !== "undefined" ? `Browser: ${navigator.userAgent}` : ""
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setDiagStatus(t("Diagnostic info copied."));
+    } catch {
+      setDiagStatus(t("Copy failed. Select the value and copy it manually."));
+    }
+    window.setTimeout(() => setDiagStatus(""), 2000);
+  }
+
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
@@ -6638,6 +7141,12 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
           <InfoTile label={t("Web portal")} value="Next.js + Firebase" />
         </div>
         <p className="muted-copy">{t("NivaDesk keeps orders, Client Files, plan guards and card profiles synced across the Swift app, web portal and Firebase backend.")}</p>
+        <div className="settings-action-row">
+          <button className="button secondary" type="button" onClick={() => { void copyDiagnostics(); }}>
+            {t("Copy diagnostic info")}
+          </button>
+        </div>
+        {diagStatus ? <p className="success-copy">{diagStatus}</p> : null}
       </section>
     </div>
   );

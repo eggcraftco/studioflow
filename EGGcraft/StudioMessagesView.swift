@@ -122,6 +122,17 @@ struct StudioMessagesView: View {
         canStartMessageConversations
     }
 
+    // Posting into the team-wide thread is its own permission. The server
+    // enforces it in sendThreadMessage; this keeps the composer honest.
+    private var canPostTeamChat: Bool {
+        authVM.currentWorkspaceAccess["teamChat"] ?? true
+    }
+
+    private var selectedThreadIsTeam: Bool {
+        guard let thread = selectedThread else { return false }
+        return thread.id == "team" || thread.type == "team"
+    }
+
     private func cleanText(_ value: String) -> String {
         value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
     }
@@ -2093,7 +2104,20 @@ struct StudioMessagesView: View {
             .overlay(RoundedRectangle(cornerRadius: isCompact ? 21 : 14, style: .continuous).stroke(Color.primary.opacity(0.08), lineWidth: 1))
     }
 
+    @ViewBuilder
     private func composer(isCompact: Bool) -> some View {
+        if selectedThreadIsTeam && !canPostTeamChat {
+            Text(t("You can read Team Chat, but posting here is not enabled for your workspace account.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+        } else {
+            composerBody(isCompact: isCompact)
+        }
+    }
+
+    private func composerBody(isCompact: Bool) -> some View {
         HStack(alignment: .bottom, spacing: 10) {
             if canSendMessageAttachments {
 #if os(iOS)
@@ -3410,6 +3434,7 @@ struct StudioMessagesView: View {
     private func sendTextMessage() {
         let text = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        if selectedThreadIsTeam && !canPostTeamChat { return }
         let threadId = selectedThread?.id ?? selectedThreadId
         setActiveThreadPresence(threadId: threadId, isActive: true)
         clearTypingStatusNow(threadId: threadId)

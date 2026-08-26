@@ -55,6 +55,7 @@ let studioNavigationAccessOptions: [(key: String, label: String)] = [
     ("schedule", "Schedule"),
     ("customers", "Customers"),
     ("messages", "Messages"),
+    ("teamChat", "Team Chat posting"),
     ("notes", "Notes"),
     ("quickReply", "Quick Reply"),
     ("settings", "Settings"),
