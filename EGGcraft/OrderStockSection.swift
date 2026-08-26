@@ -46,11 +46,7 @@ struct OrderStockSection: View {
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.name).font(.system(size: 12, weight: .semibold))
-                            Text([line.number,
-                                  line.trackingType == .quantity
-                                    ? "\(formatQuantity(line.quantity))\(line.unit.isEmpty ? "" : " \(line.unit)")"
-                                    : ""]
-                                .filter { !$0.isEmpty }.joined(separator: " · "))
+                            Text(subline(line))
                                 .font(.system(size: 10)).foregroundColor(.secondary)
                         }
                         Spacer()
@@ -91,6 +87,21 @@ struct OrderStockSection: View {
             }
             .environmentObject(firebaseManager)
         }
+    }
+
+    /// "INV-0042 · 5 / 15 pcs · Vault Z" — what this order holds out of what
+    /// exists, then where it lives, so a partial reserve doesn't read like the
+    /// whole spool. onHand and location arrived with slice I1; a line from an
+    /// older cache simply shows what it knows.
+    private func subline(_ line: OrderStockLine) -> String {
+        var amount = ""
+        if line.trackingType == .quantity {
+            amount = formatQuantity(line.quantity)
+            if let onHand = line.onHand { amount += " / " + formatQuantity(onHand) }
+            if !line.unit.isEmpty { amount += " \(line.unit)" }
+        }
+        return [line.number, amount, line.location]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private func reload() async {

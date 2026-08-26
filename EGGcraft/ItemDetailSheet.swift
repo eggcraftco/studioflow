@@ -24,6 +24,7 @@ struct ItemDetailSheet: View {
     @State private var duplicating: InventoryItem?
     @State private var showPhotos = false
     @State private var showReserve = false
+    @State private var recordingLoss = false
     @State private var movingLocation = false
     @State private var locationDraft = ""
     @FocusState private var locationFocused: Bool
@@ -123,6 +124,9 @@ struct ItemDetailSheet: View {
             switch item.status {
             case .available: return .green
             case .reserved: return .orange
+            // Partly promised is a milder fact than fully promised, so the
+            // chip is a lighter shade of the same reserved amber.
+            case .partiallyReserved: return .orange.opacity(0.7)
             case .incoming: return .blue
             default: return .gray
             }
@@ -244,6 +248,12 @@ struct ItemDetailSheet: View {
             // Wrapping rows of small bordered buttons — same idea as the web
             // panel's action grid.
             FlowingActionButtons(buttons: quickActions)
+            if recordingLoss {
+                RecordLossForm(item: item, lang: lang, onRecorded: {
+                    recordingLoss = false
+                    Task { await refresh() }
+                }, onCancel: { recordingLoss = false })
+            }
         }
     }
 
@@ -262,6 +272,11 @@ struct ItemDetailSheet: View {
         }
         if item.allowedNextStatuses.contains(.used) {
             actions.append((t("Mark as Used", lang: lang), { setStatus(.used) }))
+        }
+        // A loss can only be recorded for something still in the story —
+        // sold, used, removed and archived items are already accounted for.
+        if ![.sold, .used, .removed, .archived].contains(item.status) {
+            actions.append((t("Record a Loss…", lang: lang), { recordingLoss.toggle() }))
         }
         actions.append((t("Duplicate Item", lang: lang), { duplicating = duplicateSource() }))
         actions.append((t("Manage photos", lang: lang), { showPhotos = true }))
@@ -481,6 +496,96 @@ private struct FlowingActionButtons: View {
                 Button(entry.element.0) { entry.element.1() }
                     .font(.system(size: 12, weight: .semibold))
                     .buttonStyle(.bordered)
+            }
+        }
+    }
+}
+
+// The inline "Record a Loss…" form — its own struct, not a nested builder,
+// because deepening view nesting is a known real-iPhone crash class in this
+// codebase. The reason picker is the point: the ledger line the call writes
+// carries the reason as its kind, so "where did that stock go" has an answer
+// months later. The server enforces the rules (refuses a reserved unique item,
+// refuses a quantity that would cut into reserved stock).
+private struct RecordLossForm: View {
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    let item: InventoryItem
+    let lang: String
+    let onRecorded: () -> Void
+    let onCancel: () -> Void
+
+    @State private var kind = "damaged"
+    @State private var quantityText = "1"
+    @State private var note = ""
+    @State private var busy = false
+    @State private var error = ""
+
+    private var quantity: Double {
+        Double(quantityText.replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack(spacing: 8) {
+                Text(t("Loss reason", lang: lang))
+                    .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                Picker(t("Loss reason", lang: lang), selection: $kind) {
+                    Text(t("Damaged", lang: lang)).tag("damaged")
+                    Text(t("Lost", lang: lang)).tag("lost")
+                    Text(t("Returned to supplier", lang: lang)).tag("returned")
+                    Text(t("Wastage", lang: lang)).tag("wastage")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .font(.system(size: 12))
+            }
+            if item.trackingType == .quantity {
+                HStack(spacing: 8) {
+                    Text(t("Quantity lost", lang: lang))
+                        .font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+                    TextField("1", text: $quantityText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12))
+                        .frame(maxWidth: 90)
+                    if !item.unit.isEmpty {
+                        Text(item.unit).font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
+            }
+            TextField(t("What happened? (optional)", lang: lang), text: $note)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+            HStack(spacing: 10) {
+                Button(busy ? t("Saving…", lang: lang) : t("Record the loss", lang: lang)) { submit() }
+                    .font(.system(size: 12, weight: .semibold))
+                    .buttonStyle(.bordered)
+                    .disabled(busy || (item.trackingType == .quantity && quantity <= 0))
+                Button(t("Cancel", lang: lang)) { onCancel() }
+                    .font(.system(size: 11)).buttonStyle(.plain).foregroundColor(.secondary)
+                    .disabled(busy)
+            }
+            if !error.isEmpty {
+                Text(error).font(.system(size: 11)).foregroundColor(.red)
+            }
+        }
+    }
+
+    private func submit() {
+        busy = true
+        error = ""
+        Task {
+            do {
+                try await firebaseManager.recordInventoryLoss(
+                    itemId: item.id,
+                    kind: kind,
+                    quantity: item.trackingType == .quantity ? quantity : nil,
+                    note: note
+                )
+                onRecorded()
+            } catch {
+                self.error = error.localizedDescription
+                busy = false
             }
         }
     }

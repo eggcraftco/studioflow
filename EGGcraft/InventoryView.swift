@@ -433,6 +433,9 @@ struct InventoryView: View {
             switch item.status {
             case .available: return .green
             case .reserved: return .orange
+            // Partly promised is a milder fact than fully promised, so the
+            // chip is a lighter shade of the same reserved amber.
+            case .partiallyReserved: return .orange.opacity(0.7)
             case .incoming: return .blue
             default: return .gray
             }

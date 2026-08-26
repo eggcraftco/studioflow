@@ -35,15 +35,21 @@ enum InventoryOwnership: String, Codable {
 }
 
 enum InventoryStatus: String, CaseIterable, Codable {
-    case available, reserved, incoming, used, sold, archived
+    // "reserved" means fully promised; "partiallyReserved" is a quantity item
+    // with some — not all — of its stock promised to orders. Unique items
+    // never get partial. "removed" is where a recorded loss leaves a unique
+    // item: gone for a reason, not sold and not archived.
+    case available, reserved, partiallyReserved, incoming, used, sold, removed, archived
 
     var label: String {
         switch self {
         case .available: return "Available"
         case .reserved: return "Reserved"
+        case .partiallyReserved: return "Partially Reserved"
         case .incoming: return "Incoming"
         case .used: return "Used"
         case .sold: return "Sold"
+        case .removed: return "Removed"
         case .archived: return "Archived"
         }
     }
@@ -180,16 +186,18 @@ struct InventoryItem: Identifiable, Equatable {
 
     /// The server's STATUS_TRANSITIONS, mirrored so no button or menu entry is
     /// offered that the callable would refuse. "reserved" is deliberately never
-    /// a target: reserving must go through reserveInventoryForOrder, which
-    /// writes the reservation arrays — a bare status flip would promise the
-    /// item to no order at all.
+    /// a target — and neither is "partiallyReserved": reserving must go through
+    /// reserveInventoryForOrder, which writes the reservation arrays — a bare
+    /// status flip would promise the item to no order at all.
     var allowedNextStatuses: [InventoryStatus] {
         switch status {
         case .available: return [.used, .sold, .incoming, .archived]
         case .reserved: return [.available, .used, .sold, .archived]
+        case .partiallyReserved: return [.available, .used, .sold, .archived]
         case .incoming: return [.available, .archived]
         case .used: return [.available, .archived]
         case .sold: return [.archived]
+        case .removed: return [.available, .archived]
         case .archived: return [.available]
         }
     }
@@ -241,6 +249,9 @@ struct InventoryMovement: Identifiable, Equatable {
 
     /// The same words the web item panel uses for its history list, so the
     /// translation table needs one entry per kind, not one per platform.
+    /// A recorded loss writes a ledger line whose kind IS the reason —
+    /// returned, damaged, lost or wastage — so the answer to "where did that
+    /// stock go" reads straight off the history.
     var kindLabel: String {
         switch kind {
         case "openingStock": return "Opening stock"
@@ -250,6 +261,11 @@ struct InventoryMovement: Identifiable, Equatable {
         case "used": return "Used"
         case "sold": return "Sold"
         case "removed": return "Removed"
+        case "moved": return "Moved"
+        case "returned": return "Returned to supplier"
+        case "damaged": return "Damaged"
+        case "lost": return "Lost"
+        case "wastage": return "Wastage"
         default: return kind
         }
     }
@@ -465,6 +481,11 @@ struct OrderStockLine: Identifiable, Equatable {
     var unit: String
     var quantity: Double
     var lineCost: Double
+    /// The whole shelf, not just this order's share — "5 / 15 pcs" is what
+    /// stops a partial reserve reading like the whole spool. nil when the
+    /// server predates slice I1 (an older cached response).
+    var onHand: Double?
+    var location: String
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
@@ -475,6 +496,8 @@ struct OrderStockLine: Identifiable, Equatable {
         unit = raw["unit"] as? String ?? ""
         quantity = (raw["quantity"] as? NSNumber)?.doubleValue ?? 0
         lineCost = (raw["lineCost"] as? NSNumber)?.doubleValue ?? 0
+        onHand = (raw["onHand"] as? NSNumber)?.doubleValue
+        location = raw["location"] as? String ?? ""
     }
 }
 
@@ -547,6 +570,10 @@ let openingStockFields: [(key: String, label: String)] = [
 
 enum MovementKind: String {
     case openingStock, purchase, adjustment, stocktake, used, sold, removed
+    // Loss reasons write their own ledger kinds; "moved" is a location change
+    // with a delta of zero. A report that dropped these rows would quietly
+    // understate what left the shelf.
+    case returned, damaged, lost, wastage, moved
 
     /// The label a person reads. English here; the app translates it.
     var label: String {
@@ -558,6 +585,11 @@ enum MovementKind: String {
         case .used:         return "Used on jobs"
         case .sold:         return "Sold"
         case .removed:      return "Removed"
+        case .returned:     return "Returned to supplier"
+        case .damaged:      return "Damaged"
+        case .lost:         return "Lost"
+        case .wastage:      return "Wastage"
+        case .moved:        return "Moved"
         }
     }
 }
@@ -719,6 +751,19 @@ extension FirebaseManager {
 
     func setInventoryItemStatus(_ itemId: String, status: InventoryStatus) async throws {
         _ = try await inventoryCall("setInventoryItemStatus", ["itemId": itemId, "status": status.rawValue])
+    }
+
+    /// Records stock leaving for a reason — returned, damaged, lost or
+    /// wastage. The reason is the point: the ledger line this writes is the
+    /// answer to "where did that stock go" months later. The server owns the
+    /// rules (a unique item moves to "removed" and is refused while reserved;
+    /// a quantity loss may not cut into stock promised to orders).
+    func recordInventoryLoss(itemId: String, kind: String, quantity: Double?, note: String) async throws {
+        var payload: [String: Any] = ["itemId": itemId, "kind": kind]
+        if let quantity { payload["quantity"] = quantity }
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { payload["note"] = trimmed }
+        _ = try await inventoryCall("recordInventoryLoss", payload)
     }
 
     /// The movement ledger for one item, newest first. companyId travels via
