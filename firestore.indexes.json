@@ -4,10 +4,39 @@
       "collectionGroup": "companies",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "billingEffectiveStatus", "order": "ASCENDING" },
-        { "fieldPath": "billingCurrentPeriodEnd", "order": "ASCENDING" }
+        {
+          "fieldPath": "billingEffectiveStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "billingCurrentPeriodEnd",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "notes",
+      "fieldPath": "reminderDate",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }

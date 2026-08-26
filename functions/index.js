@@ -12506,6 +12506,48 @@ exports.anonymizeWebCustomer = onCall({ region: "europe-west2" }, async (request
 // rename flow uses. Before anything is deleted, a full snapshot of both
 // records lands in customerMergeLog (server-only collection) so the merge
 // can be reconstructed by hand or a future undo.
+// Re-applies the store's last known customer payload to the profile. An
+// explicit Resync is the owner saying "take the store's values now", so the
+// store wins on every non-empty field regardless of the passive sync policy.
+// No store API call is made — this replays what the webhook last delivered.
+exports.resyncIntegrationCustomer = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidCanEditWorkspaceCustomers(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot edit customers.");
+  }
+  const customerId = String(request.data?.customerId || "").trim();
+  if (!customerId) throw new HttpsError("invalid-argument", "customerId is required.");
+
+  const db = admin.firestore();
+  const ref = db.collection("musteriler").doc(customerId);
+  const snap = await ref.get();
+  const data = snap.data();
+  if (!data || String(data.companyId || "") !== companyId) {
+    throw new HttpsError("not-found", "Customer not found in this workspace.");
+  }
+  let payload = null;
+  try { payload = JSON.parse(String(data.integrationLastPayload || "")); } catch { payload = null; }
+  if (!payload || typeof payload !== "object") {
+    throw new HttpsError("failed-precondition", "No stored store data for this customer yet — it fills in on the next webhook.");
+  }
+
+  const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp(), integrationSyncedAt: admin.firestore.FieldValue.serverTimestamp() };
+  const allowed = [
+    "email", "phone", "address", "streetAddress", "city", "postalCode", "country",
+    "shippingAddress", "shippingStreetAddress", "shippingCity", "shippingPostalCode",
+    "shippingCountry", "shippingPhone"
+  ];
+  let applied = 0;
+  for (const key of allowed) {
+    const value = cleanWooText(payload[key]);
+    if (!value) continue;
+    if (cleanWooText(data[key]) !== value) applied += 1;
+    update[key] = value;
+  }
+  await ref.set(update, { merge: true });
+  return { ok: true, applied };
+});
+
 exports.mergeWebCustomers = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceCustomers(companyData, uid)) {
@@ -16575,6 +16617,11 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
       if (!storeWins && cleanWooText(existingData[key])) continue;
       update[key] = value;
     }
+    // Integration panel data: when the store last spoke, and exactly what it
+    // said (normalized payload, so Resync can re-apply it and the profile can
+    // show the raw values without another webhook).
+    update.integrationSyncedAt = admin.firestore.FieldValue.serverTimestamp();
+    update.integrationLastPayload = JSON.stringify({ name, externalCustomerId, ...fields }).slice(0, 6000);
     await snap.docs[0].ref.set(update, { merge: true });
     return;
   }
@@ -16587,6 +16634,8 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
     profileImageUrl: "",
     ...fields,
     externalCustomerId,
+    integrationSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
+    integrationLastPayload: JSON.stringify({ name, externalCustomerId, ...fields }).slice(0, 6000),
     lastContactDate: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -25297,8 +25346,10 @@ exports.getAdminInsights = onCall({ region: "europe-west2", timeoutSeconds: 120 
     countOf(db.collection("siparisler")),
     countOf(db.collection("siparisler").where("createdAt", ">=", monthStartTs)),
     countOf(db.collection("musteriler")),
-    countOf(db.collection("notes")),
-    countOf(db.collection("notes").where("reminderDate", ">", admin.firestore.Timestamp.fromMillis(0))),
+    // Real notes live at companies/{c}/personal_notes/{u}/notes — a root
+    // "notes" query counted an empty collection and always reported 0.
+    countOf(db.collectionGroup("notes")),
+    countOf(db.collectionGroup("notes").where("reminderDate", ">", admin.firestore.Timestamp.fromMillis(0))),
     countOf(db.collection("messages")),
     countOf(db.collection("workspaceTickets")),
     countOf(db.collection("supportTickets").where("status", "==", "open")),
