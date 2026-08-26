@@ -31,6 +31,9 @@ struct NewInventoryItemSheet: View {
     /// server assigns a fresh INV number.
     let existing: InventoryItem?
     let itemId: String
+    /// Every tag already in use across the shelf, offered as one-tap
+    /// suggestions. Empty where the caller has no list at hand.
+    let tagSuggestions: [String]
     let onSaved: () -> Void
 
     @State private var trackingType: InventoryTrackingType = .unique
@@ -53,6 +56,7 @@ struct NewInventoryItemSheet: View {
     @State private var extras: [InventoryAdditionalCost] = []
     @State private var isCustomerOwned = false
     @State private var notes = ""
+    @State private var tags: [String] = []
     @State private var saving = false
     @State private var error = ""
 
@@ -61,12 +65,14 @@ struct NewInventoryItemSheet: View {
         lang: String,
         existing: InventoryItem? = nil,
         itemId: String = "",
+        tagSuggestions: [String] = [],
         onSaved: @escaping () -> Void
     ) {
         self.currencySymbol = currencySymbol
         self.lang = lang
         self.existing = existing
         self.itemId = itemId
+        self.tagSuggestions = tagSuggestions
         self.onSaved = onSaved
         guard let item = existing else { return }
         _trackingType = State(initialValue: item.trackingType)
@@ -89,6 +95,7 @@ struct NewInventoryItemSheet: View {
         _extras = State(initialValue: item.additionalCosts)
         _isCustomerOwned = State(initialValue: item.ownership == .customer)
         _notes = State(initialValue: item.notes)
+        _tags = State(initialValue: item.tags)
     }
 
     private var extrasTotal: Double { extras.reduce(0) { $0 + $1.amount } }
@@ -131,6 +138,10 @@ struct NewInventoryItemSheet: View {
                         TextField(t("Tell me when it drops to", lang: lang), text: $lowStockAt)
                     }
                     TextField(t("Location", lang: lang), text: $location)
+                }
+
+                Section(t("Tags", lang: lang)) {
+                    TagChipEditor(tags: $tags, lang: lang, suggestions: tagSuggestions)
                 }
 
                 Section {
@@ -208,7 +219,10 @@ struct NewInventoryItemSheet: View {
             "additionalCosts": extras.map { ["label": $0.label, "amount": $0.amount] },
             "description": existing?.description ?? "",
             "currentValueEst": existing?.currentValueEst ?? 0,
-            "photos": existing?.photos ?? []
+            "photos": existing?.photos ?? [],
+            // Always sent (key-present semantics server-side), so edits
+            // round-trip and an emptied editor genuinely clears the tags.
+            "tags": tags
         ]
         Task {
             do {
@@ -599,6 +613,72 @@ struct ReceiveDeliveryRow: View {
     }
 }
 
+/// The tag editor: chips with an × to remove, a field that adds on return,
+/// and every tag already in use offered as a one-tap suggestion. Its own
+/// struct — the real-iPhone stack guard punishes rows inlined into a sheet
+/// body. The server's caps (20 tags, 30 characters each) are applied here
+/// too, so nothing typed is silently different after the save.
+struct TagChipEditor: View {
+    @Binding var tags: [String]
+    let lang: String
+    let suggestions: [String]
+
+    @State private var draft = ""
+
+    private var unusedSuggestions: [String] {
+        suggestions.filter { !tags.contains($0) }
+    }
+
+    private let columns = [GridItem(.adaptive(minimum: 90), spacing: 6)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !tags.isEmpty {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        HStack(spacing: 4) {
+                            Text(tag).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                            Button {
+                                tags.removeAll { $0 == tag }
+                            } label: {
+                                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Capsule().fill(Color.blue.opacity(0.12)))
+                        .foregroundColor(.blue)
+                    }
+                }
+            }
+            TextField(t("Add a tag and press Enter", lang: lang), text: $draft)
+                .onSubmit { add(draft) }
+            if !unusedSuggestions.isEmpty {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+                    ForEach(unusedSuggestions, id: \.self) { tag in
+                        Button { add(tag) } label: {
+                            Text(tag)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Capsule().fill(Color.gray.opacity(0.12)))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func add(_ raw: String) {
+        let value = String(raw.trimmingCharacters(in: .whitespacesAndNewlines).prefix(30))
+        draft = ""
+        guard !value.isEmpty, !tags.contains(value), tags.count < 20 else { return }
+        tags.append(value)
+    }
+}
+
 struct SupplierSheet: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
     @Environment(\.dismiss) private var dismiss
@@ -610,6 +690,10 @@ struct SupplierSheet: View {
     @State private var email = ""
     @State private var phone = ""
     @State private var website = ""
+    @State private var code = ""
+    @State private var address = ""
+    @State private var vatNumber = ""
+    @State private var currency = ""
     @State private var notes = ""
     @State private var saving = false
     @State private var error = ""
@@ -621,6 +705,20 @@ struct SupplierSheet: View {
                 TextField(t("Email", lang: lang), text: $email)
                 TextField(t("Phone", lang: lang), text: $phone)
                 TextField(t("Website", lang: lang), text: $website)
+                // The paperwork fields — what an invoice or a customs form
+                // asks for. Same set and order as the web form.
+                HStack {
+                    Text(t("Supplier code", lang: lang))
+                    TextField(t("Your reference for them", lang: lang), text: $code)
+                        .multilineTextAlignment(.trailing)
+                }
+                TextField(t("VAT number", lang: lang), text: $vatNumber)
+                HStack {
+                    Text(t("Currency", lang: lang))
+                    TextField("GBP, EUR…", text: $currency)
+                        .multilineTextAlignment(.trailing)
+                }
+                TextField(t("Address", lang: lang), text: $address, axis: .vertical).lineLimit(2...4)
                 TextField(t("Notes", lang: lang), text: $notes, axis: .vertical).lineLimit(2...4)
                 if !error.isEmpty {
                     Text(error).font(.system(size: 12)).foregroundColor(.red)
@@ -642,6 +740,13 @@ struct SupplierSheet: View {
                 email = supplier.email
                 phone = supplier.phone
                 website = supplier.website
+                code = supplier.code
+                address = supplier.address
+                vatNumber = supplier.vatNumber
+                currency = supplier.currency
+                // The server rebuilds the whole card from this payload, so
+                // notes must travel prefilled or an edit would blank them.
+                notes = supplier.notes
             }
         }
     }
@@ -652,7 +757,14 @@ struct SupplierSheet: View {
         Task {
             do {
                 try await firebaseManager.saveSupplier(
-                    ["name": name, "email": email, "phone": phone, "website": website, "notes": notes],
+                    [
+                        "name": name, "email": email, "phone": phone, "website": website, "notes": notes,
+                        "code": code.trimmingCharacters(in: .whitespaces),
+                        "address": address,
+                        "vatNumber": vatNumber.trimmingCharacters(in: .whitespaces),
+                        // Currency codes read as codes: gbp becomes GBP.
+                        "currency": currency.trimmingCharacters(in: .whitespaces).uppercased()
+                    ],
                     supplierId: supplier?.id ?? ""
                 )
                 onSaved()

@@ -116,6 +116,7 @@ struct InventoryItem: Identifiable, Equatable {
     var purchaseId: String
     var purchaseNumber: String
     var updatedAtMs: Double
+    var tags: [String]
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String else { return nil }
@@ -159,6 +160,7 @@ struct InventoryItem: Identifiable, Equatable {
         purchaseId = raw["purchaseId"] as? String ?? ""
         purchaseNumber = raw["purchaseNumber"] as? String ?? ""
         updatedAtMs = (raw["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0
+        tags = (raw["tags"] as? [String]) ?? []
     }
 
     /// A unique item is one object, whatever a stale record happens to say.
@@ -216,6 +218,10 @@ struct InventoryItem: Identifiable, Equatable {
             "description": description, "sku": sku, "location": location,
             "supplierName": supplierName, "purchaseDate": purchaseDate, "notes": notes,
             "photos": photos,
+            // Key-present semantics on the server: a payload without "tags"
+            // leaves them alone, [] clears them. The full-input path always
+            // sends them so edits round-trip.
+            "tags": tags,
             "onHand": trackingType == .quantity ? onHand : 1,
             "unit": trackingType == .quantity ? unit : "",
             "lowStockAt": lowStockAt,
@@ -482,6 +488,12 @@ struct Supplier: Identifiable, Equatable {
     var email: String
     var phone: String
     var website: String
+    var notes: String
+    // The paperwork fields: what an invoice or a customs form asks for.
+    var code: String
+    var address: String
+    var vatNumber: String
+    var currency: String
     var isImplied: Bool
     var spent: Double
     var purchaseCount: Int
@@ -495,6 +507,11 @@ struct Supplier: Identifiable, Equatable {
         email = raw["email"] as? String ?? ""
         phone = raw["phone"] as? String ?? ""
         website = raw["website"] as? String ?? ""
+        notes = raw["notes"] as? String ?? ""
+        code = raw["code"] as? String ?? ""
+        address = raw["address"] as? String ?? ""
+        vatNumber = raw["vatNumber"] as? String ?? ""
+        currency = raw["currency"] as? String ?? ""
         isImplied = (raw["implied"] as? Bool) ?? false
         let stats = raw["stats"] as? [String: Any] ?? [:]
         spent = (stats["total"] as? NSNumber)?.doubleValue ?? 0

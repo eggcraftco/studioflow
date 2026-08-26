@@ -121,9 +121,16 @@ struct InventoryView: View {
                 } else if item.status != statusFilter { return false }
             }
             if needle.isEmpty { return true }
-            return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number]
+            return [item.name, item.brand, item.model, item.reference, item.serialNumber, item.sku, item.number,
+                    item.tags.joined(separator: " ")]
                 .contains { $0.lowercased().contains(needle) }
         }
+    }
+
+    /// Every tag in use across the shelf — the item form offers these as
+    /// one-tap suggestions, same idea as the web's datalist.
+    private var tagSuggestions: [String] {
+        Array(Set(model.items.flatMap(\.tags))).sorted()
     }
 
     var body: some View {
@@ -178,7 +185,7 @@ struct InventoryView: View {
             .environmentObject(firebaseManager)
         }
         .sheet(isPresented: $showNewItem) {
-            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil) {
+            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil, tagSuggestions: tagSuggestions) {
                 Task { await model.loadItems(firebaseManager) }
             }
             .environmentObject(firebaseManager)
@@ -635,6 +642,16 @@ struct InventoryView: View {
             }
             if !supplier.email.isEmpty || !supplier.phone.isEmpty {
                 Text([supplier.email, supplier.phone].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            // The paperwork line, same shape as the web card: your code for
+            // them, their VAT number, the currency they bill in.
+            if !supplier.code.isEmpty || !supplier.vatNumber.isEmpty || !supplier.currency.isEmpty {
+                Text([
+                    supplier.code,
+                    supplier.vatNumber.isEmpty ? "" : t("VAT number", lang: seciliDil) + ": " + supplier.vatNumber,
+                    supplier.currency
+                ].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.system(size: 11)).foregroundColor(.secondary)
             }
             HStack(spacing: 14) {

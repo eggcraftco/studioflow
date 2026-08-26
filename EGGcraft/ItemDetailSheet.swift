@@ -177,6 +177,9 @@ struct ItemDetailSheet: View {
             if !item.sku.isEmpty { detailRow(t("SKU", lang: lang), item.sku) }
             if !item.year.isEmpty { detailRow(t("Year", lang: lang), item.year) }
             if !item.condition.isEmpty { detailRow(t("Condition", lang: lang), item.condition) }
+            if !item.tags.isEmpty {
+                ItemTagChips(label: t("Tags", lang: lang), tags: item.tags)
+            }
             if !item.description.isEmpty {
                 Text(item.description).font(.system(size: 11)).foregroundColor(.secondary)
             }
@@ -483,6 +486,30 @@ struct ItemDetailSheet: View {
             "unit": item.trackingType == .quantity ? item.unit : ""
         ]
         return InventoryItem(raw)
+    }
+}
+
+/// Read-only tag chips for the detail card — the same words the item form's
+/// editor writes, shown without the ×. Its own struct: deepening view nesting
+/// is a known real-iPhone crash class in this codebase.
+private struct ItemTagChips: View {
+    let label: String
+    let tags: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 6)], alignment: .leading, spacing: 6) {
+                ForEach(tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Capsule().fill(Color.blue.opacity(0.12)))
+                        .foregroundColor(.blue)
+                }
+            }
+        }
     }
 }
 
