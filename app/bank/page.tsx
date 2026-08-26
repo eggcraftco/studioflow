@@ -2815,6 +2815,11 @@ function BankPageContent() {
 
             {/* Pandle bridge ships dark until Pandle issues the OAuth app credentials
                  (NEXT_PUBLIC_PANDLE_ENABLED=1 turns the card on). */}
+            {tab === "overview" ? (
+              <p style={{ fontSize: 11, opacity: 0.55, margin: "-6px 2px 0" }}>
+                {t("Figures follow the transaction date; pending payments are included. Incoming marked as transfer, owner contribution or loan is not counted as revenue.")}
+              </p>
+            ) : null}
             {isOwner && tab === "overview" ? (() => {
               // The accountant's worklist for the selected period: how ready
               // this period is to hand over, with one click into each pile.
@@ -2987,6 +2992,14 @@ function BankPageContent() {
                     </div>
                   </div>
                 </div>
+                {drawerTx.purchaseNumber ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(22,163,74,0.25)", background: "rgba(22,163,74,0.05)" }}>
+                    <span style={{ fontWeight: 800, color: "#16a34a" }}>▣ {drawerTx.purchaseNumber}</span>
+                    <span style={{ opacity: 0.65 }}>{t("This payment is linked to a purchase — its supplier and stock items live in Inventory.")}</span>
+                    <span style={{ flex: 1 }} />
+                    <a href="/inventory" style={{ ...attentionLink, fontSize: 11.5, textDecoration: "none" }}>{t("View in Inventory")} →</a>
+                  </div>
+                ) : null}
                 {filesPicker.open ? (
                   <div style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(37,99,235,0.3)", background: "rgba(37,99,235,0.05)", fontSize: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
