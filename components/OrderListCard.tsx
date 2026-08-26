@@ -91,6 +91,18 @@ function dueTone(order: OrderListCardItem) {
   return "success";
 }
 
+// Decision 1B/2B: one of five order states drives the left stripe and, for
+// done/cancelled, the card ground. Never color alone — the badges stay.
+function cardStateTone(order: OrderListCardItem): "late" | "waiting" | "active" | "done" | "cancelled" {
+  const normalizedStatus = order.status.trim().toLowerCase();
+  if (normalizedStatus === "cancelled" || normalizedStatus === "canceled") return "cancelled";
+  if (normalizedStatus === "done" || normalizedStatus === "completed" || order.isDispatched) return "done";
+  const days = daysRemaining(order.dueDate);
+  if (days !== null && days < 0) return "late";
+  if (normalizedStatus.includes("waiting")) return "waiting";
+  return "active";
+}
+
 function scheduleDateValue(value: unknown): Date | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -420,10 +432,11 @@ export function OrderListCard({
   );
 
   const cancelledClass = order.status.trim().toLowerCase().includes("cancel") ? " is-cancelled" : "";
+  const stateClass = ` state-${cardStateTone(order)}`;
 
   if (mobileHref) {
     return (
-      <Link href={mobileHref} className={(selected ? "order-list-card selected" : "order-list-card") + cancelledClass}>
+      <Link href={mobileHref} className={(selected ? "order-list-card selected" : "order-list-card") + cancelledClass + stateClass}>
         {content}
       </Link>
     );
@@ -436,6 +449,8 @@ export function OrderListCard({
       tabIndex={0}
       className={[
         selected ? "order-list-card selected" : "order-list-card",
+        stateClass.trim(),
+        cancelledClass.trim(),
         multiSelected ? "multi-selected" : "",
         selectionActive ? "selection-active" : "",
         showFirstProjectGuideProjectBubble ? "first-project-guide-target" : ""

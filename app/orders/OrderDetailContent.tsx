@@ -1310,6 +1310,19 @@ const CARD_ACCESS_KEYS: Record<OrderDetailCardId, WorkspaceMemberAccessKey> = {
   historyLog: "cardHistoryLog"
 };
 
+// Decision 3B: every card color carries a fixed, translated meaning, shown
+// in the menu and as a chip on the colored card — the color stops being a
+// private code only its author understands.
+const CARD_COLOR_MEANINGS: Record<string, string> = {
+  Red: "Urgent",
+  Orange: "Waiting on customer",
+  Yellow: "Needs review",
+  Green: "Approved",
+  Blue: "In production",
+  Purple: "Finance",
+  Pink: "Special"
+};
+
 const CARD_COLOR_OPTIONS = ["Default", "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Pink"] as const;
 const DEFAULT_STATUS_OPTIONS = ["New", "Not Yet", "In Progress", "Done", "Cancelled"];
 const PRIORITY_OPTIONS = ["Low", "Normal", "High", "Urgent"];
@@ -5191,6 +5204,7 @@ export function OrderDetailContent({
                 >
                   <span data-card-color={color} />
                   {color}
+                  {CARD_COLOR_MEANINGS[color] ? <small className="order-card-color-meaning">{t(CARD_COLOR_MEANINGS[color])}</small> : null}
                 </button>
               ))}
             </div>
@@ -7834,6 +7848,14 @@ export function OrderDetailContent({
           </span>
         )}
         {renderCardMenu(cardId)}
+        {(() => {
+          const profileColor = cardProfileColor(cardLayout, cardId);
+          return CARD_COLOR_MEANINGS[profileColor] ? (
+            <span className="order-card-meaning-chip" data-card-color={profileColor}>
+              {t(CARD_COLOR_MEANINGS[profileColor])}
+            </span>
+          ) : null;
+        })()}
         {renderCard(cardId)}
         {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
         {draggingCardId && draggingCardId !== cardId ? (
@@ -7923,6 +7945,14 @@ export function OrderDetailContent({
         style={frameStyle}
       >
         {renderCardMenu(cardId)}
+        {(() => {
+          const profileColor = cardProfileColor(cardLayout, cardId);
+          return CARD_COLOR_MEANINGS[profileColor] ? (
+            <span className="order-card-meaning-chip" data-card-color={profileColor}>
+              {t(CARD_COLOR_MEANINGS[profileColor])}
+            </span>
+          ) : null;
+        })()}
         {renderCard(cardId)}
         {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
         {canMoveResizeCards ? (
