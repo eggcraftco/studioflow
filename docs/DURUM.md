@@ -114,7 +114,13 @@ Alphabetical). 11+1+4 yeni string × 11 dil. Web canlı doğrulaması: 8 yayın�
   Android BUILD SUCCESSFUL). KALAN: segmentler/etiketler; Messages/AI Replies
   bağlantısı; Overview sekme düzeni. Segmentler de TAMAM (27 Ağu gece 5,
   web+sunucu canlı yolda; tags[] anahtar-varsa yazımı, chip editörü + filtre
-  satırı + kart chip'leri; native segment UI'ı sonraki tur).
+  satırı + kart chip'leri; native segment UI'ı sonraki tur). İletişim
+  tercihleri de TAMAM (27 Ağu gece 6, rapor §15): preferred channel /
+  Do not contact (linkler söner) / marketing durumu / next follow-up +
+  Messages(?q= derin bağlantı)/AI Reply kısayolları; cleanCustomerForm
+  geçirgenlik bug'ı emülatörde yakalanıp düzeltildi. KALAN (Customers):
+  Overview sekme düzeni (görsel yeniden düzen — kullanıcıyla bakmalı);
+  AI Reply'a müşteri bağlamı prefill'i; native segment+tercih UI'ları.
 - Envanter/Files 3. aşaması (aşağıdaki eski liste).
 Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase receipt,
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
