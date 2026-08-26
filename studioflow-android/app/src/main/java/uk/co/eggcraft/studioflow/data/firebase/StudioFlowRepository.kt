@@ -2931,6 +2931,19 @@ class StudioFlowRepository(
         inventoryCall("releaseInventoryFromOrder", workspaceId, mapOf("itemId" to itemId, "orderId" to orderId))
     }
 
+    /** Stock leaving for a reason that is not a sale or a job — returned,
+     *  damaged, lost or wastage. The reason lands in the ledger, so "where did
+     *  300ml of lacquer go" has an answer. Quantity only counts for counted
+     *  items; the server moves a unique item to "removed" instead. */
+    suspend fun inventoryRecordLoss(
+        workspaceId: String, itemId: String, kind: String, quantity: Double? = null, note: String = ""
+    ) {
+        val payload = mutableMapOf<String, Any?>("itemId" to itemId, "kind" to kind)
+        if (quantity != null) payload["quantity"] = quantity
+        if (note.isNotBlank()) payload["note"] = note
+        inventoryCall("recordInventoryLoss", workspaceId, payload)
+    }
+
     // ---- Bank owner actions (all owner-checked server-side) ----
 
     private suspend fun bankCall(name: String, workspaceId: String, data: Map<String, Any?> = emptyMap()): Map<*, *> {

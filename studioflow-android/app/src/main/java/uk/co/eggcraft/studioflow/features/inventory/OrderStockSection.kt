@@ -111,11 +111,18 @@ fun OrderStockSection(
                     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(line.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            // "3 / 10 ml" — what this order holds out of what
+                            // exists, so a partial reserve doesn't read like
+                            // the whole spool. Older responses carry no onHand;
+                            // then the bare quantity stands alone.
                             val meta = listOf(
                                 line.number,
                                 if (line.trackingType == StudioTrackingType.Quantity)
-                                    inventoryQuantity(line.quantity) + if (line.unit.isBlank()) "" else " ${line.unit}"
-                                else ""
+                                    inventoryQuantity(line.quantity) +
+                                        (if (line.onHand > 0) " / " + inventoryQuantity(line.onHand) else "") +
+                                        (if (line.unit.isBlank()) "" else " ${line.unit}")
+                                else "",
+                                line.location
                             ).filter { it.isNotBlank() }.joinToString(" · ")
                             if (meta.isNotBlank()) Text(meta, fontSize = 11.sp, color = Color.Gray)
                         }

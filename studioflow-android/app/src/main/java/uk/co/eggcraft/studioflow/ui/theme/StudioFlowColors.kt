@@ -4,6 +4,9 @@ import androidx.compose.ui.graphics.Color
 
 val StudioBlue = Color(0xFF0A84FF)
 val StudioWarningOrange = Color(0xFFFF9500)
+
+/** A lighter take on the reserve amber, for stock that is only partly promised. */
+val StudioPartialOrange = Color(0xFFFFB340)
 val StudioGreen = Color(0xFF34C759)
 val StudioRed = Color(0xFFFF3B30)
 

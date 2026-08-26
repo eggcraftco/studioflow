@@ -69,6 +69,7 @@ import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
 import uk.co.eggcraft.studioflow.language.studioT
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
+import uk.co.eggcraft.studioflow.ui.theme.StudioPartialOrange
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
@@ -551,6 +552,7 @@ private fun InventoryItemRow(
                             low -> StudioWarningOrange
                             item.status == StudioInventoryStatus.Available -> StudioGreen
                             item.status == StudioInventoryStatus.Reserved -> StudioWarningOrange
+                            item.status == StudioInventoryStatus.PartiallyReserved -> StudioPartialOrange
                             item.status == StudioInventoryStatus.Incoming -> StudioBlue
                             else -> Color.Gray
                         }

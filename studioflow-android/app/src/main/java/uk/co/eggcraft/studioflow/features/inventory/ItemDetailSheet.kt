@@ -65,25 +65,30 @@ import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
 import uk.co.eggcraft.studioflow.ui.theme.StudioGreen
+import uk.co.eggcraft.studioflow.ui.theme.StudioPartialOrange
 import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 /**
  * Mirrors the server's STATUS_TRANSITIONS (functions/inventory.js) so no button
  * or menu offers a move the server will refuse. "reserved" is deliberately
- * never a target: reserving goes through reserveInventoryForOrder, which writes
- * the reservation arrays linking the order — a bare status flip to "reserved"
- * would link no order and be invisible everywhere an order is drawn.
+ * never a target — and neither is "partiallyReserved": reserving goes through
+ * reserveInventoryForOrder, which writes the reservation arrays linking the
+ * order — a bare status flip to "reserved" would link no order and be
+ * invisible everywhere an order is drawn.
  */
 internal fun inventoryStatusNext(status: StudioInventoryStatus): List<StudioInventoryStatus> = when (status) {
     StudioInventoryStatus.Available ->
         listOf(StudioInventoryStatus.Used, StudioInventoryStatus.Sold, StudioInventoryStatus.Incoming, StudioInventoryStatus.Archived)
     StudioInventoryStatus.Reserved ->
         listOf(StudioInventoryStatus.Available, StudioInventoryStatus.Used, StudioInventoryStatus.Sold, StudioInventoryStatus.Archived)
+    StudioInventoryStatus.PartiallyReserved ->
+        listOf(StudioInventoryStatus.Available, StudioInventoryStatus.Used, StudioInventoryStatus.Sold, StudioInventoryStatus.Archived)
     StudioInventoryStatus.Incoming ->
         listOf(StudioInventoryStatus.Available, StudioInventoryStatus.Archived)
     StudioInventoryStatus.Used -> listOf(StudioInventoryStatus.Available, StudioInventoryStatus.Archived)
     StudioInventoryStatus.Sold -> listOf(StudioInventoryStatus.Archived)
+    StudioInventoryStatus.Removed -> listOf(StudioInventoryStatus.Available, StudioInventoryStatus.Archived)
     StudioInventoryStatus.Archived -> listOf(StudioInventoryStatus.Available)
 }
 
@@ -96,8 +101,23 @@ private fun movementKindLabel(kind: String): String = when (kind) {
     "used" -> "Used"
     "sold" -> "Sold"
     "removed" -> "Removed"
+    "moved" -> "Moved"
+    "returned" -> "Returned to supplier"
+    "damaged" -> "Damaged"
+    "lost" -> "Lost"
+    "wastage" -> "Wastage"
     else -> kind
 }
+
+/** The reasons recordInventoryLoss accepts, in the order the web offers them.
+ *  The reason is the point: the ledger line it produces is the answer to
+ *  "where did that stock go" months later. */
+private val inventoryLossKinds = listOf(
+    "damaged" to "Damaged",
+    "lost" to "Lost",
+    "returned" to "Returned to supplier",
+    "wastage" to "Wastage"
+)
 
 /** The same wording the client files hub uses for a byte count. */
 private fun libraryFileSizeLabel(bytes: Long): String = when {
@@ -149,6 +169,11 @@ fun ItemDetailSheet(
     var reserveOpen by remember { mutableStateOf(false) }
     var movingLocation by remember { mutableStateOf(false) }
     var locationDraft by remember(item.id) { mutableStateOf(item.location) }
+    var lossOpen by remember(item.id) { mutableStateOf(false) }
+    var lossKind by remember(item.id) { mutableStateOf("damaged") }
+    var lossKindMenuOpen by remember { mutableStateOf(false) }
+    var lossQuantityText by remember(item.id) { mutableStateOf("1") }
+    var lossNote by remember(item.id) { mutableStateOf("") }
     var historyOpen by remember(item.id) { mutableStateOf(false) }
     var movements by remember(item.id) { mutableStateOf<List<StudioInventoryMovement>?>(null) }
     var filesOpen by remember(item.id) { mutableStateOf(false) }
@@ -203,6 +228,7 @@ fun ItemDetailSheet(
                             low -> StudioWarningOrange
                             item.status == StudioInventoryStatus.Available -> StudioGreen
                             item.status == StudioInventoryStatus.Reserved -> StudioWarningOrange
+                            item.status == StudioInventoryStatus.PartiallyReserved -> StudioPartialOrange
                             item.status == StudioInventoryStatus.Incoming -> StudioBlue
                             else -> Color.Gray
                         }
@@ -382,6 +408,84 @@ fun ItemDetailSheet(
                                             },
                                             enabled = !busy, modifier = Modifier.weight(1f)
                                         ) { Text(t("Mark as Used"), fontSize = 11.sp) }
+                                    }
+                                }
+                                // Losses only make sense while the thing is still
+                                // in the story — something sold, used up, removed
+                                // or archived has already left it.
+                                val lossEligible = item.status !in listOf(
+                                    StudioInventoryStatus.Sold, StudioInventoryStatus.Used,
+                                    StudioInventoryStatus.Removed, StudioInventoryStatus.Archived
+                                )
+                                if (lossEligible) {
+                                    OutlinedButton(
+                                        onClick = { lossOpen = !lossOpen },
+                                        enabled = !busy, modifier = Modifier.fillMaxWidth()
+                                    ) { Text(t("Record a Loss…"), fontSize = 11.sp) }
+                                }
+                                if (lossEligible && lossOpen) {
+                                    // The reason is the point: the ledger line it
+                                    // produces is the answer to "where did that
+                                    // stock go" months later.
+                                    Box {
+                                        OutlinedTextField(
+                                            value = t(inventoryLossKinds.first { it.first == lossKind }.second),
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            label = { Text(t("Loss reason"), fontSize = 11.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Box(Modifier.matchParentSize().clickable { lossKindMenuOpen = true })
+                                        DropdownMenu(expanded = lossKindMenuOpen, onDismissRequest = { lossKindMenuOpen = false }) {
+                                            inventoryLossKinds.forEach { (raw, label) ->
+                                                DropdownMenuItem(
+                                                    text = { Text(t(label), fontSize = 13.sp) },
+                                                    onClick = { lossKindMenuOpen = false; lossKind = raw }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (item.trackingType == StudioTrackingType.Quantity) {
+                                        OutlinedTextField(
+                                            value = lossQuantityText,
+                                            onValueChange = { lossQuantityText = it },
+                                            label = { Text(t("Quantity lost"), fontSize = 11.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    OutlinedTextField(
+                                        value = lossNote,
+                                        onValueChange = { lossNote = it },
+                                        label = { Text(t("What happened? (optional)"), fontSize = 11.sp) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                        val quantityOk = item.trackingType != StudioTrackingType.Quantity ||
+                                            inventoryParse(lossQuantityText) > 0
+                                        Text(
+                                            t("Record the loss"), fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (quantityOk) StudioBlue else Color.Gray,
+                                            modifier = Modifier.clickable(enabled = !busy && quantityOk) {
+                                                run("The loss could not be recorded.") {
+                                                    repository.inventoryRecordLoss(
+                                                        workspaceId, item.id, lossKind,
+                                                        quantity = if (item.trackingType == StudioTrackingType.Quantity)
+                                                            inventoryParse(lossQuantityText) else null,
+                                                        note = lossNote.trim()
+                                                    )
+                                                    lossOpen = false
+                                                    lossNote = ""
+                                                }
+                                            }
+                                        )
+                                        Text(
+                                            t("Cancel"), fontSize = 12.sp, color = Color.Gray,
+                                            modifier = Modifier.clickable { lossOpen = false }
+                                        )
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

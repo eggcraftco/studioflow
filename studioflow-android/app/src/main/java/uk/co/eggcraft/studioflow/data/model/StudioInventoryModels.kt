@@ -17,11 +17,17 @@ enum class StudioTrackingType(val raw: String, val label: String) {
 }
 
 enum class StudioInventoryStatus(val raw: String, val label: String) {
+    // "reserved" means fully promised; "partiallyReserved" is a quantity item
+    // with some — not all — of its stock promised to orders. Unique items
+    // never get partial. "removed" is where a recorded loss leaves a unique
+    // item: gone for a reason, not sold and not archived.
     Available("available", "Available"),
     Reserved("reserved", "Reserved"),
+    PartiallyReserved("partiallyReserved", "Partially Reserved"),
     Incoming("incoming", "Incoming"),
     Used("used", "Used"),
     Sold("sold", "Sold"),
+    Removed("removed", "Removed"),
     Archived("archived", "Archived");
 
     companion object {
@@ -353,6 +359,10 @@ data class StudioOrderStockLine(
     val trackingType: StudioTrackingType,
     val unit: String,
     val quantity: Double,
+    /** Total on the shelf, so the card can say "3 of 10" instead of a bare 3.
+     *  Zero when an older server response does not carry it. */
+    val onHand: Double,
+    val location: String,
     val lineCost: Double
 ) {
     companion object {
@@ -365,6 +375,8 @@ data class StudioOrderStockLine(
                 trackingType = StudioTrackingType.from(raw["trackingType"] as? String),
                 unit = raw["unit"] as? String ?: "",
                 quantity = (raw["quantity"] as? Number)?.toDouble() ?: 0.0,
+                onHand = (raw["onHand"] as? Number)?.toDouble() ?: 0.0,
+                location = raw["location"] as? String ?: "",
                 lineCost = (raw["lineCost"] as? Number)?.toDouble() ?: 0.0
             )
         }
@@ -549,7 +561,14 @@ enum class StudioMovementKind(val raw: String, val label: String) {
     Stocktake("stocktake", "Stocktake"),
     Used("used", "Used on jobs"),
     Sold("sold", "Sold"),
-    Removed("removed", "Removed");
+    Removed("removed", "Removed"),
+    // A location change moves nothing in or out — its delta is zero.
+    Moved("moved", "Moved"),
+    // Losses keep their reason, so "where did that stock go" has an answer.
+    Returned("returned", "Returned to supplier"),
+    Damaged("damaged", "Damaged"),
+    Lost("lost", "Lost"),
+    Wastage("wastage", "Wastage");
 
     companion object {
         fun from(value: String?): StudioMovementKind? = entries.firstOrNull { it.raw == value }
