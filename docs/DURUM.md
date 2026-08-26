@@ -79,7 +79,7 @@ e-posta/telefonda oluşturma onayı; Notes sekmesi → "Order Notes";
 **Müşteri kimliği (sunucu):** upsertIntegrationCustomer artık
 externalCustomerId saklıyor (5 webhook çağrı noktası) ve id → e-posta → isim
 sırasıyla eşliyor. customer-identity.mjs emülatörde TÜMÜ GEÇTİ (isim değişse
-de tek kayıt; guest aynı e-posta → mükerrer yok). **DEPLOY BEKLİYOR (reauth).**
+de tek kayıt; guest aynı e-posta → mükerrer yok). 5 webhook CANLI (26 Ağu akşamı).
 **Kart sistemi:** tek kart bileşeni 3 yoğunluk (container query; 460/380/290
 kademeleri E2E'li); ayırıcı 22px görünmez tutma alanı + çift-tık varsayılan;
 bulut genişliği artık EKRAN BAŞINA (schedule/customers kendi alanlarını yazar,
@@ -95,13 +95,11 @@ Envanter/Files raporunun 3. aşaması: partial reservation, partial purchase rec
 maliyet katmanları, iade/hasar/kayıp/fire, BOM/reçete, Shopify/Woo stok senkronu,
 sipariş kartında kullanılan-miktar/swap aksiyonları, hiyerarşik lokasyonlar,
 import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel storage yolu
-(storage.rules `firebase login --reauth` bekliyor), 500-üstü sunucu sayfalaması.
+(kural deploy'u artık açık — istenirse yapılır), 500-üstü sunucu sayfalaması.
 
 ## KULLANICIYA BAĞLI BEKLEYENLER
-- **`firebase login --reauth` — ARTIK ACİL**: kimlik bilgileri 26 Ağu öğlen
-  doldu; artık TÜM fonksiyon deploy'ları bloklu. Reauth sonrası çıkacaklar:
-  1) 5 webhook (müşteri kimliği): `firebase deploy --only functions:woocommerceOrderWebhook,functions:shopifyOrderWebhook,functions:inboundOrderWebhook,functions:shopifyAppWebhook,functions:shopifyImportOrders`
-  2) storage.rules (kütüphaneye özel depo yolu + envanter fotoğraf yayını).
+- ~~reauth~~ 26 Ağu akşamı çözüldü: 5 webhook (müşteri kimliği) + storage.rules
+  CANLI — envanter fotoğraf yayını artık tamamen açık.
 - Ana repo push (commit'ler hazır), mağaza sürümleri (iOS/macOS 1.3 review'da,
   Android 0.1.8; native kütüphane + Files sekmesi bir sonraki sürümle),
   VAPID anahtarı (+ App Check — Schedule raporu §17 de doğruladı),
