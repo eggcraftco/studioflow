@@ -535,6 +535,7 @@ export default function CustomersPage() {
           aria-label={t("Resize customer list")}
           title={t("Resize customer list")}
           onPointerDown={sidebar.startResize}
+          onDoubleClick={sidebar.resetWidth}
         />
 
         <main className="customers-detail-pane">

@@ -1122,6 +1122,7 @@ export default function OrdersPage() {
           aria-label={t("Resize order list")}
           title={t("Resize order list")}
           onPointerDown={sidebar.startResize}
+          onDoubleClick={sidebar.resetWidth}
         />
 
         <main className="orders-detail-pane">

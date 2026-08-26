@@ -390,7 +390,7 @@ export function OrderListCard({
             <span aria-hidden="true">✽</span>
             <span title={order.designName || "Untitled design"}>{order.designName || "Untitled design"}</span>
           </div>
-          <div className="order-list-detail-line">
+          <div className="order-list-detail-line order-list-date-line">
             <span aria-hidden="true">▣</span>
             <span>{shortDate(order.paymentDate ?? null)}</span>
           </div>
