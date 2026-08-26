@@ -13404,6 +13404,12 @@ private let cardColorSwatches: [(String, Color)] = [
     ("Green", .green), ("Blue", .blue), ("Purple", .purple), ("Pink", .pink)
 ]
 
+// Fixed meaning per card colour (English keys, localized via t()) — mirrors the web workspace.
+private let cardColorMeanings: [(String, String)] = [
+    ("Red", "Urgent"), ("Orange", "Waiting on customer"), ("Yellow", "Needs review"),
+    ("Green", "Approved"), ("Blue", "In production"), ("Purple", "Finance"), ("Pink", "Special")
+]
+
 // A clean, native-feeling macOS menu row: icon + label, full-width, subtle hover highlight.
 private struct CardMenuRow: View {
     let title: String
@@ -13568,7 +13574,16 @@ struct DetayKarti<Content: View>: View {
         default: return Color.clear
         }
     }
-    
+
+    private func cardColorMeaning(for renk: String) -> String? {
+        guard let anlam = cardColorMeanings.first(where: { $0.0 == renk })?.1 else { return nil }
+        return t(anlam, lang: seciliDil)
+    }
+
+    private var kartRengiAnlami: String? {
+        cardColorMeanings.first(where: { kartRengi == t($0.0, lang: seciliDil) }).map { t($0.1, lang: seciliDil) }
+    }
+
     // Dynamic card background colour
     private var bgColor: Color {
         if kartRengi == t("Default", lang: seciliDil) {
@@ -13775,47 +13790,89 @@ struct DetayKarti<Content: View>: View {
                 onColorChange(t("Red", lang: seciliDil))
             } label: {
                 Label(t("Red", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Urgent", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Orange", lang: seciliDil))
             } label: {
                 Label(t("Orange", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Waiting on customer", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Yellow", lang: seciliDil))
             } label: {
                 Label(t("Yellow", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Needs review", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Green", lang: seciliDil))
             } label: {
                 Label(t("Green", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Approved", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Blue", lang: seciliDil))
             } label: {
                 Label(t("Blue", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("In production", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Purple", lang: seciliDil))
             } label: {
                 Label(t("Purple", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Finance", lang: seciliDil))
             }
             Button {
                 onColorChange(t("Pink", lang: seciliDil))
             } label: {
                 Label(t("Pink", lang: seciliDil), systemImage: "circle.fill")
+                Text(t("Special", lang: seciliDil))
             }
             #else
             Menu("🎨 " + t("Color", lang: seciliDil)) {
                 Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange(t("Default", lang: seciliDil)) }
-                Button("🔴 " + t("Red", lang: seciliDil)) { onColorChange(t("Red", lang: seciliDil)) }
-                Button("🟠 " + t("Orange", lang: seciliDil)) { onColorChange(t("Orange", lang: seciliDil)) }
-                Button("🟡 " + t("Yellow", lang: seciliDil)) { onColorChange(t("Yellow", lang: seciliDil)) }
-                Button("🟢 " + t("Green", lang: seciliDil)) { onColorChange(t("Green", lang: seciliDil)) }
-                Button("🔵 " + t("Blue", lang: seciliDil)) { onColorChange(t("Blue", lang: seciliDil)) }
-                Button("🟣 " + t("Purple", lang: seciliDil)) { onColorChange(t("Purple", lang: seciliDil)) }
-                Button("🩷 " + t("Pink", lang: seciliDil)) { onColorChange(t("Pink", lang: seciliDil)) }
+                Button {
+                    onColorChange(t("Red", lang: seciliDil))
+                } label: {
+                    Text("🔴 " + t("Red", lang: seciliDil))
+                    Text(t("Urgent", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Orange", lang: seciliDil))
+                } label: {
+                    Text("🟠 " + t("Orange", lang: seciliDil))
+                    Text(t("Waiting on customer", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Yellow", lang: seciliDil))
+                } label: {
+                    Text("🟡 " + t("Yellow", lang: seciliDil))
+                    Text(t("Needs review", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Green", lang: seciliDil))
+                } label: {
+                    Text("🟢 " + t("Green", lang: seciliDil))
+                    Text(t("Approved", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Blue", lang: seciliDil))
+                } label: {
+                    Text("🔵 " + t("Blue", lang: seciliDil))
+                    Text(t("In production", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Purple", lang: seciliDil))
+                } label: {
+                    Text("🟣 " + t("Purple", lang: seciliDil))
+                    Text(t("Finance", lang: seciliDil))
+                }
+                Button {
+                    onColorChange(t("Pink", lang: seciliDil))
+                } label: {
+                    Text("🩷 " + t("Pink", lang: seciliDil))
+                    Text(t("Special", lang: seciliDil))
+                }
             }
             #endif
         } else {
@@ -14035,7 +14092,7 @@ struct DetayKarti<Content: View>: View {
                             color: pair.1,
                             isDefault: pair.0 == "Default",
                             isSelected: kartRengi == t(pair.0, lang: seciliDil),
-                            help: t(pair.0, lang: seciliDil)
+                            help: cardColorMeaning(for: pair.0).map { t(pair.0, lang: seciliDil) + " — " + $0 } ?? t(pair.0, lang: seciliDil)
                         ) {
                             onColorChange(t(pair.0, lang: seciliDil))
                             showCardOptionsPopover = false
@@ -14044,6 +14101,13 @@ struct DetayKarti<Content: View>: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 4)
+                if let kartRengiAnlami {
+                    Text(kartRengiAnlami)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 4)
+                }
             } else {
                 Divider().padding(.horizontal, 6).padding(.vertical, 6)
                 HStack(alignment: .top, spacing: 8) {
@@ -14141,6 +14205,18 @@ struct DetayKarti<Content: View>: View {
                     }
                     .buttonStyle(.plain)
                     .help(quickAddTooltip ?? "Add")
+                }
+
+                if let kartRengiAnlami {
+                    Text(kartRengiAnlami)
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 3.5)
+                        .background(temaRengi(kartRengi))
+                        .clipShape(Capsule())
                 }
 
                 // Give iPad a clear menu target instead of long-press.

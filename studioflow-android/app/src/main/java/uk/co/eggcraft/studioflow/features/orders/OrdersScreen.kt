@@ -68,8 +68,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -80,6 +84,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.net.URL
@@ -1172,14 +1177,19 @@ private fun OrderListCard(
     var detailsMenuOpen by remember { mutableStateOf(false) }
     var confirmDeleteOpen by remember { mutableStateOf(false) }
     val cardShape = RoundedCornerShape(20.dp)
-    val cardTone = if (selected) {
+    val stateTone = orderStateTone(order)
+    val darkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val cardTone = when {
         // Theme-aware selected tint: dark blue in dark mode (matching the Mac app), light blue otherwise.
-        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF1E3354) else Color(0xFFDCEBFF)
-    } else {
-        MaterialTheme.colorScheme.surface
+        selected -> if (darkSurface) Color(0xFF1E3354) else Color(0xFFDCEBFF)
+        stateTone == OrderStateTone.Done ->
+            if (darkSurface) Color(0xFF30A46C).copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface) else Color(0xFFF2FAF5)
+        else -> MaterialTheme.colorScheme.surface
     }
     val borderTone = when {
         selected -> StudioBlue
+        stateTone == OrderStateTone.Done ->
+            if (darkSurface) Color(0xFF4CC38A).copy(alpha = 0.35f) else Color(0xFF30A46C).copy(alpha = 0.28f)
         order.priority == "Urgent" -> StudioRed.copy(alpha = 0.28f)
         order.priority == "High" -> StudioWarningOrange.copy(alpha = 0.28f)
         else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
@@ -1208,7 +1218,7 @@ private fun OrderListCard(
                         }
                     }
                 }
-                .alpha(if (order.status == "Cancelled") 0.62f else 1f),
+                .alpha(if (stateTone == OrderStateTone.Cancelled) 0.55f else 1f),
             shape = cardShape,
             color = cardTone,
             contentColor = MaterialTheme.colorScheme.onSurface,
@@ -1216,7 +1226,15 @@ private fun OrderListCard(
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
-            BoxWithConstraints(modifier = Modifier.background(cardTone)) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .background(cardTone)
+                    .drawBehind {
+                        val stripeWidth = 3.dp.toPx()
+                        val stripeStart = if (layoutDirection == LayoutDirection.Rtl) size.width - stripeWidth else 0f
+                        drawRect(color = stateTone.stripe, topLeft = Offset(stripeStart, 0f), size = Size(stripeWidth, size.height))
+                    }
+            ) {
                 val compact = maxWidth < 390.dp
                 Row(
                     modifier = Modifier
@@ -1745,6 +1763,40 @@ private fun statusTone(status: String): Color {
         "not yet", "" -> StudioRed
         else -> StudioBlue
     }
+}
+
+private enum class OrderStateTone(val stripe: Color) {
+    Late(Color(0xFFE5484D)),
+    Waiting(Color(0xFFF5A623)),
+    Active(Color(0xFF2F6DF6)),
+    Done(Color(0xFF30A46C)),
+    Cancelled(Color(0xFF8D939E))
+}
+
+private fun orderStateTone(order: StudioOrder): OrderStateTone {
+    val normalizedStatus = order.status.trim().lowercase()
+    if (normalizedStatus == "cancelled" || normalizedStatus == "canceled") return OrderStateTone.Cancelled
+    if (normalizedStatus == "done" || normalizedStatus == "completed" || order.isDispatched) return OrderStateTone.Done
+    val days = orderDueDaysRemaining(order)
+    if (days != null && days < 0) return OrderStateTone.Late
+    if (normalizedStatus.contains("waiting")) return OrderStateTone.Waiting
+    return OrderStateTone.Active
+}
+
+private fun orderDueDaysRemaining(order: StudioOrder): Int? {
+    if (order.deliveryTime <= 0) return null
+    val startOfDay: Calendar.() -> Unit = {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val due = Calendar.getInstance().apply {
+        time = Date(order.paymentDate.time + order.deliveryTime * 24L * 60L * 60L * 1000L)
+        startOfDay()
+    }
+    val today = Calendar.getInstance().apply { startOfDay() }
+    return Math.round((due.timeInMillis - today.timeInMillis) / (24.0 * 60.0 * 60.0 * 1000.0)).toInt()
 }
 
 private fun orderStatusPayload(order: StudioOrder, status: String): Map<String, Any?> {

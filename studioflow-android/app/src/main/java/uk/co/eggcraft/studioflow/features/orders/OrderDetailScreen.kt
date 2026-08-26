@@ -8830,6 +8830,20 @@ private fun DetailCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val meaningLabel = orderCardColorMeaning(cardColorName)
+                if (cardTint != null && meaningLabel != null) {
+                    Surface(shape = RoundedCornerShape(999.dp), color = cardTint) {
+                        Text(
+                            text = t(meaningLabel),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
                 headerAction?.invoke()
                 Box {
                     Surface(
@@ -8892,9 +8906,31 @@ private fun DetailCard(
                     DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                         val actions = cardActions
                         val selectedColorName = actions?.layout?.cardColors?.get(actions.cardId) ?: t("Default")
-                        listOf(t("Default"), t("Red"), t("Orange"), t("Yellow"), t("Green"), t("Blue"), t("Purple"), "Pink").forEach { colorName ->
+                        listOf(
+                            "Default" to t("Default"),
+                            "Red" to t("Red"),
+                            "Orange" to t("Orange"),
+                            "Yellow" to t("Yellow"),
+                            "Green" to t("Green"),
+                            "Blue" to t("Blue"),
+                            "Purple" to t("Purple"),
+                            "Pink" to "Pink"
+                        ).forEach { (canonicalColorName, colorName) ->
+                            val meaningLabel = orderCardColorMeaning(canonicalColorName)
                             DropdownMenuItem(
-                                text = { Text(colorName) },
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text(colorName)
+                                        if (meaningLabel != null) {
+                                            Text(
+                                                text = t(meaningLabel),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                },
                                 leadingIcon = { CardColorSwatch(colorName, selectedColorName == colorName) },
                                 enabled = actions != null && cardsUnlocked,
                                 onClick = {
@@ -10502,6 +10538,19 @@ private fun orderDetailCardAccent(cardId: OrderDetailCardId?): Color {
         OrderDetailCardId.Schedule -> Color(0xFF6F7DFF)
         OrderDetailCardId.HistoryLog -> Color(0xFF77808F)
         null -> Color(0xFF8A8F98)
+    }
+}
+
+private fun orderCardColorMeaning(colorName: String?): String? {
+    return when (colorName) {
+        "Red" -> "Urgent"
+        "Orange" -> "Waiting on customer"
+        "Yellow" -> "Needs review"
+        "Green" -> "Approved"
+        "Blue" -> "In production"
+        "Purple" -> "Finance"
+        "Pink" -> "Special"
+        else -> null
     }
 }
 

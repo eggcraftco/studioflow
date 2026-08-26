@@ -11582,17 +11582,40 @@ struct SiparisKarti: View {
         resolvedBadgeStep(summaryStep2, fallbackIndex: 1)
     }
     
+    private enum OrderStateTone { case late, waiting, active, done, cancelled }
+
+    private var orderStateTone: OrderStateTone {
+        let normalizedStatus = siparis.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedStatus == "cancelled" || normalizedStatus == "canceled" { return .cancelled }
+        if normalizedStatus == "done" || normalizedStatus == "completed" || siparis.isDispatched { return .done }
+        if siparis.deliveryTime > 0, kalanGunSayisi(siparis: siparis) < 0 { return .late }
+        if normalizedStatus.contains("waiting") { return .waiting }
+        return .active
+    }
+
+    private var orderStateStripeColor: Color {
+        switch orderStateTone {
+        case .late: return Color(red: 0.898, green: 0.2824, blue: 0.302)
+        case .waiting: return Color(red: 0.9608, green: 0.651, blue: 0.1373)
+        case .active: return Color(red: 0.1843, green: 0.4275, blue: 0.9647)
+        case .done: return Color(red: 0.1882, green: 0.6431, blue: 0.4235)
+        case .cancelled: return Color(red: 0.5529, green: 0.5765, blue: 0.6196)
+        }
+    }
+
     private var kartArkaPlanRengi: Color {
         if isSelected { return Color.blue.opacity(0.15) }
         if isMultiSelected { return Color.blue.opacity(0.08) }
+        if orderStateTone == .done { return colorScheme == .dark ? Color(red: 0.1882, green: 0.6431, blue: 0.4235).opacity(0.10) : Color(red: 0.949, green: 0.9804, blue: 0.9608) }
         if siparis.priority == "Urgent" { return Color.red.opacity(0.08) }
         if siparis.priority == "High" { return studioWarningOrange.opacity(0.08) }
         return colorScheme == .dark ? Color(white: 0.15) : .white
     }
-    
+
     private var kartCizgiRengi: Color {
         if isSelected { return Color.blue.opacity(0.5) }
         if isMultiSelected { return Color.blue.opacity(0.35) }
+        if orderStateTone == .done { return colorScheme == .dark ? Color(red: 0.298, green: 0.7647, blue: 0.5412).opacity(0.35) : Color(red: 0.1882, green: 0.6431, blue: 0.4235).opacity(0.28) }
         if siparis.priority == "Urgent" { return Color.red.opacity(0.3) }
         if siparis.priority == "High" { return studioWarningOrange.opacity(0.3) }
         return Color.clear
@@ -11830,10 +11853,11 @@ struct SiparisKarti: View {
         }
         .padding(16)
         .background(kartArkaPlanRengi)
+        .overlay(Rectangle().fill(orderStateStripeColor).frame(width: 3), alignment: .leading)
         .cornerRadius(16)
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(kartCizgiRengi, lineWidth: 1.5))
         .shadow(color: colorScheme == .dark ? .clear : Color(red: 0, green: 0, blue: 0).opacity(0.04), radius: 5, y: 2)
-        .opacity(siparis.status == "Cancelled" ? 0.6 : 1.0)
+        .opacity(orderStateTone == .cancelled ? 0.55 : 1.0)
         .contentShape(Rectangle())
         .transaction { transaction in
             transaction.animation = nil
