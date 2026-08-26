@@ -8,6 +8,7 @@ package uk.co.eggcraft.studioflow.features.inventory
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryRecipe
 import uk.co.eggcraft.studioflow.data.model.StudioOrderStockLine
 import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
 import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
@@ -66,6 +70,7 @@ fun OrderStockSection(
     var total by remember(orderId) { mutableStateOf(0.0) }
     var loading by remember(orderId) { mutableStateOf(true) }
     var picking by remember { mutableStateOf(false) }
+    var applyingRecipe by remember { mutableStateOf(false) }
     var swapFrom by remember { mutableStateOf<StudioOrderStockLine?>(null) }
     var busyId by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -96,6 +101,11 @@ fun OrderStockSection(
                 Text(
                     t("Reserve stock"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
                     modifier = Modifier.clickable { picking = true }
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    t("Use a recipe…"), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = StudioBlue,
+                    modifier = Modifier.clickable { applyingRecipe = true }
                 )
             }
         }
@@ -196,6 +206,19 @@ fun OrderStockSection(
             Spacer(Modifier.height(6.dp))
             Text(it, fontSize = 11.sp, color = StudioRed)
         }
+    }
+
+    if (applyingRecipe) {
+        ApplyRecipeDialog(
+            workspaceId = workspaceId,
+            orderId = orderId,
+            t = t,
+            onDismiss = { applyingRecipe = false },
+            onApplied = {
+                applyingRecipe = false
+                scope.launch { reload() }
+            }
+        )
     }
 
     if (picking || swapFrom != null) {
@@ -350,5 +373,118 @@ private fun ReserveStockDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(t("Close")) } }
+    )
+}
+
+/** One act: pick the recipe, say how many jobs' worth, and the server reserves
+ *  every line in a single transaction — or refuses and reserves nothing. The
+ *  refusal names the part that did not fit, so it is shown verbatim. */
+@Composable
+private fun ApplyRecipeDialog(
+    workspaceId: String,
+    orderId: String,
+    t: (String) -> String,
+    onDismiss: () -> Unit,
+    onApplied: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val repository = remember { StudioFlowRepository() }
+    var recipes by remember { mutableStateOf<List<StudioInventoryRecipe>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var recipeId by remember { mutableStateOf("") }
+    var multiplier by remember { mutableStateOf("1") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(workspaceId) {
+        try {
+            recipes = repository.inventoryRecipes(workspaceId)
+            // One recipe needs no choosing.
+            if (recipes.size == 1) recipeId = recipes.first().id
+        } catch (failure: Exception) {
+            error = failure.message ?: t("Recipes could not be loaded.")
+        }
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Use a recipe"), fontSize = 17.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                when {
+                    loading -> Text(t("Loading…"), fontSize = 12.sp, color = Color.Gray)
+                    recipes.isEmpty() -> Text(
+                        t("No recipes yet — write one under Inventory → Recipes."),
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                    else -> {
+                        var open by remember { mutableStateOf(false) }
+                        val selected = recipes.firstOrNull { it.id == recipeId }
+                        Box {
+                            OutlinedTextField(
+                                value = selected?.let { "${it.name} · ${it.lines.size} ${t("lines")}" }
+                                    ?: t("Choose a recipe…"),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(t("Recipe"), fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Box(Modifier.matchParentSize().clickable { open = true })
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                recipes.forEach { recipe ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "${recipe.name} · ${recipe.lines.size} ${t("lines")}",
+                                                fontSize = 13.sp
+                                            )
+                                        },
+                                        onClick = { open = false; recipeId = recipe.id }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = multiplier,
+                            onValueChange = { multiplier = it },
+                            label = { Text(t("How many jobs' worth"), fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, fontSize = 12.sp, color = StudioRed)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && !loading && recipes.isNotEmpty(),
+                onClick = {
+                    if (recipeId.isBlank()) {
+                        error = t("Choose a recipe first.")
+                        return@TextButton
+                    }
+                    busy = true
+                    error = null
+                    scope.launch {
+                        try {
+                            val times = inventoryParse(multiplier).takeIf { it > 0 } ?: 1.0
+                            repository.inventoryApplyRecipe(workspaceId, recipeId, orderId, times)
+                            onApplied()
+                        } catch (failure: Exception) {
+                            error = failure.message ?: t("The recipe could not be applied.")
+                            busy = false
+                        }
+                    }
+                }
+            ) { Text(t("Reserve the parts"), fontSize = 13.sp) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Cancel")) } }
     )
 }

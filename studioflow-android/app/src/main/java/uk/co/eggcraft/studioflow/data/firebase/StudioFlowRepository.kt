@@ -61,6 +61,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryLocation
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryPage
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryRecipe
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
 import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
@@ -2783,6 +2784,41 @@ class StudioFlowRepository(
      *  the HttpsError message says which, and the screen shows it verbatim. */
     suspend fun inventoryDeleteLocation(workspaceId: String, locationId: String) {
         inventoryCall("deleteInventoryLocation", workspaceId, mapOf("locationId" to locationId))
+    }
+
+    /** The job parts lists (BOM), name-sorted server-side. */
+    suspend fun inventoryRecipes(workspaceId: String): List<StudioInventoryRecipe> {
+        val raw = inventoryCall("listInventoryRecipes", workspaceId)
+        return (raw["recipes"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryRecipe::from) }
+    }
+
+    /** Creates ([recipeId] blank) or rewrites a recipe. The server owns the
+     *  limits: at most 30 lines, every line a real item id with quantity > 0. */
+    suspend fun inventorySaveRecipe(
+        workspaceId: String, name: String, notes: String,
+        lines: List<Map<String, Any?>>, recipeId: String = ""
+    ) {
+        inventoryCall(
+            "saveInventoryRecipe", workspaceId,
+            mapOf(
+                "recipeId" to recipeId,
+                "recipe" to mapOf("name" to name, "notes" to notes, "lines" to lines)
+            )
+        )
+    }
+
+    suspend fun inventoryDeleteRecipe(workspaceId: String, recipeId: String) {
+        inventoryCall("deleteInventoryRecipe", workspaceId, mapOf("recipeId" to recipeId))
+    }
+
+    /** All-or-nothing on the server: either every line of the recipe gets
+     *  reserved for the order or nothing does, and the failure message names
+     *  the part that did not fit — the screen shows it verbatim. */
+    suspend fun inventoryApplyRecipe(workspaceId: String, recipeId: String, orderId: String, multiplier: Double) {
+        val payload = mutableMapOf<String, Any?>("recipeId" to recipeId, "orderId" to orderId)
+        if (multiplier != 1.0) payload["multiplier"] = multiplier
+        inventoryCall("applyRecipeToOrder", workspaceId, payload)
     }
 
     /** Asks the server what a pasted list would become. The preview and the

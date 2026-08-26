@@ -102,7 +102,7 @@ internal fun inventoryCardColors() =
 
 private enum class InventoryTab(val label: String) {
     Items("Items"), Purchases("Purchases"), Suppliers("Suppliers"),
-    Stocktake("Stocktake"), Locations("Locations"), Reports("Reports")
+    Stocktake("Stocktake"), Locations("Locations"), Recipes("Recipes"), Reports("Reports")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -343,6 +343,13 @@ fun InventoryScreen(state: StudioFlowUiState) {
                     // so both the item list and the form suggestions go stale.
                     scope.launch { reloadItems(); reloadLocationPaths() }
                 }
+            )
+
+            InventoryTab.Recipes -> RecipesTab(
+                workspaceId = workspaceId,
+                items = items,
+                canEdit = canEdit,
+                t = t
             )
 
             InventoryTab.Reports -> ReportsTab(

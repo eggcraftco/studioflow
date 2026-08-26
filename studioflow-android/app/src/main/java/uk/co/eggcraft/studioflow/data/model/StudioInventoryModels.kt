@@ -447,6 +447,46 @@ data class StudioInventoryLocation(
     }
 }
 
+/** One line of a recipe: this item, this many per job. */
+data class StudioInventoryRecipeLine(
+    val itemId: String,
+    val quantity: Double
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryRecipeLine? {
+            val itemId = raw["itemId"] as? String ?: return null
+            if (itemId.isBlank()) return null
+            return StudioInventoryRecipeLine(
+                itemId = itemId,
+                quantity = (raw["quantity"] as? Number)?.toDouble() ?: 1.0
+            )
+        }
+    }
+}
+
+/** A job's parts list, written once: "1 buckle + 20cm leather + 2 screws".
+ *  Applying it to an order reserves every line in ONE server transaction —
+ *  all or nothing — so what lives here is only ever the description. */
+data class StudioInventoryRecipe(
+    val id: String,
+    val name: String,
+    val notes: String,
+    val lines: List<StudioInventoryRecipeLine>
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioInventoryRecipe? {
+            val id = raw["id"] as? String ?: return null
+            return StudioInventoryRecipe(
+                id = id,
+                name = raw["name"] as? String ?: "",
+                notes = raw["notes"] as? String ?: "",
+                lines = (raw["lines"] as? List<*> ?: emptyList<Any?>())
+                    .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryRecipeLine::from) }
+            )
+        }
+    }
+}
+
 data class StudioOrderStockLine(
     val id: String,
     val number: String,
