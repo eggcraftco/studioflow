@@ -24188,3 +24188,8 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
   left: -6px;
   right: -6px;
 }
+.order-card-size-badge {
+  position: absolute; right: 12px; bottom: 34px; z-index: 6; pointer-events: none;
+  background: rgba(23, 25, 35, 0.9); color: #fff; border-radius: 7px;
+  padding: 3px 9px; font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+}
