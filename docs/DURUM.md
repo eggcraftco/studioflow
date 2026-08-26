@@ -118,18 +118,20 @@ tek host) — schedule sürüklemesi tarih değişimini Undo'lu toast'la bildiri
 (gerçek fareyle tam tur: sürükle → toast → Undo → tarihler geri, E2E'li), kart
 taşıma "Card moved — Undo" veriyor; zoom % göstergesi preset seçici oldu
 (75/100/125/150/Fit); iki ekranın alt başlığı ayrıştı ("Plan your orders" /
-"Plan your team"). 8 string × 11 dil. Kalan: ilk-kullanım rehberi.
+"Plan your team"). İlk-kullanım rehberi de eklendi (üç sürükleme jesti + Undo
+notu, tarayıcı-başına bir kez). **SCHEDULE RAPORU TAMAM.**
 (Not: Duration/Remaining ikili gösterimi bilinçli tek "Xd left" ile çözüldü.)
 
 ### B. NivaDesk_order_kart_sistemi.md — kalan iyileştirmeler
-Kart sol durum şeridi + tamamlanan/iptal zemin ayrımı (görsel karar — birlikte
-bakalım); hızlı
-sekmeler (Aktif/Geciken/Benden aksiyon/Tamamlanan); ⋮ ayırıcı tutamacı;
-"taşındı—geri al" bildirimi + klavye taşıma (toast altyapısı gerekir); kart
-menüsü boyut seçenekleri (içeriğe sığdır/varsayılan/eşitle/S-M-L); renk+etiket
-anlam sistemi; Actions gruplama; Customize cards kategorileri + reset kapsam
-ayrımı + panel içi arama; şablonlar (Owner/Designer/Finance/Workshop/Mobile);
-sipariş türüne göre düzen; kullanıcıya özel düzen; "Saving card layout" akışı.
+**26 Ağu gece eklendi:** "Kart taşındı — Undo" toast'u; kart menüsünde boyut
+bölümü (Fit to content / Default / Match column / S-M-L, persistLayout
+üstünden); Customize cards 6 kategoriye ayrıldı + panel içi arama; ROL
+ŞABLONLARI (Owner/Designer/Finance/Workshop/Compact — yalnız görünürlük,
+Undo'lu; Compact 19→5 kart E2E'li) — raporun 1 numaralı önceliği.
+Kalan: sol durum şeridi + zemin ayrımı (görsel karar — birlikte bakalım);
+hızlı sekmeler; ⋮ ayırıcı tutamacı; klavye ile taşıma; renk+etiket anlam
+sistemi; Actions gruplama; reset kapsam ayrımı; sipariş türüne göre düzen;
+kullanıcıya özel düzen; "Saving card layout" akışı.
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
 **26 Ağu akşamı eklendi:** duplicate birleştirme CANLI — profil seçilince aynı
