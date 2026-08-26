@@ -56,7 +56,7 @@ import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJs
 import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/studioflow/language";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import {
@@ -4497,6 +4497,64 @@ function FinancialSettingsSection({
   );
 }
 
+// Field-level conflict policy for store-sourced customer updates. Lives in
+// both the WooCommerce and Shopify sections — the policy is store-agnostic.
+function IntegrationCustomerSyncCard({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
+  const t = (text: string) => studioT(text, language);
+  const [policy, setPolicy] = useState<"store" | "nivadesk">("store");
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    loadWorkspaceSettingsOverview(workspace.id)
+      .then(overview => {
+        if (!active) return;
+        setPolicy(overview.integrationCustomerSync === "nivadesk" ? "nivadesk" : "store");
+        setLoaded(true);
+      })
+      .catch(() => { if (active) setLoaded(true); });
+    return () => { active = false; };
+  }, [workspace.id]);
+
+  async function save(next: "store" | "nivadesk") {
+    const previous = policy;
+    setPolicy(next);
+    setSaving(true);
+    setStatus("");
+    try {
+      await saveIntegrationSyncSettings(workspace, next);
+      setStatus(t("Saved."));
+    } catch (saveError) {
+      setPolicy(previous);
+      setStatus(saveError instanceof Error ? saveError.message : t("Could not save the sync policy."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="card app-card quick-reply-settings-card">
+      <CardTitle icon="customer" eyebrow={t("Customers")} title={t("Customer contact updates")} />
+      <div className="quick-reply-settings-info">
+        <p>{t("When a store order arrives for a customer you already have, who wins on contact details?")}</p>
+      </div>
+      <select
+        className="input"
+        style={{ maxWidth: 420 }}
+        value={policy}
+        disabled={!loaded || saving}
+        onChange={event => void save(event.target.value as "store" | "nivadesk")}
+      >
+        <option value="store">{t("Store updates contact details (default)")}</option>
+        <option value="nivadesk">{t("NivaDesk edits win — stores only fill blanks")}</option>
+      </select>
+      {status ? <p className="muted-copy" style={{ margin: "8px 0 0" }}>{status}</p> : null}
+    </section>
+  );
+}
+
 function WooCommerceIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
   const [copyStatus, setCopyStatus] = useState("");
@@ -4574,6 +4632,7 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
 
   return (
     <div className="settings-card-stack">
+      <IntegrationCustomerSyncCard workspace={workspace} language={language} />
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="orders" eyebrow={t("WooCommerce Integration")} title={t("Connect WooCommerce")} />
         <div className="quick-reply-settings-info">
@@ -4922,6 +4981,7 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
   return (
     <div className="settings-card-stack">
       <ShopifyConnectedStoresCard workspace={workspace} language={language} />
+      <IntegrationCustomerSyncCard workspace={workspace} language={language} />
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="orders" eyebrow={t("Shopify Integration")} title={t("Connect Shopify (manual webhook)")} />
         <div className="quick-reply-settings-info">
