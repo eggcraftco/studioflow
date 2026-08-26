@@ -45,6 +45,7 @@ import {
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
+import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
   DEFAULT_ORDER_DETAIL_CARD_LAYOUT,
   ORDER_DETAIL_CARD_IDS,
@@ -1909,6 +1910,15 @@ export function OrderDetailContent({
       .catch(() => { if (!cancelled) setOrderLibraryFiles([]); });
     return () => { cancelled = true; };
   }, [workspace, order.id]);
+  // The user's own Notes-app records linked to this order — the same single
+  // record the Notes screen shows, surfaced in the order's context.
+  const [orderLinkedNotes, setOrderLinkedNotes] = useState<StudioKeepNote[]>([]);
+  useEffect(() => {
+    if (!user || !workspace.id) return;
+    return listenToKeepNotes(workspace.id, user.uid, all => {
+      setOrderLinkedNotes(all.filter(note => !note.isDeleted && !note.isArchived && note.linkedOrderId === order.id));
+    });
+  }, [workspace.id, user, order.id]);
   const [browserAcceptedUploadPolicy, setBrowserAcceptedUploadPolicy] = useState(false);
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
   const [cardLayout, setCardLayout] = useState<OrderDetailCardLayout>(DEFAULT_ORDER_DETAIL_CARD_LAYOUT);
@@ -7773,6 +7783,23 @@ export function OrderDetailContent({
                   </div>
                 );
               })}
+              {orderLinkedNotes.length > 0 ? (
+                <div className="order-library-files">
+                  <strong className="order-library-files-title">{t("From the Notes app")}</strong>
+                  <ul>
+                    {orderLinkedNotes.map(note => (
+                      <li key={note.id}>
+                        <button type="button" onClick={() => window.open("/notes", "_self")}>
+                          {note.title.trim() || note.text.slice(0, 60) || t("Linked note")}
+                        </button>
+                        {note.reminderDateMillis ? (
+                          <span className="studio-pill">⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </section>
         );

@@ -32,6 +32,7 @@ import {
   type CustomerFormInput
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
+import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 
 type SortMode = "recent" | "orders" | "lastOrder" | "highestValue" | "outstanding" | "alphabetical";
 type FormMode = "create" | "edit" | null;
@@ -169,6 +170,9 @@ export default function CustomersPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  // The user's own Notes-app notes: a note typed "Customer" (or linked to one
+  // of this customer's orders) surfaces here too — one record, many contexts.
+  const [keepNotes, setKeepNotes] = useState<StudioKeepNote[]>([]);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [customers, setCustomers] = useState<CustomerDirectoryItem[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -298,6 +302,11 @@ export default function CustomersPage() {
 
   // The whole directory is client-side, so suspected twins cost nothing to
   // spot: another record sharing this customer's email or phone.
+  useEffect(() => {
+    if (!workspace || !user) return;
+    return listenToKeepNotes(workspace.id, user.uid, setKeepNotes);
+  }, [workspace, user]);
+
   const selectedDuplicate = useMemo(() => {
     if (!selectedCustomer) return null;
     const email = selectedCustomer.email.trim().toLowerCase();
@@ -313,6 +322,21 @@ export default function CustomersPage() {
     }
     return null;
   }, [customers, selectedCustomer]);
+
+  // Notes-app records that belong to this customer: typed "Customer" with the
+  // matching name, or linked to one of the customer's orders.
+  const selectedLinkedNotes = useMemo(() => {
+    const customer = customers.find(item => item.id === selectedCustomerId);
+    if (!customer) return [] as StudioKeepNote[];
+    const nameKey = normalizedCustomerLookup(customer.name);
+    const orderIds = new Set(customer.orders.map(order => order.id));
+    return keepNotes
+      .filter(note => !note.isDeleted && !note.isArchived)
+      .filter(note =>
+        (note.linkedCustomerName && normalizedCustomerLookup(note.linkedCustomerName) === nameKey)
+        || (note.linkedOrderId && orderIds.has(note.linkedOrderId)))
+      .sort((a, b) => (b.updatedAtMillis ?? 0) - (a.updatedAtMillis ?? 0));
+  }, [customers, selectedCustomerId, keepNotes]);
 
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canManageCustomers = Boolean(workspace && canManageCustomersForRole(workspace.role));
@@ -714,6 +738,7 @@ export default function CustomersPage() {
               savingInlineField={savingInlineField}
               language={language}
               duplicate={selectedDuplicate}
+              linkedNotes={selectedLinkedNotes}
               onReviewMerge={() => setMergeOpen(true)}
               onSaveDetails={(patch, fieldLabel) => handleInlineCustomerUpdate(selectedCustomer, patch, fieldLabel)}
               onUploadPhoto={file => handleCustomerPhotoUpload(selectedCustomer, file)}
@@ -869,6 +894,7 @@ function CustomerDetail({
   savingInlineField,
   language,
   duplicate,
+  linkedNotes,
   onReviewMerge,
   onSaveDetails,
   onUploadPhoto
@@ -880,6 +906,7 @@ function CustomerDetail({
   savingInlineField: string;
   language: string;
   duplicate: { other: CustomerDirectoryItem; reason: "email" | "phone" } | null;
+  linkedNotes: StudioKeepNote[];
   onReviewMerge: () => void;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
   onUploadPhoto: (file: File) => Promise<void>;
@@ -1080,8 +1107,18 @@ function CustomerDetail({
               </div>
             )
           ) : activeTab === "Notes" ? (
-            orderNotes.length === 0 ? <CustomerTabEmpty text={t("No order notes yet.")} /> : (
+            orderNotes.length === 0 && linkedNotes.length === 0 ? <CustomerTabEmpty text={t("No order notes yet.")} /> : (
               <div className="customer-order-notes-list">
+                {linkedNotes.map(note => (
+                  <Link key={`keep-${note.id}`} href="/notes" className="customer-order-note-card">
+                    <span className="customer-order-note-head">
+                      <strong>{note.title.trim() || t("Linked note")}</strong>
+                      <small>{note.updatedAtMillis ? new Date(note.updatedAtMillis).toLocaleDateString() : ""}</small>
+                    </span>
+                    <span className="customer-order-note-text">{note.text}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: "#0e7a55" }}>◉ {t("Linked note")}{note.linkedOrderLabel ? ` · ${note.linkedOrderLabel}` : ""}</span>
+                  </Link>
+                ))}
                 {orderNotes.map(order => (
                   <Link key={order.id} href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`} className="customer-order-note-card">
                     <span className="customer-order-note-head">
