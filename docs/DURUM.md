@@ -135,9 +135,10 @@ panelindeki gereksiz "Save this order" kalktı (autosave zaten var).
 Reset kapsam ayrımı da eklendi ("Reset this order" / "Reset shared layout" +
 kapsam-açık onay); Customers ülke alanlarına ortak datalist (UK/United
 Kingdom/GB kayması için yumuşak standardizasyon).
+Actions menüsü de gruplandı (Header display / Documents / Card layout).
 Kalan: sol durum şeridi + zemin ayrımı (görsel karar — birlikte bakalım);
-renk+etiket anlam sistemi; Actions gruplama; sipariş türüne göre düzen;
-kullanıcıya özel düzen. (Hızlı sekmeler: OrderQuickFilterBar zaten karşılıyor.)
+renk+etiket anlam sistemi; sipariş türüne göre düzen; kullanıcıya özel düzen.
+(Hızlı sekmeler: OrderQuickFilterBar zaten karşılıyor.)
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
 **26 Ağu gece eklendi:** iade/iptal bakiyesi düzeltildi — Outstanding artık
