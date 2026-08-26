@@ -31,7 +31,11 @@ const KIND_LABEL: Record<MovementKind, string> = {
   used: "Used on jobs",
   sold: "Sold",
   removed: "Removed",
-  moved: "Moved"
+  moved: "Moved",
+  returned: "Returned to supplier",
+  damaged: "Damaged",
+  lost: "Lost",
+  wastage: "Wastage"
 };
 
 const RANGES: Array<{ key: string; label: string; days: number }> = [

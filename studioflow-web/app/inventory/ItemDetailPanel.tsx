@@ -23,11 +23,13 @@ import {
   inventoryPhotoUrl,
   isInventoryLowStock,
   listInventoryMovements,
+  recordInventoryLoss,
   releaseInventoryFromOrder,
   reserveInventoryForOrder,
   saveInventoryItem,
   setInventoryItemStatus,
   type InventoryItem,
+  type InventoryLossKind,
   type InventoryMovement,
   type InventoryStatus
 } from "@/lib/studioflow/inventory";
@@ -43,6 +45,7 @@ type PanelTab = "details" | "history" | "purchases" | "photos" | "files";
 const STATUS_NEXT: Record<InventoryStatus, InventoryStatus[]> = {
   available: ["used", "sold", "incoming", "archived"],
   reserved: ["available", "used", "sold", "archived"],
+  partiallyReserved: ["available", "used", "sold", "archived"],
   incoming: ["available", "archived"],
   used: ["available", "archived"],
   sold: ["archived"],
@@ -58,12 +61,17 @@ const KIND_LABEL: Record<string, string> = {
   used: "Used",
   sold: "Sold",
   removed: "Removed",
-  moved: "Moved"
+  moved: "Moved",
+  returned: "Returned to supplier",
+  damaged: "Damaged",
+  lost: "Lost",
+  wastage: "Wastage"
 };
 
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   available: "Available",
   reserved: "Reserved",
+  partiallyReserved: "Partially Reserved",
   incoming: "Incoming",
   used: "Used",
   sold: "Sold",
@@ -128,6 +136,10 @@ export function ItemDetailPanel({
   const [libraryFiles, setLibraryFiles] = useState<LibraryFile[] | null>(null);
   const [movingLocation, setMovingLocation] = useState(false);
   const [locationDraft, setLocationDraft] = useState(item.location || "");
+  const [lossOpen, setLossOpen] = useState(false);
+  const [lossKind, setLossKind] = useState<InventoryLossKind>("damaged");
+  const [lossQty, setLossQty] = useState("1");
+  const [lossNote, setLossNote] = useState("");
 
   useEffect(() => {
     setTab("details");
@@ -512,6 +524,11 @@ export function ItemDetailPanel({
                     {t("Mark as Used")}
                   </button>
                 ) : null}
+                {!["sold", "used", "removed", "archived"].includes(item.status) ? (
+                  <button type="button" className="inventory-secondary" disabled={busy} onClick={() => setLossOpen(open => !open)}>
+                    {t("Record a Loss…")}
+                  </button>
+                ) : null}
                 <button type="button" className="inventory-secondary" disabled={busy} onClick={duplicateItem}>
                   {t("Duplicate Item")}
                 </button>
@@ -519,6 +536,51 @@ export function ItemDetailPanel({
                   {t("Print Label (QR)")}
                 </button>
               </div>
+              {lossOpen ? (
+                <div className="inventory-loss-form">
+                  {/* The reason is the point: the ledger line it produces is the
+                      answer to "where did that stock go" months later. */}
+                  <select className="input" value={lossKind} onChange={e => setLossKind(e.target.value as InventoryLossKind)} aria-label={t("Loss reason")}>
+                    <option value="damaged">{t("Damaged")}</option>
+                    <option value="lost">{t("Lost")}</option>
+                    <option value="returned">{t("Returned to supplier")}</option>
+                    <option value="wastage">{t("Wastage")}</option>
+                  </select>
+                  {item.trackingType === "quantity" ? (
+                    <input
+                      className="input inventory-qty-input"
+                      inputMode="decimal"
+                      value={lossQty}
+                      onChange={e => setLossQty(e.target.value)}
+                      aria-label={t("Quantity lost")}
+                    />
+                  ) : null}
+                  <input
+                    className="input"
+                    value={lossNote}
+                    onChange={e => setLossNote(e.target.value)}
+                    placeholder={t("What happened? (optional)")}
+                  />
+                  <div className="inventory-panel-actions">
+                    <button
+                      type="button"
+                      className="inventory-secondary"
+                      disabled={busy || (item.trackingType === "quantity" && !(Number(lossQty) > 0))}
+                      onClick={() => void run(async () => {
+                        await recordInventoryLoss(workspace, item.id, lossKind, {
+                          quantity: item.trackingType === "quantity" ? Number(lossQty) : undefined,
+                          note: lossNote.trim() || undefined
+                        });
+                        setLossOpen(false);
+                        setLossNote("");
+                      }, "The loss could not be recorded.")}
+                    >
+                      {t("Record the loss")}
+                    </button>
+                    <button type="button" className="inventory-link" onClick={() => setLossOpen(false)}>{t("Cancel")}</button>
+                  </div>
+                </div>
+              ) : null}
             </section>
           ) : null}
 

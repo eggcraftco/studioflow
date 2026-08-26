@@ -7,11 +7,11 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 // what a thing cost.
 
 export type InventoryTrackingType = "unique" | "quantity";
-export type InventoryStatus = "available" | "reserved" | "incoming" | "used" | "sold" | "removed" | "archived";
+export type InventoryStatus = "available" | "reserved" | "partiallyReserved" | "incoming" | "used" | "sold" | "removed" | "archived";
 export type InventoryOwnership = "business" | "customer";
 
 export const INVENTORY_STATUSES: InventoryStatus[] = [
-  "available", "reserved", "incoming", "used", "sold", "removed", "archived"
+  "available", "reserved", "partiallyReserved", "incoming", "used", "sold", "removed", "archived"
 ];
 
 export const INVENTORY_CATEGORIES = [
@@ -399,6 +399,9 @@ export type OrderInventoryLine = {
   unit: string;
   status: InventoryStatus;
   quantity: number;
+  /** Total on the shelf, so the card can say "3 of 10" instead of a bare 3. */
+  onHand: number;
+  location: string;
   unitCost: number;
   lineCost: number;
 };
@@ -542,7 +545,27 @@ export async function readOpeningStock(
 
 export type MovementKind =
   | "openingStock" | "purchase" | "adjustment" | "stocktake"
-  | "used" | "sold" | "removed" | "moved";
+  | "used" | "sold" | "removed" | "moved"
+  | "returned" | "damaged" | "lost" | "wastage";
+
+export type InventoryLossKind = "returned" | "damaged" | "lost" | "wastage";
+
+/**
+ * Stock leaving for a reason that is not a sale or a job. The reason lands in
+ * the ledger, so "where did 300ml of lacquer go" has an answer.
+ */
+export async function recordInventoryLoss(
+  workspace: WorkspaceContext,
+  itemId: string,
+  kind: InventoryLossKind,
+  options?: { quantity?: number; note?: string; orderId?: string }
+) {
+  return call<{ ok?: boolean; status?: InventoryStatus; onHand?: number }>(
+    "recordInventoryLoss",
+    { companyId: workspace.id, itemId, kind, ...options },
+    "The loss could not be recorded."
+  );
+}
 
 export type InventoryMovement = {
   id: string;

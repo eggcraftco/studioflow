@@ -58,6 +58,7 @@ const CATEGORY_ICON: Record<string, string> = {
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   available: "Available",
   reserved: "Reserved",
+  partiallyReserved: "Partially Reserved",
   incoming: "Incoming",
   used: "Used",
   sold: "Sold",
@@ -615,7 +616,7 @@ export function InventoryContent({
                           status flip links no order and is invisible to
                           getOrderInventory. Reserving goes through the panel's
                           Reserve for Order, which writes the reservation. */}
-                      {INVENTORY_STATUSES.filter(s => s !== item.status && s !== "reserved").map(s => (
+                      {INVENTORY_STATUSES.filter(s => s !== item.status && s !== "reserved" && s !== "partiallyReserved").map(s => (
                         <option key={s} value={s}>{t(STATUS_LABEL[s])}</option>
                       ))}
                     </select>

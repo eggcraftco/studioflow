@@ -111,7 +111,15 @@ export function OrderStockBlock({
                 <span className="order-stock-name">
                   <strong>{line.name}</strong>
                   <span className="inventory-sub">
-                    {[line.number, line.trackingType === "quantity" ? `${line.quantity}${line.unit ? ` ${line.unit}` : ""}` : null]
+                    {/* "3 / 10 ml" — what this order holds out of what exists,
+                        so a partial reserve doesn't read like the whole spool. */}
+                    {[
+                      line.number,
+                      line.trackingType === "quantity"
+                        ? `${line.quantity} / ${line.onHand}${line.unit ? ` ${line.unit}` : ""}`
+                        : null,
+                      line.location || null
+                    ]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
