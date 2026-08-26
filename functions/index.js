@@ -16286,11 +16286,35 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
   if (!name || name === "WooCommerce Customer" || name === "Shopify Customer" || name === "Website Customer") return;
 
   const db = admin.firestore();
-  const snap = await db.collection("musteriler")
-    .where("companyId", "==", companyId)
-    .where("name", "==", name)
-    .limit(1)
-    .get();
+  // Identity beats spelling: the store's own customer id first, then the
+  // email, then the display name. A Shopify customer who fixes a typo in
+  // their name stops minting a duplicate record the moment their id or email
+  // already lives here.
+  const externalCustomerId = cleanWooText(String(info.externalCustomerId ?? "")).slice(0, 80);
+  let snap = { empty: true, docs: [] };
+  if (externalCustomerId) {
+    snap = await db.collection("musteriler")
+      .where("companyId", "==", companyId)
+      .where("source", "==", source)
+      .where("externalCustomerId", "==", externalCustomerId)
+      .limit(1)
+      .get();
+  }
+  const email = cleanWooText(info.email);
+  if (snap.empty && email) {
+    snap = await db.collection("musteriler")
+      .where("companyId", "==", companyId)
+      .where("email", "==", email)
+      .limit(1)
+      .get();
+  }
+  if (snap.empty) {
+    snap = await db.collection("musteriler")
+      .where("companyId", "==", companyId)
+      .where("name", "==", name)
+      .limit(1)
+      .get();
+  }
 
   const fields = {
     email: cleanWooText(info.email),
@@ -16312,6 +16336,7 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
 
   if (!snap.empty) {
     const update = { updatedAt: admin.firestore.FieldValue.serverTimestamp(), source };
+    if (externalCustomerId) update.externalCustomerId = externalCustomerId;
     for (const [key, value] of Object.entries(fields)) {
       if (value) update[key] = value;
     }
@@ -16326,6 +16351,7 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
     notes: "",
     profileImageUrl: "",
     ...fields,
+    externalCustomerId,
     lastContactDate: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -16828,6 +16854,7 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
       await upsertIntegrationCustomer(companyId, {
         name: mappedOrder.customerName,
+        externalCustomerId: order?.customer_id ? String(order.customer_id) : "",
         email: mappedOrder.emailAddress,
         phone: mappedOrder.whatsappNumber,
         address: formatAddressParts(billing),
@@ -17202,6 +17229,7 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
       await upsertIntegrationCustomer(companyId, {
         name: mappedOrder.customerName,
+        externalCustomerId: order?.customer?.id ? String(order.customer.id) : "",
         email: mappedOrder.emailAddress,
         phone: mappedOrder.whatsappNumber,
         address: formatAddressParts(billing),
@@ -17594,6 +17622,7 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       const sourceTag = (cleanWooText(inboundValue(payload, ["source", "platform", "store"])) || "inbound").toLowerCase();
       await upsertIntegrationCustomer(companyId, {
         name: mappedOrder.customerName,
+        externalCustomerId: cleanWooText(inboundValue(payload, ["customerId", "customer_id", "externalCustomerId"])),
         email: mappedOrder.emailAddress,
         phone: mappedOrder.whatsappNumber,
         address: formatAddressParts(billing),
@@ -26997,6 +27026,7 @@ async function applyShopifyOrderEvent(shop, store, topic, order, options = {}) {
       const shipping = (rawShip.street || rawShip.city || rawShip.postalCode) ? rawShip : billing;
       await upsertIntegrationCustomer(companyId, {
         name: mapped.customerName,
+        externalCustomerId: order?.customer?.id ? String(order.customer.id) : "",
         email: mapped.emailAddress,
         phone: mapped.whatsappNumber,
         address: formatAddressParts(billing),
@@ -27125,6 +27155,7 @@ async function applyShopifyCustomerEvent(store, customer) {
   const addr = shopifyAddressParts(customer?.default_address);
   await upsertIntegrationCustomer(companyId, {
     name: name || addr.name,
+    externalCustomerId: customer?.id ? String(customer.id) : "",
     email: cleanWooText(customer?.email || ""),
     phone: sanitizePhone(customer?.phone || customer?.default_address?.phone || ""),
     address: formatAddressParts(addr),
