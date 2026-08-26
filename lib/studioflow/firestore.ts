@@ -353,6 +353,8 @@ export type CustomerOrderSummary = {
   invoiceNumber: string;
   isDispatched: boolean;
   isDelivered: boolean;
+  // False for cancelled/refunded orders — they owe nothing.
+  countsTowardBalance: boolean;
   files: CustomerOrderFile[];
   activity: CustomerOrderActivity[];
 };
@@ -382,6 +384,8 @@ export type CustomerDirectoryItem = {
   orderCount: number;
   totalPaid: number;
   totalValue: number;
+  // What the customer still owes, counting only orders that can owe.
+  totalOutstanding: number;
   orders: CustomerOrderSummary[];
 };
 
@@ -1484,6 +1488,15 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       invoiceNumber: stringValue(data.invoiceNumber, ""),
       isDispatched: booleanValue(data.isDispatched, false),
       isDelivered: booleanValue(data.isDelivered, false),
+      // A cancelled or refunded order owes nothing: it must not inflate the
+      // customer's outstanding balance (the report's refund complaint).
+      countsTowardBalance: !stringValue(data.status, "").toLowerCase().includes("cancel")
+        && stringValue(
+          (data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+            ? (data.customFields as Record<string, unknown>)["Shopify Status"]
+            : ""),
+          ""
+        ).toLowerCase() !== "refunded",
       files: parseCustomerOrderFiles(data.clientFiles),
       activity: parseCustomerOrderActivity(data.historyLog)
     };
@@ -1528,6 +1541,10 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       orderCount: customerOrders.length,
       totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
       totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
+      totalOutstanding: customerOrders.reduce(
+        (total, order) => order.countsTowardBalance ? total + order.remainingAmount + order.customRemainingTotal : total,
+        0
+      ),
       orders: customerOrders
     };
   });

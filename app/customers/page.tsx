@@ -242,9 +242,7 @@ export default function CustomersPage() {
       if (sortMode === "orders" && lhs.orderCount !== rhs.orderCount) return rhs.orderCount - lhs.orderCount;
       if (sortMode === "highestValue" && lhs.totalValue !== rhs.totalValue) return rhs.totalValue - lhs.totalValue;
       if (sortMode === "outstanding") {
-        const leftDue = lhs.totalValue - lhs.totalPaid;
-        const rightDue = rhs.totalValue - rhs.totalPaid;
-        if (leftDue !== rightDue) return rightDue - leftDue;
+        if (lhs.totalOutstanding !== rhs.totalOutstanding) return rhs.totalOutstanding - lhs.totalOutstanding;
       }
       if (sortMode === "lastOrder") {
         const leftOrder = lhs.orders[0]?.paymentDate?.getTime() ?? 0;
@@ -835,7 +833,7 @@ function CustomerDetail({
             visible: value, what was actually paid, and what is still owed. */}
         <CustomerStatCard emoji="🛍️" tint="#34c759" label={t("Total Order Value")} value={canSeeFinance ? money(customer.totalValue, hideNumbers, moneySettings) : "—"} valueClass="positive" />
         <CustomerStatCard emoji="💷" tint="#2f6df6" label={t("Paid")} value={canSeeFinance ? money(customer.totalPaid, hideNumbers, moneySettings) : "—"} valueClass="positive" />
-        <CustomerStatCard emoji="⏳" tint="#ff3b30" label={t("Outstanding")} value={canSeeFinance ? money(Math.max(customer.totalValue - customer.totalPaid, 0), hideNumbers, moneySettings) : "—"} />
+        <CustomerStatCard emoji="⏳" tint="#ff3b30" label={t("Outstanding")} value={canSeeFinance ? money(Math.max(customer.totalOutstanding, 0), hideNumbers, moneySettings) : "—"} />
         <CustomerStatCard emoji="📦" tint="#2f6df6" label={t("Total Orders")} value={String(customer.orderCount)} />
         <CustomerStatCard emoji="📅" tint="#af52de" label={t("Last Order")} value={lastOrderDate ? formatDate(lastOrderDate) : "—"} />
         <CustomerStatCard emoji="🕐" tint="#ff9500" label={t("Customer Since")} value={customerSinceDate ? formatMonthYear(customerSinceDate) : "—"} />
