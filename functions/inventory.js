@@ -446,11 +446,32 @@ function createInventoryFunctions({
   const listInventoryItems = onCall({ region: REGION }, async (request) => {
     const { companyId } = await requireInventoryAccess(request);
     const limit = Math.min(Math.max(Number(request.data && request.data.limit) || 200, 1), 500);
-    const snap = await itemsRef(companyId).orderBy("updatedAtMs", "desc").limit(limit).get();
+    // Cursor pagination: a workshop past 500 items used to fall silently off
+    // the end of the list. The cursor is the last row's sort key; the document
+    // id breaks ties so two items saved in the same millisecond cannot make a
+    // row repeat or vanish between pages.
+    const cursor = request.data && request.data.cursor && typeof request.data.cursor === "object"
+      ? request.data.cursor
+      : null;
+    // Both orderings descend: mixing directions with __name__ would demand a
+    // composite index, and matching them is what Firestore does implicitly.
+    let query = itemsRef(companyId)
+      .orderBy("updatedAtMs", "desc")
+      .orderBy(admin.firestore.FieldPath.documentId(), "desc");
+    if (cursor && Number.isFinite(Number(cursor.updatedAtMs)) && cursor.id) {
+      query = query.startAfter(Number(cursor.updatedAtMs), String(cursor.id));
+    }
+    const snap = await query.limit(limit).get();
+    const docs = snap.docs;
+    const last = docs.length > 0 ? docs[docs.length - 1] : null;
     return {
       ok: true,
-      items: snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })),
-      categories: DEFAULT_CATEGORIES
+      items: docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })),
+      categories: DEFAULT_CATEGORIES,
+      hasMore: docs.length === limit,
+      cursor: last && docs.length === limit
+        ? { updatedAtMs: Number((last.data() || {}).updatedAtMs) || 0, id: last.id }
+        : null
     };
   });
 

@@ -124,10 +124,21 @@ async function call<T>(name: string, payload: Record<string, unknown>, fallback:
   }
 }
 
-export async function listInventoryItems(workspace: WorkspaceContext) {
-  return call<{ ok?: boolean; items?: InventoryItem[]; categories?: string[] }>(
+export type InventoryListCursor = { updatedAtMs: number; id: string };
+
+export async function listInventoryItems(
+  workspace: WorkspaceContext,
+  cursor?: InventoryListCursor | null
+) {
+  return call<{
+    ok?: boolean;
+    items?: InventoryItem[];
+    categories?: string[];
+    hasMore?: boolean;
+    cursor?: InventoryListCursor | null;
+  }>(
     "listInventoryItems",
-    { companyId: workspace.id, limit: 500 },
+    { companyId: workspace.id, limit: 500, ...(cursor ? { cursor } : {}) },
     "Inventory could not be loaded."
   );
 }

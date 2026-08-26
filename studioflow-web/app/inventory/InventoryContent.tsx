@@ -11,6 +11,7 @@ import {
   inventoryOnHand,
   isInventoryLowStock,
   listInventoryItems,
+  type InventoryListCursor,
   saveInventoryItem,
   setInventoryItemStatus,
   type InventoryItem,
@@ -106,6 +107,8 @@ export function InventoryContent({
   const t = (text: string) => studioT(text, language);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [listCursor, setListCursor] = useState<InventoryListCursor | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [summary, setSummary] = useState<InventorySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -143,6 +146,7 @@ export function InventoryContent({
         getInventorySummary(workspace)
       ]);
       setItems(list?.items ?? []);
+      setListCursor(list?.hasMore ? list?.cursor ?? null : null);
       setSummary(totals?.summary ?? null);
       setNotice("");
     } catch (failure) {
@@ -151,6 +155,26 @@ export function InventoryContent({
       setLoading(false);
     }
   }, [workspace]);
+
+  // A workshop past 500 items used to fall silently off the end of the list;
+  // the server now hands back a cursor and this fetches the next page.
+  const loadMore = useCallback(async () => {
+    if (!listCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const list = await listInventoryItems(workspace, listCursor);
+      const fresh = list?.items ?? [];
+      setItems(current => {
+        const seen = new Set(current.map(item => item.id));
+        return [...current, ...fresh.filter(item => !seen.has(item.id))];
+      });
+      setListCursor(list?.hasMore ? list?.cursor ?? null : null);
+    } catch (failure) {
+      setNotice(failure instanceof Error ? t(failure.message) : t("Inventory could not be loaded."));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [workspace, listCursor, loadingMore]);
 
   useEffect(() => {
     void reload();
@@ -176,7 +200,7 @@ export function InventoryContent({
     return items.filter(item => {
       if (quickView === "low" && !(isInventoryLowStock(item) && item.status === "available")) return false;
       if (quickView === "incoming" && item.status !== "incoming") return false;
-      if (quickView === "reserved" && item.status !== "reserved") return false;
+      if (quickView === "reserved" && item.status !== "reserved" && item.status !== "partiallyReserved") return false;
       if (categoryFilter && item.category !== categoryFilter) return false;
       if (typeFilter && item.trackingType !== typeFilter) return false;
       if (statusFilter && item.status !== statusFilter) return false;
@@ -640,6 +664,14 @@ export function InventoryContent({
               </select>
             </div>
           </div>
+        ) : null}
+        {listCursor ? (
+          <p className="inventory-note">
+            {t("There is more stock than one page carries.")}{" "}
+            <button type="button" className="inventory-link" disabled={loadingMore} onClick={() => void loadMore()}>
+              {loadingMore ? t("Loading…") : t("Load the next 500 items")}
+            </button>
+          </p>
         ) : null}
       </div>
 
