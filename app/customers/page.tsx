@@ -287,6 +287,7 @@ export default function CustomersPage() {
     });
   }, [customers, search, sortMode]);
 
+
   const selectedCustomer = useMemo(
     () => filteredCustomers.find(customer => customer.id === selectedCustomerId)
       ?? customers.find(customer => customer.id === selectedCustomerId)
@@ -343,6 +344,34 @@ export default function CustomersPage() {
   const canManageCustomers = Boolean(workspace && canManageCustomersForRole(workspace.role));
   const language = moneySettings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
+
+  // Which field actually matched the search — shown on the card so a hit on
+  // an invoice number or address doesn't look like a random result.
+  const searchMatchHints = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const map = new Map<string, string>();
+    if (!term) return map;
+    for (const customer of filteredCustomers) {
+      if (customer.name.toLowerCase().includes(term)) continue;
+      let hint = "";
+      if (customer.email.toLowerCase().includes(term)) hint = `${studioT("Email", language)}: ${customer.email}`;
+      else if (customer.phone.toLowerCase().includes(term) || customer.primaryPhone.toLowerCase().includes(term)) hint = `${studioT("Phone", language)}: ${customer.primaryPhone || customer.phone}`;
+      else if (customer.instagram.toLowerCase().includes(term)) hint = `Instagram: ${customer.instagram}`;
+      else {
+        const order = customer.orders.find(item => item.invoiceNumber.toLowerCase().includes(term));
+        if (order) hint = `${studioT("Order", language)} ${order.invoiceNumber}`;
+        else {
+          const design = customer.orders.find(item => item.designName.toLowerCase().includes(term));
+          if (design) hint = design.designName;
+          else if ([customer.address, customer.streetAddress, customer.city, customer.postalCode, customer.country].some(value => value.toLowerCase().includes(term))) {
+            hint = `${studioT("Address", language)}: ${[customer.streetAddress || customer.address, customer.city].filter(Boolean).join(", ")}`;
+          }
+        }
+      }
+      if (hint) map.set(customer.id, hint);
+    }
+    return map;
+  }, [filteredCustomers, search, language]);
 
   useEffect(() => {
     if (!customerContextMenu) return;
@@ -727,6 +756,7 @@ export default function CustomersPage() {
                 canSeeFinance={canSeeFinance}
                 moneySettings={moneySettings}
                 language={language}
+                matchHint={searchMatchHints.get(customer.id)}
                 onSelect={() => setSelectedCustomerId(customer.id)}
                 onContextMenu={event => openCustomerContextMenu(event, customer)}
               />
@@ -860,6 +890,7 @@ function CustomerListCard({
   canSeeFinance,
   moneySettings,
   language,
+  matchHint,
   onSelect,
   onContextMenu
 }: {
@@ -868,6 +899,7 @@ function CustomerListCard({
   canSeeFinance: boolean;
   moneySettings: StudioMoneySettings;
   language: string;
+  matchHint?: string;
   onSelect: () => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
@@ -886,6 +918,9 @@ function CustomerListCard({
       <span className="customer-list-body">
         <strong title={displayName}>{displayName}</strong>
         <small>{customer.email || customer.phone || customer.instagram || t("No contact details")}</small>
+        {matchHint ? (
+          <small style={{ color: "#b45309", fontWeight: 700 }}>⌕ {t("Matched")}: {matchHint}</small>
+        ) : null}
         {designNames.length > 0 ? (
           <span className="customer-list-designs" aria-label="Customer designs">
             {designNames.map((designName, index) => (
