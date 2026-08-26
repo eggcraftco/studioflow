@@ -30,6 +30,7 @@ type BankConnection = {
   lastSyncedAt: Date | null;
   // Server-written health of the consent: "ok" | "needs_reconsent" | "error".
   syncState: string;
+  consentExpiresAt: Date | null;
   lastSyncError: string;
 };
 type BankTransaction = {
@@ -261,6 +262,7 @@ function BankPageContent() {
   const [bulkVat, setBulkVat] = useState("");
   const [bulkReview, setBulkReview] = useState("");
   const [accountFilter, setAccountFilter] = useState("");
+  const [txReview, setTxReview] = useState("");
   const [drawerOrderSearch, setDrawerOrderSearch] = useState("");
   const [drawerSplits, setDrawerSplits] = useState<Array<{ amount: string; category: string; vatCode: string; note: string; orderId: string }> | null>(null);
   const [incomingSuggest, setIncomingSuggest] = useState<{ orderLabel: string; candidates: Array<{ id: string; amount: number; method: string; note: string; dateMs: number }> } | null>(null);
@@ -334,6 +336,7 @@ function BankPageContent() {
             status: String(data.status || ""),
             accounts: Array.isArray(data.accounts) ? (data.accounts as BankAccountInfo[]) : [],
             lastSyncedAt: toDate(data.lastSyncedAt),
+            consentExpiresAt: toDate(data.consentExpiresAt),
             syncState: String(data.syncState || "ok"),
             lastSyncError: String(data.lastSyncError || "")
           };
@@ -532,13 +535,20 @@ function BankPageContent() {
     }
   }
 
-  async function removeConnection(connection: BankConnection) {
-    if (!window.confirm(t("Disconnect this bank and remove its imported transactions?"))) return;
+  // Disconnect and delete are different decisions, kept apart on purpose:
+  // disconnecting only revokes the bank consent and KEEPS everything already
+  // imported (and changes nothing in Pandle); purging the data is a second,
+  // explicit step offered on an already-disconnected connection.
+  async function removeConnection(connection: BankConnection, mode: "disconnect" | "purge" = "disconnect") {
+    const message = mode === "purge"
+      ? t("Delete every imported transaction of this connection? This cannot be undone.")
+      : t("Disconnect this bank account? Everything already imported stays in NivaDesk, and nothing in Pandle changes. You can reconnect any time.");
+    if (!window.confirm(message)) return;
     setBusy(`delete-${connection.id}`);
     setError(null);
     try {
-      await call("bankDeleteConnection", { requisitionId: connection.id });
-      setStatus(t("Bank disconnected."));
+      await call("bankDeleteConnection", { requisitionId: connection.id, mode });
+      setStatus(mode === "purge" ? t("Connection and its imported data removed.") : t("Bank disconnected — your imported transactions were kept."));
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Could not disconnect the bank.");
     } finally {
@@ -1365,6 +1375,11 @@ function BankPageContent() {
   const sortedTransactions = useMemo(() => {
     const list = visibleTransactions.filter(item => {
       if (accountFilter && item.accountId !== accountFilter) return false;
+      if (txReview === "missing_vat") {
+        if (!(item.amount < 0 && effectiveCategory(item) && !effectiveVat(item))) return false;
+      } else if (txReview === "missing_receipt") {
+        if (!(item.amount < 0 && !item.receiptPath && !item.receiptNotNeeded)) return false;
+      } else if (txReview && effectiveReviewStatus(item) !== txReview) return false;
       if (txFlow === "in" && item.amount <= 0) return false;
       if (txFlow === "out" && item.amount >= 0) return false;
       if (txAttention === "uncategorised" && !(item.amount < 0 && !effectiveCategory(item))) return false;
@@ -1377,13 +1392,13 @@ function BankPageContent() {
     });
     list.sort((a, b) => sortAsc ? a.bookingDate.localeCompare(b.bookingDate) : b.bookingDate.localeCompare(a.bookingDate));
     return list;
-  }, [visibleTransactions, sortAsc, txFlow, txAttention, txSearch, duplicateIds, accountFilter]);
+  }, [visibleTransactions, sortAsc, txFlow, txAttention, txSearch, duplicateIds, accountFilter, txReview]);
 
   const txPageCount = Math.max(1, Math.ceil(sortedTransactions.length / txPageSize));
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
   const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
   const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
-  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention, txSearch]);
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention, txSearch, txReview]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
@@ -1563,10 +1578,12 @@ function BankPageContent() {
                       <img src={connection.providerLogo} alt="" width={34} height={34} style={{ borderRadius: 999, border: "1px solid rgba(120,120,140,0.25)" }} />
                     ) : <span aria-hidden="true" style={{ fontSize: 20 }}>🏛</span>}
                     {(() => {
+                      const disconnected = connection.status === "disconnected";
                       const unhealthy = connection.status === "linked" && connection.syncState !== "ok";
                       const reconsent = connection.syncState === "needs_reconsent";
-                      const color = connection.status !== "linked" ? "#b45309" : reconsent ? "#dc2626" : unhealthy ? "#b45309" : "#16a34a";
-                      const label = connection.status !== "linked" ? t("Waiting for bank consent…") : reconsent ? t("Reconnect needed") : unhealthy ? t("Sync failing") : t("Connected");
+                      const color = disconnected ? "#6b7280" : connection.status !== "linked" ? "#b45309" : reconsent ? "#dc2626" : unhealthy ? "#b45309" : "#16a34a";
+                      const label = disconnected ? t("Disconnected — data kept") : connection.status !== "linked" ? t("Waiting for bank consent…") : reconsent ? t("Reconnect needed") : unhealthy ? t("Sync failing") : t("Connected");
+                      const consentDaysLeft = connection.consentExpiresAt ? Math.ceil((connection.consentExpiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
                       return (
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1578,6 +1595,9 @@ function BankPageContent() {
                           </div>
                           <div style={{ fontSize: 11, opacity: 0.6 }}>
                             {connection.lastSyncedAt ? `${t("Last sync")} ${connection.lastSyncedAt.toLocaleString()}` : ""}
+                            {connection.status === "linked" && consentDaysLeft !== null ? (
+                              <span style={consentDaysLeft <= 14 ? { color: "#b45309", fontWeight: 700 } : undefined}> · {t("Consent renews by")} {connection.consentExpiresAt!.toLocaleDateString()}</span>
+                            ) : null}
                             {unhealthy && connection.lastSyncError ? <span title={connection.lastSyncError}> · {reconsent ? t("The bank stopped sharing data — reconnect to resume the feed.") : connection.lastSyncError.slice(0, 80)}</span> : null}
                           </div>
                         </div>
@@ -1588,10 +1608,17 @@ function BankPageContent() {
                         ⟳ {busy === "connect" ? t("Opening your bank…") : t("Reconnect")}
                       </button>
                     ) : null}
-                    {isOwner ? (
-                      <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
-                        onClick={() => void removeConnection(connection)} aria-label={t("Disconnect")} title={t("Disconnect")}
-                        style={{ opacity: 0.4 }}>✕</button>
+                    {isOwner && connection.status === "disconnected" ? (
+                      <>
+                        <button type="button" disabled={busy === "connect"} onClick={() => void connectBank()} style={bankBtnSm}>⟳ {t("Reconnect")}</button>
+                        <button type="button" className="finance-payments-delete" disabled={busy === `delete-${connection.id}`}
+                          onClick={() => void removeConnection(connection, "purge")} aria-label={t("Delete imported data")} title={t("Delete imported data")}
+                          style={{ opacity: 0.5 }}>🗑</button>
+                      </>
+                    ) : isOwner ? (
+                      <button type="button" disabled={busy === `delete-${connection.id}`}
+                        onClick={() => void removeConnection(connection)}
+                        style={{ ...bankBtnSm, opacity: 0.7, fontSize: 11 }}>{t("Disconnect account")}</button>
                     ) : null}
                   </div>
                 ))}
@@ -1927,6 +1954,12 @@ function BankPageContent() {
                       <button type="button" onClick={() => setTxAttention("none")}
                         style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.16)", color: "#b45309" }}>
                         ! {txAttention === "any" ? t("Needs attention") : txAttention === "uncategorised" ? t("Uncategorised") : txAttention === "noReceipt" ? t("No receipt") : t("Possible duplicates")} ✕
+                      </button>
+                    ) : null}
+                    {txReview ? (
+                      <button type="button" onClick={() => setTxReview("")}
+                        style={{ border: 0, cursor: "pointer", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(37,99,235,0.12)", color: "#2563eb" }}>
+                        ⚑ {txReview === "missing_vat" ? t("Missing VAT code") : txReview === "missing_receipt" ? t("Missing receipt") : t(reviewStatusMeta(txReview).label)} ✕
                       </button>
                     ) : null}
                     <span style={{ flex: 1 }} />
@@ -2764,6 +2797,47 @@ function BankPageContent() {
 
             {/* Pandle bridge ships dark until Pandle issues the OAuth app credentials
                  (NEXT_PUBLIC_PANDLE_ENABLED=1 turns the card on). */}
+            {isOwner && tab === "overview" ? (() => {
+              // The accountant's worklist for the selected period: how ready
+              // this period is to hand over, with one click into each pile.
+              const spending = visibleTransactions.filter(item => item.amount < 0);
+              const counts = {
+                ready: visibleTransactions.filter(item => effectiveReviewStatus(item) === "ready").length,
+                needsInfo: visibleTransactions.filter(item => effectiveReviewStatus(item) === "needs_info").length,
+                missingReceipt: spending.filter(item => !item.receiptPath && !item.receiptNotNeeded).length,
+                missingVat: spending.filter(item => effectiveCategory(item) && !effectiveVat(item)).length,
+                syncErrors: visibleTransactions.filter(item => effectiveReviewStatus(item) === "sync_error").length,
+                confirmed: visibleTransactions.filter(item => effectiveReviewStatus(item) === "confirmed").length
+              };
+              const openPile = (filter: string) => {
+                setTxReview(filter);
+                setTxAttention("none");
+                setTab("transactions");
+              };
+              const pile = (label: string, value: number, filter: string, color: string) => (
+                <button key={filter} type="button" onClick={() => openPile(filter)}
+                  style={{ flex: "1 1 130px", minWidth: 120, border: "1px solid rgba(120,120,140,0.16)", borderRadius: 12, padding: "10px 12px", background: "transparent", cursor: "pointer", textAlign: "left", color: "inherit" }}>
+                  <strong style={{ fontSize: 20, display: "block", color: value > 0 ? color : undefined, fontVariantNumeric: "tabular-nums" }}>{value}</strong>
+                  <span style={{ fontSize: 11.5, opacity: 0.7 }}>{label}</span>
+                </button>
+              );
+              return (
+                <div style={{ ...bankCard, padding: "14px 18px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <strong style={{ fontSize: 14.5 }}>{t("Accounting review")}</strong>
+                    <span style={{ fontSize: 11.5, opacity: 0.6 }}>· {periodLabel}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+                    {pile(t("Ready for accounting"), counts.ready, "ready", "#2563eb")}
+                    {pile(t("Needs information"), counts.needsInfo, "needs_info", "#b45309")}
+                    {pile(t("Missing receipt"), counts.missingReceipt, "missing_receipt", "#dc2626")}
+                    {pile(t("Missing VAT code"), counts.missingVat, "missing_vat", "#b45309")}
+                    {pile(t("Sync error"), counts.syncErrors, "sync_error", "#dc2626")}
+                    {pile(t("Confirmed in accounting"), counts.confirmed, "confirmed", "#16a34a")}
+                  </div>
+                </div>
+              );
+            })() : null}
             {isOwner && tab === "overview" && process.env.NEXT_PUBLIC_PANDLE_ENABLED === "1" ? <PandleCard companyId={companyId} categoriesInUse={categoriesInUse} t={t} money={money} /> : null}
           </>
         ) : null}
