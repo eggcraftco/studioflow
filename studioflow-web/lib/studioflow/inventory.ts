@@ -439,6 +439,38 @@ export async function releaseInventoryFromOrder(
   );
 }
 
+/**
+ * The moment a promised part actually goes into the job. Without a quantity it
+ * consumes the whole reservation; with one it leaves the rest still promised.
+ */
+export async function consumeInventoryForOrder(
+  workspace: WorkspaceContext,
+  itemId: string,
+  orderId: string,
+  quantity?: number
+) {
+  return call<{ ok?: boolean; consumed?: number; remaining?: number; stillReserved?: number }>(
+    "consumeInventoryForOrder",
+    { companyId: workspace.id, itemId, orderId, ...(quantity ? { quantity } : {}) },
+    "The item could not be marked as used."
+  );
+}
+
+/** Release one item and reserve another in a single transaction. */
+export async function swapInventoryForOrder(
+  workspace: WorkspaceContext,
+  orderId: string,
+  fromItemId: string,
+  toItemId: string,
+  quantity?: number
+) {
+  return call<{ ok?: boolean; released?: number; reserved?: number }>(
+    "swapInventoryForOrder",
+    { companyId: workspace.id, orderId, fromItemId, toItemId, ...(quantity ? { quantity } : {}) },
+    "The swap could not be completed."
+  );
+}
+
 // How much of a counted material is free to promise to a new order: what is on
 // the shelf, less what other orders are already holding.
 //
