@@ -61,6 +61,7 @@ const STATUS_LABEL: Record<InventoryStatus, string> = {
   incoming: "Incoming",
   used: "Used",
   sold: "Sold",
+  removed: "Removed",
   archived: "Archived"
 };
 
