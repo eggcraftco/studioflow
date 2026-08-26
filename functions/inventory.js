@@ -1348,7 +1348,7 @@ function createInventoryFunctions({
         const snap = await tx.get(ref);
         if (!snap.exists) throw new HttpsError("not-found", "Purchase not found.");
         existing = snap.data() || {};
-        if (existing.status === "received") {
+        if (existing.status === "received" || existing.status === "partiallyReceived") {
           throw new HttpsError(
             "failed-precondition",
             "A received purchase cannot be edited — the stock it created is already on the shelf."
@@ -1453,48 +1453,126 @@ function createInventoryFunctions({
     return { ok: true, ...result };
   });
 
+  // Goods arrive in boxes, not in purchase orders. Six of the ten cases can be
+  // on the shelf while four are still with the courier — so receiving works
+  // per line and per quantity, and the purchase says "partiallyReceived" until
+  // the last piece lands. Without a lines payload it receives everything still
+  // outstanding, which is exactly what the old one-click receive did.
   const receivePurchase = onCall({ region: REGION }, async (request) => {
     const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
     const purchaseId = clean(request.data && request.data.purchaseId, "", 80);
     if (!purchaseId) throw new HttpsError("invalid-argument", "purchaseId is required.");
+    const requestedRaw = Array.isArray(request.data && request.data.lines) ? request.data.lines : null;
     const now = Date.now();
-
     const ref = purchasesRef(companyId).doc(purchaseId);
-    const snap = await ref.get();
-    if (!snap.exists) throw new HttpsError("not-found", "Purchase not found.");
-    const purchase = snap.data() || {};
-    if (purchase.status === "received") return { ok: true, alreadyReceived: true };
 
-    const itemIds = Array.isArray(purchase.itemIds) ? purchase.itemIds : [];
-    // Read the items first so the ledger can record what actually arrived,
-    // rather than what the purchase line said it would be.
-    const itemSnaps = await Promise.all(
-      itemIds.map((itemId) => itemsRef(companyId).doc(itemId).get()));
-    const batch = db().batch();
-    itemSnaps.forEach((snap) => {
-      if (!snap.exists) return;
-      const item = snap.data() || {};
-      batch.set(snap.ref, {
-        status: "available",
+    const outcome = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new HttpsError("not-found", "Purchase not found.");
+      const purchase = snap.data() || {};
+      if (purchase.status === "received") return { alreadyReceived: true };
+
+      const lines = Array.isArray(purchase.lines) ? purchase.lines : [];
+      const itemIds = Array.isArray(purchase.itemIds) ? purchase.itemIds : [];
+
+      // What should arrive now, per line index. No payload = everything left.
+      const arriving = new Map();
+      if (requestedRaw) {
+        for (const row of requestedRaw.slice(0, 60)) {
+          const index = Number(row && row.index);
+          if (!Number.isInteger(index) || index < 0 || index >= lines.length) {
+            throw new HttpsError("invalid-argument", "Unknown purchase line.");
+          }
+          const line = lines[index];
+          const already = cleanQuantity(line.receivedQuantity);
+          const ordered = String(line.trackingType) === "unique" ? 1 : cleanQuantity(line.quantity);
+          const remaining = roundMoney(ordered - already);
+          const wanted = String(line.trackingType) === "unique"
+            ? remaining
+            : (row && row.quantity !== undefined ? cleanQuantity(row.quantity) : remaining);
+          if (wanted <= 0) continue;
+          if (wanted > remaining) {
+            throw new HttpsError("failed-precondition", `Only ${remaining} of "${line.name}" is still outstanding.`);
+          }
+          arriving.set(index, wanted);
+        }
+      } else {
+        lines.forEach((line, index) => {
+          const already = cleanQuantity(line.receivedQuantity);
+          const ordered = String(line.trackingType) === "unique" ? 1 : cleanQuantity(line.quantity);
+          const remaining = roundMoney(ordered - already);
+          if (remaining > 0) arriving.set(index, remaining);
+        });
+      }
+      if (arriving.size === 0) return { received: 0 };
+
+      const itemSnaps = new Map();
+      for (const index of arriving.keys()) {
+        const itemId = itemIds[index];
+        if (!itemId) continue;
+        itemSnaps.set(index, await tx.get(itemsRef(companyId).doc(itemId)));
+      }
+
+      const nextLines = lines.map((line, index) => {
+        if (!arriving.has(index)) return line;
+        const already = cleanQuantity(line.receivedQuantity);
+        return { ...line, receivedQuantity: roundMoney(already + arriving.get(index)) };
+      });
+      const fullyReceived = nextLines.every((line) => {
+        const ordered = String(line.trackingType) === "unique" ? 1 : cleanQuantity(line.quantity);
+        return cleanQuantity(line.receivedQuantity) >= ordered;
+      });
+
+      let receivedNow = 0;
+      for (const [index, amount] of arriving) {
+        receivedNow = roundMoney(receivedNow + amount);
+        const itemSnap = itemSnaps.get(index);
+        if (!itemSnap || !itemSnap.exists) continue;
+        const item = itemSnap.data() || {};
+        const line = nextLines[index];
+        const isUnique = String(item.trackingType) === "unique";
+        if (isUnique) {
+          tx.set(itemSnap.ref, { status: "available", updatedAtMs: now, updatedByUid: uid }, { merge: true });
+        } else {
+          // The item was created with the full ordered count; from the first
+          // arrival onward its onHand says what is actually on the shelf and
+          // its incoming carries the rest.
+          const ordered = cleanQuantity(line.quantity);
+          const receivedSoFar = cleanQuantity(line.receivedQuantity);
+          tx.set(itemSnap.ref, {
+            status: "available",
+            quantity: {
+              ...(item.quantity || {}),
+              onHand: receivedSoFar,
+              incoming: roundMoney(Math.max(0, ordered - receivedSoFar))
+            },
+            updatedAtMs: now,
+            updatedByUid: uid
+          }, { merge: true });
+        }
+        recordMovement(tx, companyId, {
+          item, itemId: itemSnap.id,
+          kind: "purchase",
+          delta: isUnique ? 1 : roundSigned(amount),
+          unitCost: item.valuationCost,
+          at: now, uid, email,
+          ref: purchaseId,
+          note: clean(purchase.number, "", 40)
+        });
+      }
+
+      tx.set(ref, {
+        lines: nextLines,
+        status: fullyReceived ? "received" : "partiallyReceived",
+        receivedAtMs: fullyReceived ? now : Number(purchase.receivedAtMs) || 0,
         updatedAtMs: now,
         updatedByUid: uid
       }, { merge: true });
-      recordMovement(batch, companyId, {
-        item, itemId: snap.id,
-        kind: "purchase",
-        delta: String(item.trackingType) === "unique"
-          ? 1
-          : cleanQuantity((item.quantity || {}).onHand),
-        unitCost: item.valuationCost,
-        at: now, uid, email,
-        ref: purchaseId,
-        note: clean(purchase.number, "", 40)
-      });
-    });
-    batch.set(ref, { status: "received", receivedAtMs: now, updatedAtMs: now, updatedByUid: uid }, { merge: true });
-    await batch.commit();
 
-    return { ok: true, received: itemIds.length };
+      return { received: receivedNow, status: fullyReceived ? "received" : "partiallyReceived" };
+    });
+
+    return { ok: true, ...outcome };
   });
 
   const listPurchases = onCall({ region: REGION }, async (request) => {
@@ -1511,7 +1589,7 @@ function createInventoryFunctions({
     const snap = await ref.get();
     if (!snap.exists) return { ok: true };
     const purchase = snap.data() || {};
-    if (purchase.status === "received") {
+    if (purchase.status === "received" || purchase.status === "partiallyReceived") {
       throw new HttpsError(
         "failed-precondition",
         "A received purchase cannot be deleted — its stock is on the shelf."
