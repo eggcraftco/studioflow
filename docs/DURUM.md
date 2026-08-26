@@ -152,17 +152,25 @@ yalnız bank_receipts yükünde); aranabilir sipariş seçici; çoklu hesap
 filtresi. Emülatör: banking-links.mjs 29 assert. Native parite iki ajanla
 (BUILD SUCCEEDED ×2 + BUILD SUCCESSFUL). Kalan: multi-currency alanları
 (TrueLayer verisi geldikçe).
-**Kalan Orta:** receipt güven skoru UI (Suggested match %); recurring güven+
-fiyat değişimi alanları; rule priority/conflict; Supplier/Purchase/Inventory
-bağı (purchase bağlama var, panelde genişletme); Accounting Review ekranı;
-audit log; consent ID/expiry saklama + bağlantı kartı zenginleştirme;
-Disconnect confirmation metni; Overview soruları (dönem/pending/transfer).
+**Orta'dan kapananlar (27 Ağu gece, B3):** Accounting review kartı (dönem
+bazlı 6 kutu → tıkla-filtrele, txReview çipi); rule priority (en uzun anahtar
+kazanır) + categoryAutoRule izi; consent bitişi saklanıyor+gösteriliyor
+(90 gün, ≤14 gün amber); Disconnect/veri silme AYRILDI (disconnect rızayı
+keser veri kalır, purge ayrı onay; banking-b3.mjs 11 assert); receipt güven
+% zaten OCR listesindeydi. 6 fonksiyon daha deploy edildi.
+**Kalan Orta:** recurring güven/fiyat-değişimi alan zenginleştirmesi (temel
+tespit+priceChange var); Supplier/Purchase/Inventory panel genişletmesi;
+audit log (kural izi var, genel log yok); Overview soruları
+(dönem/pending/transfer açıklamaları); B3'ün native paritesi (Accounting
+review kartı + consent satırı + disconnect ayrımı Mac/iPhone/Android'e).
 **Dört kesin kural (uygulandı):** read-only scope; provider tx ID benzersiz;
 Pandle'da mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT
 hard-code değil mapping.
 
 ### 2) NOTES
-**Yüksek TAMAM (27 Ağu, web + sunucu; native parite ajanları koşuyor):**
+**Yüksek TAMAM (27 Ağu, web + sunucu + NATIVE: Swift BUILD SUCCEEDED ×2,
+Android BUILD SUCCESSFUL — evrensel editör, bağlı notlar, merkezi Reminders,
+etiket yönetimi, workspace fan-out üç platformda):**
 reminder bug'ı kökten kapandı (yerel tarih parse + NaN muhafızı, toISOString
 UTC kayması yok, okuyucu {seconds}/ISO tanır, görsel yükleme ara kaydı
 taslağı taşır, başarısız yazma sesli; mirror payload reminderDateMillis
