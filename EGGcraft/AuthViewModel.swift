@@ -2454,6 +2454,7 @@ class AuthViewModel: ObservableObject {
         let defaults = UserDefaults.standard
         let keys: [String] = [
             "sharedWorkspaceSnapshotJSONV1",
+            "typeWorkspaceSnapshotsJSONV1",
             "kartRenkleriJSONV1",
             "kartYerlesimiJSON",
             "kartYukseklikleriJSON",

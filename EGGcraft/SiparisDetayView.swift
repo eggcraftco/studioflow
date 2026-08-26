@@ -1346,6 +1346,11 @@ struct SiparisDetayView: View {
     @AppStorage("workspaceFollowedTeamProfileUserIdV1") private var workspaceFollowedTeamProfileUserId: String = ""
     @AppStorage("workspaceOwnerCardSyncDismissedV1") private var workspaceOwnerCardSyncDismissed: Bool = false
     @AppStorage("sharedWorkspaceSnapshotJSONV1") private var sharedWorkspaceSnapshotJSON: String = ""
+    // Read-only mirror of companySettings.typeWorkspaceSnapshotsJSON — the
+    // workspace's per-order-TYPE card layouts (today only "repair"). Written
+    // exclusively by the owner via web/server; Swift only reads it to resolve
+    // which layout an order shows and must NEVER upload it anywhere.
+    @AppStorage("typeWorkspaceSnapshotsJSONV1") private var typeWorkspaceSnapshotsJSON: String = ""
     @State private var workspaceProfiles: [WorkspaceProfileDTO] = []
     @State private var workspaceUserProfiles: [WorkspaceUserProfileDTO] = []
     @State private var followedTeamProfileLastSnapshotJSON: String = ""
@@ -1361,6 +1366,11 @@ struct SiparisDetayView: View {
     @State private var lastSyncedOwnProfileContent: String = ""
     @State private var activeWorkspaceLayoutOrderKey: String = ""
     @State private var activeWorkspaceLayoutIsIndependent: Bool = false
+    // True while the layout on screen came from the order-TYPE snapshot (e.g.
+    // the workspace's "repair" convention). Guards the auto-save path exactly
+    // like the independent per-order layout: a type layout must never be
+    // re-uploaded into the user's card profile or the shared snapshot.
+    @State private var activeWorkspaceLayoutIsTypeManaged: Bool = false
     @State private var iPadWorkspaceZoomScale: CGFloat = 1.0
     @State private var liveTrackingListener: ListenerRegistration?
     @State private var liveTrackingData: [String: String] = [:]
@@ -2171,7 +2181,12 @@ struct SiparisDetayView: View {
             .onChange(of: siparis.notes) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.notes = oldValue }) }
             // Repair intake used to persist only via onDisappear: type into it, sit
             // still, and the next snapshot overwrote what was on screen.
-            .onChange(of: siparis.orderType) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.orderType = oldValue }) }
+            .onChange(of: siparis.orderType) { oldValue, _ in
+                saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.orderType = oldValue })
+                // The order-TYPE layout follows the type live (web parity: the
+                // layout subscription re-resolves on orderType). Read-side only.
+                loadWorkspaceForCurrentOrderIfNeeded()
+            }
             .onChange(of: siparis.repairIntake) { oldValue, _ in saveOrderDetailChange(previousSiparis: previousOrderSnapshot { $0.repairIntake = oldValue }) }
             .onChange(of: siparis.customFields ?? [:]) { oldValue, newValue in
                 if shouldAutosaveInlineCustomFields(previous: oldValue, next: newValue) {
@@ -3724,7 +3739,11 @@ struct SiparisDetayView: View {
 
     private func ensureSharedWorkspaceSnapshot() {
         if sharedWorkspaceSnapshotJSON.isEmpty {
-            if isCurrentOrderIndependent {
+            // Never seed the shared snapshot from a layout the user doesn't
+            // own: an independent per-order layout, or the screen currently
+            // showing an order-TYPE layout (repair convention). Fall back to
+            // the user's own profile in both cases.
+            if isCurrentOrderIndependent || activeWorkspaceLayoutIsTypeManaged {
                 if let ownProfile = currentWorkspaceUserProfile(),
                    !ownProfile.snapshotJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     sharedWorkspaceSnapshotJSON = ownProfile.snapshotJSON
@@ -3751,9 +3770,28 @@ struct SiparisDetayView: View {
         return orderHeights
     }
 
-    private func markWorkspaceLayoutApplied(isIndependent: Bool) {
+    private func markWorkspaceLayoutApplied(isIndependent: Bool, isTypeManaged: Bool = false) {
         activeWorkspaceLayoutOrderKey = currentOrderCardHeightKey ?? ""
         activeWorkspaceLayoutIsIndependent = isIndependent
+        activeWorkspaceLayoutIsTypeManaged = isTypeManaged
+    }
+
+    // Resolves the workspace's order-TYPE layout for the open order, if one
+    // exists. Mirrors the web client exactly: only orderType == "repair"
+    // participates (web sends "repair" or nothing), and the snapshot shape is
+    // identical to sharedWorkspaceSnapshotJSON. Read-side only — nothing here
+    // is ever written back to the cloud or into a profile.
+    private func currentOrderTypeWorkspaceSnapshot() -> WorkspaceLayoutSnapshot? {
+        guard siparis.orderType == "repair" else { return nil }
+        guard let data = typeWorkspaceSnapshotsJSON.data(using: .utf8),
+              let map = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let entry = map["repair"] as? [String: Any],
+              JSONSerialization.isValidJSONObject(entry),
+              let entryData = try? JSONSerialization.data(withJSONObject: entry),
+              let snapshot = try? JSONDecoder().decode(WorkspaceLayoutSnapshot.self, from: entryData) else {
+            return nil
+        }
+        return snapshot
     }
 
     private func orderCardHeightsForSnapshot() -> [String: [String: Double]]? {
@@ -4013,6 +4051,20 @@ struct SiparisDetayView: View {
 
                 isApplyingWorkspaceProfilesFromCloud = true
 
+                // Order-TYPE layouts: read-only cache refresh. This field is
+                // owner/server-written; Swift never writes it back — an empty
+                // cloud value simply clears the local cache (the owner removed
+                // the type layout), it is never re-uploaded from here.
+                let cloudTypeSnapshotsJSON = (data["typeWorkspaceSnapshotsJSON"] as? String) ?? ""
+                if cloudTypeSnapshotsJSON != typeWorkspaceSnapshotsJSON {
+                    let hadTypeSnapshot = currentOrderTypeWorkspaceSnapshot() != nil
+                    typeWorkspaceSnapshotsJSON = cloudTypeSnapshotsJSON
+                    let hasTypeSnapshot = currentOrderTypeWorkspaceSnapshot() != nil
+                    if !isCurrentOrderIndependent, hadTypeSnapshot || hasTypeSnapshot {
+                        loadWorkspaceForCurrentOrderIfNeeded()
+                    }
+                }
+
                 if let cloudProfilesJSON = data["workspaceProfilesJSON"] as? String,
                    !cloudProfilesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                    cloudProfilesJSON != workspaceProfilesJSON {
@@ -4031,7 +4083,10 @@ struct SiparisDetayView: View {
                     workspaceUserProfilesJSON = cloudUserProfilesJSON
                     loadWorkspaceUserProfiles()
 
-                    if isCurrentOrderIndependent {
+                    if isCurrentOrderIndependent || currentOrderTypeWorkspaceSnapshot() != nil {
+                        // Independent and TYPE-managed orders re-resolve through
+                        // the one resolver so a profile update can't clobber the
+                        // layout that actually governs this order.
                         loadWorkspaceForCurrentOrderIfNeeded()
                     } else if !workspaceFollowedTeamProfileUserId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         applyFollowedTeamWorkspaceProfileIfNeeded(force: false)
@@ -4055,6 +4110,7 @@ struct SiparisDetayView: View {
 
                     if currentWorkspaceUserProfile() == nil,
                        !isCurrentOrderIndependent,
+                       currentOrderTypeWorkspaceSnapshot() == nil,
                        let snapshot = decodedWorkspaceSnapshot(cloudSharedLayoutJSON) {
                         applyWorkspaceLayout(snapshot)
                     }
@@ -4796,12 +4852,29 @@ struct SiparisDetayView: View {
         activeWorkspaceLayoutOrderKey = "__loading__\(currentOrderCardHeightKey ?? "")"
         activeWorkspaceLayoutIsIndependent = false
         ensureSharedWorkspaceSnapshot()
+        // Cleared only after ensureSharedWorkspaceSnapshot: while the screen
+        // still shows the previous order's TYPE layout, the shared snapshot
+        // must not be seeded from it.
+        activeWorkspaceLayoutIsTypeManaged = false
 
         if let json = siparis.customFields?[orderWorkspaceLayoutKey],
            let snapshot = decodedWorkspaceSnapshot(json) {
             markWorkspaceLayoutApplied(isIndependent: true)
             applyWorkspaceLayout(snapshot)
             workspaceStatusMessage = t("Loaded this order layout", lang: seciliDil)
+            return
+        }
+
+        // Order-TYPE layout (server/web parity): a layout saved for an order
+        // type (e.g. repair) is the workspace's convention for those orders —
+        // it beats personal profiles so a repair order looks like a repair
+        // order for everyone. The per-order independent layout still wins
+        // above. Display-only: the type-managed flag suppresses every
+        // auto-save so this layout can never leak into the user's card
+        // profile or the shared snapshot.
+        if let typeSnapshot = currentOrderTypeWorkspaceSnapshot() {
+            markWorkspaceLayoutApplied(isIndependent: false, isTypeManaged: true)
+            applyWorkspaceLayout(typeSnapshot)
             return
         }
 
@@ -4887,6 +4960,12 @@ struct SiparisDetayView: View {
         let currentKey = currentOrderCardHeightKey ?? ""
         guard activeWorkspaceLayoutOrderKey == currentKey else { return }
         guard !(activeWorkspaceLayoutIsIndependent && !isCurrentOrderIndependent) else { return }
+        // The layout on screen is the workspace's order-TYPE convention (e.g.
+        // repair). It is read-only on this device: auto-saving here would
+        // upload the type layout into the user's card profile / shared
+        // snapshot — the exact clobber this file's settle-gate exists to
+        // prevent. Same protection the independent per-order layout gets.
+        guard !activeWorkspaceLayoutIsTypeManaged else { return }
 
         if isCurrentOrderIndependent {
             saveCurrentLayoutForOrder(showMessage: false)

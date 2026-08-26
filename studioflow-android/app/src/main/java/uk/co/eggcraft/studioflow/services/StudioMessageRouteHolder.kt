@@ -133,6 +133,21 @@ object StudioMessageRouteHolder {
         return v
     }
 
+    // Banking → Inventory link ("View in Inventory" on a purchase-linked bank
+    // transaction): open the Inventory section.
+    private val _pendingOpenInventory = MutableStateFlow(false)
+    val pendingOpenInventory: StateFlow<Boolean> = _pendingOpenInventory.asStateFlow()
+
+    fun setPendingOpenInventory() {
+        _pendingOpenInventory.value = true
+    }
+
+    fun consumePendingOpenInventory(): Boolean {
+        val v = _pendingOpenInventory.value
+        _pendingOpenInventory.value = false
+        return v
+    }
+
     fun saveDeviceToken(companyId: String, token: String, context: Context? = null) {
         val cleanCompanyId = companyId.trim()
         val cleanToken = token.trim()

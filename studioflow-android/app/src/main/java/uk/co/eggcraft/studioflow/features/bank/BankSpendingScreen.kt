@@ -530,6 +530,13 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
         when (tab) {
             BankTab.Overview -> {
                 item {
+                    // How the Overview numbers are counted — same caption as the web.
+                    Text(
+                        t("Figures follow the transaction date; pending payments are included. Incoming marked as transfer, owner contribution or loan is not counted as revenue."),
+                        fontSize = 10.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item {
                     TileGrid(compact, listOf(
                         StatTileSpec(t("Total spent"), fmt(spentTotal, null),
                             delta?.let { "${if (it <= 0) "↓" else "↑"}${String.format(Locale.UK, "%.0f", abs(it))}% ${t(when (view) { BankPeriodView.Year -> "vs last year"; BankPeriodView.Week -> "vs last week"; else -> "vs last month" })}" },
@@ -1051,6 +1058,12 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                             else -> null
                         }
                     }
+                },
+                onOpenInventory = {
+                    // Close the sheet, then let the main shell switch sections —
+                    // the same pending-route pattern the Notes widget uses.
+                    selectedTxId = null
+                    uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.setPendingOpenInventory()
                 }
             )
         }
@@ -1579,7 +1592,9 @@ private fun TransactionDetailSheet(
     incomingSuggest: BankIncomingMatchResult?,
     onDismissSuggest: () -> Unit,
     /** (mode, orderId, paymentId) → bankMatchIncomingToOrder. */
-    onIncomingAction: (String, String, String) -> Unit
+    onIncomingAction: (String, String, String) -> Unit,
+    /** "View in Inventory" on the linked-purchase row — switches to the Inventory section. */
+    onOpenInventory: () -> Unit
 ) {
     var category by remember(tx.id) { mutableStateOf(tx.category.ifBlank { tx.categoryAuto }) }
     var vat by remember(tx.id) { mutableStateOf(tx.vatCode) }
@@ -1819,6 +1834,19 @@ private fun TransactionDetailSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(t("No receipt needed"), fontSize = 12.sp, modifier = Modifier.weight(1f))
                             Switch(checked = tx.receiptNotNeeded, onCheckedChange = onToggleNotNeeded)
+                        }
+                    }
+                }
+            }
+            // Payment created from an Inventory purchase — mirrors the web drawer row.
+            if (tx.purchaseNumber.isNotBlank()) {
+                Surface(shape = RoundedCornerShape(10.dp), color = GREEN.copy(alpha = 0.07f), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("▣ ${tx.purchaseNumber}", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = GREEN)
+                        Text(t("This payment is linked to a purchase — its supplier and stock items live in Inventory."),
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = onOpenInventory, contentPadding = PaddingValues(0.dp)) {
+                            Text("${t("View in Inventory")} →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

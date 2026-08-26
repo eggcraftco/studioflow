@@ -380,8 +380,17 @@ fun OrderDetailScreen(
             .takeIf { it.isNotBlank() }
             ?.let { orderDetailCardLayoutFromSnapshotJSON(it) }
     }
-    val effectiveWorkspaceSettings = remember(workspaceSettings, independentOrderLayout) {
-        independentOrderLayout?.let { workspaceSettings.copy(orderCardLayout = it) } ?: workspaceSettings
+    // Order-TYPE layout (e.g. every repair order opens with the repair cards
+    // forward). Same precedence as web + server: independent per-order layout >
+    // TYPE snapshot > user's workspace profile > shared snapshot > default.
+    // Display-only — it is applied via effectiveWorkspaceSettings exactly like
+    // the independent layout and is never uploaded anywhere.
+    val typeOrderLayout = remember(order.id, order.orderType, workspaceSettings.typeWorkspaceSnapshotsJSON) {
+        orderTypeCardLayoutFromSnapshotsJSON(workspaceSettings.typeWorkspaceSnapshotsJSON, order.orderType)
+    }
+    val effectiveWorkspaceSettings = remember(workspaceSettings, independentOrderLayout, typeOrderLayout) {
+        (independentOrderLayout ?: typeOrderLayout)?.let { workspaceSettings.copy(orderCardLayout = it) }
+            ?: workspaceSettings
     }
     fun allowedCard(cardId: OrderDetailCardId): Boolean {
         return when (cardId) {
@@ -396,7 +405,12 @@ fun OrderDetailScreen(
     fun saveCardLayout(nextLayout: OrderDetailCardLayout) {
         locallyVisibleCards = locallyVisibleCards.filter { nextLayout.isVisible(it) }.toSet()
         val snapshotJSON = nextLayout.toWorkspaceSnapshotJSON()
-        if (independentOrderLayout != null) {
+        if (independentOrderLayout != null || typeOrderLayout != null) {
+            // Guarded like the independent per-order layout: while a TYPE layout
+            // is displayed, an edit must not be re-saved into the user's profile
+            // or the shared snapshot (that would clobber them with the type
+            // layout). The edit lands on the order itself, which then wins over
+            // the type snapshot — display resolution stays intact.
             onSaveOrderCardLayout(order, snapshotJSON)
             return
         }
@@ -9827,6 +9841,20 @@ private fun quickReminderTemplatesJsonForOrder(
             )
         }
     }.toString()
+}
+
+/**
+ * Resolves the layout the workspace saved for one order TYPE (e.g. "repair")
+ * out of companySettings.typeWorkspaceSnapshotsJSON — a JSON map
+ * { orderType: workspaceSnapshot } with the sharedWorkspaceSnapshotJSON shape.
+ * Read-side only: callers must apply the result for display and never write it
+ * back into a profile or the shared snapshot.
+ */
+private fun orderTypeCardLayoutFromSnapshotsJSON(raw: String, orderType: String): OrderDetailCardLayout? {
+    if (raw.isBlank() || orderType.isBlank()) return null
+    val map = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    val snapshot = orderLayoutObject(map.opt(orderType)) ?: return null
+    return orderDetailCardLayoutFromSnapshotJSON(snapshot.toString())
 }
 
 private fun orderDetailCardLayoutFromSnapshotJSON(raw: String): OrderDetailCardLayout? {

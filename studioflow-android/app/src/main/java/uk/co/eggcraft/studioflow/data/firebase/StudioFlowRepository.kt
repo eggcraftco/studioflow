@@ -3089,6 +3089,7 @@ private fun workspaceSettings(
     val fallback = StudioWorkspaceSettings()
     val workspaceUserProfilesJSON = stringValue(data["workspaceUserProfilesJSON"], fallback.workspaceUserProfilesJSON)
     val sharedWorkspaceSnapshotJSON = stringValue(data["sharedWorkspaceSnapshotJSON"], fallback.sharedWorkspaceSnapshotJSON)
+    val typeWorkspaceSnapshotsJSON = stringValue(data["typeWorkspaceSnapshotsJSON"], fallback.typeWorkspaceSnapshotsJSON)
     val dashboardWidgetVisibility = stringBoolMap(data["dashboardWidgetVisibility"])
     val materialCheckFallback = listOf(
         stringValue(data["invLabel1"], fallback.materialsDefaultChecks.getOrElse(0) { "Dial Sourced" }),
@@ -3225,6 +3226,7 @@ private fun workspaceSettings(
         ordersSidebarVisible = boolValue(data["ordersSidebarVisible"], fallback.ordersSidebarVisible),
         workspaceUserProfilesJSON = workspaceUserProfilesJSON,
         sharedWorkspaceSnapshotJSON = sharedWorkspaceSnapshotJSON,
+        typeWorkspaceSnapshotsJSON = typeWorkspaceSnapshotsJSON,
         orderCardLayout = orderCardLayoutFromWorkspaceSettings(data, userId, ownerUid)
     )
 }

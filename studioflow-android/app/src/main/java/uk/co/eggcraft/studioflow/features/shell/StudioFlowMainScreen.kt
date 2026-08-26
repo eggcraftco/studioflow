@@ -414,6 +414,19 @@ fun StudioFlowMainScreen(
         }
     }
 
+    // Banking "View in Inventory" (purchase-linked transaction): land on the
+    // Inventory section.
+    LaunchedEffect(Unit) {
+        uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.pendingOpenInventory.collect { pending ->
+            if (pending && uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder.consumePendingOpenInventory() &&
+                StudioSection.Inventory in availableSections
+            ) {
+                settingsStartKey = null
+                section = StudioSection.Inventory
+            }
+        }
+    }
+
     LaunchedEffect(state.pendingActivityNavigation) {
         val pending = state.pendingActivityNavigation ?: return@LaunchedEffect
         when (pending) {

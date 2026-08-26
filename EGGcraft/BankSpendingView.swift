@@ -12,6 +12,12 @@ import UniformTypeIdentifiers
 // separate structs on purpose — deeply nested SwiftUI bodies overflow the
 // stack on real iPhones.
 
+extension Notification.Name {
+    /// Cross-screen link: asks ContentView to switch the app to the Inventory
+    /// tab (same notification-routing pattern as studioOrderRouteRequested).
+    static let studioInventoryRouteRequested = Notification.Name("studioInventoryRouteRequested")
+}
+
 // MARK: - Models
 
 /// One line of a split spending payment: the server guarantees the amounts
@@ -1054,6 +1060,12 @@ private struct BankOverviewSection: View {
         let delta: Double? = d.previousSpent > 0 ? (d.spentTotal - d.previousSpent) / d.previousSpent * 100 : nil
         let attention = d.attentionTotal(waiting: waiting, brokenConnections: brokenConnections)
         let columns = [GridItem(.adaptive(minimum: isPhone ? 150 : 215), spacing: 12)]
+        // How the numbers are counted — mirrors the web Overview caption.
+        Text(fmt.t("Figures follow the transaction date; pending payments are included. Incoming marked as transfer, owner contribution or loan is not counted as revenue."))
+            .font(.system(size: 11))
+            .foregroundColor(.primary.opacity(0.55))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         LazyVGrid(columns: columns, spacing: 12) {
             BankStatTile(title: fmt.t("Total spent"), value: fmt.money(d.spentTotal),
                          detail: delta.map { String(format: "%@%.0f%% %@", $0 <= 0 ? "↓" : "↑", abs($0), fmt.t(model.period == .year ? "vs last year" : model.period == .week ? "vs last week" : "vs last month")) },
@@ -1669,6 +1681,26 @@ struct BankTransactionDetail: View {
                         }
                     }
                 } header: { Text(fmt.t("Bookkeeping")) }
+
+                // Payment born from an Inventory purchase: read-only link here —
+                // the supplier and stock items are managed on the purchase itself.
+                if !tx.purchaseNumber.isEmpty {
+                    Section {
+                        HStack(spacing: 8) {
+                            Text("▣ \(tx.purchaseNumber)").font(.system(size: 12.5, weight: .bold))
+                            Spacer()
+                            Button {
+                                model.selectedTxId = nil
+                                NotificationCenter.default.post(name: .studioInventoryRouteRequested, object: nil)
+                            } label: {
+                                Text("\(fmt.t("View in Inventory")) →").font(.system(size: 12, weight: .bold)).foregroundColor(.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Text(fmt.t("This payment is linked to a purchase — its supplier and stock items live in Inventory."))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                }
 
                 Section {
                     if tx.hasReceipt {

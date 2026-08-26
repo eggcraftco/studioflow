@@ -12133,6 +12133,14 @@ function cleanCustomerPayload(data = {}, requireName = true) {
     shippingPhone,
     notes: cleanOrderNotes(data.notes)
   };
+  // Segments: free-form workspace tags ("VIP", "Wholesale", "Sleeping"...) —
+  // only written when the client sends the key, so contact-field autosaves
+  // never wipe them.
+  if (Array.isArray(data.tags)) {
+    payload.tags = Array.from(new Set(data.tags
+      .map((tag) => cleanOrderText(tag, "", 30))
+      .filter(Boolean))).slice(0, 20);
+  }
   // Only touch the profile photo when the client explicitly sends it. Contact-field
   // autosave omits this key, so an existing avatar is preserved (the doc is merged).
   if (typeof data.profileImageUrl === "string") {

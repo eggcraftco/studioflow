@@ -9404,6 +9404,11 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .studioOrderRouteRequested)) { _ in
             consumePendingOrderLaunchRoute()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .studioInventoryRouteRequested)) { _ in
+            // Cross-screen link (e.g. Banking's "View in Inventory").
+            aktifSekme = "Inventory"
+            phoneShowsOrderDetail = false
+        }
         .onChange(of: firebaseManager.siparisler) { _, _ in
             consumePendingOrderLaunchRoute()
             let mevcutOrderIds = Set(firebaseManager.siparisler.map { orderSelectionKey($0) })

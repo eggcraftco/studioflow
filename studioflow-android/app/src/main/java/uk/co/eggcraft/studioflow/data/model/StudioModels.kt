@@ -689,6 +689,10 @@ data class StudioWorkspaceSettings(
     val ordersSidebarVisible: Boolean = true,
     val workspaceUserProfilesJSON: String = "",
     val sharedWorkspaceSnapshotJSON: String = "",
+    // JSON map { orderType: workspaceSnapshot } — the workspace's convention for
+    // one order TYPE (e.g. repair). Read-side only on Android: resolved per order
+    // in OrderDetailScreen, never written back into profiles or the shared snapshot.
+    val typeWorkspaceSnapshotsJSON: String = "",
     val orderCardLayout: OrderDetailCardLayout = OrderDetailCardLayout()
 ) {
     fun showsCard(key: String): Boolean {
