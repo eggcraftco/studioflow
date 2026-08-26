@@ -42,6 +42,8 @@ export type InventoryItem = {
   purchaseDate: string;
   notes: string;
   photos: string[];
+  /** Free-form labels, same semantics as customer segments. */
+  tags?: string[];
   quantity: { onHand: number; reserved: number; incoming: number; unit: string };
   purchasePrice: number;
   additionalCosts: InventoryAdditionalCost[];
@@ -104,6 +106,7 @@ export type InventoryItemInput = {
   purchasePrice?: number;
   additionalCosts?: InventoryAdditionalCost[];
   currentValueEst?: number;
+  tags?: string[];
 };
 
 function inventoryError(error: unknown, fallback: string) {
@@ -179,7 +182,8 @@ export function inventoryItemToInput(item: InventoryItem): InventoryItemInput {
     lowStockAt: item.lowStockAt,
     purchasePrice: item.purchasePrice,
     additionalCosts: item.additionalCosts,
-    currentValueEst: item.currentValueEst
+    currentValueEst: item.currentValueEst,
+    tags: item.tags ?? []
   };
 }
 
@@ -328,6 +332,11 @@ export type Supplier = {
   phone?: string;
   website?: string;
   notes?: string;
+  /** The paperwork fields: what an invoice or a customs form asks for. */
+  code?: string;
+  address?: string;
+  vatNumber?: string;
+  currency?: string;
   implied?: boolean;
   stats: SupplierStats;
 };
@@ -399,7 +408,10 @@ export async function listSuppliers(workspace: WorkspaceContext) {
 
 export async function saveSupplier(
   workspace: WorkspaceContext,
-  supplier: { name: string; email?: string; phone?: string; website?: string; notes?: string },
+  supplier: {
+    name: string; email?: string; phone?: string; website?: string; notes?: string;
+    code?: string; address?: string; vatNumber?: string; currency?: string;
+  },
   supplierId?: string
 ) {
   return call<{ ok?: boolean; supplierId?: string }>(
