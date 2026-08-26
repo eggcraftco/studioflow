@@ -1794,6 +1794,11 @@ function createInventoryFunctions({
       phone: clean(input && input.phone, "", 60),
       website: clean(input && input.website, "", 240),
       notes: clean(input && input.notes, "", 2000),
+      // The paperwork fields: what an invoice or a customs form asks for.
+      code: clean(input && input.code, "", 40),
+      address: clean(input && input.address, "", 500),
+      vatNumber: clean(input && input.vatNumber, "", 40),
+      currency: clean(input && input.currency, "", 8),
       updatedAtMs: Date.now()
     }, { merge: true });
     return { ok: true, supplierId: ref.id };

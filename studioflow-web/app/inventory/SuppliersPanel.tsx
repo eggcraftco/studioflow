@@ -95,6 +95,13 @@ export function SuppliersPanel({
               {supplier.email || supplier.phone ? (
                 <p className="inventory-sub">{[supplier.email, supplier.phone].filter(Boolean).join(" · ")}</p>
               ) : null}
+              {supplier.code || supplier.vatNumber || supplier.currency ? (
+                <p className="inventory-sub">
+                  {[supplier.code, supplier.vatNumber ? `${t("VAT number")}: ${supplier.vatNumber}` : "", supplier.currency]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              ) : null}
               <div className="inventory-supplier-stats">
                 <div>
                   <span>{t("Spent")}</span>
@@ -159,6 +166,10 @@ function SupplierModal({
   const [phone, setPhone] = useState(supplier?.phone || "");
   const [website, setWebsite] = useState(supplier?.website || "");
   const [notes, setNotes] = useState(supplier?.notes || "");
+  const [code, setCode] = useState(supplier?.code || "");
+  const [address, setAddress] = useState(supplier?.address || "");
+  const [vatNumber, setVatNumber] = useState(supplier?.vatNumber || "");
+  const [currency, setCurrency] = useState(supplier?.currency || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -172,7 +183,10 @@ function SupplierModal({
     try {
       await saveSupplier(
         workspace,
-        { name: name.trim(), email: email.trim(), phone: phone.trim(), website: website.trim(), notes: notes.trim() },
+        {
+          name: name.trim(), email: email.trim(), phone: phone.trim(), website: website.trim(), notes: notes.trim(),
+          code: code.trim(), address: address.trim(), vatNumber: vatNumber.trim(), currency: currency.trim().toUpperCase()
+        },
         supplier?.id || undefined
       );
       onSaved();
@@ -206,6 +220,22 @@ function SupplierModal({
             <label className="inventory-field is-wide">
               <span>{t("Website")}</span>
               <input className="input" value={website} onChange={e => setWebsite(e.target.value)} />
+            </label>
+            <label className="inventory-field">
+              <span>{t("Supplier code")}</span>
+              <input className="input" value={code} onChange={e => setCode(e.target.value)} placeholder={t("Your reference for them")} />
+            </label>
+            <label className="inventory-field">
+              <span>{t("VAT number")}</span>
+              <input className="input" value={vatNumber} onChange={e => setVatNumber(e.target.value)} />
+            </label>
+            <label className="inventory-field">
+              <span>{t("Currency")}</span>
+              <input className="input" value={currency} onChange={e => setCurrency(e.target.value)} placeholder="GBP, EUR…" maxLength={8} />
+            </label>
+            <label className="inventory-field is-wide">
+              <span>{t("Address")}</span>
+              <textarea className="input" rows={2} value={address} onChange={e => setAddress(e.target.value)} />
             </label>
           </div>
           <label className="inventory-field">

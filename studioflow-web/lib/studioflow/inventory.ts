@@ -328,6 +328,11 @@ export type Supplier = {
   phone?: string;
   website?: string;
   notes?: string;
+  /** The paperwork fields: what an invoice or a customs form asks for. */
+  code?: string;
+  address?: string;
+  vatNumber?: string;
+  currency?: string;
   implied?: boolean;
   stats: SupplierStats;
 };
@@ -399,7 +404,10 @@ export async function listSuppliers(workspace: WorkspaceContext) {
 
 export async function saveSupplier(
   workspace: WorkspaceContext,
-  supplier: { name: string; email?: string; phone?: string; website?: string; notes?: string },
+  supplier: {
+    name: string; email?: string; phone?: string; website?: string; notes?: string;
+    code?: string; address?: string; vatNumber?: string; currency?: string;
+  },
   supplierId?: string
 ) {
   return call<{ ok?: boolean; supplierId?: string }>(
