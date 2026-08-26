@@ -7,11 +7,11 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 // what a thing cost.
 
 export type InventoryTrackingType = "unique" | "quantity";
-export type InventoryStatus = "available" | "reserved" | "incoming" | "used" | "sold" | "removed" | "archived";
+export type InventoryStatus = "available" | "reserved" | "partiallyReserved" | "incoming" | "used" | "sold" | "removed" | "archived";
 export type InventoryOwnership = "business" | "customer";
 
 export const INVENTORY_STATUSES: InventoryStatus[] = [
-  "available", "reserved", "incoming", "used", "sold", "removed", "archived"
+  "available", "reserved", "partiallyReserved", "incoming", "used", "sold", "removed", "archived"
 ];
 
 export const INVENTORY_CATEGORIES = [
@@ -399,6 +399,9 @@ export type OrderInventoryLine = {
   unit: string;
   status: InventoryStatus;
   quantity: number;
+  /** Total on the shelf, so the card can say "3 of 10" instead of a bare 3. */
+  onHand: number;
+  location: string;
   unitCost: number;
   lineCost: number;
 };
@@ -433,6 +436,38 @@ export async function releaseInventoryFromOrder(
     "releaseInventoryFromOrder",
     { companyId: workspace.id, itemId, orderId },
     "The item could not be released."
+  );
+}
+
+/**
+ * The moment a promised part actually goes into the job. Without a quantity it
+ * consumes the whole reservation; with one it leaves the rest still promised.
+ */
+export async function consumeInventoryForOrder(
+  workspace: WorkspaceContext,
+  itemId: string,
+  orderId: string,
+  quantity?: number
+) {
+  return call<{ ok?: boolean; consumed?: number; remaining?: number; stillReserved?: number }>(
+    "consumeInventoryForOrder",
+    { companyId: workspace.id, itemId, orderId, ...(quantity ? { quantity } : {}) },
+    "The item could not be marked as used."
+  );
+}
+
+/** Release one item and reserve another in a single transaction. */
+export async function swapInventoryForOrder(
+  workspace: WorkspaceContext,
+  orderId: string,
+  fromItemId: string,
+  toItemId: string,
+  quantity?: number
+) {
+  return call<{ ok?: boolean; released?: number; reserved?: number }>(
+    "swapInventoryForOrder",
+    { companyId: workspace.id, orderId, fromItemId, toItemId, ...(quantity ? { quantity } : {}) },
+    "The swap could not be completed."
   );
 }
 
@@ -542,7 +577,27 @@ export async function readOpeningStock(
 
 export type MovementKind =
   | "openingStock" | "purchase" | "adjustment" | "stocktake"
-  | "used" | "sold" | "removed" | "moved";
+  | "used" | "sold" | "removed" | "moved"
+  | "returned" | "damaged" | "lost" | "wastage";
+
+export type InventoryLossKind = "returned" | "damaged" | "lost" | "wastage";
+
+/**
+ * Stock leaving for a reason that is not a sale or a job. The reason lands in
+ * the ledger, so "where did 300ml of lacquer go" has an answer.
+ */
+export async function recordInventoryLoss(
+  workspace: WorkspaceContext,
+  itemId: string,
+  kind: InventoryLossKind,
+  options?: { quantity?: number; note?: string; orderId?: string }
+) {
+  return call<{ ok?: boolean; status?: InventoryStatus; onHand?: number }>(
+    "recordInventoryLoss",
+    { companyId: workspace.id, itemId, kind, ...options },
+    "The loss could not be recorded."
+  );
+}
 
 export type InventoryMovement = {
   id: string;

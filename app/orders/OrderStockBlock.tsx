@@ -13,11 +13,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  consumeInventoryForOrder,
   getOrderInventory,
   inventoryFreeToReserve,
   listInventoryItems,
   releaseInventoryFromOrder,
   reserveInventoryForOrder,
+  swapInventoryForOrder,
   type InventoryItem,
   type OrderInventoryLine
 } from "@/lib/studioflow/inventory";
@@ -52,6 +54,7 @@ export function OrderStockBlock({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
+  const [swapFrom, setSwapFrom] = useState<OrderInventoryLine | null>(null);
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState("");
 
@@ -86,6 +89,21 @@ export function OrderStockBlock({
     }
   }
 
+  // Consuming is the moment the promised part actually goes into the job:
+  // the whole reserved line leaves the shelf and the ledger names this order.
+  async function consume(line: OrderInventoryLine) {
+    setBusyId(line.id);
+    setNotice("");
+    try {
+      await consumeInventoryForOrder(workspace, line.id, orderId);
+      await reload();
+    } catch (failure) {
+      setNotice(failure instanceof Error ? t(failure.message) : t("The item could not be marked as used."));
+    } finally {
+      setBusyId("");
+    }
+  }
+
   if (loading && lines.length === 0) {
     return <p className="app-inline-note">{t("Loading reserved stock…")}</p>;
   }
@@ -111,19 +129,41 @@ export function OrderStockBlock({
                 <span className="order-stock-name">
                   <strong>{line.name}</strong>
                   <span className="inventory-sub">
-                    {[line.number, line.trackingType === "quantity" ? `${line.quantity}${line.unit ? ` ${line.unit}` : ""}` : null]
+                    {/* "3 / 10 ml" — what this order holds out of what exists,
+                        so a partial reserve doesn't read like the whole spool. */}
+                    {[
+                      line.number,
+                      line.trackingType === "quantity"
+                        ? `${line.quantity} / ${line.onHand}${line.unit ? ` ${line.unit}` : ""}`
+                        : null,
+                      line.location || null
+                    ]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
                 </span>
                 <span className="order-stock-cost">{money(currencySymbol, line.lineCost)}</span>
                 {canEdit ? (
-                  <button
-                    type="button"
-                    className="inventory-link inventory-link-danger"
-                    disabled={busyId === line.id}
-                    onClick={() => void release(line)}
-                  >{t("Release")}</button>
+                  <span className="order-stock-actions">
+                    <button
+                      type="button"
+                      className="inventory-link"
+                      disabled={busyId === line.id}
+                      onClick={() => void consume(line)}
+                    >{t("Use on the job")}</button>
+                    <button
+                      type="button"
+                      className="inventory-link"
+                      disabled={busyId === line.id}
+                      onClick={() => setSwapFrom(line)}
+                    >{t("Swap…")}</button>
+                    <button
+                      type="button"
+                      className="inventory-link inventory-link-danger"
+                      disabled={busyId === line.id}
+                      onClick={() => void release(line)}
+                    >{t("Release")}</button>
+                  </span>
                 ) : null}
               </li>
             ))}
@@ -140,14 +180,15 @@ export function OrderStockBlock({
 
       {notice ? <p className="app-inline-error">{notice}</p> : null}
 
-      {picking ? (
+      {picking || swapFrom ? (
         <ReserveStockModal
           workspace={workspace}
           orderId={orderId}
           currencySymbol={currencySymbol}
           alreadyReserved={lines.map(line => line.id)}
-          onClose={() => setPicking(false)}
-          onReserved={async () => { setPicking(false); await reload(); }}
+          swapFrom={swapFrom}
+          onClose={() => { setPicking(false); setSwapFrom(null); }}
+          onReserved={async () => { setPicking(false); setSwapFrom(null); await reload(); }}
         />
       ) : null}
     </div>
@@ -159,6 +200,7 @@ function ReserveStockModal({
   orderId,
   currencySymbol,
   alreadyReserved,
+  swapFrom,
   onClose,
   onReserved
 }: {
@@ -166,6 +208,8 @@ function ReserveStockModal({
   orderId: string;
   currencySymbol: string;
   alreadyReserved: string[];
+  /** When set, picking an item swaps this line for it instead of adding. */
+  swapFrom?: OrderInventoryLine | null;
   onClose: () => void;
   onReserved: () => void;
 }) {
@@ -212,9 +256,12 @@ function ReserveStockModal({
 
   async function reserve(item: InventoryItem) {
     const free = inventoryFreeToReserve(item);
+    const fallback = swapFrom && item.trackingType === "quantity"
+      ? Math.min(free, swapFrom.quantity)
+      : free;
     const wanted = item.trackingType === "unique"
       ? 1
-      : Number(amounts[item.id] ?? free) || 0;
+      : Number(amounts[item.id] ?? fallback) || 0;
     if (item.trackingType === "quantity" && wanted <= 0) {
       setError(t("Enter how much to reserve."));
       return;
@@ -222,19 +269,25 @@ function ReserveStockModal({
     setBusy(item.id);
     setError("");
     try {
-      await reserveInventoryForOrder(workspace, item.id, orderId, wanted);
+      if (swapFrom) {
+        await swapInventoryForOrder(workspace, orderId, swapFrom.id, item.id, wanted);
+      } else {
+        await reserveInventoryForOrder(workspace, item.id, orderId, wanted);
+      }
       onReserved();
     } catch (failure) {
-      setError(failure instanceof Error ? t(failure.message) : t("The item could not be reserved."));
+      setError(failure instanceof Error
+        ? t(failure.message)
+        : t(swapFrom ? "The swap could not be completed." : "The item could not be reserved."));
       setBusy("");
     }
   }
 
   return (
     <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
-      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Reserve stock")} onClick={e => e.stopPropagation()}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t(swapFrom ? "Swap to a different item" : "Reserve stock")} onClick={e => e.stopPropagation()}>
         <div className="inventory-modal-head">
-          <h2>{t("Reserve stock")}</h2>
+          <h2>{t(swapFrom ? "Swap to a different item" : "Reserve stock")}</h2>
           <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
         </div>
         <div className="inventory-modal-body">
@@ -270,7 +323,7 @@ function ReserveStockModal({
                       <input
                         className="input inventory-qty-input"
                         inputMode="decimal"
-                        value={amounts[item.id] ?? String(free)}
+                        value={amounts[item.id] ?? String(swapFrom ? Math.min(free, swapFrom.quantity) : free)}
                         onChange={event => setAmounts(current => ({ ...current, [item.id]: event.target.value }))}
                         aria-label={`Quantity to reserve of ${item.name}`}
                       />
@@ -284,7 +337,7 @@ function ReserveStockModal({
                       className="inventory-secondary inventory-secondary-small"
                       disabled={busy !== ""}
                       onClick={() => void reserve(item)}
-                    >{t("Reserve")}</button>
+                    >{t(swapFrom ? "Swap" : "Reserve")}</button>
                   </div>
                 );
               })}
