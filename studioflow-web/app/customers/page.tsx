@@ -31,7 +31,7 @@ import {
 } from "@/lib/studioflow/customers";
 import { studioT } from "@/lib/studioflow/language";
 
-type SortMode = "recent" | "orders";
+type SortMode = "recent" | "orders" | "lastOrder" | "highestValue" | "outstanding" | "alphabetical";
 type FormMode = "create" | "edit" | null;
 type CustomerUpdatePatch = Partial<CustomerFormInput>;
 
@@ -236,9 +236,19 @@ export default function CustomersPage() {
       : customers;
 
     return [...filtered].sort((lhs, rhs) => {
-      if (sortMode === "orders") {
-        if (lhs.orderCount !== rhs.orderCount) return rhs.orderCount - lhs.orderCount;
+      if (sortMode === "orders" && lhs.orderCount !== rhs.orderCount) return rhs.orderCount - lhs.orderCount;
+      if (sortMode === "highestValue" && lhs.totalValue !== rhs.totalValue) return rhs.totalValue - lhs.totalValue;
+      if (sortMode === "outstanding") {
+        const leftDue = lhs.totalValue - lhs.totalPaid;
+        const rightDue = rhs.totalValue - rhs.totalPaid;
+        if (leftDue !== rightDue) return rightDue - leftDue;
       }
+      if (sortMode === "lastOrder") {
+        const leftOrder = lhs.orders[0]?.paymentDate?.getTime() ?? 0;
+        const rightOrder = rhs.orders[0]?.paymentDate?.getTime() ?? 0;
+        if (leftOrder !== rightOrder) return rightOrder - leftOrder;
+      }
+      if (sortMode === "alphabetical") return lhs.name.localeCompare(rhs.name);
       const left = lhs.lastContactDate?.getTime() ?? 0;
       const right = rhs.lastContactDate?.getTime() ?? 0;
       if (left !== right) return right - left;
@@ -496,10 +506,17 @@ export default function CustomersPage() {
               <span>{t("Search")}</span>
               <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Name, email, phone...")} />
             </label>
-            <div className="segmented-control customers-segmented">
-              <button type="button" className={sortMode === "recent" ? "active" : ""} onClick={() => setSortMode("recent")}>{t("Recent")}</button>
-              <button type="button" className={sortMode === "orders" ? "active" : ""} onClick={() => setSortMode("orders")}>{t("Most Orders")}</button>
-            </div>
+            <label className="customers-sort-select">
+              <span>{t("Sort")}</span>
+              <select className="input" value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)}>
+                <option value="recent">{t("Last contact")}</option>
+                <option value="lastOrder">{t("Last Order")}</option>
+                <option value="orders">{t("Most Orders")}</option>
+                <option value="highestValue">{t("Highest Value")}</option>
+                <option value="outstanding">{t("Outstanding")}</option>
+                <option value="alphabetical">{t("Alphabetical")}</option>
+              </select>
+            </label>
           </div>
 
           {error ? (
