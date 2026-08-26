@@ -32,8 +32,9 @@ import {
   type InventoryStatus
 } from "@/lib/studioflow/inventory";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 
-type PanelTab = "details" | "history" | "purchases" | "photos";
+type PanelTab = "details" | "history" | "purchases" | "photos" | "files";
 
 // Mirrors the server's STATUS_TRANSITIONS so buttons that would be refused are
 // not offered. (functions/inventory.js — sold can only be archived, etc.)
@@ -121,6 +122,7 @@ export function ItemDetailPanel({
   const [purchase, setPurchase] = useState<PurchaseJoin | null | "none">(null);
   const [bankTx, setBankTx] = useState<BankTxJoin | null>(null);
   const [reserveOpen, setReserveOpen] = useState(false);
+  const [libraryFiles, setLibraryFiles] = useState<LibraryFile[] | null>(null);
   const [movingLocation, setMovingLocation] = useState(false);
   const [locationDraft, setLocationDraft] = useState(item.location || "");
 
@@ -130,6 +132,7 @@ export function ItemDetailPanel({
     setMovements(null);
     setPurchase(null);
     setBankTx(null);
+    setLibraryFiles(null);
     setMovingLocation(false);
     setLocationDraft(item.location || "");
   }, [item.id]);
@@ -162,6 +165,16 @@ export function ItemDetailPanel({
       .catch(() => { if (!cancelled) setMovements([]); });
     return () => { cancelled = true; };
   }, [tab, movements, workspace, item.id]);
+
+  // Library files linked to this item, loaded when the tab is first opened.
+  useEffect(() => {
+    if (tab !== "files" || libraryFiles !== null) return;
+    let cancelled = false;
+    listLibraryFiles(workspace, { linkKey: `inventoryItem:${item.id}` })
+      .then(result => { if (!cancelled) setLibraryFiles(result.files ?? []); })
+      .catch(() => { if (!cancelled) setLibraryFiles([]); });
+    return () => { cancelled = true; };
+  }, [tab, libraryFiles, workspace, item.id]);
 
   // Purchase join: the item names its purchase; the purchase names its bank
   // transaction; the transaction (readable to owners / bankFeed members)
@@ -286,7 +299,8 @@ export function ItemDetailPanel({
           { key: "details" as const, label: "Details" },
           { key: "history" as const, label: "History" },
           { key: "purchases" as const, label: "Purchases" },
-          { key: "photos" as const, label: "Photos" }
+          { key: "photos" as const, label: "Photos" },
+          { key: "files" as const, label: "Files" }
         ]).map(entry => (
           <button
             key={entry.key}
@@ -558,7 +572,7 @@ export function ItemDetailPanel({
             </p>
           )}
         </div>
-      ) : (
+      ) : tab === "photos" ? (
         <div className="inventory-panel-body">
           {photoUrls.length === 0 ? (
             <p className="inventory-sub">{t("No photos yet. For a unique piece, the photos are half the identity.")}</p>
@@ -575,6 +589,38 @@ export function ItemDetailPanel({
               {t("Manage photos")}
             </button>
           ) : null}
+        </div>
+      ) : (
+        <div className="inventory-panel-body">
+          {libraryFiles === null ? (
+            <p className="inventory-sub">{t("Loading…")}</p>
+          ) : libraryFiles.length === 0 ? (
+            <p className="inventory-sub">{t("No library files are linked to this item. Certificates, valuations and receipts linked in the Files library appear here.")}</p>
+          ) : (
+            <ul className="inventory-panel-list">
+              {libraryFiles.map(file => (
+                <li key={file.id}>
+                  <strong>{file.displayName}</strong>
+                  <span className="inventory-sub">
+                    {file.fileSize >= 1024 ? `${Math.round(file.fileSize / 1024)} KB` : `${file.fileSize} B`}
+                    {file.updatedAtMs ? ` · ${new Date(file.updatedAtMs).toLocaleDateString()}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="inventory-link"
+                    onClick={() => {
+                      void libraryFileUrl(file.storagePath)
+                        .then(url => window.open(url, "_blank", "noopener,noreferrer"))
+                        .catch(() => undefined);
+                    }}
+                  >
+                    {t("Open")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <a className="inventory-link" href="/files">{t("Manage in the Files library")}</a>
         </div>
       )}
 
