@@ -2105,6 +2105,152 @@ function createInventoryFunctions({
   });
 
   // ---------------------------------------------------------------------------
+  // Hierarchical locations
+  //
+  // "Safe A / Drawer 3" is one string on the item — deliberately: every client
+  // that only knows free-text locations keeps working. The tree lives in its
+  // own collection and OWNS those strings: renaming or re-parenting a location
+  // rewrites the paths of its whole subtree and of every item standing in it.
+  // No ledger lines are written for that — renaming a shelf moves no goods.
+  // ---------------------------------------------------------------------------
+
+  const locationsRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("inventoryLocations");
+  const LOCATION_MAX_DEPTH = 4;
+  const LOCATION_SEPARATOR = " / ";
+
+  function locationPathOf(name, parentPath) {
+    return parentPath ? `${parentPath}${LOCATION_SEPARATOR}${name}` : name;
+  }
+
+  async function loadAllLocations(companyId) {
+    const snap = await locationsRef(companyId).limit(500).get();
+    return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+  }
+
+  const listInventoryLocations = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const rows = await loadAllLocations(companyId);
+    rows.sort((a, b) => String(a.path || "").localeCompare(String(b.path || "")));
+    return { ok: true, locations: rows };
+  });
+
+  const saveInventoryLocation = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const locationId = clean(request.data && request.data.locationId, "", 80);
+    const name = clean(request.data && request.data.name, "", 60).replace(/\s*\/\s*/g, "-");
+    const parentId = clean(request.data && request.data.parentId, "", 80);
+    if (!name) throw new HttpsError("invalid-argument", "A location name is required.");
+
+    // The whole tree is small by design (≤500 nodes); reading it once makes
+    // cycle checks, sibling-name checks and subtree rewrites plain code.
+    const all = await loadAllLocations(companyId);
+    const byId = new Map(all.map((row) => [row.id, row]));
+    const existing = locationId ? byId.get(locationId) : null;
+    if (locationId && !existing) throw new HttpsError("not-found", "Location not found.");
+
+    let parent = null;
+    if (parentId) {
+      parent = byId.get(parentId);
+      if (!parent) throw new HttpsError("not-found", "Parent location not found.");
+      // A location cannot move under itself or any of its own descendants.
+      let cursor = parent;
+      while (cursor) {
+        if (locationId && cursor.id === locationId) {
+          throw new HttpsError("failed-precondition", "A location cannot sit inside itself.");
+        }
+        cursor = cursor.parentId ? byId.get(cursor.parentId) : null;
+      }
+      if ((Number(parent.depth) || 1) + 1 > LOCATION_MAX_DEPTH) {
+        throw new HttpsError("failed-precondition", `Locations nest at most ${LOCATION_MAX_DEPTH} levels deep.`);
+      }
+    }
+
+    const clash = all.find((row) =>
+      row.id !== locationId
+      && String(row.parentId || "") === parentId
+      && String(row.name || "").toLowerCase() === name.toLowerCase());
+    if (clash) throw new HttpsError("already-exists", "A sibling location already has that name.");
+
+    const parentPath = parent ? String(parent.path || parent.name) : "";
+    const newPath = locationPathOf(name, parentPath);
+    const newDepth = parent ? (Number(parent.depth) || 1) + 1 : 1;
+    const now = Date.now();
+    const ref = locationId ? locationsRef(companyId).doc(locationId) : locationsRef(companyId).doc();
+    const oldPath = existing ? String(existing.path || existing.name) : "";
+
+    await ref.set({
+      companyId,
+      name,
+      parentId,
+      path: newPath,
+      depth: newDepth,
+      updatedAtMs: now,
+      updatedByUid: uid,
+      ...(existing ? {} : { createdAtMs: now, createdByUid: uid })
+    }, { merge: true });
+
+    let renamedDescendants = 0;
+    let relabelledItems = 0;
+    if (existing && oldPath && oldPath !== newPath) {
+      // Subtree first: every descendant's path starts with the old path.
+      const prefix = oldPath + LOCATION_SEPARATOR;
+      const batch = db().batch();
+      all.forEach((row) => {
+        if (row.id === locationId) return;
+        const rowPath = String(row.path || "");
+        if (!rowPath.startsWith(prefix)) return;
+        const rewritten = newPath + LOCATION_SEPARATOR + rowPath.slice(prefix.length);
+        batch.set(locationsRef(companyId).doc(row.id), { path: rewritten, updatedAtMs: now }, { merge: true });
+        renamedDescendants += 1;
+      });
+      await batch.commit();
+
+      // Items: exact match or standing somewhere inside the subtree. String
+      // rewrite only — a shelf rename moves no goods, so no ledger lines.
+      const itemsSnap = await itemsRef(companyId).select("location").limit(5000).get();
+      const touched = itemsSnap.docs.filter((doc) => {
+        const value = String((doc.data() || {}).location || "");
+        return value === oldPath || value.startsWith(prefix);
+      });
+      for (let start = 0; start < touched.length; start += 400) {
+        const chunk = touched.slice(start, start + 400);
+        const itemBatch = db().batch();
+        chunk.forEach((doc) => {
+          const value = String((doc.data() || {}).location || "");
+          const rewritten = value === oldPath ? newPath : newPath + LOCATION_SEPARATOR + value.slice(prefix.length);
+          itemBatch.set(doc.ref, { location: rewritten, updatedAtMs: now }, { merge: true });
+          relabelledItems += 1;
+        });
+        // eslint-disable-next-line no-await-in-loop
+        await itemBatch.commit();
+      }
+    }
+
+    return { ok: true, locationId: ref.id, path: newPath, renamedDescendants, relabelledItems };
+  });
+
+  const deleteInventoryLocation = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const locationId = clean(request.data && request.data.locationId, "", 80);
+    if (!locationId) throw new HttpsError("invalid-argument", "locationId is required.");
+    const all = await loadAllLocations(companyId);
+    const target = all.find((row) => row.id === locationId);
+    if (!target) return { ok: true };
+    if (all.some((row) => String(row.parentId || "") === locationId)) {
+      throw new HttpsError("failed-precondition", "That location has locations inside it — delete or move them first.");
+    }
+    const path = String(target.path || target.name);
+    const itemsSnap = await itemsRef(companyId).select("location").limit(5000).get();
+    const inUse = itemsSnap.docs.some((doc) => String((doc.data() || {}).location || "") === path);
+    if (inUse) {
+      throw new HttpsError("failed-precondition", "Stock is standing in that location — move it first.");
+    }
+    await locationsRef(companyId).doc(locationId).delete();
+    return { ok: true };
+  });
+
+  // ---------------------------------------------------------------------------
   // Consuming and swapping reserved stock
   //
   // Reserving promised the part; consuming is the moment it actually goes into
@@ -2309,6 +2455,9 @@ function createInventoryFunctions({
     releaseInventoryFromOrder,
     getOrderInventory,
     recordInventoryLoss,
+    listInventoryLocations,
+    saveInventoryLocation,
+    deleteInventoryLocation,
     consumeInventoryForOrder,
     swapInventoryForOrder,
     _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
