@@ -242,7 +242,7 @@ export function isInventoryLowStock(item: InventoryItem) {
 // Purchases and suppliers
 // ---------------------------------------------------------------------------
 
-export type PurchaseStatus = "ordered" | "received";
+export type PurchaseStatus = "ordered" | "partiallyReceived" | "received";
 
 export type PurchaseLine = {
   itemId: string;
@@ -256,6 +256,8 @@ export type PurchaseLine = {
   serialNumber: string;
   location: string;
   allocatedExtras: number;
+  /** How much of this line has actually landed. Absent on older purchases. */
+  receivedQuantity?: number;
 };
 
 export type Purchase = {
@@ -338,10 +340,19 @@ export async function savePurchase(
   );
 }
 
-export async function receivePurchase(workspace: WorkspaceContext, purchaseId: string) {
-  return call<{ ok?: boolean; received?: number; alreadyReceived?: boolean }>(
+/**
+ * Without `lines` this receives everything still outstanding. With them it
+ * receives per line and per quantity — the purchase stays partiallyReceived
+ * until the last piece lands.
+ */
+export async function receivePurchase(
+  workspace: WorkspaceContext,
+  purchaseId: string,
+  lines?: Array<{ index: number; quantity?: number }>
+) {
+  return call<{ ok?: boolean; received?: number; alreadyReceived?: boolean; status?: PurchaseStatus }>(
     "receivePurchase",
-    { companyId: workspace.id, purchaseId },
+    { companyId: workspace.id, purchaseId, ...(lines ? { lines } : {}) },
     "The purchase could not be marked as received."
   );
 }
