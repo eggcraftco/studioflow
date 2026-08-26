@@ -235,6 +235,18 @@ service firebase.storage {
       allow delete: if canWriteClientFiles(companyId, orderId) && clientFilesPlanAllowed(companyId);
     }
 
+    // The library's own home. Objects land here with timestamped names and are
+    // never rewritten in place — a new version is a new object, and deletion is
+    // the server's trash-first job. So clients may read and create, never
+    // update or delete. Access mirrors client_files (same roles, same plan
+    // gate); the "library" literal reuses those helpers' role logic.
+    match /companies/{companyId}/library/{fileName} {
+      allow read: if canReadClientFiles(companyId, 'library') && clientFilesPlanAllowed(companyId);
+      allow create: if canWriteClientFiles(companyId, 'library')
+        && clientFilesPlanAllowed(companyId)
+        && safeUploadSize();
+    }
+
     match /companies/{companyId}/design_images/{fileName} {
       allow read: if canReadWorkspace(companyId);
       allow create, update: if canEditWorkspaceFiles(companyId) && safeUploadSize();

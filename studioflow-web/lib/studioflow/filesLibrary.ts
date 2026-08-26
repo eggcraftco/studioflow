@@ -131,13 +131,13 @@ export async function setLibraryFileActiveVersion(workspace: WorkspaceContext, f
   return call<{ ok?: boolean }>("setLibraryFileActiveVersion", { companyId: workspace.id, fileId, index }, "The version could not be selected.");
 }
 
-// New uploads through the library land on the client_files path: it is the one
-// workspace-scoped storage area the current rules already allow, and library
-// access is plan-gated the same way. A dedicated library path can follow once
-// storage rules can be deployed again.
+// Library uploads live on the library's OWN storage path — the rule for it
+// allows read and create only (objects are immutable; deletion is the server's
+// trash-first job). Older records may still point at the client_files/library
+// squat until the one-off migration has swept them.
 export async function uploadLibraryFile(workspace: WorkspaceContext, file: File): Promise<{ fileId?: string }> {
   const safeName = (file.name || "file").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
-  const storagePath = `companies/${workspace.id}/client_files/library/${Date.now()}-${safeName}`;
+  const storagePath = `companies/${workspace.id}/library/${Date.now()}-${safeName}`;
   await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type || "application/octet-stream" });
   return call<{ ok?: boolean; fileId?: string }>(
     "registerLibraryFile",
@@ -148,7 +148,7 @@ export async function uploadLibraryFile(workspace: WorkspaceContext, file: File)
 
 export async function addLibraryFileVersion(workspace: WorkspaceContext, fileId: string, file: File, note = "") {
   const safeName = (file.name || "file").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120);
-  const storagePath = `companies/${workspace.id}/client_files/library/${Date.now()}-${safeName}`;
+  const storagePath = `companies/${workspace.id}/library/${Date.now()}-${safeName}`;
   await uploadBytes(storageRef(storage, storagePath), file, { contentType: file.type || "application/octet-stream" });
   return call<{ ok?: boolean }>(
     "addLibraryFileVersion",
