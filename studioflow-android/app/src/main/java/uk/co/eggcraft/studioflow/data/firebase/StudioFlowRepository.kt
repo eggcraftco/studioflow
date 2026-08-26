@@ -1394,19 +1394,42 @@ class StudioFlowRepository(
     // backup on Android planted three literal maps named strings/bools/doubles
     // instead of applying any setting. The callable does all of that correctly
     // and is the same one web and iOS already use.
-    suspend fun importBackup(workspace: StudioWorkspace, rawJson: String): ImportBackupResult {
+    suspend fun importBackup(workspace: StudioWorkspace, rawJson: String, skipDuplicates: Boolean = false): ImportBackupResult {
         val root = JSONObject(rawJson)
         val result = functions.getHttpsCallable("importWorkspaceBackup")
-            .call(mapOf("companyId" to workspace.id, "backup" to jsonObjectToMap(root)))
+            .call(mapOf("companyId" to workspace.id, "backup" to jsonObjectToMap(root), "skipDuplicates" to skipDuplicates))
             .await()
         val data = result.data as? Map<*, *>
         fun count(key: String): Int = (data?.get(key) as? Number)?.toInt() ?: 0
         return ImportBackupResult(
             importedOrders = count("importedOrders"),
             importedCustomers = count("importedCustomers"),
+            skippedDuplicateOrders = count("skippedDuplicateOrders"),
+            skippedDuplicateCustomers = count("skippedDuplicateCustomers"),
             droppedOrders = count("droppedOrders"),
             droppedCustomers = count("droppedCustomers"),
             message = (data?.get("message") as? String).orEmpty()
+        )
+    }
+
+    // Same callable, dryRun=true: same parse, same duplicate keys, no writes.
+    // Web has had this preview since the QA round; the phone imported blind.
+    suspend fun previewImportBackup(workspace: StudioWorkspace, rawJson: String): ImportBackupPreview {
+        val root = JSONObject(rawJson)
+        val result = functions.getHttpsCallable("importWorkspaceBackup")
+            .call(mapOf("companyId" to workspace.id, "backup" to jsonObjectToMap(root), "dryRun" to true))
+            .await()
+        val data = result.data as? Map<*, *>
+        fun count(key: String): Int = (data?.get(key) as? Number)?.toInt() ?: 0
+        return ImportBackupPreview(
+            fileOrders = count("fileOrders"),
+            fileCustomers = count("fileCustomers"),
+            existingOrders = count("existingOrders"),
+            likelyDuplicateOrders = count("likelyDuplicateOrders"),
+            likelyDuplicateCustomers = count("likelyDuplicateCustomers"),
+            droppedOrders = count("droppedOrders"),
+            droppedCustomers = count("droppedCustomers"),
+            truncated = (data?.get("truncated") as? Boolean) == true
         )
     }
 
@@ -3469,9 +3492,22 @@ private fun orderMapFromBackup(companyId: String, item: JSONObject): Map<String,
 data class ImportBackupResult(
     val importedOrders: Int,
     val importedCustomers: Int,
+    val skippedDuplicateOrders: Int,
+    val skippedDuplicateCustomers: Int,
     val droppedOrders: Int,
     val droppedCustomers: Int,
     val message: String
+)
+
+data class ImportBackupPreview(
+    val fileOrders: Int,
+    val fileCustomers: Int,
+    val existingOrders: Int,
+    val likelyDuplicateOrders: Int,
+    val likelyDuplicateCustomers: Int,
+    val droppedOrders: Int,
+    val droppedCustomers: Int,
+    val truncated: Boolean
 )
 
 private fun jsonObjectToMap(value: JSONObject): Map<String, Any> {

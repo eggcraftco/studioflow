@@ -48,6 +48,10 @@ export type WorkspaceContext = {
   billingTeamMemberLimit: number;
   /** When the current paid period ends — a renewal date while active, an access-until date once cancelled. */
   billingCurrentPeriodEndMs: number;
+  /** "month" or "year" — written by the entitlement resolver; empty when unknown. */
+  billingInterval: string;
+  /** The subscription's item key (e.g. "pro_monthly") — the same catalog key checkout uses. */
+  billingSubscriptionItemKey: string;
   storageAddonMB: number;
   storageAddonKey: string;
   currentMemberDisplayName: string;
@@ -874,6 +878,8 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
     billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
     billingCurrentPeriodEndMs: dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
+    billingInterval: stringValue(companyData.billingInterval, ""),
+    billingSubscriptionItemKey: stringValue(companyData.billingSubscriptionItemKey, ""),
     billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
     billingCustomerId: stringValue(companyData.billingCustomerId, stringValue(companyData.billingStripeCustomerId, "")),
     billingSubscriptionId: stringValue(companyData.billingSubscriptionId, ""),

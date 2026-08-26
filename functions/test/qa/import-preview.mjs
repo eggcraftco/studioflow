@@ -72,6 +72,32 @@ const bigPreview = await call("importWorkspaceBackup", { backup: big, dryRun: tr
 ok("kırpılan sipariş sayısı doğru", bigPreview.droppedOrders === 20, `dropped=${bigPreview.droppedOrders}`);
 ok("kırpma bayrağı açık", bigPreview.truncated === true, String(bigPreview.truncated));
 
+console.log("=== yinelenenleri atlayarak içe aktarma ===");
+// Aynı dosya, skipDuplicates=true: ikisi de atlanmalı, hiçbir şey yazılmamalı.
+const beforeSkip = await orderCount();
+const skipped = await call("importWorkspaceBackup", { backup, skipDuplicates: true });
+ok("iki sipariş atlandı", skipped.skippedDuplicateOrders === 2, `skipped=${skipped.skippedDuplicateOrders}`);
+ok("iki müşteri atlandı", skipped.skippedDuplicateCustomers === 2, `skipped=${skipped.skippedDuplicateCustomers}`);
+ok("hiç sipariş yazılmadı", skipped.importedOrders === 0 && (await orderCount()) === beforeSkip,
+   `imported=${skipped.importedOrders}`);
+ok("mesaj atlananları söylüyor", /already have|duplicates/i.test(skipped.message), skipped.message);
+
+console.log("=== dosya içi yinelenen: aynı kayıt iki kez, biri girer ===");
+const twiceInFile = {
+  siparisler: [
+    { customerName: "Dosya İçi", designName: "kolye", paymentDate: "2026-05-01T00:00:00Z", paidAmount: 77, remainingAmount: 0 },
+    { customerName: "Dosya İçi", designName: "kolye", paymentDate: "2026-05-01T00:00:00Z", paidAmount: 77, remainingAmount: 0 }
+  ]
+};
+const inFile = await call("importWorkspaceBackup", { backup: twiceInFile, skipDuplicates: true });
+ok("biri girdi biri atlandı", inFile.importedOrders === 1 && inFile.skippedDuplicateOrders === 1,
+   JSON.stringify({ i: inFile.importedOrders, s: inFile.skippedDuplicateOrders }));
+
+console.log("=== atlama kapalıyken eski davranış ===");
+const noSkip = await call("importWorkspaceBackup", { backup: twiceInFile });
+ok("atlamadan iki kopya daha girdi", noSkip.importedOrders === 2 && (noSkip.skippedDuplicateOrders || 0) === 0,
+   JSON.stringify({ i: noSkip.importedOrders, s: noSkip.skippedDuplicateOrders }));
+
 console.log("=== API anahtarı yedekten içeri girmiyor ===");
 await call("importWorkspaceBackup", { backup: { settings: { strings: { openAIKey: "sk-sizin-anahtariniz", appSubtitle: "Test" } } } });
 const settings = (await db.collection("companySettings").doc(companyId).get()).data();

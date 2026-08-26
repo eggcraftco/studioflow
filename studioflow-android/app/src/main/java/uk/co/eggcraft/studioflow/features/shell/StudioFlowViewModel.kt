@@ -109,7 +109,15 @@ data class StudioFlowUiState(
     val keepNotesSection: String = "notes",
     val keepCollaborationInvites: List<StudioKeepCollaborationInvite> = emptyList(),
     val errorMessage: String = "",
-    val settingsMessage: String = ""
+    val settingsMessage: String = "",
+    val pendingBackupImport: PendingBackupImport? = null
+)
+
+// A picked backup file is previewed before anything is written; the raw text
+// waits here alongside what the server said it contains.
+data class PendingBackupImport(
+    val rawJson: String,
+    val preview: uk.co.eggcraft.studioflow.data.firebase.ImportBackupPreview
 )
 
 class StudioFlowViewModel @JvmOverloads constructor(
@@ -1132,11 +1140,35 @@ class StudioFlowViewModel @JvmOverloads constructor(
         }
     }
 
+    // Picking a file used to import it on the spot. Import is append-only and
+    // mints new records every time, so the second run of the same file silently
+    // doubled the workspace. Now the file is previewed and the user confirms.
     fun importBackup(rawJson: String) {
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
             mutableState.update { it.copy(settingsSaving = true, errorMessage = "", settingsMessage = "") }
-            runCatching { repository.importBackup(workspace, rawJson) }
+            runCatching { repository.previewImportBackup(workspace, rawJson) }
+                .onSuccess { preview ->
+                    mutableState.update {
+                        it.copy(settingsSaving = false, pendingBackupImport = PendingBackupImport(rawJson, preview))
+                    }
+                }
+                .onFailure { error ->
+                    mutableState.update {
+                        it.copy(settingsSaving = false, errorMessage = error.message ?: "Could not import backup.")
+                    }
+                }
+        }
+    }
+
+    fun confirmBackupImport(skipDuplicates: Boolean) {
+        val workspace = mutableState.value.workspace ?: return
+        val pending = mutableState.value.pendingBackupImport ?: return
+        viewModelScope.launch {
+            mutableState.update {
+                it.copy(settingsSaving = true, pendingBackupImport = null, errorMessage = "", settingsMessage = "")
+            }
+            runCatching { repository.importBackup(workspace, pending.rawJson, skipDuplicates) }
                 .onSuccess { result ->
                     // The old message said "Imported N orders" where N counted
                     // customers too, and never mentioned records the cap dropped.
@@ -1151,6 +1183,10 @@ class StudioFlowViewModel @JvmOverloads constructor(
                     }
                 }
         }
+    }
+
+    fun cancelBackupImport() {
+        mutableState.update { it.copy(pendingBackupImport = null) }
     }
 
     fun deleteWorkspaceData() {

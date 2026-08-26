@@ -20,7 +20,7 @@ import { httpsCallable } from "firebase/functions";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
-import { PLAN_ENTITLEMENTS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
+import { PLAN_ENTITLEMENTS, STRIPE_LIST_PRICE_LABELS, usagePercent, type PlanEntitlements } from "@/lib/studioflow/plans";
 import {
   loadDashboardCounts,
   loadQuickReplySettings,
@@ -728,7 +728,11 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const canEdit = canEditWorkspaceSettingsForRole(workspace.role);
+  // The client-side role guess said a plain member could edit; the server
+  // disagreed and rejected the save. The callable already answers who can
+  // manage, so Save now follows that answer — start from the guess only until
+  // the first load lands.
+  const [canEdit, setCanEdit] = useState(() => canEditWorkspaceSettingsForRole(workspace.role));
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -738,6 +742,7 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
       setDirectMessages(current.directMessagesEnabled);
       setGroupConversations(current.groupConversationsEnabled);
       setAttachments(current.attachmentsEnabled);
+      setCanEdit(current.canManage);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load message settings.");
     } finally {
@@ -818,7 +823,10 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
           <label className="settings-toggle-row">
             <span>
               <strong>{t("Allow File & Image Sending")}</strong>
-              <small>{t("Team members can send images and files in Messages.")}</small>
+              <small>
+                {t("Team members can send images and files in Messages.")}{" "}
+                <a href="/settings?section=safety-uploads">{t("Upload rules are set in Safety & Uploads.")}</a>
+              </small>
             </span>
             <input
               type="checkbox"
@@ -830,13 +838,23 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
         </div>
 
         <div className="settings-action-row">
-          <button className="button secondary" type="button" disabled={loading} onClick={() => void loadSettings()}>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              // Reload silently threw away unsaved switches; now it says so first.
+              if (messageDirty && !window.confirm(t("Reload will discard your unsaved changes here. Continue?"))) return;
+              void loadSettings();
+            }}
+          >
             {t("Reload")}
           </button>
           <button className="button" type="button" disabled={!canEdit || saving || loading || !messageDirty} onClick={() => { void handleSave(); }}>
             {saving ? t("Saving...") : t("Save")}
           </button>
         </div>
+        <p className="muted-copy">{t("Reload re-fetches what is saved for the workspace and discards unsaved edits. Save applies your changes to everyone.")}</p>
         {!canEdit ? <p className="muted-copy">{t("Only workspace owners or admins can change these settings.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
@@ -2950,7 +2968,7 @@ function SafetyUploadsSection({
           <label className="settings-range-row">
             <span>
               <strong>{t("Maximum upload size")}</strong>
-              <small>{t("Files larger than this are blocked before upload.")}</small>
+              <small>{t("The NivaDesk apps block files larger than this before upload.")}</small>
             </span>
             <input
               className="input"
@@ -2972,7 +2990,7 @@ function SafetyUploadsSection({
         </div>
         <div className="quick-reply-settings-info">
           <strong>{browserAccepted ? t("Accepted on this browser. Uploads will not ask again until you reset it.") : t("Not accepted on this browser. The next upload will ask you to accept the upload policy.")}</strong>
-          <p>{t("Order previews, logos and avatars accept image files. Client Files accepts images and PDF documents only.")}</p>
+          <p>{t("Order previews, logos and avatars accept image files. Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP.")}</p>
         </div>
         <div className="settings-action-row">
           <button className="button" type="button" disabled={!canEdit || saving || !safetyDirty} onClick={() => { void handleSave(); }}>
@@ -2981,7 +2999,8 @@ function SafetyUploadsSection({
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. Plan guards still keep cloud file upload on Pro and Team.")}</p>
+        <p className="muted-copy">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. Plan guards still keep cloud file upload on Pro and Team.")}</p>
+        <p className="muted-copy">{t("This per-file limit is separate from your plan's total storage, which is counted across Client Files and enforced on every upload.")}</p>
       </section>
 
       <section className="card app-card">
@@ -2998,8 +3017,8 @@ function SafetyUploadsSection({
         <CardTitle icon="lock" eyebrow={t("What the app does")} title={t("Workspace upload protection")} />
         <div className="settings-rule-list">
           <IntegrationInfoRow number="1" title={t("Company workspace only")} detail={t("Uploads are saved under the active Company ID so they stay connected to this workspace.")} />
-          <IntegrationInfoRow number="2" title={t("Allowed file types only")} detail={t("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB, while previews, logos and avatars stay image-only.")} />
-          <IntegrationInfoRow number="3" title={t("File size limit")} detail={t("Files larger than the selected limit are blocked before upload.")} />
+          <IntegrationInfoRow number="2" title={t("Allowed file types only")} detail={t("Client Files accepts PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP, while previews, logos and avatars stay image-only.")} />
+          <IntegrationInfoRow number="3" title={t("File size limit")} detail={t("The NivaDesk apps block files larger than the selected limit before upload.")} />
           <IntegrationInfoRow number="4" title={t("Upload audit log")} detail={t("Each upload records the company, user, file type, file size, upload date, source and related order when available.")} />
         </div>
       </section>
@@ -4043,6 +4062,10 @@ function FinancialSettingsSection({
             </div>
           </label>
 
+          <p className="muted-copy">
+            {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
+          </p>
+
           <label className="financial-settings-row">
             <span>{t("Avg. Platform Fee (%)")}</span>
             <span className="financial-percent-control">
@@ -5049,6 +5072,7 @@ function DataManagementSection({
   const [exporting, setExporting] = useState<"backup" | "webBackup" | "orders" | "customers" | "">("");
   const [importing, setImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ backup: unknown; preview: ImportBackupPreview } | null>(null);
+  const [skipDuplicatesChoice, setSkipDuplicatesChoice] = useState(true);
   const [lastBackupAtMs, setLastBackupAtMs] = useState(settings?.lastBackupExportedAtMs ?? 0);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -5107,7 +5131,10 @@ function DataManagementSection({
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
-      setPendingImport({ backup: parsed, preview: await previewWorkspaceBackupImport(workspace, parsed) });
+      const preview = await previewWorkspaceBackupImport(workspace, parsed);
+      // Skipping is the safe default; someone who wants deliberate copies unticks it.
+      setSkipDuplicatesChoice(true);
+      setPendingImport({ backup: parsed, preview });
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
     } finally {
@@ -5119,12 +5146,16 @@ function DataManagementSection({
   async function applyPendingImport() {
     if (!pendingImport) return;
     const backup = pendingImport.backup;
+    const preview = pendingImport.preview;
+    const hasDuplicates = preview.likelyDuplicateOrders > 0 || preview.likelyDuplicateCustomers > 0;
     setPendingImport(null);
     setImporting(true);
     setStatus("");
     setError("");
     try {
-      const result = await importWorkspaceBackup(workspace, backup);
+      const result = await importWorkspaceBackup(workspace, backup, {
+        skipDuplicates: hasDuplicates && skipDuplicatesChoice
+      });
       await onImported();
       setStatus(result.message || "Import finished.");
     } catch (importError) {
@@ -5171,13 +5202,28 @@ function DataManagementSection({
             <span>{t("Already in this workspace")}</span>
             <strong>{pendingImport.preview.existingOrders}</strong>
             <span>{t("Look like they are already here")}</span>
-            <strong>{pendingImport.preview.likelyDuplicateOrders}</strong>
+            <strong>{pendingImport.preview.likelyDuplicateOrders + pendingImport.preview.likelyDuplicateCustomers}</strong>
           </div>
           <p>{t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup.")}</p>
-          {pendingImport.preview.likelyDuplicateOrders > 0 ? (
-            <p className="layout-error">
-              {t("Some of these look like orders you already have. Importing anyway will create a second copy of each.")}
-            </p>
+          {pendingImport.preview.likelyDuplicateOrders > 0 || pendingImport.preview.likelyDuplicateCustomers > 0 ? (
+            <>
+              <label className="settings-toggle-row">
+                <span>
+                  <strong>{t("Skip likely duplicates")}</strong>
+                  <small>{t("Records matching ones already in this workspace are left out of the import.")}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={skipDuplicatesChoice}
+                  onChange={event => setSkipDuplicatesChoice(event.target.checked)}
+                />
+              </label>
+              {!skipDuplicatesChoice ? (
+                <p className="layout-error">
+                  {t("Some of these look like records you already have. Importing anyway will create a second copy of each.")}
+                </p>
+              ) : null}
+            </>
           ) : null}
           {pendingImport.preview.truncated ? (
             <>
@@ -5345,6 +5391,25 @@ function PlanAccessSection({
             />
           ) : null}
           <InfoTile label={t("Billing state")} value={t(planBillingStateLabel(workspace.billingStatus))} />
+          {/* Price is shown only for Stripe: Apple and Google set their own
+              per-territory prices in the store consoles, and those amounts
+              exist nowhere in this codebase — printing the £ list price for a
+              store-billed workspace could simply be wrong. Even for Stripe this
+              is the list price, not any particular invoice. */}
+          {workspace.billingEffectiveProvider === "stripe" && STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey] ? (
+            <InfoTile
+              label={t("List price")}
+              value={STRIPE_LIST_PRICE_LABELS[workspace.billingSubscriptionItemKey]}
+              hint={t("The advertised price for this plan. Your invoice can differ if a discount applies.")}
+            />
+          ) : null}
+          {workspace.billingEffectiveProvider === "apple" || workspace.billingEffectiveProvider === "google" ? (
+            <InfoTile
+              label={t("Billed through")}
+              value={workspace.billingEffectiveProvider === "apple" ? t("App Store") : t("Google Play")}
+              hint={t("The price is set in the store and shown in your store subscription settings.")}
+            />
+          ) : null}
         </div>
         {/* "Current seat allowance: 1" read as if it were seats used, and the
             total storage read as if it contradicted the plan matrix. Both
@@ -5955,6 +6020,7 @@ function SupportTicketsSection({
   const [selectedTicketId, setSelectedTicketId] = useState("");
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [sendingTicket, setSendingTicket] = useState(false);
+  const sendingTicketRef = useRef(false);
   const [loadingMessages, setLoadingMessages] = useState<Record<string, boolean>>({});
   const [sendingReply, setSendingReply] = useState<Record<string, boolean>>({});
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
@@ -6079,6 +6145,11 @@ function SupportTicketsSection({
   }
 
   async function submitTicket() {
+    // The disabled attribute lands only after a re-render; this ref closes the
+    // window between two clicks that arrive before it does. (The server also
+    // dedupes rapid identical tickets, so even a slip here files one ticket.)
+    if (sendingTicketRef.current) return;
+    sendingTicketRef.current = true;
     setSendingTicket(true);
     setStatus("");
     setError("");
@@ -6095,6 +6166,7 @@ function SupportTicketsSection({
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : t("Ticket could not be sent."));
     } finally {
+      sendingTicketRef.current = false;
       setSendingTicket(false);
     }
   }
@@ -6584,14 +6656,16 @@ function PlaceholderSection({ title, detail, action }: { title: string; detail: 
 function InfoTile({
   label,
   value,
-  action
+  action,
+  hint
 }: {
   label: string;
   value: string;
   action?: { label: string; onClick: () => void };
+  hint?: string;
 }) {
   return (
-    <article className="mini-panel settings-info-tile">
+    <article className="mini-panel settings-info-tile" title={hint}>
       <span>{label}</span>
       <strong>{value}</strong>
       {action ? (

@@ -7291,7 +7291,7 @@ export function OrderDetailContent({
             >
               <div className="app-client-files-intro">
                 <div>
-                  <strong>PDF, image, PSD and PSB files for this order.</strong>
+                  <strong>PDF, image, PSD, PSB and ZIP files for this order.</strong>
                   <p>Visible to workspace members who can open this order.</p>
                 </div>
                 {canManageClientFiles ? (
@@ -7353,7 +7353,7 @@ export function OrderDetailContent({
                 <div className="app-client-files-empty">
                   <span>▱</span>
                   <strong>No client files yet.</strong>
-                  <p>Upload PDFs, images, PSD or PSB files that belong to this client order.</p>
+                  <p>Upload PDF, image, PSD, PSB or ZIP files that belong to this client order.</p>
                 </div>
               ) : (
                 <div className={["app-client-files-list", "compact-list-grid", clientFileItems.length <= 3 ? "is-static" : "is-scrollable"].join(" ")}>
@@ -7375,7 +7375,7 @@ export function OrderDetailContent({
                 </div>
               )}
               <p className="app-client-files-note">
-                Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD and PSB. The size limit follows Settings &gt; Safety &amp; Uploads.
+                Allowed: PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. The size limit follows Settings &gt; Safety &amp; Uploads.
               </p>
             </div>
           </section>

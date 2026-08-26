@@ -425,6 +425,8 @@ private fun StudioFlowAppContent(
             onSaveCustomRole = viewModel::saveCustomRole,
             onDeleteCustomRole = viewModel::deleteCustomRole,
             onImportBackup = viewModel::importBackup,
+            onConfirmImportBackup = viewModel::confirmBackupImport,
+            onCancelImportBackup = viewModel::cancelBackupImport,
             onDeleteWorkspaceData = viewModel::deleteWorkspaceData,
             onSelectMessageThread = viewModel::selectMessageThread,
             onMarkMessageThreadRead = viewModel::markMessageThreadRead,

@@ -177,6 +177,26 @@ export function entitlementsForPlan(
   return PLAN_ENTITLEMENTS[normalized ?? fallback];
 }
 
+// Stripe LIST prices, keyed by the same item keys checkout uses. These are the
+// advertised amounts, not what any particular invoice charged — coupons and
+// grandfathered prices exist, and Apple/Google set their own per-territory
+// prices in the store consoles, so only show these for Stripe-billed
+// workspaces and label them as the list price.
+export const STRIPE_LIST_PRICE_LABELS: Record<string, string> = {
+  lite_monthly: "£9 / month",
+  lite_yearly: "£90 / year",
+  pro_monthly: "£19 / month",
+  pro_yearly: "£190 / year",
+  team_monthly: "£49 / month",
+  team_yearly: "£490 / year",
+  additional_team_seat_monthly: "£5 / month",
+  additional_team_seat_yearly: "£50 / year",
+  storage_100gb: "£9 / month",
+  storage_100gb_yearly: "£90 / year",
+  storage_200gb: "£15 / month",
+  storage_200gb_yearly: "£150 / year"
+};
+
 export function storageLimitLabel(entitlements: PlanEntitlements) {
   if (entitlements.storageLimitMB >= 1024) {
     return `${Math.round(entitlements.storageLimitMB / 1024)} GB`;

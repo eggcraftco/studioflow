@@ -90,6 +90,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -203,6 +204,8 @@ fun SettingsScreen(
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
+    onConfirmImportBackup: (Boolean) -> Unit,
+    onCancelImportBackup: () -> Unit,
     onDeleteWorkspaceData: () -> Unit,
     onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit = {},
     onReloadMessageWorkspaceSettings: () -> Unit = {},
@@ -303,6 +306,8 @@ fun SettingsScreen(
                         onSaveCustomRole = onSaveCustomRole,
                         onDeleteCustomRole = onDeleteCustomRole,
                         onImportBackup = onImportBackup,
+                        onConfirmImportBackup = onConfirmImportBackup,
+                        onCancelImportBackup = onCancelImportBackup,
                         onDeleteWorkspaceData = onDeleteWorkspaceData,
                         modifier = Modifier.weight(1f)
                     )
@@ -346,6 +351,8 @@ fun SettingsScreen(
                 onSaveCustomRole = onSaveCustomRole,
                 onDeleteCustomRole = onDeleteCustomRole,
                 onImportBackup = onImportBackup,
+                onConfirmImportBackup = onConfirmImportBackup,
+                onCancelImportBackup = onCancelImportBackup,
                 onDeleteWorkspaceData = onDeleteWorkspaceData
             )
             return@BoxWithConstraints
@@ -524,6 +531,8 @@ private fun SettingsDetailScreen(
     onSaveCustomRole: (String, String, String, WorkspaceMemberAccess) -> Unit,
     onDeleteCustomRole: (StudioCustomRole) -> Unit,
     onImportBackup: (String) -> Unit,
+    onConfirmImportBackup: (Boolean) -> Unit,
+    onCancelImportBackup: () -> Unit,
     onDeleteWorkspaceData: () -> Unit,
     onSaveMessageWorkspaceSettings: (uk.co.eggcraft.studioflow.data.model.StudioMessageWorkspaceSettings) -> Unit = {},
     onReloadMessageWorkspaceSettings: () -> Unit = {},
@@ -594,7 +603,7 @@ private fun SettingsDetailScreen(
                 "shopify" -> ShopifyDetail(state)
                 "inbound" -> InboundDetail(state)
                 "safety" -> SafetyUploadsDetail(state, onUpdateWorkspaceSettings)
-                "data" -> DataManagementDetail(state, onImportBackup, onDeleteWorkspaceData)
+                "data" -> DataManagementDetail(state, onImportBackup, onConfirmImportBackup, onCancelImportBackup, onDeleteWorkspaceData)
                 "account" -> AccountDetail(
                     state = state,
                     requireDeviceUnlock = requireDeviceUnlock,
@@ -1504,6 +1513,11 @@ private fun FinancialSettingsDetail(
                     selected = if (selectedDecimalSeparator == ",") "Comma (,)" else "Dot (.)",
                     onSelect = { selectedDecimalSeparator = if (it.startsWith(t("Comma"))) "," else "." }
                 )
+                Text(
+                    t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             PercentTextField(
                 label = "Avg. Platform Fee (%)",
@@ -2121,6 +2135,8 @@ private fun SafetyUploadsDetail(state: StudioFlowUiState, onSave: (Map<String, A
 private fun DataManagementDetail(
     state: StudioFlowUiState,
     onImportBackup: (String) -> Unit,
+    onConfirmImportBackup: (Boolean) -> Unit,
+    onCancelImportBackup: () -> Unit,
     onDeleteWorkspaceData: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -2129,6 +2145,51 @@ private fun DataManagementDetail(
     val scope = rememberCoroutineScope()
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var deleteConfirmText by rememberSaveable { mutableStateOf("") }
+
+    // The picked file is previewed server-side (same parse as the real import,
+    // no writes) before anything lands; duplicates are skipped by default.
+    val pendingImport = state.pendingBackupImport
+    if (pendingImport != null) {
+        var skipDuplicates by remember(pendingImport) { mutableStateOf(true) }
+        val duplicateCount = pendingImport.preview.likelyDuplicateOrders + pendingImport.preview.likelyDuplicateCustomers
+        AlertDialog(
+            onDismissRequest = onCancelImportBackup,
+            title = { Text(t("Import this backup?")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${t("Orders in this file")}: ${pendingImport.preview.fileOrders}")
+                    Text("${t("Customers in this file")}: ${pendingImport.preview.fileCustomers}")
+                    Text("${t("Already in this workspace")}: ${pendingImport.preview.existingOrders}")
+                    Text("${t("Look like they are already here")}: $duplicateCount")
+                    Text(t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup."))
+                    if (pendingImport.preview.truncated) {
+                        Text(
+                            t("One import is capped at 500 records. The rest will not be imported."),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (duplicateCount > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = skipDuplicates, onCheckedChange = { skipDuplicates = it })
+                            Text(t("Skip likely duplicates"))
+                        }
+                        if (!skipDuplicates) {
+                            Text(
+                                t("Some of these look like records you already have. Importing anyway will create a second copy of each."),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onConfirmImportBackup(duplicateCount > 0 && skipDuplicates) }) { Text(t("Import")) }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelImportBackup) { Text(t("Cancel")) }
+            }
+        )
+    }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
@@ -3715,14 +3776,16 @@ private fun SupportTicketsDetail(state: StudioFlowUiState) {
                 onValueChange = { subject = it },
                 label = { Text(t("Subject")) },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                enabled = !sending
             )
             OutlinedTextField(
                 value = message,
                 onValueChange = { message = it },
                 label = { Text(t("Message")) },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 4
+                minLines = 4,
+                enabled = !sending
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -11,7 +11,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, functions, storage } from "@/lib/firebase/client";
-import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceSettingsOverview, type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 // ------------------------------------------------------------------
 // Types — mirror Android StudioMessage* / Mac StudioMessage*
@@ -459,6 +459,19 @@ export async function uploadMessageFileAndSend(
 ): Promise<void> {
   if (!workspace.id || !threadId) throw new Error("Conversation is not ready.");
   if (!file || file.size === 0) throw new Error("Selected file could not be read.");
+  // Chat attachments were the one upload with no size check at all. The same
+  // workspace limit that governs Client Files applies here; the read costs far
+  // less than the upload it can prevent.
+  try {
+    const overview = await loadWorkspaceSettingsOverview(workspace.id);
+    const maxSizeMB = Math.min(Math.max(Math.round(overview.uploadSafetyMaxFileSizeMB || 10), 1), 50);
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      throw new Error(`This file is larger than the ${maxSizeMB} MB limit set in Safety & Uploads.`);
+    }
+  } catch (limitError) {
+    if (limitError instanceof Error && limitError.message.includes("Safety & Uploads")) throw limitError;
+    // If the settings read itself fails, don't block the send over it.
+  }
   const cleanName = (file.name || "Attachment").trim();
   const cleanType = (file.type || "application/octet-stream").trim();
   const uuid = (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -620,9 +633,13 @@ export async function setMessageThreadActive(
   await call("setMessageThreadActive", { companyId: workspace.id, threadId, isActive });
 }
 
-export async function getMessageWorkspaceSettings(workspace: WorkspaceContext): Promise<StudioMessageWorkspaceSettings> {
-  if (!workspace.id) return { directMessagesEnabled: true, groupConversationsEnabled: true, attachmentsEnabled: true };
-  const data = await call<{ settings?: StudioMessageWorkspaceSettings } & Partial<StudioMessageWorkspaceSettings>>(
+export async function getMessageWorkspaceSettings(
+  workspace: WorkspaceContext,
+): Promise<StudioMessageWorkspaceSettings & { canManage: boolean }> {
+  if (!workspace.id) {
+    return { directMessagesEnabled: true, groupConversationsEnabled: true, attachmentsEnabled: true, canManage: false };
+  }
+  const data = await call<{ settings?: StudioMessageWorkspaceSettings; canManage?: boolean } & Partial<StudioMessageWorkspaceSettings>>(
     "getMessageWorkspaceSettings",
     { companyId: workspace.id },
   );
@@ -631,6 +648,9 @@ export async function getMessageWorkspaceSettings(workspace: WorkspaceContext): 
     directMessagesEnabled: s.directMessagesEnabled ?? true,
     groupConversationsEnabled: s.groupConversationsEnabled ?? true,
     attachmentsEnabled: s.attachmentsEnabled ?? true,
+    // The server is the one that will accept or reject the save, so its answer
+    // — not a client-side role guess — decides whether Save is offered.
+    canManage: data.canManage === true,
   };
 }
 

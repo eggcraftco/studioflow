@@ -26,6 +26,8 @@ node integration-secrets.mjs # webhook token'ı: taşıma, döndürme, token'sı
 node clear-tax-undo.mjs      # KDV silme: önizleme + geri alma
 node import-preview.mjs      # yedek içe aktarma: önizleme, yinelenen, kırpma
 node key-test.mjs            # OpenAI anahtar testi (gerçek ağ çağrısı yapar)
+node webhook-protocol.mjs    # inbound webhook: token, test payload'ı, para okuma, tekrar teslimat
+node ticket-dedupe.mjs       # destek bileti: çift gönderim tek bilet, pencere aritmetiği
 ```
 
 `seed-qa.js` her çalıştığında çalışma alanının siparişlerini ve entegrasyon

@@ -226,6 +226,14 @@ struct AyarlarView: View {
     @State private var importUyarisiGosteriliyor = false
     @State private var importSonucGosteriliyor = false
     @State private var importSonucMesaji = ""
+    // A picked backup is decoded and held here until the user confirms; the
+    // confirm alert offers to skip records that look like ones already loaded.
+    @State private var pendingImportOrders: [Siparis] = []
+    @State private var pendingImportCustomers: [Musteri] = []
+    @State private var pendingImportSettings: BackupSettings? = nil
+    @State private var pendingImportDuplicates = 0
+    @State private var importOnayGosteriliyor = false
+    @State private var importOnayMesaji = ""
 
     var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.94) }
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
@@ -2110,6 +2118,12 @@ struct AyarlarView: View {
                 return
             }
 
+            // The create callable resets isSubmittingSupportTicket the moment it
+            // returns, but the form is only cleared after the attachments land —
+            // so for that window Send was live again with the fields still full,
+            // and a second click filed a duplicate ticket. Keep the flag up
+            // until the whole submission is actually finished.
+            firebaseManager.isSubmittingSupportTicket = true
             firebaseManager.uploadSupportTicketFilesAndReply(
                 companyId: companyId,
                 ticketId: ticketId,
@@ -2119,6 +2133,7 @@ struct AyarlarView: View {
                 userPhotoURL: authVM.accountPhotoURL,
                 suppressNotification: true
             ) { success in
+                firebaseManager.isSubmittingSupportTicket = false
                 if success {
                     finishSuccess()
                 }
@@ -3187,6 +3202,17 @@ struct AyarlarView: View {
                     Button("Cancel", role: .cancel) { }
                 } message: {
                     Text(t("Import adds the selected backup into this workspace. It does not delete your existing data, but duplicate orders may be created if the same backup is imported more than once. Export a backup first if you are unsure.", lang: seciliDil))
+                }
+                .alert(t("Import this backup?", lang: seciliDil), isPresented: $importOnayGosteriliyor) {
+                    if pendingImportDuplicates > 0 {
+                        Button(t("Skip likely duplicates", lang: seciliDil)) { finalizePendingImport(skipDuplicates: true) }
+                        Button(t("Import all", lang: seciliDil)) { finalizePendingImport(skipDuplicates: false) }
+                    } else {
+                        Button(t("Import", lang: seciliDil)) { finalizePendingImport(skipDuplicates: false) }
+                    }
+                    Button(t("Cancel", lang: seciliDil), role: .cancel) { clearPendingImport() }
+                } message: {
+                    Text(importOnayMesaji)
                 }
                 .alert("Import Finished", isPresented: $importSonucGosteriliyor) {
                     Button("OK", role: .cancel) { }
@@ -5765,6 +5791,11 @@ struct AyarlarView: View {
                     .frame(maxWidth: isPhoneLayout ? .infinity : 180)
                 }
 
+                Text(t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 financialSettingsRow(t("Avg. Platform Fee (%)", lang: seciliDil)) {
                     HStack(spacing: 8) {
                         TextField("3.0", value: $feePercentage, format: .number)
@@ -7042,37 +7073,123 @@ struct AyarlarView: View {
         return try? JSONDecoder().decode(AppBackup.self, from: data)
     }
 
+    // Mirrors the server's backupOrderMatchKey: the same fields, the same
+    // "warning, never a silent skip" intent. Both sides of the comparison go
+    // through this one function, so its exact string format only has to agree
+    // with itself.
+    private func importMatchKey(for order: Siparis) -> String {
+        let tracking = order.trackingNumber.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !tracking.isEmpty { return "t:\(tracking)" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        let round2: (Double) -> String = { String(format: "%.2f", ($0 * 100).rounded() / 100) }
+        return [
+            "o",
+            order.customerName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            order.designName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            formatter.string(from: order.paymentDate),
+            round2(order.paidAmount),
+            round2(order.remainingAmount)
+        ].joined(separator: "|")
+    }
+
+    private func importMatchKey(forCustomer customer: Musteri) -> String {
+        let name = customer.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let email = customer.email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let phone = customer.phone.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return ["c", name, email.isEmpty ? phone : email].joined(separator: "|")
+    }
+
+    private func clearPendingImport() {
+        pendingImportOrders = []
+        pendingImportCustomers = []
+        pendingImportSettings = nil
+        pendingImportDuplicates = 0
+        importOnayMesaji = ""
+    }
+
+    private func finalizePendingImport(skipDuplicates: Bool) {
+        var existingOrderKeys = Set(firebaseManager.siparisler.map { importMatchKey(for: $0) })
+        var existingCustomerKeys = Set(firebaseManager.musteriler.map { importMatchKey(forCustomer: $0) })
+        var importedOrders = 0
+        var importedCustomers = 0
+        var skipped = 0
+
+        for order in pendingImportOrders {
+            let key = importMatchKey(for: order)
+            if skipDuplicates && existingOrderKeys.contains(key) { skipped += 1; continue }
+            existingOrderKeys.insert(key)
+            firebaseManager.addSiparis(order)
+            importedOrders += 1
+        }
+        for customer in pendingImportCustomers {
+            let key = importMatchKey(forCustomer: customer)
+            if skipDuplicates && existingCustomerKeys.contains(key) { skipped += 1; continue }
+            existingCustomerKeys.insert(key)
+            firebaseManager.addMusteri(customer)
+            importedCustomers += 1
+        }
+
+        var importedSettings = false
+        if let settings = pendingImportSettings {
+            applyBackupSettings(settings)
+            importedSettings = true
+        }
+        clearPendingImport()
+
+        var parts: [String] = []
+        parts.append("Orders: \(importedOrders)")
+        parts.append("Customers: \(importedCustomers)")
+        if skipped > 0 { parts.append(t("Skipped as likely duplicates", lang: seciliDil) + ": \(skipped)") }
+        if importedSettings { parts.append("Settings: imported") }
+        importSonucMesaji = parts.joined(separator: "\n")
+        importSonucGosteriliyor = true
+    }
+
     private func dosyadanIceriAktar(result: Result<[URL], Error>) {
         do {
             guard let secilenURL = try result.get().first else { return }
             guard secilenURL.startAccessingSecurityScopedResource() else { return }
             defer { secilenURL.stopAccessingSecurityScopedResource() }
             let data = try Data(contentsOf: secilenURL)
-            var importedOrders = 0
-            var importedCustomers = 0
-            var importedSettings = false
-            
+            var yeniSiparisler: [Siparis] = []
+            var yeniMusteriler: [Musteri] = []
+            var yeniAyarlar: BackupSettings? = nil
+
             if let backup = decodeBackupData(data) {
                 if let settings = backup.settings {
-                    applyBackupSettings(settings)
-                    importedSettings = true
+                    yeniAyarlar = settings
                 }
-                for t in backup.siparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; firebaseManager.addSiparis(yeni); importedOrders += 1 }
-                if let musteriler = backup.musteriler { for m in musteriler { var yeni = Musteri(); yeni.name = m.name; yeni.phone = m.phone; yeni.email = m.email; yeni.address = m.address; yeni.streetAddress = m.streetAddress; yeni.city = m.city; yeni.postalCode = m.postalCode; yeni.country = m.country; yeni.notes = m.notes; firebaseManager.addMusteri(yeni); importedCustomers += 1 } }
+                for t in backup.siparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; yeniSiparisler.append(yeni) }
+                if let musteriler = backup.musteriler { for m in musteriler { var yeni = Musteri(); yeni.name = m.name; yeni.phone = m.phone; yeni.email = m.email; yeni.address = m.address; yeni.streetAddress = m.streetAddress; yeni.city = m.city; yeni.postalCode = m.postalCode; yeni.country = m.country; yeni.notes = m.notes; yeniMusteriler.append(yeni) } }
             } else if let eskiSiparisler = try? JSONDecoder().decode([SiparisTransfer].self, from: data) {
-                for t in eskiSiparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; firebaseManager.addSiparis(yeni); importedOrders += 1 }
+                for t in eskiSiparisler { var yeni = Siparis(); yeni.customerName = t.customerName; yeni.paymentDate = t.paymentDate; yeni.paidAmount = t.paidAmount; yeni.remainingAmount = t.remainingAmount; yeni.watchPurchasePrice = t.watchPurchasePrice; yeni.watchRef = t.watchRef; yeni.deliveryTime = t.deliveryTime; yeni.designName = t.designName; yeni.designLink = t.designLink; yeni.communication = t.communication; yeni.emailAddress = t.emailAddress; yeni.instagramUsername = t.instagramUsername; yeni.whatsappNumber = t.whatsappNumber; yeni.notes = t.notes; yeni.designStatus = t.designStatus; yeni.status = t.status; yeni.isDispatched = t.isDispatched; yeni.trackingNumber = t.trackingNumber; yeni.courier = t.courier; yeni.isDelivered = t.isDelivered; yeni.paymentFee = t.paymentFee; yeni.deliveryCost = t.deliveryCost; yeni.extraStatuses = t.extraStatuses; yeni.paymentMethod = t.paymentMethod ?? "Card"; yeni.taxRate = t.taxRate ?? 0.0; yeni.taxAmount = t.taxAmount ?? 0.0; yeni.taxType = t.taxType ?? ""; yeni.invBool1 = t.invBool1 ?? false; yeni.invBool2 = t.invBool2 ?? false; yeni.invBool3 = t.invBool3 ?? false; yeni.invBool4 = t.invBool4 ?? false; yeni.invNotes = t.invNotes ?? ""; yeni.priority = t.priority ?? "Normal"; yeni.risk = t.risk ?? "None"; yeni.riskReason = t.riskReason ?? "-"; yeni.customFields = t.customFields; yeni.customToggles = t.customToggles; yeni.historyLog = t.historyLog ?? []; yeni.clientFiles = t.clientFiles ?? []; yeni.todoItems = t.todoItems ?? []; yeni.workSessions = t.workSessions ?? []; yeni.payments = t.payments ?? []; yeni.invoiceNumber = t.invoiceNumber ?? ""; yeniSiparisler.append(yeni) }
             } else {
                 importSonucMesaji = "This file could not be imported. Please choose a valid NivaDesk backup JSON file."
                 importSonucGosteriliyor = true
                 return
             }
 
-            var parts: [String] = []
-            parts.append("Orders: \(importedOrders)")
-            parts.append("Customers: \(importedCustomers)")
-            if importedSettings { parts.append("Settings: imported") }
-            importSonucMesaji = parts.joined(separator: "\n")
-            importSonucGosteriliyor = true
+            // Nothing is written yet: count what looks already-loaded against
+            // the live in-memory lists, then ask.
+            let existingOrderKeys = Set(firebaseManager.siparisler.map { importMatchKey(for: $0) })
+            let existingCustomerKeys = Set(firebaseManager.musteriler.map { importMatchKey(forCustomer: $0) })
+            let duplicateOrders = yeniSiparisler.filter { existingOrderKeys.contains(importMatchKey(for: $0)) }.count
+            let duplicateCustomers = yeniMusteriler.filter { existingCustomerKeys.contains(importMatchKey(forCustomer: $0)) }.count
+
+            pendingImportOrders = yeniSiparisler
+            pendingImportCustomers = yeniMusteriler
+            pendingImportSettings = yeniAyarlar
+            pendingImportDuplicates = duplicateOrders + duplicateCustomers
+
+            var lines: [String] = []
+            lines.append("\(t("Orders in this file", lang: seciliDil)): \(yeniSiparisler.count)")
+            lines.append("\(t("Customers in this file", lang: seciliDil)): \(yeniMusteriler.count)")
+            lines.append("\(t("Look like they are already here", lang: seciliDil)): \(pendingImportDuplicates)")
+            lines.append(t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup.", lang: seciliDil))
+            importOnayMesaji = lines.joined(separator: "\n")
+            importOnayGosteriliyor = true
         } catch {
             print("Import error: \(error)")
             importSonucMesaji = "Import failed: \(error.localizedDescription)"

@@ -3118,6 +3118,35 @@ async function emailNivadeskSupportForTicket(ticketId, payload = {}) {
   });
 }
 
+// A double-clicked Send used to file the same ticket twice — and for NivaDesk
+// support, email everyone twice. The clients all disable their buttons, but the
+// only layer that can actually promise "once" is this one. The window is
+// deliberately short: two honest tickets with the same title minutes apart are
+// two tickets, not a duplicate.
+const SUPPORT_TICKET_DEDUPE_WINDOW_MS = 30 * 1000;
+
+async function recentDuplicateTicketId(kind, companyId, uid, title) {
+  try {
+    const snap = await admin.firestore().collection("supportTicketDedupe").doc(`${kind}_${companyId}_${uid}`).get();
+    const data = snap.exists ? snap.data() || {} : {};
+    if (data.title === title && Date.now() - Number(data.atMs || 0) < SUPPORT_TICKET_DEDUPE_WINDOW_MS && data.ticketId) {
+      return String(data.ticketId);
+    }
+  } catch (error) {
+    console.warn("supportTicketDedupe read failed:", error?.message || error);
+  }
+  return null;
+}
+
+async function rememberTicketForDedupe(kind, companyId, uid, title, ticketId) {
+  try {
+    await admin.firestore().collection("supportTicketDedupe").doc(`${kind}_${companyId}_${uid}`)
+      .set({ title, atMs: Date.now(), ticketId });
+  } catch (error) {
+    console.warn("supportTicketDedupe write failed:", error?.message || error);
+  }
+}
+
 exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -3132,7 +3161,13 @@ exports.createSupportTicket = onCall({ region: "europe-west2", secrets: [NIVADES
   payload.supportAdminEmails = Array.from(SUPPORT_ADMIN_EMAILS);
   payload.shareWithWorkspaceOwner = request.data?.shareWithWorkspaceOwner === true;
 
+  const duplicateId = await recentDuplicateTicketId("app", companyId, uid, payload.title);
+  if (duplicateId) {
+    return { ok: true, ticketId: duplicateId, deduped: true, message: "Ticket sent. We will review it as soon as possible." };
+  }
+
   await ticketRef.set(payload);
+  await rememberTicketForDedupe("app", companyId, uid, payload.title, ticketRef.id);
   await safeSupportNotification("notifySupportAdminsForTicket(createSupportTicket)", () =>
     notifySupportAdminsForTicket(companyId, ticketRef.id, payload, "new_ticket")
   );
@@ -4059,7 +4094,19 @@ exports.createWorkspaceTicket = onCall({ region: "europe-west2" }, async (reques
   payload.lastMessageByPhotoURL = payload.createdByPhotoURL;
   payload.targetRole = "owner_admin";
 
+  const duplicateId = await recentDuplicateTicketId("workspace", companyId, uid, payload.title);
+  if (duplicateId) {
+    return {
+      ok: true,
+      ticketId: duplicateId,
+      deduped: true,
+      notifiedAnyone: true,
+      message: "Workspace ticket sent to your workspace owner, admins and support managers."
+    };
+  }
+
   await ticketRef.set(payload);
+  await rememberTicketForDedupe("workspace", companyId, uid, payload.title, ticketRef.id);
   // The sender is always excluded from the recipient list, so a workspace with
   // no admins and no support managers notifies nobody. It used to answer
   // "sent to the workspace owner" anyway — to the owner, about themselves.
@@ -9095,13 +9142,71 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   // cannot see and cannot recover from, so the counts now come back.
   const allOrderItems = backupOrderItems(backup);
   const allCustomerItems = backupCustomerItems(backup);
-  const orderItems = allOrderItems.slice(0, 500);
-  const customerItems = allCustomerItems.slice(0, 500);
+  let orderItems = allOrderItems.slice(0, 500);
+  let customerItems = allCustomerItems.slice(0, 500);
   const droppedOrders = allOrderItems.length - orderItems.length;
   const droppedCustomers = allCustomerItems.length - customerItems.length;
   const settingsUpdates = importedBackupSettingsPayload(backup && typeof backup === "object" ? backup.settings : null);
   if (orderItems.length === 0 && customerItems.length === 0 && Object.keys(settingsUpdates).length === 0) {
     throw new HttpsError("invalid-argument", "Choose a valid NivaDesk backup JSON file.");
+  }
+
+  const email = String(request.auth?.token?.email || "");
+  const db = admin.firestore();
+
+  // The preview and the real run parse the same file through the same payload
+  // builders, so what the dialog promises is what the import does.
+  const dryRun = request.data?.dryRun === true;
+  const skipDuplicates = request.data?.skipDuplicates === true;
+
+  let existing = null;
+  let existingCustomers = null;
+  let existingOrderKeys = null;
+  let existingCustomerKeys = null;
+  if (dryRun || skipDuplicates) {
+    existing = await db.collection("siparisler").where("companyId", "==", companyId).get();
+    existingOrderKeys = new Set();
+    for (const doc of existing.docs) existingOrderKeys.add(backupOrderMatchKey(doc.data() || {}));
+    existingCustomers = await db.collection("musteriler").where("companyId", "==", companyId).get();
+    existingCustomerKeys = new Set();
+    for (const doc of existingCustomers.docs) existingCustomerKeys.add(backupCustomerMatchKey(doc.data() || {}));
+  }
+
+  // Skipping happens before the plan-limit check, so a file that is 90%
+  // already-imported is judged by what it would actually add. Each kept row's
+  // key joins the set, so the same order listed twice in one file imports once.
+  let skippedDuplicateOrders = 0;
+  let skippedDuplicateCustomers = 0;
+  if (skipDuplicates && !dryRun) {
+    orderItems = orderItems.filter((item) => {
+      const key = backupOrderMatchKey(importedOrderPayload(item, companyId, uid, email));
+      if (existingOrderKeys.has(key)) { skippedDuplicateOrders += 1; return false; }
+      existingOrderKeys.add(key);
+      return true;
+    });
+    customerItems = customerItems.filter((item) => {
+      const payload = importedCustomerPayload(item, companyId, uid, email);
+      if (!payload) return true;
+      const key = backupCustomerMatchKey(payload);
+      if (existingCustomerKeys.has(key)) { skippedDuplicateCustomers += 1; return false; }
+      existingCustomerKeys.add(key);
+      return true;
+    });
+    if (orderItems.length === 0 && customerItems.length === 0 && Object.keys(settingsUpdates).length === 0) {
+      return {
+        ok: true,
+        companyId,
+        importedOrders: 0,
+        importedCustomers: 0,
+        skippedDuplicateOrders,
+        skippedDuplicateCustomers,
+        droppedOrders,
+        droppedCustomers,
+        truncated: droppedOrders > 0 || droppedCustomers > 0,
+        importedSettings: false,
+        message: `Nothing to import: all ${skippedDuplicateOrders + skippedDuplicateCustomers} records in this file look like ones you already have.`
+      };
+    }
   }
 
   const entitlements = billingEntitlementsForCompany(companyData);
@@ -9114,19 +9219,7 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
     throw new HttpsError("failed-precondition", "Import would exceed this workspace customer limit.");
   }
 
-  const email = String(request.auth?.token?.email || "");
-  const db = admin.firestore();
-
-  // The preview and the real run parse the same file through the same payload
-  // builders, so what the dialog promises is what the import does.
-  const dryRun = request.data?.dryRun === true;
   if (dryRun) {
-    const existing = await db.collection("siparisler").where("companyId", "==", companyId).get();
-    const existingOrderKeys = new Set();
-    for (const doc of existing.docs) existingOrderKeys.add(backupOrderMatchKey(doc.data() || {}));
-    const existingCustomers = await db.collection("musteriler").where("companyId", "==", companyId).get();
-    const existingCustomerKeys = new Set();
-    for (const doc of existingCustomers.docs) existingCustomerKeys.add(backupCustomerMatchKey(doc.data() || {}));
 
     let likelyDuplicateOrders = 0;
     for (const item of orderItems) {
@@ -9203,17 +9296,22 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   const truncatedNote = droppedOrders > 0 || droppedCustomers > 0
     ? ` NOT imported because one import is capped at 500 records: ${droppedOrders} orders, ${droppedCustomers} customers.`
     : "";
+  const skippedNote = skippedDuplicateOrders > 0 || skippedDuplicateCustomers > 0
+    ? ` Skipped as likely duplicates: ${skippedDuplicateOrders} orders, ${skippedDuplicateCustomers} customers.`
+    : "";
 
   return {
     ok: true,
     companyId,
     importedOrders: importedOrders.length,
     importedCustomers: importedCustomers.length,
+    skippedDuplicateOrders,
+    skippedDuplicateCustomers,
     droppedOrders,
     droppedCustomers,
     truncated: droppedOrders > 0 || droppedCustomers > 0,
     importedSettings: Object.keys(settingsUpdates).length > 0,
-    message: `Import finished. Orders: ${importedOrders.length}. Customers: ${importedCustomers.length}.${Object.keys(settingsUpdates).length > 0 ? " Settings imported." : ""}${truncatedNote}`
+    message: `Import finished. Orders: ${importedOrders.length}. Customers: ${importedCustomers.length}.${Object.keys(settingsUpdates).length > 0 ? " Settings imported." : ""}${skippedNote}${truncatedNote}`
   };
 });
 

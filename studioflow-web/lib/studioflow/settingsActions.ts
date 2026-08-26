@@ -116,6 +116,8 @@ export type ImportWorkspaceBackupResult = {
   message?: string;
   importedOrders?: number;
   importedCustomers?: number;
+  skippedDuplicateOrders?: number;
+  skippedDuplicateCustomers?: number;
   importedSettings?: boolean;
 };
 
@@ -485,7 +487,11 @@ export async function recordWorkspaceBackupExport(workspace: WorkspaceContext) {
   );
 }
 
-export async function importWorkspaceBackup(workspace: WorkspaceContext, backup: unknown) {
+export async function importWorkspaceBackup(
+  workspace: WorkspaceContext,
+  backup: unknown,
+  options?: { skipDuplicates?: boolean }
+) {
   if (!canEditWorkspaceSettingsForRole(workspace.role)) {
     throw new Error("Your workspace role cannot import workspace data.");
   }
@@ -495,7 +501,8 @@ export async function importWorkspaceBackup(workspace: WorkspaceContext, backup:
       const callable = httpsCallable<Record<string, unknown>, ImportWorkspaceBackupResult>(functions, "importWorkspaceBackup");
       const result = await callable({
         companyId: workspace.id,
-        backup
+        backup,
+        skipDuplicates: options?.skipDuplicates === true
       });
       return result.data;
     }, "Importing workspace backup to cloud.");

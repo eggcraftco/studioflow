@@ -39,6 +39,16 @@ const ORDER = "QA-ORDER-1";
   for (const doc of staleSecrets.docs) await doc.ref.delete();
   // Quick Reply anahtarı ayrı koleksiyonda; kalırsa "anahtar yok" durumu hiç test edilemez.
   await db.collection("quickReplySecrets").doc(COMPANY).delete().catch(() => {});
+  // Müşteriler ve destek biletleri de sayım iddialarına girer; temiz başla.
+  const staleCustomers = await db.collection("musteriler").where("companyId", "==", COMPANY).get();
+  for (const doc of staleCustomers.docs) await doc.ref.delete();
+  const staleTickets = await db.collection("companies").doc(COMPANY).collection("workspaceTickets").get();
+  for (const doc of staleTickets.docs) await doc.ref.delete();
+  const staleSupport = await db.collection("supportTickets").where("companyId", "==", COMPANY).get();
+  for (const doc of staleSupport.docs) await doc.ref.delete();
+  for (const kind of ["app", "workspace"]) {
+    await db.collection("supportTicketDedupe").doc(`${kind}_${COMPANY}_${UID}`).delete().catch(() => {});
+  }
 
   // Rapordaki sipariş: 25 Ağu oluşturma + 45 gün = 9 Ekim teslim
   await db.collection("siparisler").doc(ORDER).set({
