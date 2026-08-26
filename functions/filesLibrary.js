@@ -40,6 +40,28 @@ const ACTIVITY_CAP = 40;
 const VERSION_CAP = 20;
 const LINK_CAP = 24;
 
+// A portal visitor has no Firebase session, so a portal-shared file needs a
+// token URL — the same mechanism the estimate signature uses. The token is
+// minted (or reused) on the object's metadata; failure degrades to "" and the
+// share itself still succeeds.
+async function ensurePortalUrl(admin, storagePath) {
+  const path = String(storagePath || "").trim();
+  if (!path) return "";
+  try {
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(path);
+    const [meta] = await file.getMetadata();
+    let token = String(((meta || {}).metadata || {}).firebaseStorageDownloadTokens || "").split(",")[0].trim();
+    if (!token) {
+      token = crypto.randomUUID();
+      await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
+    }
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+  } catch {
+    return "";
+  }
+}
+
 function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspace, cleanText }) {
   const db = () => admin.firestore();
   const recordsRef = (companyId) =>
@@ -303,6 +325,12 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
         ))
       };
     });
+    if (audience === "portal") {
+      const ref = recordsRef(companyId).doc(clean(request.data && request.data.fileId, "", 80));
+      const snap = await ref.get();
+      const portalUrl = await ensurePortalUrl(admin, (snap.data() || {}).storagePath);
+      if (portalUrl) await ref.set({ portalUrl }, { merge: true });
+    }
     return { ok: true };
   });
 
@@ -379,6 +407,7 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
         activity: pushActivity(data.activity, activityEntry(email, "new version", fileName))
       };
     });
+    await refreshPortalUrlIfShared(companyId, request.data && request.data.fileId);
     return { ok: true };
   });
 
@@ -399,8 +428,22 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
         activity: pushActivity(data.activity, activityEntry(email, "active version changed", `v${index + 1}`))
       };
     });
+    await refreshPortalUrlIfShared(companyId, request.data && request.data.fileId);
     return { ok: true };
   });
+
+  // The portal URL always points at the ACTIVE version; changing versions on a
+  // portal-shared file re-mints it so the customer never downloads stale bytes.
+  async function refreshPortalUrlIfShared(companyId, rawFileId) {
+    const fileId = clean(rawFileId, "", 80);
+    if (!fileId) return;
+    const ref = recordsRef(companyId).doc(fileId);
+    const snap = await ref.get();
+    const data = snap.exists ? snap.data() || {} : {};
+    if (data.clientPortalVisible !== true) return;
+    const portalUrl = await ensurePortalUrl(admin, data.storagePath);
+    if (portalUrl) await ref.set({ portalUrl }, { merge: true });
+  }
 
   // Builds the registry over what already exists: order client files, inventory
   // photos and bank receipts. Idempotent by construction — sha1(path) ids mean
@@ -563,4 +606,44 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
   };
 }
 
-module.exports = { createFilesLibraryFunctions };
+// What the sessionless customer portal may see of the library: only files
+// whose ORDER link was explicitly shared with audience "portal", never
+// trashed ones, each under the name the workshop chose to show. Files whose
+// storage object cannot mint a URL are omitted rather than listed dead.
+function createPortalFilesHelper({ admin }) {
+  return async function portalFilesForOrder(companyId, orderId) {
+    const company = String(companyId || "").trim();
+    const order = String(orderId || "").trim();
+    if (!company || !order) return [];
+    const snap = await admin.firestore()
+      .collection("companies").doc(company).collection("fileRecords")
+      .where("linkKeys", "array-contains", `order:${order}`)
+      .limit(200)
+      .get();
+    const out = [];
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      if (Number(data.trashedAtMs || 0) > 0) continue;
+      if (data.clientPortalVisible !== true) continue;
+      const link = (Array.isArray(data.links) ? data.links : [])
+        .find((row) => row && row.kind === "order" && row.id === order && row.audience === "portal");
+      if (!link) continue;
+      let url = String(data.portalUrl || "");
+      if (!url) {
+        url = await ensurePortalUrl(admin, data.storagePath);
+        if (url) await doc.ref.set({ portalUrl: url }, { merge: true }).catch(() => undefined);
+      }
+      if (!url) continue;
+      out.push({
+        name: String(link.displayName || data.displayName || data.fileName || "File").slice(0, 160),
+        url,
+        fileType: String(data.fileType || "").slice(0, 100),
+        fileSize: Math.max(0, Number(data.fileSize) || 0)
+      });
+      if (out.length >= 20) break;
+    }
+    return out;
+  };
+}
+
+module.exports = { createFilesLibraryFunctions, createPortalFilesHelper };

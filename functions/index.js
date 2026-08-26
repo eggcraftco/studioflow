@@ -5008,7 +5008,8 @@ Object.assign(exports, inventoryCallables);
 
 // The central file library: one file, many links; sharing is a separate,
 // deliberate act. Lives in its own module for the same reason inventory does.
-const { createFilesLibraryFunctions } = require("./filesLibrary");
+const { createFilesLibraryFunctions, createPortalFilesHelper } = require("./filesLibrary");
+const portalLibraryFilesForOrder = createPortalFilesHelper({ admin });
 Object.assign(exports, createFilesLibraryFunctions({
   admin,
   onCall,
@@ -23167,7 +23168,12 @@ exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request)
     { merge: true }
   );
   const settings = await portalWorkspaceSettings(link.companyId);
-  return { ok: true, portal: portalPublicView(orderData, settings, link) };
+  const portal = portalPublicView(orderData, settings, link);
+  portal.files = await portalLibraryFilesForOrder(
+    String(link.companyId || orderCompanyId(orderData) || ""),
+    String(link.orderId || "")
+  ).catch(() => []);
+  return { ok: true, portal };
 });
 
 // Fires on the status the workspace already sets. Nothing new to remember: move

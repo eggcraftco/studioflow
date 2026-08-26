@@ -24144,3 +24144,5 @@ body[data-studio-theme="dark"] .modal-backdrop:has(.settings-dialog) {
 .library-table td .inventory-sub { display: block; margin-top: 2px; }
 .library-table tbody tr { cursor: pointer; }
 .inventory-panel-inline-edit { display: flex; gap: 8px; align-items: center; }
+.portal-shell-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.portal-shell-files a { font-weight: 700; text-decoration: underline; }

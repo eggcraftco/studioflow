@@ -159,6 +159,35 @@ try {
   ok("üye kalıcı silemedi", /deleting/i.test(e.message), e.message);
 }
 
+console.log("=== portal: paylaşılan dosya müşteri sayfasında, token URL ile ===");
+// Gerçek baytlar: mint objenin metadata'sına token yazar, obje yoksa yazamaz.
+// Fonksiyon emülatörünün varsayılan bucket adı sürüme göre değişebildiğinden
+// iki aday isme de yükle.
+for (const bucket of ["eggcraft-studio.appspot.com", "eggcraft-studio.firebasestorage.app"]) {
+  await fetch(
+    `http://127.0.0.1:9199/upload/storage/v1/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(`companies/${companyId}/client_files/QA/design.pdf`)}`,
+    { method: "POST", headers: { "Content-Type": "application/pdf" }, body: "%PDF-1.4 qa design bytes" }
+  );
+}
+await call("shareLibraryFileWithOrder", { fileId: design.id, orderId, visibility: "portal", displayName: "Approved Design" });
+const designAfterMint = (await call("listLibraryFiles", {})).files.find(f => f.id === design.id);
+const { token: portalToken } = await call("createOrderPortalLink", { orderId });
+const visitorRes = await fetch(`${BASE}/getPortalForVisitor`, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ data: { token: portalToken } })
+});
+const visitorJson = await visitorRes.json();
+const portalFiles = visitorJson.result && visitorJson.result.portal ? visitorJson.result.portal.files : null;
+ok("ziyaretçi portalı dosya listesi döndü", Array.isArray(portalFiles), JSON.stringify(visitorJson.error || visitorJson).slice(0, 200));
+ok("yalnız portal-paylaşımlı dosya listede", Array.isArray(portalFiles) && portalFiles.length === 1,
+   JSON.stringify((portalFiles || []).map(f => f.name)));
+if (Array.isArray(portalFiles) && portalFiles[0]) {
+  ok("müşteri, seçilen adı görür", portalFiles[0].name === "Approved Design", portalFiles[0].name);
+  ok("URL token'lı ve oturumsuz", /alt=media&token=/.test(portalFiles[0].url), portalFiles[0].url);
+  const dl = await fetch(portalFiles[0].url.replace("https://firebasestorage.googleapis.com", "http://127.0.0.1:9199"));
+  ok("URL gerçekten indiriyor", dl.ok && (await dl.text()).includes("qa design bytes"), `status=${dl.status}`);
+}
+
 console.log("=== yabancı yol reddedilir ===");
 try {
   await call("registerLibraryFile", { storagePath: "companies/baska-sirket/client_files/x.pdf", fileName: "x.pdf" });
