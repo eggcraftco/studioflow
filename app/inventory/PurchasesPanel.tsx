@@ -99,6 +99,7 @@ export function PurchasesPanel({
   const [notice, setNotice] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [matching, setMatching] = useState<Purchase | null>(null);
+  const [receiving, setReceiving] = useState<Purchase | null>(null);
   const [busyId, setBusyId] = useState("");
 
   const reload = useCallback(async () => {
@@ -156,7 +157,8 @@ export function PurchasesPanel({
   }
 
   const totals = useMemo(() => {
-    const ordered = purchases.filter(row => row.status === "ordered");
+    // A partially received purchase is still awaiting the rest of its delivery.
+    const ordered = purchases.filter(row => row.status === "ordered" || row.status === "partiallyReceived");
     const unmatched = purchases.filter(row => !row.bankTransactionId);
     return {
       ordered: ordered.length,
@@ -240,7 +242,11 @@ export function PurchasesPanel({
                   <td className="r">{money(currencySymbol, purchase.total)}</td>
                   <td>
                     <span className="inventory-chip" data-status={purchase.status === "received" ? "available" : "incoming"}>
-                      {purchase.status === "received" ? t("Received") : t("Ordered")}
+                      {purchase.status === "received"
+                        ? t("Received")
+                        : purchase.status === "partiallyReceived"
+                          ? t("Partially received")
+                          : t("Ordered")}
                     </span>
                   </td>
                   <td>
@@ -254,20 +260,30 @@ export function PurchasesPanel({
                   </td>
                   {canEdit ? (
                     <td className="inventory-row-actions">
-                      {purchase.status === "ordered" ? (
+                      {purchase.status !== "received" ? (
                         <>
                           <button
                             type="button"
                             className="inventory-link"
                             disabled={busyId === purchase.id}
                             onClick={() => void markReceived(purchase)}
-                          >{t("Mark received")}</button>
-                          <button
-                            type="button"
-                            className="inventory-link inventory-link-danger"
-                            disabled={busyId === purchase.id}
-                            onClick={() => void removePurchase(purchase)}
-                          >{t("Delete")}</button>
+                          >{t(purchase.status === "partiallyReceived" ? "Receive the rest" : "Mark received")}</button>
+                          {(purchase.lines?.length || 0) > 1 || purchase.status === "partiallyReceived" ? (
+                            <button
+                              type="button"
+                              className="inventory-link"
+                              disabled={busyId === purchase.id}
+                              onClick={() => setReceiving(purchase)}
+                            >{t("Receive lines…")}</button>
+                          ) : null}
+                          {purchase.status === "ordered" ? (
+                            <button
+                              type="button"
+                              className="inventory-link inventory-link-danger"
+                              disabled={busyId === purchase.id}
+                              onClick={() => void removePurchase(purchase)}
+                            >{t("Delete")}</button>
+                          ) : null}
                         </>
                       ) : null}
                     </td>
@@ -287,6 +303,19 @@ export function PurchasesPanel({
           onClose={() => setModalOpen(false)}
           onSaved={async () => {
             setModalOpen(false);
+            await reload();
+            onStockChanged();
+          }}
+        />
+      ) : null}
+
+      {receiving ? (
+        <ReceiveLinesModal
+          workspace={workspace}
+          purchase={receiving}
+          onClose={() => setReceiving(null)}
+          onReceived={async () => {
+            setReceiving(null);
             await reload();
             onStockChanged();
           }}
@@ -553,6 +582,124 @@ function NewPurchaseModal({
             <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>
             <button type="button" className="inventory-primary" disabled={saving} onClick={() => void submit()}>
               {saving ? t("Saving…") : t("Save purchase")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Goods arrive in boxes, not in purchase orders. This modal receives what the
+// courier actually brought: per line, per quantity — the rest stays outstanding
+// and the purchase says "Partially received" until the last piece lands.
+function ReceiveLinesModal({
+  workspace,
+  purchase,
+  onClose,
+  onReceived
+}: {
+  workspace: WorkspaceContext;
+  purchase: Purchase;
+  onClose: () => void;
+  onReceived: () => void;
+}) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  const [amounts, setAmounts] = useState<Record<number, string>>({});
+  const [checked, setChecked] = useState<Record<number, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const rows = (purchase.lines ?? []).map((line, index) => {
+    const ordered = line.trackingType === "unique" ? 1 : Number(line.quantity) || 0;
+    const received = Number(line.receivedQuantity) || 0;
+    return { line, index, ordered, received, remaining: Math.max(0, Math.round((ordered - received) * 100) / 100) };
+  });
+
+  async function submit() {
+    const payload: Array<{ index: number; quantity?: number }> = [];
+    for (const row of rows) {
+      if (row.remaining <= 0) continue;
+      if (row.line.trackingType === "unique") {
+        if (checked[row.index]) payload.push({ index: row.index });
+        continue;
+      }
+      const wanted = num(amounts[row.index] ?? "");
+      if (wanted <= 0) continue;
+      if (wanted > row.remaining) {
+        setError(`"${row.line.name}" — ${t("that is more than is still outstanding.")}`);
+        return;
+      }
+      payload.push({ index: row.index, quantity: wanted });
+    }
+    if (payload.length === 0) {
+      setError(t("Enter what arrived first."));
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await receivePurchase(workspace, purchase.id, payload);
+      onReceived();
+    } catch (failure) {
+      setError(failure instanceof Error ? t(failure.message) : t("The purchase could not be marked as received."));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="inventory-modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="inventory-modal" role="dialog" aria-modal="true" aria-label={t("Receive delivery")} onClick={e => e.stopPropagation()}>
+        <div className="inventory-modal-head">
+          <h2>{t("Receive delivery")}</h2>
+          <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>
+        </div>
+        <div className="inventory-modal-body">
+          <p className="inventory-hint">
+            {purchase.number} · {purchase.supplierName || "—"} — {t("enter what the courier actually brought; the rest stays outstanding.")}
+          </p>
+          <div className="inventory-match-list">
+            {rows.map(row => (
+              <div className="inventory-reserve-row" key={row.index}>
+                <span className="inventory-match-main">
+                  <strong>{row.line.name}</strong>
+                  <span className="inventory-sub">
+                    {`${row.received} / ${row.ordered}${row.line.unit ? ` ${row.line.unit}` : ""}`}
+                  </span>
+                </span>
+                {row.remaining <= 0 ? (
+                  <span className="inventory-chip" data-status="available">{t("Received")}</span>
+                ) : row.line.trackingType === "unique" ? (
+                  <label className="inventory-check">
+                    <input
+                      type="checkbox"
+                      checked={checked[row.index] ?? false}
+                      onChange={e => setChecked(current => ({ ...current, [row.index]: e.target.checked }))}
+                    />
+                    <span>{t("Arrived")}</span>
+                  </label>
+                ) : (
+                  <input
+                    className="input inventory-qty-input"
+                    inputMode="decimal"
+                    placeholder={String(row.remaining)}
+                    value={amounts[row.index] ?? ""}
+                    onChange={e => setAmounts(current => ({ ...current, [row.index]: e.target.value }))}
+                    aria-label={`${t("Arrived")}: ${row.line.name}`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          {error ? <p className="inventory-error">{error}</p> : null}
+        </div>
+        <div className="inventory-modal-foot">
+          <span />
+          <div className="inventory-modal-actions">
+            <button type="button" className="inventory-secondary" onClick={onClose}>{t("Cancel")}</button>
+            <button type="button" className="inventory-primary" disabled={saving} onClick={() => void submit()}>
+              {saving ? t("Saving…") : t("Receive what arrived")}
             </button>
           </div>
         </div>
