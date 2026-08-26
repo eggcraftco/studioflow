@@ -132,10 +132,12 @@ Undo'lu; Compact 19→5 kart E2E'li) — raporun 1 numaralı önceliği.
 mutator'lar → aynı Undo'lu toast; telefon sırası yolu da toast'lu); ⋮ ayırıcı
 tutamacı; Customers araması sipariş no + proje adını da tarar; Customize
 panelindeki gereksiz "Save this order" kalktı (autosave zaten var).
+Reset kapsam ayrımı da eklendi ("Reset this order" / "Reset shared layout" +
+kapsam-açık onay); Customers ülke alanlarına ortak datalist (UK/United
+Kingdom/GB kayması için yumuşak standardizasyon).
 Kalan: sol durum şeridi + zemin ayrımı (görsel karar — birlikte bakalım);
-renk+etiket anlam sistemi; Actions gruplama; reset kapsam ayrımı; sipariş
-türüne göre düzen; kullanıcıya özel düzen. (Hızlı sekmeler: OrderQuickFilterBar
-zaten karşılıyor — kapalı sayıldı.)
+renk+etiket anlam sistemi; Actions gruplama; sipariş türüne göre düzen;
+kullanıcıya özel düzen. (Hızlı sekmeler: OrderQuickFilterBar zaten karşılıyor.)
 
 ### C. NivaDesk_customers.md — kalan kritik/orta/ürün
 **26 Ağu gece eklendi:** iade/iptal bakiyesi düzeltildi — Outstanding artık
