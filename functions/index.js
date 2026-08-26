@@ -5014,11 +5014,14 @@ Object.assign(exports, createFilesLibraryFunctions({
   onCall,
   HttpsError,
   cleanText: cleanOrderText,
-  requireWorkspace: async (request, { area = "clientFiles", write = false } = {}) => {
+  requireWorkspace: async (request, { area = "clientFiles", write = false, destroy = false } = {}) => {
     const context = await requireWorkspaceForBilling(request, false);
     requireWorkspaceAreaAccess(context.companyData, context.uid, area);
     if (write && !canFullyEditOrder(workspaceOrderRole(context.companyData, context.uid))) {
       throw new HttpsError("permission-denied", "Your workspace role cannot change files.");
+    }
+    if (destroy && !uidCanDeleteClientFiles(context.companyData, context.uid)) {
+      throw new HttpsError("permission-denied", "Your workspace access does not include deleting files.");
     }
     return context;
   }

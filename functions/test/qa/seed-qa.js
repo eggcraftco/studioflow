@@ -15,15 +15,27 @@ const ORDER = "QA-ORDER-1";
   try { await admin.auth().deleteUser(UID); } catch {}
   await admin.auth().createUser({ uid: UID, email: EMAIL, emailVerified: true, displayName: "QA Review" });
 
+  // İkinci kullanıcı: dosya SİLME erişimi kapatılmış normal üye — kütüphane
+  // çöp/silme kapısının klasik deleteClientFiles bayrağını saydığını test eder.
+  const MEMBER_UID = "qa-member-uid";
+  const MEMBER_EMAIL = "member@nivadesk.app";
+  try { await admin.auth().deleteUser(MEMBER_UID); } catch {}
+  await admin.auth().createUser({ uid: MEMBER_UID, email: MEMBER_EMAIL, emailVerified: true, displayName: "QA Member" });
+
   await db.collection("companies").doc(COMPANY).set({
     name: "My Studio",
     ownerUid: UID,
     billingPlan: "team_monthly",
-    members: { [UID]: { role: "owner", email: EMAIL, name: "QA Review" } },
-    memberRoles: { [UID]: "owner" },
+    members: {
+      [UID]: { role: "owner", email: EMAIL, name: "QA Review" },
+      [MEMBER_UID]: { role: "member", email: MEMBER_EMAIL, name: "QA Member" }
+    },
+    memberRoles: { [UID]: "owner", [MEMBER_UID]: "member" },
+    memberAccess: { [MEMBER_UID]: { deleteClientFiles: false } },
     createdAtMs: 1756000000000
   });
   await db.collection("users").doc(UID).set({ email: EMAIL, activeCompanyId: COMPANY });
+  await db.collection("users").doc(MEMBER_UID).set({ email: MEMBER_EMAIL, activeCompanyId: COMPANY });
   await db.collection("companySettings").doc(COMPANY).set({
     selectedCurrency: "£", selectedLanguage: "English", appSubtitle: "My Studio",
     businessType: "Jewellery / Watch workshop", businessOnboardingCompleted: true,
@@ -71,6 +83,7 @@ const ORDER = "QA-ORDER-1";
   });
 
   const token = await admin.auth().createCustomToken(UID);
-  console.log(JSON.stringify({ uid: UID, companyId: COMPANY, orderId: ORDER, customToken: token }));
+  const memberToken = await admin.auth().createCustomToken(MEMBER_UID);
+  console.log(JSON.stringify({ uid: UID, companyId: COMPANY, orderId: ORDER, customToken: token, memberCustomToken: memberToken }));
   process.exit(0);
 })().catch(e => { console.error("SEED HATASI:", e.message); process.exit(1); });

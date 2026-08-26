@@ -4,7 +4,7 @@
 // right-hand record panel. Everything here manipulates LINKS and metadata —
 // the bytes stay wherever their feature put them.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -56,11 +56,15 @@ function sizeLabel(bytes: number) {
 export function FilesLibraryView({
   workspace,
   view,
-  canEdit
+  canEdit,
+  canDelete
 }: {
   workspace: WorkspaceContext;
   view: LibraryView;
   canEdit: boolean;
+  // Trash and permanent delete follow the per-member deleteClientFiles access,
+  // the same gate the classic client-files delete honors.
+  canDelete: boolean;
 }) {
   const { language, user } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
@@ -75,11 +79,16 @@ export function FilesLibraryView({
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
 
+  // A slow early response must not clobber the result of a later action:
+  // only the newest in-flight reload may write.
+  const reloadSeq = useRef(0);
   const reload = useCallback(async () => {
+    const seq = ++reloadSeq.current;
     try {
       const result = await listLibraryFiles(workspace, { trashed: view === "trash" });
-      setFiles(result.files ?? []);
+      if (seq === reloadSeq.current) setFiles(result.files ?? []);
     } catch (failure) {
+      if (seq !== reloadSeq.current) return;
       setFiles([]);
       setNotice(failure instanceof Error ? t(failure.message) : t("The file library could not be loaded."));
     }
@@ -88,14 +97,21 @@ export function FilesLibraryView({
   useEffect(() => {
     setFiles(null);
     setSelectedId("");
+    setNotice("");
     void reload();
   }, [reload]);
+
+  // The rename editor belongs to exactly one record; switching records or
+  // closing the panel discards it rather than carrying the draft over.
+  useEffect(() => {
+    setRenaming(false);
+    setRenameDraft("");
+  }, [selectedId]);
 
   const visible = useMemo(() => {
     if (!files) return [];
     const needle = search.trim().toLowerCase();
     let list = files;
-    if (view === "recent") list = list.slice(0, 25);
     if (view === "sharedClients") list = list.filter(file => file.clientPortalVisible);
     if (view === "internalOnly") list = list.filter(file => !file.clientPortalVisible);
     if (view === "unlinked") list = list.filter(file => file.links.length === 0);
@@ -104,11 +120,16 @@ export function FilesLibraryView({
     if (view === "connPurchases") list = list.filter(file => file.linkKinds.includes("purchase"));
     if (view === "connSuppliers") list = list.filter(file => file.linkKinds.includes("supplier"));
     if (view === "connBank") list = list.filter(file => file.linkKinds.includes("bankTransaction"));
-    if (!needle) return list;
-    return list.filter(file =>
-      [file.displayName, file.fileName, ...file.links.map(link => link.label)]
-        .filter(Boolean)
-        .some(field => String(field).toLowerCase().includes(needle)));
+    if (needle) {
+      list = list.filter(file =>
+        [file.displayName, file.fileName, ...file.links.map(link => link.label)]
+          .filter(Boolean)
+          .some(field => String(field).toLowerCase().includes(needle)));
+    }
+    // Recent trims last so a search covers the whole library, not just the
+    // newest twenty-five.
+    if (view === "recent") list = list.slice(0, 25);
+    return list;
   }, [files, view, search]);
 
   const selected = useMemo(
@@ -183,9 +204,11 @@ export function FilesLibraryView({
           <p className="inventory-sub">{t("Loading…")}</p>
         ) : visible.length === 0 ? (
           <p className="inventory-sub">
-            {files.length === 0
-              ? t("The library is empty. Index existing files to bring in everything the workspace already stores.")
-              : t("No files match this view.")}
+            {view === "trash"
+              ? t("Trash is empty.")
+              : files.length === 0
+                ? t("The library is empty. Index existing files to bring in everything the workspace already stores.")
+                : t("No files match this view.")}
           </p>
         ) : (
           <table className="inventory-table library-table">
@@ -245,6 +268,9 @@ export function FilesLibraryView({
                     }, "The file could not be renamed.")}
                   >
                     {t("Save")}
+                  </button>
+                  <button type="button" className="inventory-link" disabled={busy} onClick={() => setRenaming(false)}>
+                    {t("Cancel")}
                   </button>
                 </span>
               ) : (
@@ -318,19 +344,21 @@ export function FilesLibraryView({
                     }}
                   />
                 </label>
-                <button
-                  type="button"
-                  className="inventory-secondary"
-                  disabled={busy}
-                  onClick={() => {
-                    if (selected.links.length > 1 && !window.confirm(
-                      `${t("This file is linked to")} ${selected.links.length} ${t("records. Moving it to trash hides it everywhere. Continue?")}`
-                    )) return;
-                    void run(() => trashLibraryFile(workspace, selected.id), "The file could not be moved to trash.");
-                  }}
-                >
-                  {t("Move to trash")}
-                </button>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    className="inventory-secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      if (selected.links.length > 1 && !window.confirm(
+                        `${t("This file is linked to")} ${selected.links.length} ${t("records. Moving it to trash hides it everywhere. Continue?")}`
+                      )) return;
+                      void run(() => trashLibraryFile(workspace, selected.id), "The file could not be moved to trash.");
+                    }}
+                  >
+                    {t("Move to trash")}
+                  </button>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -342,20 +370,22 @@ export function FilesLibraryView({
                 <button type="button" className="inventory-secondary" disabled={busy} onClick={() => void run(() => restoreLibraryFile(workspace, selected.id), "The file could not be restored.")}>
                   {t("Restore")}
                 </button>
-                <button
-                  type="button"
-                  className="inventory-secondary"
-                  disabled={busy}
-                  onClick={() => {
-                    if (!window.confirm(t("Delete this file record permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage."))) return;
-                    void run(async () => {
-                      await deleteLibraryFile(workspace, selected.id);
-                      setSelectedId("");
-                    }, "The file could not be deleted.");
-                  }}
-                >
-                  {t("Delete permanently")}
-                </button>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    className="inventory-secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(t("Delete this file record permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage."))) return;
+                      void run(async () => {
+                        await deleteLibraryFile(workspace, selected.id);
+                        setSelectedId("");
+                      }, "The file could not be deleted.");
+                    }}
+                  >
+                    {t("Delete permanently")}
+                  </button>
+                ) : null}
               </div>
             </section>
           ) : null}
@@ -542,6 +572,7 @@ function AddLinkModal({
             <option value="inventoryItem">{t("Inventory Item")}</option>
             <option value="purchase">{t("Purchase")}</option>
             <option value="bankTransaction">{t("Bank Transaction")}</option>
+            <option value="supplier">{t("Supplier")}</option>
           </select>
         </label>
         {kind === "order" ? (

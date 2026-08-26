@@ -306,8 +306,10 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
     return { ok: true };
   });
 
+  // Trash and hard delete additionally require the per-member delete access —
+  // the same gate the classic client-files delete honors.
   const trashLibraryFile = onCall({ region: REGION }, async (request) => {
-    const { companyId, email } = await requireWorkspace(request, { area: "clientFiles", write: true });
+    const { companyId, email } = await requireWorkspace(request, { area: "clientFiles", write: true, destroy: true });
     await mutateRecord(companyId, request.data && request.data.fileId, (data) => ({
       trashedAtMs: Date.now(),
       activity: pushActivity(data.activity, activityEntry(email, "moved to trash"))
@@ -328,7 +330,7 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
   // ONLY if the library itself put it there — indexed files belong to their
   // original features and are never destroyed from here.
   const deleteLibraryFile = onCall({ region: REGION }, async (request) => {
-    const { companyId } = await requireWorkspace(request, { area: "clientFiles", write: true });
+    const { companyId } = await requireWorkspace(request, { area: "clientFiles", write: true, destroy: true });
     const fileId = clean(request.data && request.data.fileId, "", 80);
     const ref = recordsRef(companyId).doc(fileId);
     const snap = await ref.get();

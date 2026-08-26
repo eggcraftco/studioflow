@@ -128,6 +128,37 @@ await call("setLibraryFileActiveVersion", { fileId: reg.fileId, index: 0 });
 after = (await call("listLibraryFiles", {})).files.find(f => f.id === reg.fileId);
 ok("aktif versiyon v1'e döndü", after.activeVersionIndex === 0 && /v1-cert/.test(after.storagePath), after.storagePath);
 
+console.log("=== silme kapısı: deleteClientFiles=false üye düzenler ama çöpe atamaz/silemez ===");
+const { memberCustomToken } = JSON.parse(readFileSync(`${S}/seed-out.json`, "utf8"));
+const memberAuthRes = await fetch(
+  "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key",
+  { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: memberCustomToken, returnSecureToken: true }) });
+const memberIdToken = (await memberAuthRes.json()).idToken;
+async function memberCall(name, data = {}) {
+  const res = await fetch(`${BASE}/${name}`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${memberIdToken}` },
+    body: JSON.stringify({ data: { companyId, ...data } })
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(`${name}: ${json.error.message}`);
+  return json.result;
+}
+await memberCall("renameLibraryFile", { fileId: design.id, displayName: "Renamed by member" });
+ok("üye yeniden adlandırabildi (yazma izni ayrı)", true);
+try {
+  await memberCall("trashLibraryFile", { fileId: design.id });
+  ok("üye çöpe atamadı", false, "hata beklendi");
+} catch (e) {
+  ok("üye çöpe atamadı", /deleting/i.test(e.message), e.message);
+}
+try {
+  await memberCall("deleteLibraryFile", { fileId: design.id });
+  ok("üye kalıcı silemedi", false, "hata beklendi");
+} catch (e) {
+  ok("üye kalıcı silemedi", /deleting/i.test(e.message), e.message);
+}
+
 console.log("=== yabancı yol reddedilir ===");
 try {
   await call("registerLibraryFile", { storagePath: "companies/baska-sirket/client_files/x.pdf", fileName: "x.pdf" });
