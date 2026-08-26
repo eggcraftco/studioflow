@@ -1089,7 +1089,17 @@ function cleanSharedPersonalNotePayload(data = {}, context = {}) {
     userId: String(context.targetUserId || data.userId || "").trim()
   };
 
-  if (data.reminderDate) payload.reminderDate = data.reminderDate;
+  // Clients send either a Firestore Timestamp (source doc) or reminderDateMillis
+  // (Swift/Kotlin callable payloads). Both must survive into the mirror, or a
+  // shared note silently drops its reminder for the other person.
+  if (data.reminderDate) {
+    payload.reminderDate = data.reminderDate;
+  } else {
+    const reminderMillis = Number(data.reminderDateMillis);
+    if (Number.isFinite(reminderMillis) && reminderMillis > 0) {
+      payload.reminderDate = admin.firestore.Timestamp.fromMillis(reminderMillis);
+    }
+  }
   return payload;
 }
 

@@ -37,6 +37,14 @@ export type StudioKeepNote = {
   manualOrder: number;
   createdAtMillis: number | null;
   updatedAtMillis: number | null;
+  // One note, shown wherever its context lives (the Files model): the TYPE
+  // says what the note is about, the linked ids say where else it surfaces,
+  // and visibility is a separate axis from type.
+  noteType: "personal" | "order" | "customer" | "team";
+  linkedOrderId: string;
+  linkedOrderLabel: string;
+  linkedCustomerName: string;
+  visibility: "only_me" | "workspace";
 };
 
 export type StudioProjectNoteItem = {
@@ -61,8 +69,18 @@ function notesCollection(companyId: string, userId: string) {
 function tsToMillis(value: unknown): number | null {
   if (!value) return null;
   if (value instanceof Timestamp) return value.toMillis();
-  if (typeof value === "number") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (value instanceof Date) return value.getTime();
+  // A {seconds, nanoseconds} map (written by a non-web SDK or a raw REST
+  // payload) and an ISO string are still real dates — dropping them to null
+  // is exactly the silent reminder loss the QA report caught.
+  if (typeof value === "object" && typeof (value as { seconds?: unknown }).seconds === "number") {
+    return Math.round((value as { seconds: number }).seconds * 1000);
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+  }
   return null;
 }
 
@@ -91,6 +109,11 @@ function keepNoteFromDoc(id: string, data: Record<string, unknown>): StudioKeepN
     manualOrder: typeof data.manualOrder === "number" ? (data.manualOrder as number) : 0,
     createdAtMillis: tsToMillis(data.createdAt),
     updatedAtMillis: tsToMillis(data.updatedAt),
+    noteType: (["personal", "order", "customer", "team"].includes(String(data.noteType)) ? String(data.noteType) : "personal") as StudioKeepNote["noteType"],
+    linkedOrderId: (data.linkedOrderId as string) || "",
+    linkedOrderLabel: (data.linkedOrderLabel as string) || "",
+    linkedCustomerName: (data.linkedCustomerName as string) || "",
+    visibility: (String(data.visibility) === "workspace" ? "workspace" : "only_me") as StudioKeepNote["visibility"],
   };
 }
 
@@ -140,10 +163,17 @@ export async function saveKeepNote(
     isDeleted: note.isDeleted,
     labels: note.labels,
     links: note.links,
-    reminderDate: note.reminderDateMillis
+    // NaN is falsy, but be explicit: an invalid millis value must never be
+    // silently written as "no reminder".
+    reminderDate: note.reminderDateMillis != null && Number.isFinite(note.reminderDateMillis)
       ? Timestamp.fromMillis(note.reminderDateMillis)
       : null,
     manualOrder: note.manualOrder,
+    noteType: note.noteType || "personal",
+    linkedOrderId: note.linkedOrderId || "",
+    linkedOrderLabel: note.linkedOrderLabel || "",
+    linkedCustomerName: note.linkedCustomerName || "",
+    visibility: note.visibility === "workspace" ? "workspace" : "only_me",
     createdAt: note.createdAtMillis
       ? Timestamp.fromMillis(note.createdAtMillis)
       : serverTimestamp(),
@@ -205,6 +235,11 @@ export function newKeepNote(
     manualOrder: now,
     createdAtMillis: now,
     updatedAtMillis: now,
+    noteType: "personal",
+    linkedOrderId: "",
+    linkedOrderLabel: "",
+    linkedCustomerName: "",
+    visibility: "only_me",
   };
 }
 
