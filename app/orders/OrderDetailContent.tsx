@@ -1891,6 +1891,8 @@ export function OrderDetailContent({
   const [dragOverCardCue, setDragOverCardCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
   const [dragOverColumnIndex, setDragOverColumnIndex] = useState<number | null>(null);
   const [resizingCardId, setResizingCardId] = useState<OrderDetailCardId | null>(null);
+  // Live "384 × 497" readout while a card is being resized.
+  const [resizeSizeLabel, setResizeSizeLabel] = useState("");
   const resizingCardIdRef = useRef<OrderDetailCardId | null>(null);
   const [measuredCardMinimums, setMeasuredCardMinimums] = useState<Partial<Record<OrderDetailCardId, number>>>({});
   const desktopCardFrameRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
@@ -3325,6 +3327,7 @@ export function OrderDetailContent({
       if (mode === "corner") {
         latestWidth = clampColumnWidth(startWidth + moveEvent.clientX - startX);
       }
+      setResizeSizeLabel(`${Math.round(mode === "corner" ? latestWidth : startWidth)} × ${Math.round(latestHeight)}`);
 
       setCardLayout(current => layoutWithCardSize(
         current,
@@ -3343,6 +3346,7 @@ export function OrderDetailContent({
       document.body.style.userSelect = previousUserSelect;
       resizingCardIdRef.current = null;
       setResizingCardId(null);
+      setResizeSizeLabel("");
 
       try {
         if (pointerTarget.hasPointerCapture(pointerId)) {
@@ -7592,6 +7596,9 @@ export function OrderDetailContent({
             aria-hidden="true"
           />
         ) : null}
+        {resizingCardId === cardId && resizeSizeLabel ? (
+          <span className="order-card-size-badge" aria-hidden="true">{resizeSizeLabel}</span>
+        ) : null}
         {frameCanMoveResize ? (
           <>
             <button
@@ -7957,7 +7964,9 @@ export function OrderDetailContent({
             className={["card-layout-lock-button", cardsLocked ? "is-locked" : "is-unlocked"].join(" ")}
             type="button"
             onClick={toggleCardsLocked}
-            title={cardsLocked ? t("Unlock cards") : t("Lock cards")}
+            title={cardsLocked
+              ? `${t("Unlock cards")} — ${t("applies on this device only")}`
+              : `${t("Lock cards")} — ${t("applies on this device only")}`}
             aria-label={cardsLocked ? t("Unlock cards") : t("Lock cards")}
             aria-pressed={cardsLocked}
           >
