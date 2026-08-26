@@ -2251,6 +2251,164 @@ function createInventoryFunctions({
   });
 
   // ---------------------------------------------------------------------------
+  // Recipes (BOM)
+  //
+  // "One strap job = 1 buckle + 20cm leather + 2 screws." A recipe is that
+  // list, written once. Applying it to an order reserves EVERY line in one
+  // transaction — all or nothing, so a half-reserved job cannot exist.
+  // Costing needs no layers here: every purchase batch is already its own
+  // item document carrying its own cost.
+  // ---------------------------------------------------------------------------
+
+  const recipesRef = (companyId) =>
+    db().collection("companies").doc(String(companyId)).collection("inventoryRecipes");
+
+  function cleanRecipeLines(value) {
+    const rows = Array.isArray(value) ? value.slice(0, 30) : [];
+    return rows
+      .map((row) => ({
+        itemId: clean(row && row.itemId, "", 80),
+        quantity: cleanQuantity(row && row.quantity)
+      }))
+      .filter((row) => row.itemId && row.quantity > 0);
+  }
+
+  const listInventoryRecipes = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const snap = await recipesRef(companyId).limit(200).get();
+    const recipes = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+    recipes.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+    return { ok: true, recipes };
+  });
+
+  const saveInventoryRecipe = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const recipeId = clean(request.data && request.data.recipeId, "", 80);
+    const input = request.data && request.data.recipe;
+    const name = clean(input && input.name, "", 120);
+    const lines = cleanRecipeLines(input && input.lines);
+    if (!name) throw new HttpsError("invalid-argument", "A recipe name is required.");
+    if (lines.length === 0) throw new HttpsError("invalid-argument", "A recipe needs at least one line.");
+    const now = Date.now();
+    const ref = recipeId ? recipesRef(companyId).doc(recipeId) : recipesRef(companyId).doc();
+    await ref.set({
+      companyId,
+      name,
+      notes: clean(input && input.notes, "", 500),
+      lines,
+      updatedAtMs: now,
+      updatedByUid: uid
+    }, { merge: true });
+    return { ok: true, recipeId: ref.id };
+  });
+
+  const deleteInventoryRecipe = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const recipeId = clean(request.data && request.data.recipeId, "", 80);
+    if (!recipeId) throw new HttpsError("invalid-argument", "recipeId is required.");
+    await recipesRef(companyId).doc(recipeId).delete();
+    return { ok: true };
+  });
+
+  // All-or-nothing: every capacity check runs before any write, inside one
+  // transaction, so failing on line 3 leaves lines 1 and 2 untouched.
+  const applyRecipeToOrder = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId } = await requireInventoryAccess(request, { write: true });
+    const recipeId = clean(request.data && request.data.recipeId, "", 80);
+    const orderId = clean(request.data && request.data.orderId, "", 200);
+    const multiplierRaw = cleanQuantity(request.data && request.data.multiplier);
+    const multiplier = multiplierRaw > 0 ? Math.min(multiplierRaw, 100) : 1;
+    if (!recipeId || !orderId) throw new HttpsError("invalid-argument", "recipeId and orderId are required.");
+    const now = Date.now();
+
+    const outcome = await db().runTransaction(async (tx) => {
+      const recipeSnap = await tx.get(recipesRef(companyId).doc(recipeId));
+      if (!recipeSnap.exists) throw new HttpsError("not-found", "Recipe not found.");
+      const recipe = recipeSnap.data() || {};
+      const lines = cleanRecipeLines(recipe.lines);
+      if (lines.length === 0) throw new HttpsError("failed-precondition", "That recipe has no lines.");
+
+      // Read every component first (Firestore: all reads before any write).
+      const snaps = new Map();
+      for (const line of lines) {
+        if (!snaps.has(line.itemId)) {
+          // eslint-disable-next-line no-await-in-loop
+          snaps.set(line.itemId, await tx.get(itemsRef(companyId).doc(line.itemId)));
+        }
+      }
+
+      // Pass 1: every line must fit, or nothing happens.
+      const plans = [];
+      for (const line of lines) {
+        const snap = snaps.get(line.itemId);
+        if (!snap || !snap.exists) {
+          throw new HttpsError("failed-precondition", "A recipe line points at an item that no longer exists.");
+        }
+        const item = snap.data() || {};
+        const itemName = clean(item.name, "item", 160);
+        if (String(item.ownership) === "customer") {
+          throw new HttpsError("failed-precondition", `"${itemName}" is a customer's own item and cannot be reserved.`);
+        }
+        if (["sold", "used", "archived", "removed"].includes(String(item.status))) {
+          throw new HttpsError("failed-precondition", `"${itemName}" is no longer available to reserve.`);
+        }
+        const isUnique = String(item.trackingType) === "unique";
+        const reservations = cleanReservations(item.reservations);
+        const others = reservations.filter((row) => row.orderId !== orderId);
+        const mine = reservations.find((row) => row.orderId === orderId);
+        const wanted = isUnique ? 1 : roundMoney(line.quantity * multiplier);
+        if (isUnique) {
+          if (others.length > 0) {
+            throw new HttpsError("failed-precondition", `"${itemName}" is already reserved for another order.`);
+          }
+        } else {
+          const onHand = cleanQuantity((item.quantity || {}).onHand);
+          const reservedElsewhere = others.reduce((sum, row) => sum + row.quantity, 0);
+          const free = roundMoney(onHand - reservedElsewhere);
+          const alreadyMine = mine ? mine.quantity : 0;
+          if (roundMoney(alreadyMine + wanted) > free) {
+            throw new HttpsError(
+              "failed-precondition",
+              `Not enough "${itemName}" — ${roundMoney(free - alreadyMine)} free, the recipe needs ${wanted}.`
+            );
+          }
+        }
+        plans.push({ snap, item, isUnique, others, mine, wanted });
+      }
+
+      // Pass 2: everything fits — write all the reservations.
+      for (const plan of plans) {
+        if (plan.isUnique) {
+          tx.set(plan.snap.ref, {
+            status: "reserved",
+            reservedForOrderId: orderId,
+            reservations: [{ orderId, quantity: 1, createdAtMs: now }],
+            reservedOrderIds: [orderId],
+            updatedAtMs: now,
+            updatedByUid: uid
+          }, { merge: true });
+          continue;
+        }
+        const merged = plan.mine
+          ? [...plan.others, { orderId, quantity: roundMoney(plan.mine.quantity + plan.wanted), createdAtMs: plan.mine.createdAtMs || now }]
+          : [...plan.others, { orderId, quantity: plan.wanted, createdAtMs: now }];
+        const totalReserved = roundMoney(merged.reduce((sum, row) => sum + row.quantity, 0));
+        tx.set(plan.snap.ref, {
+          reservations: merged,
+          reservedOrderIds: merged.map((row) => row.orderId),
+          quantity: { ...(plan.item.quantity || {}), reserved: totalReserved },
+          status: reservationStatus(plan.item, totalReserved),
+          updatedAtMs: now,
+          updatedByUid: uid
+        }, { merge: true });
+      }
+      return { reservedLines: plans.length, recipeName: clean(recipe.name, "", 120) };
+    });
+
+    return { ok: true, ...outcome };
+  });
+
+  // ---------------------------------------------------------------------------
   // Consuming and swapping reserved stock
   //
   // Reserving promised the part; consuming is the moment it actually goes into
@@ -2458,6 +2616,10 @@ function createInventoryFunctions({
     listInventoryLocations,
     saveInventoryLocation,
     deleteInventoryLocation,
+    listInventoryRecipes,
+    saveInventoryRecipe,
+    deleteInventoryRecipe,
+    applyRecipeToOrder,
     consumeInventoryForOrder,
     swapInventoryForOrder,
     _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
