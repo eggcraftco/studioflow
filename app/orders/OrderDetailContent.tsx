@@ -8446,8 +8446,21 @@ export function OrderDetailContent({
                 <p>{t("Show or hide the cards you want to see in the project detail workspace.")}</p>
               </div>
               <div className="workspace-blocks-actions">
-                <button className="button secondary" type="button" onClick={resetCardLayout} disabled={!canEditCardLayout || savingLayout}>
-                  {t("Reset")}
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => {
+                    // The report's complaint: nobody knew what Reset reached.
+                    // Say the scope out loud and get a yes before wiping it.
+                    const scopeQuestion = isOrderCardLayoutIndependent
+                      ? t("Reset THIS ORDER's card layout to the defaults? Other orders and the shared layout are untouched.")
+                      : t("Reset the SHARED card layout to the defaults? This affects every order and member using the shared layout.");
+                    if (window.confirm(scopeQuestion)) resetCardLayout();
+                  }}
+                  disabled={!canEditCardLayout || savingLayout}
+                  title={isOrderCardLayoutIndependent ? t("Resets only this order's layout") : t("Resets the shared workspace layout")}
+                >
+                  {t(isOrderCardLayoutIndependent ? "Reset this order" : "Reset shared layout")}
                 </button>
                 <button className="workspace-blocks-close" type="button" onClick={() => setCustomizeOpen(false)} aria-label={t("Close Workspace Blocks")}>
                   ×

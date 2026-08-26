@@ -149,6 +149,22 @@ function normalizedCustomerLookup(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+const COMMON_COUNTRIES = [
+  "United Kingdom", "Ireland", "United States", "Canada", "Australia", "New Zealand",
+  "Germany", "France", "Italy", "Spain", "Portugal", "Netherlands", "Belgium",
+  "Switzerland", "Austria", "Denmark", "Sweden", "Norway", "Finland", "Poland",
+  "Türkiye", "Greece", "United Arab Emirates", "Saudi Arabia", "Qatar", "Japan",
+  "China", "Hong Kong", "Singapore", "India", "South Africa", "Brazil", "Mexico"
+];
+
+function CountryDatalist() {
+  return (
+    <datalist id="studio-country-options">
+      {COMMON_COUNTRIES.map(country => <option key={country} value={country} />)}
+    </datalist>
+  );
+}
+
 export default function CustomersPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -1220,9 +1236,11 @@ function CustomerDetailsForm({
             disabled={disabled || saving}
             onChange={event => updateField(item.field, event.target.value)}
             placeholder="-"
+            list={item.field === "country" || item.field === "shippingCountry" ? "studio-country-options" : undefined}
           />
         </label>
       ))}
+      <CountryDatalist />
       {disabled ? null : (
         <div className="customer-detail-save-row">
           <button className="button" type="submit" disabled={saving || !isDirty}>
@@ -1565,7 +1583,8 @@ function CustomerFormModal({
 
           <label>
             Country
-            <input className="input" value={form.country} onChange={event => updateField("country", event.target.value)} disabled={saving} />
+            <input className="input" value={form.country} onChange={event => updateField("country", event.target.value)} disabled={saving} list="studio-country-options" />
+            <CountryDatalist />
           </label>
 
           <label>
