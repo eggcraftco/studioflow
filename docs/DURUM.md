@@ -162,6 +162,12 @@ keser veri kalır, purge ayrı onay; banking-b3.mjs 11 assert); receipt güven
 tespit+priceChange var); Supplier/Purchase/Inventory panel genişletmesi;
 audit log (kural izi var, genel log yok); Overview soruları
 (dönem/pending/transfer açıklamaları).
+**Recurring zenginleştirme TAMAM (27 Ağu gece 3, 4 platform):** güven
+derecesi (High/Medium/Low), tutar aralığı, ayın beklenen günü, "Detected from
+N payments"; Upcoming'de "around <tarih>" + "Based on the last N monthly
+payments" + "These are estimates, not booked payments." (§7+§22-23). Web'e
+ayrıca Overview dönem açıklaması (§4) + drawer'da Purchase→Inventory zincir
+satırı (§14) eklendi (bu iki metin native'e sonraki mikro-turda taşınabilir).
 **B3 native paritesi de TAMAM (27 Ağu gece 2):** Swift'te Accounting review
 kartı + txReview filtresi + native Disconnect/purge (onay metinli; Reconnect
 web deep-link) + consent satırı + kural izi (BUILD SUCCEEDED ×2); Android'de
