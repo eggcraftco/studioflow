@@ -24395,3 +24395,54 @@ body[data-studio-theme="dark"] .studio-toast > .studio-toast-close { color: rgba
   color: rgba(107, 114, 128, 0.55);
 }
 .workspace-sidebar-resizer:hover::after { color: rgba(37, 99, 235, 0.8); }
+
+/* ---- Decision 1B: a 3px state stripe on every order card. Color never
+   carries the meaning alone — the badges and labels stay. ---- */
+.order-list-card { position: relative; overflow: hidden; }
+.order-list-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: transparent;
+}
+.order-list-card.state-late::before      { background: #e5484d; }
+.order-list-card.state-waiting::before   { background: #f5a623; }
+.order-list-card.state-active::before    { background: #2f6df6; }
+.order-list-card.state-done::before      { background: #30a46c; }
+.order-list-card.state-cancelled::before { background: #8d939e; }
+
+/* ---- Decision 2B: done reads "finished", cancelled recedes. ---- */
+.order-list-card.state-done { background: #f2faf5; border-color: rgba(48, 164, 108, 0.28); }
+.order-list-card.state-cancelled { opacity: 0.55; }
+body[data-studio-theme="dark"] .order-list-card.state-done {
+  background: rgba(48, 164, 108, 0.10);
+  border-color: rgba(76, 195, 138, 0.35);
+}
+
+/* ---- Decision 3B: color meanings — the chip on a colored card. ---- */
+.order-card-meaning-chip {
+  position: absolute;
+  top: 13px;
+  right: 46px;
+  z-index: 5;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #fff;
+  border-radius: 999px;
+  padding: 2.5px 10px;
+  pointer-events: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.order-card-meaning-chip[data-card-color="Red"]    { background: #e5484d; }
+.order-card-meaning-chip[data-card-color="Orange"] { background: #f5a623; }
+.order-card-meaning-chip[data-card-color="Yellow"] { background: #d4a017; }
+.order-card-meaning-chip[data-card-color="Green"]  { background: #30a46c; }
+.order-card-meaning-chip[data-card-color="Blue"]   { background: #2f6df6; }
+.order-card-meaning-chip[data-card-color="Purple"] { background: #8e4ec6; }
+.order-card-meaning-chip[data-card-color="Pink"]   { background: #d6409f; }
+.order-card-color-meaning { margin-left: auto; font-size: 10.5px; opacity: 0.62; font-weight: 700; }
