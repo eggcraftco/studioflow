@@ -110,9 +110,10 @@ import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel sto
 ## SIRADA — üç rapordan KALANLAR (ilk dalga yukarıda tamamlandı)
 
 ### A. NivaDesk_schedule.md — kalan orta/iyileştirme
-Schedule–Team Schedule ayrım metni; sticky ay başlıkları (uzun aralıklar);
-zoom presetleri (%75/%100/%125/Fit + fit-selected); hover ile sol kart ↔
-timeline çubuğu eşleştirme; range değişince seçiliyi görünür alana kaydırma;
+**26 Ağu akşamı eklendi:** hover eşleştirme (kart ↔ çubuk, iki yönlü),
+haftalıktan uzun aralıklarda sticky ay şeridi (etiket yatayda da sabit),
+range/seçim değişince seçili çubuk görünür alana getiriliyor — üçü de E2E'li.
+Kalan: Schedule–Team Schedule ayrım metni; zoom presetleri (%75/%100/%125/Fit);
 tarih değişikliğinde Undo (toast altyapısı yok — önce o); ilk-kullanım rehberi.
 (Not: Duration/Remaining ikili gösterimi bilinçli tek "Xd left" ile çözüldü.)
 
