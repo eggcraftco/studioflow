@@ -411,6 +411,19 @@ export default function SchedulePage() {
   const [selectedOrderId, setSelectedOrderId] = useState("");
   // Hover on a sidebar card lights up its timeline bar, and vice versa.
   const [hoveredOrderId, setHoveredOrderId] = useState("");
+  // One-time gesture guide: shown until dismissed, remembered per browser.
+  const [showScheduleGuide, setShowScheduleGuide] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("studioflow-schedule-guide-seen") !== "1") setShowScheduleGuide(true);
+    } catch {
+      // Storage unavailable: skip the guide rather than nag on every visit.
+    }
+  }, []);
+  function dismissScheduleGuide() {
+    setShowScheduleGuide(false);
+    try { window.localStorage.setItem("studioflow-schedule-guide-seen", "1"); } catch {}
+  }
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
@@ -1182,6 +1195,16 @@ export default function SchedulePage() {
 
           {scheduleStatus ? <p className="layout-status schedule-action-message">{scheduleStatus}</p> : null}
           {scheduleError ? <p className="layout-error schedule-action-message">{scheduleError}</p> : null}
+
+          {!teamMode && showScheduleGuide && canEditSchedule ? (
+            <div className="schedule-first-use-guide" role="note">
+              <div>
+                <strong>{t("Three ways to move an order")}</strong>
+                <span>{t("Drag the bar to move the whole order, its left edge to change the start date, its right edge to change the delivery date. Every change offers Undo.")}</span>
+              </div>
+              <button type="button" onClick={dismissScheduleGuide}>{t("Got it")}</button>
+            </div>
+          ) : null}
 
           {teamMode ? (
             !teamPlanActive ? (
