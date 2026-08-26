@@ -23715,6 +23715,52 @@ body[data-studio-theme="dark"] .inventory-status.is-archived { color: #9ca3af; }
 .inventory-panel-inline-edit { display: flex; gap: 6px; align-items: center; }
 .inventory-panel-inline-edit .input { font-size: 12px; padding: 5px 8px; }
 .inventory-modal.is-narrow { max-width: 440px; }
+
+/* The inventory sidebar — the module's single primary navigation. */
+.inventory-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .inventory-shell { grid-template-columns: 1fr; } }
+.inventory-nav { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 12px; }
+.inventory-nav-group {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;
+  opacity: 0.55; margin: 12px 0 4px; padding: 0 10px;
+}
+.inventory-nav-group:first-child { margin-top: 0; }
+.inventory-nav button {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  font-size: 12.5px; font-weight: 600; padding: 7px 10px; border-radius: 8px;
+  border: none; background: transparent; color: inherit; cursor: pointer; opacity: 0.8;
+}
+.inventory-nav button:hover { opacity: 1; background: rgba(127, 127, 127, 0.08); }
+.inventory-nav button[data-active="true"] { opacity: 1; background: var(--accent-soft, rgba(37, 99, 235, 0.1)); color: var(--accent, #2563eb); }
+.inventory-nav-badge {
+  margin-left: auto; font-size: 10.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+}
+.inventory-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.inventory-pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 4px 2px; flex-wrap: wrap; }
+.inventory-pager-controls { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.inventory-pager-controls button {
+  border: 1px solid var(--app-border, rgba(0,0,0,0.14)); background: transparent; color: inherit;
+  border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px;
+}
+.inventory-pager-controls button:disabled { opacity: 0.4; cursor: default; }
+.inventory-pager-controls .input { width: auto; font-size: 12px; padding: 4px 8px; }
+
+/* Bulk selection: checkboxes mean "work on these", the outlined row means
+   "open in the panel" — two different signals, kept visually apart. */
+.inventory-check-col { width: 34px; text-align: center; }
+.inventory-bulkbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--accent-soft, rgba(37, 99, 235, 0.08));
+  border: 1px solid var(--accent, #2563eb);
+}
+.inventory-bulkbar strong { font-size: 12.5px; margin-right: 4px; }
+.inventory-bulkbar button {
+  font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--app-border, rgba(0,0,0,0.14)); background: transparent; color: inherit;
+}
+.inventory-bulkbar button:disabled { opacity: 0.5; cursor: default; }
 .inventory-status-select { font-size: 12px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--app-border, rgba(0,0,0,0.14)); background: transparent; color: inherit; }
 
 /* Add-item modal */

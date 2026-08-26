@@ -316,8 +316,28 @@ export function ItemDetailPanel({
 
           <section className="inventory-panel-card">
             <header>
-              <strong>{t("Linked To")}</strong>
+              <strong>{t("Linked Records")}</strong>
             </header>
+            {/* Report §7: every operational connection in one card — purchase,
+                supplier, bank and order — not the order alone. */}
+            <dl className="inventory-panel-grid">
+              {purchase && purchase !== "none" && purchase.number ? (
+                <><dt>{t("Purchase")}</dt><dd>{purchase.number}</dd></>
+              ) : null}
+              {(purchase && purchase !== "none" && purchase.supplierName) || item.supplierName ? (
+                <><dt>{t("Supplier")}</dt><dd>{(purchase !== "none" && purchase?.supplierName) || item.supplierName}</dd></>
+              ) : null}
+              {purchase && purchase !== "none" ? (
+                <>
+                  <dt>{t("Bank Transaction")}</dt>
+                  <dd>
+                    {purchase.bankTransactionId
+                      ? <span className="inventory-status is-available">{t("Matched")} ✓</span>
+                      : <span className="inventory-sub">{t("Not matched")}</span>}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
             {reservations.length > 0 ? (
               <ul className="inventory-panel-list">
                 {reservations.map(row => (

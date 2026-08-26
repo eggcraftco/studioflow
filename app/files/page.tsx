@@ -202,6 +202,8 @@ export default function FilesPage() {
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [previewingFileId, setPreviewingFileId] = useState<string | null>(null);
   const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
+  const [fileSearch, setFileSearch] = useState("");
+  const [fileSort, setFileSort] = useState<"newest" | "name" | "size">("newest");
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   async function handleDownloadAll() {
@@ -319,7 +321,25 @@ export default function FilesPage() {
   }, [user]);
 
   const totalSize = useMemo(() => files.reduce((sum, file) => sum + Math.max(file.fileSize, 0), 0), [files]);
-  const groupedFiles = useMemo(() => groupFilesByOrder(files), [files]);
+  // Search and sort run before grouping, so a needle narrows every order's
+  // group and the groups themselves stay in the chosen order.
+  const filteredSortedFiles = useMemo(() => {
+    const needle = fileSearch.trim().toLowerCase();
+    const filtered = needle
+      ? files.filter(file =>
+          [file.fileName, file.customerName, file.designName]
+            .filter(Boolean)
+            .some(field => String(field).toLowerCase().includes(needle)))
+      : files.slice();
+    filtered.sort((a, b) => {
+      if (fileSort === "name") return String(a.fileName).localeCompare(String(b.fileName));
+      if (fileSort === "size") return (b.fileSize || 0) - (a.fileSize || 0);
+      return (b.uploadedAt?.getTime() ?? 0) - (a.uploadedAt?.getTime() ?? 0);
+    });
+    return filtered;
+  }, [files, fileSearch, fileSort]);
+
+  const groupedFiles = useMemo(() => groupFilesByOrder(filteredSortedFiles), [filteredSortedFiles]);
   const canUseClientFiles = Boolean(workspace?.entitlements.features.client_files);
   const previewFiles = useMemo(
     () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
@@ -597,6 +617,20 @@ export default function FilesPage() {
             <p style={{ color: "var(--muted)", margin: 0 }}>
               Total listed size: {clientFileSizeLabel(totalSize)}
             </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <input
+                className="input"
+                style={{ maxWidth: 260 }}
+                placeholder="Search files, customer, design…"
+                value={fileSearch}
+                onChange={event => setFileSearch(event.target.value)}
+              />
+              <select className="input" style={{ maxWidth: 170 }} value={fileSort} onChange={event => setFileSort(event.target.value as "newest" | "name" | "size")}>
+                <option value="newest">Newest first</option>
+                <option value="name">Name A–Z</option>
+                <option value="size">Largest first</option>
+              </select>
+            </div>
             {actionStatus ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 800 }}>{actionStatus}</p> : null}
             {actionError ? <p style={{ color: "var(--danger)", margin: "10px 0 0", fontWeight: 800 }}>{actionError}</p> : null}
           </div>
@@ -647,10 +681,12 @@ export default function FilesPage() {
                     </button>
                   ) : null}
                   {canDeleteClientFiles ? (
+                    // Destructive, so it must not sit shoulder-to-shoulder with
+                    // the ZIP button in the same visual weight (report §19):
+                    // pushed apart, plain text, danger-colored.
                     <button
-                      className="button secondary"
                       type="button"
-                      style={{ padding: "4px 10px", fontSize: 12, color: "var(--danger)" }}
+                      style={{ marginLeft: 18, padding: "4px 6px", fontSize: 11.5, color: "var(--danger)", background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}
                       disabled={deletingOrderId === group.orderId}
                       onClick={() => handleDeleteOrderGroup(group)}
                     >
