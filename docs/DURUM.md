@@ -161,8 +161,14 @@ keser veri kalır, purge ayrı onay; banking-b3.mjs 11 assert); receipt güven
 **Kalan Orta:** recurring güven/fiyat-değişimi alan zenginleştirmesi (temel
 tespit+priceChange var); Supplier/Purchase/Inventory panel genişletmesi;
 audit log (kural izi var, genel log yok); Overview soruları
-(dönem/pending/transfer açıklamaları); B3'ün native paritesi (Accounting
-review kartı + consent satırı + disconnect ayrımı Mac/iPhone/Android'e).
+(dönem/pending/transfer açıklamaları).
+**B3 native paritesi de TAMAM (27 Ağu gece 2):** Swift'te Accounting review
+kartı + txReview filtresi + native Disconnect/purge (onay metinli; Reconnect
+web deep-link) + consent satırı + kural izi (BUILD SUCCEEDED ×2); Android'de
+aynı yüzey, bağlantı yönetimi bilinçli web'de (BUILD SUCCESSFUL). BANKING
+RAPORU 4 PLATFORMDA KAPANDI — kalan: recurring alan zenginleştirme,
+Supplier/Purchase panel genişletme, genel audit log, multi-currency,
+Overview açıklamaları.
 **Dört kesin kural (uygulandı):** read-only scope; provider tx ID benzersiz;
 Pandle'da mevcut hareket match edilir, yeniden yaratılmaz; kategori/VAT
 hard-code değil mapping.
