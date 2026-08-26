@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { db } from "@/lib/firebase/client";
@@ -3038,11 +3039,17 @@ export function OrderDetailContent({
     const targetIndex = nextColumns[targetColumnIndex].indexOf(targetCardId);
     nextColumns[targetColumnIndex].splice(insertAfter ? targetIndex + 1 : targetIndex, 0, sourceCardId);
 
+    const previousLayout = cardLayout;
     void persistLayout({
       ...cardLayout,
       columns: nextColumns,
       cardOrder: flattenedColumns(nextColumns)
     }, "Card order saved.");
+    dispatchStudioToast({
+      message: t("Card moved."),
+      actionLabel: t("Undo"),
+      onAction: () => { void persistLayout(previousLayout, "Card order restored."); }
+    });
   }
 
   function reorderMobileCardByDrop(sourceCardId: OrderDetailCardId, targetCardId: OrderDetailCardId, insertAfter: boolean) {
@@ -3151,12 +3158,18 @@ export function OrderDetailContent({
     while (nextColumns.length <= targetColumnIndex) nextColumns.push([]);
     nextColumns[targetColumnIndex].push(sourceCardId);
 
+    const previousLayout = cardLayout;
     void persistLayout({
       ...cardLayout,
       columns: nextColumns,
       columnWidths: columnWidthsForCount(cardLayout.columnWidths, nextColumns.length),
       cardOrder: flattenedColumns(nextColumns)
     }, "Card order saved.");
+    dispatchStudioToast({
+      message: t("Card moved."),
+      actionLabel: t("Undo"),
+      onAction: () => { void persistLayout(previousLayout, "Card order restored."); }
+    });
   }
 
   function handleColumnDragOver(event: DragEvent<HTMLDivElement>, columnIndex: number) {

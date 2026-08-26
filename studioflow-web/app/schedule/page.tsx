@@ -7,6 +7,7 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
@@ -725,6 +726,21 @@ export default function SchedulePage() {
       const refreshedOrders = await loadScheduleOrders(workspace.id, workspace, uid);
       setOrders(refreshedOrders);
       setScheduleStatus(`Schedule updated: ${previousRange} -> ${nextRange}`);
+      // The report's ask, verbatim: "Schedule updated — Undo". The undo call
+      // must see the POST-change order, or its own no-change guard bites.
+      const previousStart = orderStartDate(order);
+      const previousDelivery = Math.max(order.deliveryTime, 1);
+      const changedOrder: ScheduleOrderItem = {
+        ...order,
+        paymentDate: normalizedPaymentDate,
+        deliveryTime: normalizedDeliveryTime,
+        dueDate: nextDueDate
+      };
+      dispatchStudioToast({
+        message: `${t("Schedule updated")}: ${previousRange} → ${nextRange}`,
+        actionLabel: t("Undo"),
+        onAction: () => { void saveScheduleOrderRange(changedOrder, previousStart, previousDelivery); }
+      });
     } catch (saveError) {
       setOrders(previousOrders);
       setScheduleStatus("");
@@ -1005,7 +1021,9 @@ export default function SchedulePage() {
           <div className="schedule-header-card">
             <div className="schedule-title-block">
               <h1>{t(teamMode ? "Team Schedule" : "Schedule")}</h1>
-              <p>{t(teamMode ? "See each team member's assigned work." : "See who is doing what and when.")}</p>
+              {/* The two screens confused people: this one plans ORDERS on a
+                  timeline, Team Schedule plans PEOPLE. Say so. */}
+              <p>{t(teamMode ? "Plan your team: each member's assigned work and availability." : "Plan your orders: start and delivery dates on one timeline.")}</p>
             </div>
             <div className="schedule-header-actions">
               {workspace ? <span className="studio-pill">{workspace.name} - {workspace.roleLabel}</span> : null}
@@ -1098,9 +1116,34 @@ export default function SchedulePage() {
 
             <div className="schedule-zoom-control" role="group" aria-label={t("Timeline zoom")} title={t("Timeline zoom")}>
               <button type="button" onClick={() => adjustScheduleZoom(-0.15)} disabled={clampedTimelineZoom <= MIN_SCHEDULE_ZOOM + 0.001} aria-label={t("Zoom out")} title={t("Zoom out")}>−</button>
-              <span>{Math.round(clampedTimelineZoom * 100)}%</span>
+              {/* The percentage doubles as a preset picker: fixed steps plus
+                  Fit, which sizes the day width so the whole range is visible. */}
+              <select
+                className="schedule-zoom-preset"
+                value={String(Math.round(clampedTimelineZoom * 100))}
+                aria-label={t("Zoom presets")}
+                onChange={event => {
+                  if (event.target.value === "fit") {
+                    const scroller = timelineScrollRef.current;
+                    if (scroller && scroller.clientWidth > 0) {
+                      setScheduleZoom((scroller.clientWidth - 34) / (visibleDayCount * baseDayWidth));
+                    }
+                    return;
+                  }
+                  setScheduleZoom(Number(event.target.value) / 100);
+                }}
+              >
+                {[75, 100, 125, 150].includes(Math.round(clampedTimelineZoom * 100)) ? null : (
+                  <option value={String(Math.round(clampedTimelineZoom * 100))}>{Math.round(clampedTimelineZoom * 100)}%</option>
+                )}
+                <option value="75">75%</option>
+                <option value="100">100%</option>
+                <option value="125">125%</option>
+                <option value="150">150%</option>
+                <option value="fit">{t("Fit")}</option>
+              </select>
               <button type="button" onClick={() => adjustScheduleZoom(0.15)} disabled={clampedTimelineZoom >= MAX_SCHEDULE_ZOOM - 0.001} aria-label={t("Zoom in")} title={t("Zoom in")}>+</button>
-              <button type="button" onClick={() => setScheduleZoom(1)} aria-label={t("Reset zoom")} title={t("Reset zoom")}>↺</button>
+              <button type="button" onClick={() => setScheduleZoom(1)} aria-label={t("Reset zoom")} title={t("Reset to 100%")}>↺</button>
             </div>
 
             <div className="schedule-mobile-span-row">

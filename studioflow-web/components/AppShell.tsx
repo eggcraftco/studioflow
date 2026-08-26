@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
+import { StudioToastHost } from "@/components/StudioToastHost";
 import { auth, db } from "@/lib/firebase/client";
 import { doc, getDoc } from "firebase/firestore";
 import {
@@ -1963,6 +1964,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+      <StudioToastHost />
       <AppHelpAssistant workspace={workspace} language={language} t={t} />
       <NotificationsDrawer
         open={notifDrawerOpen}
