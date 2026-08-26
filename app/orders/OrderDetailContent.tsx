@@ -3036,6 +3036,18 @@ export function OrderDetailContent({
     });
   }
 
+  // Keyboard/menu alternative to dragging: nudge a card within its column or
+  // across columns. Reuses the exact drag mutators, so the same toasts and
+  // undo apply.
+  function moveCardColumnBy(cardId: OrderDetailCardId, direction: -1 | 1) {
+    setOpenCardMenuId(null);
+    if (!canEditCardLayout || savingLayout || isNarrowLayout) return;
+    const columns = cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder];
+    const currentIndex = columns.findIndex(ids => ids.includes(cardId));
+    if (currentIndex < 0) return;
+    moveCardToColumn(cardId, currentIndex + direction);
+  }
+
   // The card report's size menu: content-fit, default, column-match and three
   // fixed steps. All routes flow through the same persistLayout the resize
   // handles use, so undo/rollback behavior stays identical.
@@ -3103,10 +3115,16 @@ export function OrderDetailContent({
     const [movedCard] = nextMobileOrder.splice(index, 1);
     nextMobileOrder.splice(targetIndex, 0, movedCard);
 
+    const previousLayout = cardLayout;
     void persistLayout({
       ...cardLayout,
       mobileCardOrder: nextMobileOrder
     }, "Phone card order saved.");
+    dispatchStudioToast({
+      message: t("Card moved."),
+      actionLabel: t("Undo"),
+      onAction: () => { void persistLayout(previousLayout, "Card order restored."); }
+    });
   }
 
   function reorderCardByDrop(sourceCardId: OrderDetailCardId, targetCardId: OrderDetailCardId, insertAfter: boolean) {
@@ -5133,6 +5151,17 @@ export function OrderDetailContent({
             >
               Edit Block Headings
             </button>
+            <div className="order-card-menu-label">Move</div>
+            <div className="order-card-size-steps">
+              <button type="button" disabled={locked || savingLayout} title="Move up" aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑</button>
+              <button type="button" disabled={locked || savingLayout} title="Move down" aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓</button>
+              {!isNarrowLayout ? (
+                <>
+                  <button type="button" disabled={locked || savingLayout} title="Move to previous column" aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>←</button>
+                  <button type="button" disabled={locked || savingLayout} title="Move to next column" aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→</button>
+                </>
+              ) : null}
+            </div>
             <div className="order-card-menu-label">Size</div>
             <div className="order-card-size-grid">
               <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "fit")} title="Shrink the card to exactly its content">
@@ -8459,9 +8488,8 @@ export function OrderDetailContent({
                 <div className="workspace-layout-mode-actions">
                   {isOrderCardLayoutIndependent ? (
                     <>
-                      <button className="button secondary" type="button" disabled={savingLayout || !canEditCardLayout} onClick={() => void persistLayout(cardLayout, "Saved layout for this order.")}>
-                        Save this order
-                      </button>
+                      {/* Changes autosave; a manual Save next to autosave only
+                          confused people (report §8). Rejoin is the one real action. */}
                       <button className="button secondary" type="button" disabled={savingLayout || !canEditCardLayout} onClick={() => void rejoinSharedCardLayout()}>
                         Rejoin shared
                       </button>
