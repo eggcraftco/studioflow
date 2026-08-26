@@ -461,6 +461,30 @@ data class StudioInventoryMovement(
     }
 }
 
+/** One row of the Files library, as listLibraryFiles returns it. Only the
+ *  fields the detail sheet draws are kept — anything else the server sends is
+ *  ignored, so new library fields never break the parse. */
+data class StudioLibraryFile(
+    val id: String,
+    val displayName: String,
+    val fileSize: Long,
+    val storagePath: String,
+    val updatedAtMs: Long
+) {
+    companion object {
+        fun from(raw: Map<*, *>): StudioLibraryFile? {
+            val id = raw["id"] as? String ?: return null
+            return StudioLibraryFile(
+                id = id,
+                displayName = raw["displayName"] as? String ?: "",
+                fileSize = (raw["fileSize"] as? Number)?.toLong() ?: 0L,
+                storagePath = raw["storagePath"] as? String ?: "",
+                updatedAtMs = (raw["updatedAtMs"] as? Number)?.toLong() ?: 0L
+            )
+        }
+    }
+}
+
 enum class StudioMovementKind(val raw: String, val label: String) {
     OpeningStock("openingStock", "Opening stock"),
     Purchase("purchase", "Purchases received"),

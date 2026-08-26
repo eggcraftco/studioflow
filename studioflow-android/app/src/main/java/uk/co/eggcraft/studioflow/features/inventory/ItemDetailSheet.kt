@@ -8,6 +8,8 @@ package uk.co.eggcraft.studioflow.features.inventory
 // strings so the translation tables line up. Every write goes through the same
 // callables the other platforms use; nothing here does its own arithmetic.
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,11 +54,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
+import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
@@ -94,6 +99,13 @@ private fun movementKindLabel(kind: String): String = when (kind) {
     else -> kind
 }
 
+/** The same wording the client files hub uses for a byte count. */
+private fun libraryFileSizeLabel(bytes: Long): String = when {
+    bytes >= 1024 * 1024 -> String.format(Locale.UK, "%.1f MB", bytes / 1024.0 / 1024.0)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
+}
+
 @Composable
 private fun DetailRow(label: String, value: String) {
     Row(Modifier.padding(vertical = 3.dp)) {
@@ -130,6 +142,7 @@ fun ItemDetailSheet(
 ) {
     val scope = rememberCoroutineScope()
     val repository = remember { StudioFlowRepository() }
+    val context = LocalContext.current
 
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -138,6 +151,8 @@ fun ItemDetailSheet(
     var locationDraft by remember(item.id) { mutableStateOf(item.location) }
     var historyOpen by remember(item.id) { mutableStateOf(false) }
     var movements by remember(item.id) { mutableStateOf<List<StudioInventoryMovement>?>(null) }
+    var filesOpen by remember(item.id) { mutableStateOf(false) }
+    var libraryFiles by remember(item.id) { mutableStateOf<List<StudioLibraryFile>?>(null) }
 
     fun run(failText: String, action: suspend () -> Unit) {
         scope.launch {
@@ -159,6 +174,13 @@ fun ItemDetailSheet(
     LaunchedEffect(historyOpen, item.id) {
         if (!historyOpen || movements != null) return@LaunchedEffect
         movements = try { repository.inventoryMovements(workspaceId, item.id) }
+        catch (failure: Exception) { emptyList() }
+    }
+
+    // The Files library list loads the same way: on first open only.
+    LaunchedEffect(filesOpen, item.id) {
+        if (!filesOpen || libraryFiles != null) return@LaunchedEffect
+        libraryFiles = try { repository.libraryFiles(workspaceId, "inventoryItem:${item.id}") }
         catch (failure: Exception) { emptyList() }
     }
 
@@ -425,6 +447,54 @@ fun ItemDetailSheet(
                                             ).filter { it.isNotBlank() }.joinToString(" · "),
                                             fontSize = 10.sp, color = Color.Gray
                                         )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---- Files ----
+                    Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth().clickable { filesOpen = !filesOpen }
+                            ) {
+                                Text(t("Files"), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(if (filesOpen) "▾" else "▸", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            if (filesOpen) {
+                                Spacer(Modifier.height(6.dp))
+                                val rows = libraryFiles
+                                when {
+                                    rows == null -> Text(t("Loading…"), fontSize = 12.sp, color = Color.Gray)
+                                    rows.isEmpty() -> Text(
+                                        t("No library files are linked to this item. Certificates, valuations and receipts linked in the Files library appear here."),
+                                        fontSize = 12.sp, color = Color.Gray
+                                    )
+                                    else -> rows.forEachIndexed { index, file ->
+                                        if (index > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                                        Column(
+                                            Modifier.fillMaxWidth().clickable(enabled = file.storagePath.isNotBlank()) {
+                                                scope.launch {
+                                                    runCatching {
+                                                        val url = repository.libraryFileUrl(file.storagePath)
+                                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Text(file.displayName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                listOf(
+                                                    libraryFileSizeLabel(file.fileSize),
+                                                    if (file.updatedAtMs > 0)
+                                                        DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(file.updatedAtMs))
+                                                    else ""
+                                                ).filter { it.isNotBlank() }.joinToString(" · "),
+                                                fontSize = 10.sp, color = Color.Gray
+                                            )
+                                        }
                                     }
                                 }
                             }

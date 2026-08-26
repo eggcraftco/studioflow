@@ -255,6 +255,26 @@ struct InventoryMovement: Identifiable, Equatable {
     }
 }
 
+/// One file from the central library, as listLibraryFiles returns it. The
+/// server sends more fields than this; the panel only needs enough to name a
+/// file, size it, date it and open it.
+struct LibraryFile: Identifiable, Equatable {
+    let id: String
+    let displayName: String
+    let fileSize: Int64
+    let storagePath: String
+    let updatedAtMs: Double
+
+    init?(_ raw: [String: Any]) {
+        guard let id = raw["id"] as? String else { return nil }
+        self.id = id
+        displayName = raw["displayName"] as? String ?? ""
+        fileSize = (raw["fileSize"] as? NSNumber)?.int64Value ?? 0
+        storagePath = raw["storagePath"] as? String ?? ""
+        updatedAtMs = (raw["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0
+    }
+}
+
 /// What the shelf value did over the last 30 days. `available` is false while
 /// the ledger is younger than the window — a percentage computed over a period
 /// the ledger does not cover would be an invented number.
@@ -660,6 +680,20 @@ extension FirebaseManager {
     func loadInventoryMovements(itemId: String) async throws -> [InventoryMovement] {
         let raw = try await inventoryCall("listInventoryMovements", ["itemId": itemId])
         return (raw["movements"] as? [[String: Any]] ?? []).compactMap(InventoryMovement.init)
+    }
+
+    /// The central library files linked to one record, e.g.
+    /// "inventoryItem:<itemId>". companyId travels via inventoryCall like
+    /// every other workspace-scoped callable.
+    func loadLibraryFiles(linkKey: String) async throws -> [LibraryFile] {
+        let raw = try await inventoryCall("listLibraryFiles", ["linkKey": linkKey])
+        return (raw["files"] as? [[String: Any]] ?? []).compactMap(LibraryFile.init)
+    }
+
+    /// Library files store storage paths, not URLs — same reasoning as item
+    /// photos: a path is permanent where a download URL expires.
+    func libraryFileURL(_ path: String) async throws -> URL {
+        try await Storage.storage().reference(withPath: path).downloadURL()
     }
 
     func loadPurchases() async throws -> [Purchase] {

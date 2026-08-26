@@ -57,6 +57,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryMovement
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryStatus
+import uk.co.eggcraft.studioflow.data.model.StudioLibraryFile
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioOrderStockLine
 import uk.co.eggcraft.studioflow.data.model.StudioOpeningStockRead
@@ -2706,6 +2707,16 @@ class StudioFlowRepository(
         return (raw["movements"] as? List<*> ?: emptyList<Any?>())
             .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryMovement::from) }
     }
+
+    /** The Files library entries linked to one record, e.g. "inventoryItem:<id>". */
+    suspend fun libraryFiles(workspaceId: String, linkKey: String): List<StudioLibraryFile> {
+        val raw = inventoryCall("listLibraryFiles", workspaceId, mapOf("linkKey" to linkKey))
+        return (raw["files"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioLibraryFile::from) }
+    }
+
+    suspend fun libraryFileUrl(path: String): String =
+        storage.reference.child(path).downloadUrl.await().toString()
 
     // ---- Stocktake and reporting ----
 

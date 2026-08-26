@@ -17,6 +17,7 @@ struct ItemDetailSheet: View {
 
     @State private var item: InventoryItem
     @State private var movements: [InventoryMovement]?
+    @State private var libraryFiles: [LibraryFile]?
     @State private var busy = false
     @State private var error = ""
     @State private var editing = false
@@ -54,6 +55,7 @@ struct ItemDetailSheet: View {
                     inventoryDetailsCard
                     if canEdit { quickActionsCard }
                     historyCard
+                    filesCard
                 }
                 .padding(16)
             }
@@ -70,7 +72,10 @@ struct ItemDetailSheet: View {
         #if os(macOS)
         .frame(minWidth: 480, minHeight: 620)
         #endif
-        .task { await loadMovements() }
+        .task {
+            await loadMovements()
+            await loadLibraryFiles()
+        }
         .sheet(isPresented: $editing) {
             NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: item, itemId: item.id) {
                 Task { await refresh() }
@@ -297,6 +302,43 @@ struct ItemDetailSheet: View {
         }
     }
 
+    // Read-only window onto the central Files library — linking and unlinking
+    // happen there, this card only shows what already points at this item.
+    private var filesCard: some View {
+        card(t("Files", lang: lang)) {
+            if let libraryFiles {
+                if libraryFiles.isEmpty {
+                    Text(t("No library files are linked to this item. Certificates, valuations and receipts linked in the Files library appear here.", lang: lang))
+                        .font(.system(size: 12)).foregroundColor(.secondary)
+                } else {
+                    ForEach(libraryFiles) { file in
+                        Button { openLibraryFile(file) } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(file.displayName).font(.system(size: 12, weight: .semibold))
+                                    Text([
+                                        fileSizeText(file.fileSize),
+                                        Date(timeIntervalSince1970: file.updatedAtMs / 1000)
+                                            .formatted(date: .abbreviated, time: .shortened)
+                                    ].joined(separator: " · "))
+                                        .font(.system(size: 10)).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.system(size: 12)).foregroundColor(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if file.id != libraryFiles.last?.id { Divider() }
+                    }
+                }
+            } else {
+                Text(t("Loading…", lang: lang)).font(.system(size: 12)).foregroundColor(.secondary)
+            }
+        }
+    }
+
     // MARK: Building blocks
 
     private func reservationLabel(_ row: InventoryReservation) -> String {
@@ -362,6 +404,33 @@ struct ItemDetailSheet: View {
     private func loadMovements() async {
         do { movements = try await firebaseManager.loadInventoryMovements(itemId: item.id) }
         catch { movements = [] }
+    }
+
+    private func loadLibraryFiles() async {
+        do { libraryFiles = try await firebaseManager.loadLibraryFiles(linkKey: "inventoryItem:\(item.id)") }
+        catch { libraryFiles = [] }
+    }
+
+    private func fileSizeText(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    private func openLibraryFile(_ file: LibraryFile) {
+        guard !file.storagePath.isEmpty else { return }
+        Task {
+            do {
+                let url = try await firebaseManager.libraryFileURL(file.storagePath)
+                #if os(macOS)
+                NSWorkspace.shared.open(url)
+                #else
+                await UIApplication.shared.open(url)
+                #endif
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 
     private func saveLocation() {
