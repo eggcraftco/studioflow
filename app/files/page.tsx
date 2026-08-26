@@ -506,7 +506,7 @@ export default function FilesPage() {
             <>
               <div className="upload-safety-panel">
                 <span className="studio-pill">Max {maxUploadSizeMB} MB</span>
-                <span className="studio-pill">PDF, image, PSD, PSB</span>
+                <span className="studio-pill">PDF, image, PSD, PSB, ZIP</span>
                 {requireUploadPolicyAcceptance ? (
                   <label className="upload-safety-check">
                     <input

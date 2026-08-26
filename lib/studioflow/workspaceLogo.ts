@@ -103,6 +103,12 @@ export async function uploadWorkspaceLogo({
     throw new Error("Your workspace role cannot edit Workspace Logo.");
   }
 
+  // The card says "Maximum N MB" — until now nothing actually checked, and the
+  // limit was written into the file's metadata as if it had been.
+  if (maxSizeMB > 0 && file.size > maxSizeMB * 1024 * 1024) {
+    throw new Error(`This file is larger than the ${Math.round(maxSizeMB)} MB limit set in Safety & Uploads.`);
+  }
+
   const extension = extensionForWorkspaceLogo(file);
   const contentType = contentTypeForWorkspaceLogo(file, extension);
   await requireWorkspacePlanAction(workspace.id, "upload_workspace_logo", {
