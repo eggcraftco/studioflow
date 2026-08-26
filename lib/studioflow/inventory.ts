@@ -422,6 +422,51 @@ export async function saveSupplier(
 }
 
 // ---------------------------------------------------------------------------
+// Hierarchical locations
+//
+// The tree lives server-side and OWNS the location strings on items: renaming
+// a node rewrites its subtree and every item standing in it. Items still carry
+// one plain string, so free-typed locations keep working everywhere.
+// ---------------------------------------------------------------------------
+
+export type InventoryLocation = {
+  id: string;
+  name: string;
+  parentId: string;
+  /** Display path, e.g. "Safe A / Drawer 3". */
+  path: string;
+  depth: number;
+};
+
+export async function listInventoryLocations(workspace: WorkspaceContext) {
+  return call<{ ok?: boolean; locations?: InventoryLocation[] }>(
+    "listInventoryLocations",
+    { companyId: workspace.id },
+    "Locations could not be loaded."
+  );
+}
+
+export async function saveInventoryLocation(
+  workspace: WorkspaceContext,
+  location: { name: string; parentId?: string },
+  locationId?: string
+) {
+  return call<{ ok?: boolean; locationId?: string; path?: string; renamedDescendants?: number; relabelledItems?: number }>(
+    "saveInventoryLocation",
+    { companyId: workspace.id, locationId: locationId || "", ...location },
+    "The location could not be saved."
+  );
+}
+
+export async function deleteInventoryLocation(workspace: WorkspaceContext, locationId: string) {
+  return call<{ ok?: boolean }>(
+    "deleteInventoryLocation",
+    { companyId: workspace.id, locationId },
+    "The location could not be deleted."
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Reserving stock for an order
 // ---------------------------------------------------------------------------
 

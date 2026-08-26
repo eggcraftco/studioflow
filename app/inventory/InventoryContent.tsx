@@ -11,6 +11,7 @@ import {
   inventoryOnHand,
   isInventoryLowStock,
   listInventoryItems,
+  listInventoryLocations,
   type InventoryListCursor,
   saveInventoryItem,
   setInventoryItemStatus,
@@ -30,10 +31,11 @@ import { ItemPhotosModal } from "./ItemPhotosModal";
 import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
 import { ReportsPanel } from "./ReportsPanel";
+import { LocationsPanel } from "./LocationsPanel";
 import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
-type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "reports";
+type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "reports";
 
 function money(symbol: string, value: number) {
   return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
@@ -138,6 +140,9 @@ export function InventoryContent({
   const [bulkLocationOpen, setBulkLocationOpen] = useState(false);
   const [bulkLocationDraft, setBulkLocationDraft] = useState("");
   const [supplierNames, setSupplierNames] = useState<string[]>([]);
+  // Defined location paths ("Safe A / Drawer 3") — offered in the item form so
+  // a fresh, still-empty location is pickable before anything stands in it.
+  const [locationPaths, setLocationPaths] = useState<string[]>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -195,6 +200,19 @@ export function InventoryContent({
   useEffect(() => {
     void reloadSuppliers();
   }, [reloadSuppliers]);
+
+  const reloadLocationPaths = useCallback(async () => {
+    try {
+      const result = await listInventoryLocations(workspace);
+      setLocationPaths((result?.locations ?? []).map(row => row.path).filter(Boolean));
+    } catch {
+      setLocationPaths([]);
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    void reloadLocationPaths();
+  }, [reloadLocationPaths]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -404,6 +422,7 @@ export function InventoryContent({
         <button type="button" data-active={tab === "suppliers"} onClick={() => { setTab("suppliers"); setSelectedId(""); }}>{t("Suppliers")}</button>
         <p className="inventory-nav-group">{t("Manage")}</p>
         <button type="button" data-active={tab === "stocktake"} onClick={() => { setTab("stocktake"); setSelectedId(""); }}>{t("Stocktake")}</button>
+        <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
         <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
       </nav>
 
@@ -422,6 +441,13 @@ export function InventoryContent({
           currencySymbol={currencySymbol}
           canEdit={canEdit}
           onStockChanged={() => void reload()}
+        />
+      ) : tab === "locations" ? (
+        <LocationsPanel
+          workspace={workspace}
+          items={items}
+          canEdit={canEdit}
+          onLocationsChanged={() => { void reload(); void reloadLocationPaths(); }}
         />
       ) : tab === "reports" ? (
         <ReportsPanel workspace={workspace} currencySymbol={currencySymbol} />
@@ -739,6 +765,7 @@ export function InventoryContent({
           workspace={workspace}
           currencySymbol={currencySymbol}
           tagSuggestions={allTags}
+          locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
           onClose={() => setModalOpen(false)}
           onSaved={async () => { setModalOpen(false); await reload(); }}
         />
@@ -749,6 +776,7 @@ export function InventoryContent({
           workspace={workspace}
           currencySymbol={currencySymbol}
           tagSuggestions={allTags}
+          locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
           initialItem={editing}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }}
@@ -766,6 +794,7 @@ function NewItemModal({
   workspace,
   currencySymbol,
   tagSuggestions,
+  locationSuggestions,
   initialItem,
   onClose,
   onSaved
@@ -774,6 +803,8 @@ function NewItemModal({
   currencySymbol: string;
   /** Every tag already in use, so spellings converge instead of multiplying. */
   tagSuggestions: string[];
+  /** Defined location paths plus every location already in use. */
+  locationSuggestions: string[];
   /** When set, the form edits this item (or, with a blank id, creates a copy). */
   initialItem?: InventoryItem | null;
   onClose: () => void;
@@ -877,7 +908,10 @@ function NewItemModal({
           <label className="inventory-field">
             <span>{t("Location")}</span>
             <input className="input" value={draft.location ?? ""} onChange={e => set("location", e.target.value)}
-              placeholder={t("Safe A, Drawer 3…")} />
+              placeholder={t("Safe A, Drawer 3…")} list="inventory-location-suggestions" />
+            <datalist id="inventory-location-suggestions">
+              {locationSuggestions.map(path => <option key={path} value={path} />)}
+            </datalist>
           </label>
 
           {isUnique ? (
