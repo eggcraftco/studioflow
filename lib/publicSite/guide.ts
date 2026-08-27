@@ -63,7 +63,8 @@ const TREE_EN: GuideNode[] = [
         "The Tax set-aside card holds net VAT — VAT collected on sales minus reclaimable VAT inside bank payments marked Standard or Reduced rate — plus Corporation Tax when enabled.",
         "Click any point on the Net Profit chart to zoom the dashboard to that period.",
         "The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range.",
-        "When Shopify or WooCommerce orders exist, channel pills under the period switcher scope every figure to one sales channel — or to manually created orders."
+        "When Shopify or WooCommerce orders exist, channel pills under the period switcher scope every figure to one sales channel — or to manually created orders.",
+        "Orders imported in another currency are listed in the Financial Breakdown in their original currency, marked not converted — NivaDesk never silently converts money."
       ] }
     ]
   },
@@ -856,7 +857,8 @@ const TREE_TR: GuideNode[] = [
         "Tax set-aside kartı net KDV tutar — satışlarda tahsil edilen KDV eksi Standart/İndirimli oranlı banka ödemelerindeki iade alınabilir KDV — açıksa Kurumlar Vergisi de eklenir.",
         "Net Profit grafiğinde bir noktaya tıklayın; panel o döneme yakınlaşır.",
         "Dönem seçicide hazır aralıklar var — Son 7/30 gün, bu/geçen çeyrek, İngiltere vergi yılı — ve özel aralık.",
-        "Shopify veya WooCommerce siparişi varsa dönem seçicinin altındaki kanal pilleri her rakamı tek satış kanalına — veya elle açılan siparişlere — daraltır."
+        "Shopify veya WooCommerce siparişi varsa dönem seçicinin altındaki kanal pilleri her rakamı tek satış kanalına — veya elle açılan siparişlere — daraltır.",
+        "Başka para biriminde içe aktarılan siparişler Financial Breakdown'da kendi para birimleriyle, çevrilmedi işaretiyle listelenir — NivaDesk parayı asla sessizce çevirmez."
       ] }
     ]
   },

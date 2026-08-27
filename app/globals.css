@@ -24938,3 +24938,20 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
 .dashboard-channel-control {
   margin-top: 10px;
 }
+
+/* Hotfix: grouping changed .public-order-card-grid's children from 19 card
+   slots to 5 group blocks — the old 210px auto-fit tracks squeezed every
+   group into a sliver. Give the blocks two real columns (one on phones). */
+.public-site .public-order-card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 16px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .public-site .public-order-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .public-site .public-order-card-group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
