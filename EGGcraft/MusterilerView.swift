@@ -719,6 +719,10 @@ struct MusteriDetayView: View {
     @State private var pendingMusteriPreviousName: String? = nil
     @State private var customerNameDraft: String = ""
     @FocusState private var customerNameFocused: Bool
+    // The Contact Info "Customer name" row edits the SAME draft as the heading
+    // (one source of truth); its own focus only decides when to commit.
+    @FocusState private var contactCustomerNameFocused: Bool
+    @State private var isHoveringCustomerName = false
     @State private var isEditingCustomerNotes = false
     @State private var selectedCustomerTab: String = "Orders"
     @State private var isResyncingFromStore = false
@@ -741,6 +745,23 @@ struct MusteriDetayView: View {
             .lowercased()
             .replacingOccurrences(of: "[\\s_-]+", with: "", options: .regularExpression)
         return ["owner", "admin", "member"].contains(role)
+    }
+
+    /// True while EITHER editor of the shared name draft (heading or the
+    /// Contact Info row) owns the keyboard — external snapshot updates must
+    /// not clobber what the user is typing in either place.
+    private var isEditingCustomerName: Bool {
+        customerNameFocused || contactCustomerNameFocused
+    }
+
+    /// macOS reveals the heading's pencil on hover (or while editing); on
+    /// iOS/iPadOS there is no hover, so the hint is always shown but subtle.
+    private var isCustomerNamePencilVisible: Bool {
+        #if os(macOS)
+        return isHoveringCustomerName || customerNameFocused
+        #else
+        return true
+        #endif
     }
 
     var musteriSiparisleri: [Siparis] { firebaseManager.siparisler.filter { $0.customerName.lowercased() == musteri.name.lowercased() }.sorted { $0.paymentDate > $1.paymentDate } }
@@ -811,33 +832,57 @@ struct MusteriDetayView: View {
             customerAvatarView
 
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Customer Name", text: $customerNameDraft)
-                    .font(.system(size: isPhoneLayout ? 22 : 28, weight: .bold))
-                    .foregroundColor(.primary)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1)
-                    .focused($customerNameFocused)
-                    .onSubmit { commitCustomerNameDraft() }
-                    .onAppear {
+                HStack(spacing: 8) {
+                    TextField("Customer Name", text: $customerNameDraft)
+                        .font(.system(size: isPhoneLayout ? 22 : 28, weight: .bold))
+                        .foregroundColor(.primary)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1)
+                        .focused($customerNameFocused)
+                        .onSubmit { commitCustomerNameDraft() }
+                    // A quiet "this is editable" hint: always visible on
+                    // iOS/iPadOS, hover-revealed on macOS (mirrors the web).
+                    // Kept in the layout while hidden so hovering never
+                    // reflows the heading.
+                    Button {
+                        customerNameFocused = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(isCustomerNamePencilVisible ? 1 : 0)
+                    .allowsHitTesting(isCustomerNamePencilVisible)
+                    .help(t("Rename", lang: seciliDil))
+                    .accessibilityLabel(t("Rename", lang: seciliDil))
+                    .accessibilityHidden(!isCustomerNamePencilVisible)
+                }
+                .onHover { hovering in
+                    isHoveringCustomerName = hovering
+                }
+                .onAppear {
+                    customerNameDraft = musteri.name
+                }
+                .onChange(of: musteri.id ?? "") { _, _ in
+                    if !isEditingCustomerName {
                         customerNameDraft = musteri.name
                     }
-                    .onChange(of: musteri.id ?? "") { _, _ in
-                        if !customerNameFocused {
+                }
+                .onChange(of: musteri.name) { _, newValue in
+                    if !isEditingCustomerName {
+                        customerNameDraft = newValue
+                    }
+                }
+                .onChange(of: customerNameFocused) { _, focused in
+                    if focused {
+                        if !contactCustomerNameFocused {
                             customerNameDraft = musteri.name
                         }
+                    } else {
+                        commitCustomerNameDraft()
                     }
-                    .onChange(of: musteri.name) { _, newValue in
-                        if !customerNameFocused {
-                            customerNameDraft = newValue
-                        }
-                    }
-                    .onChange(of: customerNameFocused) { _, focused in
-                        if focused {
-                            customerNameDraft = musteri.name
-                        } else {
-                            commitCustomerNameDraft()
-                        }
-                    }
+                }
 
                 Text("\(musteriSiparisleri.count) \(t("Orders", lang: seciliDil)) • \(seciliParaBirimi)\(toplamHarcama.toCurrencyString())")
                     .font(.system(size: isPhoneLayout ? 12 : 13, weight: .semibold))
@@ -917,12 +962,6 @@ struct MusteriDetayView: View {
                     let encoded = instagram.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? instagram
                     quickActionChip(icon: "at", label: "Instagram", urlString: "https://instagram.com/\(encoded)",
                                     highlighted: preferred == "instagram", blocked: blocked)
-                }
-                quickActionChip(icon: "bubble.left.fill", label: t("Messages", lang: seciliDil), blocked: blocked) {
-                    withAnimation { aktifSekme = "Messages" }
-                }
-                quickActionChip(icon: "sparkles", label: t("AI Reply", lang: seciliDil), blocked: blocked) {
-                    withAnimation { aktifSekme = "QuickReply" }
                 }
                 if blocked {
                     Text("⛔ \(t("Do not contact", lang: seciliDil))")
@@ -1322,8 +1361,44 @@ struct MusteriDetayView: View {
         saveMusteriDetailChange(previousName: previousName)
     }
 
+    /// The heading's name editor, repeated inside Contact Info so the name is
+    /// editable where every other contact detail lives (web parity). Shares
+    /// customerNameDraft + commitCustomerNameDraft with the heading — one
+    /// draft, one commit path, so the two fields can never fight each other.
+    private var contactInfoNameRow: some View {
+        HStack(spacing: 10) {
+            Text(t("Customer name", lang: seciliDil))
+                .font(.system(size: 13))
+                .foregroundColor(.gray)
+                .frame(width: 110, alignment: .leading)
+            TextField("", text: $customerNameDraft)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.primary.opacity(0.05), lineWidth: 1)
+                        )
+                )
+                .cornerRadius(6)
+                .focused($contactCustomerNameFocused)
+                .onSubmit { commitCustomerNameDraft() }
+                .onChange(of: contactCustomerNameFocused) { _, focused in
+                    if !focused {
+                        commitCustomerNameDraft()
+                    }
+                }
+        }
+    }
+
     private var contactInfoCard: some View {
         DetayKartiSabit(title: t("Contact Info", lang: seciliDil), iconName: "person.crop.circle") {
+            contactInfoNameRow
             DetailField(label: t("Email", lang: seciliDil), value: $musteri.email)
                 .onChange(of: musteri.email) { _, _ in saveMusteriDetailChange() }
             // The customer's own WhatsApp number, kept apart from the store-fed
