@@ -223,7 +223,12 @@ function addYears(date: Date, years: number) {
 }
 
 function dateInputValue(date: Date) {
-  return date.toISOString().slice(0, 10);
+  // Local calendar date, never toISOString: in BST, July 1st 00:00 local is
+  // June 30th in UTC, and the picker would land a day early (the same drift
+  // the schedule's Created Date bug came from).
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function parseInputDate(value: string, fallback: Date) {
@@ -254,8 +259,10 @@ function rangeWindow(range: RangeKey, orders: DashboardFinanceOrder[], customSta
   }
 
   if (range === "custom") {
-    const start = parseInputDate(customStart, startOfMonth(now));
-    const end = parseInputDate(customEnd, now);
+    let start = parseInputDate(customStart, startOfMonth(now));
+    let end = parseInputDate(customEnd, now);
+    // A backwards range is always a typo, never an intent: swap, don't zero.
+    if (start > end) [start, end] = [end, start];
     const days = Math.abs(end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000);
     return { start: startOfDay(start), end: endOfDay(end), unit: days > 70 ? "month" as BucketUnit : "day" as BucketUnit };
   }
@@ -599,12 +606,53 @@ export default function DashboardPage() {
               <div className="dashboard-date-controls">
                 <label>
                   {t("Start")}
-                  <input className="input" type="date" value={customStart} onChange={event => setCustomStart(event.target.value)} />
+                  <input className="input" type="date" value={customStart} max={customEnd || undefined} onChange={event => setCustomStart(event.target.value)} />
                 </label>
                 <label>
                   {t("End")}
-                  <input className="input" type="date" value={customEnd} onChange={event => setCustomEnd(event.target.value)} />
+                  <input className="input" type="date" value={customEnd} min={customStart || undefined} onChange={event => setCustomEnd(event.target.value)} />
                 </label>
+                {/* The ranges an owner actually reaches for (§3), one tap each.
+                    Tax year = UK personal tax year, 6 April to 5 April. */}
+                <div className="dashboard-range-presets">
+                  {([
+                    ["last7", t("Last 7 days")],
+                    ["last30", t("Last 30 days")],
+                    ["thisQuarter", t("This quarter")],
+                    ["lastQuarter", t("Last quarter")],
+                    ["taxYear", t("Tax year")]
+                  ] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className="compare-pill"
+                      onClick={() => {
+                        const now = new Date();
+                        const day = 24 * 60 * 60 * 1000;
+                        let start = now;
+                        let end = now;
+                        if (key === "last7") start = new Date(now.getTime() - 6 * day);
+                        else if (key === "last30") start = new Date(now.getTime() - 29 * day);
+                        else if (key === "thisQuarter") {
+                          start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+                        } else if (key === "lastQuarter") {
+                          const quarterStart = Math.floor(now.getMonth() / 3) * 3;
+                          start = new Date(now.getFullYear(), quarterStart - 3, 1);
+                          end = new Date(now.getFullYear(), quarterStart, 0);
+                        } else if (key === "taxYear") {
+                          const yearStart = now >= new Date(now.getFullYear(), 3, 6)
+                            ? new Date(now.getFullYear(), 3, 6)
+                            : new Date(now.getFullYear() - 1, 3, 6);
+                          start = yearStart;
+                        }
+                        setCustomStart(dateInputValue(start));
+                        setCustomEnd(dateInputValue(end));
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
 
