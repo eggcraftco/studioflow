@@ -835,3 +835,41 @@ Rapor: önceki önerilerin ~%75-80'i uygulanmış; kalan ana sorun sıralama
   doğrulandı, tur 37 canlıda CSS+JS marker'larıyla teyitli.
 - Ders: yapısal DOM değişikliği yapınca konteynerin ESKİ layout
   varsayımlarını da elden geçir; yalnız yeni sınıfların CSS'ini ekleme.
+
+---
+
+## 27 Ağu gece 3 — ANA SAYFA v3: kullanıcının mock'u (tur 38 CANLI)
+
+Kullanıcı görsel mock verdi; talimatlar: mock tasarımı uygula, ChatGPT
+bölümünü ve platform bölümünü KORU, kargo hikâyesini Features'a taşı,
+fiyatlar gerçek rakamlarla.
+
+**Uygulanan:**
+- Hero: eyebrow ve chip'ler gitti; ekran görüntüsünün üstünde 4 stat
+  kartı (3 orders / £2,450 / 2 in transit / 4 tasks); CTA'lar Start Free
+  + Watch the demo + View Pricing→ (metin bağlantısı); hero.body mock'un
+  3 kısa cümlesi. "See it full size" korunud.
+- "Everything stays connected" → hub diyagramı: ortada Order kartı
+  (Custom Leather Duffle Bag, In Progress, Timeline/Files/Notes çipleri),
+  çevresinde Customer/Work/Money/Items kartları, kesikli bağlantılar.
+  19 kartlık detay grid'i Features sayfasında yaşamaya devam ediyor.
+- Customisation: mini kanban kartı (4 kolon + sürüklenen "Edge
+  Finishing" hayaleti) + "Your studio. Your rules." altyazısı.
+- ChatGPT bölümü OLDUĞU GİBİ korundu (talimat).
+- Back office: 6 tıklanabilir ikon karosu, başlık "Powerful back-office
+  features for your studio."; açıklamalar title tooltip'inde.
+- Kargo: 4 ekranlık scroll hikâyesi /features'a taşındı (#shipping
+  çapası); ana sayfada tek satırlık "Keep customers informed" şeridi +
+  "See how tracking works →".
+- Platform bölümü OLDUĞU GİBİ korundu (talimat).
+- Fiyatlar GERÇEK: Free £0 Süresiz / Pro £19/ay (Recommended rozeti —
+  mevcut çevrili anahtar) / Team £49/ay — mock'taki £24/£59 ve yanlış
+  "per user" ibaresi KULLANILMADI. Compare plans → /pricing.
+- FAQ: 3 soruluk akordeon (içe aktarma/güvenlik/iptal) dürüst kısa
+  cevaplarla; mock'taki soru seti mevcut çevrili sorularla eşlendi.
+- Kapanış: "Ready to run a calmer, more organised studio?" + Start Free
+  + "No credit card required." — mock'taki "Join thousands of makers"
+  iddiası YALAN olurdu (37 workspace), bilinçli atlandı.
+- Footer mock'a çevrilmedi (yasal bağlantılar korunmalı; mock'ta yok).
+- Sayfa yüksekliği ~7.204px (12.595→9.376→7.204). 37 yeni string +
+  hero.body 12 dilde. Tur 38 canlıda 5 marker'la doğrulandı.
