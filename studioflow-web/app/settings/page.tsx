@@ -4042,6 +4042,15 @@ function FinancialSettingsSection({
     }
   }
 
+  // Discard resets the draft to the last loaded/saved settings; the unsaved
+  // guard's baseline was captured from that same object, so dirty drops back
+  // to false without any extra bookkeeping.
+  function handleDiscard() {
+    setDraft(settings);
+    setStatus("");
+    setError("");
+  }
+
   // The old flow was a browser confirm over a number nobody could see. Saving
   // the settings first is deliberate: the preview has to describe the rules that
   // will actually be applied, not the draft on screen.
@@ -4153,9 +4162,14 @@ function FinancialSettingsSection({
   const previewCurrency = draft.selectedCurrency || "£";
   const previewMoney = (value: number) =>
     `${previewCurrency}${Number(value || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const currencySummaryLabel =
+    FINANCIAL_CURRENCIES.find(([symbol]) => symbol === draft.selectedCurrency)?.[1] ?? previewCurrency;
+  const activeTaxBasisLabel = draft.taxCalculationType === "Profit"
+    ? (draft.taxRuleNameProfit || "Profit")
+    : (draft.taxRuleNameRevenue || "Revenue");
 
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack financial-settings-page">
       {recalculationPreview ? (
         <SettingsDialog
           wide
@@ -4289,267 +4303,348 @@ function FinancialSettingsSection({
         </section>
       ) : null}
 
-      <section className="card app-card financial-settings-card">
-        <header className="financial-settings-main-title">
-          <span className="financial-settings-main-icon">%</span>
-          <h2>{t("Financial Settings")}</h2>
-        </header>
-
-        <div className="financial-settings-section">
-          <div className="financial-settings-section-title">
-            <strong>{t("General")}</strong>
-            <span />
+      <header className="settings-page-header">
+        <div className="settings-page-header-info">
+          <p className="settings-page-breadcrumb">{t("Settings")} / {t("Finance & Tax")}</p>
+          <div className="settings-page-title-row">
+            <h2>{t("Financial Settings")}</h2>
+            <span className="settings-scope-badge">{t("Workspace · Owner managed")}</span>
           </div>
+          <p className="settings-page-subtitle">{t("Control currency, fees and tax calculations for this workspace.")}</p>
+        </div>
+        <div className="settings-page-header-actions">
+          <button
+            type="button"
+            className="button secondary"
+            disabled={saving || !financialDirty}
+            onClick={handleDiscard}
+          >
+            {t("Discard changes")}
+          </button>
+          <button
+            type="button"
+            className="button"
+            disabled={!canEdit || saving || !financialDirty}
+            onClick={() => { void handleSave(); }}
+          >
+            {saving ? t("Saving...") : t("Save changes")}
+          </button>
+        </div>
+        {status ? <p className="success-copy settings-page-header-note">{status}</p> : null}
+        {error ? <p className="layout-error settings-page-header-note">{error}</p> : null}
+      </header>
 
-          <label className="financial-settings-row">
-            <span>{t("Currency Symbol")}</span>
-            <select
-              className="input financial-control"
-              value={draft.selectedCurrency}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("selectedCurrency", event.target.value)}
-            >
-              {FINANCIAL_CURRENCIES.map(([symbol, label]) => (
-                <option value={symbol} key={symbol}>{label}</option>
-              ))}
-            </select>
-          </label>
+      <div className="financial-two-col">
+        <div className="financial-col">
+          <section className="card app-card financial-panel">
+            <CardTitle icon="finance" eyebrow={t("General")} title={t("Currency & formatting")} />
 
-          <label className="financial-settings-row">
-            <span>{t("Decimal Separator")}</span>
-            <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
+            <label className="financial-settings-row">
+              <span>{t("Currency Symbol")}</span>
+              <select
+                className="input financial-control"
+                value={draft.selectedCurrency}
+                disabled={!canEdit || saving}
+                onChange={event => updateString("selectedCurrency", event.target.value)}
+              >
+                {FINANCIAL_CURRENCIES.map(([symbol, label]) => (
+                  <option value={symbol} key={symbol}>{label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="financial-settings-row">
+              <span>{t("Decimal Separator")}</span>
+              <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
+                <button
+                  type="button"
+                  className={draft.selectedDecimalSeparator === "." ? "active" : ""}
+                  disabled={!canEdit || saving}
+                  onClick={() => updateString("selectedDecimalSeparator", ".")}
+                >
+                  {t("Dot (.)")}
+                </button>
+                <button
+                  type="button"
+                  className={draft.selectedDecimalSeparator === "," ? "active" : ""}
+                  disabled={!canEdit || saving}
+                  onClick={() => updateString("selectedDecimalSeparator", ",")}
+                >
+                  {t("Comma (,)")}
+                </button>
+              </div>
+            </label>
+
+            <p className="muted-copy">
+              {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
+            </p>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="docText" eyebrow={t("Tax / VAT Settings")} title={t("Tax calculation")} />
+
+            <div className="financial-tax-choice" role="radiogroup" aria-label={t("Calculate Tax On")}>
               <button
                 type="button"
-                className={draft.selectedDecimalSeparator === "." ? "active" : ""}
+                role="radio"
+                aria-checked={draft.taxCalculationType !== "Profit"}
+                data-active={draft.taxCalculationType !== "Profit" ? "true" : "false"}
+                className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("selectedDecimalSeparator", ".")}
+                onClick={() => updateString("taxCalculationType", "Revenue")}
               >
-                {t("Dot (.)")}
+                <strong>{draft.taxRuleNameRevenue || "Revenue"}</strong>
+                <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
               </button>
               <button
                 type="button"
-                className={draft.selectedDecimalSeparator === "," ? "active" : ""}
+                role="radio"
+                aria-checked={draft.taxCalculationType === "Profit"}
+                data-active={draft.taxCalculationType === "Profit" ? "true" : "false"}
+                className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("selectedDecimalSeparator", ",")}
+                onClick={() => updateString("taxCalculationType", "Profit")}
               >
-                {t("Comma (,)")}
+                <strong>{draft.taxRuleNameProfit || "Profit"}</strong>
+                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
               </button>
             </div>
-          </label>
 
-          <p className="muted-copy">
-            {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
-          </p>
-
-          <label className="financial-settings-row">
-            <span>{t("Avg. Platform Fee (%)")}</span>
-            <span className="financial-percent-control">
-              <input
-                className="input financial-control"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={draft.feePercentage}
-                disabled={!canEdit || saving}
-                onChange={event => updateNumber("feePercentage", Number(event.target.value))}
-              />
-              <em>%</em>
-            </span>
-          </label>
-        </div>
-
-        <div className="financial-settings-section">
-          <div className="financial-settings-section-title">
-            <strong>{t("Tax / VAT Settings")}</strong>
-            <span />
-          </div>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Tax rule label — calculated on revenue")}</span>
-            <input
-              className="input financial-control"
-              value={draft.taxRuleNameRevenue}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Tax rule label — calculated on eligible profit")}</span>
-            <input
-              className="input financial-control"
-              value={draft.taxRuleNameProfit}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxRuleNameProfit", event.target.value)}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Default VAT Rate (%)")}</span>
-            <span className="financial-percent-control is-vat-rate">
-              <input
-                className="input financial-control"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={draft.defaultTaxRate}
-                disabled={!canEdit || saving}
-                onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
-              />
-              <em>%</em>
-            </span>
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Default delivery time for new orders (days)")}</span>
-            <input
-              className="input financial-control"
-              type="number"
-              min="1"
-              max="730"
-              step="1"
-              value={draft.defaultDeliveryTime}
-              disabled={!canEdit || saving}
-              onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Calculate Tax On")}</span>
-            <select
-              className="input financial-control"
-              value={draft.taxCalculationType}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxCalculationType", event.target.value)}
-            >
-              <option value="Revenue">{draft.taxRuleNameRevenue || "Revenue"}</option>
-              <option value="Profit">{draft.taxRuleNameProfit || "Profit"}</option>
-            </select>
-          </label>
-
-          {/* The page named the rule and the rate and never said what either one
-              meant, so nobody could tell whether the price already contained the
-              VAT or had it added later. The arithmetic is spelled out with this
-              workspace's own rate instead of described. */}
-          <div className="financial-tax-explainer">
-            <strong>{t("What this means")}</strong>
-            {draft.taxCalculationType === "Profit" ? (
-              <>
-                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
+            {/* The page named the rule and the rate and never said what either one
+                meant, so nobody could tell whether the price already contained the
+                VAT or had it added later. The arithmetic is spelled out with this
+                workspace's own rate instead of described. */}
+            <div className="financial-example-strip">
+              <strong>{t("What this means")}</strong>
+              {draft.taxCalculationType === "Profit" ? (
                 <p className="financial-tax-example">
                   {t("Example")}: {previewMoney(1000)} {t("order")}, {previewMoney(600)} {t("cost")} →{" "}
                   {previewMoney(400)} {t("margin")} = {previewMoney(taxExample.marginNet)} + {previewMoney(taxExample.marginVat)} {t("VAT")}
                 </p>
-              </>
-            ) : (
-              <>
-                <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
+              ) : (
                 <p className="financial-tax-example">
                   {t("Example")}: {previewMoney(1000)} {t("order")} ={" "}
                   {previewMoney(taxExample.net)} + {previewMoney(taxExample.vat)} {t("VAT")} {t("at")} {taxExample.rate}%
                 </p>
-              </>
-            )}
-            <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
-          </div>
+              )}
+              <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
+            </div>
 
-          <label className="financial-settings-row">
-            <span>{t("Use Tax Transition Date")}</span>
-            <span className="financial-checkbox-line">
-              <input
-                type="checkbox"
-                checked={draft.taxMilestoneEnabled}
-                disabled={!canEdit || saving}
-                onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
-              />
-              <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
-            </span>
-          </label>
-          <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
-
-          {draft.taxMilestoneEnabled ? (
             <label className="financial-settings-row wide-control">
-              <span>{t("VAT Registration Date")}</span>
+              <span>{t("Tax rule label — calculated on revenue")}</span>
               <input
                 className="input financial-control"
-                type="date"
-                value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
+                value={draft.taxRuleNameRevenue}
                 disabled={!canEdit || saving}
-                onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
+                onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
               />
             </label>
-          ) : null}
 
-          <label className="financial-settings-row">
-            <span>{t("Enable Corporation Tax")}</span>
-            <span className="financial-checkbox-line">
+            <label className="financial-settings-row wide-control">
+              <span>{t("Tax rule label — calculated on eligible profit")}</span>
               <input
-                type="checkbox"
-                checked={Boolean(draft.corporationTaxEnabled)}
+                className="input financial-control"
+                value={draft.taxRuleNameProfit}
                 disabled={!canEdit || saving}
-                onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
+                onChange={event => updateString("taxRuleNameProfit", event.target.value)}
               />
-              <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
-            </span>
-          </label>
-          <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
+            </label>
 
-          {draft.corporationTaxEnabled ? (
-            <>
-              <label className="financial-settings-row wide-control">
-                <span>{t("Corporation Tax Rate (%)")}</span>
-                <span className="financial-percent-control is-vat-rate">
-                  <input
-                    className="input financial-control"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={draft.corporationTaxRate ?? 19}
-                    disabled={!canEdit || saving}
-                    onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
-                  />
-                  <em>%</em>
-                </span>
-              </label>
-              <label className="financial-settings-row wide-control">
-                <span>{t("Invoice Footer / Payment Terms")}</span>
-                <textarea
+            <label className="financial-settings-row wide-control">
+              <span>{t("Default VAT Rate (%)")}</span>
+              <span className="financial-percent-control is-vat-rate">
+                <input
                   className="input financial-control"
-                  rows={3}
-                  value={draft.invoiceFooterNote ?? ""}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={draft.defaultTaxRate}
                   disabled={!canEdit || saving}
-                  placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
-                  onChange={event => updateString("invoiceFooterNote", event.target.value)}
+                  onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
+                />
+                <em>%</em>
+              </span>
+            </label>
+          </section>
+        </div>
+
+        <div className="financial-col">
+          <section className="card app-card financial-panel">
+            <CardTitle icon="orders" eyebrow={t("General")} title={t("Defaults for new orders")} />
+
+            <label className="financial-settings-row">
+              <span>{t("Avg. Platform Fee (%)")}</span>
+              <span className="financial-percent-control">
+                <input
+                  className="input financial-control"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={draft.feePercentage}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("feePercentage", Number(event.target.value))}
+                />
+                <em>%</em>
+              </span>
+            </label>
+
+            <label className="financial-settings-row wide-control">
+              <span>{t("Default delivery time for new orders (days)")}</span>
+              <input
+                className="input financial-control"
+                type="number"
+                min="1"
+                max="730"
+                step="1"
+                value={draft.defaultDeliveryTime}
+                disabled={!canEdit || saving}
+                onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
+              />
+            </label>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="check" eyebrow={t("Workspace")} title={t("Current workspace calculation")} />
+            <div className="financial-summary-list">
+              <div className="financial-summary-row">
+                <span>{t("Currency")}</span>
+                <strong>{currencySummaryLabel}</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("VAT")}</span>
+                <strong>{taxExample.rate}%</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("Tax basis")}</span>
+                <strong>{activeTaxBasisLabel}</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("Applies to")}</span>
+                <strong>{t("New orders")}</strong>
+              </div>
+            </div>
+            <p className="muted-copy">{t("Follows your edits above. New orders use these values once saved.")}</p>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="calendarClock" eyebrow={t("Tax / VAT Settings")} title={t("Effective dates")} />
+
+            <label className="financial-settings-row">
+              <span>{t("Use Tax Transition Date")}</span>
+              <span className="financial-checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={draft.taxMilestoneEnabled}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
+                />
+                <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
+              </span>
+            </label>
+            <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
+
+            {draft.taxMilestoneEnabled ? (
+              <label className="financial-settings-row wide-control">
+                <span>{t("VAT Registration Date")}</span>
+                <input
+                  className="input financial-control"
+                  type="date"
+                  value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
                 />
               </label>
-            </>
-          ) : null}
+            ) : null}
+
+            <label className="financial-settings-row">
+              <span>{t("Enable Corporation Tax")}</span>
+              <span className="financial-checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.corporationTaxEnabled)}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
+                />
+                <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
+              </span>
+            </label>
+            <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
+
+            {draft.corporationTaxEnabled ? (
+              <>
+                <label className="financial-settings-row wide-control">
+                  <span>{t("Corporation Tax Rate (%)")}</span>
+                  <span className="financial-percent-control is-vat-rate">
+                    <input
+                      className="input financial-control"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={draft.corporationTaxRate ?? 19}
+                      disabled={!canEdit || saving}
+                      onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
+                    />
+                    <em>%</em>
+                  </span>
+                </label>
+                <p className="muted-copy">{t("Estimated — a planning figure, not your filed liability.")}</p>
+                <label className="financial-settings-row wide-control">
+                  <span>{t("Invoice Footer / Payment Terms")}</span>
+                  <textarea
+                    className="input financial-control"
+                    rows={3}
+                    value={draft.invoiceFooterNote ?? ""}
+                    disabled={!canEdit || saving}
+                    placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
+                    onChange={event => updateString("invoiceFooterNote", event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
+          </section>
+        </div>
+      </div>
+
+      <section className="financial-danger-zone">
+        <div className="financial-danger-zone-title">
+          <span aria-hidden="true">⚠</span>
+          <strong>{t("Existing order tools")}</strong>
+        </div>
+        <p className="muted-copy">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
+
+        <div className="financial-danger-row">
+          <span className="financial-danger-row-icon" aria-hidden="true">↻</span>
+          <div className="financial-danger-row-text">
+            <strong>{t("Recalculate Taxes for Past Orders")}</strong>
+            <p>{t("Apply the current VAT rule, default rate and platform fee to orders you already have.")}</p>
+          </div>
+          <div className="financial-danger-row-actions">
+            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
+              {recalculating ? t("Recalculating...") : t("Recalculate")}
+            </button>
+          </div>
         </div>
 
-        <div className="financial-settings-footer">
-          <button className="button secondary financial-save-button" type="button" disabled={!canEdit || saving || !financialDirty} onClick={() => { void handleSave(); }}>
-            {saving ? t("Saving...") : t("Save Financial Settings")}
-          </button>
-          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
-            <span aria-hidden="true">↻</span>
-            {recalculating ? t("Recalculating...") : t("Recalculate Taxes for Past Orders")}
-          </button>
-          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
-            <span aria-hidden="true">⊘</span>
-            {clearingTax ? t("Removing VAT...") : t("Remove VAT from all orders")}
-          </button>
-          {clearTaxUndoRunId ? (
-            <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
-              {t("Undo VAT removal")}
+        <div className="financial-danger-row">
+          <span className="financial-danger-row-icon" aria-hidden="true">⊘</span>
+          <div className="financial-danger-row-text">
+            <strong>{t("Remove VAT from all orders")}</strong>
+            <p>{t("Use this when VAT does not apply — you sell abroad, or you are not VAT-registered.")}</p>
+          </div>
+          <div className="financial-danger-row-actions">
+            {clearTaxUndoRunId ? (
+              <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
+                {t("Undo VAT removal")}
+              </button>
+            ) : null}
+            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
+              {clearingTax ? t("Removing VAT...") : t("Remove VAT")}
             </button>
-          ) : null}
+          </div>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy financial-settings-note">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
       </section>
     </div>
   );
