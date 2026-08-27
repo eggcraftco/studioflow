@@ -19811,7 +19811,10 @@ function nvChatGPTOrderFinancialsFromData(data = {}, orderId = "") {
   const customExpenseTotal = customExpenses.reduce((sum, item) => sum + item.amount, 0);
   const customPendingTotal = customPending.reduce((sum, item) => sum + item.amount, 0);
   const totalCost = watchPurchasePrice + paymentFee + deliveryCost + taxAmount + customExpenseTotal;
-  const expectedRevenue = totalPrice || (paidAmount + remainingAmount);
+  // Same revenue the dashboard uses: paid + remaining INCLUDING custom
+  // Remaining headings — leaving those out made ChatGPT's estimatedProfit
+  // disagree with the app on any order using them.
+  const expectedRevenue = totalPrice || (paidAmount + remainingAmount + customPendingTotal);
   const estimatedProfit = expectedRevenue - totalCost;
   const outstandingTotal = remainingAmount + customPendingTotal;
   const dueMs = nvChatGPTDueDateMillis(data);
