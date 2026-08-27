@@ -76,6 +76,10 @@ object WidgetSummaryBridge {
     suspend fun publish(context: Context, orders: List<StudioOrder>, settings: StudioWorkspaceSettings) {
         val lang = settings.selectedLanguage.ifBlank { "English" }
         val active = orders.filter { !it.isDeleted }
+        // Cancelled/refunded orders earn nothing and owe nothing: the money
+        // buckets (profit, pending) run on counting orders only, matching the
+        // dashboard's aggregates. Delivery counters keep the full active list.
+        val counting = active.filter { it.countsTowardBalance }
         val hideNumbers = context.getSharedPreferences(HEADER_PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(HIDE_NUMBERS_KEY, false)
 
@@ -93,7 +97,7 @@ object WidgetSummaryBridge {
         fun bucketTotal(field: Int, offset: Int, amount: (StudioOrder) -> Double): Double {
             val anchor = Calendar.getInstance().apply { add(field, -offset) }
             val cal = Calendar.getInstance()
-            return active.sumOf { order ->
+            return counting.sumOf { order ->
                 cal.time = order.paymentDate
                 val match = when (field) {
                     Calendar.WEEK_OF_YEAR ->

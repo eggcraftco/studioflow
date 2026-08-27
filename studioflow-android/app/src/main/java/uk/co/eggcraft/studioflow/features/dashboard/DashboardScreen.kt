@@ -522,7 +522,9 @@ private fun SummaryTileGrid(cards: List<DashboardSummaryCardSpec>, modifier: Mod
                             modifier = Modifier.weight(1f),
                             icon = card.icon,
                             subtitle = card.subtitle,
-                            hint = card.hint?.let { t(it) }
+                            hint = card.hint?.let { base ->
+                                listOfNotNull(base, card.hintExtra).joinToString(" ") { t(it) }
+                            }
                         )
                     }
                     repeat(columnCount - rowCards.size) {
@@ -811,6 +813,11 @@ private data class DashboardStats(
     val netProfit: Double,
     val perOrderNetProfits: List<Double>,
     val extraSpending: Double,
+    // Cancelled/refunded orders in the visible range: excluded from every
+    // money figure above, surfaced as their own Financial Breakdown line
+    // (count + order value) so the money is visible instead of counted.
+    val cancelledCount: Int,
+    val cancelledTotal: Double,
     val chartValues: List<Double>,
     val chartLabels: List<String>,
     val chartAxisLabels: List<String>,
@@ -848,41 +855,57 @@ private data class DashboardStats(
             val currentYear = now.get(Calendar.YEAR)
             val currentMonth = now.get(Calendar.MONTH)
             val bucketCount = period.bucketCount(now)
+            // A cancelled or refunded order owes nothing and earned nothing:
+            // every money aggregate below (cards, chart, YoY, Corporation Tax)
+            // runs on countingOrders only — the same shared rule the customers
+            // page applies (StudioOrder.countsTowardBalance, mirroring web's
+            // orderCountsTowardBalance). Operational counters (orders in view,
+            // late, ready to ship) keep the full selection.
+            val countingOrders = orders.filter { it.countsTowardBalance }
             val selectedOrders = orders.filter { order -> period.includes(order, currentYear, currentMonth, 0) }
-            val chartValues = buildChartValues(orders, period, currentYear, currentMonth, 0, bucketCount, advancedFinanceEnabled, expenseTitles, showBaseCost)
-            val previousOne = period.previousOrders(orders, currentYear, currentMonth, 1)
-            val previousTwo = period.previousOrders(orders, currentYear, currentMonth, 2)
-            val previousThree = period.previousOrders(orders, currentYear, currentMonth, 3)
-            val thisYearOrders = orders.filter { order ->
+            val selectedCountingOrders = selectedOrders.filter { it.countsTowardBalance }
+            // Money sitting on non-counting orders in the visible range — shown
+            // as its own "Cancelled or refunded" line in the Financial
+            // Breakdown, so it is visible instead of pretending to be earned.
+            val excludedOrders = selectedOrders.filter { !it.countsTowardBalance }
+            val chartValues = buildChartValues(countingOrders, period, currentYear, currentMonth, 0, bucketCount, advancedFinanceEnabled, expenseTitles, showBaseCost)
+            val previousOne = period.previousOrders(countingOrders, currentYear, currentMonth, 1)
+            val previousTwo = period.previousOrders(countingOrders, currentYear, currentMonth, 2)
+            val previousThree = period.previousOrders(countingOrders, currentYear, currentMonth, 3)
+            val thisYearOrders = countingOrders.filter { order ->
                 Calendar.getInstance(Locale.UK).apply { time = order.paymentDate }.get(Calendar.YEAR) == currentYear
             }
-            val lastYearOrders = orders.filter { order ->
+            val lastYearOrders = countingOrders.filter { order ->
                 Calendar.getInstance(Locale.UK).apply { time = order.paymentDate }.get(Calendar.YEAR) == currentYear - 1
             }
-            val selectedReceived = selectedOrders.sumOf { it.paidAmount }
-            val selectedBaseCost = selectedOrders.sumOf { it.watchPurchasePrice }
+            val selectedReceived = selectedCountingOrders.sumOf { it.paidAmount }
+            val selectedBaseCost = selectedCountingOrders.sumOf { it.watchPurchasePrice }
             val yearReceived = thisYearOrders.sumOf { it.paidAmount }
             val yearBaseCost = thisYearOrders.sumOf { it.watchPurchasePrice }
             return DashboardStats(
                 received = selectedReceived,
                 basicBalance = selectedReceived - selectedBaseCost,
-                revenue = selectedOrders.sumOf { it.orderValue },
+                revenue = selectedCountingOrders.sumOf { it.orderValue },
                 // Custom "Remaining" items count as pending too — matches Mac/web.
-                pending = selectedOrders.sumOf { it.remainingAmount + it.customRemainingTotal },
-                baseCost = selectedOrders.sumOf { it.watchPurchasePrice },
-                breakdownBaseCost = if (showBaseCost) selectedOrders.sumOf { it.watchPurchasePrice } else 0.0,
-                platformFee = selectedOrders.sumOf { it.paymentFee },
-                shipping = selectedOrders.sumOf { it.deliveryCost },
-                tax = selectedOrders.sumOf { it.taxAmount },
-                netProfit = selectedOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
-                perOrderNetProfits = selectedOrders.map { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
-                extraSpending = selectedOrders.sumOf { dashboardCustomExpenseTotal(it, expenseTitles) },
+                pending = selectedCountingOrders.sumOf { it.remainingAmount + it.customRemainingTotal },
+                baseCost = selectedCountingOrders.sumOf { it.watchPurchasePrice },
+                breakdownBaseCost = if (showBaseCost) selectedCountingOrders.sumOf { it.watchPurchasePrice } else 0.0,
+                platformFee = selectedCountingOrders.sumOf { it.paymentFee },
+                shipping = selectedCountingOrders.sumOf { it.deliveryCost },
+                tax = selectedCountingOrders.sumOf { it.taxAmount },
+                netProfit = selectedCountingOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                perOrderNetProfits = selectedCountingOrders.map { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                extraSpending = selectedCountingOrders.sumOf { dashboardCustomExpenseTotal(it, expenseTitles) },
+                // Order value (paid + remaining + custom receivables — web's
+                // orderSalesTotal) parked on cancelled/refunded orders in range.
+                cancelledCount = excludedOrders.size,
+                cancelledTotal = excludedOrders.sumOf { it.orderValue },
                 chartValues = chartValues,
                 chartLabels = period.chartLabels(now, locale),
                 chartAxisLabels = period.chartAxisLabels(now, locale),
-                previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount, true, expenseTitles, showBaseCost),
-                previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount, true, expenseTitles, showBaseCost),
-                previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount, true, expenseTitles, showBaseCost),
+                previousOneYearValues = buildChartValues(countingOrders, period, currentYear, currentMonth, 1, bucketCount, true, expenseTitles, showBaseCost),
+                previousTwoYearValues = buildChartValues(countingOrders, period, currentYear, currentMonth, 2, bucketCount, true, expenseTitles, showBaseCost),
+                previousThreeYearValues = buildChartValues(countingOrders, period, currentYear, currentMonth, 3, bucketCount, true, expenseTitles, showBaseCost),
                 previousOneYearNetProfit = previousOne?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
                 previousTwoYearNetProfit = previousTwo?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
                 previousThreeYearNetProfit = previousThree?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
@@ -941,7 +964,10 @@ private data class DashboardSummaryCardSpec(
     val subtitle: String? = null,
     // Plain-words explanation of the figure (web shows it on hover; here a tap
     // on the card toggles it) — pass the English key, translated at render time.
-    val hint: String? = null
+    val hint: String? = null,
+    // Optional second sentence appended to the hint. Kept as its own key so
+    // each sentence translates on its own, mirroring web's `${t(a)} ${t(b)}`.
+    val hintExtra: String? = null
 )
 
 private fun dashboardSummaryCards(
@@ -978,7 +1004,8 @@ private fun dashboardSummaryCards(
             add(DashboardSummaryCardSpec(
                 "Revenue", money(stats.revenue, currency, decimalSeparator, hideNumbers), currency, StudioBlue, null,
                 subtitle = revenueSubtitle,
-                hint = "Invoiced order value in this range: paid + still owed (accrual basis)."
+                hint = "Invoiced order value in this range: paid + still owed (accrual basis).",
+                hintExtra = "Cancelled and refunded orders are not counted."
             ))
             add(DashboardSummaryCardSpec(
                 "Payments Received", money(stats.received, currency, decimalSeparator, hideNumbers), "", StudioBlue, Icons.Filled.Done,
@@ -1343,6 +1370,17 @@ private fun FinancialBreakdownCard(
             Text(t("Financial Breakdown"), fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             FinancialBreakdownRow(t("Revenue"), amount(stats.revenue), MaterialTheme.colorScheme.onSurface)
+            // Visibility line, not part of the reconciliation: money sitting on
+            // cancelled/refunded orders in this range, already excluded from
+            // every figure above and below (web parity).
+            if (stats.cancelledCount > 0) {
+                HorizontalDivider(color = divider)
+                FinancialBreakdownRow(
+                    "${t("Cancelled or refunded")} (${stats.cancelledCount})",
+                    amount(stats.cancelledTotal),
+                    MaterialTheme.colorScheme.onSurface
+                )
+            }
             HorizontalDivider(color = divider)
             FinancialBreakdownRow(t("Base Cost"), amount(stats.breakdownBaseCost, negative = true), StudioRed)
             HorizontalDivider(color = divider)
