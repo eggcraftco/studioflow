@@ -24933,3 +24933,8 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Dashboard store-channel pills sit under the time-range control. */
+.dashboard-channel-control {
+  margin-top: 10px;
+}

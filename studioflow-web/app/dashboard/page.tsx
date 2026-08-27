@@ -76,6 +76,15 @@ type BankTx = {
   splits: Array<{ amount: number; vatCode: string }>;
 };
 
+type DashboardChannel = "all" | "shopify" | "woocommerce" | "manual";
+
+function dashboardOrderChannel(order: DashboardFinanceOrder): DashboardChannel {
+  const source = (order.customFields["Source"] || "").trim().toLowerCase();
+  if (source === "shopify") return "shopify";
+  if (source === "woocommerce") return "woocommerce";
+  return "manual";
+}
+
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
   { key: "week", label: "Week" },
   { key: "month", label: "Month" },
@@ -475,21 +484,36 @@ export default function DashboardPage() {
 
   const canSeeFinance = Boolean(workspace && workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
+  // Store-channel filter (dashboard report): every money view can be scoped
+  // to Shopify, WooCommerce or manually created orders. The pills only render
+  // when an integration channel actually exists in the workspace.
+  const [channelFilter, setChannelFilter] = useState<DashboardChannel>("all");
+  const availableChannels = useMemo(() => {
+    const found = new Set<DashboardChannel>();
+    for (const order of financeOrders) found.add(dashboardOrderChannel(order));
+    return found;
+  }, [financeOrders]);
+  const channelOrders = useMemo(
+    () => channelFilter === "all"
+      ? financeOrders
+      : financeOrders.filter(order => dashboardOrderChannel(order) === channelFilter),
+    [channelFilter, financeOrders]
+  );
   const currentWindow = useMemo(
-    () => rangeWindow(range, financeOrders, customStart, customEnd),
-    [customEnd, customStart, financeOrders, range]
+    () => rangeWindow(range, channelOrders, customStart, customEnd),
+    [customEnd, customStart, channelOrders, range]
   );
   // Cancelled/refunded orders (countsTowardBalance === false) are excluded
   // from every money aggregate — Revenue, Payments Received, Outstanding,
   // Net, the chart, YoY and the tax set-aside — and surfaced as their own
   // visible line instead, mirroring the customers page.
   const countingFinanceOrders = useMemo(
-    () => financeOrders.filter(order => order.countsTowardBalance !== false),
-    [financeOrders]
+    () => channelOrders.filter(order => order.countsTowardBalance !== false),
+    [channelOrders]
   );
   const filteredFinanceOrders = useMemo(
-    () => filterOrdersByWindow(financeOrders, currentWindow.start, currentWindow.end),
-    [currentWindow.end, currentWindow.start, financeOrders]
+    () => filterOrdersByWindow(channelOrders, currentWindow.start, currentWindow.end),
+    [currentWindow.end, currentWindow.start, channelOrders]
   );
   const filteredCountingOrders = useMemo(
     () => filteredFinanceOrders.filter(order => order.countsTowardBalance !== false),
@@ -644,6 +668,26 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
+
+            {availableChannels.has("shopify") || availableChannels.has("woocommerce") ? (
+              <div className="segmented-control dashboard-channel-control" aria-label={t("Sales channel")}>
+                {([
+                  ["all", t("All channels")],
+                  ...(availableChannels.has("shopify") ? [["shopify", "Shopify"] as const] : []),
+                  ...(availableChannels.has("woocommerce") ? [["woocommerce", "WooCommerce"] as const] : []),
+                  ["manual", t("Manual")]
+                ] as Array<readonly [DashboardChannel, string]>).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={channelFilter === key ? "active" : ""}
+                    type="button"
+                    onClick={() => setChannelFilter(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             {range === "custom" ? (
               <div className="dashboard-date-controls">
