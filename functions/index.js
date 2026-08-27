@@ -23688,6 +23688,28 @@ function portalExpectedDateMs(orderData = {}) {
 
 // Built field by field from the order, never by removing things from it: a field
 // added to orders later cannot leak here by default.
+// Rebrands a raw Firebase Storage URL as a RELATIVE /f/ viewer link. Relative
+// on purpose: the portal page hands it to the browser as-is, so the address
+// bar keeps whichever host served the page — track.customer.com stays
+// track.customer.com, never firebasestorage.googleapis.com. Non-Storage or
+// unparseable URLs pass through untouched.
+function maskedPortalFileUrl(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    if (url.hostname !== "firebasestorage.googleapis.com") return String(rawUrl || "");
+    const match = url.pathname.match(/^\/v0\/b\/([^/]+)\/o\/(.+)$/);
+    if (!match) return String(rawUrl || "");
+    const bucket = decodeURIComponent(match[1]);
+    const storagePath = decodeURIComponent(match[2]);
+    const token = url.searchParams.get("token");
+    if (!token) return String(rawUrl || "");
+    const segments = storagePath.split("/").map(encodeURIComponent).join("/");
+    return `/f/${segments}?b=${encodeURIComponent(bucket)}&t=${encodeURIComponent(token)}`;
+  } catch {
+    return String(rawUrl || "");
+  }
+}
+
 function portalPublicView(orderData = {}, settings = {}, link = {}) {
   const visibility = cleanPortalVisibility(orderData.portalVisibility);
   const currency = cleanFinancialCurrency(settings.seciliParaBirimi, "£");
@@ -23942,10 +23964,10 @@ exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request)
   );
   const settings = await portalWorkspaceSettings(link.companyId);
   const portal = portalPublicView(orderData, settings, link);
-  portal.files = await portalLibraryFilesForOrder(
+  portal.files = (await portalLibraryFilesForOrder(
     String(link.companyId || orderCompanyId(orderData) || ""),
     String(link.orderId || "")
-  ).catch(() => []);
+  ).catch(() => [])).map((file) => ({ ...file, url: maskedPortalFileUrl(file.url) }));
   return { ok: true, portal };
 });
 
