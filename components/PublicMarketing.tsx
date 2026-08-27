@@ -949,6 +949,7 @@ function PublicFooter() {
               <Link href="/contact">{t("nav.contact")}</Link>
               <Link href="/account-deletion">{t("nav.accountDeletion")}</Link>
               <Link href="/refund-cancellation">{t("nav.refundCancellation")}</Link>
+              <Link href="/login">{t("cta.login")}</Link>
             </nav>
           </section>
         </div>
@@ -2343,6 +2344,9 @@ export function ChatGPTAppShowcase({
         <div className="public-shell gpt-section-more">
           <Link href="/chatgpt" className="public-button ghost large">
             {t("aiPage.learnMore")}<span className="public-button-arrow" aria-hidden="true">→</span>
+          </Link>
+          <Link href="/security" className="public-button ghost large">
+            {t("aiPage.securityLink")}
           </Link>
         </div>
       ) : null}
