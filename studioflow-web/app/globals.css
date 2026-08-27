@@ -25992,3 +25992,46 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   color: inherit;
   border-color: var(--line, rgba(15, 23, 42, 0.3));
 }
+
+/* Settings change history — one entry per save, newest first. */
+.settings-audit-list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.settings-audit-entry {
+  border: 1px solid rgba(120, 120, 140, 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.settings-audit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.settings-audit-head span {
+  opacity: 0.75;
+  font-size: 12px;
+}
+.settings-audit-head time {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.settings-audit-keys {
+  margin: 0;
+  font-size: 12.5px;
+}
+.settings-audit-value {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
