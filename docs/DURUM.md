@@ -949,3 +949,43 @@ Kullanıcı Settings raporu + ortak şablon mock'u verdi ("burdan devam").
   adımlarla confident:true yanıt verdi.
 - 25 yeni string 12 dilde (16 şablon + 9 Woo/inbound; "Turn off" zaten
   vardı, atlandı).
+
+---
+
+## 27 Ağu gece 5 — CLOUDFLARE GEÇİŞİ TAMAM + Settings dalga 2 (tur 41)
+
+### nivadesk.app artık Cloudflare DNS'te (kesintisiz geçiş)
+- Kullanıcı Cloudflare hesabı açtı (contact@eggcraft.co.uk, account
+  9f0543bf...); zone Free planda eklendi.
+- Tarama 17 kaydı buldu; dig envanteriyle birebir doğrulandı. Taramanın
+  KAÇIRDIĞI mcp CNAME'i (nivadesk-mcp.web.app — canlı ChatGPT MCP!)
+  elle eklendi; SaaS hazırlığı için customers A 76.13.132.222 eklendi.
+- 19 kaydın TAMAMI bilinçli olarak DNS-only (gri bulut) — sıfır davranış
+  değişikliği; proxy/SaaS katmanı sonra adım adım.
+- Hostinger'da nameserver'lar değişti: artemis/hermes.dns-parking.com →
+  jarred/virginia.ns.cloudflare.com (kullanıcı girişli, ben uyguladım).
+- Yayılma dakikalar içinde tamamlandı (1.1.1.1 + 8.8.8.8 CF NS dönüyor).
+  Doğrulamalar: site 200; mcp.nivadesk.app → Firebase aynı hedef,
+  POST /chatgptMcp 200 + OAuth metadata 200 (OpenAI entegrasyonu
+  KESİNTİSİZ); MX/SPF/TXT zone'dan birebir; customers çözülüyor;
+  tur 41 marker'ları CF DNS üzerinden canlı.
+- **SIRADAKİ CF adımları (ayrı oturum):** SSL/TLS mode kararı + kök/www
+  proxy'sini bilinçli açma → SSL for SaaS (fallback origin
+  customers.nivadesk.app) → CF API token'ıyla custom hostname
+  otomasyonu (verifyClientDomain'e bağlanacak) → *.nivadesk.app
+  wildcard için CNAME. Cloudflare 29 Ağu 09:00-10:00 UTC bakım
+  penceresinde zone-config değişikliği yapma.
+
+### Settings dalga 2 (tur 41 CANLI)
+- Domain kurulum akışı: 4 adım (Enter domain → Add the DNS record →
+  Verify ownership → Serving rollout), dürüst pil (Not configured /
+  DNS required / Verifying... / Domain verified), tek dokunuş Copy,
+  "Check again"; accent'e hex girişi + açık-zemin kontrast uyarısı.
+- Yetki matrisi (ajan, fb01c0d): 12 satır × (Owner + 3 taban + legacy
+  Admin koşullu + özel roller) — hepsi GERÇEK yaptırım noktalarından
+  türetildi (orders.ts/canEdit..., memberAccess bayrakları, settings
+  sayacı n/11); yapışkan ilk kolon, üye sayaçlı başlıklar, "Bu rolü
+  düzenlemek N üyeyi etkiler" dipnotları. Ajan mevcut bir bug'ı da
+  bayrakladı (TeamAccess re-render döngüsü — task chip).
+- 13+11 string 12 dilde; rehber: domain adımları + matris + ayar
+  araması; korpus deploy'ları yapıldı.
