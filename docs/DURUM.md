@@ -570,3 +570,53 @@ KULLANICI tarafında; kodda host-çözümleme + doğrulama + branding ben yapar�
 - **KULLANICI tarafı:** *.nivadesk.app wildcard DNS + Cloudflare for SaaS
   custom-hostname servisi kurulmadan custom host'lar yalnız rezerve edilir,
   servis edilmez (UI bunu dürüstçe söylüyor).
+
+---
+
+## 27 Ağu gece — Rehber kuralı ilk uygulama + Android Cost + Website raporu (tur 29-31)
+
+### Rehber + bot (ayakta duran kuralın ilk rutin uygulaması)
+- guide.ts: Dashboard bölümüne "Para kartlarını okumak" (Revenue vs Payments
+  Received vs Outstanding, Net Profit formülü, dönem preset'leri) + Settings
+  altına "Customer Portal Domain" (set-client-domain) EN+TR eklendi.
+- Korpus 43→44 bölüm; 4 fonksiyon deploy edildi; üretim probu GEÇTİ
+  (track.mysite.com sorusuna gerçek adımlar, confident:true).
+- Not: probe sırasında support inbox'a 1 QA sohbeti düştü (hello + domain
+  sorusu) — silinebilir.
+
+### Android Cost kartı sapması KAPANDI (a6fea64)
+- dashboardSummaryCards rolledCost'a stats.extraSpending eklendi — web'in
+  dashboardCostTotal bileşimiyle birebir (base cost kapılı, extra spending
+  koşulsuz). Diğer yüzeyler (grafik/YoY/CT/widget köprüsü) zaten doğruydu.
+  BUILD SUCCESSFUL, push'landı.
+
+### NivaDesk_global_website.md — İLK İKİ GEÇİŞ CANLI (tur 30+31)
+Kullanıcı talimatı (27 Ağu gece): dosya kuyruğa, yeni özellikler siteye
+eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
+**Yapıldı (Yüksek öncelik 8/8'in 7'si + orta birkaçı):**
+- Terminoloji: Open Portal → "Open NivaDesk", Login → "Log in"; footer
+  support sütununa Log in eklendi; CTA seti standardize.
+- Ana sayfa yeniden sıralandı: Hero → hikâye → özelleştirme → sipariş
+  kartları → ChatGPT → YENİ "Beyond the order board" bölümü → platformlar
+  → CTA. Yeni bölüm 6 kart: Inventory, Bank Spending, Estimates &
+  approvals, Repairs intake, Files library, Your own domain.
+- Dürüstlük: IMG_2056.zip → approved-design.pdf; "perfect sync" →
+  senkron cümlesi; "secure ChatGPT support" → "the secure NivaDesk
+  ChatGPT app"; platform durumları Available/Planned'a indirildi.
+- Hero eyebrow/body genişletildi (custom orders, repairs and service
+  work); heroChip Finance → "Payments & Profit"; project→order taraması
+  (schedule.f1.body, plan.pro.note, aiPage.ask.q10).
+- Header: Security üst menüde (masaüstü+mobil); dil seçici 🌐 + yalnız
+  yerel adlar; footer yılı dinamik; chat düğmesi "Ask NivaDesk".
+- ChatGPT bölümüne "Learn about security and permissions" → /security.
+- Tüm değişen/yeni string'ler (26+4) 12 dilde; TR dev-preview'da doğrulandı;
+  tur 30 ve 31 canlıda chunk-doğrulamalı.
+**Kalan (rapor Orta/Görsel):**
+- Ürün screenshot okunabilirliği (zoom/tam ekran önizleme, floating kart
+  bağlantı çizgileri) — tasarım dokunuşu ister.
+- Platform bölümünde Windows kartını soluklaştırma; QR modal klavye/mobil
+  davranışları; içerik tekrarını azaltma (editoryal); footer'a store/status
+  bağlantıları; erişilebilirlik listesi (skip-link, focus, RTL, 200% zoom);
+  demo video caption/fallback; dil değişiminde tarih/para/story localization
+  taraması. Rapor Home dışı sayfaları (Features/Pricing/FAQ) ayrıca
+  inceleyecekti — o raporlar gelince devam.
