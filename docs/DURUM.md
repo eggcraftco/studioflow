@@ -468,3 +468,19 @@ ticket→Hostinger SMTP maili var — bu kurgu o akışın üstünü yeniden yaz
   "£19 per month" (confident:true), emin-olmayan yol spec cümlesi
   (confident:false). 6 fonksiyon isimle deploy (websiteChatRequestHuman yeni).
 - Native: destek kutusu bağlam kartı paritesi için iki ajan çalışıyor.
+
+## KALICI SÜREÇ KURALI — "bot anlatabiliyor mu?" (27 Ağu, kullanıcı talimatı)
+Her yeni özellik/modül ancak şunlarla KAPANIR:
+1. guide.ts'e EN+TR rehber bölümü (kullanıcının yapacağı işler diliyle,
+   menü-adım düzeyinde; diğer diller tasarım gereği İngilizce'ye düşer).
+2. `node functions/assistant/buildGuideCorpus.js` + getUserGuide/askAppAssistant/
+   createWebsiteChat/postWebsiteChatMessage deploy'u (JSON'lar fonksiyonla taşınır).
+3. Üretim sondası: özelliğe dair bir nasıl-yapılır sorusu website asistanına
+   sorulur — gerçek adımlarla confident:true beklenir; rehber kapsamıyorsa
+   asistan confident:false + Send-to-team verir (blöf yasak, kural promptta).
+4. Bot düzgün anlatamıyorsa özelliğin kendisi anlatılabilir hâle getirilir
+   (adlandırma/akış sadeleştirme) — "gerekirse özellikleri botun anlatacağı
+   şekle getirelim".
+27 Ağu'da Banking + Envanter bölümleri bu kurala göre yazıldı (41→43 bölüm);
+fiş sorusu üç aşamada kanıtlandı: dün blöf → sabah dürüst devir → şimdi
+gerçek adımlar.
