@@ -1016,3 +1016,32 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
 - Bot probu: "hangi menüden?" sorusuna confident:true, birebir doğru:
   "Settings ▸ Customer Portal Domain… 'Your customer links' kartı."
 - 13 string 12 dilde (11 public + 2 settings).
+
+---
+
+## 27/28 Ağu gece — AKTİVASYON dalga 1 (tur 43 CANLI)
+
+23 Ağu teşhisinin yeniden incelemesi:
+- Yönlendirme yarısı ZATEN çözÜLMÜŞ: signup VE login /orders'a iniyor;
+  Orders boş durumu create-first-order akışıyla düzgün. Teşhisin açık
+  kalan yarısı yön göstericiydi.
+- **YENİ: Dashboard "Getting started" listesi** — genç workspace'lerde
+  en üstte 5 adım: ilk sipariş / ilk müşteri / ChatGPT ile içe aktarım /
+  mağaza bağla / müşteri-bağlantısı adını al. İlk ikisi canlı
+  sayaçlardan kendiliğinden işaretlenir; diğerleri tıklanınca
+  (per-workspace localStorage) ve doğru ekrana derin-link
+  (settings?section=... ön-seçili). 5/5 olunca veya Hide ile kaybolur.
+- Dev E2E: 2/5 canlı tik + tık→settings(Woo) + tik kalıcılığı doğrulandı.
+- 8 string 12 dilde; rehberin Dashboard bölümü listeyi anlatıyor;
+  4 asistan fonksiyonu deploy. Tur 43 canlı (3 marker).
+- Mobil tarafı: masaüstü kart-turu telefonda bilinçli kapalı; bu liste
+  telefonda da çalışarak o boşluğu dolduruyor.
+- Native parite: sonraki mağaza sürümü dalgasına not (Swift/Android
+  dashboard'una aynı kart).
+- **Cloudflare SaaS mimari notu:** Hostinger keyfi Host başlığı kabul
+  etmez → custom hostname servisinde fallback origin Hostinger OLAMAZ;
+  doğru yol CF Worker: SaaS hostname + *.nivadesk.app rotalarını
+  Worker karşılar, nivadesk.app origin'ine proxy'ler (tarayıcı adres
+  çubuğu müşteri domain'inde kalır, spoof-guard client-side host'u
+  zaten gönderiyor). Sonraki odaklı faz bu Worker + SSL for SaaS +
+  verifyClientDomain'e CF API otomasyonu.
