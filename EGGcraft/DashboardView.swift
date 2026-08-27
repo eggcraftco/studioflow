@@ -150,6 +150,22 @@ struct DashboardView: View {
             }
         }
     }
+
+    // Cancelled/refunded orders (countsTowardBalance == false) are excluded
+    // from every money aggregate — Revenue, Payments Received, Outstanding,
+    // Cost, Fee, Shipping, VAT, Net, the chart, YoY and Corporation Tax — and
+    // surfaced as their own visible line instead, mirroring the web dashboard.
+    var sayilanSiparisler: [Siparis] {
+        filtrelenmisSiparisler.filter { $0.countsTowardBalance }
+    }
+
+    // Money sitting on non-counting orders in the visible range — same figure
+    // the customers page reports as "cancelled or refunded" (order value:
+    // paid + remaining + custom receivables, the web's orderSalesTotal).
+    private var iptalIadeOzeti: (count: Int, amount: Double) {
+        let excluded = filtrelenmisSiparisler.filter { !$0.countsTowardBalance }
+        return (excluded.count, excluded.reduce(0) { $0 + $1.salesTotal })
+    }
     
     private var financialExpenseItems: [DashboardFinancialItemDTO] {
         decodeFinancialItems(from: financialExpenseItemsJSON)
@@ -482,20 +498,20 @@ struct DashboardView: View {
         return total
     }
 
-    var toplamReceived: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.paidAmount } }
-    var toplamBaseCost: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.watchPurchasePrice } }
+    var toplamReceived: Double { sayilanSiparisler.reduce(0) { $0 + $1.paidAmount } }
+    var toplamBaseCost: Double { sayilanSiparisler.reduce(0) { $0 + $1.watchPurchasePrice } }
     var toplamBasicBalance: Double { toplamReceived - toplamBaseCost }
-    var toplamCiro: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.salesTotal } }
-    var bekleyenAlacak: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.remainingAmount + customPendingTotal(for: $1) } }
-    var toplamGider: Double { filtrelenmisSiparisler.reduce(0) { $0 + dashboardCostTotal(for: $1) } }
-    var toplamKesinti: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.paymentFee } }
-    var toplamKargo: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.deliveryCost } }
-    var toplamVergi: Double { filtrelenmisSiparisler.reduce(0) { $0 + $1.taxAmount } }
-    var netKar: Double { filtrelenmisSiparisler.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
+    var toplamCiro: Double { sayilanSiparisler.reduce(0) { $0 + $1.salesTotal } }
+    var bekleyenAlacak: Double { sayilanSiparisler.reduce(0) { $0 + $1.remainingAmount + customPendingTotal(for: $1) } }
+    var toplamGider: Double { sayilanSiparisler.reduce(0) { $0 + dashboardCostTotal(for: $1) } }
+    var toplamKesinti: Double { sayilanSiparisler.reduce(0) { $0 + $1.paymentFee } }
+    var toplamKargo: Double { sayilanSiparisler.reduce(0) { $0 + $1.deliveryCost } }
+    var toplamVergi: Double { sayilanSiparisler.reduce(0) { $0 + $1.taxAmount } }
+    var netKar: Double { sayilanSiparisler.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
     // Estimated Corporation Tax across the period: per-order tax on profit after VAT.
     var kurumlarVergisi: Double {
         guard corporationTaxEnabled else { return 0 }
-        return filtrelenmisSiparisler.reduce(0) { $0 + (max(0, adjustedNetProfit(for: $1)) * corporationTaxRate).rounded() / 100.0 }
+        return sayilanSiparisler.reduce(0) { $0 + (max(0, adjustedNetProfit(for: $1)) * corporationTaxRate).rounded() / 100.0 }
     }
     var netKarSonrasiCT: Double { netKar - kurumlarVergisi }
     
@@ -521,7 +537,9 @@ struct DashboardView: View {
         let realEnd = cal.dateInterval(of: comp, for: end)!.start
         
         while current <= realEnd { dict[current] = 0.0; current = cal.date(byAdding: comp, value: 1, to: current)! }
-        for s in firebaseManager.siparisler {
+        // Cancelled/refunded orders stay out of the profit line and every
+        // year-compare series (the window itself still spans all orders).
+        for s in firebaseManager.siparisler where s.countsTowardBalance {
             if s.paymentDate >= start && s.paymentDate <= end {
                 let groupedDate = cal.dateInterval(of: comp, for: s.paymentDate)!.start
                 if let existing = dict[groupedDate] { dict[groupedDate] = existing + dashboardChartAmount(for: s) }
@@ -538,12 +556,12 @@ struct DashboardView: View {
     var veriEksi2: [GrafikVerisi] { verileriHazirla(yilGeri: 2) }
     var veriEksi3: [GrafikVerisi] { verileriHazirla(yilGeri: 3) }
     
-    var buYilSiparisleri: [Siparis] { let cal = Calendar.current; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: Date(), toGranularity: .year) } }
+    var buYilSiparisleri: [Siparis] { let cal = Calendar.current; return firebaseManager.siparisler.filter { $0.countsTowardBalance && cal.isDate($0.paymentDate, equalTo: Date(), toGranularity: .year) } }
     var buYilReceived: Double { buYilSiparisleri.reduce(0) { $0 + $1.paidAmount } }
     var buYilBaseCost: Double { buYilSiparisleri.reduce(0) { $0 + $1.watchPurchasePrice } }
     var buYilBasicBalance: Double { buYilReceived - buYilBaseCost }
     var buYilKari: Double { buYilSiparisleri.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
-    var gecenYilKari: Double { let cal = Calendar.current; guard let gecenYil = cal.date(byAdding: .year, value: -1, to: Date()) else { return 0 }; return firebaseManager.siparisler.filter { cal.isDate($0.paymentDate, equalTo: gecenYil, toGranularity: .year) }.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
+    var gecenYilKari: Double { let cal = Calendar.current; guard let gecenYil = cal.date(byAdding: .year, value: -1, to: Date()) else { return 0 }; return firebaseManager.siparisler.filter { $0.countsTowardBalance && cal.isDate($0.paymentDate, equalTo: gecenYil, toGranularity: .year) }.reduce(0) { $0 + adjustedNetProfit(for: $1) } }
     // Divide by the magnitude, not the signed value: after a loss year a
     // recovery is growth, and a signed denominator flips the arrow.
     var buyumeYuzdesi: Double { if gecenYilKari == 0 { return buYilKari > 0 ? 100.0 : 0.0 }; return ((buYilKari - gecenYilKari) / abs(gecenYilKari)) * 100.0 }
@@ -1114,8 +1132,8 @@ struct DashboardView: View {
 
     // Clean components for the Financial Breakdown (per-order overrides applied):
     // Revenue − Base Cost − Extra Spending − Platform Fee − Shipping − VAT = netKar.
-    private var toplamBreakdownBaseCost: Double { filtrelenmisSiparisler.reduce(0) { $0 + baseCostTotal(for: $1) } }
-    private var toplamExtraSpending: Double { filtrelenmisSiparisler.reduce(0) { $0 + customExpenseTotal(for: $1) } }
+    private var toplamBreakdownBaseCost: Double { sayilanSiparisler.reduce(0) { $0 + baseCostTotal(for: $1) } }
+    private var toplamExtraSpending: Double { sayilanSiparisler.reduce(0) { $0 + customExpenseTotal(for: $1) } }
 
     private func breakdownRow(_ title: String, _ value: Double, negative: Bool = false, valueColor: Color = .primary, strong: Bool = false) -> some View {
         HStack(spacing: 12) {
@@ -1133,6 +1151,13 @@ struct DashboardView: View {
     @ViewBuilder private var breakdownLeftRows: some View {
         breakdownRow(t("Revenue", lang: seciliDil), toplamCiro)
         Divider().opacity(0.5)
+        // Visibility line, not part of the reconciliation: money sitting on
+        // cancelled/refunded orders in this range, already excluded from every
+        // figure above and below (mirrors the web's Financial Breakdown).
+        if iptalIadeOzeti.count > 0 {
+            breakdownRow("\(t("Cancelled or refunded", lang: seciliDil)) (\(iptalIadeOzeti.count))", iptalIadeOzeti.amount)
+            Divider().opacity(0.5)
+        }
         breakdownRow(t("Base Cost", lang: seciliDil), toplamBreakdownBaseCost, negative: true, valueColor: .red)
         Divider().opacity(0.5)
         breakdownRow(t("Extra Spending", lang: seciliDil), toplamExtraSpending, negative: true, valueColor: .red)
@@ -1191,7 +1216,7 @@ struct DashboardView: View {
         if canSeeAdvancedFinance {
             // Revenue is invoiced order value; Payments Received is the cash
             // that actually arrived — accrual vs cash side by side, not blended.
-            if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi, subtitle: revenueTaxRuleSubtitle, helpText: t("Invoiced order value in this range: paid + still owed (accrual basis).", lang: seciliDil)) }
+            if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi, subtitle: revenueTaxRuleSubtitle, helpText: "\(t("Invoiced order value in this range: paid + still owed (accrual basis).", lang: seciliDil)) \(t("Cancelled and refunded orders are not counted.", lang: seciliDil))") }
             if dashShowRevenue { OzetKart(title: t("Payments Received", lang: seciliDil), value: toplamReceived, iconName: "checkmark.circle", color: .blue, sembol: seciliParaBirimi, helpText: t("Money actually collected on these orders (cash basis).", lang: seciliDil)) }
             if dashShowPending { OzetKart(title: t("Outstanding Balance", lang: seciliDil), value: bekleyenAlacak, iconName: "clock", color: studioWarningOrange, sembol: seciliParaBirimi, helpText: t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.", lang: seciliDil)) }
             if dashShowCost { OzetKart(title: t("Cost", lang: seciliDil), value: toplamGider, iconName: "cart", color: .red, sembol: seciliParaBirimi, helpText: t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.", lang: seciliDil)) }

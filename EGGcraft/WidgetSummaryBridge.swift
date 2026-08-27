@@ -72,10 +72,13 @@ enum WidgetSummaryBridge {
         }
 
         // Sum for orders whose paymentDate falls in the same calendar bucket as
-        // `anchor` (offset buckets step backwards in time).
+        // `anchor` (offset buckets step backwards in time). Money figures skip
+        // cancelled/refunded orders, exactly like the dashboard's aggregates;
+        // the delivery counters below keep their own status rule.
+        let counting = active.filter { $0.countsTowardBalance }
         func bucketTotal(component: Calendar.Component, offset: Int, amount: (Siparis) -> Double) -> Double {
             guard let anchor = calendar.date(byAdding: component, value: -offset, to: now) else { return 0 }
-            return active.reduce(0) { total, siparis in
+            return counting.reduce(0) { total, siparis in
                 calendar.isDate(siparis.paymentDate, equalTo: anchor, toGranularity: component)
                     ? total + amount(siparis)
                     : total

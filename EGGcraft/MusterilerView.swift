@@ -747,15 +747,10 @@ struct MusteriDetayView: View {
     var toplamHarcama: Double { musteriSiparisleri.reduce(0) { $0 + $1.paidAmount + $1.remainingAmount } }
     /// The slice of the gross figure sitting in cancelled/refunded orders —
     /// shown as a sub-line so the total cannot quietly overstate a customer's
-    /// worth (same flag logic as the web's countsTowardBalance).
+    /// worth. The rule itself now lives on Siparis.countsTowardBalance, shared
+    /// with the dashboard (same hoist the web made into firestore.ts).
     var iptalIadeToplami: Double {
-        musteriSiparisleri.filter(siparisIptalVeyaIade).reduce(0) { $0 + $1.paidAmount + $1.remainingAmount }
-    }
-    private func siparisIptalVeyaIade(_ siparis: Siparis) -> Bool {
-        if siparis.status.lowercased().contains("cancel") { return true }
-        let shopify = (siparis.customFields?["Shopify Status"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return shopify == "refunded"
+        musteriSiparisleri.filter { !$0.countsTowardBalance }.reduce(0) { $0 + $1.paidAmount + $1.remainingAmount }
     }
     var lastOrderDate: Date? { musteriSiparisleri.first?.paymentDate }
     var customerSinceDate: Date? { musteriSiparisleri.last?.paymentDate }

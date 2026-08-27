@@ -344,6 +344,16 @@ struct Siparis: Identifiable, Codable {
     var lineItemsTotal: Double {
         (lineItems ?? []).reduce(0) { $0 + $1.lineTotal }
     }
+
+    // A cancelled or refunded order owes nothing and earned nothing: the single
+    // canonical rule shared by the customers page and every dashboard money
+    // aggregate (mirrors orderCountsTowardBalance in the web's firestore.ts).
+    var countsTowardBalance: Bool {
+        if status.lowercased().contains("cancel") { return false }
+        let shopify = (customFields?["Shopify Status"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return shopify != "refunded"
+    }
 }
 
 // The empty initializer lives in an extension so Swift keeps generating the long
