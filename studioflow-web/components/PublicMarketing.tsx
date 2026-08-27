@@ -856,7 +856,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
     <header className="public-header">
       <div className="public-shell public-header-inner">
         <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
-          <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" />
+          <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" aria-hidden="true" />
         </Link>
 
         <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
@@ -920,7 +920,7 @@ function PublicFooter() {
         </div>
         <div className="public-footer-groups" aria-label={t("nav.footer")}>
           <section className="public-footer-group">
-            <h3>{t("footer.product")}</h3>
+            <h2>{t("footer.product")}</h2>
             <nav aria-label={t("footer.product")}>
               <Link href="/features">{t("nav.features")}</Link>
               <Link href="/chatgpt">{t("nav.chatgpt")}</Link>
@@ -933,7 +933,7 @@ function PublicFooter() {
             </nav>
           </section>
           <section className="public-footer-group">
-            <h3>{t("footer.legal")}</h3>
+            <h2>{t("footer.legal")}</h2>
             <nav aria-label={t("footer.legal")}>
               <Link href="/privacy">{t("nav.privacy")}</Link>
               <Link href="/terms">{t("nav.terms")}</Link>
@@ -946,7 +946,7 @@ function PublicFooter() {
             </nav>
           </section>
           <section className="public-footer-group">
-            <h3>{t("footer.support")}</h3>
+            <h2>{t("footer.support")}</h2>
             <nav aria-label={t("footer.support")}>
               <Link href="/contact">{t("nav.contact")}</Link>
               <Link href="/account-deletion">{t("nav.accountDeletion")}</Link>
@@ -1097,7 +1097,8 @@ function ProductScene() {
                 aria-label={t("hero.seeFullSize")}
                 onClick={event => event.stopPropagation()}
               >
-                <button type="button" className="public-qr-modal-close" onClick={() => setShotOpen(false)} aria-label="Close">
+                {/* autoFocus moves keyboard focus into the dialog when it opens. */}
+                <button type="button" className="public-qr-modal-close" onClick={() => setShotOpen(false)} aria-label="Close" autoFocus>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
@@ -1472,11 +1473,13 @@ function PublicPlanGrid({ compact = false }: { compact?: boolean }) {
             <strong>{savePercent}</strong>
           </span>
           <div className="public-plan-yearly-copy">
-            <h3>
+            {/* h2, not h3: on /pricing this is the first heading after the
+                page h1, so an h3 here skipped a level. */}
+            <h2>
               {titleParts[0]}
               <span className="hero-accent">{t("pricing.twoMonthsFree")}</span>
               {titleParts[1] ?? ""}
-            </h3>
+            </h2>
             <p>{t("pricing.yearlyBanner.body")}</p>
           </div>
           <ul className="public-plan-yearly-perks">
@@ -2286,7 +2289,7 @@ export function ChatGPTAppShowcase({
                   </span>
                   <span className="gpt-composer-chip">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="gpt-composer-chip-logo" src="/brand/nivadesk-mark-64.png" alt="" width={20} height={20} loading="lazy" decoding="async" />
+                    <img className="gpt-composer-chip-logo" src="/brand/nivadesk-mark-64.png" alt="" aria-hidden="true" width={20} height={20} loading="lazy" decoding="async" />
                     NivaDesk
                   </span>
                   <p className="gpt-composer-text">{t("chatgptApp.prompt")}</p>
@@ -2493,7 +2496,7 @@ function AppStoreDownload() {
                 aria-label={t("platform.apple.qrAlt")}
                 onClick={event => event.stopPropagation()}
               >
-                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close" autoFocus>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
@@ -2572,7 +2575,7 @@ function PlayStoreDownload() {
                 aria-label={t("platform.android.qrAlt")}
                 onClick={event => event.stopPropagation()}
               >
-                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close">
+                <button type="button" className="public-qr-modal-close" onClick={() => setQrOpen(false)} aria-label="Close" autoFocus>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
@@ -2742,7 +2745,7 @@ function PublicHomePageContent() {
                 aria-label={t("hero.watchDemo")}
                 onClick={event => event.stopPropagation()}
               >
-                <button type="button" className="public-qr-modal-close" onClick={() => setDemoOpen(false)} aria-label="Close">
+                <button type="button" className="public-qr-modal-close" onClick={() => setDemoOpen(false)} aria-label="Close" autoFocus>
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
@@ -2844,8 +2847,10 @@ function SiteDemoPlayer() {
           }}
           aria-label={t("hero.watchDemo")}
         >
+          {/* Decorative here: the button already carries the accessible name
+              via aria-label, so a matching alt would be announced twice. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nivadesk-demo-poster.jpg" alt={t("hero.watchDemo")} loading="lazy" decoding="async" />
+          <img src="/nivadesk-demo-poster.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <span className="lp-demo-play" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
           </span>
