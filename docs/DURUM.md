@@ -410,7 +410,7 @@ recipe…" iki native'de.
 
 ---
 
-## SIRADA — Chatbot/Support yeniden kurgusu (27 Ağu, kullanıcı talimatıyla kaydedildi)
+## TAMAMLANDI — Chatbot/Support yeniden kurgusu (27 Ağu, round 25 CANLI)
 Kaynak: repo kökünde `NivaDesk_chatbot 2.md` + kullanıcının vereceği "Ask
 NivaDesk" tasarım görseli (koyu yeşil başlık, premium sade; referans ekran
 görüldü). KULLANICI AYRI BİR GÖREVLE BAŞLATACAK — kendiliğinden başlama.
@@ -444,3 +444,27 @@ görüldü). KULLANICI AYRI BİR GÖREVLE BAŞLATACAK — kendiliğinden başlam
 Mevcut altyapı notu: postWebsiteChatMessage canlı (23 Ağu), app-support
 ticket→Hostinger SMTP maili var — bu kurgu o akışın üstünü yeniden yazar
 (email spam'ini needs_human'a indirger).
+
+
+**Chatbot kurgusu uygulandı (27 Ağu, round 25 canlı chunk-doğrulamalı):**
+- Widget görselle birebir: form yok, "Hi 👋" + 4 çip, saat/çift-tik'li ziyaretçi
+  balonu, sparkle-AI / isimli-insan avatarı, yuvarlak input + daire gönder,
+  kilit+privacy alt bilgisi. 20 anahtar × 11 public dil YENİDEN çevrildi.
+- Dürüstlük yolu: asistan JSON {reply, confident} döner; emin değilse spec
+  cümlesini ziyaretçi dilinde söyler, widget [Send to team][Keep chatting]
+  sunar; handoff "Handed to NivaDesk team" şeridi yazar, asistan kalıcı susar,
+  AYNI thread insanla sürer; "Talk to a person" her an bir tık.
+  websiteChatRequestHuman yeni callable.
+- E-posta politikası: TÜM konuşmalar Support inbox'ta; mail YALNIZ handoff'ta
+  ve insan devredeyken gelen ziyaretçi cevaplarında. AI'nın çözdükleri mail
+  atmaz. (Günlük özet v1'de bilinçli yok.)
+- Login'li kullanıcıdan e-posta hiç istenmez; createWebsiteChat sunucuda
+  kimlik+workspace+plan+sayfa damgalar; Settings→Support→Website Chats'te
+  bağlam kartı + "Asked for a person" bayrağı (6 anahtar × 11 dil).
+- Bonus: website asistanı artık rehberden zeminleniyor (in-process corpus,
+  top-3 bölüm) — "detay rehberde" derken rehbere kör olma çelişkisi bitti.
+- Kanıt: emülatörde uçtan uca (çip→balon→handoff→divider; bilet dokümanında
+  accountName "QA Review"/plan/needsHuman); ÜRETİMDE iki sonda — emin yol
+  "£19 per month" (confident:true), emin-olmayan yol spec cümlesi
+  (confident:false). 6 fonksiyon isimle deploy (websiteChatRequestHuman yeni).
+- Native: destek kutusu bağlam kartı paritesi için iki ajan çalışıyor.
