@@ -1107,3 +1107,31 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
 - Rapor High kalanları: #9 backup dry-run + import raporu,
   #10 settings audit history. Workflow template preview (#5) zaten
   önceki dalgada yapılmış çıktı.
+
+---
+
+## 27 Ağu gece 2 — İLK GERÇEK MARKALI DOMAIN CANLI + linkler markayı giydi (tur 47)
+
+- **Uçtan uca KANITLANDI:** kullanıcı gerçek token'ı girdi (v3; v1
+  placeholder + v2 yanlışlıkla girilen Global API Key İMHA edildi),
+  verify+remove v3'le deploy. Hostinger'da track.eggcraft.co.uk →
+  customers.nivadesk.app CNAME'i eklendi (anında yayıldı). Settings'te
+  Connect → Check again: Domain verified + CF custom hostname API ile
+  otomatik açıldı, sertifika ~2 dk'da aktif, kart **Live**.
+  curl https://track.eggcraft.co.uk/track/qa-check → 200 "Track your
+  order"; kök → 301 nivadesk.app. Otomasyonun ilk gerçek koşusu temiz.
+- **Link üretimi markalı host'a geçti:** clientPortalBaseUrl(companyId)
+  (custom > slug.nivadesk.app > nivadesk.app) — createOrderPortalLink,
+  sendOrderEstimate, notifyCustomerOnStatusChange (SMS) + web'de
+  portalUrlForToken(token, workspace.clientPortalHost) ve
+  WorkspaceContext.clientPortalHost. verifyClientDomain doğrulanan
+  custom'ı company.clientPortalCustomHost'a yazar (Check again ile
+  EGGcraft backfill edildi); Remove eşleşiyorsa temizler.
+  "Your customer links" önizlemesi aktif custom domain'i önceler.
+- 9 fonksiyon tek deploy'da; rehber bulleti (EN+TR) + corpus + bot
+  sondası confident:True ("SMS ve teklif linkleri markalı adresi
+  kullanır" doğru cevap). Tur 47 push (76de99c).
+- **Native parite notu (mağaza dalgasına):** Swift/Kotlin portal veya
+  teklif linkini İSTEMCİDE yeniden kurmamalı — callable'ın döndürdüğü
+  url alanını göstersin; yeniden kuruyorsa clientPortalCustomHost/
+  clientPortalSlug'u okusun.
