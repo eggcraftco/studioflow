@@ -70,6 +70,17 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
     var assignedByName: String = ""
     var assignedByEmail: String = ""
     var assignedAt: Date?
+    // Website-chat context (ticketType "website"): who is asking, from which
+    // page, on which plan. Filled by the server; shown to NivaDesk support
+    // admins only, mirroring the web support inbox's context card.
+    var visitorEmail: String = ""
+    var visitorPage: String = ""
+    var needsHuman: Bool = false
+    var accountUid: String = ""
+    var accountEmail: String = ""
+    var accountName: String = ""
+    var accountCompanyName: String = ""
+    var accountPlan: String = ""
 
     var isAssigned: Bool {
         !assignedToUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -128,6 +139,14 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
         if let readByMap = data["readBy"] as? [String: Timestamp] {
             self.readBy = readByMap.mapValues { $0.dateValue() }
         }
+        self.visitorEmail = data["visitorEmail"] as? String ?? ""
+        self.visitorPage = data["visitorPage"] as? String ?? ""
+        self.needsHuman = data["needsHuman"] as? Bool ?? false
+        self.accountUid = data["accountUid"] as? String ?? ""
+        self.accountEmail = data["accountEmail"] as? String ?? ""
+        self.accountName = data["accountName"] as? String ?? ""
+        self.accountCompanyName = data["accountCompanyName"] as? String ?? ""
+        self.accountPlan = data["accountPlan"] as? String ?? ""
     }
 
 
@@ -178,6 +197,14 @@ struct StudioSupportTicket: Identifiable, Codable, Equatable {
             }
             self.readBy = parsedReadBy
         }
+        self.visitorEmail = data["visitorEmail"] as? String ?? ""
+        self.visitorPage = data["visitorPage"] as? String ?? ""
+        self.needsHuman = data["needsHuman"] as? Bool ?? false
+        self.accountUid = data["accountUid"] as? String ?? ""
+        self.accountEmail = data["accountEmail"] as? String ?? ""
+        self.accountName = data["accountName"] as? String ?? ""
+        self.accountCompanyName = data["accountCompanyName"] as? String ?? ""
+        self.accountPlan = data["accountPlan"] as? String ?? ""
     }
 
     var firestoreData: [String: Any] {

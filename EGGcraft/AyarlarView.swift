@@ -1985,6 +1985,12 @@ struct AyarlarView: View {
                                     .lineLimit(isConversationOpen ? nil : 2)
                                     .fixedSize(horizontal: false, vertical: true)
 
+                                // The web inbox's context card: WHO is asking, from
+                                // WHERE, on WHICH plan — before the first reply is typed.
+                                if supportTicketDestination == "website" && isNivaDeskSupportAdmin && ticket.ticketType == "website" {
+                                    WebsiteTicketContextCard(ticket: ticket, lang: seciliDil)
+                                }
+
                                 HStack(spacing: 6) {
                                     Image(systemName: "clock")
                                         .font(.system(size: 10, weight: .semibold))
@@ -7195,6 +7201,72 @@ struct AyarlarView: View {
             importSonucMesaji = "Import failed: \(error.localizedDescription)"
             importSonucGosteriliyor = true
         }
+    }
+}
+
+/// Admin-only context card on website-chat ticket rows: WHO is asking, from
+/// WHICH page, on WHICH plan — mirrors the web support inbox card. Kept as its
+/// own small struct on purpose (deeply nested SwiftUI crashes real iPhones).
+private struct WebsiteTicketContextCard: View {
+    let ticket: StudioSupportTicket
+    let lang: String
+
+    // Same tint as the web card: rgba(16, 122, 87, …).
+    private static let tint = Color(red: 16 / 255, green: 122 / 255, blue: 87 / 255)
+    // Web's amber (#b45309) for the "asked for a person" flag.
+    private static let amber = Color(red: 180 / 255, green: 83 / 255, blue: 9 / 255)
+
+    private var isSignedIn: Bool {
+        !ticket.accountUid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var headline: String {
+        if isSignedIn {
+            let name = ticket.accountName.isEmpty ? ticket.accountEmail : ticket.accountName
+            return ticket.accountCompanyName.isEmpty ? name : "\(name) · \(ticket.accountCompanyName)"
+        }
+        let visitor = ticket.createdByName.isEmpty ? t("Website visitor", lang: lang) : ticket.createdByName
+        let emailPart = ticket.visitorEmail.isEmpty ? t("no email left", lang: lang) : ticket.visitorEmail
+        return "\(visitor) · \(emailPart)"
+    }
+
+    private var planLine: String {
+        let plan = ticket.accountPlan.isEmpty
+            ? t("Signed-in user", lang: lang)
+            : "\(t("Plan", lang: lang)): \(ticket.accountPlan)"
+        return ticket.accountEmail.isEmpty ? plan : "\(plan) · \(ticket.accountEmail)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(headline)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.primary)
+
+            if isSignedIn {
+                Text(planLine)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            if !ticket.visitorPage.isEmpty {
+                Text("\(t("Current page", lang: lang)): \(ticket.visitorPage)")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            if ticket.needsHuman {
+                Text("👥 \(t("Asked for a person", lang: lang))")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(Self.amber)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Self.tint.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Self.tint.opacity(0.22)))
     }
 }
 
