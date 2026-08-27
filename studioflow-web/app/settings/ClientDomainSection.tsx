@@ -41,8 +41,17 @@ export function ClientDomainSection({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [verifyResult, setVerifyResult] = useState<{ host: string; verified: boolean; found: string[]; error?: string } | null>(null);
+  const [verifyingHost, setVerifyingHost] = useState("");
+  const [copiedValue, setCopiedValue] = useState("");
   const [accentColor, setAccentColor] = useState("");
   const [showPoweredBy, setShowPoweredBy] = useState(true);
+
+  const copyValue = (value: string) => {
+    void navigator.clipboard?.writeText(value).then(() => {
+      setCopiedValue(value);
+      window.setTimeout(() => setCopiedValue(current => (current === value ? "" : current)), 1600);
+    });
+  };
 
   const reload = useCallback(async () => {
     if (!isOwner) { setLoadingConfig(false); return; }
@@ -154,46 +163,93 @@ export function ClientDomainSection({
           </button>
         </div>
 
-        {customDomains.map(domain => (
-          <div key={domain.host} className="mini-panel" style={{ display: "grid", gap: 8, padding: 12, background: "rgba(120,120,140,0.05)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <strong style={{ fontSize: 14 }}>{domain.host}</strong>
-              <span
-                className="studio-pill"
-                style={domain.status === "active"
-                  ? { background: "rgba(22,163,74,0.14)", color: "#16a34a" }
-                  : { background: "rgba(234,138,46,0.16)", color: "#b45309" }}
-              >
-                {domain.status === "active" ? `🟢 ${t("Domain verified")}` : t("Waiting for DNS")}
-              </span>
-              <span style={{ flex: 1 }} />
-              <button className="button secondary" type="button" disabled={busy} onClick={() => void run(async () => {
-                const result = await verifyClientDomain(workspace, domain.host);
-                setVerifyResult({ host: domain.host, verified: result.verified === true, found: result.found ?? [], error: result.error });
-              }, "Checked.")}>
-                {t("Verify")}
-              </button>
-              <button className="button secondary" type="button" disabled={busy} onClick={() => void run(() => removeClientDomain(workspace, domain.host), "Domain removed.")}>
-                {t("Remove")}
-              </button>
-            </div>
-            {domain.status !== "active" ? (
-              <div style={{ display: "grid", gap: 4 }}>
-                <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Add this DNS record at your domain provider:")}</p>
-                <code style={{ fontSize: 12.5, background: "rgba(120,120,140,0.1)", borderRadius: 8, padding: "8px 10px" }}>
-                  CNAME&nbsp;&nbsp;{domain.host.split(".")[0]}&nbsp;&nbsp;→&nbsp;&nbsp;{cnameTarget}
-                </code>
+        {customDomains.length === 0 ? (
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Not configured")}</p>
+        ) : null}
+        {customDomains.map(domain => {
+          const isVerifying = verifyingHost === domain.host;
+          const failedCheck = verifyResult && verifyResult.host === domain.host && !verifyResult.verified ? verifyResult : null;
+          const statusLabel = domain.status === "active"
+            ? `🟢 ${t("Domain verified")}`
+            : isVerifying ? t("Verifying...") : t("DNS required");
+          const steps: { label: string; state: "done" | "current" | "todo" }[] = [
+            { label: t("Enter domain"), state: "done" },
+            { label: t("Add the DNS record"), state: domain.status === "active" ? "done" : "current" },
+            { label: t("Verify ownership"), state: domain.status === "active" ? "done" : failedCheck || isVerifying ? "current" : "todo" },
+            { label: t("Serving rollout"), state: domain.status === "active" ? "current" : "todo" }
+          ];
+          return (
+            <div key={domain.host} className="mini-panel" style={{ display: "grid", gap: 10, padding: 14, background: "rgba(120,120,140,0.05)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 14 }}>{domain.host}</strong>
+                <span
+                  className="studio-pill"
+                  style={domain.status === "active"
+                    ? { background: "rgba(22,163,74,0.14)", color: "#16a34a" }
+                    : { background: "rgba(234,138,46,0.16)", color: "#b45309" }}
+                >
+                  {statusLabel}
+                </span>
+                <span style={{ flex: 1 }} />
+                <button className="button secondary" type="button" disabled={busy} onClick={() => void run(async () => {
+                  setVerifyingHost(domain.host);
+                  try {
+                    const result = await verifyClientDomain(workspace, domain.host);
+                    setVerifyResult({ host: domain.host, verified: result.verified === true, found: result.found ?? [], error: result.error });
+                  } finally {
+                    setVerifyingHost("");
+                  }
+                }, "Checked.")}>
+                  {isVerifying ? t("Verifying...") : t("Check again")}
+                </button>
+                <button className="button secondary" type="button" disabled={busy} onClick={() => void run(() => removeClientDomain(workspace, domain.host), "Domain removed.")}>
+                  {t("Remove")}
+                </button>
               </div>
-            ) : null}
-            {verifyResult && verifyResult.host === domain.host && !verifyResult.verified ? (
-              <p className="muted-copy" style={{ margin: 0, fontSize: 12.5, color: "#b45309" }}>
-                {verifyResult.found.length > 0
-                  ? `${t("Found")}: ${verifyResult.found.join(", ")} — ${t("expected")} ${cnameTarget}. ${t("DNS changes can take up to an hour to spread.")}`
-                  : `${t("No CNAME record found yet.")} ${t("DNS changes can take up to an hour to spread.")}`}
-              </p>
-            ) : null}
-          </div>
-        ))}
+
+              <ol className="client-domain-steps">
+                {steps.map((step, index) => (
+                  <li key={step.label} data-state={step.state}>
+                    <span className="client-domain-step-dot">{step.state === "done" ? "✓" : index + 1}</span>
+                    {step.label}
+                  </li>
+                ))}
+              </ol>
+
+              {domain.status !== "active" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Add this DNS record at your domain provider:")}</p>
+                  <div className="client-domain-dns-row">
+                    <span className="client-domain-dns-cell">CNAME</span>
+                    <span className="client-domain-dns-cell">
+                      {domain.host.split(".")[0]}
+                      <button type="button" className="client-domain-copy" onClick={() => copyValue(domain.host.split(".")[0])}>
+                        {copiedValue === domain.host.split(".")[0] ? t("Copied!") : t("Copy")}
+                      </button>
+                    </span>
+                    <span className="client-domain-dns-cell">
+                      {cnameTarget}
+                      <button type="button" className="client-domain-copy" onClick={() => copyValue(cnameTarget)}>
+                        {copiedValue === cnameTarget ? t("Copied!") : t("Copy")}
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>
+                  {t("Reserved for your workspace — serving your links on this domain is being rolled out, and existing nivadesk.app links keep working.")}
+                </p>
+              )}
+              {failedCheck ? (
+                <p className="muted-copy" style={{ margin: 0, fontSize: 12.5, color: "#b45309" }}>
+                  {failedCheck.found.length > 0
+                    ? `${t("Found")}: ${failedCheck.found.join(", ")} — ${t("expected")} ${cnameTarget}. ${t("DNS changes can take up to an hour to spread.")}`
+                    : `${t("No CNAME record found yet.")} ${t("DNS changes can take up to an hour to spread.")}`}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
 
         <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>
           {t("A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working.")}
@@ -213,10 +269,28 @@ export function ClientDomainSection({
               style={{ width: 42, height: 28, padding: 0, border: "none", background: "transparent", cursor: "pointer" }}
             />
           </label>
+          <input
+            className="input"
+            style={{ width: 110, fontFamily: "monospace", fontSize: 13 }}
+            value={accentColor}
+            placeholder="#2563eb"
+            maxLength={7}
+            onChange={event => {
+              const value = event.target.value.trim();
+              if (value === "" || /^#[0-9a-fA-F]{0,6}$/.test(value)) setAccentColor(value.toLowerCase());
+            }}
+            aria-label={t("Hex colour")}
+          />
           {accentColor ? (
             <button className="button secondary" type="button" onClick={() => setAccentColor("")}>
               {t("Use the default colour")}
             </button>
+          ) : null}
+          {/^#[0-9a-f]{6}$/.test(accentColor) && (() => {
+            const r = parseInt(accentColor.slice(1, 3), 16), g = parseInt(accentColor.slice(3, 5), 16), b = parseInt(accentColor.slice(5, 7), 16);
+            return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.72;
+          })() ? (
+            <span style={{ fontSize: 12, color: "#b45309" }}>{t("This colour may be hard to see on a light page.")}</span>
           ) : null}
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
             <input

@@ -783,7 +783,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "steps", items: [
             "Enter a subdomain of a website you own, like track.yourdomain.com, and press Connect. A bare domain or a path such as yourdomain.com/track will not work — DNS cannot route paths.",
             "At your domain provider, add the CNAME record shown on screen, pointing to customers.nivadesk.app.",
-            "Press Verify. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. Once the record matches, the domain shows Domain verified."
+            "Press Check again. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. The step flow on the card walks Enter domain → Add the DNS record → Verify ownership → Serving rollout, and the values are copyable with one tap."
           ] },
           { kind: "bullets", items: [
             "A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.",
@@ -1565,7 +1565,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "steps", items: [
             "Size ait bir sitenin alt alan adını girin — örn. track.sizinsite.com — ve Connect'e basın. Çıplak domain veya sizinsite.com/track gibi yollar çalışmaz; DNS yol yönlendiremez.",
             "Alan adı sağlayıcınızda, ekranda gösterilen CNAME kaydını customers.nivadesk.app hedefiyle ekleyin.",
-            "Verify'a basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Kayıt eşleşince alan adı Domain verified olur."
+            "Check again'e basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Karttaki adım akışı Alan adını gir → DNS kaydını ekle → Sahipliği doğrula → Yayına alma sırasını izler; değerler tek dokunuşla kopyalanır."
           ] },
           { kind: "bullets", items: [
             "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
