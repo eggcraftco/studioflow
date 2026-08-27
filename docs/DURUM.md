@@ -1277,3 +1277,28 @@ domain sistemiyle değişir mi? CEVAP: EVET, uçtan uca yapıldı.
 - Rehber: set-client-domain "File links follow your name too" (EN+TR),
   corpus + 4 fonksiyon deploy (ilk denemede guide string'i kırıldı —
   python [:-1] kapanış tırnağını yemişti; düzeltilip yeniden kuruldu).
+
+---
+
+## 28 Ağu — İndirme düğmesi sızıntısı da kapandı (tur 54)
+
+Kullanıcı talimatı: "tüm kullanıcıları etkileyecekse onu da kapat."
+- İlk deneme (bucket CORS'u * yapmak) İKİ engele takıldı: functions
+  servis hesabında storage.buckets.get/update yok (one-off fonksiyon
+  403 aldı; silindi) ve Cloud Shell gunes.gocmen@gmail.com ile açılıyor
+  — o hesapta da bucket izni yok. IAM genişletmeye GEREK KALMADI:
+- **Çözüm: proxy indirme.** /f/ route'una ?dl=1 modu — baytları sunucu
+  çeker, content-disposition: attachment ile akıtır. Yol-modu doğrudan;
+  kısa-link modu nvViewSharedFile'ın yeni meta=1 JSON'uyla çözülür.
+  Viewer'daki Download düğmeleri (FAB + generic) artık AYNI host'ta
+  kalan göreli ?dl=1 linkleri; kısa-link viewer'ın CORS'lu blob script'i
+  ve ham-URL fallback'i tamamen kaldırıldı. CORS'a hiç ihtiyaç yok →
+  HER domain'de HER kullanıcı için çalışır.
+- Kanıt (kullanıcının gerçek PNG'i, track.eggcraft.co.uk): ?dl=1 → 200 +
+  attachment başlığı; viewer HTML'inde indirme çapası göreli /f/…,
+  ham firebasestorage indirme çapası 0. (Görüntünün <img> baytları
+  bilinçli olarak hâlâ doğrudan Firebase'den gelir.)
+- Not: indirme baytları artık origin üzerinden akar (markalı hostlarda
+  CF Worker + Hostinger; nivadesk.app'te Hostinger) — indirme tıklama
+  bazlı olduğundan bant maliyeti ihmal edilebilir; sorun olursa Worker
+  doğrudan storage'a fetch edecek şekilde optimize edilebilir.
