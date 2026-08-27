@@ -1079,6 +1079,7 @@ function CustomerDetail({
             value={customerDisplayName(customer.name)}
             disabled={!canManageCustomers}
             saving={savingInlineField === "Customer name"}
+            editHint={t("Click to rename this customer")}
             onSave={value => onSaveDetails({ name: value }, "Customer name")}
           />
           <p>
@@ -1109,8 +1110,6 @@ function CustomerDetail({
                 {waDigits ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("whatsapp") }} href={`https://wa.me/${waDigits}`} target="_blank" rel="noopener noreferrer">💬 WhatsApp</a> : null}
                 {customer.email ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("email") }} href={`mailto:${customer.email}`}>✉️ {t("Email")}</a> : null}
                 {instagram ? <a style={{ ...quickAction, ...blockedStyle, ...preferredPill("instagram") }} href={`https://instagram.com/${encodeURIComponent(instagram)}`} target="_blank" rel="noopener noreferrer">◎ Instagram</a> : null}
-                <Link style={{ ...quickAction, ...blockedStyle }} href={`/messages?q=${encodeURIComponent(customerDisplayName(customer.name))}`}>🗨 {t("Messages")}</Link>
-                <Link style={{ ...quickAction, ...blockedStyle }} href={`/quick-reply?customer=${encodeURIComponent(customerDisplayName(customer.name))}`}>✨ {t("AI Reply")}</Link>
                 {blocked ? <span style={{ ...quickAction, borderColor: "rgba(220,38,38,0.4)", color: "#dc2626", background: "rgba(220,38,38,0.06)" }}>⛔ {t("Do not contact")}</span> : null}
                 {customer.nextFollowUpDate ? (
                   <span style={{ ...quickAction, borderColor: "rgba(245,158,11,0.4)", color: customer.nextFollowUpDate.getTime() < Date.now() ? "#dc2626" : "#b45309", background: "rgba(245,158,11,0.06)" }}>
@@ -1506,6 +1505,9 @@ function CustomerDetailsForm({
   }
 
   const fields: Array<{ label: string; field: keyof CustomerFormInput; type?: string }> = [
+    // The name lives up in the big heading too, but a detail form that omits
+    // the person's own name reads like a hole — both save the same field.
+    { label: "Customer name", field: "name" },
     { label: "Email", field: "email", type: "email" },
     { label: "Primary Phone", field: "primaryPhone" },
     // The customer's own WhatsApp number, kept apart from the store-fed phone.
@@ -1562,11 +1564,13 @@ function CustomerInlineTitle({
   value,
   disabled,
   saving,
+  editHint,
   onSave
 }: {
   value: string;
   disabled: boolean;
   saving: boolean;
+  editHint: string;
   onSave: (value: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -1615,8 +1619,18 @@ function CustomerInlineTitle({
   if (disabled) return <h1>{value}</h1>;
 
   return (
-    <button className="customer-inline-title-button" type="button" onClick={() => setEditing(true)}>
+    <button
+      className="customer-inline-title-button"
+      type="button"
+      title={editHint}
+      onClick={() => setEditing(true)}
+    >
       {value}
+      {/* The pencil only surfaces on hover/focus — a quiet promise that the
+          name is editable, which plain cursor:text never managed to make. */}
+      <svg className="customer-inline-title-pencil" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
     </button>
   );
 }
