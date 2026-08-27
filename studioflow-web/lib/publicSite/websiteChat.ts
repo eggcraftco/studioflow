@@ -6,6 +6,11 @@ export type WebsiteChatMessage = {
   message: string;
   fromVisitor: boolean;
   fromAssistant?: boolean;
+  fromSystem?: boolean;
+  /** "handoff" renders as the "Handed to NivaDesk team" divider. */
+  kind?: string;
+  /** false = the assistant was not sure; the widget offers Send to team. */
+  assistantConfident?: boolean;
   authorName: string;
   createdAtMillis: number;
 };
@@ -14,6 +19,8 @@ export type WebsiteChatThread = {
   ok?: boolean;
   ticketId?: string;
   status?: string;
+  needsHuman?: boolean;
+  hasEmail?: boolean;
   messages?: WebsiteChatMessage[];
 };
 
@@ -61,8 +68,10 @@ function chatError(error: unknown, fallback: string) {
 }
 
 export async function startWebsiteChat(input: {
-  name: string;
-  email: string;
+  name?: string;
+  /** Optional now: the widget opens straight into conversation; the address
+   * is only asked at handoff, and never from a signed-in user. */
+  email?: string;
   message: string;
   page: string;
   language: string;
@@ -89,6 +98,17 @@ export async function sendWebsiteChatMessage(session: WebsiteChatSession, messag
     await callable({ ...session, message });
   } catch (error) {
     throw new Error(chatError(error, "Message could not be sent right now. Please try again, or email contact@nivadesk.co.uk."));
+  }
+}
+
+// The visitor's explicit ask for a person. The assistant goes quiet, the team
+// gets the email — the only email a routine AI conversation ever triggers.
+export async function requestWebsiteChatHuman(session: WebsiteChatSession, email?: string) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; needsHuman?: boolean }>(functions, "websiteChatRequestHuman");
+    await callable({ ...session, ...(email ? { email } : {}) });
+  } catch (error) {
+    throw new Error(chatError(error, "The conversation could not be handed to the team right now. Please try again, or email contact@nivadesk.co.uk."));
   }
 }
 

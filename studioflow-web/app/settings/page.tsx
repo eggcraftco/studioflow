@@ -6866,6 +6866,25 @@ function SupportTicketsSection({
                     <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last message")} · {formatSupportDate(lastMessageTime)}</small>
                     {ticket.lastMessagePreview ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{t("Last reply")} · {ticket.lastMessagePreview}</small> : null}
                     {!isWorkspaceMode && isSupportAdmin ? <small className="muted-copy" style={{ lineHeight: 1.4 }}>{ticket.companyName || ticket.companyId} · {ticket.platform} {ticket.appVersion}</small> : null}
+                    {isWebsiteMode && isSupportAdmin ? (
+                      // The spec's context card: WHO is asking, from WHERE, on
+                      // WHICH plan — before the first reply is typed.
+                      <div className="mini-panel" style={{ marginTop: 4, padding: "8px 12px", display: "grid", gap: 2, background: "rgba(16, 122, 87, 0.06)", border: "1px solid rgba(16, 122, 87, 0.22)" }}>
+                        <small style={{ fontWeight: 800, color: "var(--text)" }}>
+                          {ticket.accountUid
+                            ? `${ticket.accountName || ticket.accountEmail}${ticket.accountCompanyName ? ` · ${ticket.accountCompanyName}` : ""}`
+                            : `${ticket.createdByName || t("Website visitor")}${ticket.visitorEmail ? ` · ${ticket.visitorEmail}` : ` · ${t("no email left")}`}`}
+                        </small>
+                        {ticket.accountUid ? (
+                          <small className="muted-copy">
+                            {ticket.accountPlan ? `${t("Plan")}: ${ticket.accountPlan}` : t("Signed-in user")}
+                            {ticket.accountEmail ? ` · ${ticket.accountEmail}` : ""}
+                          </small>
+                        ) : null}
+                        {ticket.visitorPage ? <small className="muted-copy">{t("Current page")}: {ticket.visitorPage}</small> : null}
+                        {ticket.needsHuman ? <small style={{ color: "#b45309", fontWeight: 800 }}>👥 {t("Asked for a person")}</small> : null}
+                      </div>
+                    ) : null}
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", flex: "0 1 auto" }}>
                     {isUnread ? <span style={supportNewBadgeStyle}>{t("New")}</span> : null}

@@ -2990,7 +2990,17 @@ function supportTicketFromDoc(doc, ticketType = "appSupport", currentUid = "") {
     assignedByEmail: String(data.assignedByEmail || ""),
     assignedAtMillis: supportTimestampMillis(data.assignedAt),
     readByMillis: supportReadByMillisMap(data.readBy || {}),
-    isUnread: supportTicketIsUnreadForUid(data, currentUid)
+    isUnread: supportTicketIsUnreadForUid(data, currentUid),
+    // Website-chat context: WHO is asking, from WHERE, on WHICH plan — the
+    // difference between a faceless form and a support desk that knows you.
+    visitorEmail: String(data.visitorEmail || ""),
+    visitorPage: String(data.visitorPage || ""),
+    needsHuman: data.needsHuman === true,
+    accountUid: String(data.accountUid || ""),
+    accountEmail: String(data.accountEmail || ""),
+    accountName: String(data.accountName || ""),
+    accountCompanyName: String(data.accountCompanyName || ""),
+    accountPlan: String(data.accountPlan || "")
   };
 }
 
@@ -3263,7 +3273,9 @@ async function websiteChatTicketForVisitor(ticketId, visitorToken) {
   return { ref, data };
 }
 
-async function emailNivadeskSupportForWebsiteChat(ticketId, payload = {}, isReply = false) {
+async function emailNivadeskSupportForWebsiteChat(ticketId, payload = {}, kind = "new") {
+  const isReply = kind === "reply" || kind === true;
+  const isHandoff = kind === "handoff";
   const password = String(process.env.NIVADESK_SMTP_PASSWORD || "").trim();
   if (!password) {
     console.warn("emailNivadeskSupportForWebsiteChat: NIVADESK_SMTP_PASSWORD secret is not set; skipping email.");
@@ -3285,11 +3297,13 @@ async function emailNivadeskSupportForWebsiteChat(ticketId, payload = {}, isRepl
     host, port, secure: port === 465, auth: { user, pass: password }
   });
 
-  const subject = isReply
-    ? `[NivaDesk Website] New reply from ${visitorName}`
-    : `[NivaDesk Website] New chat from ${visitorName}`;
+  const subject = isHandoff
+    ? `[NivaDesk Website] ${visitorName} asked for a person`
+    : isReply
+      ? `[NivaDesk Website] New reply from ${visitorName}`
+      : `[NivaDesk Website] New chat from ${visitorName}`;
   const text = [
-    isReply ? "New reply in a website chat" : "New website chat",
+    isHandoff ? "A website chat was handed to the team" : isReply ? "New reply in a website chat" : "New website chat",
     "",
     `From:     ${visitorName}${visitorEmail ? ` <${visitorEmail}>` : ""}`,
     `Page:     ${page || "-"}`,
@@ -3420,20 +3434,55 @@ const WEBSITE_ASSISTANT_FACTS = [
   "Support email: contact@nivadesk.co.uk."
 ].join("\n");
 
-function websiteAssistantSystemPrompt(language) {
+// The widget assistant used to be blind to the user guide while telling
+// visitors "the detail lives in the guide". Now the guide's most relevant
+// sections ride along as extra grounding — same in-process corpus the in-app
+// assistant reads, so this costs no extra I/O.
+function websiteAssistantGuideBlock(question) {
+  try {
+    const sections = appAssistantCorpus();
+    if (!Array.isArray(sections) || sections.length === 0) return "";
+    const tokens = new Set(appAssistantTokens(question));
+    if (tokens.size === 0) return "";
+    const scored = sections
+      .map((section) => {
+        const hay = new Set(appAssistantTokens(`${section.title || ""} ${section.text || ""}`));
+        let score = 0;
+        tokens.forEach((word) => { if (hay.has(word)) score += 1; });
+        return { section, score };
+      })
+      .filter((row) => row.score >= 2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    if (scored.length === 0) return "";
+    return scored
+      .map((row) => `## ${String(row.section.title || "")}\n${String(row.section.text || "").slice(0, 2000)}`)
+      .join("\n\n");
+  } catch (error) {
+    console.warn("websiteAssistant guide grounding failed:", error?.message || error);
+    return "";
+  }
+}
+
+function websiteAssistantSystemPrompt(language, guideBlock = "") {
   return [
-    "You are the assistant on the NivaDesk marketing website (nivadesk.app). You are talking to a visitor who is not signed in.",
+    "You are the assistant on the NivaDesk marketing website (nivadesk.app).",
+    "",
+    "You MUST answer with a single JSON object: {\"reply\": \"<your message>\", \"confident\": true|false}. Nothing outside the JSON.",
     "",
     "Rules:",
-    "1. Answer ONLY from the facts below. If the answer is not in them, say you are not sure and that a person from the team will reply here and by email. Never guess a price, a limit, a date or a feature.",
-    "2. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it.",
-    "3. Keep it short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
-    `4. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
-    "5. Never ask for passwords, card details or API keys. If a visitor needs account help, tell them the team will pick it up.",
-    "6. You cannot look inside anyone's workspace or account, and you cannot change anything. Say so plainly if asked.",
+    "1. Answer ONLY from the facts below. Never guess a price, a limit, a date or a feature.",
+    "2. When the facts genuinely cover the question, write the answer in \"reply\" and set \"confident\": true.",
+    "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and make \"reply\" exactly this sentence, translated into the visitor's language: \"I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.\" Do not add anything else to it.",
+    "4. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it (that is still a confident answer).",
+    "5. Keep confident replies short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
+    `6. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
+    "7. Never ask for passwords, card details or API keys.",
+    "8. You cannot look inside anyone's workspace or account, and you cannot change anything. Say so plainly if asked.",
     "",
     "Facts:",
-    WEBSITE_ASSISTANT_FACTS
+    WEBSITE_ASSISTANT_FACTS,
+    ...(guideBlock ? ["", "Guide excerpts that may answer this question (treat as facts):", guideBlock] : [])
   ].join("\n");
 }
 
@@ -3451,22 +3500,26 @@ async function websiteAssistantKey() {
   return { key: String(key || "").trim(), reason: key ? "ok" : "missing_key", companyId };
 }
 
-// Returns the reply text, or "" when the assistant should stay quiet and leave
-// the question for a person.
+// Returns { reply, confident } — or null when the assistant should stay quiet
+// and leave the question for a person. "confident: false" is the structured
+// version of "I\u2019m not fully sure": the widget turns it into the
+// Send-to-team / Keep-chatting offer instead of letting the model bluff.
 async function websiteAssistantReply(ticketData = {}, history = []) {
   const { key, reason } = await websiteAssistantKey();
   if (!key) {
     if (reason !== "disabled") console.warn("websiteAssistant skipped:", reason);
-    return "";
+    return null;
   }
 
-  const messages = [{ role: "system", content: websiteAssistantSystemPrompt(ticketData.language) }];
+  const lastVisitorMessage = [...history].reverse().find((item) => item.fromVisitor);
+  const guideBlock = websiteAssistantGuideBlock(lastVisitorMessage ? lastVisitorMessage.message : "");
+  const messages = [{ role: "system", content: websiteAssistantSystemPrompt(ticketData.language, guideBlock) }];
   for (const item of history.slice(-10)) {
     const text = cleanSupportMultiline(item.message, 2000);
     if (!text) continue;
     messages.push({ role: item.fromVisitor ? "user" : "assistant", content: text });
   }
-  if (messages.length < 2) return "";
+  if (messages.length < 2) return null;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -3476,18 +3529,32 @@ async function websiteAssistantReply(ticketData = {}, history = []) {
         model: "gpt-4o-mini",
         messages,
         temperature: 0.2,
-        max_tokens: 400
+        max_tokens: 400,
+        response_format: { type: "json_object" }
       })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error("websiteAssistant OpenAI error", response.status, payload?.error?.message || "");
-      return "";
+      return null;
     }
-    return cleanSupportMultiline(payload?.choices?.[0]?.message?.content || "", 3000);
+    const raw = String(payload?.choices?.[0]?.message?.content || "");
+    let reply = "";
+    let confident = true;
+    try {
+      const parsed = JSON.parse(raw);
+      reply = cleanSupportMultiline(parsed?.reply, 3000);
+      confident = parsed?.confident !== false;
+    } catch {
+      // A model that ignored the JSON contract still answered — treat the
+      // whole thing as a confident reply rather than dropping it.
+      reply = cleanSupportMultiline(raw, 3000);
+    }
+    if (!reply) return null;
+    return { reply, confident };
   } catch (error) {
     console.error("websiteAssistant request failed", error?.message || error);
-    return "";
+    return null;
   }
 }
 
@@ -3506,18 +3573,21 @@ async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
     })
     .sort((a, b) => a.createdAtMillis - b.createdAtMillis);
 
-  const reply = await websiteAssistantReply(ticketData, history);
-  if (!reply) return false;
+  const result = await websiteAssistantReply(ticketData, history);
+  if (!result) return false;
 
   const now = admin.firestore.FieldValue.serverTimestamp();
   await ticketRef.collection("messages").add({
     ticketId: ticketRef.id,
-    message: reply,
+    message: result.reply,
     attachments: [],
     authorUid: "",
     authorEmail: "",
     authorName: "NivaDesk Assistant",
     authorRole: "assistant",
+    // false = the widget renders the Send-to-team / Keep-chatting offer
+    // under this bubble instead of pretending the answer was solid.
+    assistantConfident: result.confident !== false,
     createdAt: now,
     source: "websiteAssistant",
     supportSchemaVersion: 2
@@ -3529,8 +3599,9 @@ async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
     lastMessageByEmail: "",
     lastMessageByName: "NivaDesk Assistant",
     lastMessageByRole: "assistant",
-    lastMessagePreview: supportLastMessagePreview(reply),
-    assistantRepliedAt: now
+    lastMessagePreview: supportLastMessagePreview(result.reply),
+    assistantRepliedAt: now,
+    ...(result.confident === false ? { assistantUnsureAt: now } : {})
   }, { merge: true });
   return true;
 }
@@ -3894,16 +3965,44 @@ exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_
     if (!message) {
       throw new HttpsError("invalid-argument", "Please write a message.");
     }
-    const visitorEmail = websiteChatVisitorEmail(request.data?.email);
-    if (!visitorEmail) {
-      throw new HttpsError("invalid-argument", "Please add an email address so we can reply.");
-    }
+    // The email form is gone from the front of the widget: a conversation
+    // starts like a conversation. The address is asked only at handoff, and a
+    // signed-in NivaDesk user is never asked at all — we already know them.
+    const visitorEmail = websiteChatVisitorEmail(request.data?.email) || "";
     // Honeypot: the widget renders a hidden field no human fills in.
     if (cleanSupportText(request.data?.company, 120)) {
       return { ok: true, ticketId: "", visitorToken: "" };
     }
 
-    const visitorName = cleanSupportText(request.data?.name, 120) || visitorEmail.split("@")[0];
+    // A signed-in user brings their identity and workspace context with them —
+    // the support side then sees WHO is asking, on which plan, from which page.
+    let account = null;
+    if (request.auth?.uid) {
+      const accountUid = String(request.auth.uid);
+      const accountEmail = String(request.auth.token?.email || "").toLowerCase();
+      try {
+        const accountCompanyId = await activeCompanyIdForUid(accountUid);
+        const companySnap = accountCompanyId
+          ? await admin.firestore().collection("companies").doc(accountCompanyId).get()
+          : null;
+        const companyData = companySnap && companySnap.exists ? (companySnap.data() || {}) : {};
+        account = {
+          accountUid,
+          accountEmail,
+          accountName: cleanSupportText(request.auth.token?.name, 120) || accountEmail.split("@")[0],
+          accountCompanyId: companySnap && companySnap.exists ? accountCompanyId : "",
+          accountCompanyName: cleanSupportText(companyData.name || companyData.companyName, 160),
+          accountPlan: String(billingEntitlementsForCompany(companyData)?.plan || "")
+        };
+      } catch (error) {
+        console.warn("createWebsiteChat account context failed:", error?.message || error);
+        account = { accountUid, accountEmail, accountName: accountEmail.split("@")[0], accountCompanyId: "", accountCompanyName: "", accountPlan: "" };
+      }
+    }
+
+    const visitorName = cleanSupportText(request.data?.name, 120)
+      || (account ? account.accountName : "")
+      || (visitorEmail ? visitorEmail.split("@")[0] : "Website visitor");
     const visitorToken = websiteChatToken();
     const ticketRef = admin.firestore().collection("supportTickets").doc();
     const now = admin.firestore.FieldValue.serverTimestamp();
@@ -3912,12 +4011,14 @@ exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_
       ticketType: "website",
       companyId: WEBSITE_CHAT_COMPANY_ID,
       companyName: "Website visitor",
-      createdByUid: "",
-      createdByEmail: visitorEmail,
+      createdByUid: account ? account.accountUid : "",
+      createdByEmail: visitorEmail || (account ? account.accountEmail : ""),
       createdByName: visitorName,
       createdByPhotoURL: "",
-      visitorEmail,
+      visitorEmail: visitorEmail || (account ? account.accountEmail : ""),
       visitorName,
+      ...(account ? account : {}),
+      needsHuman: false,
       visitorToken,
       visitorPage: cleanSupportText(request.data?.page, 300),
       visitorId: cleanSupportText(request.data?.visitorId, 120),
@@ -3960,11 +4061,9 @@ exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_
     await safeSupportNotification("notifySupportAdminsForTicket(createWebsiteChat)", () =>
       notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ticketRef.id, payload, "new_ticket")
     );
-    await safeSupportNotification("emailNivadeskSupportForWebsiteChat(new)", () =>
-      emailNivadeskSupportForWebsiteChat(ticketRef.id, payload, false)
-    );
-    // The assistant answers on top of the notification, never instead of it:
-    // the team still gets every question.
+    // Deliberately NO email here: every conversation lands in the Support
+    // inbox, but the mailbox only rings when a person is actually needed —
+    // the AI answering routine questions is the quiet path.
     await safeSupportNotification("appendWebsiteAssistantReply(createWebsiteChat)", () =>
       appendWebsiteAssistantReply(ticketRef, payload)
     );
@@ -4015,14 +4114,17 @@ exports.postWebsiteChatMessage = onCall({ region: "europe-west2", secrets: [NIVA
     await safeSupportNotification("notifySupportAdminsForTicket(postWebsiteChatMessage)", () =>
       notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ref.id, nextData, "reply")
     );
-    await safeSupportNotification("emailNivadeskSupportForWebsiteChat(reply)", () =>
-      emailNivadeskSupportForWebsiteChat(ref.id, nextData, true)
-    );
-    // Once a person has joined the thread the assistant steps back, so the
-    // visitor is not answered twice by two different voices.
+    // Once a person has joined the thread — or was asked for — the assistant
+    // steps back for good, and THOSE are the only messages that ring the
+    // mailbox. AI small talk stays in the Support inbox, out of the email.
     const humanReplied = String(data.lastMessageByRole || "") === "supportAdmin"
       || String(data.lastMessageByRole || "") === "user";
-    if (!humanReplied) {
+    const humanInPlay = data.needsHuman === true || humanReplied;
+    if (humanInPlay) {
+      await safeSupportNotification("emailNivadeskSupportForWebsiteChat(reply)", () =>
+        emailNivadeskSupportForWebsiteChat(ref.id, nextData, "reply")
+      );
+    } else {
       await safeSupportNotification("appendWebsiteAssistantReply(postWebsiteChatMessage)", () =>
         appendWebsiteAssistantReply(ref, { ...data, ...nextData })
       );
@@ -4031,6 +4133,58 @@ exports.postWebsiteChatMessage = onCall({ region: "europe-west2", secrets: [NIVA
     return { ok: true, ticketId: ref.id };
   } catch (error) {
     throw supportCallableInternalError("postWebsiteChatMessage", error);
+  }
+});
+
+// "Send to team": the visitor's explicit ask for a person. From here the
+// assistant stays silent for good, the thread carries a visible hand-off
+// divider, and THIS is the moment the mailbox rings — not before.
+exports.websiteChatRequestHuman = onCall({ region: "europe-west2", secrets: [NIVADESK_SMTP_PASSWORD] }, async (request) => {
+  try {
+    await websiteChatCheckRate("msg", websiteChatClientIp(request), WEBSITE_CHAT_MESSAGES_PER_HOUR);
+    const { ref, data } = await websiteChatTicketForVisitor(request.data?.ticketId, request.data?.visitorToken);
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    // A visitor without an address can leave one here so the team can reply
+    // by email; a signed-in user never needs to — theirs came with the ticket.
+    const offeredEmail = websiteChatVisitorEmail(request.data?.email);
+    const patch = {
+      needsHuman: true,
+      humanRequestedAt: data.humanRequestedAt || now,
+      status: ["resolved", "closed"].includes(String(data.status || "open")) ? "open" : String(data.status || "open"),
+      updatedAt: now
+    };
+    if (offeredEmail && !String(data.visitorEmail || "").trim()) {
+      patch.visitorEmail = offeredEmail;
+      patch.createdByEmail = offeredEmail;
+    }
+    await ref.set(patch, { merge: true });
+
+    if (data.needsHuman !== true) {
+      await ref.collection("messages").add({
+        ticketId: ref.id,
+        message: "Handed to NivaDesk team",
+        attachments: [],
+        authorUid: "",
+        authorEmail: "",
+        authorName: "",
+        authorRole: "system",
+        kind: "handoff",
+        createdAt: now,
+        source: "website",
+        supportSchemaVersion: 2
+      });
+      const nextData = { ...data, ...patch };
+      await safeSupportNotification("notifySupportAdminsForTicket(websiteChatRequestHuman)", () =>
+        notifySupportAdminsForTicket(WEBSITE_CHAT_COMPANY_ID, ref.id, nextData, "reply")
+      );
+      await safeSupportNotification("emailNivadeskSupportForWebsiteChat(handoff)", () =>
+        emailNivadeskSupportForWebsiteChat(ref.id, nextData, "handoff")
+      );
+    }
+    return { ok: true, needsHuman: true };
+  } catch (error) {
+    throw supportCallableInternalError("websiteChatRequestHuman", error);
   }
 });
 
@@ -4046,19 +4200,31 @@ exports.getWebsiteChatThread = onCall({ region: "europe-west2" }, async (request
         // so the assistant is never labelled as the support team.
         const authorName = role === "visitor"
           ? String(item.authorName || "")
-          : (role === "assistant" ? "NivaDesk Assistant" : "NivaDesk Support");
+          : (role === "assistant" ? "NivaDesk Assistant" : role === "system" ? "" : "NivaDesk Support");
         return {
           id: doc.id,
           message: String(item.message || ""),
           fromVisitor: role === "visitor",
           fromAssistant: role === "assistant",
+          fromSystem: role === "system",
+          kind: String(item.kind || ""),
+          // false marks the bubble that should carry the Send-to-team /
+          // Keep-chatting offer in the widget.
+          assistantConfident: item.assistantConfident !== false,
           authorName,
           createdAtMillis: supportTimestampMillis(item.createdAt)
         };
       })
       .sort((a, b) => a.createdAtMillis - b.createdAtMillis);
 
-    return { ok: true, ticketId: ref.id, status: String(data.status || "open"), messages };
+    return {
+      ok: true,
+      ticketId: ref.id,
+      status: String(data.status || "open"),
+      needsHuman: data.needsHuman === true,
+      hasEmail: Boolean(String(data.visitorEmail || "").trim()),
+      messages
+    };
   } catch (error) {
     throw supportCallableInternalError("getWebsiteChatThread", error);
   }

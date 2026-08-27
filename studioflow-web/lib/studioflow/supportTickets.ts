@@ -31,6 +31,15 @@ export type StudioSupportTicket = {
   lastMessageByRole?: string;
   lastMessagePreview?: string;
   readBy?: Record<string, unknown>;
+  /** Website-chat context — who is asking, from where, on which plan. */
+  visitorEmail?: string;
+  visitorPage?: string;
+  needsHuman?: boolean;
+  accountUid?: string;
+  accountEmail?: string;
+  accountName?: string;
+  accountCompanyName?: string;
+  accountPlan?: string;
 };
 
 export type StudioSupportTicketAttachment = {
