@@ -1256,9 +1256,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     memberCanAccess(workspace, "dashboard") &&
     memberCanAccess(workspace, "financialInfo"),
   );
+  // Same rule as the dashboard: cancelled and refunded orders earn nothing.
   const monthMargin = useMemo(
     () =>
       financeOrders
+        .filter(order => order.countsTowardBalance !== false)
         .filter(orderInCurrentMonth)
         .reduce((total, order) => total + orderGrossMargin(order), 0),
     [financeOrders],
@@ -1266,6 +1268,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const yearMargin = useMemo(
     () =>
       financeOrders
+        .filter(order => order.countsTowardBalance !== false)
         .filter(orderInCurrentYear)
         .reduce((total, order) => total + orderGrossMargin(order), 0),
     [financeOrders],

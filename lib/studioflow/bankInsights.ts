@@ -53,6 +53,51 @@ export type RecurringSpend = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// ---- Input VAT (reclaimable VAT inside bank spending) -----------------------
+// VAT sits INSIDE a UK price, so it is extracted from the gross rather than
+// added on top: £120 at 20% carries £20 of VAT, not £24. Mirrors
+// vatFromGrossAmount() on the server (the "VAT inclusive fix") — same formula,
+// same 2-decimal rounding, so dashboard figures agree with invoices.
+export function vatFromGross(grossAmount: number, ratePercent: number): number {
+  if (!(ratePercent > 0)) return 0;
+  if (!Number.isFinite(grossAmount) || grossAmount <= 0) return 0;
+  return Math.round(((grossAmount * ratePercent) / (100 + ratePercent)) * 100) / 100;
+}
+
+/**
+ * The VAT treatments from the bank page's VAT_CODES that carry a percentage a
+ * business can reclaim from the gross paid: Standard rate (ST, 20%) and
+ * Reduced rate (RR, 5%). ZR/EX/OS/NV have no VAT inside the price, NR has no
+ * VAT receipt to reclaim against, RC nets out on the return, IM and MX are not
+ * derivable from the gross alone (MX resolves through its split lines).
+ */
+export const RECLAIMABLE_VAT_RATES: Record<string, number> = { ST: 20, RR: 5 };
+
+export type VatCodedBankTx = {
+  amount: number;
+  vatCode?: string;
+  vatCodeAuto?: string;
+  splits?: Array<{ amount: number; vatCode?: string }>;
+};
+
+/**
+ * Reclaimable input VAT contained in one outgoing bank transaction. Split
+ * transactions resolve per line (each split carries its own vatCode, amounts
+ * stored positive); otherwise the owner's vatCode wins over the auto one —
+ * the same precedence the bank page uses.
+ */
+export function reclaimableVatForTx(tx: VatCodedBankTx): number {
+  if (tx.amount >= 0) return 0;
+  if (tx.splits && tx.splits.length > 0) {
+    return tx.splits.reduce((total, split) => {
+      const rate = RECLAIMABLE_VAT_RATES[split.vatCode || ""] ?? 0;
+      return total + vatFromGross(Math.abs(split.amount), rate);
+    }, 0);
+  }
+  const rate = RECLAIMABLE_VAT_RATES[tx.vatCode || tx.vatCodeAuto || ""] ?? 0;
+  return vatFromGross(Math.abs(tx.amount), rate);
+}
+
 /** merchant key → vendor, so aliases collapse into one group everywhere. */
 export function vendorKeyMap(vendors: BankVendor[]): Map<string, BankVendor> {
   const map = new Map<string, BankVendor>();

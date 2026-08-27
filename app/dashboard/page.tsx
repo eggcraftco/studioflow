@@ -32,7 +32,7 @@ import {
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
-import { detectRecurringSpends, monthlyFixedTotal } from "@/lib/studioflow/bankInsights";
+import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -58,6 +58,8 @@ type FinanceTotals = {
 type ChartPoint = {
   label: string;
   value: number;
+  /** Local start of the bucket this point aggregates — drill-down target. */
+  start: Date;
 };
 
 type BankTx = {
@@ -69,6 +71,9 @@ type BankTx = {
   counterparty: string;
   category: string;
   categoryAuto: string;
+  vatCode: string;
+  vatCodeAuto: string;
+  splits: Array<{ amount: number; vatCode: string }>;
 };
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
@@ -310,7 +315,7 @@ function buildChartSeries(
         : adjustedDashboardNetProfit(order, settings));
     }, 0);
 
-    points.push({ label: bucketLabel(visibleBucketStart, unit, locale), value });
+    points.push({ label: bucketLabel(visibleBucketStart, unit, locale), value, start: visibleBucketStart });
     cursor = visibleBucketEnd;
   }
 
@@ -378,7 +383,17 @@ export default function DashboardPage() {
             description: String(data.description || ""),
             counterparty: String(data.counterparty || ""),
             category: String(data.category || ""),
-            categoryAuto: String(data.categoryAuto || "")
+            categoryAuto: String(data.categoryAuto || ""),
+            vatCode: String(data.vatCode || ""),
+            vatCodeAuto: String(data.vatCodeAuto || ""),
+            // Split lines carry their own VAT treatment (amounts stored
+            // positive on the bank page) — same shape /bank reads.
+            splits: Array.isArray(data.splits)
+              ? (data.splits as Array<Record<string, unknown>>).map(row => ({
+                  amount: Number(row?.amount) || 0,
+                  vatCode: String(row?.vatCode || "")
+                }))
+              : []
           };
         }));
       },
@@ -464,20 +479,41 @@ export default function DashboardPage() {
     () => rangeWindow(range, financeOrders, customStart, customEnd),
     [customEnd, customStart, financeOrders, range]
   );
+  // Cancelled/refunded orders (countsTowardBalance === false) are excluded
+  // from every money aggregate — Revenue, Payments Received, Outstanding,
+  // Net, the chart, YoY and the tax set-aside — and surfaced as their own
+  // visible line instead, mirroring the customers page.
+  const countingFinanceOrders = useMemo(
+    () => financeOrders.filter(order => order.countsTowardBalance !== false),
+    [financeOrders]
+  );
   const filteredFinanceOrders = useMemo(
     () => filterOrdersByWindow(financeOrders, currentWindow.start, currentWindow.end),
     [currentWindow.end, currentWindow.start, financeOrders]
   );
+  const filteredCountingOrders = useMemo(
+    () => filteredFinanceOrders.filter(order => order.countsTowardBalance !== false),
+    [filteredFinanceOrders]
+  );
+  // Money sitting on non-counting orders in the visible range — same figure
+  // the customers page reports as "cancelled or refunded".
+  const cancelledSummary = useMemo(() => {
+    const excluded = filteredFinanceOrders.filter(order => order.countsTowardBalance === false);
+    return {
+      count: excluded.length,
+      amount: excluded.reduce((total, order) => total + orderSalesTotal(order), 0)
+    };
+  }, [filteredFinanceOrders]);
   const totals = useMemo(
-    () => totalsForOrders(filteredFinanceOrders, settings, dashboardVisibility),
-    [dashboardVisibility, filteredFinanceOrders, settings]
+    () => totalsForOrders(filteredCountingOrders, settings, dashboardVisibility),
+    [dashboardVisibility, filteredCountingOrders, settings]
   );
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
   const locale = studioLocaleTag(language);
   const currentSeries = useMemo(
     () => buildChartSeries(
-      financeOrders,
+      countingFinanceOrders,
       settings,
       currentWindow.start,
       currentWindow.end,
@@ -486,19 +522,19 @@ export default function DashboardPage() {
       canSeeAdvancedFinance ? "netProfit" : "basicBalance",
       locale
     ),
-    [canSeeAdvancedFinance, currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
+    [canSeeAdvancedFinance, currentWindow.end, currentWindow.start, currentWindow.unit, countingFinanceOrders, settings, locale]
   );
   const previousYearSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 1, "netProfit", locale),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
+    () => buildChartSeries(countingFinanceOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 1, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, countingFinanceOrders, settings, locale]
   );
   const twoYearsBackSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 2, "netProfit", locale),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
+    () => buildChartSeries(countingFinanceOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 2, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, countingFinanceOrders, settings, locale]
   );
   const threeYearsBackSeries = useMemo(
-    () => buildChartSeries(financeOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 3, "netProfit", locale),
-    [currentWindow.end, currentWindow.start, currentWindow.unit, financeOrders, settings, locale]
+    () => buildChartSeries(countingFinanceOrders, settings, currentWindow.start, currentWindow.end, currentWindow.unit, 3, "netProfit", locale),
+    [currentWindow.end, currentWindow.start, currentWindow.unit, countingFinanceOrders, settings, locale]
   );
   // Bank spending per chart bucket (red line). Buckets mirror buildChartSeries
   // exactly so the series lines up point-for-point with the profit line.
@@ -518,13 +554,13 @@ export default function DashboardPage() {
       const bucketEnd = nextBucket(bucketStart, currentWindow.unit);
       const value = spends.reduce((total, item) => (item.when >= bucketStart && item.when < bucketEnd ? total + item.amount : total), 0);
       if (value > 0) any = true;
-      points.push({ label: bucketLabel(bucketStart, currentWindow.unit, locale), value });
+      points.push({ label: bucketLabel(bucketStart, currentWindow.unit, locale), value, start: bucketStart });
       cursor = bucketEnd;
     }
     return any ? points : [];
   }, [bankTransactions, currentWindow.end, currentWindow.start, currentWindow.unit, dashboardVisibility.bankSpending, canViewBankFeed, locale]);
 
-  const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
+  const yearly = useMemo(() => yearTotals(countingFinanceOrders, settings), [countingFinanceOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
 
   async function persistDashboardVisibility(next: DashboardWidgetVisibility) {
@@ -726,7 +762,7 @@ export default function DashboardPage() {
                     {/* Revenue is invoiced order value; Payments Received is
                         the cash that actually arrived — the report's accrual
                         vs cash split, side by side instead of blended. */}
-                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={t("Invoiced order value in this range: paid + still owed (accrual basis).")} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={`${t("Invoiced order value in this range: paid + still owed (accrual basis).")} ${t("Cancelled and refunded orders are not counted.")}`} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.revenue ? <DashboardSummaryCard icon="check" title={t("Payments Received")} hint={t("Money actually collected on these orders (cash basis).")} value={money(totals.received, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Outstanding Balance")} hint={t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
                     {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} hint={t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
@@ -757,7 +793,7 @@ export default function DashboardPage() {
 
               {canSeeAdvancedFinance ? (
                 <TaxSetAsideCard
-                  orders={financeOrders}
+                  orders={countingFinanceOrders}
                   settings={settings}
                   bankTransactions={bankTransactions}
                   isOwner={canViewBankFeed}
@@ -772,6 +808,17 @@ export default function DashboardPage() {
                   <div className="financial-breakdown-grid">
                     <div className="financial-breakdown-col">
                       <BreakdownRow label={t("Revenue")} amount={totals.revenue} hideNumbers={hideNumbers} settings={settings} />
+                      {/* Visibility line, not part of the reconciliation: money
+                          sitting on cancelled/refunded orders in this range,
+                          already excluded from every figure above and below. */}
+                      {cancelledSummary.count > 0 ? (
+                        <BreakdownRow
+                          label={`${t("Cancelled or refunded")} (${cancelledSummary.count})`}
+                          amount={cancelledSummary.amount}
+                          hideNumbers={hideNumbers}
+                          settings={settings}
+                        />
+                      ) : null}
                       <BreakdownRow label={t("Base Cost")} amount={totals.breakdownBaseCost} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Extra Spending")} amount={totals.expenses} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Platform Fee")} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
@@ -807,6 +854,21 @@ export default function DashboardPage() {
                   bank={bankSeries}
                   settings={settings}
                   t={t}
+                  // Drill-down rides the custom range, which is Pro-only —
+                  // same gate as the Custom pill in the range control.
+                  onSelectPeriod={canSeeAdvancedFinance ? point => {
+                    // Zoom to exactly the clicked bucket: a day point becomes
+                    // that single day, a month point that calendar month.
+                    // Local date strings via dateInputValue — never
+                    // toISOString (the BST day-shift trap).
+                    const start = point.start;
+                    const end = currentWindow.unit === "month"
+                      ? new Date(start.getFullYear(), start.getMonth() + 1, 0)
+                      : start;
+                    setCustomStart(dateInputValue(start));
+                    setCustomEnd(dateInputValue(end));
+                    setRange("custom");
+                  } : undefined}
                 />
                 {!canSeeAdvancedFinance ? (
                   <div className="dashboard-chart-locked">
@@ -1073,9 +1135,10 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
 }
 
 // Tax set-aside — built from the SAME per-order figures the dashboard already
-// aggregates (order taxAmount = VAT, plus the Corporation Tax estimate from
-// workspace settings), not a rough percentage of bank inflows. Bank payments
-// the owner categorised as "Tax" count as already paid.
+// aggregates (order taxAmount = output VAT, plus the Corporation Tax estimate
+// from workspace settings), minus the reclaimable input VAT found in the bank
+// feed's VAT treatments — not a rough percentage of bank inflows. Bank
+// payments the owner categorised as "Tax" count as already paid.
 function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideNumbers }: {
   orders: DashboardFinanceOrder[];
   settings: WorkspaceSettingsOverview | null;
@@ -1106,20 +1169,52 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
       }
     }
 
+    // Input VAT: reclaimable VAT sitting inside outgoing bank payments whose
+    // treatment (vatCode, else vatCodeAuto; split lines per line) is Standard
+    // or Reduced rate — extracted from the gross with the same VAT-inclusive
+    // maths invoices use. Reclaimed on the return, so it reduces what must be
+    // set aside. No bank feed data → 0 → the card behaves exactly as before.
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    let inputVatYtd = 0;
+    let inputVatMonth = 0;
+    for (const item of bankTransactions) {
+      if (item.amount >= 0 || !item.bookingDate.startsWith(String(year))) continue;
+      const reclaim = reclaimableVatForTx(item);
+      if (reclaim <= 0) continue;
+      inputVatYtd += reclaim;
+      if (item.bookingDate.startsWith(monthPrefix)) inputVatMonth += reclaim;
+    }
+    const netVatYtd = Math.max(0, vatYtd - inputVatYtd);
+    const netVatMonth = Math.max(0, vatMonth - inputVatMonth);
+
     const paidYtd = bankTransactions
       .filter(item => item.amount < 0
         && item.bookingDate.startsWith(String(year))
         && (item.category || item.categoryAuto) === "Tax")
       .reduce((acc, item) => acc + Math.abs(item.amount), 0);
 
-    return { vatYtd, ctYtd, totalYtd: vatYtd + ctYtd, monthTotal: vatMonth + ctMonth, paidYtd, ctEnabled, ctRate };
+    return {
+      vatYtd,
+      inputVatYtd,
+      netVatYtd,
+      ctYtd,
+      totalYtd: netVatYtd + ctYtd,
+      monthTotal: netVatMonth + ctMonth,
+      paidYtd,
+      ctEnabled,
+      ctRate
+    };
   }, [orders, settings, bankTransactions]);
 
-  if (summary.totalYtd <= 0.005) return null;
+  // Keyed off the gross figures, not the netted total: a year whose output VAT
+  // is fully covered by reclaimable input VAT should still show the card (with
+  // £0 to set aside), while a workspace with no VAT at all still hides it.
+  if (summary.vatYtd + summary.ctYtd <= 0.005) return null;
 
   const remaining = Math.max(0, summary.totalYtd - summary.paidYtd);
   const paidShare = summary.totalYtd > 0 ? Math.min(100, (summary.paidYtd / summary.totalYtd) * 100) : 0;
   const showMoney = (value: number) => money(value, hideNumbers, settings);
+  const hasInputVat = summary.inputVatYtd > 0.005;
 
   return (
     <section className="card app-card">
@@ -1133,9 +1228,25 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
           {/* Both sums above key off getFullYear(), so say "calendar year" out
               loud — owners think in tax years and would misread a bare "year". */}
           <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }} title={t("Counted over the calendar year (1 January – 31 December), not the tax year.")}>{t("Set aside this calendar year")}</p>
-          <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.totalYtd)}</strong>
+          <strong
+            style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}
+            title={hasInputVat ? t("Net VAT (VAT collected minus reclaimable VAT on spending, never below zero) plus Corporation Tax.") : undefined}
+          >
+            {showMoney(summary.totalYtd)}
+          </strong>
           <span style={{ fontSize: 11.5, opacity: 0.7 }}>
-            {t("VAT Amount")}: {showMoney(summary.vatYtd)}
+            {hasInputVat ? (
+              <>
+                {t("VAT collected")}: {showMoney(summary.vatYtd)}
+                {" · "}
+                <span title={t("Reclaimable VAT inside outgoing bank payments marked Standard rate (20%) or Reduced rate (5%), including split lines.")}>
+                  {t("VAT on spending")}: {hideNumbers ? "" : "−"}{showMoney(summary.inputVatYtd)}
+                </span>
+                {" · "}{t("Net VAT")}: {showMoney(summary.netVatYtd)}
+              </>
+            ) : (
+              <>{t("VAT Amount")}: {showMoney(summary.vatYtd)}</>
+            )}
             {summary.ctEnabled ? <> · {t("Corporation Tax")} ({Math.round(summary.ctRate)}%): {showMoney(summary.ctYtd)}</> : null}
           </span>
         </div>
@@ -1237,7 +1348,8 @@ function ProfitChart({
   threeBack,
   bank = [],
   settings,
-  t
+  t,
+  onSelectPeriod
 }: {
   current: ChartPoint[];
   previous: ChartPoint[];
@@ -1246,6 +1358,8 @@ function ProfitChart({
   bank?: ChartPoint[];
   settings: StudioMoneySettings;
   t: (text: string) => string;
+  /** Drill-down: called with the clicked point of the current series. */
+  onSelectPeriod?: (point: ChartPoint) => void;
 }) {
   const allValues = [...current, ...previous, ...twoBack, ...threeBack, ...bank].map(point => point.value);
   const min = Math.min(0, ...allValues);
@@ -1295,20 +1409,32 @@ function ProfitChart({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverPx, setHoverPx] = useState<{ x: number; y: number } | null>(null);
 
+  function indexForClientX(clientX: number): number | null {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const svgX = ((clientX - rect.left) / rect.width) * W;
+    if (current.length <= 1) return 0;
+    const usable = W - padXLeft - padXRight;
+    const rel = Math.max(0, Math.min(usable, svgX - padXLeft));
+    return Math.round((rel / usable) * (current.length - 1));
+  }
+
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
     setHoverPx({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    const svgX = ((e.clientX - rect.left) / rect.width) * W;
-    if (current.length <= 1) {
-      setHoverIdx(0);
-      return;
-    }
-    const usable = W - padXLeft - padXRight;
-    const rel = Math.max(0, Math.min(usable, svgX - padXLeft));
-    const idx = Math.round((rel / usable) * (current.length - 1));
-    setHoverIdx(idx);
+    setHoverIdx(indexForClientX(e.clientX));
+  }
+
+  // Drill-down: a click zooms the whole dashboard to the clicked bucket.
+  // Index comes from the click position itself (not hover state), so taps on
+  // touch screens work without a preceding mousemove.
+  function handleClick(e: React.MouseEvent<SVGSVGElement>) {
+    if (!onSelectPeriod) return;
+    const idx = indexForClientX(e.clientX);
+    if (idx != null && current[idx]) onSelectPeriod(current[idx]);
   }
 
   return (
@@ -1317,10 +1443,13 @@ function ProfitChart({
         ref={svgRef}
         viewBox={`0 0 ${W} ${H + 22}`}
         role="img"
-        aria-label={t("Net profit chart")}
+        aria-label={onSelectPeriod
+          ? t("Net profit chart. Click a point to zoom the dashboard to that period.")
+          : t("Net profit chart")}
         onMouseMove={handleMove}
         onMouseLeave={() => { setHoverIdx(null); setHoverPx(null); }}
-        style={{ cursor: "crosshair", width: "100%", height: 350 }}
+        onClick={handleClick}
+        style={{ cursor: onSelectPeriod ? "pointer" : "crosshair", width: "100%", height: 350 }}
       >
         {/* gridlines + Y labels */}
         {yTicks.map((tick, idx) => {

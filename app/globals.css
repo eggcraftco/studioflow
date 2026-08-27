@@ -14927,6 +14927,10 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   position: relative;
   width: 100%;
   max-width: 320px;
+  /* Short viewports (200% zoom, landscape phones): scroll inside the card
+     instead of clipping the store badge below the fold. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   background: #fff;
   border-radius: 20px;
   padding: 30px 28px 26px;
@@ -15070,6 +15074,8 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 .public-demo-video {
   display: block;
   width: 100%;
+  /* Keep the player (and its close button) on screen on short viewports. */
+  max-height: calc(100vh - 120px);
   border-radius: 12px;
   background: #000;
 }
@@ -15676,7 +15682,9 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   min-width: 0;
 }
 
-.public-footer-group h3 {
+/* h2 in the markup (heading order: footer group titles must not skip from the
+   page h1 to h3 on sparse pages), styled as the small labels they always were. */
+.public-footer-group h2 {
   margin: 0 0 12px;
   color: var(--public-text);
   font-size: 12px;
@@ -15840,8 +15848,8 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     border-radius: 12px;
     border: 1px solid var(--public-border);
     background: #fff;
@@ -15878,6 +15886,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   }
   .public-header-mobile-menu a:hover { background: rgba(23, 25, 35, 0.05); }
   .public-header-mobile-lang { padding: 8px 6px 4px; border-top: 1px solid var(--public-border); margin-top: 6px; }
+  .public-header-mobile-lang .public-language-select { min-height: 44px; }
 
   .public-hero::after {
     background: rgba(238, 240, 237, 0.88);
@@ -15913,6 +15922,24 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
   .public-header-actions .public-button.ghost {
     display: none;
+  }
+
+  /* Touch targets: header CTA, footer links and modal close reach 44px. */
+  .public-header-actions .public-button {
+    min-height: 44px;
+  }
+
+  .public-footer .public-footer-group nav a,
+  .public-footer-linkbtn,
+  .public-footer-contact a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .public-qr-modal-close {
+    width: 44px;
+    height: 44px;
   }
 
   .public-button {
@@ -16811,7 +16838,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 }
 
 .public-order-flow-section {
-  min-height: 265vh;
+  min-height: 185vh;
   padding: 0;
   background:
     radial-gradient(circle at 7% 14%, rgba(220, 232, 221, 0.72), transparent 30%),
@@ -17615,7 +17642,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   min-height: calc(100vh - 118px);
   display: grid;
   align-items: center;
-  padding: 72px 0;
+  padding: 40px 0;
 }
 
 .public-scroll-stage-window {
@@ -18001,19 +18028,19 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
 .public-scroll-steps {
   display: grid;
-  gap: 24vh;
-  padding: 26vh 0;
+  gap: 10vh;
+  padding: 12vh 0;
 }
 
 .public-story-step {
-  min-height: 54vh;
+  min-height: 38vh;
   display: grid;
   align-content: center;
-  opacity: 0.42;
-  transform: translateY(28px) scale(0.985);
+  opacity: 0.5;
+  transform: translateY(16px) scale(0.99);
   transition:
-    opacity 420ms ease,
-    transform 520ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    opacity 280ms ease,
+    transform 340ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .public-story-step.is-active {
@@ -18510,7 +18537,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
     gap: 14px;
   }
 
-  .public-footer-group h3 { font-size: 11px; }
+  .public-footer-group h2 { font-size: 11px; }
 
   .public-footer .public-footer-group nav a { font-size: 12px; }
 
@@ -18716,6 +18743,9 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 @media (prefers-reduced-motion: reduce) {
   .public-scroll-reveal,
   .public-scroll-stagger > *,
+  /* The phone platform grid re-declares its own (more specific) stagger
+     transform, so it needs its own line here to actually be neutralised. */
+  .public-platform-grid.public-scroll-stagger > *,
   .public-story-step,
   .public-scroll-stage-cards article,
   .public-story-cursor,
@@ -18733,6 +18763,10 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
 
   .public-story-cursor {
     display: none;
+  }
+
+  .guide-detail {
+    animation: none;
   }
 }
 
@@ -19890,7 +19924,8 @@ html[dir="rtl"] .login-public-shell {
   font-weight: 800;
 }
 
-.public-plan-yearly-copy h3 {
+/* h2 in the markup (first heading after the /pricing h1), same visual size. */
+.public-plan-yearly-copy h2 {
   margin: 0 0 5px;
   font-size: clamp(21px, 2.1vw, 28px);
   line-height: 1.12;
@@ -20795,6 +20830,7 @@ html[dir="rtl"] .login-public-shell {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  min-height: 44px; /* comfortable touch target */
   padding: 12px 18px 12px 15px;
   border: none;
   border-radius: 999px;
@@ -20844,7 +20880,15 @@ html[dir="rtl"] .login-public-shell {
   background: transparent;
   color: #fff;
   cursor: pointer;
+  /* 44px hit area; negative margins keep the icon visually where it was. */
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
+  margin: -13px -13px -13px 0;
+  border-radius: 12px;
   line-height: 0;
   opacity: 0.85;
 }
@@ -21088,8 +21132,8 @@ html[dir="rtl"] .login-public-shell {
 .support-chat-input-row input:focus { outline: 2px solid rgba(47, 111, 109, 0.35); outline-offset: 1px; }
 .support-chat-send {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 999px;
   background: var(--public-accent);
@@ -24693,5 +24737,199 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
   /* Phones tap the store badge directly; a QR code is a desktop affordance. */
   .public-appstore-qr-trigger {
     display: none;
+  }
+}
+
+/* Global-website report item 31: consistent, visible keyboard focus across
+   the public marketing site. Additive — the mouse-driven :focus styles above
+   are untouched; this only paints a ring for keyboard (:focus-visible) users.
+   The QR/demo/shot modals portal to <body> (outside .public-site), so the
+   backdrop selector carries the ring there; --public-accent is defined on
+   .public-site only, hence the literal fallback colour. */
+.public-site a:focus-visible,
+.public-site button:focus-visible,
+.public-site input:focus-visible,
+.public-site select:focus-visible,
+.public-site textarea:focus-visible,
+.login-public-shell a:focus-visible,
+.login-public-shell button:focus-visible,
+.login-public-shell select:focus-visible,
+.public-qr-modal-backdrop a:focus-visible,
+.public-qr-modal-backdrop button:focus-visible,
+.public-qr-modal-backdrop video:focus-visible {
+  outline: 3px solid var(--public-accent, #2f6f6d);
+  outline-offset: 2px;
+}
+
+/* Controls that sit on accent/dark surfaces swap to a white ring so the
+   indicator keeps contrast against its background. */
+.public-cta-inner a:focus-visible,
+.public-cta-inner button:focus-visible,
+.support-chat-head button:focus-visible,
+.public-demo-modal .public-qr-modal-close:focus-visible {
+  outline-color: #fff;
+}
+
+/* Hover lifts read as motion; under reduced motion keep colour/shadow
+   feedback but drop the translate. Lives after the base rules so the
+   equal-specificity cascade resolves in its favour. */
+@media (prefers-reduced-motion: reduce) {
+  .public-button:hover:not(:disabled),
+  .public-demo-button:hover,
+  .public-features-chip:hover,
+  .hero-shot-zoom:hover,
+  .support-chat-bubble:hover {
+    transform: none;
+  }
+}
+
+/* Follow-up home report: story context line, grouped order cards, summary
+   blocks, stronger selected card, ChatGPT permission summary. */
+.public-site .public-story-context {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--public-accent);
+}
+.public-site .public-order-card-group {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.public-site .public-order-card-group-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.public-site .public-order-card-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.public-site .public-order-card-chip[data-active="true"] {
+  border-color: var(--public-accent);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
+}
+.public-site .gpt-bridge-line {
+  margin: 10px 0 0;
+  font-size: 0.98rem;
+  opacity: 0.8;
+  max-width: 62ch;
+}
+.public-site .gpt-section-more-wrap {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  margin-top: 22px;
+}
+.public-site .gpt-permission-summary {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  border: 1px solid var(--public-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
+}
+.public-site .gpt-permission-summary strong {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.public-site .gpt-permission-summary ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.public-site .gpt-permission-summary li::before {
+  content: "✓";
+  color: #16a34a;
+  font-weight: 800;
+  margin-right: 8px;
+}
+.public-site .gpt-permission-summary li[data-mark="no"]::before {
+  content: "✕";
+  color: #b42318;
+}
+.public-site .public-shot-caption {
+  margin: 10px 4px 0;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  text-align: center;
+}
+.public-site .public-home-pricing-title {
+  text-align: center;
+  font-size: 1.5rem;
+  margin: 0 0 20px;
+  text-wrap: balance;
+}
+.public-site .public-home-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+.public-site .public-home-pricing-card {
+  display: grid;
+  gap: 4px;
+  padding: 18px;
+  text-align: center;
+}
+.public-site .public-home-pricing-card span {
+  font-size: 0.9rem;
+  color: var(--public-muted);
+}
+.public-site .public-home-pricing-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+.public-site .public-home-faq { padding-top: 0; }
+.public-site .public-home-faq-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.public-site .public-home-faq-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  color: inherit;
+}
+.public-site .public-home-faq-more {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+@media (max-width: 700px) {
+  /* Report 34: on phones the launcher shrinks to an icon, respects the safe
+     area, and the open panel never swallows the screen. */
+  .public-site .support-chat-bubble > span {
+    display: none;
+  }
+  .public-site .support-chat-bubble {
+    border-radius: 999px;
+    width: 52px;
+    height: 52px;
+    justify-content: center;
+    padding: 0;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .public-site .support-chat-panel {
+    max-height: min(75vh, calc(100vh - 90px));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+  .public-site .public-order-card-group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

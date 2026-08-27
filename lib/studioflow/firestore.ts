@@ -167,6 +167,11 @@ export type DashboardFinanceOrder = {
   customerName: string;
   designName: string;
   watchRef: string;
+  /** False for cancelled or refunded orders — they must not count in revenue,
+   * payments, outstanding or profit (same rule the customers page applies).
+   * Optional so structural supersets (the order-detail model) stay assignable
+   * to the finance helpers; absent means "counts". */
+  countsTowardBalance?: boolean;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -1062,6 +1067,18 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
   };
 }
 
+// A cancelled or refunded order owes nothing and earned nothing: the single
+// canonical rule, shared by the customers page and the dashboard aggregates.
+function orderCountsTowardBalance(data: Record<string, unknown>): boolean {
+  return !stringValue(data.status, "").toLowerCase().includes("cancel")
+    && stringValue(
+      (data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+        ? (data.customFields as Record<string, unknown>)["Shopify Status"]
+        : ""),
+      ""
+    ).toLowerCase() !== "refunded";
+}
+
 export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
   const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
   return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
@@ -1078,7 +1095,8 @@ export async function loadDashboardFinanceOrders(companyId: string): Promise<Das
       customFields: stringMapValue(data.customFields),
       customerName: stringValue(data.customerName, ""),
       designName: stringValue(data.designName, ""),
-      watchRef: stringValue(data.watchRef, "")
+      watchRef: stringValue(data.watchRef, ""),
+      countsTowardBalance: orderCountsTowardBalance(data)
     };
   });
 }
@@ -1514,13 +1532,7 @@ export async function loadWorkspaceCustomers(companyId: string): Promise<Custome
       isDelivered: booleanValue(data.isDelivered, false),
       // A cancelled or refunded order owes nothing: it must not inflate the
       // customer's outstanding balance (the report's refund complaint).
-      countsTowardBalance: !stringValue(data.status, "").toLowerCase().includes("cancel")
-        && stringValue(
-          (data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
-            ? (data.customFields as Record<string, unknown>)["Shopify Status"]
-            : ""),
-          ""
-        ).toLowerCase() !== "refunded",
+      countsTowardBalance: orderCountsTowardBalance(data),
       files: parseCustomerOrderFiles(data.clientFiles),
       activity: parseCustomerOrderActivity(data.historyLog)
     };

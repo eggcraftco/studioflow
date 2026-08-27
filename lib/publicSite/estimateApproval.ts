@@ -30,6 +30,8 @@ export type PublicEstimate = {
   businessName: string;
   logoUrl: string;
   footerNote: string;
+  accentColor?: string;
+  showPoweredBy?: boolean;
   customerFirstName: string;
   replacesNumber: string;
   alreadyDecided: boolean;
