@@ -1045,3 +1045,31 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
   çubuğu müşteri domain'inde kalır, spoof-guard client-side host'u
   zaten gönderiyor). Sonraki odaklı faz bu Worker + SSL for SaaS +
   verifyClientDomain'e CF API otomasyonu.
+
+---
+
+## 27 Ağu akşam — Worker fazı: *.nivadesk.app müşteri sayfaları CANLI (tur 44)
+
+- **CF Worker "wild-sunset-2fbb"** (hedef ad nivadesk-customer-pages,
+  rename kozmetik/bekliyor) deploy edildi; rota `*.nivadesk.app/*`.
+  Kod: scratchpad nivadesk-customer-pages-worker.js — /r/, /track/,
+  /e/, /_next/, /brand/ + favicon/robots proxy'lenir
+  (X-NivaDesk-Client-Host başlığıyla), gerisi 301 → nivadesk.app.
+  /_next/static/ immutable cache.
+- **DNS:** `*` A 192.0.2.1 PROXIED eklendi; `customers` A 76.13.132.222
+  PROXIED'e çevrildi. mcp + www + apex grey-cloud → Worker'a girmiyor.
+- **Uçtan uca test GEÇTİ:** customers.nivadesk.app/track/qa-check →
+  200 + "Track your order" (cf-ray'li); foo.nivadesk.app → 301
+  nivadesk.app; mcp.nivadesk.app/chatgptMcp POST → 200 (bozulmadı);
+  www + apex 200. Yani HERKESİN ücretsiz alt alan adı
+  (studio.nivadesk.app/r/<token>) ŞU AN çalışıyor.
+- **SSL for SaaS (müşterinin KENDİ domain'i için):** Enable düğmesi
+  fatura adresi formu açıyor ($0/ay, kullanım bazlı) — kişisel/fatura
+  bilgisini BEN giremem; sekme kullanıcıya açık bırakıldı. Kullanıcı
+  formu doldurunca: fallback origin customers.nivadesk.app + Worker
+  rotasına `*/*` eklenmeli (custom hostname isteği *.nivadesk.app
+  desenine uymaz) + CF API token (kullanıcı kendisi secrets:set yapar)
+  → verifyClientDomain otomasyonu.
+- **TeamAccess düzeltmesi (6734240) tur 43'le zaten çıkmış**; tur 44
+  eksik olan 2 hata string'inin 12-dil çevirisini ekledi
+  (language.ts, kaynak commit 9ed9a5a).
