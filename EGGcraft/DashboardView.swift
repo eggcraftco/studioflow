@@ -128,6 +128,9 @@ struct DashboardView: View {
     @AppStorage("dashShowProfit") private var dashShowProfit = true
     @AppStorage("corporationTaxEnabled") private var corporationTaxEnabled = false
     @AppStorage("corporationTaxRate") private var corporationTaxRate = 19.0
+    // Card names tell the truth: the KPI is "Revenue"; the workspace's tax-rule
+    // name is context, demoted to a small subtitle (same default as Settings).
+    @AppStorage("taxRuleNameRevenue") private var taxRuleNameRevenue: String = "Standard VAT (Services/New)"
     @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan = StudioBillingPlan.teamMonthly.rawValue
 
     private var canSeeAdvancedFinance: Bool {
@@ -612,6 +615,22 @@ struct DashboardView: View {
         .onChange(of: extraSpendingIncludeShipping) { _, _ in resetExtraSpendingPage() }
         .onChange(of: extraSpendingIncludePlatformFee) { _, _ in resetExtraSpendingPage() }
         .onChange(of: extraSpendingIncludeTax) { _, _ in resetExtraSpendingPage() }
+        // A custom range with Start after End would silently show an empty
+        // dashboard; swap the two instead (mirrors the web guard).
+        .onChange(of: baslangicTarihi) { _, yeniBaslangic in
+            if yeniBaslangic > bitisTarihi {
+                let eskiBitis = bitisTarihi
+                bitisTarihi = yeniBaslangic
+                baslangicTarihi = eskiBitis
+            }
+        }
+        .onChange(of: bitisTarihi) { _, yeniBitis in
+            if yeniBitis < baslangicTarihi {
+                let eskiBaslangic = baslangicTarihi
+                baslangicTarihi = yeniBitis
+                bitisTarihi = eskiBaslangic
+            }
+        }
 
     }
 
@@ -980,6 +999,13 @@ struct DashboardView: View {
                             .datePickerStyle(.compact)
                     }
                     .font(.system(size: 12, weight: .semibold))
+
+                    DashboardTarihOnAyarlari(
+                        baslangicTarihi: $baslangicTarihi,
+                        bitisTarihi: $bitisTarihi,
+                        seciliDil: seciliDil,
+                        isPhoneLayout: true
+                    )
                 }
             }
             .padding(12)
@@ -1020,6 +1046,17 @@ struct DashboardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 16)
+
+                if seciliFiltre == .ozelTarih {
+                    DashboardTarihOnAyarlari(
+                        baslangicTarihi: $baslangicTarihi,
+                        bitisTarihi: $bitisTarihi,
+                        seciliDil: seciliDil,
+                        isPhoneLayout: false
+                    )
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.horizontal, 16)
+                }
 
                 if seciliFiltre == .buAy || seciliFiltre == .buYil {
                     HStack(spacing: 14) {
@@ -1144,16 +1181,24 @@ struct DashboardView: View {
         .padding(.horizontal, isPhoneLayout ? 10 : 16)
     }
 
+    private var revenueTaxRuleSubtitle: String {
+        let trimmed = taxRuleNameRevenue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Standard VAT (Services/New)" : trimmed
+    }
+
     @ViewBuilder
     private var summaryCards: some View {
         if canSeeAdvancedFinance {
-            if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi) }
-            if dashShowPending { OzetKart(title: t("Pending", lang: seciliDil), value: bekleyenAlacak, iconName: "clock", color: studioWarningOrange, sembol: seciliParaBirimi) }
-            if dashShowCost { OzetKart(title: t("Cost", lang: seciliDil), value: toplamGider, iconName: "cart", color: .red, sembol: seciliParaBirimi) }
+            // Revenue is invoiced order value; Payments Received is the cash
+            // that actually arrived — accrual vs cash side by side, not blended.
+            if dashShowRevenue { OzetKart(title: t("Revenue", lang: seciliDil), value: toplamCiro, iconName: "sterlingsign", color: .blue, sembol: seciliParaBirimi, subtitle: revenueTaxRuleSubtitle, helpText: t("Invoiced order value in this range: paid + still owed (accrual basis).", lang: seciliDil)) }
+            if dashShowRevenue { OzetKart(title: t("Payments Received", lang: seciliDil), value: toplamReceived, iconName: "checkmark.circle", color: .blue, sembol: seciliParaBirimi, helpText: t("Money actually collected on these orders (cash basis).", lang: seciliDil)) }
+            if dashShowPending { OzetKart(title: t("Outstanding Balance", lang: seciliDil), value: bekleyenAlacak, iconName: "clock", color: studioWarningOrange, sembol: seciliParaBirimi, helpText: t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.", lang: seciliDil)) }
+            if dashShowCost { OzetKart(title: t("Cost", lang: seciliDil), value: toplamGider, iconName: "cart", color: .red, sembol: seciliParaBirimi, helpText: t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.", lang: seciliDil)) }
             if dashShowFee { OzetKart(title: t("Platform Fee", lang: seciliDil), value: toplamKesinti, iconName: "percent", color: .red, sembol: seciliParaBirimi) }
             if dashShowShipping { OzetKart(title: t("Shipping", lang: seciliDil), value: toplamKargo, iconName: "shippingbox", color: .red, sembol: seciliParaBirimi) }
-            if dashShowTax { OzetKart(title: t("VAT Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
-            if dashShowProfit { OzetKart(title: t(corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi) }
+            if dashShowTax { OzetKart(title: t("VAT Amount", lang: seciliDil), value: toplamVergi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi, helpText: t("VAT recorded on these orders and set aside — not yet paid to HMRC.", lang: seciliDil)) }
+            if dashShowProfit { OzetKart(title: t(corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit", lang: seciliDil), value: netKar, iconName: "checkmark.circle", color: .green, sembol: seciliParaBirimi, helpText: t("Revenue − base cost − extra spending − platform fee − shipping − VAT.", lang: seciliDil)) }
             if dashShowProfit && corporationTaxEnabled { OzetKart(title: "\(t("Corporation Tax", lang: seciliDil)) (\(Int(corporationTaxRate))%)", value: kurumlarVergisi, iconName: "building.columns", color: .red, sembol: seciliParaBirimi) }
             if dashShowProfit && corporationTaxEnabled { OzetKart(title: t("Profit after CT", lang: seciliDil), value: netKarSonrasiCT, iconName: "checkmark.seal.fill", color: .green, sembol: seciliParaBirimi) }
         } else {
@@ -1850,6 +1895,11 @@ struct OzetKart: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("hideSensitiveNumbers") private var hideSensitiveNumbers: Bool = false
     let title: String; let value: Double; let iconName: String; let color: Color; let sembol: String
+    // The trust rule from the web dashboard: every money figure explains
+    // itself. `subtitle` carries context (e.g. the tax-rule name under
+    // Revenue); `helpText` is a macOS tooltip and an accessibility hint on iOS.
+    var subtitle: String? = nil
+    var helpText: String? = nil
 
     private var isPhoneLayout: Bool { horizontalSizeClass == .compact }
 
@@ -1858,6 +1908,14 @@ struct OzetKart: View {
     }
 
     var body: some View {
+        if let helpText, !helpText.isEmpty {
+            kartGovdesi.help(helpText)
+        } else {
+            kartGovdesi
+        }
+    }
+
+    private var kartGovdesi: some View {
         VStack(alignment: .leading, spacing: isPhoneLayout ? 10 : 8) {
             HStack(spacing: 7) {
                 Image(systemName: iconName)
@@ -1876,6 +1934,14 @@ struct OzetKart: View {
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
+
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: isPhoneLayout ? 10 : 9.5, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
         .padding(isPhoneLayout ? 14 : 12)
         .frame(maxWidth: .infinity, minHeight: isPhoneLayout ? 82 : 0, alignment: .leading)
@@ -1886,3 +1952,85 @@ struct OzetKart: View {
 }
 
 struct GrafikVerisi: Identifiable { let id = UUID(); let tarih: Date; let kar: Double }
+
+// Custom-range presets: the ranges an owner actually reaches for, one tap
+// each. Tax year = UK personal tax year, 6 April to 5 April. Mirrors the web
+// dashboard's preset pills; its own small struct for the real-iPhone stack
+// guard.
+private struct DashboardTarihOnAyarlari: View {
+    @Binding var baslangicTarihi: Date
+    @Binding var bitisTarihi: Date
+    let seciliDil: String
+    let isPhoneLayout: Bool
+
+    private static let presetKeys = ["Last 7 days", "Last 30 days", "This quarter", "Last quarter", "Tax year"]
+
+    var body: some View {
+        if isPhoneLayout {
+            ScrollView(.horizontal, showsIndicators: false) {
+                butonSirasi
+            }
+        } else {
+            butonSirasi
+        }
+    }
+
+    private var butonSirasi: some View {
+        HStack(spacing: 6) {
+            ForEach(Self.presetKeys, id: \.self) { key in
+                Button {
+                    uygula(key)
+                } label: {
+                    Text(t(key, lang: seciliDil))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.06))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func uygula(_ key: String) {
+        let cal = Calendar.current
+        let now = Date()
+        var start = now
+        var end = now
+
+        switch key {
+        case "Last 7 days":
+            start = cal.date(byAdding: .day, value: -6, to: now) ?? now
+        case "Last 30 days":
+            start = cal.date(byAdding: .day, value: -29, to: now) ?? now
+        case "This quarter":
+            start = ceyrekBaslangici(for: now, calendar: cal) ?? now
+        case "Last quarter":
+            let buCeyrek = ceyrekBaslangici(for: now, calendar: cal) ?? now
+            start = cal.date(byAdding: .month, value: -3, to: buCeyrek) ?? now
+            end = cal.date(byAdding: .day, value: -1, to: buCeyrek) ?? now
+        case "Tax year":
+            let yil = cal.component(.year, from: now)
+            let buYil6Nisan = cal.date(from: DateComponents(year: yil, month: 4, day: 6)) ?? now
+            start = now >= buYil6Nisan
+                ? buYil6Nisan
+                : (cal.date(from: DateComponents(year: yil - 1, month: 4, day: 6)) ?? now)
+        default:
+            break
+        }
+
+        // Never hand back an inverted range — swap instead.
+        if start > end { swap(&start, &end) }
+        baslangicTarihi = start
+        bitisTarihi = end
+    }
+
+    private func ceyrekBaslangici(for date: Date, calendar cal: Calendar) -> Date? {
+        let comps = cal.dateComponents([.year, .month], from: date)
+        guard let yil = comps.year, let ay = comps.month else { return nil }
+        let ceyrekIlkAy = ((ay - 1) / 3) * 3 + 1
+        return cal.date(from: DateComponents(year: yil, month: ceyrekIlkAy, day: 1))
+    }
+}
