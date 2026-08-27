@@ -4118,7 +4118,11 @@ export function OrderDetailContent({
     if (!cleaned || cleaned === cardLabels[key]) return;
     setCardLabels(prev => ({ ...prev, [key]: cleaned }));
     try {
-      await setDoc(doc(db, "companySettings", workspace.id), { [key]: cleaned }, { merge: true });
+      await setDoc(doc(db, "companySettings", workspace.id), {
+        [key]: cleaned,
+        // Signs the change history entry; rules only accept your own uid here.
+        ...(user?.uid ? { lastSettingsWriteByUid: user.uid, lastSettingsWriteAtMs: Date.now() } : {})
+      }, { merge: true });
     } catch {
       // The companySettings snapshot listener re-syncs the label if the write fails.
     }
@@ -8499,6 +8503,10 @@ export function OrderDetailContent({
             workspacePayload.financialExpenseItemsJSON = JSON.stringify(expense.map(it => ({ id: it.id, title: it.title })));
             workspacePayload.financialRemainingItemsJSON = JSON.stringify(remaining.map(it => ({ id: it.id, title: it.title })));
             workspacePayload.financialBaseCostLabel = baseLabel.trim() || "Cost (Base)";
+          }
+          if (user?.uid) {
+            workspacePayload.lastSettingsWriteByUid = user.uid;
+            workspacePayload.lastSettingsWriteAtMs = Date.now();
           }
           void setDoc(doc(db, "companySettings", workspace.id), workspacePayload, { merge: true });
         }}
