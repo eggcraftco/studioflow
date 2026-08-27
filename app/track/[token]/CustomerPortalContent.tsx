@@ -51,11 +51,13 @@ export function CustomerPortalContent({ token }: { token: string }) {
     setLoading(true);
     setError("");
     try {
-      const callable = httpsCallable<{ token: string }, { ok?: boolean; portal?: PortalView }>(
+      const callable = httpsCallable<{ token: string; host?: string }, { ok?: boolean; portal?: PortalView }>(
         functions,
         "getPortalForVisitor"
       );
-      const result = await callable({ token });
+      // The serving host rides along so the server can refuse dressing this
+      // order in another workspace's client domain.
+      const result = await callable({ token, host: typeof window !== "undefined" ? window.location.host : "" });
       if (!result.data?.portal) throw new Error("This link is no longer available.");
       setPortal(result.data.portal);
     } catch (failure) {
