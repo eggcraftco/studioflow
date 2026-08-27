@@ -7,12 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1858,6 +1860,9 @@ private fun ClientDomainDetail(state: StudioFlowUiState) {
     // Result of the last explicit Verify press: host to result. Cleared on reload
     // only when the domain turned active (the row disappears from the pending UI).
     var verifyResult by remember { mutableStateOf<Pair<String, StudioFlowRepository.ClientDomainVerifyResult>?>(null) }
+    // Customer page branding: "" = the default accent (#2563eb), matching web.
+    var accentColor by remember { mutableStateOf("") }
+    var showPoweredBy by remember { mutableStateOf(true) }
 
     suspend fun reload() {
         val ws = workspace ?: return
@@ -1869,6 +1874,8 @@ private fun ClientDomainDetail(state: StudioFlowUiState) {
             customDomains = config.customDomains
             if (config.cnameTarget.isNotEmpty()) cnameTarget = config.cnameTarget
             slugDraft = config.subdomain?.host ?: ""
+            accentColor = config.branding.accentColor
+            showPoweredBy = config.branding.showPoweredBy
         } catch (failure: Exception) {
             errorText = t(clientDomainErrorMessage(failure, "The domain settings could not be loaded."))
         } finally {
@@ -1876,7 +1883,7 @@ private fun ClientDomainDetail(state: StudioFlowUiState) {
         }
     }
 
-    fun runAction(doneText: String, action: suspend () -> Unit) {
+    fun runAction(doneText: String, failText: String = "Something went wrong.", action: suspend () -> Unit) {
         if (busy) return
         scope.launch {
             busy = true
@@ -1887,7 +1894,7 @@ private fun ClientDomainDetail(state: StudioFlowUiState) {
                 reload()
                 statusText = t(doneText)
             } catch (failure: Exception) {
-                errorText = t(clientDomainErrorMessage(failure, "Something went wrong."))
+                errorText = t(clientDomainErrorMessage(failure, failText))
             } finally {
                 busy = false
             }
@@ -1986,6 +1993,92 @@ private fun ClientDomainDetail(state: StudioFlowUiState) {
                 t("A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working."),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // ---- Branding for the customer-facing pages --------------------------
+        // The web offers a native colour input; the app offers the same range as
+        // a row of tappable swatches. "" means "use the default accent" and the
+        // preview chip shows the web default #2563eb while nothing custom is set.
+        DetailCard(title = t("Customer page branding"), icon = Icons.Filled.Palette) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(t("Accent colour"), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(
+                            clientBrandingHexColor(accentColor.ifEmpty { ClientPortalDefaultAccent })
+                                ?: MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(9.dp))
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ClientBrandingAccentChoices.forEach { hex ->
+                    ClientBrandingSwatch(hex = hex, selected = accentColor == hex, onClick = { accentColor = hex })
+                }
+            }
+            if (accentColor.isNotEmpty()) {
+                OutlinedButton(onClick = { accentColor = "" }, enabled = !busy) { Text(t("Use the default colour")) }
+            }
+            SettingSwitch(t("Show “Powered by NivaDesk” on customer pages"), showPoweredBy) { showPoweredBy = it }
+            Button(
+                onClick = {
+                    val ws = workspace ?: return@Button
+                    runAction("Branding saved.", "The branding could not be saved.") {
+                        repository.saveClientPortalBranding(ws, accentColor, showPoweredBy)
+                    }
+                },
+                enabled = !busy
+            ) { Text(t("Save"), fontWeight = FontWeight.ExtraBold) }
+            Text(
+                t("The accent colours the order tracking page. Hiding the Powered by line is part of the Pro and Team plans."),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// The web's colour input shows this blue while no custom accent is stored.
+private const val ClientPortalDefaultAccent = "#2563eb"
+
+// Curated accents for the branding swatch row, all lowercase #rrggbb — the
+// server accepts "" or a #rrggbb hex, nothing else.
+private val ClientBrandingAccentChoices = listOf(
+    "#2563eb", "#0ea5e9", "#0d9488", "#2f6f6d", "#16a34a",
+    "#f59e0b", "#ea580c", "#dc2626", "#db2777", "#7c3aed", "#111827",
+)
+
+private fun clientBrandingHexColor(hex: String): Color? =
+    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
+
+// One tappable branding colour, styled after the order-card colour swatches.
+@Composable
+private fun ClientBrandingSwatch(hex: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(clientBrandingHexColor(hex) ?: MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(9.dp)
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
             )
         }
     }

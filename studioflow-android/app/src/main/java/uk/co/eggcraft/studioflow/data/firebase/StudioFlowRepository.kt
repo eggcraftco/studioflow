@@ -956,10 +956,17 @@ class StudioFlowRepository(
         val status: String, // "active" | "pending"
     )
 
+    // Branding for the customer-facing pages: "" means "use the default accent".
+    data class ClientPortalBranding(
+        val accentColor: String,    // "" | "#rrggbb"
+        val showPoweredBy: Boolean,
+    )
+
     data class ClientDomainConfig(
         val subdomain: ClientDomainRow?,
         val customDomains: List<ClientDomainRow>,
         val cnameTarget: String,
+        val branding: ClientPortalBranding,
     )
 
     data class ClientDomainVerifyResult(
@@ -985,11 +992,22 @@ class StudioFlowRepository(
             .call(mapOf("companyId" to workspace.id))
             .await()
         val data = result.data as? Map<*, *>
+        val brandingRaw = data?.get("branding") as? Map<*, *>
         return ClientDomainConfig(
             subdomain = clientDomainRow(data?.get("subdomain")),
             customDomains = (data?.get("customDomains") as? List<*>)?.mapNotNull { clientDomainRow(it) } ?: emptyList(),
             cnameTarget = ((data?.get("cnameTarget") as? String).orEmpty().trim()).ifEmpty { "customers.nivadesk.app" },
+            branding = ClientPortalBranding(
+                accentColor = (brandingRaw?.get("accentColor") as? String).orEmpty().trim().lowercase(),
+                showPoweredBy = brandingRaw?.get("showPoweredBy") != false,
+            ),
         )
+    }
+
+    suspend fun saveClientPortalBranding(workspace: StudioWorkspace, accentColor: String, showPoweredBy: Boolean) {
+        functions.getHttpsCallable("saveClientPortalBranding")
+            .call(mapOf("companyId" to workspace.id, "accentColor" to accentColor, "showPoweredBy" to showPoweredBy))
+            .await()
     }
 
     suspend fun setClientSubdomain(workspace: StudioWorkspace, slug: String) {
