@@ -30,7 +30,7 @@ const softwareApplication = {
   "@id": `${BASE_URL}/#software`,
   name: "NivaDesk",
   description:
-    "Premium studio and order management workspace for artists, custom studios and order-based creative businesses. Orders, customers, client files, delivery timelines, to-do lists, team roles, finance summaries and live shipment tracking in one place.",
+    "Organised workspace for custom-order, repair and service businesses. Orders, repairs, customers, client files, schedules, inventory, estimates with e-signature, bank preparation, branded customer links and live shipment tracking connected in one place — with a secure ChatGPT app on every plan.",
   url: BASE_URL,
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web, macOS, iOS, Android",
@@ -54,11 +54,25 @@ const softwareApplication = {
     "WooCommerce order import",
     "Shopify order sync",
     "Connect any online store via webhook or Zapier (Wix, Squarespace, Etsy, BigCommerce)",
-    "CSV and JSON exports on every plan"
+    "CSV and JSON exports on every plan",
+    "Branded customer links: free yourstudio.nivadesk.app subdomain on every plan, own custom domain on Pro and Team",
+    "Customer portal with token-based order tracking pages, accent colour branding and optional Powered by line",
+    "Estimates and approvals with customer e-signature on the phone",
+    "Repair intake card that keeps the customer's own item separate from stock",
+    "Inventory: unique items and quantity stock, purchases, suppliers, locations, recipes and QR/barcode scanning",
+    "Banking preparation via read-only Open Banking: categories, VAT codes, receipt OCR matching and recurring detection",
+    "Notes with reminders, tags, home-screen widgets and workspace sharing",
+    "Role permission matrix and per-area team access control",
+    "Interface in 12 languages"
   ]
 };
 
 const FAQ_ENTRIES: { question: string; answer: string }[] = [
+  {
+    question: "Can customer links use my own domain?",
+    answer:
+      "Yes. Every plan can claim a free name.nivadesk.app subdomain, and Pro and Team can connect a subdomain of their own website — like track.yourdomain.com — with one CNAME record. Order tracking and estimate links then carry your brand, and older nivadesk.app links keep working."
+  },
   {
     question: "Can I connect my online store, like WooCommerce, Shopify, Wix, Squarespace or Etsy?",
     answer:

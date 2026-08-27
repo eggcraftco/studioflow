@@ -35,7 +35,7 @@ const publicMetadata: Record<
   home: {
     title: "NivaDesk | Studio, Order & Client Management Software",
     description:
-      "NivaDesk is studio management software for creative studios and makers. Track orders, clients, schedules, invoices and files in one place, on web, Mac, iPhone and Android.",
+      "NivaDesk is order management software for custom-order, repair and service businesses. Orders, clients, schedules, inventory, estimates with e-signature, bank preparation and branded customer links in one workspace — web, Mac, iPhone and Android, with a secure ChatGPT app on every plan.",
     path: "/"
   },
   chatgpt: {
@@ -47,7 +47,7 @@ const publicMetadata: Record<
   features: {
     title: "NivaDesk Features | Orders, Clients, Scheduling & Files",
     description:
-      "See how NivaDesk manages orders, customers, schedules, invoices, client files, to do lists, team roles and dashboards in one studio workspace, on web, Mac, iPhone and Android.",
+      "See how NivaDesk manages orders, repairs, customers, schedules, inventory, estimates, client files, bank preparation, team roles and branded customer links in one workspace, on web, Mac, iPhone and Android.",
     path: "/features"
   },
   pricing: {

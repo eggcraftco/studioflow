@@ -256,6 +256,17 @@ export function ClientDomainSection({
         </p>
       </section>
 
+      {/* ---- What the links actually look like --------------------------- */}
+      <section className="mini-panel" style={{ display: "grid", gap: 8, padding: 16 }}>
+        <strong>{t("Your customer links")}</strong>
+        <p className="muted-copy" style={{ margin: 0, fontSize: 13 }}>
+          {t("Order tracking and estimate pages ride short links; they follow whichever name you set up here.")}
+        </p>
+        <code style={{ fontSize: 12.5, background: "rgba(120,120,140,0.1)", borderRadius: 8, padding: "8px 10px" }}>
+          https://{subdomain ? `${subdomain.host}.nivadesk.app` : "nivadesk.app"}/r/a1b2c3…
+        </code>
+      </section>
+
       {/* ---- Branding for the customer-facing pages ----------------------- */}
       <section className="mini-panel" style={{ display: "grid", gap: 10, padding: 16 }}>
         <strong>{t("Customer page branding")}</strong>

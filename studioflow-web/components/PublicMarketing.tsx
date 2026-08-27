@@ -664,7 +664,8 @@ const FAQ_GROUPS: FaqGroup[] = [
   {
     categoryKey: "faq.cat.integrations",
     items: [
-      { titleKey: "faq.q24.title", bodyKey: "faq.q24.body" }
+      { titleKey: "faq.q24.title", bodyKey: "faq.q24.body" },
+      { titleKey: "faq.q25.title", bodyKey: "faq.q25.body" }
     ]
   },
   {
@@ -2932,7 +2933,7 @@ function AdvancedAreasSection() {
           {ADVANCED_AREAS.map(area => (
             <Link
               key={area.id}
-              href="/features"
+              href={area.id === "domain" ? "/features#customer-portal" : "/features"}
               className="public-card public-backoffice-tile"
               title={t(area.bodyKey)}
             >
@@ -3913,6 +3914,30 @@ function PublicInfoContent({
           <span className="public-eyebrow">{t(eyebrowKey)}</span>
           <h1>{t(titleKey)}</h1>
           <p>{t(bodyKey)}</p>
+        </div>
+      </section>
+
+      <section className="public-section" id="customer-portal">
+        <div className="public-shell">
+          <SectionHeader
+            eyebrowKey="featuresDomain.eyebrow"
+            titleKey="featuresDomain.title"
+            bodyKey="featuresDomain.body"
+          />
+          <div className="public-advanced-grid">
+            <article className="public-card public-advanced-card">
+              <h3>{t("featuresDomain.sub1Title")}</h3>
+              <p>{t("featuresDomain.sub1Body")}</p>
+            </article>
+            <article className="public-card public-advanced-card">
+              <h3>{t("featuresDomain.sub2Title")}</h3>
+              <p>{t("featuresDomain.sub2Body")}</p>
+            </article>
+            <article className="public-card public-advanced-card">
+              <h3>{t("featuresDomain.sub3Title")}</h3>
+              <p>{t("featuresDomain.brandingBody")}</p>
+            </article>
+          </div>
         </div>
       </section>
 
