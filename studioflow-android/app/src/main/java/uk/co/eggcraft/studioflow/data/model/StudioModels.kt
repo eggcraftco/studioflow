@@ -764,13 +764,26 @@ data class StudioSupportTicket(
     val language: String,
     val createdAt: Date?,
     val updatedAt: Date?,
-    val lastMessageAt: Date?
+    val lastMessageAt: Date?,
+    // Website-chat context (ticketType "website"): who is asking, from which
+    // page, on which plan — filled by listMySupportTickets for support admins.
+    val visitorEmail: String = "",
+    val visitorPage: String = "",
+    val needsHuman: Boolean = false,
+    val accountUid: String = "",
+    val accountEmail: String = "",
+    val accountName: String = "",
+    val accountCompanyName: String = "",
+    val accountPlan: String = ""
 ) {
     val senderLabel: String
         get() = createdByName.trim().ifEmpty { emailName(createdByEmail).ifEmpty { createdByUid } }
 
     val isWorkspaceTicket: Boolean
         get() = ticketType == "workspace"
+
+    val isWebsiteTicket: Boolean
+        get() = ticketType == "website"
 }
 
 data class StudioSupportTicketMessage(

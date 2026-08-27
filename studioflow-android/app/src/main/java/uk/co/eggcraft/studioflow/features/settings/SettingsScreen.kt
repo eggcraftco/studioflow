@@ -4082,6 +4082,55 @@ private fun SupportTicketCard(
                 overflow = TextOverflow.Ellipsis
             )
 
+            if (canManage && ticket.isWebsiteTicket) {
+                // Web-parity context card: WHO is asking, from WHERE, on WHICH
+                // plan — before the first reply is typed (admins only).
+                val contextGreen = Color(0xFF107A57)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = contextGreen.copy(alpha = 0.06f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, contextGreen.copy(alpha = 0.22f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        val headline = if (ticket.accountUid.isNotBlank()) {
+                            val identity = ticket.accountName.ifBlank { ticket.accountEmail }
+                            identity + if (ticket.accountCompanyName.isNotBlank()) " · ${ticket.accountCompanyName}" else ""
+                        } else {
+                            val visitorName = ticket.createdByName.trim().ifEmpty { t("Website visitor") }
+                            visitorName + if (ticket.visitorEmail.isNotBlank()) " · ${ticket.visitorEmail}" else " · ${t("no email left")}"
+                        }
+                        Text(headline, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                        if (ticket.accountUid.isNotBlank()) {
+                            val planPart = if (ticket.accountPlan.isNotBlank()) "${t("Plan")}: ${ticket.accountPlan}" else t("Signed-in user")
+                            Text(
+                                planPart + if (ticket.accountEmail.isNotBlank()) " · ${ticket.accountEmail}" else "",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                        }
+                        if (ticket.visitorPage.isNotBlank()) {
+                            Text(
+                                "${t("Current page")}: ${ticket.visitorPage}",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp
+                            )
+                        }
+                        if (ticket.needsHuman) {
+                            Text(
+                                "👥 ${t("Asked for a person")}",
+                                color = Color(0xFFB45309),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = onToggleOpen, shape = RoundedCornerShape(999.dp)) {
                     Text(if (isOpen) t("Hide Conversation") else t("Open Conversation"), fontWeight = FontWeight.Bold)

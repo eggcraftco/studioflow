@@ -1797,7 +1797,15 @@ class StudioFlowRepository(
                 language = stringValue(data["language"], "English"),
                 createdAt = dateFromAny(data["createdAtMillis"]),
                 updatedAt = dateFromAny(data["updatedAtMillis"]),
-                lastMessageAt = dateFromAny(data["lastMessageAtMillis"])
+                lastMessageAt = dateFromAny(data["lastMessageAtMillis"]),
+                visitorEmail = stringValue(data["visitorEmail"], ""),
+                visitorPage = stringValue(data["visitorPage"], ""),
+                needsHuman = boolValue(data["needsHuman"], false),
+                accountUid = stringValue(data["accountUid"], ""),
+                accountEmail = stringValue(data["accountEmail"], ""),
+                accountName = stringValue(data["accountName"], ""),
+                accountCompanyName = stringValue(data["accountCompanyName"], ""),
+                accountPlan = stringValue(data["accountPlan"], "")
             )
         }.sortedByDescending { it.lastMessageAt?.time ?: it.createdAt?.time ?: 0L }
     }
