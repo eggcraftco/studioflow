@@ -185,7 +185,7 @@
    "id": "settings",
    "title": "Settings",
    "path": "Settings",
-   "text": "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls. Some settings are protected, so only the owner or admins can change them."
+   "text": "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls, or type into the search box above the list — searching \"VAT\", \"logo\" or \"password\" jumps straight to the right section. Some settings are protected, so only the owner or admins can change them."
   },
   {
    "id": "set-general",
@@ -221,7 +221,7 @@
    "id": "set-woocommerce",
    "title": "Store & website integrations",
    "path": "Settings › Store & website integrations",
-   "text": "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow.\n- WooCommerce: create one webhook (Order created) and paste the delivery URL.\n- Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.\n- Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
+   "text": "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow.\n- WooCommerce: create one webhook (Order created) and paste the delivery URL.\n- WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.\n- Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.\n- Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
   },
   {
    "id": "set-safety",

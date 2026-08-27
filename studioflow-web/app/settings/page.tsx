@@ -4719,6 +4719,8 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
   const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [signatureSecretDraft, setSignatureSecretDraft] = useState("");
+  const [signatureState, setSignatureState] = useState<{ saving: boolean; message: string; enabled: boolean | null }>({ saving: false, message: "", enabled: null });
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTest, setWebhookTest] = useState<{ ok?: boolean; message?: string } | null>(null);
 
@@ -4848,7 +4850,7 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
         <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
         <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
         <p className="muted-copy">{t("Redelivering the same order never creates a copy: the order number is the identity, and a redelivery only updates what the shop owns — production status and tracking stay untouched.")}</p>
-        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL. WooCommerce's own webhook signature is not checked, so treat the URL like a password and replace it if it leaks.")}</p>
+        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL. Add your WooCommerce webhook Secret below and every delivery's signature is verified as well — without it, treat the URL like a password and replace it if it leaks.")}</p>
         <div className="settings-action-row">
           <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runShopWebhookTest(); }}>
             {testingWebhook ? t("Testing...") : t("Send test webhook")}
@@ -4859,6 +4861,63 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
             {webhookTest.message}{" "}
             {webhookTest.ok ? t("This proves the URL, workspace and token. It does not prove your own tool is pointed at it.") : ""}
           </p>
+        ) : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="lock" eyebrow={t("Optional, recommended")} title={t("Signature check")} />
+        <p className="muted-copy">{t("Paste the same Secret you set on the WooCommerce webhook. Every delivery is then verified with its signature, and a wrong signature is rejected even alongside a valid URL.")}</p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            className="input"
+            style={{ maxWidth: 320 }}
+            type="password"
+            value={signatureSecretDraft}
+            placeholder={t("WooCommerce webhook Secret")}
+            onChange={event => setSignatureSecretDraft(event.target.value)}
+          />
+          <button
+            className="button"
+            type="button"
+            disabled={signatureState.saving || !companyId || signatureSecretDraft.trim().length < 8}
+            onClick={() => {
+              void (async () => {
+                setSignatureState(current => ({ ...current, saving: true, message: "" }));
+                try {
+                  const callable = httpsCallable<{ companyId: string; secret: string }, { ok: boolean; enabled: boolean; last4: string }>(functions, "saveWooSignatureSecret");
+                  const result = await callable({ companyId, secret: signatureSecretDraft.trim() });
+                  setSignatureSecretDraft("");
+                  setSignatureState({ saving: false, enabled: result.data.enabled, message: `${t("Signature checks are on.")} ····${result.data.last4}` });
+                } catch (failure) {
+                  setSignatureState({ saving: false, enabled: null, message: failure instanceof Error ? failure.message.replace(/^[a-z-]+:\s*/i, "") : t("Something went wrong.") });
+                }
+              })();
+            }}
+          >
+            {signatureState.saving ? t("Saving...") : t("Save secret")}
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={signatureState.saving || !companyId}
+            onClick={() => {
+              void (async () => {
+                setSignatureState(current => ({ ...current, saving: true, message: "" }));
+                try {
+                  const callable = httpsCallable<{ companyId: string; secret: string }, { ok: boolean; enabled: boolean }>(functions, "saveWooSignatureSecret");
+                  await callable({ companyId, secret: "" });
+                  setSignatureState({ saving: false, enabled: false, message: t("Signature checks are off — the URL token is the only lock.") });
+                } catch (failure) {
+                  setSignatureState({ saving: false, enabled: null, message: failure instanceof Error ? failure.message.replace(/^[a-z-]+:\s*/i, "") : t("Something went wrong.") });
+                }
+              })();
+            }}
+          >
+            {t("Turn off")}
+          </button>
+        </div>
+        {signatureState.message ? (
+          <p className={signatureState.enabled === null ? "layout-error" : "success-copy"}>{signatureState.message}</p>
         ) : null}
       </section>
     </div>
@@ -5375,7 +5434,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
   "shippingCost": 4.99,
   "source": "Wix"
 }`}</pre>
-        <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. Amounts are shown in your workspace currency.")}</p>
+        <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. An order in another currency keeps its own currency — NivaDesk never converts it silently, and the dashboard lists it unconverted.")}</p>
         <p className="muted-copy">{t("Redelivery is safe: orderId is the identity, so sending the same order again updates it instead of creating a copy — production status and tracking are never overwritten. There is no automatic retry on our side; if your tool retries, that is fine for the same reason.")}</p>
         <p className="muted-copy">{t("Amounts are rounded to 2 decimal places; both 1,234.56 and 1.234,56 styles are read correctly. schemaVersion says which payload format this is — today it is 1, and future formats will keep 1 working.")}</p>
         <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL — there is no separate signature header. Treat the URL like a password and replace it if it leaks.")}</p>
