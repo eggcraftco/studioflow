@@ -1340,3 +1340,40 @@ Kullanıcı mock'u birebir uygulandı (kartların ... menüsü):
   iç kısıtı kaldırıldı. Dev'de shell-container-wide üçünde doğrulandı.
 - Kaynak push b86748b (native commit'ler dahil); mağaza sürümü notu:
   bu parite 1.4/0.1.9 paketine girer.
+
+---
+
+## 28 Ağu — Giriş flaşı + Customers başlık düzeni (tur 57, 3 platform)
+
+**1) "Yeni üye" kartlarının bir anlık flaşı (kullanıcı bildirimi) ÇÖZÜLDÜ:**
+AppShell'de yeni-kullanıcı yüzeylerinin kapısı `financeOrders.length === 0`
+idi; siparişler HENÜZ YÜKLENMEDEN de bu koşul doğru olduğundan her
+girişte workspace-onboarding ekranı + "ilk projeni ekle" rehberi bir kare
+görünüp kayboluyordu. Yeni `financeOrdersLoaded` bayrağı eklendi (cache'li
+açılışta true; başarısız yüklemede de doğru set edilir) ve iki koşula da
+kondu — artık yalnız "gerçekten yüklendi VE gerçekten sıfır" halinde
+çıkıyor.
+
+**2) Customers başlığı (kullanıcı isteği), 3 platformda:**
+- Web: Messages + AI Reply hızlı-aksiyon düğmeleri kaldırıldı (deep-link
+  okuyucuları /messages?q= ve /quick-reply?customer= bilerek DURUYOR —
+  başka yerden gelen bağlantılar çalışsın); isim başlığına hover/focus'ta
+  beliren kalem ikonu + "Click to rename this customer" ipucu; Customer
+  details formunun İLK alanı artık "Customer name" (aynı kaydı yazar —
+  dev'de test: formdan değiştir → başlık anında güncellendi).
+- Mac/iOS (78795e7, macOS + iOS BUILD SUCCEEDED): Messages ve AI Reply
+  chip'leri kaldırıldı; başlıkta pencil (macOS hover-reveal, iOS hep
+  hafif; tıklayınca alana odaklanır); Contact Info'ya "Customer name"
+  satırı — heading ile AYNI draft+commit yolu (iki alan birbirini
+  ezemez), harici snapshot güncellemesi ikisinden biri yazarken taslağı
+  bozmaz.
+- Android (b68fddd, BUILD SUCCESSFUL): AI Reply chip'i + arkasındaki
+  onOpenQuickReply pass-through zinciri + yalnız ona ait çeviri anahtarı
+  silindi (nav'daki "AI Replies" ayrı anahtar, duruyor); Contact Info'ya
+  editable.name'e bağlı "Customer Name" alanı (aynı debounce'lu autosave).
+  Android'de zaten Messages chip'i yoktu.
+- İsim HER ÜÇ PLATFORMDA da tek alan (`name`); first/last ayrımı yalnız
+  Woo/Shopify webhook'unda parse edilip birleştiriliyor — değişiklik yok.
+- 1 yeni string 12 dilde; agent'lar Fable 5 limitine takıldı, build+commit
+  Opus ile elle tamamlandı (Android APK zaman damgası kaynaktan yeni →
+  değişiklikler gerçekten derlendi).
