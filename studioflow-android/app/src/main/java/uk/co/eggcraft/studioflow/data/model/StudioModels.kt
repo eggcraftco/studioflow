@@ -620,6 +620,10 @@ data class StudioWorkspaceSettings(
     val financialRemainingItems: List<StudioHeadingItem> = emptyList(),
     val financialShowBaseCost: Boolean = true,
     val financialBaseCostLabel: String = "Cost (Base)",
+    // Workspace-wide card colour meanings, stored exactly as the web writes them:
+    // a JSON object of colour name ("Red".."Pink") to short label. An empty label
+    // deliberately hides the chip for that colour; a missing key keeps the default.
+    val cardColorMeaningsJSON: String = "",
     val designNameLabel: String = "Design Name",
     val priorityCardLabel: String = "Priority",
     val riskCardLabel: String = "Risk",

@@ -49,6 +49,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
@@ -56,6 +57,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RemoveCircle
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.automirrored.filled.CallMerge
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
@@ -65,6 +67,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -3239,7 +3242,7 @@ private fun OrderDetailCardContent(
             workspaceSettings = workspaceSettings,
             onUpdateOrderFields = onUpdateOrderFields
         )
-        OrderDetailCardId.HistoryLog -> DesktopHistoryLogCard(order = order)
+        OrderDetailCardId.HistoryLog -> DesktopHistoryLogCard(order = order, workspaceSettings = workspaceSettings)
     }
 }
 
@@ -5781,10 +5784,18 @@ private fun ScheduleReminderRow(
 }
 
 @Composable
-private fun DesktopHistoryLogCard(order: StudioOrder) {
+private fun DesktopHistoryLogCard(order: StudioOrder, workspaceSettings: StudioWorkspaceSettings) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    DetailCard(title = "History / Log") {
+    val exportHistoryPdf = rememberHistoryLogPdfExporter(workspaceSettings)
+    DetailCard(
+        title = "History / Log",
+        extraMenuItems = listOf(
+            DetailCardMenuAction("Export history PDF", Icons.Filled.PictureAsPdf) {
+                exportHistoryPdf(order)
+            }
+        )
+    ) {
         if (order.historyLog.isEmpty()) {
             DetailListRow("No changes recorded yet", "", MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -8726,11 +8737,20 @@ private fun OperationsCard(
     }
 }
 
+// A card-specific entry pinned to the top of the card's "..." menu (e.g. the
+// History/Log card's PDF export). Label goes through t() at render time.
+private data class DetailCardMenuAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit
+)
+
 @Composable
 private fun DetailCard(
     title: String,
     headerAction: (@Composable () -> Unit)? = null,
     minimumHeightOverride: Int? = null,
+    extraMenuItems: List<DetailCardMenuAction> = emptyList(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
@@ -8780,8 +8800,11 @@ private fun DetailCard(
         ?.coerceAtLeast(minimumCardHeight)
     var menuOpen by remember(title) { mutableStateOf(false) }
     var colorMenuOpen by remember(title) { mutableStateOf(false) }
+    var sizeMenuOpen by remember(title) { mutableStateOf(false) }
     var collapsed by remember(title) { mutableStateOf(false) }
     var headingEditorOpen by remember(title) { mutableStateOf(false) }
+    // Workspace-wide colour meanings override (companySettings.cardColorMeaningsJSON).
+    val cardColorMeaningsJSON = headingEditorActions?.workspaceSettings?.cardColorMeaningsJSON
     val dragHandleModifier = if (cardsUnlocked && cardActions != null) {
         Modifier.dragAndDropSource { _ ->
             cardActions.onCardDragStart(cardActions.cardId)
@@ -8844,7 +8867,7 @@ private fun DetailCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val meaningLabel = orderCardColorMeaning(cardColorName)
+                val meaningLabel = orderCardColorMeaning(cardColorName, cardColorMeaningsJSON)
                 if (cardTint != null && meaningLabel != null) {
                     Surface(shape = RoundedCornerShape(999.dp), color = cardTint) {
                         Text(
@@ -8876,6 +8899,19 @@ private fun DetailCard(
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         val actions = cardActions
+                        extraMenuItems.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(t(item.label)) },
+                                leadingIcon = { Icon(item.icon, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    item.onClick()
+                                }
+                            )
+                        }
+                        if (extraMenuItems.isNotEmpty()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        }
                         DropdownMenuItem(
                             text = { Text(t("Hide Block")) },
                             leadingIcon = { Icon(Icons.Filled.VisibilityOff, contentDescription = null) },
@@ -8906,6 +8942,83 @@ private fun DetailCard(
                             }
                         )
                         HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        // Position — the same moves the web menu offers: up/down in
+                        // this card's flow, and across columns on the column board.
+                        // All routes reuse the exact mutation helpers + save pipeline
+                        // that drag-and-drop uses.
+                        DropdownMenuItem(
+                            text = { Text(t("Move up")) },
+                            leadingIcon = { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                if (actions != null) {
+                                    actions.onSaveLayout(
+                                        if (actions.isPhoneLayout) {
+                                            actions.layout.movePhoneCardBy(actions.cardId, -1)
+                                        } else {
+                                            actions.layout.moveDesktopCardWithinColumn(actions.cardId, actions.columnIndex, -1)
+                                        }
+                                    )
+                                }
+                                menuOpen = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(t("Move down")) },
+                            leadingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                if (actions != null) {
+                                    actions.onSaveLayout(
+                                        if (actions.isPhoneLayout) {
+                                            actions.layout.movePhoneCardBy(actions.cardId, 1)
+                                        } else {
+                                            actions.layout.moveDesktopCardWithinColumn(actions.cardId, actions.columnIndex, 1)
+                                        }
+                                    )
+                                }
+                                menuOpen = false
+                            }
+                        )
+                        if (actions != null && !actions.isPhoneLayout) {
+                            DropdownMenuItem(
+                                text = { Text(t("Move left")) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null) },
+                                enabled = cardsUnlocked && actions.columnIndex > 0,
+                                onClick = {
+                                    if (actions.columnIndex > 0) {
+                                        actions.onSaveLayout(
+                                            actions.layout.moveDesktopCardToColumnEnd(actions.cardId, actions.columnIndex - 1)
+                                        )
+                                    }
+                                    menuOpen = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(t("Move right")) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                                enabled = cardsUnlocked && actions.columnIndex + 1 < MaxDesktopCardColumns,
+                                onClick = {
+                                    if (actions.columnIndex + 1 < MaxDesktopCardColumns) {
+                                        actions.onSaveLayout(
+                                            actions.layout.moveDesktopCardToColumnEnd(actions.cardId, actions.columnIndex + 1)
+                                        )
+                                    }
+                                    menuOpen = false
+                                }
+                            )
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        DropdownMenuItem(
+                            text = { Text(t("Card size")) },
+                            leadingIcon = { Icon(Icons.Filled.Height, contentDescription = null) },
+                            trailingIcon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                menuOpen = false
+                                sizeMenuOpen = true
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text(t("Color")) },
                             leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
@@ -8916,6 +9029,99 @@ private fun DetailCard(
                                 colorMenuOpen = true
                             }
                         )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        // One tap returns the card to how it started: automatic
+                        // height, no colour. Position is left alone — reset must
+                        // never scatter someone's board. (Same rule as web.)
+                        DropdownMenuItem(
+                            text = { Text(t("Reset")) },
+                            leadingIcon = { Icon(Icons.Filled.RestartAlt, contentDescription = null) },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                if (actions != null) {
+                                    actions.onSaveLayout(
+                                        actions.layout
+                                            .withCardAutoHeight(actions.cardId, actions.orderId)
+                                            .withCardColor(actions.cardId, "Default")
+                                    )
+                                }
+                                menuOpen = false
+                            }
+                        )
+                    }
+                    DropdownMenu(expanded = sizeMenuOpen, onDismissRequest = { sizeMenuOpen = false }) {
+                        val actions = cardActions
+                        val storedHeight = actions?.layout?.savedHeightFor(actions.cardId, actions.orderId)
+                        // The three fixed steps shared with web/iOS (220/380/560),
+                        // stored through the exact same pipeline the drag-resize
+                        // uses — including the per-order vs shared height choice.
+                        listOf("S" to 220, "M" to 380, "L" to 560).forEach { (label, height) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (storedHeight == height) StudioBlue else Color.Transparent
+                                    )
+                                },
+                                enabled = actions != null && cardsUnlocked,
+                                onClick = {
+                                    if (actions != null) {
+                                        actions.onSaveLayout(actions.layout.withCardHeight(actions.cardId, actions.orderId, height))
+                                    }
+                                    sizeMenuOpen = false
+                                }
+                            )
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                        // Clears the stored height so the card goes back to sizing
+                        // itself from its content — the per-card version of the
+                        // board-level Auto-size.
+                        DropdownMenuItem(
+                            text = { Text(t("Fit content")) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (storedHeight == null) StudioBlue else Color.Transparent
+                                )
+                            },
+                            enabled = actions != null && cardsUnlocked,
+                            onClick = {
+                                if (actions != null) {
+                                    actions.onSaveLayout(actions.layout.withCardAutoHeight(actions.cardId, actions.orderId))
+                                }
+                                sizeMenuOpen = false
+                            }
+                        )
+                        if (actions != null && !actions.isPhoneLayout) {
+                            // Give every card in this card's column this card's
+                            // current effective height (desktop board only).
+                            DropdownMenuItem(
+                                text = { Text(t("Match column")) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color.Transparent
+                                    )
+                                },
+                                enabled = cardsUnlocked,
+                                onClick = {
+                                    val targetHeight = displayedHeight
+                                        ?: renderedCardHeightDp
+                                        ?: defaultRenderedCardHeight(actions.cardId)
+                                    val column = actions.layout.columns.getOrNull(actions.columnIndex).orEmpty()
+                                    var nextLayout = actions.layout
+                                    column.forEach { member ->
+                                        nextLayout = nextLayout.withCardHeight(member, actions.orderId, targetHeight)
+                                    }
+                                    actions.onSaveLayout(nextLayout)
+                                    sizeMenuOpen = false
+                                }
+                            )
+                        }
                     }
                     DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
                         val actions = cardActions
@@ -8930,7 +9136,7 @@ private fun DetailCard(
                             "Purple" to t("Purple"),
                             "Pink" to "Pink"
                         ).forEach { (canonicalColorName, colorName) ->
-                            val meaningLabel = orderCardColorMeaning(canonicalColorName)
+                            val meaningLabel = orderCardColorMeaning(canonicalColorName, cardColorMeaningsJSON)
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -10569,16 +10775,35 @@ private fun orderDetailCardAccent(cardId: OrderDetailCardId?): Color {
     }
 }
 
-private fun orderCardColorMeaning(colorName: String?): String? {
-    return when (colorName) {
-        "Red" -> "Urgent"
-        "Orange" -> "Waiting on customer"
-        "Yellow" -> "Needs review"
-        "Green" -> "Approved"
-        "Blue" -> "In production"
-        "Purple" -> "Finance"
-        "Pink" -> "Special"
-        else -> null
+// Fixed defaults, shared verbatim with web (CARD_COLOR_MEANINGS) and iOS.
+private val OrderCardDefaultColorMeanings: Map<String, String> = mapOf(
+    "Red" to "Urgent",
+    "Orange" to "Waiting on customer",
+    "Yellow" to "Needs review",
+    "Green" to "Approved",
+    "Blue" to "In production",
+    "Purple" to "Finance",
+    "Pink" to "Special"
+)
+
+// The label shown on a coloured card's chip. The workspace can override each
+// colour via companySettings.cardColorMeaningsJSON (written by the web's
+// "Manage colour labels" editor): an empty string hides the chip for that
+// colour, a missing key keeps the default above.
+private fun orderCardColorMeaning(colorName: String?, cardColorMeaningsJSON: String?): String? {
+    val cleanColorName = colorName?.takeIf { it.isNotBlank() } ?: return null
+    val defaultMeaning = OrderCardDefaultColorMeanings[cleanColorName] ?: return null
+    val json = cardColorMeaningsJSON?.trim().orEmpty()
+    if (json.isBlank()) return defaultMeaning
+    return try {
+        val parsed = JSONObject(json)
+        if (parsed.has(cleanColorName)) {
+            parsed.optString(cleanColorName).trim().take(40).ifBlank { null }
+        } else {
+            defaultMeaning
+        }
+    } catch (_: Exception) {
+        defaultMeaning
     }
 }
 
@@ -12414,6 +12639,188 @@ private fun rememberOrderPdfExporter(
                 Toast.makeText(context, "PDF export failed: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+}
+
+/**
+ * Returns a callback that builds the History/Log PDF and opens the system
+ * "Save as" document picker, falling back to the share sheet — the exact same
+ * plumbing the whole-order Export PDF and Invoice PDF use.
+ */
+@Composable
+private fun rememberHistoryLogPdfExporter(
+    settings: StudioWorkspaceSettings
+): (StudioOrder) -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pendingFile by remember { mutableStateOf<File?>(null) }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri: Uri? ->
+        val file = pendingFile
+        pendingFile = null
+        if (uri == null || file == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    }
+                }.isSuccess
+            }
+            Toast.makeText(
+                context,
+                if (ok) "History PDF saved." else "Could not save the history PDF.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    return { order ->
+        scope.launch {
+            try {
+                val file = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    createHistoryLogPdfFile(context, order, settings)
+                }
+                pendingFile = file
+                try {
+                    uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
+                    saveLauncher.launch(file.name)
+                } catch (e: Exception) {
+                    // No document picker (rare) -> fall back to sharing.
+                    pendingFile = null
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "History PDF"))
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "History PDF failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+}
+
+// The order's FULL history log on paper: title with the order reference, then
+// one row per entry (timestamp, field, old -> new), paginated as needed. The
+// entries carry no author field on any platform, so none is printed.
+private fun createHistoryLogPdfFile(
+    context: Context,
+    order: StudioOrder,
+    settings: StudioWorkspaceSettings
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 42f
+    val document = PdfDocument()
+    var pageNumber = 1
+    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+    var canvas = page.canvas
+    canvas.drawColor(0xFFFFFFFF.toInt())
+
+    val rightX = pageWidth - margin
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x59000000; textSize = 26f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF111827.toInt(); textSize = 16f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val mutedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF6B7280.toInt(); textSize = 10.5f }
+    val entryTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF111827.toInt(); textSize = 12f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val entryValuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF374151.toInt(); textSize = 11f }
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFE5E7EB.toInt(); strokeWidth = 1f }
+    val creditPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF8E8E93.toInt(); textSize = 10f; textAlign = Paint.Align.CENTER
+    }
+
+    fun drawRight(text: String, x: Float, yy: Float, paint: Paint) {
+        val old = paint.textAlign
+        paint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(text, x, yy, paint)
+        paint.textAlign = old
+    }
+
+    var y = margin + 6f
+
+    fun startNextPage() {
+        canvas.drawText("Generated automatically from NivaDesk", pageWidth / 2f, pageHeight - margin + 6f, creditPaint)
+        document.finishPage(page)
+        pageNumber += 1
+        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+        canvas = page.canvas
+        canvas.drawColor(0xFFFFFFFF.toInt())
+        y = margin + 6f
+    }
+
+    fun ensureSpace(needed: Float) {
+        if (y + needed > pageHeight - margin - 26f) startNextPage()
+    }
+
+    // ---------- Header: business name + doc title + order reference ----------
+    canvas.drawText(settings.appSubtitle.ifBlank { "NivaDesk" }, margin, y + 12f, namePaint)
+    drawRight("HISTORY LOG", rightX, y + 20f, titlePaint)
+    y += 40f
+    val orderName = order.displayCustomerName.trim()
+        .ifBlank { order.designName.trim() }
+        .ifBlank { "Order" }
+    canvas.drawText(orderName, margin, y, entryTitlePaint)
+    y += 16f
+    val referenceLine = listOf(
+        "Order: ${order.id.take(8)}",
+        "Design Name: ${order.designName.trim().ifBlank { "-" }}",
+        "Total Logs: ${order.historyLog.size}"
+    ).joinToString("    ")
+    canvas.drawText(referenceLine, margin, y, mutedPaint)
+    y += 10f
+    canvas.drawLine(margin, y, rightX, y, linePaint)
+    y += 22f
+
+    // ---------- One row per history entry ----------
+    val timestampFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.UK)
+    val timestampWidth = 96f
+    val titleWidth = rightX - margin - timestampWidth - 8f
+    if (order.historyLog.isEmpty()) {
+        canvas.drawText("No changes recorded yet", margin, y, mutedPaint)
+        y += 16f
+    } else {
+        order.historyLog.forEach { item ->
+            val titleLines = pdfWrappedLines(item.title.trim().ifBlank { "Updated" }, entryTitlePaint, titleWidth)
+            val changeText = "${item.oldValue.trim().ifBlank { "-" }} → ${item.newValue.trim().ifBlank { "-" }}"
+            val changeLines = pdfWrappedLines(changeText, entryValuePaint, rightX - margin - 12f)
+            val rowHeight = titleLines.size * 15f + changeLines.size * 14f + 16f
+            ensureSpace(rowHeight)
+            drawRight(item.createdAt?.let { timestampFormat.format(it) } ?: "-", rightX, y, mutedPaint)
+            titleLines.forEach { line ->
+                canvas.drawText(line, margin, y, entryTitlePaint)
+                y += 15f
+            }
+            changeLines.forEach { line ->
+                canvas.drawText(line, margin + 12f, y, entryValuePaint)
+                y += 14f
+            }
+            y += 6f
+            canvas.drawLine(margin, y - 2f, rightX, y - 2f, linePaint)
+            y += 10f
+        }
+    }
+
+    // ---------- Footer ----------
+    canvas.drawText("Generated automatically from NivaDesk", pageWidth / 2f, pageHeight - margin + 6f, creditPaint)
+    document.finishPage(page)
+
+    val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+    val file = File(exportDir, "${pdfSafeFileName(order.displayCustomerName)}_History_${order.id.take(8)}.pdf")
+    try {
+        file.outputStream().use { document.writeTo(it) }
+        return file
+    } finally {
+        document.close()
     }
 }
 

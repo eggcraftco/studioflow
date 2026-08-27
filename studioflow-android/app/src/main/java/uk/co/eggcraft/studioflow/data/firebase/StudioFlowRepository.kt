@@ -3434,6 +3434,7 @@ private fun workspaceSettings(
         ).filter { isUsableFinancialTitle(it.title, "Pending") },
         financialShowBaseCost = boolValue(data["financialShowBaseCost"], fallback.financialShowBaseCost),
         financialBaseCostLabel = stringValue(data["financialBaseCostLabel"], fallback.financialBaseCostLabel),
+        cardColorMeaningsJSON = stringValue(data["cardColorMeaningsJSON"], fallback.cardColorMeaningsJSON),
         designNameLabel = stringValue(data["designNameLabel"], fallback.designNameLabel),
         priorityCardLabel = stringValue(data["priorityCardLabel"], fallback.priorityCardLabel),
         riskCardLabel = stringValue(data["riskCardLabel"], fallback.riskCardLabel),
