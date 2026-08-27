@@ -31,6 +31,7 @@ import {
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
 import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
+import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 
 function formatDate(date: Date | null) {
   if (!date) return "-";
@@ -95,12 +96,14 @@ function FilesPreviewModal({
   files,
   activeFile,
   onClose,
-  onSelect
+  onSelect,
+  brandedHost
 }: {
   files: ClientFileListItem[];
   activeFile: ClientFileListItem;
   onClose: () => void;
   onSelect: (fileId: string) => void;
+  brandedHost?: string;
 }) {
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
@@ -162,7 +165,13 @@ function FilesPreviewModal({
             Previous
           </button>
           {activeFile.downloadURL ? (
-            <a className="button secondary" href={activeFile.downloadURL} target="_blank" rel="noreferrer">
+            <a
+              className="button secondary"
+              href={maskFileUrl(activeFile.downloadURL, brandedHost)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}
+            >
               Open / Download
             </a>
           ) : null}
@@ -755,7 +764,7 @@ export default function FilesPage() {
                         <div className="client-file-icon-actions">
                           {canUseClientFiles ? (
                             file.downloadURL ? (
-                              <a className="button secondary" href={file.downloadURL} target="_blank" rel="noreferrer">Open</a>
+                              <a className="button secondary" href={maskFileUrl(file.downloadURL, workspace?.clientPortalHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, workspace?.clientPortalHost); }}>Open</a>
                             ) : (
                               <span className="pill">No URL</span>
                             )
@@ -798,6 +807,7 @@ export default function FilesPage() {
 
       {activePreview ? (
         <FilesPreviewModal
+          brandedHost={workspace?.clientPortalHost}
           files={previewFiles}
           activeFile={activePreview}
           onClose={() => setPreviewingFileId(null)}

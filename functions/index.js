@@ -22975,7 +22975,7 @@ function nvFileErrorHtml(message) {
   return `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>NivaDesk</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;background:#0b0b0c;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}div{text-align:center;padding:24px}h1{font-size:18px;margin:0 0 6px}p{color:#9a9a9a;margin:0;font-size:13px}</style></head><body><div><h1>NivaDesk</h1><p>${nvEscapeHtml(message)}</p></div></body></html>`;
 }
 
-function nvFileViewerHtml(firebaseUrl, fileName) {
+function nvFileViewerHtml(firebaseUrl, fileName, showBrand = true) {
   const ext = (fileName.includes(".") ? fileName.split(".").pop() : "").toLowerCase();
   const safeUrl = nvEscapeHtml(firebaseUrl);
   const safeName = nvEscapeHtml(fileName);
@@ -23001,7 +23001,7 @@ function nvFileViewerHtml(firebaseUrl, fileName) {
   return `<!doctype html>
 <html><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${safeName} · NivaDesk</title>
+<title>${safeName}${showBrand ? " · NivaDesk" : ""}</title>
 <style>
 html,body{height:100%;margin:0;background:#0b0b0c}
 body{display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -23070,7 +23070,7 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
       return;
     }
     const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(data.bucket)}/o/${encodeURIComponent(data.path)}?alt=media&token=${encodeURIComponent(data.token)}`;
-    res.status(200).send(nvFileViewerHtml(firebaseUrl, String(data.fileName || "file")));
+    res.status(200).send(nvFileViewerHtml(firebaseUrl, String(data.fileName || "file"), String(req.query.brand || "") !== "0"));
   } catch (error) {
     console.error("nvViewSharedFile failed:", error);
     res.status(500).send(nvFileErrorHtml("Could not load this file right now."));

@@ -7681,6 +7681,7 @@ export function OrderDetailContent({
                 <div className={["app-client-files-list", "compact-list-grid", clientFileItems.length <= 3 ? "is-static" : "is-scrollable"].join(" ")}>
                   {clientFileItems.map(file => (
                     <ClientFileCard
+            brandedHost={workspace.clientPortalHost}
                       key={file.id}
                       file={file}
                       canUseClientFiles={canUseClientFiles}
@@ -8519,6 +8520,7 @@ export function OrderDetailContent({
 
       {activeClientFilePreview ? (
         <ClientFilePreviewModal
+          brandedHost={workspace.clientPortalHost}
           files={previewableClientFiles}
           activeFile={activeClientFilePreview}
           canManageClientFiles={canManageClientFiles}
@@ -10500,9 +10502,11 @@ function ClientFileCard({
   onPreview,
   onRename,
   onDelete,
-  onUseAsPreview
+  onUseAsPreview,
+  brandedHost
 }: {
   file: ClientFileDetail;
+  brandedHost?: string;
   canUseClientFiles: boolean;
   canManageClientFiles: boolean;
   canDeleteFile: boolean;
@@ -10547,7 +10551,7 @@ function ClientFileCard({
       <div className="client-file-icon-actions">
         {canUseClientFiles ? (
           file.downloadURL ? (
-            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL); }} title="Open / Download" aria-label="Open or download file">
+            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, brandedHost); }} title="Open / Download" aria-label="Open or download file">
               <ClientFileActionIcon name="download" />
             </a>
           ) : (
@@ -10596,10 +10600,12 @@ function ClientFilePreviewModal({
   actioning,
   onClose,
   onSelect,
-  onUseAsPreview
+  onUseAsPreview,
+  brandedHost
 }: {
   files: ClientFileDetail[];
   activeFile: ClientFileDetail;
+  brandedHost?: string;
   canManageClientFiles: boolean;
   actionDisabled: boolean;
   actioning: boolean;
@@ -10679,8 +10685,8 @@ function ClientFilePreviewModal({
               {actioning ? "Working..." : "Use in Preview"}
             </button>
           ) : null}
-          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL); }}>Open</a>
-          <a className="button" href={maskFileUrl(activeFile.downloadURL)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName); }}>Download</a>
+          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}>Open</a>
+          <a className="button" href={maskFileUrl(activeFile.downloadURL, brandedHost)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName, brandedHost); }}>Download</a>
         </footer>
       </section>
     </div>
