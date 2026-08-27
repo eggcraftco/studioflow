@@ -1135,3 +1135,29 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
   teklif linkini İSTEMCİDE yeniden kurmamalı — callable'ın döndürdüğü
   url alanını göstersin; yeniden kuruyorsa clientPortalCustomHost/
   clientPortalSlug'u okusun.
+
+---
+
+## 28 Ağu — Rapor High #9 KAPANDI (çoğu zaten vardı) + cila (tur 48)
+
+- Workflow taraması gösterdi: dry-run önizleme, sayaçlar, duplicate
+  atlama, 500-cap uyarıları, sonuç raporu ve Undo 26 Ağu notes3
+  dalgasında ZATEN yapılmış (importWorkspaceBackup dryRun:true +
+  financeBulkRuns/undo). Rapor maddesi kapalı sayıldı; bu tur 5 cila:
+  1) Bozuk JSON'da ham SyntaxError yerine dostane mesaj (12 dilde).
+  2) İndirmede not edilen SHA-256 artık import'ta GERÇEKTEN kontrol
+     ediliyor — önizleme "son indirdiğin yedeğin birebir aynısı" veya
+     yumuşak "eski/başka cihaz yedeği olabilir" satırı gösteriyor.
+  3) Önizlemeye gelen ama gösterilmeyen alanlar eklendi: mevcut müşteri
+     sayısı + "Includes settings" Yes/No (bare Yes/No sözlüğe girdi).
+  4) importWorkspaceBackup + undo'ya saatlik hız limiti (30/saat/uid,
+     websiteChatCheckRate'e mesaj parametresi eklendi).
+  5) Run-kaydı yazılamazsa Undo zaten vaat edilmiyordu — teyit edildi.
+- Dev E2E: sentetik File+DataTransfer ile diyalog satırları ve dostane
+  JSON hatası doğrulandı. 6 fonksiyon deploy; rehber set-data "Importing
+  a backup" alt bölümü EN+TR; bot sondası confident:True (SHA-256
+  cevabı doğru). Tur 48: bu + Live-domain tazelik fixi.
+- Kalan tek High: #10 settings audit history (keşif workflow'u açıldı).
+- Not (okuyucu bulgusu, ayrı faz): /export sayfası indirmeleri "Last
+  backup" kaydını güncellemiyor; web-archive workspaceSettings ham
+  dökümü allowlist'siz; clientFiles URL'leri import'ta doğrulanmıyor.
