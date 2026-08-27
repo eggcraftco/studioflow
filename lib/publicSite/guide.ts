@@ -62,7 +62,8 @@ const TREE_EN: GuideNode[] = [
         "Cancelled and refunded orders are left out of every money figure; the Financial Breakdown shows them on their own \"Cancelled or refunded\" line.",
         "The Tax set-aside card holds net VAT — VAT collected on sales minus reclaimable VAT inside bank payments marked Standard or Reduced rate — plus Corporation Tax when enabled.",
         "Click any point on the Net Profit chart to zoom the dashboard to that period.",
-        "The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range."
+        "The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range.",
+        "When Shopify or WooCommerce orders exist, channel pills under the period switcher scope every figure to one sales channel — or to manually created orders."
       ] }
     ]
   },
@@ -854,7 +855,8 @@ const TREE_TR: GuideNode[] = [
         "İptal ve iade edilen siparişler hiçbir para rakamına girmez; Financial Breakdown bunları kendi \"Cancelled or refunded\" satırında gösterir.",
         "Tax set-aside kartı net KDV tutar — satışlarda tahsil edilen KDV eksi Standart/İndirimli oranlı banka ödemelerindeki iade alınabilir KDV — açıksa Kurumlar Vergisi de eklenir.",
         "Net Profit grafiğinde bir noktaya tıklayın; panel o döneme yakınlaşır.",
-        "Dönem seçicide hazır aralıklar var — Son 7/30 gün, bu/geçen çeyrek, İngiltere vergi yılı — ve özel aralık."
+        "Dönem seçicide hazır aralıklar var — Son 7/30 gün, bu/geçen çeyrek, İngiltere vergi yılı — ve özel aralık.",
+        "Shopify veya WooCommerce siparişi varsa dönem seçicinin altındaki kanal pilleri her rakamı tek satış kanalına — veya elle açılan siparişlere — daraltır."
       ] }
     ]
   },
