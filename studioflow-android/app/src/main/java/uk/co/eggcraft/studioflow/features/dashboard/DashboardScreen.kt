@@ -110,12 +110,15 @@ fun DashboardScreen(
     val widgetVisibility = DashboardWidgetVisibility.from(state.workspaceSettings)
     val advancedFinanceEnabled = state.workspace?.billingPlan == StudioBillingPlan.ProMonthly || state.workspace?.billingPlan == StudioBillingPlan.TeamMonthly
     val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
-    val stats = remember(state.orders, period, advancedFinanceEnabled, locale, state.workspaceSettings.financialExpenseItems) {
-        DashboardStats.from(state.orders, period, advancedFinanceEnabled, locale, state.workspaceSettings.financialExpenseItems)
+    val stats = remember(state.orders, period, advancedFinanceEnabled, locale, state.workspaceSettings.financialExpenseItems, state.workspaceSettings.financialShowBaseCost) {
+        DashboardStats.from(state.orders, period, advancedFinanceEnabled, locale, state.workspaceSettings.financialExpenseItems, state.workspaceSettings.financialShowBaseCost)
     }
     val compareEnabled = advancedFinanceEnabled && compareMode != DashboardCompareMode.None && period.supportsYearCompare
-    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate) {
-        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate)
+    // The tax-rule name the workspace files revenue under — the Revenue card's
+    // subtitle on web, demoted from title so the card always reads "Revenue".
+    val revenueCardSubtitle = state.workspaceSettings.taxRuleNameRevenue.ifBlank { "Standard VAT (New)" }
+    val summaryCards = remember(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate, revenueCardSubtitle) {
+        dashboardSummaryCards(stats, currency, decimalSeparator, widgetVisibility, hideSensitiveNumbers, advancedFinanceEnabled, state.workspaceSettings.corporationTaxEnabled, state.workspaceSettings.corporationTaxRate, revenueCardSubtitle)
     }
 
     LazyColumn(
@@ -517,7 +520,9 @@ private fun SummaryTileGrid(cards: List<DashboardSummaryCardSpec>, modifier: Mod
                             prefix = card.prefix,
                             color = card.color,
                             modifier = Modifier.weight(1f),
-                            icon = card.icon
+                            icon = card.icon,
+                            subtitle = card.subtitle,
+                            hint = card.hint?.let { t(it) }
                         )
                     }
                     repeat(columnCount - rowCards.size) {
@@ -536,15 +541,33 @@ private fun SummaryTile(
     prefix: String,
     color: Color,
     modifier: Modifier,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    subtitle: String? = null,
+    hint: String? = null
 ) {
+    // Web surfaces the hint on hover; there is no hover here, so a tap on the
+    // card shows/hides the same sentence in place.
+    var showHint by remember { mutableStateOf(false) }
     Surface(modifier = modifier, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier
+                .then(if (hint != null) Modifier.clickable { showHint = !showHint } else Modifier)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (icon != null) Icon(icon, contentDescription = null, tint = color) else Text(prefix, color = color, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
+                Column {
+                    Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.ExtraBold)
+                    if (subtitle != null) {
+                        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
             }
             Text(value, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+            if (showHint && hint != null) {
+                Text(hint, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 15.sp)
+            }
         }
     }
 }
@@ -779,6 +802,9 @@ private data class DashboardStats(
     val revenue: Double,
     val pending: Double,
     val baseCost: Double,
+    // Base cost as the Net Profit formula actually charges it: 0 when the
+    // workspace hides the base cost field — web's totals.breakdownBaseCost.
+    val breakdownBaseCost: Double,
     val platformFee: Double,
     val shipping: Double,
     val tax: Double,
@@ -817,13 +843,13 @@ private data class DashboardStats(
     }
 
     companion object {
-        fun from(orders: List<StudioOrder>, period: DashboardPeriod, advancedFinanceEnabled: Boolean, locale: Locale = Locale.UK, expenseTitles: List<StudioHeadingItem> = emptyList()): DashboardStats {
+        fun from(orders: List<StudioOrder>, period: DashboardPeriod, advancedFinanceEnabled: Boolean, locale: Locale = Locale.UK, expenseTitles: List<StudioHeadingItem> = emptyList(), showBaseCost: Boolean = true): DashboardStats {
             val now = Calendar.getInstance(Locale.UK)
             val currentYear = now.get(Calendar.YEAR)
             val currentMonth = now.get(Calendar.MONTH)
             val bucketCount = period.bucketCount(now)
             val selectedOrders = orders.filter { order -> period.includes(order, currentYear, currentMonth, 0) }
-            val chartValues = buildChartValues(orders, period, currentYear, currentMonth, 0, bucketCount, advancedFinanceEnabled, expenseTitles)
+            val chartValues = buildChartValues(orders, period, currentYear, currentMonth, 0, bucketCount, advancedFinanceEnabled, expenseTitles, showBaseCost)
             val previousOne = period.previousOrders(orders, currentYear, currentMonth, 1)
             val previousTwo = period.previousOrders(orders, currentYear, currentMonth, 2)
             val previousThree = period.previousOrders(orders, currentYear, currentMonth, 3)
@@ -844,23 +870,24 @@ private data class DashboardStats(
                 // Custom "Remaining" items count as pending too — matches Mac/web.
                 pending = selectedOrders.sumOf { it.remainingAmount + it.customRemainingTotal },
                 baseCost = selectedOrders.sumOf { it.watchPurchasePrice },
+                breakdownBaseCost = if (showBaseCost) selectedOrders.sumOf { it.watchPurchasePrice } else 0.0,
                 platformFee = selectedOrders.sumOf { it.paymentFee },
                 shipping = selectedOrders.sumOf { it.deliveryCost },
                 tax = selectedOrders.sumOf { it.taxAmount },
-                netProfit = selectedOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
-                perOrderNetProfits = selectedOrders.map { adjustedDashboardNetProfit(it, expenseTitles) },
+                netProfit = selectedOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                perOrderNetProfits = selectedOrders.map { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
                 extraSpending = selectedOrders.sumOf { dashboardCustomExpenseTotal(it, expenseTitles) },
                 chartValues = chartValues,
                 chartLabels = period.chartLabels(now, locale),
                 chartAxisLabels = period.chartAxisLabels(now, locale),
-                previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount, true, expenseTitles),
-                previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount, true, expenseTitles),
-                previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount, true, expenseTitles),
-                previousOneYearNetProfit = previousOne?.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
-                previousTwoYearNetProfit = previousTwo?.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
-                previousThreeYearNetProfit = previousThree?.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
-                thisYearNetProfit = thisYearOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
-                lastYearNetProfit = lastYearOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles) },
+                previousOneYearValues = buildChartValues(orders, period, currentYear, currentMonth, 1, bucketCount, true, expenseTitles, showBaseCost),
+                previousTwoYearValues = buildChartValues(orders, period, currentYear, currentMonth, 2, bucketCount, true, expenseTitles, showBaseCost),
+                previousThreeYearValues = buildChartValues(orders, period, currentYear, currentMonth, 3, bucketCount, true, expenseTitles, showBaseCost),
+                previousOneYearNetProfit = previousOne?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                previousTwoYearNetProfit = previousTwo?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                previousThreeYearNetProfit = previousThree?.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                thisYearNetProfit = thisYearOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
+                lastYearNetProfit = lastYearOrders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) },
                 thisYearReceived = yearReceived,
                 thisYearBaseCost = yearBaseCost,
                 thisYearBasicBalance = yearReceived - yearBaseCost,
@@ -878,14 +905,15 @@ private data class DashboardStats(
             yearBack: Int,
             bucketCount: Int,
             advancedFinanceEnabled: Boolean,
-            expenseTitles: List<StudioHeadingItem> = emptyList()
+            expenseTitles: List<StudioHeadingItem> = emptyList(),
+            showBaseCost: Boolean = true
         ): List<Double> {
             val values = MutableList(bucketCount) { 0.0 }
             orders.filter { period.includes(it, currentYear, currentMonth, yearBack) }.forEach { order ->
                 val bucket = period.bucketIndex(order)
                 if (bucket in values.indices) {
                     values[bucket] += if (advancedFinanceEnabled) {
-                        adjustedDashboardNetProfit(order, expenseTitles)
+                        adjustedDashboardNetProfit(order, expenseTitles, showBaseCost)
                     } else {
                         order.paidAmount - order.watchPurchasePrice
                     }
@@ -908,7 +936,12 @@ private data class DashboardSummaryCardSpec(
     val value: String,
     val prefix: String,
     val color: Color,
-    val icon: ImageVector?
+    val icon: ImageVector?,
+    // Small line under the title (shown as-is, e.g. the workspace's tax-rule name).
+    val subtitle: String? = null,
+    // Plain-words explanation of the figure (web shows it on hover; here a tap
+    // on the card toggles it) — pass the English key, translated at render time.
+    val hint: String? = null
 )
 
 private fun dashboardSummaryCards(
@@ -919,7 +952,8 @@ private fun dashboardSummaryCards(
     hideNumbers: Boolean,
     advancedFinanceEnabled: Boolean,
     corporationTaxEnabled: Boolean = false,
-    corporationTaxRate: Double = 19.0
+    corporationTaxRate: Double = 19.0,
+    revenueSubtitle: String? = null
 ): List<DashboardSummaryCardSpec> {
     if (!advancedFinanceEnabled) {
         return listOf(
@@ -929,19 +963,37 @@ private fun dashboardSummaryCards(
         )
     }
 
-    val rolledCost = stats.baseCost +
+    // Same gated base cost as Net Profit (web's dashboardCostTotal → baseCostTotal),
+    // so hiding the base cost field keeps the Cost card and Net Profit consistent.
+    val rolledCost = stats.breakdownBaseCost +
         (if (!visibility.dashShowFee) stats.platformFee else 0.0) +
         (if (!visibility.dashShowShipping) stats.shipping else 0.0) +
         (if (!visibility.dashShowTax) stats.tax else 0.0)
     return buildList {
+        // Revenue is invoiced order value; Payments Received is the cash that
+        // actually arrived — the accrual vs cash split, side by side (web parity).
         if (visibility.dashShowRevenue) {
-            add(DashboardSummaryCardSpec("Revenue", money(stats.revenue, currency, decimalSeparator, hideNumbers), currency, StudioBlue, null))
+            add(DashboardSummaryCardSpec(
+                "Revenue", money(stats.revenue, currency, decimalSeparator, hideNumbers), currency, StudioBlue, null,
+                subtitle = revenueSubtitle,
+                hint = "Invoiced order value in this range: paid + still owed (accrual basis)."
+            ))
+            add(DashboardSummaryCardSpec(
+                "Payments Received", money(stats.received, currency, decimalSeparator, hideNumbers), "", StudioBlue, Icons.Filled.Done,
+                hint = "Money actually collected on these orders (cash basis)."
+            ))
         }
         if (visibility.dashShowPending) {
-            add(DashboardSummaryCardSpec("Pending", money(stats.pending, currency, decimalSeparator, hideNumbers), "", StudioWarningOrange, Icons.Filled.Schedule))
+            add(DashboardSummaryCardSpec(
+                "Outstanding Balance", money(stats.pending, currency, decimalSeparator, hideNumbers), "", StudioWarningOrange, Icons.Filled.Schedule,
+                hint = "What customers still owe on orders in this range — cancelled and refunded orders owe nothing."
+            ))
         }
         if (visibility.dashShowCost) {
-            add(DashboardSummaryCardSpec("Cost", money(rolledCost, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.ShoppingCart))
+            add(DashboardSummaryCardSpec(
+                "Cost", money(rolledCost, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.ShoppingCart,
+                hint = "Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden."
+            ))
         }
         if (visibility.dashShowFee) {
             add(DashboardSummaryCardSpec("Platform Fee", money(stats.platformFee, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.Percent))
@@ -950,10 +1002,16 @@ private fun dashboardSummaryCards(
             add(DashboardSummaryCardSpec("Shipping", money(stats.shipping, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.LocalShipping))
         }
         if (visibility.dashShowTax) {
-            add(DashboardSummaryCardSpec("VAT Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance))
+            add(DashboardSummaryCardSpec(
+                "VAT Amount", money(stats.tax, currency, decimalSeparator, hideNumbers), "", StudioRed, Icons.Filled.AccountBalance,
+                hint = "VAT recorded on these orders and set aside — not yet paid to HMRC."
+            ))
         }
         if (visibility.dashShowProfit) {
-            add(DashboardSummaryCardSpec(if (corporationTaxEnabled) "Profit before Corporation Tax" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done))
+            add(DashboardSummaryCardSpec(
+                if (corporationTaxEnabled) "Profit before Corporation Tax" else "Net Profit", money(stats.netProfit, currency, decimalSeparator, hideNumbers), "", StudioGreen, Icons.Filled.Done,
+                hint = "Revenue − base cost − extra spending − platform fee − shipping − VAT."
+            ))
         }
         if (visibility.dashShowProfit && corporationTaxEnabled) {
             // Per-order CT, each rounded to 2 dp, then summed — matches the Mac and
@@ -1284,7 +1342,7 @@ private fun FinancialBreakdownCard(
             Spacer(modifier = Modifier.height(4.dp))
             FinancialBreakdownRow(t("Revenue"), amount(stats.revenue), MaterialTheme.colorScheme.onSurface)
             HorizontalDivider(color = divider)
-            FinancialBreakdownRow(t("Base Cost"), amount(stats.baseCost, negative = true), StudioRed)
+            FinancialBreakdownRow(t("Base Cost"), amount(stats.breakdownBaseCost, negative = true), StudioRed)
             HorizontalDivider(color = divider)
             FinancialBreakdownRow(t("Extra Spending"), amount(stats.extraSpending, negative = true), StudioRed)
             HorizontalDivider(color = divider)
@@ -1608,8 +1666,17 @@ internal fun dashboardCustomExpenseTotal(order: StudioOrder, workspaceTitles: Li
 
 // Per-order profit with custom spending subtracted — matches the Mac and web
 // dashboards, which already deduct per-order spending from net profit.
-internal fun adjustedDashboardNetProfit(order: StudioOrder, workspaceTitles: List<StudioHeadingItem>): Double =
-    order.netProfit - dashboardCustomExpenseTotal(order, workspaceTitles)
+// When the workspace hides the base cost field (financialShowBaseCost = false),
+// the purchase price is not part of that workspace's cost model: add it back,
+// mirroring web's baseCostTotal() returning 0 in that case (finance.ts).
+internal fun adjustedDashboardNetProfit(
+    order: StudioOrder,
+    workspaceTitles: List<StudioHeadingItem>,
+    showBaseCost: Boolean
+): Double =
+    order.netProfit +
+        (if (showBaseCost) 0.0 else order.watchPurchasePrice) -
+        dashboardCustomExpenseTotal(order, workspaceTitles)
 
 private fun dashboardOrderExpenseTitles(order: StudioOrder, workspace: List<StudioHeadingItem>): List<StudioHeadingItem> {
     val raw = order.customFields["orderExpenseItemsJSON"]?.trim().orEmpty()

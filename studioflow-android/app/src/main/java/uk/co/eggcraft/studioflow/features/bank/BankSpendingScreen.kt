@@ -1290,7 +1290,16 @@ private fun ConnectionRow(connection: StudioBankConnection, t: (String) -> Strin
                 Text(stateLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = stateColor)
             }
             connection.lastSyncedAtMillis?.let {
-                Text("${t("Last sync")} ${SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(it))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Stale data hiding behind a quiet timestamp is how trust dies:
+                // past 12 hours, say the age out loud (web dashboard parity).
+                val ageMs = System.currentTimeMillis() - it
+                if (ageMs > 12L * 60 * 60 * 1000) {
+                    val hours = ageMs / (60L * 60 * 1000)
+                    val ageText = if (hours < 48) "$hours ${t("hours ago")}" else "${hours / 24} ${t("days ago")}"
+                    Text("${t("Last synced")} $ageText", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AMBER)
+                } else {
+                    Text("${t("Last sync")} ${SimpleDateFormat("d MMM yyyy HH:mm", locale).format(Date(it))}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             if (connection.isLinked) {
                 // 90-day Open Banking consent — amber and bold once renewal is near.

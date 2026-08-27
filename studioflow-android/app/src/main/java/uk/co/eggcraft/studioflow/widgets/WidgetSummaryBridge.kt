@@ -79,9 +79,10 @@ object WidgetSummaryBridge {
         val hideNumbers = context.getSharedPreferences(HEADER_PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(HIDE_NUMBERS_KEY, false)
 
-        // Same per-order profit the dashboard aggregates.
+        // Same per-order profit the dashboard aggregates — including the base
+        // cost gate: hidden base cost is not deducted from Net Profit.
         fun profit(order: StudioOrder): Double =
-            adjustedDashboardNetProfit(order, settings.financialExpenseItems)
+            adjustedDashboardNetProfit(order, settings.financialExpenseItems, settings.financialShowBaseCost)
 
         // Same formula as the dashboard's Pending card.
         fun pending(order: StudioOrder): Double =
