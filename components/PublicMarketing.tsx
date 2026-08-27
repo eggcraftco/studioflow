@@ -1122,30 +1122,33 @@ function ProductScene() {
             document.body
           )
         : null}
-      <div className="hero-float hero-float-orders" aria-hidden="true">
-        <span className="hero-float-icon" data-tone="sage">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
-        </span>
-        <div><strong>{t("heroFloat.ordersTitle")}</strong><span>{t("heroFloat.ordersSub")}</span></div>
-      </div>
-      <div className="hero-float hero-float-received" aria-hidden="true">
-        <span className="hero-float-icon" data-tone="green">
-          <span className="hero-float-currency">{currencySymbol}</span>
-        </span>
-        <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
-      </div>
-      <div className="hero-float hero-float-chatgpt" aria-hidden="true">
-        <span className="hero-float-icon" data-tone="violet">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
-        </span>
-        <div><strong>{t("heroFloat.chatgptTitle")}</strong><span>{t("heroFloat.chatgptSub")}</span></div>
-        <span className="hero-float-arrow">›</span>
-      </div>
-      <div className="hero-float hero-float-file" aria-hidden="true">
-        <span className="hero-float-icon" data-tone="gold">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h6l4 4v10H5zM11 3v4h4" /></svg>
-        </span>
-        <div><strong>{t("heroFloat.fileTitle")}</strong><span>{t("heroFloat.fileSub")}</span></div>
+      {/* The mock's stat strip: four small live-looking cards above the shot
+          instead of scattered floats. */}
+      <div className="hero-stat-strip" aria-hidden="true">
+        <div className="hero-stat-card">
+          <span className="hero-float-icon" data-tone="sage">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
+          </span>
+          <div><strong>{t("heroFloat.ordersTitle")}</strong><span>{t("heroFloat.ordersSub")}</span></div>
+        </div>
+        <div className="hero-stat-card">
+          <span className="hero-float-icon" data-tone="green">
+            <span className="hero-float-currency">{currencySymbol}</span>
+          </span>
+          <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
+        </div>
+        <div className="hero-stat-card">
+          <span className="hero-float-icon" data-tone="violet">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6h9v8h-9zM11.5 9h3.2l2.8 2.6V14h-6M5.5 14.4a1.6 1.6 0 1 0 3.2 0M12.5 14.4a1.6 1.6 0 1 0 3.2 0" /></svg>
+          </span>
+          <div><strong>{t("heroStat.transitTitle")}</strong><span>{t("heroStat.transitSub")}</span></div>
+        </div>
+        <div className="hero-stat-card">
+          <span className="hero-float-icon" data-tone="gold">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10.5l4 4 8-9" /></svg>
+          </span>
+          <div><strong>{t("heroStat.tasksTitle")}</strong><span>{t("heroStat.tasksSub")}</span></div>
+        </div>
       </div>
     </div>
   );
@@ -2695,6 +2698,121 @@ function PlatformNote() {
   );
 }
 
+// Mock hub diagram: one order in the middle, the four life areas around it.
+function ConnectedOrderDiagram() {
+  const { t } = usePublicSiteLanguage();
+  const sides: { titleKey: PublicSiteTranslationKey; subKey: PublicSiteTranslationKey; icon: ReactNode; tone: string }[] = [
+    { titleKey: "orderCards.group.customer", subKey: "connected.customerSub", tone: "sage", icon: <><circle cx="10" cy="7" r="3" /><path d="M4.5 16.5c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5" /></> },
+    { titleKey: "orderCards.group.work", subKey: "connected.workSub", tone: "violet", icon: <><path d="M13 3.5l3.5 3.5-9 9H4v-3.5z" /></> },
+    { titleKey: "orderCards.group.money", subKey: "connected.moneySub", tone: "green", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v7M8 8.2c0-.9.9-1.5 2-1.5s2 .6 2 1.4c0 2.2-4 1.2-4 3.4 0 .8.9 1.4 2 1.4s2-.6 2-1.5" /></> },
+    { titleKey: "orderCards.group.items", subKey: "connected.itemsSub", tone: "gold", icon: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></> }
+  ];
+  return (
+    <section className="public-section public-connected-section public-scroll-reveal">
+      <div className="public-shell">
+        <h2 className="public-connected-title">{t("section.flow.title")}</h2>
+        <div className="public-connected-diagram">
+          <div className="public-connected-col">
+            {sides.slice(0, 2).map(side => (
+              <div className="public-card public-connected-card" data-side="left" key={side.titleKey}>
+                <span className="hero-float-icon" data-tone={side.tone} aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{side.icon}</svg>
+                </span>
+                <div>
+                  <strong>{t(side.titleKey)}</strong>
+                  <span>{t(side.subKey)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="public-card public-connected-center">
+            <span className="public-connected-center-tag">{t("orderCards.group.order")}</span>
+            <strong>Custom Leather Duffle Bag</strong>
+            <span className="public-connected-status">{t("connected.status")}</span>
+            <div className="public-connected-chips" aria-hidden="true">
+              <span>{t("connected.chipTimeline")}</span>
+              <span>{t("connected.chipFiles")}</span>
+              <span>{t("connected.chipNotes")}</span>
+            </div>
+          </div>
+          <div className="public-connected-col">
+            {sides.slice(2).map(side => (
+              <div className="public-card public-connected-card" data-side="right" key={side.titleKey}>
+                <span className="hero-float-icon" data-tone={side.tone} aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{side.icon}</svg>
+                </span>
+                <div>
+                  <strong>{t(side.titleKey)}</strong>
+                  <span>{t(side.subKey)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Mock customisation card: a small kanban with one card mid-drag.
+function CustomisationShowcase() {
+  const { t } = usePublicSiteLanguage();
+  const columns: { titleKey: PublicSiteTranslationKey; tasks: { key: PublicSiteTranslationKey; pri: PublicSiteTranslationKey; tone: string }[] }[] = [
+    { titleKey: "kanban.col1", tasks: [{ key: "kanban.task1", pri: "kanban.priHigh", tone: "red" }] },
+    { titleKey: "kanban.col2", tasks: [{ key: "kanban.task2", pri: "kanban.priMedium", tone: "amber" }] },
+    { titleKey: "kanban.col3", tasks: [{ key: "kanban.task3", pri: "kanban.priMedium", tone: "amber" }] },
+    { titleKey: "kanban.col4", tasks: [{ key: "kanban.task4", pri: "kanban.priLow", tone: "green" }] }
+  ];
+  return (
+    <section className="public-section public-kanban-section public-scroll-reveal">
+      <div className="public-shell public-card public-kanban-card">
+        <h2>{t("accent.title")}</h2>
+        <div className="public-kanban" aria-hidden="true">
+          {columns.map(column => (
+            <div className="public-kanban-col" key={column.titleKey}>
+              <span className="public-kanban-col-title">{t(column.titleKey)}</span>
+              {column.tasks.map(task => (
+                <div className="public-kanban-task" key={task.key}>
+                  <strong>{t(task.key)}</strong>
+                  <span className="public-kanban-pri" data-tone={task.tone}>{t(task.pri)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div className="public-kanban-task is-dragging" aria-hidden="true">
+            <strong>{t("kanban.task5")}</strong>
+            <span className="public-kanban-pri" data-tone="amber">{t("kanban.priMedium")}</span>
+          </div>
+        </div>
+        <p className="public-kanban-caption">{t("kanban.caption")}</p>
+      </div>
+    </section>
+  );
+}
+
+// Mock compact tracking strip; the full scroll story lives on /features now.
+function ShippingStrip() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-shipstrip-section public-scroll-reveal">
+      <div className="public-shell public-card public-shipstrip-card">
+        <h2>{t("shippingStrip.title")}</h2>
+        <div className="public-shipstrip" aria-hidden="true">
+          {(["scrollStory.status1", "scrollStory.status2", "scrollStory.status3", "scrollStory.status4"] as PublicSiteTranslationKey[]).map(key => (
+            <div className="public-shipstrip-step" key={key}>
+              <span className="public-shipstrip-dot">✓</span>
+              <span>{t(key)}</span>
+            </div>
+          ))}
+        </div>
+        <Link href="/features#shipping" className="public-shipstrip-link">
+          {t("shippingStrip.link")}<span aria-hidden="true"> →</span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 // Follow-up report items 37-38: answer the visitor's last objections right
 // before the final CTA — three plan one-liners and three FAQ links, nothing
 // that adds real page height.
@@ -2703,19 +2821,23 @@ function HomePricingSummary() {
   return (
     <section className="public-section public-home-pricing public-scroll-reveal">
       <div className="public-shell">
-        <h2 className="public-home-pricing-title">{t("homePricing.title")}</h2>
+        <h2 className="public-home-pricing-title">{t("homePricing.simpleTitle")}</h2>
         <div className="public-home-pricing-grid">
           <div className="public-card public-home-pricing-card">
             <strong>Free</strong>
-            <span>{t("homePricing.freeSub")}</span>
+            <span className="public-home-pricing-note">{t("homePricing.freeSub")}</span>
+            <span className="public-home-pricing-price">£0 <em>{t("homePricing.forever")}</em></span>
           </div>
-          <div className="public-card public-home-pricing-card">
+          <div className="public-card public-home-pricing-card is-featured">
+            <span className="public-home-pricing-badge">{t("plan.pro.badge")}</span>
             <strong>Pro</strong>
-            <span>{t("homePricing.proSub")}</span>
+            <span className="public-home-pricing-note">{t("homePricing.proSub")}</span>
+            <span className="public-home-pricing-price">£19 <em>{t("homePricing.perMonth")}</em></span>
           </div>
           <div className="public-card public-home-pricing-card">
             <strong>Team</strong>
-            <span>{t("homePricing.teamSub")}</span>
+            <span className="public-home-pricing-note">{t("homePricing.teamSub")}</span>
+            <span className="public-home-pricing-price">£49 <em>{t("homePricing.perMonth")}</em></span>
           </div>
         </div>
         <div className="public-home-pricing-more">
@@ -2728,17 +2850,23 @@ function HomePricingSummary() {
 
 function HomeFaqSummary() {
   const { t } = usePublicSiteLanguage();
-  const questions: PublicSiteTranslationKey[] = ["homeFaq.q1", "homeFaq.q2", "homeFaq.q3"];
+  const items: Array<[PublicSiteTranslationKey, PublicSiteTranslationKey]> = [
+    ["homeFaq.q1", "homeFaq.a1"],
+    ["homeFaq.q2", "homeFaq.a2"],
+    ["homeFaq.q3", "homeFaq.a3"]
+  ];
   return (
     <section className="public-section public-home-faq public-scroll-reveal">
       <div className="public-shell">
-        <nav className="public-home-faq-list" aria-label={t("nav.faq")}>
-          {questions.map(key => (
-            <Link key={key} href="/faq" className="public-card public-home-faq-item">
-              {t(key)}<span aria-hidden="true">→</span>
-            </Link>
+        <h2 className="public-home-faq-title">{t("homeFaq.title")}</h2>
+        <div className="public-home-faq-list">
+          {items.map(([q, a]) => (
+            <details className="public-card public-home-faq-item" key={q}>
+              <summary>{t(q)}<span aria-hidden="true">▾</span></summary>
+              <p>{t(a)}</p>
+            </details>
           ))}
-        </nav>
+        </div>
         <div className="public-home-faq-more">
           <Link href="/faq">{t("homeFaq.more")}</Link>
         </div>
@@ -2746,7 +2874,6 @@ function HomeFaqSummary() {
     </section>
   );
 }
-
 // The newer back-office areas (the global-website report asked the home page
 // to say these exist so visitors understand NivaDesk is more than the order
 // board). Short cards only — the deep explanations live on /features and in
@@ -2762,27 +2889,37 @@ const ADVANCED_AREAS = [
 
 function AdvancedAreasSection() {
   const { t } = usePublicSiteLanguage();
+  const icons: Record<string, ReactNode> = {
+    inventory: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></>,
+    banking: <><path d="M3 8.5 10 4l7 4.5M4.5 9v6M8.2 9v6M11.8 9v6M15.5 9v6M3 16.5h14" /></>,
+    estimates: <><path d="M6 3h8a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 14 17H6a1.5 1.5 0 0 1-1.5-1.5v-11A1.5 1.5 0 0 1 6 3z" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></>,
+    repairs: <><path d="M12.5 3.5a4 4 0 0 0-4.9 5L3 13.1V17h3.9l4.6-4.6a4 4 0 0 0 5-4.9l-2.6 2.6-2.4-.6-.6-2.4z" /></>,
+    files: <><path d="M3 6l1.5-2h4l1 1.5H17v10.5H3z" /></>,
+    domain: <><circle cx="10" cy="10" r="7" /><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7S12.2 15 10 17c-2.2-2-3.3-4.4-3.3-7S7.8 5 10 3z" /></>
+  };
   return (
-    <section className="public-section public-scroll-reveal">
+    <section className="public-section public-backoffice-section public-scroll-reveal">
       <div className="public-shell">
-        <SectionHeader
-          eyebrowKey="section.advanced.eyebrow"
-          titleKey="section.advanced.title"
-          bodyKey="section.advanced.body"
-        />
-        <div className="public-advanced-grid">
+        <h2 className="public-backoffice-title">{t("section.backoffice.title")}</h2>
+        <div className="public-backoffice-grid">
           {ADVANCED_AREAS.map(area => (
-            <article key={area.id} className="public-card public-advanced-card">
-              <h3>{t(area.titleKey)}</h3>
-              <p>{t(area.bodyKey)}</p>
-            </article>
+            <Link
+              key={area.id}
+              href="/features"
+              className="public-card public-backoffice-tile"
+              title={t(area.bodyKey)}
+            >
+              <span className="hero-float-icon" data-tone="sage" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{icons[area.id]}</svg>
+              </span>
+              <span>{t(area.titleKey)}</span>
+            </Link>
           ))}
         </div>
       </div>
     </section>
   );
 }
-
 function PublicHomePageContent() {
   const { t } = usePublicSiteLanguage();
   const [demoOpen, setDemoOpen] = useState(false);
@@ -2794,14 +2931,12 @@ function PublicHomePageContent() {
         <ProductScene />
         <div className="public-shell public-hero-content">
           <div className="public-hero-copy public-scroll-reveal">
-            <span className="public-eyebrow">{t("hero.eyebrow")}</span>
             <h1>
               {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
             </h1>
             <p>{t("hero.body")}</p>
             <div className="public-hero-actions">
               <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
-              <Link href="/pricing" className="public-button ghost large">{t("cta.viewPricing")}</Link>
               <button
                 type="button"
                 className="public-demo-button"
@@ -2822,8 +2957,10 @@ function PublicHomePageContent() {
                   <span>1:17</span>
                 </span>
               </button>
+              <Link href="/pricing" className="public-hero-pricing-link">
+                {t("cta.viewPricing")}<span aria-hidden="true"> →</span>
+              </Link>
             </div>
-            <HeroFeatureChips />
           </div>
         </div>
       </section>
@@ -2864,30 +3001,20 @@ function PublicHomePageContent() {
           )
         : null}
 
-      {/* Follow-up report ordering: the connected-order workflow is the
-          product's core logic and leads; shipping is a supporting use case
-          and follows the back office instead of hogging the fold. */}
+      {/* Mock-driven layout: connected-order diagram, customisation kanban,
+          the (kept) ChatGPT showcase, back-office tiles, a compact tracking
+          strip (the full scroll story now lives on /features), the (kept)
+          platform section, then pricing and FAQ. */}
 
-      <section className="public-section public-order-flow-section">
-        <div className="public-order-flow-sticky">
-          <div className="public-shell">
-            <SectionHeader
-              eyebrowKey="section.flow.eyebrow"
-              titleKey="section.flow.title"
-              bodyKey="section.flow.body"
-            />
-            <OrderCardTitleGrid />
-          </div>
-        </div>
-      </section>
+      <ConnectedOrderDiagram />
 
-      <StudioAccentBand />
+      <CustomisationShowcase />
 
       <ChatGPTAppShowcase featured showMoreLink />
 
       <AdvancedAreasSection />
 
-      <ScrollStoryShowcase />
+      <ShippingStrip />
 
       <PlatformNote />
 
@@ -2896,12 +3023,12 @@ function PublicHomePageContent() {
       <HomeFaqSummary />
 
       <section className="public-section public-cta-band public-scroll-reveal">
-        <div className="public-shell public-cta-inner">
-          <div>
-            <span className="public-eyebrow">{t("ctaBand.eyebrow")}</span>
-            <h2>{t("ctaBand.title")}</h2>
+        <div className="public-shell public-cta-ready">
+          <h2>{t("ctaBand.readyTitle")}</h2>
+          <div className="public-cta-ready-actions">
+            <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
+            <span className="public-cta-ready-note">{t("ctaBand.noCard")}</span>
           </div>
-          <HeroActions />
         </div>
       </section>
     </>
@@ -3013,6 +3140,12 @@ function PublicFeaturesPageContent() {
       <FeatureWorkflowPanel />
 
       <FeatureDeepDiveSection />
+
+      {/* The shipping scroll story moved here from the home page (mock
+          redesign); the home strip links to this anchor. */}
+      <div id="shipping">
+        <ScrollStoryShowcase />
+      </div>
 
       <DashboardFinanceShowcase />
 
