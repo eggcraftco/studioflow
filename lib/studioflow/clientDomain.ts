@@ -57,7 +57,7 @@ export async function requestClientDomain(workspace: WorkspaceContext, host: str
 }
 
 export async function verifyClientDomain(workspace: WorkspaceContext, host: string) {
-  return call<{ ok?: boolean; verified?: boolean; found?: string[]; expected?: string; error?: string }>(
+  return call<{ ok?: boolean; verified?: boolean; found?: string[]; expected?: string; error?: string; certificate?: { status?: string; error?: string } }>(
     "verifyClientDomain",
     { companyId: workspace.id, host },
     "The domain could not be checked."

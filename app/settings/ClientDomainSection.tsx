@@ -40,7 +40,7 @@ export function ClientDomainSection({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [verifyResult, setVerifyResult] = useState<{ host: string; verified: boolean; found: string[]; error?: string } | null>(null);
+  const [verifyResult, setVerifyResult] = useState<{ host: string; verified: boolean; found: string[]; error?: string; certificate?: { status?: string; error?: string } } | null>(null);
   const [verifyingHost, setVerifyingHost] = useState("");
   const [copiedValue, setCopiedValue] = useState("");
   const [accentColor, setAccentColor] = useState("");
@@ -169,14 +169,16 @@ export function ClientDomainSection({
         {customDomains.map(domain => {
           const isVerifying = verifyingHost === domain.host;
           const failedCheck = verifyResult && verifyResult.host === domain.host && !verifyResult.verified ? verifyResult : null;
+          const certificate = verifyResult && verifyResult.host === domain.host ? verifyResult.certificate : undefined;
+          const certActive = certificate?.status === "active";
           const statusLabel = domain.status === "active"
-            ? `🟢 ${t("Domain verified")}`
+            ? certActive ? `🟢 ${t("Live")}` : `🟢 ${t("Domain verified")}`
             : isVerifying ? t("Verifying...") : t("DNS required");
           const steps: { label: string; state: "done" | "current" | "todo" }[] = [
             { label: t("Enter domain"), state: "done" },
             { label: t("Add the DNS record"), state: domain.status === "active" ? "done" : "current" },
             { label: t("Verify ownership"), state: domain.status === "active" ? "done" : failedCheck || isVerifying ? "current" : "todo" },
-            { label: t("Serving rollout"), state: domain.status === "active" ? "current" : "todo" }
+            { label: t("Certificate"), state: domain.status === "active" ? (certActive ? "done" : "current") : "todo" }
           ];
           return (
             <div key={domain.host} className="mini-panel" style={{ display: "grid", gap: 10, padding: 14, background: "rgba(120,120,140,0.05)" }}>
@@ -195,7 +197,7 @@ export function ClientDomainSection({
                   setVerifyingHost(domain.host);
                   try {
                     const result = await verifyClientDomain(workspace, domain.host);
-                    setVerifyResult({ host: domain.host, verified: result.verified === true, found: result.found ?? [], error: result.error });
+                    setVerifyResult({ host: domain.host, verified: result.verified === true, found: result.found ?? [], error: result.error, certificate: result.certificate });
                   } finally {
                     setVerifyingHost("");
                   }
@@ -237,7 +239,11 @@ export function ClientDomainSection({
                 </div>
               ) : (
                 <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>
-                  {t("Reserved for your workspace — serving your links on this domain is being rolled out, and existing nivadesk.app links keep working.")}
+                  {certActive
+                    ? t("Live — your customer links now open on this domain. Existing nivadesk.app links keep working.")
+                    : certificate?.status === "error"
+                      ? `${t("Verified. The certificate step reported a problem — press Check again, and contact support if it persists.")} (${certificate.error || ""})`
+                      : t("Verified. The security certificate is being issued — usually a few minutes. Press Check again to refresh.")}
                 </p>
               )}
               {failedCheck ? (
@@ -252,7 +258,7 @@ export function ClientDomainSection({
         })}
 
         <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>
-          {t("A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working.")}
+          {t("A verified domain serves your customer links with your branding; older nivadesk.app links keep working.")}
         </p>
       </section>
 
