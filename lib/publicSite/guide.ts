@@ -522,7 +522,8 @@ const TREE_EN: GuideNode[] = [
         "Add a customer, edit their details, or remove one you no longer need.",
         "Open a customer to see their details and their designs and orders.",
         "Customer notes stay with the customer and appear on each of their orders.",
-        "Use the collapsible list to find a customer quickly."
+        "Use the collapsible list to find a customer quickly.",
+        "How many customers are new versus returning in a period lives on the Dashboard: the Financial Breakdown shows New customers and Returning customers for the selected range — new means their first order falls inside it."
       ] }
     ]
   },
@@ -1333,7 +1334,8 @@ const TREE_TR: GuideNode[] = [
         "Müşteri ekleyin, bilgilerini düzenleyin veya gerekmeyeni kaldırın.",
         "Bir müşteriyi açıp bilgilerini, tasarımlarını ve siparişlerini görün.",
         "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür.",
-        "Bir müşteriyi hızla bulmak için katlanır listeyi kullanın."
+        "Bir müşteriyi hızla bulmak için katlanır listeyi kullanın.",
+        "Bir dönemde kaç müşterinin yeni, kaçının dönen olduğu Dashboard'dadır: Financial Breakdown seçili aralık için Yeni müşteriler ve Dönen müşteriler satırlarını gösterir — ilk siparişi aralığa denk gelen müşteri yenidir."
       ] }
     ]
   },

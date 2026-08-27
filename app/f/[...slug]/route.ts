@@ -34,8 +34,16 @@ const PDF_EXTENSIONS = new Set(["pdf"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "m4v"]);
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "ogg"]);
 
-function errorPage(message: string): Response {
-  const html = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>NivaDesk</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;background:#0b0b0c;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}div{text-align:center;padding:24px}h1{font-size:18px;margin:0 0 6px}p{color:#9a9a9a;margin:0;font-size:13px}</style></head><body><div><h1>NivaDesk</h1><p>${escapeHtml(message)}</p></div></body></html>`;
+// A customer's own domain is white-label territory: the viewer drops the
+// NivaDesk name there and lets the file speak for itself.
+function isNivaDeskHost(request: NextRequest): boolean {
+  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  return !host || host === "localhost" || host === "nivadesk.app" || host.endsWith(".nivadesk.app");
+}
+
+function errorPage(message: string, showBrand = true): Response {
+  const heading = showBrand ? "NivaDesk" : "File";
+  const html = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>${heading}</title><style>html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;background:#0b0b0c;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}div{text-align:center;padding:24px}h1{font-size:18px;margin:0 0 6px}p{color:#9a9a9a;margin:0;font-size:13px}</style></head><body><div><h1>${heading}</h1><p>${escapeHtml(message)}</p></div></body></html>`;
   return new Response(html, {
     status: 400,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
@@ -49,6 +57,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const searchParams = request.nextUrl.searchParams;
   const bucket = (searchParams.get("b") || "").trim();
   const token = (searchParams.get("t") || "").trim();
+  const nivadeskHost = isNivaDeskHost(request);
+  const brandSuffix = nivadeskHost ? " · NivaDesk" : "";
 
   // Short-link mode: a single clean segment like /f/aB9xK2.png (no b/t params).
   // Resolve it through the function (it reads the /fileShares mapping and returns
@@ -67,7 +77,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
         }
       });
     } catch {
-      return errorPage("Could not load this file right now.");
+      return errorPage("Could not load this file right now.", nivadeskHost);
     }
   }
 
@@ -75,9 +85,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const storagePath = pathSegments.join("/");
   const fileName = pathSegments[pathSegments.length - 1] || "file";
 
-  if (!storagePath || storagePath.includes("..")) return errorPage("This file link is invalid.");
-  if (!BUCKET_PATTERN.test(bucket)) return errorPage("This file link is invalid or has expired.");
-  if (!TOKEN_PATTERN.test(token)) return errorPage("This file link is invalid or has expired.");
+  if (!storagePath || storagePath.includes("..")) return errorPage("This file link is invalid.", nivadeskHost);
+  if (!BUCKET_PATTERN.test(bucket)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
+  if (!TOKEN_PATTERN.test(token)) return errorPage("This file link is invalid or has expired.", nivadeskHost);
 
   // Reconstruct the real Firebase Storage download URL (loaded directly by the browser).
   const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
@@ -104,7 +114,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${safeName} · NivaDesk</title>
+  <title>${safeName}${brandSuffix}</title>
   <link rel="icon" href="/favicon.ico" />
   <style>
     html, body { height: 100%; margin: 0; background: #0b0b0c; }
