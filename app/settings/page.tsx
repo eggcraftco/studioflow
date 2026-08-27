@@ -17,6 +17,7 @@ import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from 
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, functions } from "@/lib/firebase/client";
 import { httpsCallable } from "firebase/functions";
+import { ClientDomainSection } from "./ClientDomainSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -103,7 +104,8 @@ type SettingsSectionId =
   | "plan-access"
   | "team-access"
   | "message-settings"
-  | "support-tickets";
+  | "support-tickets"
+  | "client-domain";
 
 type SettingsGroup =
   | "personal"
@@ -165,6 +167,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "personal" },
   { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "personal" },
   { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "design" },
+  { id: "client-domain", title: "Customer Portal Domain", appKey: "Client Domain", description: "Branded customer links: your subdomain and your own domain.", icon: "brand", group: "design" },
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
   { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workflowGroup" },
@@ -709,6 +712,8 @@ function renderSettingsSection({
       return <PreferencesSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
     case "branding":
       return <WorkspaceBrandingSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} />;
+    case "client-domain":
+      return <ClientDomainSection workspace={workspace} language={language} />;
     case "workflow":
       return <WorkflowSettingsSection workspace={workspace} language={language} />;
     case "pdf":
