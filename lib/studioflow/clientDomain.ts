@@ -27,8 +27,13 @@ async function call<T>(name: string, payload: Record<string, unknown>, fallback:
   }
 }
 
+export type ClientPortalBranding = {
+  accentColor: string;
+  showPoweredBy: boolean;
+};
+
 export async function getClientDomainConfig(workspace: WorkspaceContext) {
-  return call<{ ok?: boolean; subdomain?: ClientDomainRow | null; customDomains?: ClientDomainRow[]; cnameTarget?: string }>(
+  return call<{ ok?: boolean; subdomain?: ClientDomainRow | null; customDomains?: ClientDomainRow[]; cnameTarget?: string; branding?: ClientPortalBranding }>(
     "getClientDomainConfig",
     { companyId: workspace.id },
     "The domain settings could not be loaded."
@@ -56,6 +61,14 @@ export async function verifyClientDomain(workspace: WorkspaceContext, host: stri
     "verifyClientDomain",
     { companyId: workspace.id, host },
     "The domain could not be checked."
+  );
+}
+
+export async function saveClientPortalBranding(workspace: WorkspaceContext, branding: ClientPortalBranding) {
+  return call<{ ok?: boolean; accentColor?: string; showPoweredBy?: boolean }>(
+    "saveClientPortalBranding",
+    { companyId: workspace.id, accentColor: branding.accentColor, showPoweredBy: branding.showPoweredBy },
+    "The branding could not be saved."
   );
 }
 
