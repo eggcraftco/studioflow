@@ -1,5 +1,10 @@
 import SwiftUI
 import FirebaseFunctions
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 // Settings → Customer Portal Domain (Workspace Design group, owner-only).
 //
@@ -57,6 +62,10 @@ struct ClientDomainSettingsView: View {
     @State private var errorText = ""
     @State private var verifyOutcome: ClientDomainVerifyOutcome? = nil
 
+    // Branding drafts — "" means "use the default colour" (server stores "").
+    @State private var accentColorHex = ""
+    @State private var showPoweredBy = true
+
     private var isOwner: Bool {
         firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
     }
@@ -76,6 +85,7 @@ struct ClientDomainSettingsView: View {
 
                 subdomainCard
                 customDomainCard
+                brandingCard
 
                 if !statusText.isEmpty {
                     Text(statusText)
@@ -285,6 +295,80 @@ struct ClientDomainSettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    // MARK: - Branding for the customer-facing pages
+
+    /// Default accent shown in the picker while the stored value is "" —
+    /// the same #2563eb the web section falls back to.
+    private static let defaultAccentHex = "#2563eb"
+
+    /// The ColorPicker edits a Color; the server speaks "#rrggbb" or "".
+    private var accentColorBinding: Binding<Color> {
+        Binding(
+            get: { Color(clientDomainHex: accentColorHex.isEmpty ? Self.defaultAccentHex : accentColorHex) },
+            set: { accentColorHex = $0.clientDomainHexString }
+        )
+    }
+
+    private var brandingCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(t("Customer page branding", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+
+            HStack(spacing: 14) {
+                HStack(spacing: 8) {
+                    Text(t("Accent colour", lang: seciliDil))
+                        .font(.system(size: 13))
+
+                    ColorPicker("", selection: accentColorBinding, supportsOpacity: false)
+                        .labelsHidden()
+                }
+
+                if !accentColorHex.isEmpty {
+                    Button {
+                        accentColorHex = ""
+                    } label: {
+                        Text(t("Use the default colour", lang: seciliDil))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isBusy)
+                }
+            }
+
+            Toggle(isOn: $showPoweredBy) {
+                Text(t("Show “Powered by NivaDesk” on customer pages", lang: seciliDil))
+                    .font(.system(size: 13))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Button {
+                    let accent = accentColorHex
+                    let show = showPoweredBy
+                    run(doneText: "Branding saved.") {
+                        _ = try await callDomainFunction("saveClientPortalBranding", [
+                            "accentColor": accent,
+                            "showPoweredBy": show,
+                        ])
+                    }
+                } label: {
+                    Text(t("Save", lang: seciliDil))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isBusy)
+            }
+
+            Text(t("The accent colours the order tracking page. Hiding the Powered by line is part of the Pro and Team plans.", lang: seciliDil))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.04), radius: 6, y: 2)
+    }
+
     // MARK: - Field helper
 
     private func hostnameField(_ placeholder: String, text: Binding<String>, maxLength: Int) -> some View {
@@ -339,6 +423,9 @@ struct ClientDomainSettingsView: View {
             customDomains = (config["customDomains"] as? [[String: Any]])?.compactMap(ClientDomainRowDTO.init) ?? []
             if let target = config["cnameTarget"] as? String, !target.isEmpty { cnameTarget = target }
             slugDraft = subdomain?.host ?? ""
+            let branding = config["branding"] as? [String: Any]
+            accentColorHex = (branding?["accentColor"] as? String) ?? ""
+            showPoweredBy = (branding?["showPoweredBy"] as? Bool) ?? true
         } catch {
             errorText = t(error.localizedDescription, lang: seciliDil)
         }
@@ -360,5 +447,39 @@ struct ClientDomainSettingsView: View {
             }
             isBusy = false
         }
+    }
+}
+
+// MARK: - "#rrggbb" ↔ Color, matching the web <input type="color"> contract
+
+private extension Color {
+    /// Parse "#rrggbb" (the only shape the server emits) into an sRGB Color.
+    init(clientDomainHex hex: String) {
+        let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        var value: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&value)
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255.0,
+            green: Double((value >> 8) & 0xFF) / 255.0,
+            blue: Double(value & 0xFF) / 255.0,
+            opacity: 1
+        )
+    }
+
+    /// Lowercase "#rrggbb" for the saveClientPortalBranding payload — the same
+    /// format the web colour input produces.
+    var clientDomainHexString: String {
+        #if os(macOS)
+        guard let native = NSColor(self).usingColorSpace(.sRGB) else { return "#2563eb" }
+        let red = native.redComponent
+        let green = native.greenComponent
+        let blue = native.blueComponent
+        #else
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(self).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
+        func byte(_ component: CGFloat) -> Int { Int((max(0, min(1, component)) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", byte(red), byte(green), byte(blue))
     }
 }
