@@ -11,7 +11,7 @@
    "id": "dashboard",
    "title": "Dashboard",
    "path": "Dashboard",
-   "text": "Your home overview. Start your day here to see what needs attention before you dive into individual orders.\n- Quick stats on active orders, what is due soon and recent activity.\n- Spot overdue or at-risk jobs early so they don't slip.\n- Jump straight to an order that needs you."
+   "text": "Your home overview. Start your day here to see what needs attention before you dive into individual orders.\n- Quick stats on active orders, what is due soon and recent activity.\n- Spot overdue or at-risk jobs early so they don't slip.\n- Jump straight to an order that needs you.\nReading the money cards\n- Revenue counts the value of orders in the selected period, whether or not the money has arrived yet.\n- Payments Received counts only money actually collected in the period — compare it with Revenue to see what is still out.\n- Outstanding Balance is what customers still owe across those orders.\n- Net Profit is revenue minus base cost, extra spending, platform fees, shipping and VAT. Hover any card title for its exact formula.\n- The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range."
   },
   {
    "id": "orders",
@@ -246,6 +246,12 @@
    "title": "Team Access",
    "path": "Settings › Team Access",
    "text": "Invite your team and control exactly what each person can see and do.\n- Give each member a role: Member, View Only, Workflow Only, or your own custom role.\n- Control which menus, order cards and settings each role can see.\n- Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
+  },
+  {
+   "id": "set-client-domain",
+   "title": "Customer Portal Domain",
+   "path": "Settings › Customer Portal Domain",
+   "text": "Put YOUR name on every link your customers see — order tracking, estimates and future customer pages. Owner only, under Settings ▸ Customer Portal Domain.\nYour free NivaDesk subdomain\n- Open Settings ▸ Customer Portal Domain (you must be the workspace owner).\n- Type a name — letters, numbers and hyphens, 3–40 characters — and press Save.\n- Your customer links can use name.nivadesk.app. Included on every plan; claiming a new name releases the old one.\nYour own domain (Pro and Team)\n- Enter a subdomain of a website you own, like track.yourdomain.com, and press Connect. A bare domain or a path such as yourdomain.com/track will not work — DNS cannot route paths.\n- At your domain provider, add the CNAME record shown on screen, pointing to customers.nivadesk.app.\n- Press Verify. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. Once the record matches, the domain shows Domain verified.\n- A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.\n- Each hostname belongs to one workspace — a name someone else verified cannot be claimed.\n- Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
   },
   {
    "id": "set-support",
