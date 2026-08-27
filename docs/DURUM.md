@@ -1073,3 +1073,37 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
 - **TeamAccess düzeltmesi (6734240) tur 43'le zaten çıkmış**; tur 44
   eksik olan 2 hata string'inin 12-dil çevirisini ekledi
   (language.ts, kaynak commit 9ed9a5a).
+
+---
+
+## 27 Ağu gece — SaaS tam devre + PDF ön ayarları (tur 45-46)
+
+- **Cloudflare for SaaS AKTİF** (kullanıcı fatura profilini doldurdu; 100
+  custom hostname ücretsiz, $0/ay taban). Fallback origin
+  customers.nivadesk.app → Active. Worker rotasına `*/*` eklendi
+  (custom hostname isteği *.nivadesk.app desenine uymadığı için şart).
+  Regresyon testi: customers/foo/mcp/www/apex hepsi temiz.
+- **verifyClientDomain CF otomasyonu:** NIVADESK_CF_API_TOKEN secret'ı
+  (v1 placeholder) + clientDomains.js'e cfEnsureCustomHostname /
+  cfDeleteCustomHostname; DNS doğrulanınca custom hostname otomatik
+  açılır, Remove'da edge kaydı da silinir. Token placeholder iken
+  otomasyon kapalı, davranış eskisi gibi DNS-only. verify+remove deploy
+  edildi. KALAN: kullanıcı gerçek token'ı kendisi oluşturup
+  `firebase functions:secrets:set NIVADESK_CF_API_TOKEN` yapacak
+  (Zone → SSL and Certificates → Edit, yalnız nivadesk.app), sonra
+  verify+remove yeniden deploy.
+- **Settings UI:** adım akışı "Serving rollout" → "Certificate";
+  sertifika pending/active/error durumları Check again ile yenileniyor;
+  "rollout" metinleri canlı gerçeğe çevrildi (6 yeni string 12 dilde).
+- **PDF ön ayarları (settings raporu High #7):** 4 chip — Müşteri
+  faturası / İç iş emri / Teklif / İrsaliye + Custom göstergesi;
+  hiçbir preset Internal Financials'ı açmaz; workflow-only rol yalnız
+  görebildiği anahtarları değiştirir. 12 toggle etiketi + bölüm başlığı
+  dahil 20 string 12 dile çevrildi (PDF bölümü artık tam yerelleşmiş).
+  Dev E2E: chip tıkla→12 toggle doğru, elle değişince Custom'a dönüş.
+- Rehber: set-pdf Presets alt bölümü + set-client-domain sertifika
+  akışı (EN+TR), corpus 2 kez yeniden kuruldu, 4 asistan fonksiyonu
+  2 kez deploy; bot sondası confident:true (Delivery note cevabı doğru).
+- Rapor High kalanları: #9 backup dry-run + import raporu,
+  #10 settings audit history. Workflow template preview (#5) zaten
+  önceki dalgada yapılmış çıktı.
