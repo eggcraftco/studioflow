@@ -14556,7 +14556,7 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   .hero-float { display: none; }
   .hero-app-shot {
     display: block;
-    position: static;
+    position: relative;
     right: auto;
     top: auto;
     width: calc(100% - 40px);
@@ -24635,9 +24635,6 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
 }
 .public-skip-link:focus {
   left: 0;
-}
-.hero-app-shot {
-  position: relative;
 }
 .hero-shot-zoom {
   position: absolute;
