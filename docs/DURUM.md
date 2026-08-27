@@ -520,3 +520,53 @@ Domain değişince eskiler 301 ile yenisine; kaldırılınca fallback çalışı
 Plan: Pro'da dahil (Seçenek A), Team'de + custom sending email.
 **Altyapı notu:** *.nivadesk.app wildcard DNS + Cloudflare for SaaS kurulumu
 KULLANICI tarafında; kodda host-çözümleme + doğrulama + branding ben yaparım.
+
+---
+
+## 27 Ağu — Dashboard raporu S1+S2 KAPANDI, Domain-link D1 CANLI
+
+### Dashboard finans raporu — Kritik+Yüksek tamam, 4 platform
+- Kritik'lerin ikisi rapor yazılmadan HEAD'de zaten çözülmüştü (üst menü
+  "Margin" adı 881b33c'te, Growth işareti de düzeltilmiş) — rapor eski
+  sürüme bakıyordu.
+- Web S1 (tur 27): Revenue kartı + accrual hint, YENİ Payments Received
+  kartı (totals.received), Outstanding Balance, Cost/VAT/Net Profit
+  formül tooltip'leri, üst pill'ler tıklanabilir (/orders, /customers),
+  bank tile'ları "Spent this month/year" + bayat senkron metni
+  ("N days ago" >12sa), Extra Spending dönem kapsamı sayfa filtresine bağlı.
+- Web S2 (tur 28): Custom aralık preset'leri (Last 7/30 days, This/Last
+  quarter, UK tax year 6-Nisan), start>end sessiz takas + min/max,
+  toISOString UTC kayması düzeltildi (BST'de gün kayıyordu — yerel
+  YYYY-MM-DD formatla).
+- MCP kâr sapması: expectedRevenue = totalPrice || (paid+remaining+custom).
+- Native parite: Swift 1c03264 + Android af75195 (ikisi de push'lu, iki
+  platform da derlenip doğrulandı). Android'de financialShowBaseCost
+  kapısı KPI/grafik/YoY/widget köprüsüne kadar işlendi.
+- **Takip:** Android Cost kartı extra spending'i hâlâ dışlıyor (web'in
+  dashboardCostTotal'ı dahil ediyor) — ayrı bir tur ister. Android'de
+  custom aralık seçici, bank tile'ları, Active/Due-soon sayaçları bilinçli
+  atlandı.
+- Kalan (Orta/Ürün): grafik tooltip/drill-down, Customize genişletme,
+  store-channel filtreleri, çoklu para birimi, refund/chargeback dökümü,
+  VAT set-aside input-VAT ayrımı, CSV dosya adına aralık, şablonlar.
+
+### Domain-link D1 — kayıt defteri + Settings UI CANLI
+- functions/clientDomains.js (e1c7c57): tek `clientDomains` koleksiyonu,
+  host → workspace tek okumada; 6 callable deploy edildi
+  (getClientDomainConfig/setClientSubdomain/requestClientDomain/
+  verifyClientDomain/removeClientDomain/resolveClientDomain).
+  Slug rezerve listesi + transactional devir; custom host Pro/Team kapılı,
+  apex ve path reddi ("yourdomain.com/track" açıklamalı); doğrulama DNS'in
+  GERÇEKTEN döndürdüğünü raporluyor. 20 assert'lik suite yeşil.
+- Web (512da92, yayın turu 29 CANLI): Settings → "Customer Portal Domain"
+  (design grubu, yalnız owner). Subdomain claim + custom domain
+  bağla/doğrula/kaldır, CNAME talimatı kod bloğu, dürüst doğrulama geri
+  bildirimi. 32 string 12 dilde.
+- Dev E2E: "my-studio-qa" slug alındı; track.eggcraft.co.uk eklendi,
+  Verify dürüstçe "No CNAME record found yet" döndü.
+- **Kalan (D2+):** Next.js middleware host-rewrite, portal branding
+  (logo/renk/başlık/favicon/poweredBy), spoof-guard (token'ın workspace'i
+  servis eden host'a sahip mi), eski link 301.
+- **KULLANICI tarafı:** *.nivadesk.app wildcard DNS + Cloudflare for SaaS
+  custom-hostname servisi kurulmadan custom host'lar yalnız rezerve edilir,
+  servis edilmez (UI bunu dürüstçe söylüyor).
