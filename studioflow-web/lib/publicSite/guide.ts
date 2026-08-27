@@ -791,6 +791,9 @@ const TREE_EN: GuideNode[] = [
             "Each hostname belongs to one workspace — a name someone else verified cannot be claimed.",
             "Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
           ] },
+          { kind: "bullets", items: [
+            "The \"Your customer links\" card in the same section shows a live example of your short links (like https://yourstudio.nivadesk.app/r/…) — order tracking and estimate pages follow whichever name you set up."
+          ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
@@ -1573,6 +1576,9 @@ const TREE_TR: GuideNode[] = [
             "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
             "Her sunucu adı tek bir çalışma alanına aittir — başkasının doğruladığı ad alınamaz.",
             "Remove düğmesiyle istediğiniz an kaldırın; bağlantılarınız standart nivadesk.app adreslerine geri döner."
+          ] },
+          { kind: "bullets", items: [
+            "Aynı bölümdeki \"Your customer links\" kartı kısa bağlantılarınızın canlı bir örneğini gösterir (https://atolyeniz.nivadesk.app/r/… gibi) — sipariş takibi ve teklif sayfaları burada kurduğunuz adı izler."
           ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
