@@ -989,3 +989,30 @@ Kullanıcı Settings raporu + ortak şablon mock'u verdi ("burdan devam").
   bayrakladı (TeamAccess re-render döngüsü — task chip).
 - 13+11 string 12 dilde; rehber: domain adımları + matris + ayar
   araması; korpus deploy'ları yapıldı.
+
+---
+
+## 27 Ağu gece 6 — Domain her yüzeyde: Settings + public + SEO/AEO (tur 42)
+
+Kullanıcı isteği: domain ayarları Settings'te eksiksiz, public'te anlatım,
+Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
+üyelere menü yoluyla anlatsın.
+- **Settings:** bölüme "Your customer links" kartı — canlı örnek kısa
+  bağlantı (https://<slug>.nivadesk.app/r/…); takip+teklif sayfalarının
+  bu adı izlediği cümlesi. (Bölümde artık: subdomain, custom domain
+  4-adımlı akış, kopyalanabilir DNS, branding, link önizleme.)
+- **Public:** /features'a "Your links, your name" bölümü
+  (#customer-portal, 3 kart: subdomain/own domain/branding); ana sayfa
+  domain karosu artık bu çapaya derin-link; /faq'a görünür soru:
+  "Can customer links use my own domain?" (+FAQ JSON-LD aynası).
+- **SEO/AEO:** llms.txt SIFIRDAN yazıldı (gerçek ürün: markalı linkler,
+  envanter, banking preparation, e-imzalı teklif, onarım kabul, files,
+  dürüst finans kuralları, 12 dil; BAYAT Free limiti 5/3→gerçek 10/10
+  düzeltildi); SoftwareApplication şemasına 10 yeni featureList satırı +
+  güncel açıklama; home/features meta description'ları özellik-öncelikli.
+- Tur 42 canlı: llms/JSON-LD/meta/FAQ/features hepsi doğrulandı
+  (features marker'ları iki ayrı chunk'a bölünmüştü — tek-chunk arama
+  yanılgısı; ders: marker'ları chunk-bağımsız topla).
+- Bot probu: "hangi menüden?" sorusuna confident:true, birebir doğru:
+  "Settings ▸ Customer Portal Domain… 'Your customer links' kartı."
+- 13 string 12 dilde (11 public + 2 settings).
