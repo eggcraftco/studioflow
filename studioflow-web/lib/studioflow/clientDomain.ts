@@ -12,6 +12,8 @@ export type ClientDomainRow = {
   cnameTarget?: string;
   lastCheckFound?: string[];
   verifiedAtMs?: number;
+  /** Edge certificate state written at verify time — "active" once TLS is being served. */
+  cfSslStatus?: string;
 };
 
 async function call<T>(name: string, payload: Record<string, unknown>, fallback: string) {
