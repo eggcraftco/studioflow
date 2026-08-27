@@ -1247,3 +1247,33 @@ hunk'ının hepsi doğru yerde. Bulunan ve düzeltilenler:
   dashboard raporu bulunursa netleştirilecek.
 - Native parite (mağaza dalgası): AOV + yeni/dönen satırları
   Swift/Kotlin dashboard'una taşınacak.
+
+---
+
+## 28 Ağu — Dosya linkleri markayı giydi (kullanıcı sorusu; tur 52-53)
+
+Soru: Client Files linki ham firebasestorage URL'si görünüyor — yeni
+domain sistemiyle değişir mi? CEVAP: EVET, uçtan uca yapıldı.
+- **Portal (müşteri):** getPortalForVisitor dosya URL'lerini artık
+  GÖRELİ /f/ maskesiyle döner (maskedPortalFileUrl) — müşteri hangi
+  host'ta açtıysa orada kalır. Fotoğraf embed'leri bilinçli ham (bayt).
+- **Uygulama içi (personel):** fileMask brandedHost öğrendi;
+  OrderDetailContent (3 site) + FilesLibraryView.openFile (ham
+  window.open'dı!) + /files sayfasının 2 ham <a>'sı artık
+  workspace.clientPortalHost ile maskeli. Maske yoksa nivadesk.app.
+- **Worker:** SERVE_PREFIXES += "/f/" (dashboard'dan deploy).
+- **Beyaz-etiket:** /f/ route + nvViewSharedFile kendi domain'de
+  "· NivaDesk" başlığını atar. KRİTİK DÜZELTME: route gerçek host'u
+  Host'tan DEĞİL X-NivaDesk-Client-Host'tan okumalı (Worker origin'e
+  nivadesk.app Host'uyla gider) — ilk doğrulama bunu yakaladı.
+- Kanıt: kullanıcının verdiği gerçek PNG maskeli linkle
+  track.eggcraft.co.uk'de 200 + başlıkta yalnız dosya adı + sayfada
+  0 "NivaDesk"; nivadesk.app'te marka duruyor. Tur 52+53 canlı.
+- Bilinen sınırlar: eski kopyalanmış ham linkler geçerli kalır (token
+  rotasyonu ayrı iş); embed baytları Firebase'den gelir (adres çubuğu
+  değil, ancak sağ-tık/inspect görür); viewer Download düğmesi custom
+  domain'de CORS yüzünden ham linke düşebilir (bucket CORS genişletme
+  ayrı karar). Native paylaşım yolları mağaza dalgasında.
+- Rehber: set-client-domain "File links follow your name too" (EN+TR),
+  corpus + 4 fonksiyon deploy (ilk denemede guide string'i kırıldı —
+  python [:-1] kapanış tırnağını yemişti; düzeltilip yeniden kuruldu).
