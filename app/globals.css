@@ -25353,3 +25353,451 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
 @media (max-width: 860px) {
   .public-site .public-connected-lines { display: none; }
 }
+
+/* Settings report wave 1: search box, compact sidebar, dirty-state bar. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.14));
+  border-radius: 10px;
+  background: var(--app-surface-muted, rgba(0, 0, 0, 0.03));
+}
+.settings-search svg { width: 15px; height: 15px; opacity: 0.55; flex: 0 0 auto; }
+.settings-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  color: inherit;
+}
+.settings-section-button small { display: none; }
+.settings-section-button { padding-top: 8px; padding-bottom: 8px; }
+.settings-section-group { margin-bottom: 4px; }
+.settings-dirty-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  width: fit-content;
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+.settings-dirty-bar[data-dirty="true"] {
+  background: rgba(234, 138, 46, 0.14);
+  color: #b45309;
+}
+
+/* ==== Financial Settings redesign: sticky page header, two-column body, danger zone ==== */
+
+.financial-settings-page {
+  position: relative;
+}
+
+/* Sticks to the top of the scrolling settings content pane. The pane has
+   22px padding and the browser resolves the sticky offset against it, so a
+   matching negative top pins the header flush with the pane's visible edge
+   instead of hovering 22px below it with content peeking through the gap. */
+.settings-page-header {
+  position: sticky;
+  top: -22px;
+  z-index: 30; /* above the cards, below .modal-backdrop (40) */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(250, 251, 253, 0.97);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+.settings-page-header-info {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.settings-page-breadcrumb {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.settings-page-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-page-title-row h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.settings-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid rgba(22, 163, 74, 0.26);
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settings-page-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.settings-page-header-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.financial-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.financial-col {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.financial-panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+/* Half-width cards cannot fit the old two-column label/control rows;
+   stack label above control inside the new layout. */
+.financial-two-col .financial-settings-row {
+  grid-template-columns: 1fr;
+  gap: 6px;
+  min-height: 0;
+}
+
+.financial-two-col .financial-control,
+.financial-two-col .financial-percent-control {
+  max-width: 100%;
+}
+
+.financial-tax-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.financial-tax-choice-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.48);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.financial-tax-choice-card strong {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.financial-tax-choice-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.financial-tax-choice-card[data-active="true"] {
+  border-color: #1478ff;
+  background: rgba(20, 120, 255, 0.07);
+  box-shadow: inset 0 0 0 1px #1478ff;
+}
+
+.financial-tax-choice-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.financial-example-strip {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.055);
+  font-size: 12.5px;
+}
+
+.financial-example-strip strong {
+  font-size: 12.5px;
+}
+
+.financial-example-strip p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.financial-summary-list {
+  display: grid;
+}
+
+.financial-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13.5px;
+}
+
+.financial-summary-row:last-child {
+  border-bottom: 0;
+}
+
+.financial-summary-row > span {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.financial-summary-row > strong {
+  font-weight: 850;
+  text-align: right;
+}
+
+.financial-danger-zone {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(217, 45, 32, 0.4);
+  border-radius: 14px;
+  background: rgba(254, 242, 242, 0.65);
+}
+
+.financial-danger-zone-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d92d20;
+}
+
+.financial-danger-zone-title strong {
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.financial-danger-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(217, 45, 32, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.financial-danger-row-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: rgba(217, 45, 32, 0.1);
+  color: #d92d20;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.financial-danger-row-text {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.financial-danger-row-text strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.financial-danger-row-text p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.financial-danger-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.financial-danger-button {
+  min-height: 38px;
+  padding: 9px 16px;
+  border: 1px solid rgba(217, 45, 32, 0.5);
+  border-radius: 10px;
+  background: transparent;
+  color: #d92d20;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.financial-danger-button:hover:not(:disabled) {
+  background: rgba(217, 45, 32, 0.08);
+}
+
+.financial-danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .financial-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .financial-tax-choice {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page-header-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .settings-page-header-actions .button {
+    flex: 1 1 auto;
+  }
+}
+
+body[data-studio-theme="dark"] .settings-page-header {
+  background: rgba(26, 26, 26, 0.97);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+body[data-studio-theme="dark"] .settings-page-title-row h2 {
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .settings-scope-badge {
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.14);
+  color: #6ee7a0;
+}
+
+/* The dark-theme card overrides above target direct children of
+   .settings-card-stack; these cards sit inside the two-column wrapper. */
+body[data-studio-theme="dark"] .financial-settings-page .card {
+  background: #202020;
+  border-color: rgba(255, 255, 255, 0.11);
+  box-shadow: none;
+}
+
+body[data-studio-theme="dark"] .financial-settings-page .card .card-title-icon {
+  background: rgba(59, 130, 246, 0.18);
+  color: #5b9cff;
+}
+
+body[data-studio-theme="dark"] .financial-settings-page .card .card-title-text {
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .financial-tax-choice-card {
+  background: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f0f0f0;
+}
+
+body[data-studio-theme="dark"] .financial-tax-choice-card[data-active="true"] {
+  border-color: #4f79f6;
+  background: rgba(79, 121, 246, 0.16);
+  box-shadow: inset 0 0 0 1px #4f79f6;
+}
+
+body[data-studio-theme="dark"] .financial-example-strip {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body[data-studio-theme="dark"] .financial-summary-row {
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+body[data-studio-theme="dark"] .financial-danger-zone {
+  background: rgba(127, 29, 29, 0.16);
+  border-color: rgba(248, 113, 113, 0.34);
+}
+
+body[data-studio-theme="dark"] .financial-danger-zone-title {
+  color: #f87171;
+}
+
+body[data-studio-theme="dark"] .financial-danger-row {
+  background: #202020;
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+body[data-studio-theme="dark"] .financial-danger-row-icon {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+
+body[data-studio-theme="dark"] .financial-danger-button {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #f87171;
+}
+
+body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+}

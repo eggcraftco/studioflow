@@ -648,7 +648,7 @@ const TREE_EN: GuideNode[] = [
     id: "settings",
     title: "Settings",
     blocks: [
-      { kind: "para", text: "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls. Some settings are protected, so only the owner or admins can change them." }
+      { kind: "para", text: "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls, or type into the search box above the list — searching \"VAT\", \"logo\" or \"password\" jumps straight to the right section. Some settings are protected, so only the owner or admins can change them." }
     ],
     children: [
       {
@@ -724,6 +724,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
             "WooCommerce: create one webhook (Order created) and paste the delivery URL.",
+            "WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.",
             "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
             "Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
           ] }
@@ -1429,7 +1430,7 @@ const TREE_TR: GuideNode[] = [
     id: "settings",
     title: "Settings (Ayarlar)",
     blocks: [
-      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Soldan bir bölüm seçin. Bazı ayarlar korumalıdır; yalnızca owner veya adminler değiştirebilir." }
+      { kind: "para", text: "NivaDesk'i işinize göre özelleştirdiğiniz yer. Soldan bir bölüm seçin veya listenin üstündeki arama kutusuna yazın — \"KDV\", \"logo\" ya da \"şifre\" yazmak doğru bölüme götürür. Bazı ayarlar korumalıdır; yalnızca owner veya adminler değiştirebilir." }
     ],
     children: [
       {
@@ -1505,6 +1506,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Online mağazanı bağla; canlı web sitesi siparişleri NivaDesk'e otomatik aksın. Her entegrasyon ekranı, platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'ini gösterir; yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
             "WooCommerce: bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
+            "WooCommerce imza denetimi (isteğe bağlı, önerilir): WooCommerce webhook'unda bir Secret belirle, aynısını entegrasyon ekranındaki Signature check kartına yapıştır; NivaDesk her teslimatın imzasını doğrular — yanlış imza geçerli URL ile bile reddedilir.",
             "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
             "Diğer platformlar: Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
           ] }

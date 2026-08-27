@@ -170,12 +170,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "client-domain", title: "Customer Portal Domain", appKey: "Client Domain", description: "Branded customer links: your subdomain and your own domain.", icon: "brand", group: "design" },
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
-  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workflowGroup" },
+  { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
   { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
   { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "files" },
-  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "dataGroup" },
+  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "files" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
   { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "integrations" },
   { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "integrations" },
@@ -183,13 +183,36 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" }
 ];
 
+// Settings search (settings report): each section carries the terms a user
+// actually types — "VAT", "logo", "password" — beyond its title words.
+const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
+  "profile-security": "password email photo sign in account delete biometric security",
+  preferences: "theme language dark light auto lock",
+  about: "version release diagnostics whats new",
+  branding: "logo name subtitle brand colour",
+  "client-domain": "domain subdomain dns cname portal accent powered by",
+  pdf: "invoice pdf export vat eori job sheet preview",
+  workflow: "status steps template material headings badges",
+  "quick-reply": "ai reply openai api key knowledge tone quick",
+  financial: "vat tax fee currency corporation margin recalculate decimal",
+  "team-access": "role member permission invite seat join request",
+  "message-settings": "chat group messaging direct",
+  "safety-uploads": "upload file size limit policy zip audit virus",
+  data: "backup export import csv restore delete archive",
+  "plan-access": "billing plan storage subscription upgrade seat",
+  woocommerce: "webhook woocommerce store website orders",
+  shopify: "shopify store sync app orders",
+  inbound: "zapier make webhook custom api platforms",
+  "support-tickets": "ticket help support contact"
+};
+
 const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
   personal: "Personal",
-  design: "Workspace Design",
+  design: "Workspace",
   workflowGroup: "Workflow",
   finance: "Finance & Tax",
   team: "Team & Permissions",
-  files: "Files & Security",
+  files: "Files & Data",
   dataGroup: "Data & Backups",
   billing: "Billing",
   integrations: "Integrations",
@@ -332,6 +355,7 @@ export default function SettingsPage() {
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
+  const [sectionSearch, setSectionSearch] = useState("");
   // Sections register their own unsaved edits here; see ./unsavedChanges.
   const settingsDirty = useProvideSettingsDirty();
   const unsavedSectionId = useMemo(
@@ -590,10 +614,33 @@ export default function SettingsPage() {
             <h1>{t("Settings")}</h1>
             <p>{t("Choose a section to edit.")}</p>
           </div>
+          <label className="settings-search">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5" /><path d="M13.2 13.2 17 17" /></svg>
+            <input
+              type="search"
+              value={sectionSearch}
+              placeholder={t("Search settings...")}
+              aria-label={t("Search settings...")}
+              onChange={event => setSectionSearch(event.target.value)}
+            />
+          </label>
           <div className="settings-section-list">
-            {visibleSections.map((section, index) => {
+            {(sectionSearch.trim()
+              ? visibleSections.filter(section => {
+                  const query = sectionSearch.trim().toLowerCase();
+                  const haystack = [
+                    section.title,
+                    section.description,
+                    t(section.title),
+                    t(section.description),
+                    SETTINGS_SEARCH_KEYWORDS[section.id] || ""
+                  ].join(" ").toLowerCase();
+                  return query.split(/\s+/).every(word => haystack.includes(word));
+                })
+              : visibleSections
+            ).map((section, index, list) => {
               const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
-              const showGroupHeading = index === 0 || visibleSections[index - 1].group !== section.group;
+              const showGroupHeading = index === 0 || list[index - 1].group !== section.group;
               return (
                 <Fragment key={section.id}>
                   {showGroupHeading ? (
@@ -657,6 +704,12 @@ export default function SettingsPage() {
             userEmail: user.email ?? "Signed in",
             onDataImported: refreshSettingsAfterImport
           }) : null}
+
+          <div className="settings-dirty-bar" data-dirty={settingsDirty.dirtySections[selectedSection.id] ? "true" : "false"}>
+            {settingsDirty.dirtySections[selectedSection.id]
+              ? <>● {t("Unsaved changes")}</>
+              : <>✓ {t("No unsaved changes")}</>}
+          </div>
         </section>
       </div>
       </SettingsDirtyProvider>
@@ -3989,6 +4042,15 @@ function FinancialSettingsSection({
     }
   }
 
+  // Discard resets the draft to the last loaded/saved settings; the unsaved
+  // guard's baseline was captured from that same object, so dirty drops back
+  // to false without any extra bookkeeping.
+  function handleDiscard() {
+    setDraft(settings);
+    setStatus("");
+    setError("");
+  }
+
   // The old flow was a browser confirm over a number nobody could see. Saving
   // the settings first is deliberate: the preview has to describe the rules that
   // will actually be applied, not the draft on screen.
@@ -4100,9 +4162,14 @@ function FinancialSettingsSection({
   const previewCurrency = draft.selectedCurrency || "£";
   const previewMoney = (value: number) =>
     `${previewCurrency}${Number(value || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const currencySummaryLabel =
+    FINANCIAL_CURRENCIES.find(([symbol]) => symbol === draft.selectedCurrency)?.[1] ?? previewCurrency;
+  const activeTaxBasisLabel = draft.taxCalculationType === "Profit"
+    ? (draft.taxRuleNameProfit || "Profit")
+    : (draft.taxRuleNameRevenue || "Revenue");
 
   return (
-    <div className="settings-card-stack">
+    <div className="settings-card-stack financial-settings-page">
       {recalculationPreview ? (
         <SettingsDialog
           wide
@@ -4236,267 +4303,348 @@ function FinancialSettingsSection({
         </section>
       ) : null}
 
-      <section className="card app-card financial-settings-card">
-        <header className="financial-settings-main-title">
-          <span className="financial-settings-main-icon">%</span>
-          <h2>{t("Financial Settings")}</h2>
-        </header>
-
-        <div className="financial-settings-section">
-          <div className="financial-settings-section-title">
-            <strong>{t("General")}</strong>
-            <span />
+      <header className="settings-page-header">
+        <div className="settings-page-header-info">
+          <p className="settings-page-breadcrumb">{t("Settings")} / {t("Finance & Tax")}</p>
+          <div className="settings-page-title-row">
+            <h2>{t("Financial Settings")}</h2>
+            <span className="settings-scope-badge">{t("Workspace · Owner managed")}</span>
           </div>
+          <p className="settings-page-subtitle">{t("Control currency, fees and tax calculations for this workspace.")}</p>
+        </div>
+        <div className="settings-page-header-actions">
+          <button
+            type="button"
+            className="button secondary"
+            disabled={saving || !financialDirty}
+            onClick={handleDiscard}
+          >
+            {t("Discard changes")}
+          </button>
+          <button
+            type="button"
+            className="button"
+            disabled={!canEdit || saving || !financialDirty}
+            onClick={() => { void handleSave(); }}
+          >
+            {saving ? t("Saving...") : t("Save changes")}
+          </button>
+        </div>
+        {status ? <p className="success-copy settings-page-header-note">{status}</p> : null}
+        {error ? <p className="layout-error settings-page-header-note">{error}</p> : null}
+      </header>
 
-          <label className="financial-settings-row">
-            <span>{t("Currency Symbol")}</span>
-            <select
-              className="input financial-control"
-              value={draft.selectedCurrency}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("selectedCurrency", event.target.value)}
-            >
-              {FINANCIAL_CURRENCIES.map(([symbol, label]) => (
-                <option value={symbol} key={symbol}>{label}</option>
-              ))}
-            </select>
-          </label>
+      <div className="financial-two-col">
+        <div className="financial-col">
+          <section className="card app-card financial-panel">
+            <CardTitle icon="finance" eyebrow={t("General")} title={t("Currency & formatting")} />
 
-          <label className="financial-settings-row">
-            <span>{t("Decimal Separator")}</span>
-            <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
+            <label className="financial-settings-row">
+              <span>{t("Currency Symbol")}</span>
+              <select
+                className="input financial-control"
+                value={draft.selectedCurrency}
+                disabled={!canEdit || saving}
+                onChange={event => updateString("selectedCurrency", event.target.value)}
+              >
+                {FINANCIAL_CURRENCIES.map(([symbol, label]) => (
+                  <option value={symbol} key={symbol}>{label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="financial-settings-row">
+              <span>{t("Decimal Separator")}</span>
+              <div className={canEdit ? "financial-segmented" : "financial-segmented is-disabled"}>
+                <button
+                  type="button"
+                  className={draft.selectedDecimalSeparator === "." ? "active" : ""}
+                  disabled={!canEdit || saving}
+                  onClick={() => updateString("selectedDecimalSeparator", ".")}
+                >
+                  {t("Dot (.)")}
+                </button>
+                <button
+                  type="button"
+                  className={draft.selectedDecimalSeparator === "," ? "active" : ""}
+                  disabled={!canEdit || saving}
+                  onClick={() => updateString("selectedDecimalSeparator", ",")}
+                >
+                  {t("Comma (,)")}
+                </button>
+              </div>
+            </label>
+
+            <p className="muted-copy">
+              {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
+            </p>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="docText" eyebrow={t("Tax / VAT Settings")} title={t("Tax calculation")} />
+
+            <div className="financial-tax-choice" role="radiogroup" aria-label={t("Calculate Tax On")}>
               <button
                 type="button"
-                className={draft.selectedDecimalSeparator === "." ? "active" : ""}
+                role="radio"
+                aria-checked={draft.taxCalculationType !== "Profit"}
+                data-active={draft.taxCalculationType !== "Profit" ? "true" : "false"}
+                className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("selectedDecimalSeparator", ".")}
+                onClick={() => updateString("taxCalculationType", "Revenue")}
               >
-                {t("Dot (.)")}
+                <strong>{draft.taxRuleNameRevenue || "Revenue"}</strong>
+                <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
               </button>
               <button
                 type="button"
-                className={draft.selectedDecimalSeparator === "," ? "active" : ""}
+                role="radio"
+                aria-checked={draft.taxCalculationType === "Profit"}
+                data-active={draft.taxCalculationType === "Profit" ? "true" : "false"}
+                className="financial-tax-choice-card"
                 disabled={!canEdit || saving}
-                onClick={() => updateString("selectedDecimalSeparator", ",")}
+                onClick={() => updateString("taxCalculationType", "Profit")}
               >
-                {t("Comma (,)")}
+                <strong>{draft.taxRuleNameProfit || "Profit"}</strong>
+                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
               </button>
             </div>
-          </label>
 
-          <p className="muted-copy">
-            {t("Changing the currency symbol only relabels amounts — existing records are never converted between currencies. The decimal separator changes how numbers are shown; CSV exports always use a dot and a separate Currency column.")}
-          </p>
-
-          <label className="financial-settings-row">
-            <span>{t("Avg. Platform Fee (%)")}</span>
-            <span className="financial-percent-control">
-              <input
-                className="input financial-control"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={draft.feePercentage}
-                disabled={!canEdit || saving}
-                onChange={event => updateNumber("feePercentage", Number(event.target.value))}
-              />
-              <em>%</em>
-            </span>
-          </label>
-        </div>
-
-        <div className="financial-settings-section">
-          <div className="financial-settings-section-title">
-            <strong>{t("Tax / VAT Settings")}</strong>
-            <span />
-          </div>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Rule 1 (Revenue)")}</span>
-            <input
-              className="input financial-control"
-              value={draft.taxRuleNameRevenue}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Rule 2 (Profit)")}</span>
-            <input
-              className="input financial-control"
-              value={draft.taxRuleNameProfit}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxRuleNameProfit", event.target.value)}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Default VAT Rate (%)")}</span>
-            <span className="financial-percent-control is-vat-rate">
-              <input
-                className="input financial-control"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                value={draft.defaultTaxRate}
-                disabled={!canEdit || saving}
-                onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
-              />
-              <em>%</em>
-            </span>
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Default delivery time for new orders (days)")}</span>
-            <input
-              className="input financial-control"
-              type="number"
-              min="1"
-              max="730"
-              step="1"
-              value={draft.defaultDeliveryTime}
-              disabled={!canEdit || saving}
-              onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
-            />
-          </label>
-
-          <label className="financial-settings-row wide-control">
-            <span>{t("Calculate Tax On")}</span>
-            <select
-              className="input financial-control"
-              value={draft.taxCalculationType}
-              disabled={!canEdit || saving}
-              onChange={event => updateString("taxCalculationType", event.target.value)}
-            >
-              <option value="Revenue">{draft.taxRuleNameRevenue || "Revenue"}</option>
-              <option value="Profit">{draft.taxRuleNameProfit || "Profit"}</option>
-            </select>
-          </label>
-
-          {/* The page named the rule and the rate and never said what either one
-              meant, so nobody could tell whether the price already contained the
-              VAT or had it added later. The arithmetic is spelled out with this
-              workspace's own rate instead of described. */}
-          <div className="financial-tax-explainer">
-            <strong>{t("What this means")}</strong>
-            {draft.taxCalculationType === "Profit" ? (
-              <>
-                <p>{t("Margin scheme: VAT is due on your margin, not on the whole price. The margin already contains the VAT.")}</p>
+            {/* The page named the rule and the rate and never said what either one
+                meant, so nobody could tell whether the price already contained the
+                VAT or had it added later. The arithmetic is spelled out with this
+                workspace's own rate instead of described. */}
+            <div className="financial-example-strip">
+              <strong>{t("What this means")}</strong>
+              {draft.taxCalculationType === "Profit" ? (
                 <p className="financial-tax-example">
                   {t("Example")}: {previewMoney(1000)} {t("order")}, {previewMoney(600)} {t("cost")} →{" "}
                   {previewMoney(400)} {t("margin")} = {previewMoney(taxExample.marginNet)} + {previewMoney(taxExample.marginVat)} {t("VAT")}
                 </p>
-              </>
-            ) : (
-              <>
-                <p>{t("Prices include VAT. The figure you enter is what the customer pays; the VAT is taken out of it, not added on top.")}</p>
+              ) : (
                 <p className="financial-tax-example">
                   {t("Example")}: {previewMoney(1000)} {t("order")} ={" "}
                   {previewMoney(taxExample.net)} + {previewMoney(taxExample.vat)} {t("VAT")} {t("at")} {taxExample.rate}%
                 </p>
-              </>
-            )}
-            <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
-          </div>
+              )}
+              <p className="muted-copy">{t("To charge VAT on top of your prices instead, raise the price itself — NivaDesk does not add it at invoice time.")}</p>
+            </div>
 
-          <label className="financial-settings-row">
-            <span>{t("Use Tax Transition Date")}</span>
-            <span className="financial-checkbox-line">
-              <input
-                type="checkbox"
-                checked={draft.taxMilestoneEnabled}
-                disabled={!canEdit || saving}
-                onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
-              />
-              <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
-            </span>
-          </label>
-          <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
-
-          {draft.taxMilestoneEnabled ? (
             <label className="financial-settings-row wide-control">
-              <span>{t("VAT Registration Date")}</span>
+              <span>{t("Tax rule label — calculated on revenue")}</span>
               <input
                 className="input financial-control"
-                type="date"
-                value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
+                value={draft.taxRuleNameRevenue}
                 disabled={!canEdit || saving}
-                onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
+                onChange={event => updateString("taxRuleNameRevenue", event.target.value)}
               />
             </label>
-          ) : null}
 
-          <label className="financial-settings-row">
-            <span>{t("Enable Corporation Tax")}</span>
-            <span className="financial-checkbox-line">
+            <label className="financial-settings-row wide-control">
+              <span>{t("Tax rule label — calculated on eligible profit")}</span>
               <input
-                type="checkbox"
-                checked={Boolean(draft.corporationTaxEnabled)}
+                className="input financial-control"
+                value={draft.taxRuleNameProfit}
                 disabled={!canEdit || saving}
-                onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
+                onChange={event => updateString("taxRuleNameProfit", event.target.value)}
               />
-              <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
-            </span>
-          </label>
-          <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
+            </label>
 
-          {draft.corporationTaxEnabled ? (
-            <>
-              <label className="financial-settings-row wide-control">
-                <span>{t("Corporation Tax Rate (%)")}</span>
-                <span className="financial-percent-control is-vat-rate">
-                  <input
-                    className="input financial-control"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={draft.corporationTaxRate ?? 19}
-                    disabled={!canEdit || saving}
-                    onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
-                  />
-                  <em>%</em>
-                </span>
-              </label>
-              <label className="financial-settings-row wide-control">
-                <span>{t("Invoice Footer / Payment Terms")}</span>
-                <textarea
+            <label className="financial-settings-row wide-control">
+              <span>{t("Default VAT Rate (%)")}</span>
+              <span className="financial-percent-control is-vat-rate">
+                <input
                   className="input financial-control"
-                  rows={3}
-                  value={draft.invoiceFooterNote ?? ""}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={draft.defaultTaxRate}
                   disabled={!canEdit || saving}
-                  placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
-                  onChange={event => updateString("invoiceFooterNote", event.target.value)}
+                  onChange={event => updateNumber("defaultTaxRate", Number(event.target.value))}
+                />
+                <em>%</em>
+              </span>
+            </label>
+          </section>
+        </div>
+
+        <div className="financial-col">
+          <section className="card app-card financial-panel">
+            <CardTitle icon="orders" eyebrow={t("General")} title={t("Defaults for new orders")} />
+
+            <label className="financial-settings-row">
+              <span>{t("Avg. Platform Fee (%)")}</span>
+              <span className="financial-percent-control">
+                <input
+                  className="input financial-control"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={draft.feePercentage}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("feePercentage", Number(event.target.value))}
+                />
+                <em>%</em>
+              </span>
+            </label>
+
+            <label className="financial-settings-row wide-control">
+              <span>{t("Default delivery time for new orders (days)")}</span>
+              <input
+                className="input financial-control"
+                type="number"
+                min="1"
+                max="730"
+                step="1"
+                value={draft.defaultDeliveryTime}
+                disabled={!canEdit || saving}
+                onChange={event => updateNumber("defaultDeliveryTime", Number(event.target.value))}
+              />
+            </label>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="check" eyebrow={t("Workspace")} title={t("Current workspace calculation")} />
+            <div className="financial-summary-list">
+              <div className="financial-summary-row">
+                <span>{t("Currency")}</span>
+                <strong>{currencySummaryLabel}</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("VAT")}</span>
+                <strong>{taxExample.rate}%</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("Tax basis")}</span>
+                <strong>{activeTaxBasisLabel}</strong>
+              </div>
+              <div className="financial-summary-row">
+                <span>{t("Applies to")}</span>
+                <strong>{t("New orders")}</strong>
+              </div>
+            </div>
+            <p className="muted-copy">{t("Follows your edits above. New orders use these values once saved.")}</p>
+          </section>
+
+          <section className="card app-card financial-panel">
+            <CardTitle icon="calendarClock" eyebrow={t("Tax / VAT Settings")} title={t("Effective dates")} />
+
+            <label className="financial-settings-row">
+              <span>{t("Use Tax Transition Date")}</span>
+              <span className="financial-checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={draft.taxMilestoneEnabled}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateBoolean("taxMilestoneEnabled", event.target.checked)}
+                />
+                <strong aria-hidden="true">{t("Use Tax Transition Date")}</strong>
+              </span>
+            </label>
+            <p className="muted-copy">{t("Turning this on reveals a VAT Registration Date field: orders before that date are treated as pre-registration.")}</p>
+
+            {draft.taxMilestoneEnabled ? (
+              <label className="financial-settings-row wide-control">
+                <span>{t("VAT Registration Date")}</span>
+                <input
+                  className="input financial-control"
+                  type="date"
+                  value={dateInputValueFromSeconds(draft.taxMilestoneDate)}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateNumber("taxMilestoneDate", secondsFromDateInput(event.target.value))}
                 />
               </label>
-            </>
-          ) : null}
+            ) : null}
+
+            <label className="financial-settings-row">
+              <span>{t("Enable Corporation Tax")}</span>
+              <span className="financial-checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.corporationTaxEnabled)}
+                  disabled={!canEdit || saving}
+                  onChange={event => updateBoolean("corporationTaxEnabled", event.target.checked)}
+                />
+                <strong aria-hidden="true">{t("Enable Corporation Tax")}</strong>
+              </span>
+            </label>
+            <p className="muted-copy">{t("Turning this on reveals a Corporation Tax rate field used in the yearly summary.")}</p>
+
+            {draft.corporationTaxEnabled ? (
+              <>
+                <label className="financial-settings-row wide-control">
+                  <span>{t("Corporation Tax Rate (%)")}</span>
+                  <span className="financial-percent-control is-vat-rate">
+                    <input
+                      className="input financial-control"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={draft.corporationTaxRate ?? 19}
+                      disabled={!canEdit || saving}
+                      onChange={event => updateNumber("corporationTaxRate", Number(event.target.value))}
+                    />
+                    <em>%</em>
+                  </span>
+                </label>
+                <p className="muted-copy">{t("Estimated — a planning figure, not your filed liability.")}</p>
+                <label className="financial-settings-row wide-control">
+                  <span>{t("Invoice Footer / Payment Terms")}</span>
+                  <textarea
+                    className="input financial-control"
+                    rows={3}
+                    value={draft.invoiceFooterNote ?? ""}
+                    disabled={!canEdit || saving}
+                    placeholder={t("Bank details, payment terms, thank-you note shown on the customer invoice.")}
+                    onChange={event => updateString("invoiceFooterNote", event.target.value)}
+                  />
+                </label>
+              </>
+            ) : null}
+          </section>
+        </div>
+      </div>
+
+      <section className="financial-danger-zone">
+        <div className="financial-danger-zone-title">
+          <span aria-hidden="true">⚠</span>
+          <strong>{t("Existing order tools")}</strong>
+        </div>
+        <p className="muted-copy">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
+
+        <div className="financial-danger-row">
+          <span className="financial-danger-row-icon" aria-hidden="true">↻</span>
+          <div className="financial-danger-row-text">
+            <strong>{t("Recalculate Taxes for Past Orders")}</strong>
+            <p>{t("Apply the current VAT rule, default rate and platform fee to orders you already have.")}</p>
+          </div>
+          <div className="financial-danger-row-actions">
+            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
+              {recalculating ? t("Recalculating...") : t("Recalculate")}
+            </button>
+          </div>
         </div>
 
-        <div className="financial-settings-footer">
-          <button className="button secondary financial-save-button" type="button" disabled={!canEdit || saving || !financialDirty} onClick={() => { void handleSave(); }}>
-            {saving ? t("Saving...") : t("Save Financial Settings")}
-          </button>
-          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || recalculating} onClick={handleRecalculate}>
-            <span aria-hidden="true">↻</span>
-            {recalculating ? t("Recalculating...") : t("Recalculate Taxes for Past Orders")}
-          </button>
-          <button className="financial-recalculate-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
-            <span aria-hidden="true">⊘</span>
-            {clearingTax ? t("Removing VAT...") : t("Remove VAT from all orders")}
-          </button>
-          {clearTaxUndoRunId ? (
-            <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
-              {t("Undo VAT removal")}
+        <div className="financial-danger-row">
+          <span className="financial-danger-row-icon" aria-hidden="true">⊘</span>
+          <div className="financial-danger-row-text">
+            <strong>{t("Remove VAT from all orders")}</strong>
+            <p>{t("Use this when VAT does not apply — you sell abroad, or you are not VAT-registered.")}</p>
+          </div>
+          <div className="financial-danger-row-actions">
+            {clearTaxUndoRunId ? (
+              <button className="button secondary" type="button" disabled={clearingTax} onClick={() => { void handleUndoClearTax(); }}>
+                {t("Undo VAT removal")}
+              </button>
+            ) : null}
+            <button className="financial-danger-button" type="button" disabled={!canEdit || saving || clearingTax} onClick={handleClearTax}>
+              {clearingTax ? t("Removing VAT...") : t("Remove VAT")}
             </button>
-          ) : null}
+          </div>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
-        <p className="muted-copy financial-settings-note">{t("Changing the default calculation model sets the tax rule for new projects. Use recalculation when you want existing projects to adopt the current VAT rule, default VAT rate and platform fee.")}</p>
       </section>
     </div>
   );
@@ -4571,6 +4719,8 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
   const [webhookInfo, setWebhookInfo] = useState<IntegrationWebhookInfo | null>(null);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [signatureSecretDraft, setSignatureSecretDraft] = useState("");
+  const [signatureState, setSignatureState] = useState<{ saving: boolean; message: string; enabled: boolean | null }>({ saving: false, message: "", enabled: null });
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTest, setWebhookTest] = useState<{ ok?: boolean; message?: string } | null>(null);
 
@@ -4700,7 +4850,7 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
         <CardTitle icon="dashboard" eyebrow={t("What happens when it is active")} title={t("Incoming website orders")} />
         <p className="muted-copy">{t("New website orders are added to Orders automatically. They also appear in Schedule and are saved under this Company ID.")}</p>
         <p className="muted-copy">{t("Redelivering the same order never creates a copy: the order number is the identity, and a redelivery only updates what the shop owns — production status and tracking stay untouched.")}</p>
-        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL. WooCommerce's own webhook signature is not checked, so treat the URL like a password and replace it if it leaks.")}</p>
+        <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL. Add your WooCommerce webhook Secret below and every delivery's signature is verified as well — without it, treat the URL like a password and replace it if it leaks.")}</p>
         <div className="settings-action-row">
           <button className="button secondary" type="button" disabled={testingWebhook || !companyId} onClick={() => { void runShopWebhookTest(); }}>
             {testingWebhook ? t("Testing...") : t("Send test webhook")}
@@ -4711,6 +4861,63 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
             {webhookTest.message}{" "}
             {webhookTest.ok ? t("This proves the URL, workspace and token. It does not prove your own tool is pointed at it.") : ""}
           </p>
+        ) : null}
+      </section>
+
+      <section className="card app-card quick-reply-settings-card">
+        <CardTitle icon="lock" eyebrow={t("Optional, recommended")} title={t("Signature check")} />
+        <p className="muted-copy">{t("Paste the same Secret you set on the WooCommerce webhook. Every delivery is then verified with its signature, and a wrong signature is rejected even alongside a valid URL.")}</p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            className="input"
+            style={{ maxWidth: 320 }}
+            type="password"
+            value={signatureSecretDraft}
+            placeholder={t("WooCommerce webhook Secret")}
+            onChange={event => setSignatureSecretDraft(event.target.value)}
+          />
+          <button
+            className="button"
+            type="button"
+            disabled={signatureState.saving || !companyId || signatureSecretDraft.trim().length < 8}
+            onClick={() => {
+              void (async () => {
+                setSignatureState(current => ({ ...current, saving: true, message: "" }));
+                try {
+                  const callable = httpsCallable<{ companyId: string; secret: string }, { ok: boolean; enabled: boolean; last4: string }>(functions, "saveWooSignatureSecret");
+                  const result = await callable({ companyId, secret: signatureSecretDraft.trim() });
+                  setSignatureSecretDraft("");
+                  setSignatureState({ saving: false, enabled: result.data.enabled, message: `${t("Signature checks are on.")} ····${result.data.last4}` });
+                } catch (failure) {
+                  setSignatureState({ saving: false, enabled: null, message: failure instanceof Error ? failure.message.replace(/^[a-z-]+:\s*/i, "") : t("Something went wrong.") });
+                }
+              })();
+            }}
+          >
+            {signatureState.saving ? t("Saving...") : t("Save secret")}
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={signatureState.saving || !companyId}
+            onClick={() => {
+              void (async () => {
+                setSignatureState(current => ({ ...current, saving: true, message: "" }));
+                try {
+                  const callable = httpsCallable<{ companyId: string; secret: string }, { ok: boolean; enabled: boolean }>(functions, "saveWooSignatureSecret");
+                  await callable({ companyId, secret: "" });
+                  setSignatureState({ saving: false, enabled: false, message: t("Signature checks are off — the URL token is the only lock.") });
+                } catch (failure) {
+                  setSignatureState({ saving: false, enabled: null, message: failure instanceof Error ? failure.message.replace(/^[a-z-]+:\s*/i, "") : t("Something went wrong.") });
+                }
+              })();
+            }}
+          >
+            {t("Turn off")}
+          </button>
+        </div>
+        {signatureState.message ? (
+          <p className={signatureState.enabled === null ? "layout-error" : "success-copy"}>{signatureState.message}</p>
         ) : null}
       </section>
     </div>
@@ -5227,7 +5434,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
   "shippingCost": 4.99,
   "source": "Wix"
 }`}</pre>
-        <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. Amounts are shown in your workspace currency.")}</p>
+        <p className="muted-copy">{t("Send total as a plain number. A status of cancelled, refunded, voided or failed means the order is not created. An order in another currency keeps its own currency — NivaDesk never converts it silently, and the dashboard lists it unconverted.")}</p>
         <p className="muted-copy">{t("Redelivery is safe: orderId is the identity, so sending the same order again updates it instead of creating a copy — production status and tracking are never overwritten. There is no automatic retry on our side; if your tool retries, that is fine for the same reason.")}</p>
         <p className="muted-copy">{t("Amounts are rounded to 2 decimal places; both 1,234.56 and 1.234,56 styles are read correctly. schemaVersion says which payload format this is — today it is 1, and future formats will keep 1 working.")}</p>
         <p className="muted-copy">{t("Authentication is the secret token inside the Delivery URL — there is no separate signature header. Treat the URL like a password and replace it if it leaks.")}</p>
@@ -5699,7 +5906,7 @@ function DataManagementSection({
           </button>
         </div>
 
-        <p className="muted-copy">{t("Download backup is the one to keep — it restores into NivaDesk on any device. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
+        <p className="muted-copy">{t("Workspace data backup restores your settings, orders and customers into NivaDesk on any device — it does not include uploaded files. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
         {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {lastImportRunId ? (
