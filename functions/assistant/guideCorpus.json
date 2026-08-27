@@ -149,7 +149,7 @@
    "id": "customers",
    "title": "Customers",
    "path": "Customers",
-   "text": "Your client directory: every customer with their details and the work linked to them.\n- Add a customer, edit their details, or remove one you no longer need.\n- Open a customer to see their details and their designs and orders.\n- Customer notes stay with the customer and appear on each of their orders.\n- Use the collapsible list to find a customer quickly."
+   "text": "Your client directory: every customer with their details and the work linked to them.\n- Add a customer, edit their details, or remove one you no longer need.\n- Open a customer to see their details and their designs and orders.\n- Customer notes stay with the customer and appear on each of their orders.\n- Use the collapsible list to find a customer quickly.\n- How many customers are new versus returning in a period lives on the Dashboard: the Financial Breakdown shows New customers and Returning customers for the selected range — new means their first order falls inside it."
   },
   {
    "id": "inventory",
