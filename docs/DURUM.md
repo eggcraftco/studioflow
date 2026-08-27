@@ -695,3 +695,15 @@ eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
   temizlik gerekmez, ama kullanıcının gerçek alt alan adı üretimde
   HENÜZ CLAIM EDİLMEDİ (nivadesk.app/settings'ten yapılabilir).
 - Üretim kanıtı curl ile europe-west2 URL'lerine; hafızaya kaydedildi.
+
+### Portal branding native parite TAMAM (27 Ağu öğleden sonra)
+- Swift 00bbefc: brandingCard (ColorPicker + sRGB hex dönüşümü, boşken
+  #2563eb; "Use the default colour" yalnız renk seçiliyken), Powered by
+  Toggle, 9 anahtar DilMotoru'da web'le bayt-bayt aynı; macOS + iOS
+  Simulator BUILD SUCCEEDED.
+- Android 2a02f26: ClientPortalBranding + saveClientPortalBranding
+  wrapper; renk kontrolü OrderDetail'in CardColorSwatch desenini
+  yeniden kullanan 11 swatch'lık FlowRow (web varsayılanı #2563eb +
+  sunucu örneği #2f6f6d dahil); SettingSwitch + Save; TR_13'e 9 anahtar
+  web'den bire bir; BUILD SUCCESSFUL.
+- Branding artık 4 platformda; mağaza sürümleriyle kullanıcıya ulaşır.
