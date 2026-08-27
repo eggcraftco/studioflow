@@ -24620,3 +24620,81 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
   line-height: 1.55;
   color: var(--public-muted);
 }
+
+/* Global-website report, visual pass: skip link, hero zoom, muted Planned card. */
+.public-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 60;
+  padding: 10px 16px;
+  border-radius: 0 0 10px 0;
+  background: var(--public-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.public-skip-link:focus {
+  left: 0;
+}
+.hero-app-shot {
+  position: relative;
+}
+.hero-shot-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--public-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(23, 25, 35, 0.12);
+}
+.hero-shot-zoom:hover {
+  background: #fff;
+}
+.public-shot-modal {
+  position: relative;
+  max-width: min(1240px, 94vw);
+  max-height: 92vh;
+  border-radius: 16px;
+  overflow: auto;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 30px 80px rgba(10, 12, 18, 0.4);
+}
+.public-shot-modal img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+.public-demo-fallback {
+  margin: 10px 0 0;
+  text-align: center;
+}
+.public-demo-fallback a {
+  color: #fff;
+  text-decoration: underline;
+}
+/* Planned platforms read as roadmap, not as available product. */
+.public-platform-card[data-platform="windows"] {
+  opacity: 0.78;
+  border-style: dashed;
+}
+.public-platform-card[data-platform="windows"] .public-platform-status {
+  background: rgba(120, 124, 130, 0.14);
+  color: #5d646b;
+}
+@media (max-width: 719px) {
+  /* Phones tap the store badge directly; a QR code is a desktop affordance. */
+  .public-appstore-qr-trigger {
+    display: none;
+  }
+}

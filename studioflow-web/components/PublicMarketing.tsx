@@ -928,6 +928,8 @@ function PublicFooter() {
               <Link href="/guide">{t("nav.guide")}</Link>
               <Link href="/faq">{t("nav.faq")}</Link>
               <Link href="/changelog">{t("nav.changelog")}</Link>
+              <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">App Store</a>
+              <a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer">Google Play</a>
             </nav>
           </section>
           <section className="public-footer-group">
@@ -979,7 +981,7 @@ function PublicFooter() {
 }
 
 function PublicShellContent({ children }: { children: ReactNode }) {
-  const { dir } = usePublicSiteLanguage();
+  const { dir, t } = usePublicSiteLanguage();
   const pathname = usePathname();
   usePublicScrollReveal(pathname);
 
@@ -987,8 +989,9 @@ function PublicShellContent({ children }: { children: ReactNode }) {
     <div className="public-site" dir={dir}>
       <SiteVisitBeacon />
       <GoogleAdsTag />
+      <a href="#public-main" className="public-skip-link">{t("nav.skipToContent")}</a>
       <PublicHeader />
-      <main>{children}</main>
+      <main id="public-main">{children}</main>
       <PublicFooter />
       <SupportChatWidget />
     </div>
@@ -1055,35 +1058,77 @@ function ProductScene() {
   const { t } = usePublicSiteLanguage();
   // Default to £ for the server render; resolve the visitor's symbol after hydration.
   const [currencySymbol, setCurrencySymbol] = useState("£");
+  const [shotOpen, setShotOpen] = useState(false);
   useEffect(() => {
     setCurrencySymbol(heroCurrencySymbol());
   }, []);
+  useEffect(() => {
+    if (!shotOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShotOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [shotOpen]);
   return (
-    <div className="public-hero-visual" aria-hidden="true">
+    <div className="public-hero-visual">
       <div className="hero-app-shot">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/hero-app2.webp" alt="NivaDesk order workspace" loading="eager" />
+        <button type="button" className="hero-shot-zoom" onClick={() => setShotOpen(true)}>
+          <svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            <circle cx="9" cy="9" r="5.5" /><path d="M13 13l4 4M9 6.5v5M6.5 9h5" />
+          </svg>
+          {t("hero.seeFullSize")}
+        </button>
       </div>
-      <div className="hero-float hero-float-orders">
+      {shotOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="public-qr-modal-backdrop" role="presentation" onClick={() => setShotOpen(false)}>
+              <div
+                className="public-shot-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t("hero.seeFullSize")}
+                onClick={event => event.stopPropagation()}
+              >
+                <button type="button" className="public-qr-modal-close" onClick={() => setShotOpen(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/hero-app2.webp" alt="NivaDesk order workspace" />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+      <div className="hero-float hero-float-orders" aria-hidden="true">
         <span className="hero-float-icon" data-tone="sage">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
         </span>
         <div><strong>{t("heroFloat.ordersTitle")}</strong><span>{t("heroFloat.ordersSub")}</span></div>
       </div>
-      <div className="hero-float hero-float-received">
+      <div className="hero-float hero-float-received" aria-hidden="true">
         <span className="hero-float-icon" data-tone="green">
           <span className="hero-float-currency">{currencySymbol}</span>
         </span>
         <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
       </div>
-      <div className="hero-float hero-float-chatgpt">
+      <div className="hero-float hero-float-chatgpt" aria-hidden="true">
         <span className="hero-float-icon" data-tone="violet">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /></svg>
         </span>
         <div><strong>{t("heroFloat.chatgptTitle")}</strong><span>{t("heroFloat.chatgptSub")}</span></div>
         <span className="hero-float-arrow">›</span>
       </div>
-      <div className="hero-float hero-float-file">
+      <div className="hero-float hero-float-file" aria-hidden="true">
         <span className="hero-float-icon" data-tone="gold">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 3h6l4 4v10H5zM11 3v4h4" /></svg>
         </span>
@@ -2645,6 +2690,7 @@ function AdvancedAreasSection() {
 function PublicHomePageContent() {
   const { t } = usePublicSiteLanguage();
   const [demoOpen, setDemoOpen] = useState(false);
+  const [demoFailed, setDemoFailed] = useState(false);
 
   return (
     <>
@@ -2709,7 +2755,13 @@ function PublicHomePageContent() {
                   autoPlay
                   playsInline
                   onEnded={() => trackLandingEvent("homepage_demo_complete")}
+                  onError={() => setDemoFailed(true)}
                 />
+                {demoFailed ? (
+                  <p className="public-demo-fallback">
+                    <a href="/nivadesk-demo.mp4" target="_blank" rel="noopener noreferrer">{t("hero.demoFallback")}</a>
+                  </p>
+                ) : null}
               </div>
             </div>,
             document.body

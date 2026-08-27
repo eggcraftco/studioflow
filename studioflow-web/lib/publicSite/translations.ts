@@ -78,6 +78,9 @@ export const PUBLIC_SITE_EN = {
   "adv.files.body": "Every design, photo and document in one library — linked to orders and shared with clients only when you choose.",
   "adv.domain.title": "Your own domain",
   "adv.domain.body": "Customer links can carry your name — yourstudio.nivadesk.app on every plan, or track.yourdomain.com on Pro and Team.",
+  "nav.skipToContent": "Skip to content",
+  "hero.seeFullSize": "See it full size",
+  "hero.demoFallback": "The video could not load — open it directly.",
   "heroChip.orders": "Orders",
   "heroChip.files": "Client Files",
   "heroChip.finance": "Payments & Profit",
@@ -1008,6 +1011,9 @@ export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
 type PublicSiteTranslationTable = Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>;
 
 const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = {
+  "nav.skipToContent": "İçeriğe atla",
+  "hero.seeFullSize": "Tam boyutta gör",
+  "hero.demoFallback": "Video yüklenemedi — doğrudan açın.",
   "aiPage.securityLink": "Güvenlik ve izinler hakkında bilgi edinin",
   "section.advanced.eyebrow": "Sipariş panosunun ötesinde",
   "section.advanced.title": "Arka ofis de aynı çalışma alanında yaşar",
@@ -1835,6 +1841,9 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
 
 const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe">, Partial<Record<PublicSiteTranslationKey, string>>> = {
   Deutsch: {
+    "nav.skipToContent": "Zum Inhalt springen",
+    "hero.seeFullSize": "In voller Größe ansehen",
+    "hero.demoFallback": "Das Video konnte nicht geladen werden — direkt öffnen.",
     "aiPage.securityLink": "Mehr über Sicherheit und Berechtigungen erfahren",
     "section.advanced.eyebrow": "Mehr als nur das Auftragsboard",
     "section.advanced.title": "Das Backoffice lebt im selben Workspace",
@@ -1922,6 +1931,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Mit Google fortfahren"
   },
   Français: {
+    "nav.skipToContent": "Aller au contenu",
+    "hero.seeFullSize": "Voir en taille réelle",
+    "hero.demoFallback": "La vidéo n'a pas pu se charger — ouvrez-la directement.",
     "aiPage.securityLink": "En savoir plus sur la sécurité et les autorisations",
     "section.advanced.eyebrow": "Au-delà du tableau des commandes",
     "section.advanced.title": "Le back-office vit dans le même espace de travail",
@@ -2009,6 +2021,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Continuer avec Google"
   },
   Italiano: {
+    "nav.skipToContent": "Salta al contenuto",
+    "hero.seeFullSize": "Visualizza a schermo intero",
+    "hero.demoFallback": "Impossibile caricare il video — aprilo direttamente.",
     "aiPage.securityLink": "Scopri di più su sicurezza e autorizzazioni",
     "section.advanced.eyebrow": "Oltre la bacheca degli ordini",
     "section.advanced.title": "Il back office vive nello stesso workspace",
@@ -2096,6 +2111,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Continua con Google"
   },
   "Español (Spanish)": {
+    "nav.skipToContent": "Saltar al contenido",
+    "hero.seeFullSize": "Verla a tamaño completo",
+    "hero.demoFallback": "El video no se pudo cargar — ábrelo directamente.",
     "aiPage.securityLink": "Más información sobre seguridad y permisos",
     "section.advanced.eyebrow": "Más allá del tablero de pedidos",
     "section.advanced.title": "La gestión interna vive en el mismo espacio de trabajo",
@@ -2183,6 +2201,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Continuar con Google"
   },
   Português: {
+    "nav.skipToContent": "Ir para o conteúdo",
+    "hero.seeFullSize": "Ver em tamanho real",
+    "hero.demoFallback": "Não foi possível carregar o vídeo — abra-o diretamente.",
     "aiPage.securityLink": "Saiba mais sobre segurança e permissões",
     "section.advanced.eyebrow": "Para lá do quadro de encomendas",
     "section.advanced.title": "O back office vive no mesmo espaço de trabalho",
@@ -2270,6 +2291,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Continuar com Google"
   },
   "Русский (Russian)": {
+    "nav.skipToContent": "Перейти к содержимому",
+    "hero.seeFullSize": "Открыть в полном размере",
+    "hero.demoFallback": "Не удалось загрузить видео — откройте его напрямую.",
     "aiPage.securityLink": "Узнайте о безопасности и правах доступа",
     "section.advanced.eyebrow": "Больше, чем доска заказов",
     "section.advanced.title": "Бэк-офис — в том же рабочем пространстве",
@@ -2357,6 +2381,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Продолжить с Google"
   },
   "日本語 (Japanese)": {
+    "nav.skipToContent": "コンテンツへスキップ",
+    "hero.seeFullSize": "フルサイズで見る",
+    "hero.demoFallback": "動画を読み込めませんでした — 直接開いてください。",
     "aiPage.securityLink": "セキュリティと権限について詳しく見る",
     "section.advanced.eyebrow": "オーダーボードのその先へ",
     "section.advanced.title": "バックオフィスも同じワークスペースの中に",
@@ -2444,6 +2471,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "Googleで続行"
   },
   "中文 (Chinese)": {
+    "nav.skipToContent": "跳至内容",
+    "hero.seeFullSize": "查看全尺寸图片",
+    "hero.demoFallback": "视频无法加载——请直接打开。",
     "aiPage.securityLink": "了解安全与权限",
     "section.advanced.eyebrow": "不止于订单看板",
     "section.advanced.title": "后台事务，同一个工作区搞定",
@@ -2531,6 +2561,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "使用 Google 继续"
   },
   "العربية (Arabic)": {
+    "nav.skipToContent": "تخطَّ إلى المحتوى",
+    "hero.seeFullSize": "اعرضها بالحجم الكامل",
+    "hero.demoFallback": "تعذّر تحميل الفيديو — افتحه مباشرةً.",
     "aiPage.securityLink": "تعرّف على الأمان والأذونات",
     "section.advanced.eyebrow": "أبعد من لوحة الطلبات",
     "section.advanced.title": "المكتب الخلفي يعيش في مساحة العمل نفسها",
@@ -2618,6 +2651,9 @@ const COMMON_TRANSLATIONS: Record<Exclude<StudioLanguage, "English" | "Türkçe"
     "login.google": "المتابعة باستخدام Google"
   },
   "हिन्दी (Hindi)": {
+    "nav.skipToContent": "सीधे सामग्री पर जाएँ",
+    "hero.seeFullSize": "पूर्ण आकार में देखें",
+    "hero.demoFallback": "वीडियो लोड नहीं हो सका — इसे सीधे खोलें।",
     "aiPage.securityLink": "सुरक्षा और अनुमतियों के बारे में जानें",
     "section.advanced.eyebrow": "ऑर्डर बोर्ड से आगे",
     "section.advanced.title": "बैक ऑफ़िस भी उसी वर्कस्पेस में रहता है",
