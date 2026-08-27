@@ -13,6 +13,7 @@ import {
   getClientDomainConfig,
   removeClientDomain,
   requestClientDomain,
+  saveClientPortalBranding,
   setClientSubdomain,
   verifyClientDomain,
   type ClientDomainRow
@@ -40,6 +41,8 @@ export function ClientDomainSection({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [verifyResult, setVerifyResult] = useState<{ host: string; verified: boolean; found: string[]; error?: string } | null>(null);
+  const [accentColor, setAccentColor] = useState("");
+  const [showPoweredBy, setShowPoweredBy] = useState(true);
 
   const reload = useCallback(async () => {
     if (!isOwner) { setLoadingConfig(false); return; }
@@ -50,6 +53,8 @@ export function ClientDomainSection({
       setCustomDomains(config.customDomains ?? []);
       if (config.cnameTarget) setCnameTarget(config.cnameTarget);
       setSlugDraft(config.subdomain?.host ?? "");
+      setAccentColor(config.branding?.accentColor ?? "");
+      setShowPoweredBy(config.branding?.showPoweredBy !== false);
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : t("The domain settings could not be loaded."));
     } finally {
@@ -85,6 +90,9 @@ export function ClientDomainSection({
       <p className="muted-copy" style={{ margin: 0 }}>
         {t("Your customers' links — order tracking, estimates and every future customer page — can carry YOUR name instead of ours.")}
       </p>
+
+      {status ? <p style={{ margin: 0, fontSize: 13, color: "#16a34a", fontWeight: 600 }}>✓ {status}</p> : null}
+      {error ? <p style={{ margin: 0, fontSize: 13, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
 
       {/* ---- Level 1: the free subdomain --------------------------------- */}
       <section className="mini-panel" style={{ display: "grid", gap: 10, padding: 16 }}>
@@ -189,6 +197,46 @@ export function ClientDomainSection({
 
         <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>
           {t("A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working.")}
+        </p>
+      </section>
+
+      {/* ---- Branding for the customer-facing pages ----------------------- */}
+      <section className="mini-panel" style={{ display: "grid", gap: 10, padding: 16 }}>
+        <strong>{t("Customer page branding")}</strong>
+        <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+            {t("Accent colour")}
+            <input
+              type="color"
+              value={accentColor || "#2563eb"}
+              onChange={event => setAccentColor(event.target.value)}
+              style={{ width: 42, height: 28, padding: 0, border: "none", background: "transparent", cursor: "pointer" }}
+            />
+          </label>
+          {accentColor ? (
+            <button className="button secondary" type="button" onClick={() => setAccentColor("")}>
+              {t("Use the default colour")}
+            </button>
+          ) : null}
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={showPoweredBy}
+              onChange={event => setShowPoweredBy(event.target.checked)}
+            />
+            {t("Show \u201CPowered by NivaDesk\u201D on customer pages")}
+          </label>
+          <button
+            className="button"
+            type="button"
+            disabled={busy}
+            onClick={() => void run(() => saveClientPortalBranding(workspace, { accentColor, showPoweredBy }), "Branding saved.")}
+          >
+            {t("Save")}
+          </button>
+        </div>
+        <p className="muted-copy" style={{ margin: 0, fontSize: 12 }}>
+          {t("The accent colours the order tracking page. Hiding the Powered by line is part of the Pro and Team plans.")}
         </p>
       </section>
     </div>

@@ -37,7 +37,8 @@ const api = createClientDomainFunctions({
   HttpsError: class extends Error { constructor(code, message) { super(code); this.detail = message; } },
   uidIsCompanyOwner: (companyData, uid) => String(companyData.ownerUid) === uid,
   planForCompany: () => plan,
-  dnsResolveCname: async () => { if (cnameError) throw cnameError; return cnameAnswer; }
+  dnsResolveCname: async () => { if (cnameError) throw cnameError; return cnameAnswer; },
+  companySettingsDocRef: (companyId) => mk(["companySettings", companyId])
 });
 const req = (companyId, uid, data = {}) => ({ auth: { uid }, data: { companyId, ...data } });
 
@@ -116,6 +117,27 @@ const ok = (l, c, e = "") => { if (!c) fail++; console.log(`${c ? "PASS" : "FAIL
   ok("başkasınınkini kaldıramaz", threw === "permission-denied", threw);
   await api.removeClientDomain(req("A", "owner-a", { host: "eggcraft-atolye" }));
   ok("slug kaldırılınca company alanı boşalır", store.get("companies/A").clientPortalSlug === "" && !store.has("clientDomains/eggcraft-atolye"), store.get("companies/A").clientPortalSlug);
+
+  console.log("\n=== 6) branding: renk temizliği, plan kapısı, config okuması ===");
+  threw = "";
+  try { await api.saveClientPortalBranding(req("A", "not-owner", { accentColor: "#112233" })); } catch (e) { threw = e.message; }
+  ok("branding owner ister", threw === "permission-denied", threw);
+  threw = "";
+  try { await api.saveClientPortalBranding(req("A", "owner-a", { accentColor: "red" })); } catch (e) { threw = e.message; }
+  ok("hex olmayan renk reddedilir", threw === "invalid-argument", threw);
+  plan = "lite_monthly";
+  threw = "";
+  try { await api.saveClientPortalBranding(req("A", "owner-a", { accentColor: "#112233", showPoweredBy: false })); } catch (e) { threw = e.message; }
+  ok("Lite Powered by'ı gizleyemez", threw === "failed-precondition", threw);
+  const bLite = await api.saveClientPortalBranding(req("A", "owner-a", { accentColor: "#AABBCC", showPoweredBy: true }));
+  ok("Lite renk kaydedebilir (küçük harfe iner)", bLite.accentColor === "#aabbcc" && bLite.showPoweredBy === true, JSON.stringify(bLite));
+  plan = "pro_monthly";
+  const bPro = await api.saveClientPortalBranding(req("A", "owner-a", { accentColor: "", showPoweredBy: false }));
+  ok("Pro Powered by'ı gizler, boş renk temizler", bPro.accentColor === "" && bPro.showPoweredBy === false, JSON.stringify(bPro));
+  ok("settings dokümanına yazıldı", store.get("companySettings/A").portalShowPoweredBy === false && store.get("companySettings/A").portalAccentColor === "", JSON.stringify(store.get("companySettings/A")));
+  store.set("companySettings/A", { ...store.get("companySettings/A"), portalAccentColor: "#2F6F6D" });
+  const cfg = await api.getClientDomainConfig(req("A", "owner-a"));
+  ok("config branding'i normalize okur", cfg.branding.accentColor === "#2f6f6d" && cfg.branding.showPoweredBy === false, JSON.stringify(cfg.branding));
 
   console.log(fail === 0 ? "\n✅ CLIENT DOMAINS GEÇTİ" : `\n❌ ${fail} BAŞARISIZ`);
   process.exit(fail === 0 ? 0 : 1);

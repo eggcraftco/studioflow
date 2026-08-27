@@ -15,6 +15,8 @@ type PortalView = {
   logoUrl: string;
   footerNote: string;
   currency: string;
+  accentColor?: string;
+  showPoweredBy?: boolean;
   shows: {
     status: boolean;
     estimate: boolean;
@@ -86,7 +88,10 @@ export function CustomerPortalContent({ token }: { token: string }) {
   }
 
   return (
-    <section className="portal-shell">
+    <section
+      className="portal-shell"
+      style={portal.accentColor ? ({ "--portal-accent": portal.accentColor } as React.CSSProperties) : undefined}
+    >
       <header className="portal-shell-head">
         {portal.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -185,7 +190,7 @@ export function CustomerPortalContent({ token }: { token: string }) {
       ) : null}
 
       {portal.footerNote ? <p className="portal-shell-footer">{portal.footerNote}</p> : null}
-      <p className="portal-shell-credit">Powered by NivaDesk</p>
+      {portal.showPoweredBy !== false ? <p className="portal-shell-credit">Powered by NivaDesk</p> : null}
     </section>
   );
 }

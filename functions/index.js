@@ -5206,7 +5206,8 @@ const { _internal: clientDomainInternal, ...clientDomainCallables } = createClie
   HttpsError,
   uidIsCompanyOwner,
   planForCompany: (companyData) => String(billingEntitlementsForCompany(companyData || {})?.plan || ""),
-  dnsResolveCname: (host) => require("dns").promises.resolveCname(host)
+  dnsResolveCname: (host) => require("dns").promises.resolveCname(host),
+  companySettingsDocRef: (companyId) => companySettingsDocRef(companyId)
 });
 Object.assign(exports, clientDomainCallables);
 
@@ -23571,6 +23572,8 @@ function portalPublicView(orderData = {}, settings = {}, link = {}) {
     businessName: String(settings.appSubtitle || "NivaDesk"),
     logoUrl: String(settings.appLogoUrl || ""),
     footerNote: String(settings.invoiceFooterNote || ""),
+    accentColor: /^#[0-9a-f]{6}$/i.test(String(settings.portalAccentColor || "")) ? String(settings.portalAccentColor).toLowerCase() : "",
+    showPoweredBy: settings.portalShowPoweredBy !== false,
     currency,
     shows: visibility,
     stages: [],
@@ -24086,6 +24089,8 @@ function estimatePublicView(record, settings, link) {
     businessName: String(settings.appSubtitle || "NivaDesk"),
     logoUrl: String(settings.appLogoUrl || ""),
     footerNote: String(settings.invoiceFooterNote || ""),
+    accentColor: /^#[0-9a-f]{6}$/i.test(String(settings.portalAccentColor || "")) ? String(settings.portalAccentColor).toLowerCase() : "",
+    showPoweredBy: settings.portalShowPoweredBy !== false,
     customerFirstName: String(record.customerNameSnapshot || "").split(" ")[0] || "",
     replacesNumber: record.replacesNumber || "",
     alreadyDecided: Boolean(record.approval),

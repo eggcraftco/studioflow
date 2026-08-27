@@ -27,7 +27,7 @@ const RESERVED_SLUGS = new Set([
 
 const CNAME_TARGET = "customers.nivadesk.app";
 
-function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner, planForCompany, dnsResolveCname }) {
+function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner, planForCompany, dnsResolveCname, companySettingsDocRef }) {
   const db = () => admin.firestore();
   const domainsRef = () => db().collection("clientDomains");
   const companyRef = (companyId) => db().collection("companies").doc(String(companyId));
@@ -85,16 +85,55 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
 
   // ---------------------------------------------------------------------------
 
+  function cleanAccentColor(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (!/^#[0-9a-fA-F]{6}$/.test(raw)) {
+      throw new HttpsError("invalid-argument", "The accent colour must be a hex value like #2f6f6d.");
+    }
+    return raw.toLowerCase();
+  }
+
   const getClientDomainConfig = onCall({ region: REGION }, async (request) => {
     const { companyId } = await requireOwner(request);
-    const snap = await domainsRef().where("companyId", "==", companyId).limit(10).get();
+    const [snap, settingsSnap] = await Promise.all([
+      domainsRef().where("companyId", "==", companyId).limit(10).get(),
+      companySettingsDocRef(companyId).get()
+    ]);
     const rows = snap.docs.map((doc) => ({ host: doc.id, ...(doc.data() || {}) }));
+    const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
     return {
       ok: true,
       subdomain: rows.find((row) => row.kind === "subdomain") || null,
       customDomains: rows.filter((row) => row.kind === "custom"),
-      cnameTarget: CNAME_TARGET
+      cnameTarget: CNAME_TARGET,
+      branding: {
+        accentColor: /^#[0-9a-f]{6}$/i.test(String(settings.portalAccentColor || "")) ? String(settings.portalAccentColor).toLowerCase() : "",
+        showPoweredBy: settings.portalShowPoweredBy !== false
+      }
     };
+  });
+
+  // Branding for the customer-facing pages rides in the same section: the
+  // accent is free, hiding the Powered by line is white-label territory and
+  // stays with the paid tiers like custom domains do.
+  const saveClientPortalBranding = onCall({ region: REGION }, async (request) => {
+    const { uid, companyId, companyData } = await requireOwner(request);
+    const accentColor = cleanAccentColor(request.data?.accentColor);
+    const showPoweredBy = request.data?.showPoweredBy !== false;
+    if (!showPoweredBy) {
+      const plan = planForCompany(companyData);
+      if (!["pro_monthly", "team_monthly"].includes(plan)) {
+        throw new HttpsError("failed-precondition", "Hiding the Powered by NivaDesk line is part of the Pro and Team plans.");
+      }
+    }
+    await companySettingsDocRef(companyId).set({
+      portalAccentColor: accentColor,
+      portalShowPoweredBy: showPoweredBy,
+      portalBrandingUpdatedAtMs: Date.now(),
+      portalBrandingUpdatedByUid: uid
+    }, { merge: true });
+    return { ok: true, accentColor, showPoweredBy };
   });
 
   const setClientSubdomain = onCall({ region: REGION }, async (request) => {
@@ -236,6 +275,7 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
 
   return {
     getClientDomainConfig,
+    saveClientPortalBranding,
     setClientSubdomain,
     requestClientDomain,
     verifyClientDomain,

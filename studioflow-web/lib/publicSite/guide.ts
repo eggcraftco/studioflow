@@ -783,6 +783,12 @@ const TREE_EN: GuideNode[] = [
             "A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.",
             "Each hostname belongs to one workspace — a name someone else verified cannot be claimed.",
             "Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
+          ] },
+          { kind: "sub", text: "Customer page branding" },
+          { kind: "bullets", items: [
+            "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
+            "The \"Powered by NivaDesk\" line on customer pages can be switched off on the Pro and Team plans.",
+            "Your logo, business name and footer note already come from your workspace branding settings."
           ] }
         ]
       },
@@ -1553,6 +1559,12 @@ const TREE_TR: GuideNode[] = [
             "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
             "Her sunucu adı tek bir çalışma alanına aittir — başkasının doğruladığı ad alınamaz.",
             "Remove düğmesiyle istediğiniz an kaldırın; bağlantılarınız standart nivadesk.app adreslerine geri döner."
+          ] },
+          { kind: "sub", text: "Müşteri sayfası markalama" },
+          { kind: "bullets", items: [
+            "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
+            "Müşteri sayfalarındaki \"Powered by NivaDesk\" satırı Pro ve Team planlarında kapatılabilir.",
+            "Logonuz, işletme adınız ve alt not zaten çalışma alanı markalama ayarlarınızdan gelir."
           ] }
         ]
       },
