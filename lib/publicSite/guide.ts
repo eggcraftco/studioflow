@@ -510,6 +510,88 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
+    id: "inventory",
+    title: "Inventory",
+    blocks: [
+      { kind: "para", text: "Your stock room inside NivaDesk: the watches, dials, parts and consumables your business owns, what they cost, where they stand and what they are promised to. A customer's own property can be held and tracked too — it is marked as theirs and never counted as your asset." },
+      { kind: "sub", text: "Items" },
+      { kind: "bullets", items: [
+        "Two kinds of item: a Unique item is one physical object with its own serial and condition (a watch, a dial); a Quantity item is counted stock with a unit (screws, leather, lacquer).",
+        "Statuses tell the truth about each item: Available, Reserved, Partially Reserved (some of a counted material is promised, some is still free), Incoming, Used, Sold, Removed and Archived.",
+        "Give items tags (free labels like 'vintage' or 'gold'), a location, photos, a low-stock threshold for materials, and print a QR label to find the record by scanning.",
+        "Search matches names, brands, references, serials, SKUs and tags; filters narrow by category, type, status, location and supplier."
+      ] },
+      { kind: "sub", text: "Adding stock" },
+      { kind: "steps", items: [
+        "Add Item creates one item by hand — pick Unique or Quantity first, the form adapts.",
+        "Import opening stock pastes a whole spreadsheet: columns are matched automatically, every row is previewed before anything is created, and rows that match stock you already have (by SKU or serial) are flagged so you choose Skip / Update existing / Create anyway.",
+        "Recording a Purchase creates its items for you, held as Incoming until the goods arrive."
+      ] },
+      { kind: "sub", text: "Purchases" },
+      { kind: "bullets", items: [
+        "New Purchase records what you bought, from whom and at what cost; shipping and fees are spread across the lines without touching the item prices.",
+        "Goods arrive in boxes, not purchase orders: Receive lines… takes a partial delivery (6 of 10 boxes), the purchase shows Partially received, and Receive the rest finishes it later.",
+        "Match payment links the purchase to the bank transaction that paid for it, so stock and banking join on a fact.",
+        "A purchase with stock already on the shelf can no longer be edited or deleted."
+      ] },
+      { kind: "sub", text: "Stock on orders" },
+      { kind: "bullets", items: [
+        "Reserve stock on an order's stock card puts a part aside for that job so it cannot be promised twice; the line reads like '3 / 10 pcs · Safe A' — what this order holds out of what exists.",
+        "Use on the job consumes the reserved part: it leaves the shelf and the movement ledger names the order.",
+        "Swap… exchanges a reserved part for a different one in one step; Release puts it back.",
+        "Recipes: write a repeated job's parts list once (Inventory ▸ Recipes), then Use a recipe… on the order reserves every line together — all or nothing."
+      ] },
+      { kind: "sub", text: "Losses, counts and reports" },
+      { kind: "bullets", items: [
+        "Record a Loss… on an item logs stock leaving for a reason that is not a sale or a job: damaged, lost, returned to supplier or wastage — the reason lands in the ledger.",
+        "Stocktake walks you through counting what is really on the shelf and corrects the records with a full audit trail.",
+        "Every change is a movement in the item's History; Reports sums value, movement kinds and category totals over time."
+      ] },
+      { kind: "sub", text: "Locations and suppliers" },
+      { kind: "bullets", items: [
+        "Locations form a tree — a safe holds a drawer holds a tray. Renaming or moving one renames it on every item standing there; a location with stock or child locations inside cannot be deleted.",
+        "Suppliers keep contact details plus the paperwork fields an invoice asks for: your own code for them, address, VAT number and billing currency."
+      ] }
+    ]
+  },
+  {
+    id: "banking",
+    title: "Bank Spending",
+    blocks: [
+      { kind: "para", text: "Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. NivaDesk only reads your transactions — it can never move money. Bank access is owner-only unless the owner grants a member the Bank Spending permission." },
+      { kind: "sub", text: "Connecting a bank" },
+      { kind: "steps", items: [
+        "Open Banking and choose Connect; pick your bank and approve access on the bank's own page.",
+        "Transactions sync automatically in the background, and Refresh fetches on demand.",
+        "Open Banking consent lasts 90 days: NivaDesk shows the renewal date, warns when it is close, and Reconnect renews it in a minute.",
+        "Disconnect keeps everything already imported; deleting the imported data is a separate, explicit choice. The Activity view shows the connection's own diary — syncs, failures, connects and disconnects."
+      ] },
+      { kind: "sub", text: "Transactions, categories and VAT" },
+      { kind: "bullets", items: [
+        "Every transaction gets a category; rules apply them automatically ('always categorise this keyword as Software') and each automatic change says which rule did it.",
+        "VAT treatment is recorded per transaction with NivaDesk's own codes (standard, reduced, zero-rated, exempt and more), independent of any accounting provider.",
+        "Review statuses track what still needs a look; bulk actions handle a whole month in one pass.",
+        "A transaction that covers several things can be split into lines; the lines must add up to the bank amount, to the penny."
+      ] },
+      { kind: "sub", text: "Receipts" },
+      { kind: "steps", items: [
+        "Open a transaction and attach its receipt: upload a photo or PDF, or Choose from Files to reference an invoice already in your library — nothing is copied twice.",
+        "Or snap the receipt first: NivaDesk reads the amount and date and suggests the matching transaction.",
+        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears."
+      ] },
+      { kind: "sub", text: "Recurring and incoming" },
+      { kind: "bullets", items: [
+        "Recurring payments are detected from history — usual amount, expected day of the month and a confidence grade; upcoming ones are estimates, clearly marked. You can also mark a vendor as recurring yourself.",
+        "Incoming money can be matched to an order as its payment — never duplicated — or marked as a transfer, an owner contribution or a loan so it does not count as revenue."
+      ] },
+      { kind: "sub", text: "Accountant sync (Pandle)" },
+      { kind: "bullets", items: [
+        "If you use Pandle, connect it on the Banking page: confirmed transactions are pushed with your own category and VAT mapping.",
+        "NivaDesk matches transactions Pandle already has instead of creating them again, and asks you to confirm when a match is not certain."
+      ] }
+    ]
+  },
+  {
     id: "files",
     title: "Files",
     blocks: [
@@ -1162,6 +1244,88 @@ const TREE_TR: GuideNode[] = [
         "Bir müşteriyi açıp bilgilerini, tasarımlarını ve siparişlerini görün.",
         "Müşteri notları müşteriyle kalır ve onun her siparişinde görünür.",
         "Bir müşteriyi hızla bulmak için katlanır listeyi kullanın."
+      ] }
+    ]
+  },
+  {
+    id: "inventory",
+    title: "Envanter",
+    blocks: [
+      { kind: "para", text: "NivaDesk içindeki stok odanız: işletmenizin sahip olduğu saatler, kadranlar, parçalar ve sarf malzemeleri — maliyetleri, nerede durdukları ve neye söz verildikleri. Müşterinin kendi malı da tutulup izlenebilir; onun olarak işaretlenir ve asla sizin varlığınız sayılmaz." },
+      { kind: "sub", text: "Ürünler" },
+      { kind: "bullets", items: [
+        "İki tür ürün var: Benzersiz ürün, kendi serisi ve durumu olan tek bir fiziksel nesnedir (bir saat, bir kadran); Adetli ürün, birimiyle sayılan stoktur (vida, deri, lake).",
+        "Statüler her ürün için gerçeği söyler: Uygun, Rezerve, Kısmen Rezerve (sayılan malzemenin bir kısmı söz verilmiş, bir kısmı hâlâ boşta), Geliyor, Kullanıldı, Satıldı, Çıkarıldı ve Arşivlendi.",
+        "Ürünlere etiket (örn. 'vintage', 'altın'), konum, fotoğraf ve malzemeler için düşük stok eşiği verin; kaydı taratarak bulmak için QR etiketi yazdırın.",
+        "Arama ad, marka, referans, seri, SKU ve etiketlerle eşleşir; filtreler kategori, tür, statü, konum ve tedarikçiye göre daraltır."
+      ] },
+      { kind: "sub", text: "Stok ekleme" },
+      { kind: "steps", items: [
+        "Ürün Ekle tek ürünü elle oluşturur — önce Benzersiz mi Adetli mi seçin, form uyum sağlar.",
+        "Açılış stoğunu içe aktar bütün bir tabloyu yapıştırır: sütunlar otomatik eşlenir, hiçbir şey oluşturulmadan her satır önizlenir ve elinizdeki stokla (SKU veya seriyle) eşleşen satırlar işaretlenir — Atla / Mevcutları güncelle / Yine de oluştur sizin seçiminizdir.",
+        "Satın alma kaydı ürünlerini sizin için oluşturur; mal gelene kadar Geliyor statüsünde tutulur."
+      ] },
+      { kind: "sub", text: "Satın almalar" },
+      { kind: "bullets", items: [
+        "Yeni Satın Alma ne aldığınızı, kimden ve kaça aldığınızı kaydeder; kargo ve masraflar ürün fiyatlarına dokunmadan kalemlere dağıtılır.",
+        "Mal koliyle gelir, siparişle değil: Kalemleri teslim al… kısmi teslimatı işler (10 kolinin 6'sı), satın alma Kısmen teslim alındı gösterir, kalanı sonra Kalanı teslim al bitirir.",
+        "Ödeme eşleştir satın almayı onu ödeyen banka hareketine bağlar; stok ve bankacılık tahminle değil gerçekle birleşir.",
+        "Stoğu rafa çıkmış bir satın alma artık düzenlenemez ve silinemez."
+      ] },
+      { kind: "sub", text: "Siparişte stok" },
+      { kind: "bullets", items: [
+        "Siparişin stok kartındaki Stok rezerve et parçayı o işe ayırır ki iki kez söz verilemesin; satır '3 / 10 adet · Kasa A' gibi okunur — var olanın içinden bu siparişin tuttuğu.",
+        "İşte kullan rezerve parçayı tüketir: raftan düşer ve hareket defteri siparişi adıyla yazar.",
+        "Değiştir… rezerve parçayı tek hamlede başkasıyla takas eder; Bırak geri koyar.",
+        "Reçeteler: tekrarlanan işin parça listesini bir kez yazın (Envanter ▸ Reçeteler); siparişte Reçete kullan… tüm satırları birlikte rezerve eder — ya hepsi ya hiçbiri."
+      ] },
+      { kind: "sub", text: "Kayıplar, sayımlar ve raporlar" },
+      { kind: "bullets", items: [
+        "Üründe Kayıp Kaydet…, satış ya da iş olmayan bir sebeple çıkan stoğu işler: hasarlı, kayıp, tedarikçiye iade veya fire — sebep deftere yazılır.",
+        "Sayım, rafta gerçekte ne olduğunu adım adım saydırır ve kayıtları tam izle düzeltir.",
+        "Her değişiklik ürünün Geçmiş'inde bir harekettir; Raporlar zaman içinde değeri, hareket türlerini ve kategori toplamlarını özetler."
+      ] },
+      { kind: "sub", text: "Konumlar ve tedarikçiler" },
+      { kind: "bullets", items: [
+        "Konumlar ağaç kurar — kasa çekmeceyi, çekmece tepsiyi barındırır. Birini yeniden adlandırmak veya taşımak, orada duran her üründe adını günceller; içinde stok ya da alt konum olan konum silinemez.",
+        "Tedarikçiler iletişim bilgisinin yanında faturanın sorduğu evrak alanlarını tutar: sizin verdiğiniz kod, adres, KDV numarası ve para birimi."
+      ] }
+    ]
+  },
+  {
+    id: "banking",
+    title: "Banka Harcamaları",
+    blocks: [
+      { kind: "para", text: "İşletme bankanızı Open Banking ile bağlayın ve harcamayı olurken görün: kategoriler, KDV işlemi, hareketlere eşlenmiş fişler ve tekrarlayan ödemeler. NivaDesk hareketlerinizi yalnızca okur — asla para taşıyamaz. Banka erişimi, sahibi bir üyeye Banka Harcamaları iznini vermedikçe yalnız sahibindedir." },
+      { kind: "sub", text: "Banka bağlama" },
+      { kind: "steps", items: [
+        "Banka bölümünü açıp Bağlan'ı seçin; bankanızı seçin ve erişimi bankanın kendi sayfasında onaylayın.",
+        "Hareketler arka planda kendiliğinden eşitlenir; Yenile anında çeker.",
+        "Open Banking rızası 90 gün sürer: NivaDesk yenileme tarihini gösterir, yaklaşınca uyarır; Yeniden bağlan bir dakikada tazeler.",
+        "Bağlantıyı kes içe aktarılmış her şeyi korur; veriyi silmek ayrı ve açık bir karardır. Etkinlik görünümü bağlantının kendi günlüğünü gösterir — eşitlemeler, hatalar, bağlanma ve kesilmeler."
+      ] },
+      { kind: "sub", text: "Hareketler, kategoriler ve KDV" },
+      { kind: "bullets", items: [
+        "Her hareket bir kategori alır; kurallar bunu kendiliğinden uygular ('bu kelimeyi hep Yazılım yap') ve her otomatik değişiklik hangi kuralın yaptığını söyler.",
+        "KDV işlemi, muhasebe sağlayıcısından bağımsız olarak NivaDesk'in kendi kodlarıyla hareket başına kaydedilir (standart, indirimli, sıfır oranlı, istisna ve daha fazlası).",
+        "İnceleme durumları hâlâ bakılması gerekeni izler; toplu işlemler koca bir ayı tek geçişte halleder.",
+        "Birden çok şeyi kapsayan hareket satırlara bölünebilir; satırlar banka tutarına kuruşuna kadar denk gelmek zorundadır."
+      ] },
+      { kind: "sub", text: "Fişler" },
+      { kind: "steps", items: [
+        "Hareketi açın ve fişini ekleyin: fotoğraf ya da PDF yükleyin, veya kütüphanenizdeki faturayı Dosyalardan seç ile bağlayın — hiçbir şey ikinci kez kopyalanmaz.",
+        "Ya da önce fişi çekin: NivaDesk tutarı ve tarihi okur, eşleşen hareketi önerir.",
+        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir."
+      ] },
+      { kind: "sub", text: "Tekrarlayan ve gelen" },
+      { kind: "bullets", items: [
+        "Tekrarlayan ödemeler geçmişten saptanır — olağan tutar, ayın beklenen günü ve güven derecesiyle; yaklaşanlar tahmindir ve öyle işaretlenir. Bir satıcıyı kendiniz de tekrarlayan olarak işaretleyebilirsiniz.",
+        "Gelen para bir siparişin ödemesi olarak eşlenebilir — asla çift kayıt olmadan — ya da transfer, sahip katkısı veya kredi olarak işaretlenir ki hasılat sayılmasın."
+      ] },
+      { kind: "sub", text: "Muhasebe eşitlemesi (Pandle)" },
+      { kind: "bullets", items: [
+        "Pandle kullanıyorsanız Banka sayfasından bağlayın: onaylanmış hareketler sizin kategori ve KDV eşlemenizle gönderilir.",
+        "NivaDesk, Pandle'da zaten olan hareketi yeniden yaratmak yerine eşler; eşleşme kesin değilse size sorar."
       ] }
     ]
   },
