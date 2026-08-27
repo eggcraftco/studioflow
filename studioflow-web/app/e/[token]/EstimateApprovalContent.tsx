@@ -191,7 +191,10 @@ export function EstimateApprovalContent({ token }: { token: string }) {
   const showVat = !marginScheme && estimate.taxRate > 0.0001;
 
   return (
-    <div className="estimate-panel">
+    <div
+      className="estimate-panel"
+      style={estimate.accentColor ? ({ "--portal-accent": estimate.accentColor } as React.CSSProperties) : undefined}
+    >
       <header className="estimate-head">
         {estimate.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -313,6 +316,7 @@ export function EstimateApprovalContent({ token }: { token: string }) {
       </div>
 
       {estimate.footerNote ? <p className="estimate-note">{estimate.footerNote}</p> : null}
+      {estimate.showPoweredBy !== false ? <p className="portal-shell-credit">Powered by NivaDesk</p> : null}
     </div>
   );
 }
