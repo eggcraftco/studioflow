@@ -560,12 +560,15 @@ export default function DashboardPage() {
             <div>
               <p className="orders-kicker">{t("Dashboard")}</p>
               <h1>{workspace.name}</h1>
-              <p>{workspace.billingPlanName} · {workspace.roleLabel} · {counts.activeOrderCount} {t("active orders")}</p>
+              <p>
+                {workspace.billingPlanName} · {workspace.roleLabel} ·{" "}
+                <span title={t("Excludes Done, Completed and Cancelled orders.")}>{counts.activeOrderCount} {t("active orders")}</span>
+              </p>
             </div>
             <div className="compact-pill-row">
-              <span className="studio-pill">{t("Orders")} {counts.orderCount}</span>
-              <span className="studio-pill">{t("Customers")} {counts.customerCount}</span>
-              <span className="studio-pill">{t("Due soon")} {counts.dueSoonCount}</span>
+              <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Open the orders list")}>{t("Orders")} {counts.orderCount}</button>
+              <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/customers")} title={t("Open the customer directory")}>{t("Customers")} {counts.customerCount}</button>
+              <button type="button" className="studio-pill" style={{ cursor: "pointer", border: "none" }} onClick={() => router.push("/orders")} title={t("Delivery due within the next 14 days, excluding closed orders.")}>{t("Due soon")} {counts.dueSoonCount}</button>
               <button
                 type="button"
                 className="studio-pill"
@@ -665,13 +668,17 @@ export default function DashboardPage() {
               <section className="dashboard-summary-grid">
                 {canSeeAdvancedFinance ? (
                   <>
-                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t(revenueCardTitle)} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
-                    {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Pending")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
-                    {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
+                    {/* Revenue is invoiced order value; Payments Received is
+                        the cash that actually arrived — the report's accrual
+                        vs cash split, side by side instead of blended. */}
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={t("Invoiced order value in this range: paid + still owed (accrual basis).")} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon="check" title={t("Payments Received")} hint={t("Money actually collected on these orders (cash basis).")} value={money(totals.received, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Outstanding Balance")} hint={t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
+                    {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} hint={t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} hint={t("VAT recorded on these orders and set aside — not yet paid to HMRC.")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT.")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
@@ -732,7 +739,7 @@ export default function DashboardPage() {
               ) : null}
 
               {canSeeAdvancedFinance && (
-                <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} />
+                <ExtraSpendingSection orders={financeOrders} settings={settings} hideNumbers={hideNumbers} pageRange={range} />
               )}
 
               <section className="card app-card dashboard-chart-card">
@@ -924,7 +931,9 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
         {lastSync ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, opacity: 0.75 }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: syncedRecently ? "#16a34a" : "#f59e0b", display: "inline-block" }} />
-            {t("Synced")} · {syncedRecently ? t("Updated recently") : lastSync.toLocaleString(localeTag)}
+            {syncedRecently
+              ? `${t("Synced")} · ${t("Updated recently")}`
+              : `${t("Last synced")} ${formatSyncAge(Date.now() - lastSync.getTime(), t)}`}
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
@@ -932,7 +941,7 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
       </div>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "stretch" }}>
         <div style={tileStyle}>
-          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Month")}</p>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }} title={t("Total money out of the bank this calendar month.")}>{t("Spent this month")}</p>
           <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{bankMoney(summary.thisMonth)}</strong>
           {delta !== null ? (
             <span style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? "#16a34a" : "#dc2626" }}>
@@ -949,7 +958,7 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
           </div>
         </div>
         <div style={tileStyle}>
-          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("This Year")}</p>
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }} title={t("Total money out of the bank this calendar year.")}>{t("Spent this year")}</p>
           <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{bankMoney(summary.yearTotal)}</strong>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{t("Avg.")} {bankMoney(summary.monthlyAvg, 0)} / {t("month")}</span>
           <div style={{ marginTop: 8 }}>
@@ -1086,16 +1095,26 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
   );
 }
 
-function DashboardSummaryCard({ icon, title, value, tone, locked = false }: { icon: CardIcon; title: string; value: string; tone: "blue" | "green" | "orange" | "red"; locked?: boolean }) {
+function DashboardSummaryCard({ icon, title, value, tone, locked = false, hint, sub }: { icon: CardIcon; title: string; value: string; tone: "blue" | "green" | "orange" | "red"; locked?: boolean; hint?: string; sub?: string }) {
   return (
-    <article className={locked ? "dashboard-summary-card is-locked" : "dashboard-summary-card"} data-tone={tone}>
+    // The report's trust rule: every money figure explains itself on hover.
+    <article className={locked ? "dashboard-summary-card is-locked" : "dashboard-summary-card"} data-tone={tone} title={hint}>
       <div className="summary-icon" aria-hidden="true"><CardIconGlyph icon={icon} /></div>
       <div>
         <p>{title}</p>
         <strong>{value}</strong>
+        {sub ? <span className="dashboard-summary-sub">{sub}</span> : null}
       </div>
     </article>
   );
+}
+
+// Four-day-old bank data saying only "Synced" is how trust dies quietly; say
+// the age out loud once it is no longer fresh.
+function formatSyncAge(ms: number, t: (text: string) => string) {
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  if (hours < 48) return `${hours} ${t("hours ago")}`;
+  return `${Math.floor(hours / 24)} ${t("days ago")}`;
 }
 
 // Rounded to one decimal for display, so direction is read off the rounded
@@ -1400,16 +1419,28 @@ function ExtraSpendingSection({
   orders,
   settings,
   hideNumbers,
+  pageRange,
 }: {
   orders: DashboardFinanceOrder[];
   settings: WorkspaceSettingsOverview | null;
   hideNumbers: boolean;
+  /** The dashboard's active range — this section follows it by default so the
+   * two never silently show different periods (the report's §15). */
+  pageRange?: RangeKey;
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const locale = studioLocaleTag(language);
   const [expanded, setExpanded] = useState(false);
   const [scope, setScope] = useState<SpendingScope>("thisMonth");
+
+  useEffect(() => {
+    if (!pageRange) return;
+    if (pageRange === "week" || pageRange === "month") setScope("thisMonth");
+    else if (pageRange === "year") setScope("thisYear");
+    else if (pageRange === "all") setScope("allTime");
+    // "custom" keeps whatever the section itself has — its own picker wins.
+  }, [pageRange]);
   const [customStart, setCustomStart] = useState(dateInputValue(startOfMonth(new Date())));
   const [customEnd, setCustomEnd] = useState(dateInputValue(new Date()));
   const [incBase, setIncBase] = useState(true);

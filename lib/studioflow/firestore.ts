@@ -1011,7 +1011,9 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
   const [ordersCountSnapshot, customersCountSnapshot, sampledOrdersSnapshot] = await Promise.all([
     getCountFromServer(ordersQuery),
     getCountFromServer(customersQuery),
-    getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId), limit(200)))
+    // 1000, not 200: the pills silently understated for workspaces past the
+    // sample size (the dashboard report's caveat). Count aggregates stay exact.
+    getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId), limit(1000)))
   ]);
 
   let activeOrderCount = 0;
@@ -1024,6 +1026,7 @@ export async function loadDashboardCounts(companyId: string): Promise<DashboardC
 
   sampledOrdersSnapshot.docs.forEach(orderDocument => {
     const data = orderDocument.data();
+    if (data.isDeleted === true) return; // trash never counts as active work
     const status = stringValue(data.status, "").toLowerCase();
     if (status === "cancelled" || status === "canceled") cancelledOrderCount += 1;
     if (status === "done" || status === "completed") completedOrderCount += 1;
