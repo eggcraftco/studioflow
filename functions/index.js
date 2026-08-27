@@ -5196,6 +5196,20 @@ const inventoryExports = createInventoryFunctions({
 const { _internal: inventoryInternal, ...inventoryCallables } = inventoryExports;
 Object.assign(exports, inventoryCallables);
 
+// The workspace's client-facing domain layer: subdomain slugs and custom
+// hostnames, one registry, host → workspace in a single read. Module for the
+// same reason inventory is one.
+const { createClientDomainFunctions } = require("./clientDomains");
+const { _internal: clientDomainInternal, ...clientDomainCallables } = createClientDomainFunctions({
+  admin,
+  onCall,
+  HttpsError,
+  uidIsCompanyOwner,
+  planForCompany: (companyData) => String(billingEntitlementsForCompany(companyData || {})?.plan || ""),
+  dnsResolveCname: (host) => require("dns").promises.resolveCname(host)
+});
+Object.assign(exports, clientDomainCallables);
+
 // The central file library: one file, many links; sharing is a separate,
 // deliberate act. Lives in its own module for the same reason inventory does.
 const { createFilesLibraryFunctions, createPortalFilesHelper } = require("./filesLibrary");
