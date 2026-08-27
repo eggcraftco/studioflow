@@ -809,3 +809,29 @@ Rapor: önceki önerilerin ~%75-80'i uygulanmış; kalan ana sorun sıralama
   aynı: harcama listesi, mutabakat değil).
 - Net-VAT şu an yalnız web'de ÇÜNKÜ vergi kenara-ayır kartı yalnız
   web'de var — native'e kart gelirse net-VAT'la birlikte gelmeli (not).
+
+---
+
+## 27 Ağu gece 2 — Çoklu para birimi (dürüst dilim) + grid hotfix (tur 37)
+
+### Çoklu para birimi — dönüştürmeden görünürlük CANLI
+- Rapor #20 tam dönüşümün kur kararları istediğini söylüyor (hangi kur,
+  hangi tarih, refund kuru) — bunlar SAHİBİN kararı, tahmin edilmedi.
+- Yapılan dürüst dilim: yabancı kurlu siparişler (Shopify/WooCommerce/
+  Currency customField'ı workspace sembolünün ISO karşılığından farklıysa)
+  Financial Breakdown'da kendi satırlarında: "USD (çevrilmedi) (3)" +
+  tutar kendi para biriminde; Revenue hint'ine açıklama cümlesi.
+  Toplamlar değişmedi. 2 string 12 dilde; rehber kuralı: "NivaDesk parayı
+  asla sessizce çevirmez". SYMBOL→ISO haritası settings'teki 9 sembol.
+- **AÇIK KARAR (kullanıcıya):** gerçek kur dönüşümü istenirse kur
+  kaynağı/tarihi/refund kuru kararları gerekiyor.
+
+### HOTFIX tur 37 — gruplu kartlar ezilmişti
+- Kullanıcı bildirdi: "Everything stays connected" bölümü bozuk.
+  Neden: gruplama grid'in çocuklarını 19 slottan 5 blok'a çevirdi ama
+  konteyner 210px auto-fit'te kaldı → gruplar 226px şeride, çipler
+  108px'e ezildi (tur 35-36'da canlıya böyle çıkmış). Fix: blok grid'i
+  2 gerçek kolon (telefonda 1), çipler 286px'e döndü. Dev'de geometri
+  doğrulandı, tur 37 canlıda CSS+JS marker'larıyla teyitli.
+- Ders: yapısal DOM değişikliği yapınca konteynerin ESKİ layout
+  varsayımlarını da elden geçir; yalnız yeni sınıfların CSS'ini ekleme.
