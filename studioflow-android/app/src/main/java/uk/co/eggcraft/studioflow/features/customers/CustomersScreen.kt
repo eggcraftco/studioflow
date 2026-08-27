@@ -143,8 +143,7 @@ fun CustomersScreen(
     onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit = { _, _, _ -> },
     onDeleteCustomer: (String) -> Unit = {},
-    onOpenOrder: (StudioOrder) -> Unit = {},
-    onOpenQuickReply: () -> Unit = {}
+    onOpenOrder: (StudioOrder) -> Unit = {}
 ) {
     var selectedCustomerId by rememberSaveable { mutableStateOf<String?>(null) }
     var searchText by rememberSaveable { mutableStateOf("") }
@@ -152,7 +151,6 @@ fun CustomersScreen(
     // Single-select segment filter (web parity) — lives here so it survives
     // the wide/narrow layout switch.
     var segmentFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    val showAiReply = state.workspace?.quickReplyMenuEnabled ?: true
 
     LaunchedEffect(focusedCustomerName) {
         if (focusedCustomerName.isNotBlank()) searchText = focusedCustomerName
@@ -225,8 +223,6 @@ fun CustomersScreen(
                             showBack = false,
                             onUpdateCustomer = onUpdateCustomer,
                             onUpdateCustomerPrefs = onUpdateCustomerPrefs,
-                            showAiReply = showAiReply,
-                            onOpenQuickReply = onOpenQuickReply,
                             onResyncCustomer = onResyncCustomer,
                             onUploadCustomerPhoto = onUploadCustomerPhoto,
                             onDelete = {
@@ -253,8 +249,6 @@ fun CustomersScreen(
                 onBack = { selectedCustomerId = null },
                 onUpdateCustomer = onUpdateCustomer,
                 onUpdateCustomerPrefs = onUpdateCustomerPrefs,
-                showAiReply = showAiReply,
-                onOpenQuickReply = onOpenQuickReply,
                 onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDelete = {
@@ -685,8 +679,6 @@ private fun CustomerDetail(
     showBack: Boolean = true,
     onUpdateCustomer: (StudioCustomer) -> Unit,
     onUpdateCustomerPrefs: (StudioCustomer, StudioCustomerPrefsPatch) -> Unit = { _, _ -> },
-    showAiReply: Boolean = false,
-    onOpenQuickReply: () -> Unit = {},
     onResyncCustomer: (StudioCustomer) -> Unit = {},
     onUploadCustomerPhoto: (StudioCustomer, ByteArray, String) -> Unit,
     onDelete: () -> Unit,
@@ -819,9 +811,6 @@ private fun CustomerDetail(
             }
             if (instagram.isNotBlank()) {
                 QuickActionChip("◎ Instagram", enabled = !blocked, highlighted = customer.preferredChannel == "instagram") { open(Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/${Uri.encode(instagram)}"))) }
-            }
-            if (showAiReply) {
-                QuickActionChip("✨ ${t("AI Reply")}", enabled = !blocked) { onOpenQuickReply() }
             }
             if (blocked) {
                 StatusPill(
@@ -980,6 +969,10 @@ private fun CustomerDetail(
     @Composable
     fun contactCard() {
         DetailCard(title = t("Contact Info")) {
+            // Same editable.name the header text field binds — one source of
+            // truth, both views reflect each other through the shared state
+            // and the debounced autosave (web parity).
+            CustomerField(t("Customer Name"), editable.name) { editable = editable.copy(name = it); dirty = true }
             CustomerField(t("Email"), editable.email) { editable = editable.copy(email = it); dirty = true }
             // The customer's own WhatsApp number, kept apart from the store-fed
             // phone — "Phone / WhatsApp" stops being one ambiguous box (web parity).

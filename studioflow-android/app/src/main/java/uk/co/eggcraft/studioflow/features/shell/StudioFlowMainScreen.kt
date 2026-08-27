@@ -544,10 +544,6 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
-                    onOpenQuickReply = {
-                        settingsStartKey = null
-                        section = StudioSection.QuickReply
-                    },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
@@ -694,10 +690,6 @@ fun StudioFlowMainScreen(
                         focusedCustomerName = order.displayCustomerName
                         settingsStartKey = null
                         section = StudioSection.Customers
-                    },
-                    onOpenQuickReply = {
-                        settingsStartKey = null
-                        section = StudioSection.QuickReply
                     },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
@@ -1394,7 +1386,6 @@ private fun StudioSectionContent(
     onRestoreOrder: (StudioOrder) -> Unit,
     focusedCustomerName: String,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
-    onOpenQuickReply: () -> Unit = {},
     onCreateOrder: () -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
@@ -1528,8 +1519,7 @@ private fun StudioSectionContent(
                 onResyncCustomer = onResyncCustomer,
                 onUploadCustomerPhoto = onUploadCustomerPhoto,
                 onDeleteCustomer = onDeleteCustomer,
-                onOpenOrder = onOpenOrderFromFiles,
-                onOpenQuickReply = onOpenQuickReply
+                onOpenOrder = onOpenOrderFromFiles
             )
             StudioSection.Files -> uk.co.eggcraft.studioflow.features.files.ClientFilesScreen(
                 state = state,
