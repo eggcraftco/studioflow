@@ -748,6 +748,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [financeOrders, setFinanceOrders] = useState<DashboardFinanceOrder[]>(
     () => (cachedShellMatchesUser ? cachedFinanceOrders : []),
   );
+  // An empty list means two very different things: "brand-new workspace" and
+  // "still loading". New-user surfaces must only trust the first — otherwise
+  // they flash at every sign-in until the orders arrive.
+  const [financeOrdersLoaded, setFinanceOrdersLoaded] = useState<boolean>(
+    () => cachedShellMatchesUser,
+  );
   const [cloudSyncState, setCloudSyncState] =
     useState<WebSyncState>("connecting");
   const [cloudSyncMessage, setCloudSyncMessage] = useState(
@@ -850,6 +856,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       setWorkspace(null);
       setSettings(null);
       setFinanceOrders([]);
+      setFinanceOrdersLoaded(false);
       return;
     }
 
@@ -878,6 +885,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         const resolvedSettings = loadedSettings;
         if (cancelled) return;
         setFinanceOrders(loadedOrders);
+        setFinanceOrdersLoaded(true);
         setSettings(resolvedSettings);
         rememberAppShellSnapshot(currentUser.uid, {
           workspace: loadedWorkspace,
@@ -890,10 +898,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             setWorkspace(cachedWorkspace);
             setSettings(cachedSettings);
             setFinanceOrders(cachedFinanceOrders);
+            setFinanceOrdersLoaded(true);
           } else {
             setWorkspace(null);
             setSettings(null);
             setFinanceOrders([]);
+            setFinanceOrdersLoaded(false);
           }
         }
       }
@@ -1312,6 +1322,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     workspace &&
     settings &&
     !settings.businessOnboardingCompleted &&
+    financeOrdersLoaded &&
     financeOrders.length === 0 &&
     memberCanAccess(workspace, "settings") &&
     roleCanSetUpWorkspace(workspace.role),
@@ -1323,6 +1334,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     guideDeviceEligible &&
     canCreateToolbarOrder &&
     pathname.startsWith("/orders") &&
+    financeOrdersLoaded &&
     financeOrders.length === 0 &&
     !firstProjectGuide?.completed &&
     (firstProjectGuide === null || firstProjectGuide.step === 1),

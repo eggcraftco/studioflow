@@ -26261,3 +26261,24 @@ body[data-studio-theme="dark"] .block-custom-segment button.is-active {
 body[data-studio-theme="dark"] .block-custom-color.is-selected {
   background: rgba(96, 148, 255, 0.14);
 }
+
+/* Customer name heading: the pencil appears on hover/focus, promising the
+   name is editable — invisible otherwise so the heading stays a heading. */
+.customer-inline-title-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.customer-inline-title-pencil {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  opacity: 0;
+  transform: translateY(1px);
+  transition: opacity 120ms ease;
+  color: var(--accent, #2563eb);
+}
+.customer-inline-title-button:hover .customer-inline-title-pencil,
+.customer-inline-title-button:focus-visible .customer-inline-title-pencil {
+  opacity: 0.85;
+}
