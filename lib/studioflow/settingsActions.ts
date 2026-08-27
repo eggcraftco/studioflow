@@ -557,6 +557,29 @@ export async function undoWorkspaceBackupImport(workspace: WorkspaceContext, run
   }
 }
 
+export type SettingsAuditEntry = {
+  id: string;
+  atMs: number;
+  areas: string[];
+  changedKeys: string[];
+  changedCount: number;
+  values: { key: string; from: string; to: string }[];
+  byUid: string;
+  byName: string;
+};
+
+// The owner's read of the settings change history. Recording is a server
+// trigger; this only lists what it wrote.
+export async function getSettingsAuditLog(workspace: WorkspaceContext) {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; enabled?: boolean; entries?: SettingsAuditEntry[] }>(functions, "getSettingsAuditLog");
+    const result = await callable({ companyId: workspace.id });
+    return { enabled: result.data.enabled === true, entries: result.data.entries ?? [] };
+  } catch (error) {
+    throw new Error(friendlySettingsError(error));
+  }
+}
+
 export async function deleteWorkspaceData(workspace: WorkspaceContext, confirmation: string) {
   if (!canDeleteWorkspaceDataForRole(workspace.role)) {
     throw new Error("Only workspace Owner or Admin can delete workspace data.");

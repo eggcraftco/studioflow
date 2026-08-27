@@ -762,6 +762,12 @@ const TREE_EN: GuideNode[] = [
             "If the file is the exact backup you last downloaded, the preview says so — the SHA-256 noted at download time is checked against the file you picked.",
             "Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.",
             "After importing, Undo this import removes exactly the records that import created. Settings changes are not undone."
+          ] },
+          { kind: "sub", text: "Change history" },
+          { kind: "bullets", items: [
+            "Every workspace settings save — from web, Mac, iPhone or Android — is recorded as a change entry: which fields changed, when, and by whom. Entries are kept for 90 days.",
+            "The workspace owner reads the history under Settings ▸ Data Management ▸ Change history on the Pro and Team plans. Recording never pauses, so upgrading shows what already happened.",
+            "Secrets stay secret: an API key change is recorded as the fact that it changed — never the key itself."
           ] }
         ]
       },
@@ -1566,6 +1572,12 @@ const TREE_TR: GuideNode[] = [
             "Dosya, en son indirdiğiniz yedeğin birebir aynısıysa önizleme bunu söyler — indirme sırasında not edilen SHA-256, seçtiğiniz dosyayla karşılaştırılır.",
             "Olası kopyalar varsayılan olarak atlanır; bilerek ikinci kopya istiyorsanız Skip likely duplicates işaretini kaldırın. Bir içe aktarma 500 kayıtla sınırlıdır ve dışarıda kalanları söyler.",
             "İçe aktardıktan sonra Undo this import, tam olarak o içe aktarmanın oluşturduğu kayıtları siler. Ayar değişiklikleri geri alınmaz."
+          ] },
+          { kind: "sub", text: "Değişiklik geçmişi" },
+          { kind: "bullets", items: [
+            "Her çalışma alanı ayar kaydı — web, Mac, iPhone veya Android'den — bir değişiklik girdisi olarak kaydedilir: hangi alanlar, ne zaman ve kim tarafından. Girdiler 90 gün tutulur.",
+            "Çalışma alanı sahibi geçmişi Pro ve Team planlarında Settings ▸ Data Management ▸ Change history altından okur. Kayıt hiç durmaz; yükseltince geçmişte olanlar da görünür.",
+            "Gizli olan gizli kalır: API anahtarı değişikliği yalnızca değiştiği bilgisiyle kaydedilir — anahtarın kendisi asla."
           ] }
         ]
       },

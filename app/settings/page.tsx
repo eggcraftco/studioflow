@@ -11,7 +11,7 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { SettingsDialog } from "./SettingsDialog";
-import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPreview } from "@/lib/studioflow/settingsActions";
+import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPreview, SettingsAuditEntry } from "@/lib/studioflow/settingsActions";
 import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studioflow/planActions";
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -60,7 +60,7 @@ import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJs
 import { studioT, SUPPORTED_STUDIO_LANGUAGES, studioLocaleTag } from "@/lib/studioflow/language";
 import { getAutoLockMinutes, setAutoLockMinutes } from "@/lib/auth/sessionLock";
 import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMessageWorkspaceSettings } from "@/lib/studioflow/messages";
-import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings } from "@/lib/studioflow/settingsActions";
+import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings, getSettingsAuditLog } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
 import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
@@ -203,7 +203,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   "team-access": "role member permission invite seat join request",
   "message-settings": "chat group messaging direct",
   "safety-uploads": "upload file size limit policy zip audit virus",
-  data: "backup export import csv restore delete archive",
+  data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
   woocommerce: "webhook woocommerce store website orders",
   shopify: "shopify store sync app orders",
@@ -5832,6 +5832,25 @@ function settingsFilePrefix(workspace: WorkspaceContext) {
     .replace(/^-|-$/g, "") || "studioflow";
 }
 
+// Raw settings keys read like code; the history reads like a sentence. A few
+// keys carry names of their own, the rest just get their camelCase unfolded.
+const AUDIT_KEY_LABELS: Record<string, string> = {
+  hasOpenAIKey: "OpenAI key",
+  openAIKeyRotatedAtMs: "OpenAI key replaced",
+  aiKnowledgeBase: "Company Knowledge Base"
+};
+
+function humanizeSettingsKey(key: string) {
+  if (AUDIT_KEY_LABELS[key]) return AUDIT_KEY_LABELS[key];
+  return key
+    .replace(/JSON$/, "")
+    .replace(/^__/, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, first => first.toUpperCase())
+    .replace(/^Pdf /, "PDF ")
+    .replace(/^Ai /, "AI ");
+}
+
 function DataManagementSection({
   workspace,
   counts,
@@ -5864,6 +5883,25 @@ function DataManagementSection({
   const exportAllowed = workspace.entitlements.features.export_data;
   const canImport = canEditWorkspaceSettingsForRole(workspace.role);
   const canDelete = canDeleteWorkspaceDataForRole(workspace.role);
+  const isWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
+  const [auditEntries, setAuditEntries] = useState<SettingsAuditEntry[] | null>(null);
+  const [auditEnabled, setAuditEnabled] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
+
+  async function loadAuditLog() {
+    setAuditLoading(true);
+    setAuditError("");
+    try {
+      const result = await getSettingsAuditLog(workspace);
+      setAuditEnabled(result.enabled);
+      setAuditEntries(result.entries);
+    } catch (loadError) {
+      setAuditError(loadError instanceof Error ? loadError.message : t("The change history could not be loaded."));
+    } finally {
+      setAuditLoading(false);
+    }
+  }
 
   async function sha256Hex(text: string) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -6126,6 +6164,53 @@ function DataManagementSection({
         ) : null}
         {error ? <p className="layout-error">{error}</p> : null}
       </section>
+
+      {isWorkspaceOwner ? (
+        <section className="card app-card quick-reply-settings-card">
+          <CardTitle icon="docText" eyebrow={t("Data Management")} title={t("Change history")} />
+          <p className="muted-copy">{t("Who changed what, and when — workspace settings changes from the last 90 days, recorded from every device.")}</p>
+          {auditEntries === null ? (
+            <div className="settings-action-row">
+              <button className="button secondary" type="button" disabled={auditLoading} onClick={() => { void loadAuditLog(); }}>
+                {auditLoading ? t("Loading...") : t("Load history")}
+              </button>
+            </div>
+          ) : !auditEnabled ? (
+            <p className="muted-copy">{t("Change history is part of the Pro and Team plans. Changes are already being recorded — upgrade to read them.")}</p>
+          ) : auditEntries.length === 0 ? (
+            <p className="muted-copy">{t("No settings changes recorded yet. New saves appear here within a few seconds.")}</p>
+          ) : (
+            <>
+              <div className="settings-audit-list">
+                {auditEntries.map(entry => (
+                  <div className="settings-audit-entry" key={entry.id}>
+                    <div className="settings-audit-head">
+                      <strong>{entry.byName || t("Workspace member")}</strong>
+                      <span>{entry.areas.map(area => t(area)).join(" · ")}</span>
+                      <time>{new Date(entry.atMs).toLocaleString(studioLocaleTag(language))}</time>
+                    </div>
+                    <p className="muted-copy settings-audit-keys">
+                      {entry.changedKeys.slice(0, 6).map(humanizeSettingsKey).join(", ")}
+                      {entry.changedCount > 6 ? ` +${entry.changedCount - 6}` : ""}
+                    </p>
+                    {entry.values.slice(0, 4).map(value => (
+                      <p className="settings-audit-value" key={value.key}>
+                        {humanizeSettingsKey(value.key)}: {value.from} → {value.to}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="settings-action-row">
+                <button className="button secondary" type="button" disabled={auditLoading} onClick={() => { void loadAuditLog(); }}>
+                  {auditLoading ? t("Loading...") : t("Refresh")}
+                </button>
+              </div>
+            </>
+          )}
+          {auditError ? <p className="layout-error">{auditError}</p> : null}
+        </section>
+      ) : null}
 
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="lock" eyebrow={t("Protected Actions")} title={t("Import and delete")} />
