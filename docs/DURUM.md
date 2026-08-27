@@ -1224,3 +1224,26 @@ hunk'ının hepsi doğru yerde. Bulunan ve düzeltilenler:
 - Kabul edilen sınırlar: native yazmalar mağaza dalgasına kadar anonim;
   kayıt her planda sürer (bilinçli); aiKnowledgeBase 57 karakter önizleme
   yalnız owner'a görünür.
+
+---
+
+## 28 Ağu — Dashboard Ürün: AOV + Yeni/Dönen müşteriler (tur 51)
+
+- Financial Breakdown'a iki ekleme: **Average order value (n)** —
+  hasılat ÷ sayılan sipariş, Revenue ile aynı istisnalar (iptal/iade
+  hariç, yabancı para nominal + mevcut açıklama notu) — ve
+  **New/Returning customers** kırılımı: ilk siparişi aralıkta olan
+  müşteri yeni; ilk-sipariş geçmişi BİLEREK tüm kanallara bakar (kanal
+  filtresi açıkken bile mağazadan eski müşteri "dönen" kalır);
+  hideNumbers sayıları da gizler. Altta tek cümlelik açıklama.
+- Dev E2E: AOV £93.50 = 935/10 birebir; 7 yeni / 0 dönen doğru.
+  4 string 12 dilde. Tur 51 canlı-doğrulandı (dashboard chunk'ları).
+- Rehber: Dashboard bulleti + Customers bölümüne çapraz referans
+  (ilk sonda yeni/dönen kısmını ıskaladı → çapraz bullet sonrası
+  hedefli soru confident:True). Corpus 2 kez, 4 fonksiyon 2 kez deploy.
+- Notes'un bekleyen deploy'u da kapandı: sharePersonalNoteWithWorkspaceMember
+  (reminderDateMillis mirror fix'i) CANLIDA.
+- "Templates" ürün maddesinin kaynak raporu elimizde değil — orijinal
+  dashboard raporu bulunursa netleştirilecek.
+- Native parite (mağaza dalgası): AOV + yeni/dönen satırları
+  Swift/Kotlin dashboard'una taşınacak.
