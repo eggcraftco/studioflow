@@ -658,3 +658,40 @@ eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
   Not: guard yalnız KAYITLI bir domain'de host≠workspace olduğunda devreye
   girer; kayıtlı iki domain de bizim workspace'te olduğundan mevcut linkler
   etkilenmez.
+
+---
+
+## 27 Ağu öğle — Domain 4 platformda + Portal branding (tur 33)
+
+### Customer Portal Domain native parite TAMAM
+- Swift 5e6fb16: ClientDomainSettingsView (Workspace Design grubunda,
+  Branding-PDF arası, yalnız owner), 5 callable, DilMotoru'da 25 anahtar
+  12 dilde; macOS + iOS Simulator BUILD SUCCEEDED.
+- Android f615631: repository + SettingsScreen ClientDomainDetail,
+  TR_13 çeviri bloğu web'den bire bir çıkarıldı; BUILD SUCCESSFUL.
+- Bölüm artık 4 platformda; native'de status/error satırları BAŞTAN görünür.
+
+### Portal branding (web+server CANLI, native ajanları çalışıyor)
+- saveClientPortalBranding (YENİ, deploy edildi): owner-only; hex #rrggbb
+  doğrulaması; Powered by gizleme Pro/Team kapılı. getClientDomainConfig
+  branding'i okur; portal VE estimate public view'ları
+  accentColor/showPoweredBy taşır (getPortalForVisitor +
+  getEstimateForVisitor yeniden deploy).
+- Web: bölüme "Customer page branding" kartı (renk seçici + varsayılana
+  dön + Powered by anahtarı + Save); portal sayfası --portal-accent
+  değişkeniyle durum yazısı + ilerleme noktalarını boyar; credit satırı
+  koşullu. 9 string 12 dilde. Suite 27 assert yeşil. Tur 33 canlı.
+- **Gizli bug bulundu+düzeltildi:** ClientDomainSection status/error
+  state'lerini D1'den beri hiç render etmiyordu — "That subdomain is
+  already taken." gibi sunucu mesajları sessizdi.
+- Rehber: set-client-domain bölümüne markalama alt başlığı (EN+TR),
+  korpus yeniden kuruldu, 4 asistan fonksiyonu deploy, üretim probu
+  GEÇTİ (confident:true). Probe support inbox'a 1 QA sohbeti bıraktı.
+
+### ÖNEMLİ KEŞİF — dev web TAM emülatör stack'inde
+- localhost:3000 functions(5001)+Firestore(8080)+auth+storage
+  emülatörlerine bağlı; dünkü "dev E2E" domain claim'leri emülatör
+  sandbox'ındaydı. ÜRETİM clientDomains koleksiyonu TEMİZ/BOŞ —
+  temizlik gerekmez, ama kullanıcının gerçek alt alan adı üretimde
+  HENÜZ CLAIM EDİLMEDİ (nivadesk.app/settings'ten yapılabilir).
+- Üretim kanıtı curl ile europe-west2 URL'lerine; hafızaya kaydedildi.
