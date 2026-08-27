@@ -1161,3 +1161,35 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
 - Not (okuyucu bulgusu, ayrı faz): /export sayfası indirmeleri "Last
   backup" kaydını güncellemiyor; web-archive workspaceSettings ham
   dökümü allowlist'siz; clientFiles URL'leri import'ta doğrulanmıyor.
+
+---
+
+## 28 Ağu — Rapor High #10 KAPANDI: Settings audit history (tur 49)
+
+- **Mimari:** onDocumentWritten(companySettings/{id}) trigger'ı
+  (functions/settingsAudit.js, clientDomains gibi factory) her kaydı
+  alan-bazlı diff'e çevirip companies/{id}/settingsAuditLog'a yazar —
+  4 platformun doğrudan yazdıkları dahil. Bookkeeping-only kayıtlar
+  atlanır; secret/JSON değerleri asla yazılmaz (anahtar adı yeter);
+  openAIKeyRotatedAtMs işaretiyle anahtar DEĞİŞTİRME de görünür
+  (raporun açık isteği). 90 günden eski girdiler trigger içinde küçük
+  batch'lerle silinir (zamanlayıcı yok).
+- **Aktör:** agent 17 callable'a lastSettingsWriteByUid damgası ekledi
+  (saveSwiftWorkspaceCardProfile'dan saveWorkspaceSmsSettings'e; tam
+  liste commit 4a6adf4). Trigger damga yoksa delta'daki *ByUid
+  alanlarını tarar; hiçbiri yoksa "Workspace member".
+- **Okuma:** getSettingsAuditLog (owner-only; auditLogEnabled
+  entitlement'ı İLK KEZ kullanıldı → Pro/Team görür, kayıt her planda
+  sürer). Web: Data Management'ta "Change history" kartı (owner'a),
+  Load history/Refresh, insan-diline çevrilmiş anahtar adları,
+  from → to satırları. 18 string 12 dilde.
+- **Rules:** settingsAuditLog İKİ catch-all istisna listesine eklendi
+  (server-only) ve rules DEPLOY edildi.
+- **Test:** settings-audit.test.js 6 senaryo yeşil; dev emülatör E2E:
+  PDF kaydı → girdi (13 anahtar, area PDF, byUid damgası aktı) → UI
+  kartında "Owner · PDF · tarih" listelendi. 23 fonksiyon tek deploy
+  (2 yeni + 17 damgalı + 4 asistan); bot sondası confident:True.
+- **Native parite (mağaza dalgası):** Swift/Kotlin companySettings
+  yazarken lastSettingsWriteByUid: uid eklemeli — yoksa girdileri
+  "Workspace member" görünür (kayıt yine tutulur).
+- Settings raporunun TÜM High maddeleri artık kapalı (1-10).
