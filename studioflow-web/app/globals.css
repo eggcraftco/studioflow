@@ -25353,3 +25353,43 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
 @media (max-width: 860px) {
   .public-site .public-connected-lines { display: none; }
 }
+
+/* Settings report wave 1: search box, compact sidebar, dirty-state bar. */
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border, rgba(0, 0, 0, 0.14));
+  border-radius: 10px;
+  background: var(--app-surface-muted, rgba(0, 0, 0, 0.03));
+}
+.settings-search svg { width: 15px; height: 15px; opacity: 0.55; flex: 0 0 auto; }
+.settings-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 13px;
+  color: inherit;
+}
+.settings-section-button small { display: none; }
+.settings-section-button { padding-top: 8px; padding-bottom: 8px; }
+.settings-section-group { margin-bottom: 4px; }
+.settings-dirty-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  width: fit-content;
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+.settings-dirty-bar[data-dirty="true"] {
+  background: rgba(234, 138, 46, 0.14);
+  color: #b45309;
+}

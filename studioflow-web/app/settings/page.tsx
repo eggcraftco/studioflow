@@ -170,12 +170,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "client-domain", title: "Customer Portal Domain", appKey: "Client Domain", description: "Branded customer links: your subdomain and your own domain.", icon: "brand", group: "design" },
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
-  { id: "quick-reply", title: "Quick Reply Settings", appKey: "Quick Reply", description: "Quick reply templates.", icon: "reply", group: "workflowGroup" },
+  { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
   { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
   { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "files" },
-  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "dataGroup" },
+  { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "files" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
   { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "integrations" },
   { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "integrations" },
@@ -183,13 +183,36 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" }
 ];
 
+// Settings search (settings report): each section carries the terms a user
+// actually types — "VAT", "logo", "password" — beyond its title words.
+const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
+  "profile-security": "password email photo sign in account delete biometric security",
+  preferences: "theme language dark light auto lock",
+  about: "version release diagnostics whats new",
+  branding: "logo name subtitle brand colour",
+  "client-domain": "domain subdomain dns cname portal accent powered by",
+  pdf: "invoice pdf export vat eori job sheet preview",
+  workflow: "status steps template material headings badges",
+  "quick-reply": "ai reply openai api key knowledge tone quick",
+  financial: "vat tax fee currency corporation margin recalculate decimal",
+  "team-access": "role member permission invite seat join request",
+  "message-settings": "chat group messaging direct",
+  "safety-uploads": "upload file size limit policy zip audit virus",
+  data: "backup export import csv restore delete archive",
+  "plan-access": "billing plan storage subscription upgrade seat",
+  woocommerce: "webhook woocommerce store website orders",
+  shopify: "shopify store sync app orders",
+  inbound: "zapier make webhook custom api platforms",
+  "support-tickets": "ticket help support contact"
+};
+
 const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
   personal: "Personal",
-  design: "Workspace Design",
+  design: "Workspace",
   workflowGroup: "Workflow",
   finance: "Finance & Tax",
   team: "Team & Permissions",
-  files: "Files & Security",
+  files: "Files & Data",
   dataGroup: "Data & Backups",
   billing: "Billing",
   integrations: "Integrations",
@@ -332,6 +355,7 @@ export default function SettingsPage() {
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
+  const [sectionSearch, setSectionSearch] = useState("");
   // Sections register their own unsaved edits here; see ./unsavedChanges.
   const settingsDirty = useProvideSettingsDirty();
   const unsavedSectionId = useMemo(
@@ -590,10 +614,33 @@ export default function SettingsPage() {
             <h1>{t("Settings")}</h1>
             <p>{t("Choose a section to edit.")}</p>
           </div>
+          <label className="settings-search">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5" /><path d="M13.2 13.2 17 17" /></svg>
+            <input
+              type="search"
+              value={sectionSearch}
+              placeholder={t("Search settings...")}
+              aria-label={t("Search settings...")}
+              onChange={event => setSectionSearch(event.target.value)}
+            />
+          </label>
           <div className="settings-section-list">
-            {visibleSections.map((section, index) => {
+            {(sectionSearch.trim()
+              ? visibleSections.filter(section => {
+                  const query = sectionSearch.trim().toLowerCase();
+                  const haystack = [
+                    section.title,
+                    section.description,
+                    t(section.title),
+                    t(section.description),
+                    SETTINGS_SEARCH_KEYWORDS[section.id] || ""
+                  ].join(" ").toLowerCase();
+                  return query.split(/\s+/).every(word => haystack.includes(word));
+                })
+              : visibleSections
+            ).map((section, index, list) => {
               const unreadCount = section.id === "support-tickets" ? supportUnreadCount : 0;
-              const showGroupHeading = index === 0 || visibleSections[index - 1].group !== section.group;
+              const showGroupHeading = index === 0 || list[index - 1].group !== section.group;
               return (
                 <Fragment key={section.id}>
                   {showGroupHeading ? (
@@ -657,6 +704,12 @@ export default function SettingsPage() {
             userEmail: user.email ?? "Signed in",
             onDataImported: refreshSettingsAfterImport
           }) : null}
+
+          <div className="settings-dirty-bar" data-dirty={settingsDirty.dirtySections[selectedSection.id] ? "true" : "false"}>
+            {settingsDirty.dirtySections[selectedSection.id]
+              ? <>● {t("Unsaved changes")}</>
+              : <>✓ {t("No unsaved changes")}</>}
+          </div>
         </section>
       </div>
       </SettingsDirtyProvider>
@@ -4313,7 +4366,7 @@ function FinancialSettingsSection({
           </div>
 
           <label className="financial-settings-row wide-control">
-            <span>{t("Rule 1 (Revenue)")}</span>
+            <span>{t("Tax rule label — calculated on revenue")}</span>
             <input
               className="input financial-control"
               value={draft.taxRuleNameRevenue}
@@ -4323,7 +4376,7 @@ function FinancialSettingsSection({
           </label>
 
           <label className="financial-settings-row wide-control">
-            <span>{t("Rule 2 (Profit)")}</span>
+            <span>{t("Tax rule label — calculated on eligible profit")}</span>
             <input
               className="input financial-control"
               value={draft.taxRuleNameProfit}
@@ -5699,7 +5752,7 @@ function DataManagementSection({
           </button>
         </div>
 
-        <p className="muted-copy">{t("Download backup is the one to keep — it restores into NivaDesk on any device. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
+        <p className="muted-copy">{t("Workspace data backup restores your settings, orders and customers into NivaDesk on any device — it does not include uploaded files. Full web archive is a raw copy for support. The two CSV files are for spreadsheets and cannot be imported back.")}</p>
         {!canImport ? <p className="muted-copy">{t("Your current workspace role cannot import backup files.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
         {lastImportRunId ? (
