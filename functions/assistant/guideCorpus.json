@@ -203,7 +203,7 @@
    "id": "set-pdf",
    "title": "PDF Export Settings",
    "path": "Settings › PDF Export Settings",
-   "text": "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export."
+   "text": "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export.\nPresets\n- Four one-tap presets set the visible sections for a common document: Customer invoice, Internal job sheet, Estimate and Delivery note. A preset only flips the toggles — review the result, open a preview, then press Save.\n- No preset ever turns on Internal Financials: internal cost, profit and supplier details print only if you enable that section yourself, and the page warns you when it is on.\n- Change any toggle by hand and the chip row shows Custom, so you always know whether you are on a preset or your own mix."
   },
   {
    "id": "set-quickreply",

@@ -683,7 +683,13 @@ const TREE_EN: GuideNode[] = [
         id: "set-pdf",
         title: "PDF Export Settings",
         blocks: [
-          { kind: "para", text: "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export." }
+          { kind: "para", text: "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export." },
+          { kind: "sub", text: "Presets" },
+          { kind: "bullets", items: [
+            "Four one-tap presets set the visible sections for a common document: Customer invoice, Internal job sheet, Estimate and Delivery note. A preset only flips the toggles — review the result, open a preview, then press Save.",
+            "No preset ever turns on Internal Financials: internal cost, profit and supplier details print only if you enable that section yourself, and the page warns you when it is on.",
+            "Change any toggle by hand and the chip row shows Custom, so you always know whether you are on a preset or your own mix."
+          ] }
         ]
       },
       {
@@ -1472,7 +1478,13 @@ const TREE_TR: GuideNode[] = [
         id: "set-pdf",
         title: "PDF Export Settings",
         blocks: [
-          { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü, işletme bilgileri, logo ve alt not, ve dışa aktarıma neyin dahil edileceğini ayarlayın." }
+          { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü, işletme bilgileri, logo ve alt not, ve dışa aktarıma neyin dahil edileceğini ayarlayın." },
+          { kind: "sub", text: "Ön ayarlar" },
+          { kind: "bullets", items: [
+            "Dört tek dokunuşluk ön ayar, sık kullanılan belgeler için görünür bölümleri ayarlar: Müşteri faturası, İç iş emri, Teklif ve İrsaliye. Ön ayar yalnızca anahtarları değiştirir — sonucu gözden geçirin, önizlemeyi açın, sonra Kaydet'e basın.",
+            "Hiçbir ön ayar İç Finansallar'ı açmaz: iç maliyet, kâr ve tedarikçi bilgileri yalnızca o bölümü kendiniz açarsanız yazdırılır; açıkken sayfa sizi uyarır.",
+            "Herhangi bir anahtarı elle değiştirirseniz çip satırı Custom gösterir; böylece bir ön ayarda mı yoksa kendi karışımınızda mı olduğunuzu her zaman bilirsiniz."
+          ] }
         ]
       },
       {

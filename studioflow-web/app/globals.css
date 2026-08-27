@@ -25950,3 +25950,45 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 @media (min-width: 900px) {
   .getting-started-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* PDF section presets — one-tap starting points above the toggle grid. */
+.pdf-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+.pdf-preset-chip {
+  border: 1px solid var(--line, rgba(15, 23, 42, 0.16));
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.pdf-preset-chip:hover:not(:disabled) {
+  border-color: var(--accent, #4f63d2);
+}
+.pdf-preset-chip.is-active {
+  background: var(--accent, #4f63d2);
+  border-color: var(--accent, #4f63d2);
+  color: #fff;
+}
+.pdf-preset-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pdf-preset-chip.is-custom {
+  cursor: default;
+  border-style: dashed;
+  display: none;
+}
+.pdf-preset-chip.is-custom.is-active {
+  display: inline-block;
+  background: transparent;
+  color: inherit;
+  border-color: var(--line, rgba(15, 23, 42, 0.3));
+}

@@ -2280,6 +2280,55 @@ const PDF_SETTING_TOGGLES: Array<[keyof Pick<WorkspaceSettingsOverview,
   ["pdfShowShippingAddress", "Shipping Address"]
 ];
 
+type PdfToggleKey = (typeof PDF_SETTING_TOGGLES)[number][0];
+
+// Curated starting points for the section toggles. A preset never prints
+// internal cost, profit or supplier data on a customer-facing document —
+// Internal Financials stays off in every preset and is only ever a manual
+// opt-in.
+const PDF_SECTION_PRESETS: Array<{ id: string; label: string; values: Record<PdfToggleKey, boolean> }> = [
+  {
+    id: "customer-invoice",
+    label: "Customer invoice",
+    values: {
+      pdfShowCustomer: true, pdfShowContact: false, pdfShowPreview: true,
+      pdfShowMaterials: false, pdfShowPriority: false, pdfShowFinCustomer: true,
+      pdfShowPaymentMethod: true, pdfShowFinInternal: false, pdfShowStatus: false,
+      pdfShowShipping: true, pdfShowAddress: true, pdfShowShippingAddress: true
+    }
+  },
+  {
+    id: "job-sheet",
+    label: "Internal job sheet",
+    values: {
+      pdfShowCustomer: true, pdfShowContact: true, pdfShowPreview: true,
+      pdfShowMaterials: true, pdfShowPriority: true, pdfShowFinCustomer: false,
+      pdfShowPaymentMethod: false, pdfShowFinInternal: false, pdfShowStatus: true,
+      pdfShowShipping: true, pdfShowAddress: false, pdfShowShippingAddress: true
+    }
+  },
+  {
+    id: "estimate",
+    label: "Estimate",
+    values: {
+      pdfShowCustomer: true, pdfShowContact: false, pdfShowPreview: true,
+      pdfShowMaterials: false, pdfShowPriority: false, pdfShowFinCustomer: true,
+      pdfShowPaymentMethod: false, pdfShowFinInternal: false, pdfShowStatus: false,
+      pdfShowShipping: false, pdfShowAddress: true, pdfShowShippingAddress: false
+    }
+  },
+  {
+    id: "delivery-note",
+    label: "Delivery note",
+    values: {
+      pdfShowCustomer: true, pdfShowContact: false, pdfShowPreview: true,
+      pdfShowMaterials: false, pdfShowPriority: false, pdfShowFinCustomer: false,
+      pdfShowPaymentMethod: false, pdfShowFinInternal: false, pdfShowStatus: false,
+      pdfShowShipping: true, pdfShowAddress: false, pdfShowShippingAddress: true
+    }
+  }
+];
+
 function PdfExportSettingsSection({
   workspace,
   settings,
@@ -2335,6 +2384,26 @@ function PdfExportSettingsSection({
     setStatus("");
     setError("");
   }
+
+  // A preset only rewrites the toggles this role is allowed to see: for a
+  // workflow-only member the finance keys keep their stored values instead of
+  // pretending to flip in a UI that could never save them.
+  function applyPdfPreset(preset: (typeof PDF_SECTION_PRESETS)[number]) {
+    setDraft(current => {
+      if (!current) return current;
+      const next = { ...current };
+      for (const [key] of visiblePdfToggles) next[key] = preset.values[key];
+      return next;
+    });
+    setStatus("");
+    setError("");
+  }
+
+  const activePdfPresetId = draft
+    ? PDF_SECTION_PRESETS.find(preset =>
+        visiblePdfToggles.every(([key]) => Boolean(draft[key]) === preset.values[key])
+      )?.id ?? null
+    : null;
 
   // Loaded on demand: the templates live in the order-detail module, which is
   // the point — the preview and the real print buttons share one generator.
@@ -2453,6 +2522,23 @@ function PdfExportSettingsSection({
 
       <section className="card app-card quick-reply-settings-card">
         <CardTitle icon="docText" eyebrow={t("PDF Export Settings")} title={t("Visible PDF sections")} />
+        <div className="pdf-preset-row" role="group" aria-label={t("PDF presets")}>
+          {PDF_SECTION_PRESETS.map(preset => (
+            <button
+              key={preset.id}
+              type="button"
+              className={`pdf-preset-chip${activePdfPresetId === preset.id ? " is-active" : ""}`}
+              disabled={!canEdit || saving}
+              onClick={() => applyPdfPreset(preset)}
+            >
+              {t(preset.label)}
+            </button>
+          ))}
+          <span className={`pdf-preset-chip is-custom${activePdfPresetId === null ? " is-active" : ""}`} aria-hidden={activePdfPresetId !== null}>
+            {t("Custom")}
+          </span>
+        </div>
+        <p className="muted-copy">{t("A preset only flips the section toggles below — nothing prints internal cost or profit unless you turn Internal Financials on yourself. Review the result, preview it, then press Save.")}</p>
         <div className="pdf-settings-grid">
           {visiblePdfToggles.map(([key, label]) => (
             <label className="pdf-settings-toggle" key={key}>
