@@ -527,10 +527,9 @@ export default function DashboardPage() {
   const yearly = useMemo(() => yearTotals(financeOrders, settings), [financeOrders, settings]);
   const revenueCardTitle = settings?.taxRuleNameRevenue || "Standard VAT (New)";
 
-  async function updateDashboardVisibility(key: keyof DashboardWidgetVisibility, value: boolean) {
+  async function persistDashboardVisibility(next: DashboardWidgetVisibility) {
     if (!workspace) return;
     const previous = dashboardVisibility;
-    const next = { ...previous, [key]: value };
     setDashboardVisibility(next);
     setSettings(current => current ? { ...current, dashboardWidgetVisibility: next } : current);
     setCustomizeStatus(null);
@@ -548,6 +547,14 @@ export default function DashboardPage() {
       setCustomizeError(saveError instanceof Error ? saveError.message : "Dashboard customization could not be saved.");
     }
   }
+
+  function updateDashboardVisibility(key: keyof DashboardWidgetVisibility, value: boolean) {
+    return persistDashboardVisibility({ ...dashboardVisibility, [key]: value });
+  }
+
+  const isDefaultDashboardLayout = DASHBOARD_WIDGET_ROWS.every(
+    row => dashboardVisibility[row.key] === DEFAULT_DASHBOARD_VISIBILITY[row.key]
+  );
 
   if (loading || !user) return <LoadingScreen />;
 
@@ -799,6 +806,7 @@ export default function DashboardPage() {
                   threeBack={canSeeAdvancedFinance && compareThreeYears ? threeYearsBackSeries : []}
                   bank={bankSeries}
                   settings={settings}
+                  t={t}
                 />
                 {!canSeeAdvancedFinance ? (
                   <div className="dashboard-chart-locked">
@@ -841,9 +849,20 @@ export default function DashboardPage() {
               <section className="add-order-modal dashboard-customize-modal" onClick={event => event.stopPropagation()}>
                 <div className="add-order-header">
                   <CardTitle icon="dashboard" eyebrow={t("Customize")} title={t("Dashboard")} />
-                  <button className="ghost-button" type="button" onClick={() => setShowCustomize(false)}>
-                    {t("Close")}
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={isDefaultDashboardLayout}
+                      title={t("Show every dashboard card again.")}
+                      onClick={() => persistDashboardVisibility(DEFAULT_DASHBOARD_VISIBILITY)}
+                    >
+                      {t("Reset layout")}
+                    </button>
+                    <button className="ghost-button" type="button" onClick={() => setShowCustomize(false)}>
+                      {t("Close")}
+                    </button>
+                  </div>
                 </div>
                 <div className="dashboard-widget-list">
                   {DASHBOARD_WIDGET_ROWS.map(row => (
@@ -1111,7 +1130,9 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
       </div>
       <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div>
-          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }}>{t("Set aside this year")}</p>
+          {/* Both sums above key off getFullYear(), so say "calendar year" out
+              loud — owners think in tax years and would misread a bare "year". */}
+          <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }} title={t("Counted over the calendar year (1 January – 31 December), not the tax year.")}>{t("Set aside this calendar year")}</p>
           <strong style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{showMoney(summary.totalYtd)}</strong>
           <span style={{ fontSize: 11.5, opacity: 0.7 }}>
             {t("VAT Amount")}: {showMoney(summary.vatYtd)}
@@ -1215,7 +1236,8 @@ function ProfitChart({
   twoBack,
   threeBack,
   bank = [],
-  settings
+  settings,
+  t
 }: {
   current: ChartPoint[];
   previous: ChartPoint[];
@@ -1223,16 +1245,20 @@ function ProfitChart({
   threeBack: ChartPoint[];
   bank?: ChartPoint[];
   settings: StudioMoneySettings;
+  t: (text: string) => string;
 }) {
   const allValues = [...current, ...previous, ...twoBack, ...threeBack, ...bank].map(point => point.value);
   const min = Math.min(0, ...allValues);
   const max = Math.max(1, ...allValues);
 
   if (current.length === 0) {
-    return <div className="dashboard-chart-empty">No data available.</div>;
+    return <div className="dashboard-chart-empty">{t("No data available.")}</div>;
   }
 
   const symbol = moneySymbol(settings);
+  // Tooltip figures use the workspace money format (currency symbol + decimal
+  // separator), not the browser locale, so they match the KPI cards exactly.
+  const tooltipMoney = (value: number) => formatStudioMoney(value, settings);
   // Nice y-axis ticks: 4 evenly spaced levels including 0 and max-rounded
   const niceMax = niceCeil(max);
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * niceMax);
@@ -1291,7 +1317,7 @@ function ProfitChart({
         ref={svgRef}
         viewBox={`0 0 ${W} ${H + 22}`}
         role="img"
-        aria-label="Net profit chart"
+        aria-label={t("Net profit chart")}
         onMouseMove={handleMove}
         onMouseLeave={() => { setHoverIdx(null); setHoverPx(null); }}
         style={{ cursor: "crosshair", width: "100%", height: 350 }}
@@ -1356,48 +1382,50 @@ function ProfitChart({
         <div
           className="dashboard-chart-tooltip"
           style={{
-            left: `${hoverPx.x + 14}px`,
+            left: hoverPx.x > W - 190 ? `${hoverPx.x - 14}px` : `${hoverPx.x + 14}px`,
             top: `${hoverPx.y + 14}px`,
-            transform: "none",
+            // Flip to the left of the cursor near the right edge so the
+            // breakdown never gets clipped by the card boundary.
+            transform: hoverPx.x > W - 190 ? "translateX(-100%)" : "none",
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280" }}>{current[hoverIdx].label}</div>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#16a34a", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: "#16a34a" }} />
-            Net: {symbol}{current[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {t("Net")}: {tooltipMoney(current[hoverIdx].value)}
           </div>
           {bank[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#dc2626" }} />
-              Bank: {symbol}{bank[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {t("Bank")}: {tooltipMoney(bank[hoverIdx].value)}
             </div>
           ) : null}
           {previous[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#f59e0b" }} />
-              -1 Yr: {symbol}{previous[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {t("-1 Yr")}: {tooltipMoney(previous[hoverIdx].value)}
             </div>
           ) : null}
           {twoBack[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#7c3aed" }} />
-              -2 Yrs: {symbol}{twoBack[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {t("-2 Yrs")}: {tooltipMoney(twoBack[hoverIdx].value)}
             </div>
           ) : null}
           {threeBack[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#6b7280" }} />
-              -3 Yrs: {symbol}{threeBack[hoverIdx].value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              {t("-3 Yrs")}: {tooltipMoney(threeBack[hoverIdx].value)}
             </div>
           ) : null}
         </div>
       )}
       <div className="dashboard-chart-legend">
-        <span><i className="legend-current" /> Current</span>
-        {bank.length ? <span><i style={{ background: "#dc2626" }} /> Bank</span> : null}
-        {previous.length ? <span><i className="legend-previous" /> -1 Yr</span> : null}
-        {twoBack.length ? <span><i className="legend-two" /> -2 Yrs</span> : null}
-        {threeBack.length ? <span><i className="legend-three" /> -3 Yrs</span> : null}
+        <span><i className="legend-current" /> {t("Current")}</span>
+        {bank.length ? <span><i style={{ background: "#dc2626" }} /> {t("Bank")}</span> : null}
+        {previous.length ? <span><i className="legend-previous" /> {t("-1 Yr")}</span> : null}
+        {twoBack.length ? <span><i className="legend-two" /> {t("-2 Yrs")}</span> : null}
+        {threeBack.length ? <span><i className="legend-three" /> {t("-3 Yrs")}</span> : null}
       </div>
     </div>
   );
@@ -1600,7 +1628,8 @@ function ExtraSpendingSection({
           e.watchRef,
           e.heading,
           e.description,
-          e.paymentDate ? e.paymentDate.toISOString().slice(0, 10) : "",
+          // Local calendar date — toISOString shifts the day around midnight in BST.
+          e.paymentDate ? dateInputValue(e.paymentDate) : "",
           e.amount.toFixed(2),
         ]);
       }
@@ -1610,7 +1639,12 @@ function ExtraSpendingSection({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `extra-spending-${new Date().toISOString().slice(0, 10)}.csv`;
+    // Name the file after the range it covers, not the day it was clicked.
+    const rangeSlug = scope === "thisMonth" ? "this-month"
+      : scope === "thisYear" ? "this-year"
+      : scope === "allTime" ? "all-time"
+      : `${dateInputValue(start)}_${dateInputValue(end)}`;
+    a.download = `extra-spending-${rangeSlug}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
