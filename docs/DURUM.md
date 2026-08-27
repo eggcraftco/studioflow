@@ -890,3 +890,44 @@ Kullanıcı yakın-plan kırpımlarla detayları istedi:
   (pano/kamyon/kurye/koli), etiket + yeşil tik ALTA.
 - Tur 39 canlı: JS'te asset referansı + CSS'te connected-lines + JPEG
   bayt kontrolüyle doğrulandı.
+
+---
+
+## 27 Ağu gece 4 — NivaDesk_settings_update.md İLK DALGA
+
+Kullanıcı Settings raporu + ortak şablon mock'u verdi ("burdan devam").
+
+### Dalga 1a — Settings chrome (commit'li, yayın Financial ajanıyla birlikte)
+- Kenar çubuğuna ARAMA ("Search settings...") — bölüm başlığı+açıklaması+
+  kullanıcının gerçekte yazdığı kelimeler (VAT, logo, password, Shopify,
+  file size, role...) üzerinden; dev'de "vat"→PDF+Financial doğrulandı.
+- Kompakt menü (açıklamalar gizli, sıkı satırlar); gruplar mock'la eşitlendi:
+  Workspace, Files & Data (Data Management, Safety & Uploads ile birleşti).
+- "Quick Reply Settings" → "AI Reply Settings" (rapor 9, ürün adıyla aynı).
+- İçerik altında yapışkan durum çipi: ✓ No unsaved changes / ● Unsaved.
+- Dürüst metinler: "Rule 1/2" → "Tax rule label — calculated on revenue /
+  eligible profit"; yedek açıklaması artık dosyaları İÇERMEDİĞİNİ söylüyor
+  (rapor kritik #3). 8 string 12 dilde.
+
+### Sunucu kritikleri (deploy edildi)
+- **Woo imza doğrulaması (kritik #2):** X-WC-Webhook-Signature desteği.
+  saveWooSignatureSecret (owner-only, YENİ) secret'ı integrationSecrets'a
+  yazar; secret kayıtlı + header mevcutken YANLIŞ imza geçerli token'la
+  bile reddedilir (forgery de misconfig de sesli düşmeli). Karar tek
+  helper'da, 6 assert'lik suite yeşil; teslimat günlüğü authMethod yazar.
+  Secret yoksa davranış aynen eski. UI alanı Financial ajanı inince
+  Woo bölümüne eklenecek.
+- **Shopify resmi/manuel karşılıklı dışlama (kritik #6):** workspace'te
+  AKTİF resmi mağaza bağlantısı varken manuel webhook 409 + açıklama
+  döner (çift içe aktarma teknik olarak engellendi); Pause/Remove yolu
+  yeniden açar.
+
+### Bilinçli ertelenen kritikler
+- #1 Malware taraması: kendi fazını ister (GCS tarama servisi/quarantine
+  altyapısı) — planlanacak.
+- #4 Çoklu-mağaza kimliği (store ID + external order ID): bugünkü model
+  workspace başına TEK bağlantı; doc-id değişikliği mevcut siparişlerin
+  dedup'unu kırar — çoklu-mağaza modeliyle birlikte ele alınmalı.
+- #5 Inbound para birimi metni: settings sayfası ajandayken metin
+  düzeltmesi bekliyor; sunucu tarafı zaten kaynak Currency'yi saklıyor ve
+  dashboard artık karışık kurları dönüştürmeden gösteriyor.
