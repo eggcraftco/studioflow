@@ -20969,6 +20969,140 @@ html[dir="rtl"] .login-public-shell {
   .support-chat-panel { right: 12px; left: 12px; bottom: 68px; width: auto; max-height: calc(100vh - 100px); }
 }
 
+/* Ask NivaDesk redesign: rows with avatars, chips, hand-off divider ------ */
+.support-chat-row { display: flex; align-items: flex-end; gap: 8px; }
+.support-chat-row.is-visitor { justify-content: flex-end; }
+
+.support-chat-avatar {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  position: relative;
+}
+.support-chat-avatar.is-ai { background: var(--public-accent); color: #fff; }
+.support-chat-avatar.is-human { background: rgba(47, 111, 109, 0.14); color: var(--public-accent); }
+.support-chat-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #22c55e;
+  border: 2px solid #fff;
+}
+
+.support-chat-msg.is-human p { background: #fff; border-color: var(--public-border); }
+.support-chat-meta {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--public-muted);
+}
+.support-chat-msg.is-visitor .support-chat-meta { text-align: right; }
+.support-chat-meta span { letter-spacing: -2px; color: var(--public-accent); }
+
+.support-chat-chips { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 38px; }
+.support-chat-chips button {
+  border: 1px solid rgba(47, 111, 109, 0.4);
+  background: #fff;
+  color: var(--public-accent);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.support-chat-chips button:hover { background: rgba(47, 111, 109, 0.07); }
+
+.support-chat-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  color: var(--public-muted);
+}
+.support-chat-divider::before,
+.support-chat-divider::after { content: ""; flex: 1; height: 1px; background: var(--public-border); }
+.support-chat-divider span {
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(47, 111, 109, 0.10);
+  color: var(--public-accent);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+.support-chat-offer { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.support-chat-offer-primary,
+.support-chat-offer-secondary {
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.support-chat-offer-primary { border: none; background: var(--public-accent); color: #fff; }
+.support-chat-offer-secondary { border: 1px solid var(--public-border); background: #fff; color: var(--public-text); }
+.support-chat-offer-email { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.support-chat-offer-email input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--public-border);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.support-chat-person-link {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--public-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 18px 6px;
+  text-decoration: underline;
+}
+
+.support-chat-input-row { display: flex; align-items: center; gap: 8px; }
+.support-chat-input-row input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid var(--public-border);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--public-text);
+}
+.support-chat-input-row input:focus { outline: 2px solid rgba(47, 111, 109, 0.35); outline-offset: 1px; }
+.support-chat-send {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: var(--public-accent);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.support-chat-send:disabled { opacity: 0.45; cursor: default; }
+.support-chat-send svg { width: 17px; height: 17px; }
+.support-chat-privacy a { color: inherit; text-decoration: underline; }
+
 /* ChatGPT / AI page ------------------------------------------------------ */
 .ai-hero {
   text-align: center;
