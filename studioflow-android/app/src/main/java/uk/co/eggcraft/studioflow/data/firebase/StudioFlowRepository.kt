@@ -945,6 +945,84 @@ class StudioFlowRepository(
         return data?.get("deliveryUrl") as? String ?: ""
     }
 
+    // ===================== CUSTOMER PORTAL DOMAIN (owner only) =====================
+    // The workspace's client-facing domain layer: a subdomain slug for everyone,
+    // a custom hostname for Pro/Team. Mirrors functions/clientDomains.js and the
+    // web lib/studioflow/clientDomain.ts.
+
+    data class ClientDomainRow(
+        val host: String,
+        val kind: String,   // "subdomain" | "custom"
+        val status: String, // "active" | "pending"
+    )
+
+    data class ClientDomainConfig(
+        val subdomain: ClientDomainRow?,
+        val customDomains: List<ClientDomainRow>,
+        val cnameTarget: String,
+    )
+
+    data class ClientDomainVerifyResult(
+        val verified: Boolean,
+        val found: List<String>,
+        val expected: String,
+        val error: String,
+    )
+
+    private fun clientDomainRow(raw: Any?): ClientDomainRow? {
+        val entry = raw as? Map<*, *> ?: return null
+        val host = (entry["host"] as? String).orEmpty().trim()
+        if (host.isEmpty()) return null
+        return ClientDomainRow(
+            host = host,
+            kind = (entry["kind"] as? String).orEmpty().lowercase(),
+            status = (entry["status"] as? String).orEmpty().lowercase(),
+        )
+    }
+
+    suspend fun getClientDomainConfig(workspace: StudioWorkspace): ClientDomainConfig {
+        val result = functions.getHttpsCallable("getClientDomainConfig")
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *>
+        return ClientDomainConfig(
+            subdomain = clientDomainRow(data?.get("subdomain")),
+            customDomains = (data?.get("customDomains") as? List<*>)?.mapNotNull { clientDomainRow(it) } ?: emptyList(),
+            cnameTarget = ((data?.get("cnameTarget") as? String).orEmpty().trim()).ifEmpty { "customers.nivadesk.app" },
+        )
+    }
+
+    suspend fun setClientSubdomain(workspace: StudioWorkspace, slug: String) {
+        functions.getHttpsCallable("setClientSubdomain")
+            .call(mapOf("companyId" to workspace.id, "slug" to slug))
+            .await()
+    }
+
+    suspend fun requestClientDomain(workspace: StudioWorkspace, host: String) {
+        functions.getHttpsCallable("requestClientDomain")
+            .call(mapOf("companyId" to workspace.id, "host" to host))
+            .await()
+    }
+
+    suspend fun verifyClientDomain(workspace: StudioWorkspace, host: String): ClientDomainVerifyResult {
+        val result = functions.getHttpsCallable("verifyClientDomain")
+            .call(mapOf("companyId" to workspace.id, "host" to host))
+            .await()
+        val data = result.data as? Map<*, *>
+        return ClientDomainVerifyResult(
+            verified = data?.get("verified") == true,
+            found = (data?.get("found") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            expected = (data?.get("expected") as? String).orEmpty(),
+            error = (data?.get("error") as? String).orEmpty(),
+        )
+    }
+
+    suspend fun removeClientDomain(workspace: StudioWorkspace, host: String) {
+        functions.getHttpsCallable("removeClientDomain")
+            .call(mapOf("companyId" to workspace.id, "host" to host))
+            .await()
+    }
+
     // Mints (or reuses) the workspace-linked obfuscated account token used as the
     // Google Play obfuscatedAccountId. Mirrors prepareAppleSubscriptionPurchase.
     suspend fun prepareGooglePlayPurchase(workspace: StudioWorkspace): String {

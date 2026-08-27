@@ -392,6 +392,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("preferences", "Preferences", "Your personal theme and language.", Icons.Filled.Tune, "Personal"),
         SettingsSection("about", "About", "App version and product information.", Icons.Filled.Info, "Personal"),
         SettingsSection("branding", "Branding", "Workspace name, logo and subtitle.", Icons.Filled.Palette, "Workspace Design"),
+        SettingsSection("clientDomain", "Customer Portal Domain", "Branded customer links: your subdomain and your own domain.", Icons.Filled.Language, "Workspace Design"),
         SettingsSection("pdf", "PDF Export Settings", "Invoice and PDF export options.", Icons.Filled.Description, "Workspace Design"),
         SettingsSection("workflow", "Workflow Steps", "Order steps and custom fields.", Icons.Filled.Timeline, "Workflow"),
         SettingsSection("quickReply", "Quick Reply Settings", "Quick reply templates.", Icons.Outlined.AutoAwesome, "Workflow"),
@@ -426,6 +427,9 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
             when (section.key) {
                 "profileSecurity", "preferences", "about" -> access?.settingsGeneral != false
                 "branding" -> access?.settingsGeneral != false
+                // Customer Portal Domain is owner-only, matching web (the callables
+                // reject non-owners with permission-denied anyway).
+                "clientDomain" -> normalizedRole == "owner"
                 "workflow" -> access?.settingsWorkflow != false
                 "pdf" -> access?.settingsPdf != false
                 "quickReply" -> access?.settingsQuickReply != false
@@ -595,6 +599,7 @@ private fun SettingsDetailScreen(
                     )
                 }
                 "workflow" -> WorkflowStepsDetail(state, onUpdateWorkspaceSettings)
+                "clientDomain" -> ClientDomainDetail(state)
                 "pdf" -> PdfExportDetail(state, onUpdateWorkspaceSettings)
                 "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
                 "messages" -> MessageSettingsDetail(state, onSaveMessageWorkspaceSettings, onReloadMessageWorkspaceSettings)
@@ -1806,6 +1811,254 @@ private fun settingsDateSeconds(value: String, fallback: Double): Double {
     return runCatching {
         SimpleDateFormat("yyyy-MM-dd", Locale.UK).parse(value)?.time?.div(1000.0)
     }.getOrNull() ?: fallback.takeIf { it > 0 } ?: (System.currentTimeMillis() / 1000.0)
+}
+
+// ===================== CUSTOMER PORTAL DOMAIN (owner only) =====================
+// Settings → Customer Portal Domain. Mirrors the web ClientDomainSection: every
+// workspace claims a free subdomain (name.nivadesk.app); Pro and Team connect a
+// hostname of their own with one CNAME. Backend callables are owner-only.
+
+// Server messages from the clientDomains callables are human-readable sentences
+// ("That subdomain is already taken."). Mirror the web cleanup: strip a leading
+// "code:" prefix and fall back to a generic line for opaque codes.
+private fun clientDomainErrorMessage(failure: Throwable, fallback: String): String {
+    val raw = failure.message.orEmpty()
+    val cleaned = raw.replace(Regex("^[A-Za-z_-]+:\\s*"), "").trim()
+    if (cleaned.isEmpty()) return fallback
+    if (cleaned.matches(Regex("(?i)^(internal|unknown|unavailable|not[_-]found)$"))) return fallback
+    return cleaned
+}
+
+@Composable
+private fun ClientDomainDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    if (!isOwner) {
+        DetailColumn {
+            DetailCard(title = t("Customer Portal Domain"), icon = Icons.Filled.Language) {
+                Text(t("The client domain is managed by the workspace owner."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        return
+    }
+
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(true) }
+    var subdomain by remember { mutableStateOf<StudioFlowRepository.ClientDomainRow?>(null) }
+    var customDomains by remember { mutableStateOf<List<StudioFlowRepository.ClientDomainRow>>(emptyList()) }
+    var cnameTarget by remember { mutableStateOf("customers.nivadesk.app") }
+    var slugDraft by remember { mutableStateOf("") }
+    var hostDraft by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    // Result of the last explicit Verify press: host to result. Cleared on reload
+    // only when the domain turned active (the row disappears from the pending UI).
+    var verifyResult by remember { mutableStateOf<Pair<String, StudioFlowRepository.ClientDomainVerifyResult>?>(null) }
+
+    suspend fun reload() {
+        val ws = workspace ?: return
+        if (ws.id.isEmpty()) return
+        loading = true
+        try {
+            val config = repository.getClientDomainConfig(ws)
+            subdomain = config.subdomain
+            customDomains = config.customDomains
+            if (config.cnameTarget.isNotEmpty()) cnameTarget = config.cnameTarget
+            slugDraft = config.subdomain?.host ?: ""
+        } catch (failure: Exception) {
+            errorText = t(clientDomainErrorMessage(failure, "The domain settings could not be loaded."))
+        } finally {
+            loading = false
+        }
+    }
+
+    fun runAction(doneText: String, action: suspend () -> Unit) {
+        if (busy) return
+        scope.launch {
+            busy = true
+            statusText = ""
+            errorText = ""
+            try {
+                action()
+                reload()
+                statusText = t(doneText)
+            } catch (failure: Exception) {
+                errorText = t(clientDomainErrorMessage(failure, "Something went wrong."))
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    LaunchedEffect(workspace?.id) { reload() }
+
+    DetailColumn {
+        Text(
+            t("Your customers' links — order tracking, estimates and every future customer page — can carry YOUR name instead of ours."),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (errorText.isNotEmpty()) {
+            Text(errorText, color = DangerRed, fontWeight = FontWeight.SemiBold)
+        } else if (statusText.isNotEmpty()) {
+            Text(statusText, color = StudioGreen, fontWeight = FontWeight.SemiBold)
+        } else if (loading && subdomain == null && customDomains.isEmpty()) {
+            Text(t("Loading…"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        // ---- Level 1: the free subdomain -----------------------------------
+        DetailCard(title = t("Your NivaDesk subdomain"), icon = Icons.Filled.Language) {
+            Text(
+                t("Included on every plan. Pick a name and your customer links become name.nivadesk.app."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = slugDraft,
+                    onValueChange = { if (it.length <= 40) slugDraft = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text(t("your-studio")) }
+                )
+                Text(".nivadesk.app", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button(
+                onClick = {
+                    val ws = workspace ?: return@Button
+                    runAction("Subdomain saved.") { repository.setClientSubdomain(ws, slugDraft.trim()) }
+                },
+                enabled = !busy && slugDraft.isNotBlank()
+            ) { Text(t("Save"), fontWeight = FontWeight.ExtraBold) }
+            subdomain?.let { row ->
+                Text("✅ ${row.host}.nivadesk.app ${t("is yours.")}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        // ---- Level 2: the custom domain -------------------------------------
+        DetailCard(title = t("Your own domain"), icon = Icons.Filled.Link) {
+            Text(
+                t("Pro and Team: connect a subdomain of your own website — track.yourdomain.com — and customer links carry your brand end to end."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                value = hostDraft,
+                onValueChange = { if (it.length <= 253) hostDraft = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("track.yourdomain.com") }
+            )
+            Button(
+                onClick = {
+                    val ws = workspace ?: return@Button
+                    runAction("Domain added — now create the DNS record below and verify.") {
+                        repository.requestClientDomain(ws, hostDraft.trim())
+                        hostDraft = ""
+                    }
+                },
+                enabled = !busy && hostDraft.isNotBlank()
+            ) { Text(t("Connect"), fontWeight = FontWeight.ExtraBold) }
+
+            customDomains.forEach { domain ->
+                ClientDomainRowCard(
+                    domain = domain,
+                    cnameTarget = cnameTarget,
+                    verifyResult = verifyResult?.takeIf { it.first == domain.host }?.second,
+                    busy = busy,
+                    t = t,
+                    onVerify = {
+                        val ws = workspace ?: return@ClientDomainRowCard
+                        runAction("Checked.") {
+                            val result = repository.verifyClientDomain(ws, domain.host)
+                            verifyResult = domain.host to result
+                        }
+                    },
+                    onRemove = {
+                        val ws = workspace ?: return@ClientDomainRowCard
+                        runAction("Domain removed.") { repository.removeClientDomain(ws, domain.host) }
+                    }
+                )
+            }
+
+            Text(
+                t("A verified domain is reserved for your workspace; serving your links on it is being rolled out and older nivadesk.app links keep working."),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+// One connected custom domain: host + status pill, Verify / Remove, the CNAME
+// instruction while pending, and honest feedback after a failed verify.
+@Composable
+private fun ClientDomainRowCard(
+    domain: StudioFlowRepository.ClientDomainRow,
+    cnameTarget: String,
+    verifyResult: StudioFlowRepository.ClientDomainVerifyResult?,
+    busy: Boolean,
+    t: (String) -> String,
+    onVerify: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val isActive = domain.status == "active"
+    val pillColor = if (isActive) Color(0xFF16A34A) else Color(0xFFB45309)
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    domain.host,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(shape = RoundedCornerShape(999.dp), color = pillColor.copy(alpha = 0.14f)) {
+                    Text(
+                        if (isActive) "🟢 ${t("Domain verified")}" else t("Waiting for DNS"),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = pillColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onVerify, enabled = !busy) { Text(t("Verify")) }
+                OutlinedButton(onClick = onRemove, enabled = !busy) { Text(t("Remove")) }
+            }
+            if (!isActive) {
+                Text(
+                    t("Add this DNS record at your domain provider:"),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)) {
+                    Text(
+                        "CNAME  ${domain.host.substringBefore(".")}  →  $cnameTarget",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            if (verifyResult != null && !verifyResult.verified) {
+                Text(
+                    if (verifyResult.found.isNotEmpty())
+                        "${t("Found")}: ${verifyResult.found.joinToString(", ")} — ${t("expected")} $cnameTarget. ${t("DNS changes can take up to an hour to spread.")}"
+                    else
+                        "${t("No CNAME record found yet.")} ${t("DNS changes can take up to an hour to spread.")}",
+                    fontSize = 12.sp,
+                    color = Color(0xFFB45309)
+                )
+            }
+        }
+    }
 }
 
 @Composable
