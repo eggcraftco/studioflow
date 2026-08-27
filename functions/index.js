@@ -5200,6 +5200,9 @@ Object.assign(exports, inventoryCallables);
 // hostnames, one registry, host → workspace in a single read. Module for the
 // same reason inventory is one.
 const { createClientDomainFunctions } = require("./clientDomains");
+// Placeholder value = automation off; the real token turns verify into
+// "verify DNS + provision the Cloudflare custom hostname" in one step.
+const NIVADESK_CF_API_TOKEN = defineSecret("NIVADESK_CF_API_TOKEN");
 const { _internal: clientDomainInternal, ...clientDomainCallables } = createClientDomainFunctions({
   admin,
   onCall,
@@ -5207,7 +5210,8 @@ const { _internal: clientDomainInternal, ...clientDomainCallables } = createClie
   uidIsCompanyOwner,
   planForCompany: (companyData) => String(billingEntitlementsForCompany(companyData || {})?.plan || ""),
   dnsResolveCname: (host) => require("dns").promises.resolveCname(host),
-  companySettingsDocRef: (companyId) => companySettingsDocRef(companyId)
+  companySettingsDocRef: (companyId) => companySettingsDocRef(companyId),
+  cfApiToken: NIVADESK_CF_API_TOKEN
 });
 Object.assign(exports, clientDomainCallables);
 

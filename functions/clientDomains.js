@@ -27,11 +27,75 @@ const RESERVED_SLUGS = new Set([
 
 const CNAME_TARGET = "customers.nivadesk.app";
 
-function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner, planForCompany, dnsResolveCname, companySettingsDocRef }) {
+// Cloudflare for SaaS: once the owner's CNAME is verified, the edge still
+// needs a custom-hostname entry before it will answer TLS for that host.
+// With an API token in NIVADESK_CF_API_TOKEN this happens automatically at
+// verify time; without one (or with the placeholder value) verification
+// stays DNS-only and the hostname is added by hand in the dashboard.
+const CF_API = "https://api.cloudflare.com/client/v4";
+const CF_ZONE_NAME = "nivadesk.app";
+
+function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOwner, planForCompany, dnsResolveCname, companySettingsDocRef, cfApiToken }) {
   const db = () => admin.firestore();
   const domainsRef = () => db().collection("clientDomains");
   const companyRef = (companyId) => db().collection("companies").doc(String(companyId));
   const REGION = "europe-west2";
+  const cfSecrets = cfApiToken ? [cfApiToken] : [];
+  let cachedZoneId = "";
+
+  function cfToken() {
+    try {
+      const value = String(cfApiToken?.value() || "").trim();
+      return !value || value.toLowerCase() === "placeholder" ? "" : value;
+    } catch {
+      return "";
+    }
+  }
+
+  async function cfFetch(token, path, options = {}) {
+    const response = await fetch(`${CF_API}${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) }
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body.success === false) {
+      const message = (body.errors || []).map((row) => row && row.message).filter(Boolean).join("; ") || `HTTP ${response.status}`;
+      throw new Error(`Cloudflare API: ${message}`);
+    }
+    return body;
+  }
+
+  async function cfZoneId(token) {
+    if (cachedZoneId) return cachedZoneId;
+    const body = await cfFetch(token, `/zones?name=${CF_ZONE_NAME}&status=active`);
+    const zone = (body.result || [])[0];
+    if (!zone || !zone.id) throw new Error(`Cloudflare API: zone ${CF_ZONE_NAME} not found for this token`);
+    cachedZoneId = String(zone.id);
+    return cachedZoneId;
+  }
+
+  async function cfEnsureCustomHostname(token, host) {
+    const zoneId = await cfZoneId(token);
+    const existing = await cfFetch(token, `/zones/${zoneId}/custom_hostnames?hostname=${encodeURIComponent(host)}`);
+    let row = (existing.result || [])[0];
+    if (!row) {
+      const created = await cfFetch(token, `/zones/${zoneId}/custom_hostnames`, {
+        method: "POST",
+        body: JSON.stringify({ hostname: host, ssl: { method: "http", type: "dv", settings: { min_tls_version: "1.2" } } })
+      });
+      row = created.result || {};
+    }
+    return {
+      id: String(row.id || ""),
+      status: String(row.status || ""),
+      sslStatus: String((row.ssl && row.ssl.status) || "")
+    };
+  }
+
+  async function cfDeleteCustomHostname(token, cfId) {
+    const zoneId = await cfZoneId(token);
+    await cfFetch(token, `/zones/${zoneId}/custom_hostnames/${encodeURIComponent(cfId)}`, { method: "DELETE" });
+  }
 
   async function requireOwner(request) {
     const uid = request.auth?.uid;
@@ -206,7 +270,7 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
     };
   });
 
-  const verifyClientDomain = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+  const verifyClientDomain = onCall({ region: REGION, timeoutSeconds: 60, secrets: cfSecrets }, async (request) => {
     const { companyId } = await requireOwner(request);
     const host = cleanHost(request.data?.host);
     const ref = domainsRef().doc(host);
@@ -233,17 +297,37 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
       updatedAtMs: now
     }, { merge: true });
 
+    // DNS says the CNAME is in place — now make the edge answer TLS for it.
+    // A CF failure never un-verifies the domain; it is reported separately so
+    // the owner sees "verified, certificate still being issued" rather than a
+    // false DNS error.
+    let certificate = null;
+    if (verified && String((snap.data() || {}).kind) === "custom") {
+      const token = cfToken();
+      if (token) {
+        try {
+          const cf = await cfEnsureCustomHostname(token, host);
+          certificate = { status: cf.sslStatus === "active" ? "active" : (cf.sslStatus || "pending") };
+          await ref.set({ cfHostnameId: cf.id, cfHostnameStatus: cf.status, cfSslStatus: cf.sslStatus, cfLastError: "", cfCheckedAtMs: now }, { merge: true });
+        } catch (cfFailure) {
+          certificate = { status: "error", error: String(cfFailure?.message || cfFailure) };
+          await ref.set({ cfLastError: String(cfFailure?.message || cfFailure), cfCheckedAtMs: now }, { merge: true });
+        }
+      }
+    }
+
     return {
       ok: true,
       host,
       verified,
       found: normalized,
       expected: CNAME_TARGET,
+      ...(certificate ? { certificate } : {}),
       ...(error && !verified ? { error } : {})
     };
   });
 
-  const removeClientDomain = onCall({ region: REGION }, async (request) => {
+  const removeClientDomain = onCall({ region: REGION, secrets: cfSecrets }, async (request) => {
     const { companyId } = await requireOwner(request);
     const host = cleanHost(request.data?.host);
     const ref = domainsRef().doc(host);
@@ -252,6 +336,18 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
     const row = snap.data() || {};
     if (String(row.companyId) !== companyId) {
       throw new HttpsError("permission-denied", "That hostname belongs to another workspace.");
+    }
+    // Tidy the edge entry too — a removed domain must stop serving, not keep a
+    // certificate alive for a hostname the workspace no longer claims.
+    if (row.kind === "custom" && row.cfHostnameId) {
+      const token = cfToken();
+      if (token) {
+        try {
+          await cfDeleteCustomHostname(token, String(row.cfHostnameId));
+        } catch (cfFailure) {
+          console.warn("removeClientDomain: Cloudflare cleanup failed", host, String(cfFailure?.message || cfFailure));
+        }
+      }
     }
     await ref.delete();
     if (row.kind === "subdomain") {

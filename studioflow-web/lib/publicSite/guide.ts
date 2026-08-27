@@ -793,10 +793,11 @@ const TREE_EN: GuideNode[] = [
           { kind: "steps", items: [
             "Enter a subdomain of a website you own, like track.yourdomain.com, and press Connect. A bare domain or a path such as yourdomain.com/track will not work — DNS cannot route paths.",
             "At your domain provider, add the CNAME record shown on screen, pointing to customers.nivadesk.app.",
-            "Press Check again. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. The step flow on the card walks Enter domain → Add the DNS record → Verify ownership → Serving rollout, and the values are copyable with one tap."
+            "Press Check again. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. The step flow on the card walks Enter domain → Add the DNS record → Verify ownership → Certificate, and the values are copyable with one tap.",
+            "After verification a security certificate is issued for your domain automatically — usually within a few minutes. Press Check again to refresh; the card shows Live when your links are being served."
           ] },
           { kind: "bullets", items: [
-            "A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.",
+            "A verified domain serves your customer links with your branding — and your free name.nivadesk.app subdomain works immediately, with no DNS setup at all. Existing nivadesk.app links keep working either way.",
             "Each hostname belongs to one workspace — a name someone else verified cannot be claimed.",
             "Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
           ] },
@@ -1588,10 +1589,11 @@ const TREE_TR: GuideNode[] = [
           { kind: "steps", items: [
             "Size ait bir sitenin alt alan adını girin — örn. track.sizinsite.com — ve Connect'e basın. Çıplak domain veya sizinsite.com/track gibi yollar çalışmaz; DNS yol yönlendiremez.",
             "Alan adı sağlayıcınızda, ekranda gösterilen CNAME kaydını customers.nivadesk.app hedefiyle ekleyin.",
-            "Check again'e basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Karttaki adım akışı Alan adını gir → DNS kaydını ekle → Sahipliği doğrula → Yayına alma sırasını izler; değerler tek dokunuşla kopyalanır."
+            "Check again'e basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Karttaki adım akışı Alan adını gir → DNS kaydını ekle → Sahipliği doğrula → Sertifika sırasını izler; değerler tek dokunuşla kopyalanır.",
+            "Doğrulamadan sonra alan adınız için güvenlik sertifikası otomatik düzenlenir — genellikle birkaç dakika sürer. Yenilemek için Check again'e basın; bağlantılarınız sunulmaya başlayınca kart Canlı gösterir."
           ] },
           { kind: "bullets", items: [
-            "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
+            "Doğrulanan alan adı müşteri bağlantılarınızı kendi markanızla sunar — ücretsiz ad.nivadesk.app alt alan adınız ise hiç DNS kurulumu gerektirmeden anında çalışır. Mevcut nivadesk.app bağlantıları her durumda çalışmaya devam eder.",
             "Her sunucu adı tek bir çalışma alanına aittir — başkasının doğruladığı ad alınamaz.",
             "Remove düğmesiyle istediğiniz an kaldırın; bağlantılarınız standart nivadesk.app adreslerine geri döner."
           ] },
