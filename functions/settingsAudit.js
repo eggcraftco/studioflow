@@ -8,12 +8,12 @@
 // a stamp is still recorded, just as an unnamed workspace member. Entries
 // are server-only in the rules; the owner reads them through a callable.
 
-const BOOKKEEPING_KEY = /(updatedat|updatedby|updatedbyemail|completedat|completedby|appliedat|savedat|lastsettingswrite|lastbackupexported|aiknowledgebaseprevious)/i;
+const BOOKKEEPING_KEY = /(updatedat|updatedby|updatedbyemail|completedat|completedby|appliedat|savedat|checkedatms|migratedat|lastsettingswrite|lastbackupexported|aiknowledgebaseprevious)/i;
 
 // Values that never print: anything credential-shaped, plus keys whose value
 // is an opaque blob or a raw timestamp where only the fact of change matters.
 const SENSITIVE_KEY = /(secret|token|password|apikey|openaikey|hash)/i;
-const SILENT_VALUE_KEY = /(json|rotatedatms|logo|image|base64)/i;
+const SILENT_VALUE_KEY = /(json$|rotatedatms|base64)/i;
 
 const AREA_RULES = [
   { pattern: /^(financial|corporationTax|vat|tax)/i, area: "Financial" },
@@ -23,7 +23,7 @@ const AREA_RULES = [
   { pattern: /^(replyMode|quickReply|aiKnowledgeBase|customProducts|customRules|hasOpenAIKey|openAIKey)/i, area: "AI Reply" },
   { pattern: /^(upload|safety|policy)/i, area: "Uploads" },
   { pattern: /^(integration|woo|shopify|webhook|signature)/i, area: "Integrations" },
-  { pattern: /^(showCard|orderCard|cardLayout|__workspaceLayout|workspaceSidebar|invLabel|materials|summaryStep|orderListStep|customField|customStep|customToggle|designNameLabel|priorityCardLabel|riskCardLabel|extraStatus|businessType|businessDescription)/i, area: "Workflow & cards" },
+  { pattern: /^(showCard|orderCard|cardLayout|__workspaceLayout|workspaceSidebar|workspaceUserProfiles|typeWorkspaceSnapshots|invLabel|materials|summaryStep|orderListStep|customField|customStep|customToggle|designNameLabel|priorityCardLabel|riskCardLabel|extraStatus|businessType|businessDescription)|sidebar/i, area: "Workflow & cards" },
   { pattern: /^dashboard/i, area: "Dashboard" },
   { pattern: /^(selectedLanguage|selectedCurrency|language)/i, area: "Language & currency" },
   { pattern: /^(lastBackup|business(Template|Onboarding))/i, area: "Data" }
@@ -68,15 +68,15 @@ function settingsAuditDiff(before = {}, after = {}) {
     if (stableStringify(before?.[key]) !== stableStringify(after?.[key])) changed.push(key);
   }
   const visible = changed.filter((key) => !BOOKKEEPING_KEY.test(key)).sort();
-  // A key rotation marker is bookkeeping-shaped on purpose but IS the event.
-  if (changed.includes("openAIKeyRotatedAtMs") && !visible.includes("openAIKeyRotatedAtMs")) {
-    visible.push("openAIKeyRotatedAtMs");
-  }
   if (visible.length === 0) return null;
 
+  // The stamp attributes a save only when it moved in THIS write — the uid
+  // alone repeats between saves, so the companion lastSettingsWriteAtMs is
+  // what proves the stamp is fresh and not a stale leftover a direct
+  // (unstamped) writer merged past.
   let byUid = "";
   const stamped = String(after?.lastSettingsWriteByUid || "");
-  if (stamped && changed.includes("lastSettingsWriteByUid")) byUid = stamped;
+  if (stamped && (changed.includes("lastSettingsWriteByUid") || changed.includes("lastSettingsWriteAtMs"))) byUid = stamped;
   if (!byUid) {
     for (const key of changed) {
       if (!/by(uid)?$/i.test(key)) continue;
@@ -93,7 +93,7 @@ function settingsAuditDiff(before = {}, after = {}) {
     if (SENSITIVE_KEY.test(key) || SILENT_VALUE_KEY.test(key)) continue;
     const from = printableValue(before?.[key]);
     const to = printableValue(after?.[key]);
-    if (from === null || to === null) continue;
+    if (from === null || to === null || from === to) continue;
     values.push({ key, from, to });
   }
 
@@ -121,7 +121,24 @@ function createSettingsAuditFunctions({ admin, onCall, HttpsError, onDocumentWri
 
     const now = Date.now();
     try {
-      await logRef(companyId).add({ ...diff, atMs: now, docDeleted: !event.data?.after?.exists });
+      // Dragging a sidebar fires a save per gesture; ten of those are one
+      // story. The same person changing the same keys within a short window
+      // updates the previous entry instead of burying the log under copies.
+      const newestSnap = await logRef(companyId).orderBy("atMs", "desc").limit(1).get();
+      const newest = newestSnap.empty ? null : newestSnap.docs[0];
+      const newestData = newest ? newest.data() || {} : {};
+      const sameStory = newest
+        && String(newestData.byUid || "") === diff.byUid
+        && JSON.stringify(newestData.changedKeys || []) === JSON.stringify(diff.changedKeys)
+        && now - (Number(newestData.atMs) || 0) < 15 * 60 * 1000;
+      if (sameStory) {
+        await newest.ref.set({ ...diff, atMs: now, docDeleted: !event.data?.after?.exists }, { merge: true });
+      } else {
+        // The event id makes retried deliveries land on the same doc.
+        const docId = String(event.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60) || undefined;
+        const target = docId ? logRef(companyId).doc(docId) : logRef(companyId).doc();
+        await target.set({ ...diff, atMs: now, docDeleted: !event.data?.after?.exists });
+      }
     } catch (error) {
       console.warn("settingsAuditTrail write failed:", companyId, error?.message || error);
       return;
@@ -158,7 +175,10 @@ function createSettingsAuditFunctions({ admin, onCall, HttpsError, onDocumentWri
       return { ok: true, enabled: false, entries: [] };
     }
 
-    const snap = await logRef(companyId).orderBy("atMs", "desc").limit(50).get();
+    // The card promises 90 days; an idle workspace must not show older
+    // leftovers just because the trigger-side trim never ran again.
+    const cutoffMs = Date.now() - 90 * 24 * 3600 * 1000;
+    const snap = await logRef(companyId).where("atMs", ">=", cutoffMs).orderBy("atMs", "desc").limit(50).get();
     const members = companyData.members && typeof companyData.members === "object" ? companyData.members : {};
     const nameForUid = (entryUid) => {
       if (!entryUid) return "";

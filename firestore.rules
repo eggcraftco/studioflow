@@ -758,17 +758,23 @@ service cloud.firestore {
       allow read: if canReadCompany(companyId);
       // API credentials and owner-controlled Knowledge Base fields must be
       // changed only through saveQuickReplySettings callable validation.
+      // The audit stamp is writable, but only as yourself — the change
+      // history must not let one member sign another member's name.
       allow write: if canWriteCompanyData(companyId)
         && (
           resource == null
-            ? !request.resource.data.keys().hasAny([
+            ? (!request.resource.data.keys().hasAny([
                 'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
                 'customProductsJSON', 'customRulesJSON'
               ])
-            : !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              && (!request.resource.data.keys().hasAny(['lastSettingsWriteByUid'])
+                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
+            : (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
                 'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
                 'customProductsJSON', 'customRulesJSON'
               ])
+              && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastSettingsWriteByUid'])
+                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
         );
     }
 

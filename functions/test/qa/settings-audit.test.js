@@ -67,10 +67,49 @@ function pass(name) { console.log("PASS ", name); }
   pass("blobs silent, strings truncated, unstamped is anonymous");
 }
 
-// 6. Area mapping spot checks.
+// 6. Repeat save by the same user stays attributed: the uid does not change,
+// but the companion timestamp does (the review's highest finding).
+{
+  const diff = settingsAuditDiff(
+    { financialShowBaseCost: true, lastSettingsWriteByUid: "uid-1", lastSettingsWriteAtMs: 100 },
+    { financialShowBaseCost: false, lastSettingsWriteByUid: "uid-1", lastSettingsWriteAtMs: 200 }
+  );
+  assert(diff);
+  assert.strictEqual(diff.byUid, "uid-1");
+  pass("repeat save attributed via fresh timestamp");
+}
+
+// 7. A stale stamp left behind by a stamped save must NOT sign a later
+// unstamped (direct native) write.
+{
+  const diff = settingsAuditDiff(
+    { designNameLabel: "Design", lastSettingsWriteByUid: "uid-1", lastSettingsWriteAtMs: 100 },
+    { designNameLabel: "Model", lastSettingsWriteByUid: "uid-1", lastSettingsWriteAtMs: 100 }
+  );
+  assert(diff);
+  assert.strictEqual(diff.byUid, "", "stale stamp does not attribute");
+  pass("unstamped direct write stays anonymous");
+}
+
+// 8. Connectivity checks and one-off migrations are bookkeeping, not history;
+// and a missing→null non-change prints no value row.
+{
+  const checkOnly = settingsAuditDiff(
+    { openAIKeyCheckedAtMs: 1, openAIKeyWorks: true },
+    { openAIKeyCheckedAtMs: 2, openAIKeyWorks: true, lastSettingsWriteByUid: "u", lastSettingsWriteAtMs: 1 }
+  );
+  assert.strictEqual(checkOnly, null);
+  const nullish = settingsAuditDiff({}, { someFlag: null });
+  assert(nullish && nullish.values.length === 0, "missing→null prints no — → — row");
+  pass("check clicks silent, null rows dropped");
+}
+
+// 9. Area mapping spot checks.
 assert.strictEqual(areaForKey("pdfShowCustomer"), "PDF");
 assert.strictEqual(areaForKey("showCardFinancial"), "Workflow & cards");
 assert.strictEqual(areaForKey("dashboardWidgetVisibilityJSON"), "Dashboard");
+assert.strictEqual(areaForKey("ordersSidebarWidth"), "Workflow & cards");
+assert.strictEqual(areaForKey("workspaceUserProfilesJSON"), "Workflow & cards");
 assert.strictEqual(areaForKey("somethingNobodyMapped"), "Other");
 pass("area mapping");
 

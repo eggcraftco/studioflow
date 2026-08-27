@@ -5862,7 +5862,7 @@ exports.saveSwiftWorkspaceCardProfile = onCall({ region: "europe-west2" }, async
 
     transaction.set(settingsRef, {
       workspaceUserProfilesJSON: JSON.stringify(profiles),
-      lastSettingsWriteByUid: uid
+      lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
     }, { merge: true });
   });
 
@@ -5950,13 +5950,13 @@ exports.saveTypeWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (
 
   if (request.data?.layout == null) {
     delete typeSnapshots[orderType];
-    await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots), lastSettingsWriteByUid: uid }, { merge: true });
+    await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots), lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now() }, { merge: true });
     return { ok: true, cleared: true };
   }
 
   const layout = normalizeOrderDetailCardLayout(request.data.layout || {});
   typeSnapshots[orderType] = workspaceSnapshotFromLayout(layout, {}, "");
-  await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots), lastSettingsWriteByUid: uid }, { merge: true });
+  await settingsRef.set({ typeWorkspaceSnapshotsJSON: JSON.stringify(typeSnapshots), lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now() }, { merge: true });
   return { ok: true, layout };
 });
 
@@ -6034,7 +6034,7 @@ exports.saveWorkspaceCardLayout = onCall({ region: "europe-west2" }, async (requ
 
     transaction.set(settingsRef, {
       workspaceUserProfilesJSON: JSON.stringify(profiles),
-      lastSettingsWriteByUid: uid
+      lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
     }, { merge: true });
   });
 
@@ -6675,6 +6675,7 @@ exports.saveWorkspaceBlockHeadings = onCall({ region: "europe-west2" }, async (r
   const updates = blockHeadingUpdatesForCard(cardId, request.data?.settings || {});
   const settingsRef = companySettingsDocRef(companyId);
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
 
@@ -6703,7 +6704,7 @@ exports.saveWorkspaceSidebarLayout = onCall({ region: "europe-west2" }, async (r
     [`${screen}SidebarVisible`]: visible,
     workspaceSidebarLayoutUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     workspaceSidebarLayoutUpdatedBy: uid,
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   return {
@@ -6730,7 +6731,7 @@ exports.saveOrderCardDisplaySettings = onCall({ region: "europe-west2" }, async 
     orderCardShowStatusBadges: showStatusBadges,
     orderCardSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     orderCardSettingsUpdatedBy: uid,
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   return {
@@ -6760,7 +6761,7 @@ exports.saveDashboardWidgetVisibility = onCall({ region: "europe-west2" }, async
     dashShowProfit: visibility.profit,
     dashboardWidgetVisibilityUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     dashboardWidgetVisibilityUpdatedBy: uid,
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   return {
@@ -7072,7 +7073,7 @@ exports.testQuickReplyApiKey = onCall({ region: "europe-west2", timeoutSeconds: 
   await companySettingsDocRef(companyId).set({
     openAIKeyCheckedAtMs: checkedAtMs,
     openAIKeyWorks: ok,
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   return { ok, checkedAtMs, message: ok ? "The key works." : message };
@@ -7126,6 +7127,7 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
   if (Object.prototype.hasOwnProperty.call(incoming, "openAIKey")) {
     const cleanKey = cleanQuickReplyText(incoming.openAIKey, 500);
     if (cleanKey) {
+      const previousKey = String((await quickReplySecretDocRef(companyId).get()).data()?.openAIKey || "");
       await quickReplySecretDocRef(companyId).set({
         companyId,
         openAIKey: cleanKey,
@@ -7133,8 +7135,9 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
         updatedByUid: uid
       }, { merge: true });
       // Marks a key REPLACE for the settings audit trigger even when
-      // hasOpenAIKey stays true. Never the key itself.
-      updates.openAIKeyRotatedAtMs = Date.now();
+      // hasOpenAIKey stays true. Never the key itself — and re-saving the
+      // identical key is not a rotation.
+      if (previousKey !== cleanKey) updates.openAIKeyRotatedAtMs = Date.now();
     } else {
       await quickReplySecretDocRef(companyId).delete().catch(() => undefined);
     }
@@ -7144,6 +7147,7 @@ exports.saveQuickReplySettings = onCall({ region: "europe-west2" }, async (reque
   // Always strip a legacy client-readable key after an owner settings save.
   updates.openAIKey = admin.firestore.FieldValue.delete();
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
 
@@ -7583,6 +7587,7 @@ exports.savePdfExportSettings = onCall({ region: "europe-west2" }, async (reques
   };
 
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
   return {
@@ -7624,6 +7629,7 @@ exports.saveFinancialSettings = onCall({ region: "europe-west2" }, async (reques
 
   const settingsRef = companySettingsDocRef(companyId);
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
   return {
@@ -7692,6 +7698,7 @@ exports.saveThemeBrandingSettings = onCall({ region: "europe-west2" }, async (re
 
   const settingsRef = companySettingsDocRef(companyId);
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await settingsRef.set(updates, { merge: true });
   const settingsSnapshot = await settingsRef.get();
   return {
@@ -8573,7 +8580,7 @@ exports.saveUploadSafetySettings = onCall({ region: "europe-west2" }, async (req
     uploadSafetyMaxFileSizeMB: maxFileSizeMB,
     uploadSafetyPolicyText: policyText,
     uploadSafetySettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   const settingsSnapshot = await settingsRef.get();
@@ -8595,7 +8602,7 @@ exports.saveIntegrationSyncSettings = onCall({ region: "europe-west2" }, async (
   await companySettingsDocRef(companyId).set({
     integrationCustomerSync: policy,
     integrationSyncSettingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
   return { ok: true, companyId, policy, message: "Integration sync policy saved." };
 });
@@ -8647,7 +8654,7 @@ exports.saveWorkspaceLogo = onCall({ region: "europe-west2" }, async (request) =
     brandingUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     brandingUpdatedByUid: uid,
     brandingUpdatedByEmail: String(request.auth?.token?.email || ""),
-    lastSettingsWriteByUid: uid
+    lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
   }, { merge: true });
 
   return {
@@ -9668,7 +9675,7 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
         ...settingsUpdates,
         importedFromBackupAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastSettingsWriteByUid: uid
+        lastSettingsWriteByUid: uid, lastSettingsWriteAtMs: Date.now()
       },
       merge: true
     });
@@ -23506,6 +23513,7 @@ exports.saveWorkspaceSmsSettings = onCall({ region: "europe-west2" }, async (req
     settingsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
   };
   updates.lastSettingsWriteByUid = uid;
+  updates.lastSettingsWriteAtMs = Date.now();
   await companySettingsDocRef(companyId).set(updates, { merge: true });
   return { ok: true, senderId: requestedSender, senderStatus, triggers: updates.smsTriggers };
 });
