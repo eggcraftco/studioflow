@@ -707,3 +707,21 @@ eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
   sunucu örneği #2f6f6d dahil); SettingSwitch + Save; TR_13'e 9 anahtar
   web'den bire bir; BUILD SUCCESSFUL.
 - Branding artık 4 platformda; mağaza sürümleriyle kullanıcıya ulaşır.
+
+---
+
+## 27 Ağu — Pandle konusu yeniden açıldı (araya girme; sonra kuyruğa dönülecek)
+
+Pandle destek (Lily) app kaydı için HTTPS redirect URL'ini sordu (ilk mailde
+vardı ama yeniden istediler). Altyapı denetimi:
+- **Callback CANLI:** https://nivadesk.app/pandle/callback → 200 (parametreli de).
+- **Secret'lar kayıtlı:** NIVADESK_PANDLE_CLIENT_ID / _SECRET v1 ENABLED
+  (gerçek kimlikler gelene kadar yer tutucu).
+- **Fonksiyonlar:** MD "canlıya bağlı" diyordu ama yalnız 4'ü canlıymış
+  (Preview/Push/ConfirmMatch/RejectMatch) — kısmi eski deploy. 27 Ağu'da
+  10'u birden isimle deploy edildi (7 create + 3 update); anonim probe
+  temiz UNAUTHENTICATED dönüyor (owner kapısı çalışıyor).
+- **Kimlikler gelince yapılacak:** `firebase functions:secrets:set` ile iki
+  secret'a gerçek değerler + secret bağlayan fonksiyonları yeniden deploy
+  (ConnectStart/ConnectFinish/RefreshMeta/Preview/Push — bağlayanlar) →
+  /bank'taki PandleCard'dan Connect ile uçtan uca üretim testi.
