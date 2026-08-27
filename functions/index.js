@@ -3234,7 +3234,7 @@ function websiteChatRateKey(prefix, value) {
 
 // Fixed one-hour windows: cheap, and a visitor who genuinely needs more can
 // keep writing in the thread they already opened.
-async function websiteChatCheckRate(prefix, value, limit) {
+async function websiteChatCheckRate(prefix, value, limit, message) {
   const ref = admin.firestore().collection("websiteChatRateLimits").doc(websiteChatRateKey(prefix, value));
   const windowStart = Math.floor(Date.now() / 3600000) * 3600000;
   const allowed = await admin.firestore().runTransaction(async (tx) => {
@@ -3246,7 +3246,7 @@ async function websiteChatCheckRate(prefix, value, limit) {
     return true;
   });
   if (!allowed) {
-    throw new HttpsError("resource-exhausted", "Too many messages from this connection. Please try again later, or email contact@nivadesk.co.uk.");
+    throw new HttpsError("resource-exhausted", message || "Too many messages from this connection. Please try again later, or email contact@nivadesk.co.uk.");
   }
 }
 
@@ -9470,6 +9470,9 @@ exports.importWorkspaceBackup = onCall({ region: "europe-west2", timeoutSeconds:
   if (!canFullyEditOrder(role)) {
     throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot import workspace data.`);
   }
+  // Each call re-reads the whole workspace for dedup, so a stuck retry loop is
+  // real load. 30/hour still covers preview+import pairs many times over.
+  await websiteChatCheckRate("backupImport", uid, 30, "Too many backup imports in a short time. Wait a little and try again.");
 
   const backup = request.data?.backup;
   // Restoring a 900-order workspace used to return 500 orders and the word
@@ -9706,6 +9709,7 @@ exports.undoWorkspaceBackupImport = onCall(
     if (!canFullyEditOrder(role)) {
       throw new HttpsError("permission-denied", `Your current role is ${workspaceRoleLabel(role)} and cannot undo an import.`);
     }
+    await websiteChatCheckRate("backupUndo", uid, 30, "Too many undo requests in a short time. Wait a little and try again.");
 
     const runId = cleanOrderText(request.data && request.data.runId, "", 80);
     if (!runId) throw new HttpsError("invalid-argument", "runId is required.");

@@ -233,7 +233,7 @@
    "id": "set-data",
    "title": "Data Management",
    "path": "Settings › Data Management",
-   "text": "Import, export and back up your workspace data, and manage data clean-up."
+   "text": "Import, export and back up your workspace data, and manage data clean-up.\nImporting a backup\n- Import is a dry run first: before anything is written you see how many orders and customers the file holds, how many already exist in the workspace, how many look like duplicates, and whether the file includes settings.\n- If the file is the exact backup you last downloaded, the preview says so — the SHA-256 noted at download time is checked against the file you picked.\n- Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.\n- After importing, Undo this import removes exactly the records that import created. Settings changes are not undone."
   },
   {
    "id": "set-plan",

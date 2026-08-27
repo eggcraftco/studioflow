@@ -755,7 +755,14 @@ const TREE_EN: GuideNode[] = [
         id: "set-data",
         title: "Data Management",
         blocks: [
-          { kind: "para", text: "Import, export and back up your workspace data, and manage data clean-up." }
+          { kind: "para", text: "Import, export and back up your workspace data, and manage data clean-up." },
+          { kind: "sub", text: "Importing a backup" },
+          { kind: "bullets", items: [
+            "Import is a dry run first: before anything is written you see how many orders and customers the file holds, how many already exist in the workspace, how many look like duplicates, and whether the file includes settings.",
+            "If the file is the exact backup you last downloaded, the preview says so — the SHA-256 noted at download time is checked against the file you picked.",
+            "Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.",
+            "After importing, Undo this import removes exactly the records that import created. Settings changes are not undone."
+          ] }
         ]
       },
       {
@@ -1552,7 +1559,14 @@ const TREE_TR: GuideNode[] = [
         id: "set-data",
         title: "Data Management",
         blocks: [
-          { kind: "para", text: "Çalışma alanı verilerinizi içe/dışa aktarın, yedeğini alın ve veri temizliğini yönetin." }
+          { kind: "para", text: "Çalışma alanı verilerinizi içe/dışa aktarın, yedeğini alın ve veri temizliğini yönetin." },
+          { kind: "sub", text: "Yedek içe aktarma" },
+          { kind: "bullets", items: [
+            "İçe aktarma önce kuru çalıştırmadır: hiçbir şey yazılmadan önce dosyada kaç sipariş ve müşteri olduğunu, kaçının çalışma alanında zaten bulunduğunu, kaçının kopya göründüğünü ve dosyanın ayar içerip içermediğini görürsünüz.",
+            "Dosya, en son indirdiğiniz yedeğin birebir aynısıysa önizleme bunu söyler — indirme sırasında not edilen SHA-256, seçtiğiniz dosyayla karşılaştırılır.",
+            "Olası kopyalar varsayılan olarak atlanır; bilerek ikinci kopya istiyorsanız Skip likely duplicates işaretini kaldırın. Bir içe aktarma 500 kayıtla sınırlıdır ve dışarıda kalanları söyler.",
+            "İçe aktardıktan sonra Undo this import, tam olarak o içe aktarmanın oluşturduğu kayıtları siler. Ayar değişiklikleri geri alınmaz."
+          ] }
         ]
       },
       {
