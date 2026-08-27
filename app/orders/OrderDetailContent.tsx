@@ -5285,7 +5285,7 @@ export function OrderDetailContent({
   const portal = order.customerPortal;
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
-  const portalUrl = portalUrlForToken(portal.token);
+  const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
 
   async function createPortalLink() {
     setPortalBusy(true);

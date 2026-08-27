@@ -59,6 +59,8 @@ export async function saveOrderPortalSettings(
   );
 }
 
-export function portalUrlForToken(token: string) {
-  return token ? `https://nivadesk.app/track/${token}` : "";
+export function portalUrlForToken(token: string, brandedHost = "") {
+  if (!token) return "";
+  const host = brandedHost.trim().toLowerCase() || "nivadesk.app";
+  return `https://${host}/track/${token}`;
 }

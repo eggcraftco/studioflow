@@ -57,6 +57,8 @@ export type WorkspaceContext = {
   currentMemberDisplayName: string;
   currentMemberPhotoURL: string;
   quickReplyMenuEnabled: boolean;
+  /** Branded host for customer links (custom domain, else slug.nivadesk.app); empty = default nivadesk.app. */
+  clientPortalHost: string;
   entitlements: PlanEntitlements;
 };
 
@@ -942,6 +944,12 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
       ? stringValue(memberData.photoURL, "")
       : "",
     quickReplyMenuEnabled: booleanValue(companyData.quickReplyMenuEnabled, true),
+    clientPortalHost: (() => {
+      const customHost = stringValue(companyData.clientPortalCustomHost, "").trim().toLowerCase();
+      if (customHost) return customHost;
+      const slug = stringValue(companyData.clientPortalSlug, "").trim().toLowerCase();
+      return slug ? `${slug}.nivadesk.app` : "";
+    })(),
     entitlements
   };
 }
