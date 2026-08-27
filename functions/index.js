@@ -3454,7 +3454,20 @@ function websiteAssistantGuideBlock(question) {
       .filter((row) => row.score >= 2)
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-    if (scored.length === 0) return "";
+    if (scored.length === 0) {
+      // Same reasoning as the in-app assistant: keyword overlap cannot match
+      // a Turkish question against an English guide, and a wrong "not
+      // covered" is worse than a few thousand extra tokens.
+      let budget = APP_ASSISTANT_FULL_CORPUS_BUDGET;
+      const all = [];
+      for (const section of sections) {
+        const chunk = `## ${String(section.title || "")}\n${String(section.text || "")}`;
+        if (budget - chunk.length < 0) break;
+        budget -= chunk.length;
+        all.push(chunk);
+      }
+      return all.join("\n\n");
+    }
     return scored
       .map((row) => `## ${String(row.section.title || "")}\n${String(row.section.text || "").slice(0, 2000)}`)
       .join("\n\n");
@@ -3475,6 +3488,7 @@ function websiteAssistantSystemPrompt(language, guideBlock = "") {
     "2. When the facts genuinely cover the question, write the answer in \"reply\" and set \"confident\": true.",
     "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and make \"reply\" exactly this sentence, translated into the visitor's language: \"I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.\" Do not add anything else to it.",
     "4. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it (that is still a confident answer).",
+    "4b. HOW-TO questions (which button, which menu, step by step): answer ONLY from the guide excerpts below. If no excerpt covers those steps, that is an unconfident case — never improvise steps, screens or menu paths, and never answer a how-to question by pointing at the ChatGPT app.",
     "5. Keep confident replies short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
     `6. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
     "7. Never ask for passwords, card details or API keys.",
