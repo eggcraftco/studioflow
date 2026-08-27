@@ -245,7 +245,7 @@
    "id": "set-team",
    "title": "Team Access",
    "path": "Settings › Team Access",
-   "text": "Invite your team and control exactly what each person can see and do.\n- Give each member a role: Member, View Only, Workflow Only, or your own custom role.\n- Control which menus, order cards and settings each role can see.\n- Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
+   "text": "Invite your team and control exactly what each person can see and do.\n- Give each member a role: Member, View Only, Workflow Only, or your own custom role.\n- The Permission matrix shows every role side by side — what each one can view, edit or delete at a glance, with member counts per role.\n- Control which menus, order cards and settings each role can see.\n- Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
   },
   {
    "id": "set-client-domain",

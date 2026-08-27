@@ -763,6 +763,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Invite your team and control exactly what each person can see and do." },
           { kind: "bullets", items: [
             "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
+            "The Permission matrix shows every role side by side — what each one can view, edit or delete at a glance, with member counts per role.",
             "Control which menus, order cards and settings each role can see.",
             "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
           ] }
@@ -1545,6 +1546,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin." },
           { kind: "bullets", items: [
             "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+            "Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği ve kaç üyeyi kapsadığı tek bakışta.",
             "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
           ] }
