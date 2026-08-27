@@ -725,3 +725,59 @@ vardı ama yeniden istediler). Altyapı denetimi:
   secret'a gerçek değerler + secret bağlayan fonksiyonları yeniden deploy
   (ConnectStart/ConnectFinish/RefreshMeta/Preview/Push — bağlayanlar) →
   /bank'taki PandleCard'dan Connect ile uçtan uca üretim testi.
+
+---
+
+## 27 Ağu akşam — Dashboard finans paketi + erişilebilirlik + ANA SAYFA v2 (tur 35)
+
+### Dashboard finans paketi (ajan, 794be02)
+- **BULGU:** iptal/iade siparişler dashboard'ın HER rakamına giriyordu
+  (KPI/grafik/YoY/set-aside) — Outstanding hint'i tersini iddia ederken.
+  Fix: orderCountsTowardBalance paylaşıldı; her yer dışlıyor; Financial
+  Breakdown'a "Cancelled or refunded (n)" satırı.
+- VAT set-aside dürüstleşti: input VAT (ST %20 / RR %5 giden ödemeler,
+  split satırlar dahil) düşülür → set-aside = net VAT + CT; ödendi barı
+  yeni toplama göre. vatFromGross sunucudaki formülün aynası.
+  Bilinen sapma: kategori-varsayılanından gelen VAT kodu sayılmaz.
+- Grafik: noktaya tıkla → panel o döneme zoom (Custom range, yerel tarih).
+- AppShell üst şerit Margin'i de iptalleri dışlıyor (benim fix'im).
+- 8 string 12 dilde; rehbere 3 yeni madde (iptal/netVAT/drill-down),
+  korpus + 4 fonksiyon deploy, bot probu ↑ bu koşuda.
+
+### Erişilebilirlik geçişi (ajan, 0234ff7)
+- :focus-visible halkası tüm public etkileşimlilerde (modallar dahil,
+  koyu zeminde beyaz); modallara autoFocus; reduced-motion boşlukları
+  (platform stagger, guideFade, hover lift'ler); başlık sırası fix'leri
+  (pricing h3→h2, footer h3→h2); alt/aria düzeltmeleri; 44px dokunma
+  hedefleri (hamburger, footer linkleri, chat kapat/gönder, QR kapat);
+  QR modal + demo video zoom/kısa ekran taşma korumaları.
+
+### NivaDesk_global_website_home_menu.md — ANA SAYFA v2 CANLI
+Rapor: önceki önerilerin ~%75-80'i uygulanmış; kalan ana sorun sıralama
+(Shipping çok erken) + 12.595px uzunluk. Yapılanlar:
+- **Yeni sıra birebir önerilen akış:** Hero → Everything stays connected
+  (5 kategori etiketli 19 kart: Customer/Work/Order/Money/Items&records)
+  → Customisation → ChatGPT (köprü cümlesi + "You control access" izin
+  özeti ✓✓✓✕) → Back office → Shipping (bağlam satırı: "From the order
+  board to the customer's door.") → Platforms → 3 satırlık pricing özeti
+  → 3 FAQ bağlantısı → CTA.
+- **Uzunluk 12.595 → ~9.376px** (pricing+FAQ eklenmişken): story
+  3085→1879 (54→38vh adım, 24→10vh gap, hızlı+az kaybolan reveal),
+  order-flow 2385→1665 (265→185vh).
+- Metin dürüstlüğü: "no refresh" → otomatik+manuel; teslimatı kart
+  işaretler (sipariş değil); "never needs a second tool" → savunulabilir
+  cümle; Bank Spending → Banking preparation; one-at-a-time → review
+  imported records; summarize→summarise; Web Portal → Web App;
+  "…and Web."; chat notu "securely stored to provide support".
+- Mobil: chat launcher 52px ikon-rozet + safe-area; panel ≤75vh.
+  Customisation ikinci CTA'sı /features#customisation'a (anchor eklendi).
+  Hero tam-boyut modalına altyazı satırı.
+- 36 string 12 dilde (154 değiştirme + 22 yeni anahtar).
+- **Bilinçli atlanan/ertelenen:** H1 alt-satırı (eyebrow zaten kapsıyor),
+  floating kart bağlantı çizgileri + mobil carousel (tasarım riski),
+  Windows waitlist CTA (e-posta toplama → privacy kararı kullanıcıda),
+  header kırpılması (pane'de yeniden üretilemedi; nav'da transform/
+  overflow yok — gerçek cihazda görülürse tekrar), scroll-story adım
+  aktivasyonu pane'de test edilemiyor (programatik scroll artefaktı —
+  üretimde de aynı, gerçek kullanıcıda çalışıyor).
+- Pandle: destek PS-3869 referansıyla geliştirmeye iletti; kimlik bekleniyor.
