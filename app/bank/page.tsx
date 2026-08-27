@@ -1450,7 +1450,7 @@ function BankPageContent() {
       {/* With a transaction open the page becomes two columns: the list keeps a
           comfortable width on the left and the details panel sits beside it,
           starting under the app header instead of covering it. */}
-      <div className={drawerTx ? "bank-layout bank-layout--drawer" : "bank-layout"} style={{ maxWidth: drawerTx ? 1320 : 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 18, alignItems: "start", transition: "max-width 160ms" }}>
+      <div className={drawerTx ? "bank-layout bank-layout--drawer" : "bank-layout"} style={{ margin: "0 auto", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ---- Header ------------------------------------------------------ */}

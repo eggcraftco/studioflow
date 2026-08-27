@@ -734,7 +734,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname === "/quick-reply" ||
     pathname === "/notes" ||
     pathname === "/messages" ||
-    pathname === "/settings";
+    pathname === "/settings" ||
+    pathname === "/inventory" ||
+    pathname === "/bank" ||
+    pathname === "/admin";
   const cachedShellMatchesUser = hasCachedShellForUser(user?.uid);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(() =>
     cachedShellMatchesUser ? cachedWorkspace : null,
