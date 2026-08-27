@@ -620,3 +620,38 @@ eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
   demo video caption/fallback; dil değişiminde tarih/para/story localization
   taraması. Rapor Home dışı sayfaları (Features/Pricing/FAQ) ayrıca
   inceleyecekti — o raporlar gelince devam.
+
+---
+
+## 27 Ağu sabah — Website görsel geçiş + Dashboard Orta + D2 adım 1 (tur 32)
+
+### Website raporu görsel maddeler (CANLI)
+- Hero screenshot'a "See it full size" düğmesi → tam ekran önizleme
+  (Escape kapatır, scroll kilitlenir; dev'de tam tur test edildi).
+- Skip-to-content bağlantısı tüm public sayfalarda; Planned (Windows)
+  platform kartı soluk + kesikli çerçeve; telefonda QR yerine doğrudan
+  mağaza rozeti; demo video yüklenemezse doğrudan bağlantı; footer'a
+  App Store + Google Play. 3 yeni string 12 dilde.
+
+### Dashboard Orta maddeleri (ajan, da482b7, CANLI)
+- Vergi kartı "Set aside this calendar year" + 1 Oca–31 Ara tooltip'i
+  (hesap gerçekten takvim yılı — kod doğrulandı).
+- Extra Spending CSV dosya adı aktif aralığı taşıyor
+  (extra-spending-this-month.csv / -2026-01-01_2026-03-31.csv); satır
+  tarihlerindeki toISOString UTC kayması da düzeltildi.
+- Grafik tooltip'i workspace para birimiyle (formatStudioMoney), sağ
+  kenarda sola çevriliyor; grafik etiketleri t()'ye taşındı.
+- Customize'a "Reset layout" (varsayılanla eşleşince pasif; E2E'li).
+- 11 yeni string 12 dilde (language.ts).
+
+### Domain-link D2 adım 1 (web CANLI, fonksiyon deploy BEKLİYOR)
+- middleware.ts: /r/<token> → /track/<token> rewrite, her host'ta;
+  üretimde doğrulandı (nivadesk.app/r/... track sayfasını veriyor).
+- Portal + Estimate sayfaları serving host'u gönderiyor;
+  assertHostMayServeCompany: kayıtlı bir client domain'de sunulan token
+  sayfası o domain'in workspace'ine ait değilse permission-denied.
+  Kayıtsız/birincil host'lar dokunulmadan geçer.
+- **BEKLEYEN DEPLOY (firebase reauth gerekli):** getPortalForVisitor,
+  getEstimateForVisitor + Notes'tan kalan sharePersonalNote.
+  Reauth gelene kadar canlı fonksiyonlar host paramını yok sayar —
+  regresyon yok, guard sadece devreye girmemiş olur.
