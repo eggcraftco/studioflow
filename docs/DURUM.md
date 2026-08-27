@@ -1302,3 +1302,41 @@ Kullanıcı talimatı: "tüm kullanıcıları etkileyecekse onu da kapat."
   CF Worker + Hostinger; nivadesk.app'te Hostinger) — indirme tıklama
   bazlı olduğundan bant maliyeti ihmal edilebilir; sorun olursa Worker
   doğrudan storage'a fetch edecek şekilde optimize edilebilir.
+
+---
+
+## 28 Ağu — Block customisation paneli 4 PLATFORMDA + geniş sayfalar (tur 55-56)
+
+Kullanıcı mock'u birebir uygulandı (kartların ... menüsü):
+- **Web (tur 55 canlı-doğrulandı):** renderCardMenu → "Block
+  customisation" paneli: başlık+grip+X, ikonlu eylemler (Export
+  history/to-do PDF ilgili kartlarda), Position (etiketli oklar +
+  "sürükleyebilirsin" ipucu), Width (Fit content/Match column), Card
+  size S/M/L (aktif olan türetilir: 220/380/560/fit yükseklik eşleşmesi),
+  2 sütun renk kartları, Manage colour labels, Reset/Done. Escape +
+  backdrop kapatma eklendi (eskiden yoktu). Telefonda bottom-sheet.
+  Reset = yükseklik+renk temizle (konum bilinçli korunur).
+- **YENİ: renk anlam etiketleri düzenlenebilir** — companySettings.
+  cardColorMeaningsJSON ({Red:"...",...}; boş=çipi gizle, yok=varsayılan);
+  web'de editör modalı (owner-value yazımı lastSettingsWrite damgalı,
+  audit'e düşer), üç platform da OKUR. Dev E2E: Red→"Acil is" kartta
+  ve menüde anında.
+- **Swift (c6b7583, mac+iOS BUILD SUCCEEDED, ayrı DerivedData):**
+  S/M/L + Fit content + Match column (sütun üyelerine bildirim
+  köprüsüyle) + kart-başına Reset + paylaşılan etiketler (FirebaseManager
+  companySettings sync + logout cache temizliği AuthViewModel'de);
+  DilMotoru 12 dil; alt-view'lar ayrı struct (gerçek-iPhone stack kuralı).
+- **Android (1e05a0e, BUILD SUCCESSFUL):** menüye Move up/down (+
+  masaüstünde left/right), S/M/L, Fit content, Match column, Reset,
+  paylaşılan etiketler (StudioModels+Repository read-back), TR_14 çeviri
+  haritası VE eksik olan **Export History Log PDF** (sayfalı PdfDocument,
+  mevcut exporter deseni). Not: history girdilerinde yazar alanı hiçbir
+  platformda yok — PDF mevcut alanları basar.
+- 35 string 12 dilde (workflow fan-out, 11 ajan 20 sn); rehber Orders
+  bölümü güncellendi; bot sondası confident:True (etiket yeniden
+  adlandırma + S/M/L cevabı doğru).
+- **Geniş sayfalar (tur 56):** AppShell wideWorkspace listesine
+  /inventory, /bank, /admin eklendi; bank sayfasının kendi 1180/1320px
+  iç kısıtı kaldırıldı. Dev'de shell-container-wide üçünde doğrulandı.
+- Kaynak push b86748b (native commit'ler dahil); mağaza sürümü notu:
+  bu parite 1.4/0.1.9 paketine girer.
