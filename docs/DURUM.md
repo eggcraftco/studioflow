@@ -781,3 +781,31 @@ Rapor: önceki önerilerin ~%75-80'i uygulanmış; kalan ana sorun sıralama
   aktivasyonu pane'de test edilemiyor (programatik scroll artefaktı —
   üretimde de aynı, gerçek kullanıcıda çalışıyor).
 - Pandle: destek PS-3869 referansıyla geliştirmeye iletti; kimlik bekleniyor.
+
+---
+
+## 27 Ağu gece — Kanal filtresi (tur 36) + iptal-dışlama 3 PLATFORMDA
+
+### Web: mağaza-kanal filtresi CANLI (tur 36)
+- Dashboard'da dönem seçicinin altında kanal pilleri (yalnız Shopify/Woo
+  siparişi varsa görünür): All channels / Shopify / WooCommerce / Manual.
+  customFields.Source'tan türetilir; aynı memo zincirini beslediği için
+  KPI/grafik/YoY/döküm hepsi uyumlu. Dev E2E: £785 = Woo £385 + Manual
+  £400. 3 string 12 dilde; rehber dashboard bölümüne madde; korpus + 4
+  asistan fonksiyonu deploy.
+
+### Dashboard finans düzeltmeleri NATIVE PARITE TAMAM
+- **Android d594653:** iptal siparişler orada da sayılıyormuş —
+  DashboardStats.from + WidgetSummaryBridge dahil tüm toplama noktaları
+  countsTowardBalance'a bağlandı; dökümde "Cancelled or refunded (N)"
+  satırı + Revenue hint cümlesi; vergi kartı Android'de yok → net-VAT
+  bilinçli atlandı. BUILD SUCCESSFUL.
+- **Swift 6a7871d:** aynı bulgu; Siparis.countsTowardBalance paylaşılan
+  predicate oldu (MusterilerView'daki özel kopya silindi), DashboardView
+  tüm toplamlar + grafik/YoY + WidgetSummaryBridge düzeltildi; döküm
+  satırı + hint; vergi kartı Swift'te de yok → atlandı. macOS + iOS
+  BUILD SUCCEEDED.
+- Extra Spending her platformda bilinçli olarak filtrelenmedi (web ile
+  aynı: harcama listesi, mutabakat değil).
+- Net-VAT şu an yalnız web'de ÇÜNKÜ vergi kenara-ayır kartı yalnız
+  web'de var — native'e kart gelirse net-VAT'la birlikte gelmeli (not).
