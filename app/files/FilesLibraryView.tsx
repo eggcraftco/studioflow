@@ -25,6 +25,7 @@ import {
   type LibraryLinkKind
 } from "@/lib/studioflow/filesLibrary";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { openSharedFile } from "@/lib/studioflow/fileMask";
 
 export type LibraryView =
   | "all" | "recent" | "sharedClients" | "internalOnly" | "unlinked"
@@ -153,7 +154,9 @@ export function FilesLibraryView({
   async function openFile(file: LibraryFile) {
     try {
       const url = await libraryFileUrl(file.storagePath);
-      window.open(url, "_blank", "noopener,noreferrer");
+      // Masked viewer: the tab shows the workspace's branded host (or
+      // nivadesk.app), never the raw firebasestorage address.
+      await openSharedFile(url, workspace.clientPortalHost);
     } catch {
       setNotice(t("This file's storage area is not accessible to your account."));
     }

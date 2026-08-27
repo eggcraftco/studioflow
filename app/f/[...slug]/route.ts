@@ -35,9 +35,13 @@ const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "m4v"]);
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "ogg"]);
 
 // A customer's own domain is white-label territory: the viewer drops the
-// NivaDesk name there and lets the file speak for itself.
+// NivaDesk name there and lets the file speak for itself. On branded hosts the
+// Cloudflare Worker proxies to the primary origin, so the true host arrives in
+// X-NivaDesk-Client-Host — the plain Host header always says nivadesk.app.
 function isNivaDeskHost(request: NextRequest): boolean {
-  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const host = (request.headers.get("x-nivadesk-client-host") || request.headers.get("host") || "")
+    .split(":")[0]
+    .toLowerCase();
   return !host || host === "localhost" || host === "nivadesk.app" || host.endsWith(".nivadesk.app");
 }
 
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   if ((slug || []).length === 1 && !bucket && !token) {
     const id = slug[0].replace(/\.[a-z0-9]+$/i, "");
     try {
-      const upstream = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}`, { cache: "no-store" });
+      const upstream = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}${nivadeskHost ? "" : "&brand=0"}`, { cache: "no-store" });
       const html = await upstream.text();
       return new Response(html, {
         status: upstream.status,
