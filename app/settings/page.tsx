@@ -5851,7 +5851,7 @@ function DataManagementSection({
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [exporting, setExporting] = useState<"backup" | "webBackup" | "orders" | "customers" | "">("");
   const [importing, setImporting] = useState(false);
-  const [pendingImport, setPendingImport] = useState<{ backup: unknown; preview: ImportBackupPreview } | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ backup: unknown; preview: ImportBackupPreview; matchesLastBackup: boolean; hasBackupHash: boolean } | null>(null);
   const [skipDuplicatesChoice, setSkipDuplicatesChoice] = useState(true);
   const [lastImportRunId, setLastImportRunId] = useState("");
   const [undoingImport, setUndoingImport] = useState(false);
@@ -5924,11 +5924,24 @@ function DataManagementSection({
     setError("");
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text) as unknown;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error(t("That file could not be read as JSON. Choose a NivaDesk backup file ending in .json."));
+      }
+      // The hash noted at download time turns "is this the right file?" from a
+      // guess into an answer — a mismatch is still importable, just called out.
+      const fileHash = await sha256Hex(text);
       const preview = await previewWorkspaceBackupImport(workspace, parsed);
       // Skipping is the safe default; someone who wants deliberate copies unticks it.
       setSkipDuplicatesChoice(true);
-      setPendingImport({ backup: parsed, preview });
+      setPendingImport({
+        backup: parsed,
+        preview,
+        matchesLastBackup: Boolean(lastBackupHash) && fileHash === lastBackupHash,
+        hasBackupHash: Boolean(lastBackupHash)
+      });
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : t("Import could not be completed."));
     } finally {
@@ -6010,11 +6023,20 @@ function DataManagementSection({
             <strong>{pendingImport.preview.fileOrders}</strong>
             <span>{t("Customers in this file")}</span>
             <strong>{pendingImport.preview.fileCustomers}</strong>
-            <span>{t("Already in this workspace")}</span>
+            <span>{t("Orders already in this workspace")}</span>
             <strong>{pendingImport.preview.existingOrders}</strong>
+            <span>{t("Customers already in this workspace")}</span>
+            <strong>{pendingImport.preview.existingCustomers}</strong>
             <span>{t("Look like they are already here")}</span>
             <strong>{pendingImport.preview.likelyDuplicateOrders + pendingImport.preview.likelyDuplicateCustomers}</strong>
+            <span>{t("Includes settings")}</span>
+            <strong>{pendingImport.preview.importsSettings ? t("Yes") : t("No")}</strong>
           </div>
+          {pendingImport.matchesLastBackup ? (
+            <p className="success-copy">{t("This file matches your last downloaded backup exactly.")}</p>
+          ) : pendingImport.hasBackupHash ? (
+            <p className="muted-copy">{t("Not the file from your last download — that is fine if this is an older backup or one from another device.")}</p>
+          ) : null}
           <p>{t("Import adds records — it never replaces or clears anything. Client Files are not included in a backup.")}</p>
           {(pendingImport.preview.unsupportedCustomers ?? 0) > 0 ? (
             <p className="layout-error">

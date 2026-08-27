@@ -170,7 +170,9 @@ export function ClientDomainSection({
           const isVerifying = verifyingHost === domain.host;
           const failedCheck = verifyResult && verifyResult.host === domain.host && !verifyResult.verified ? verifyResult : null;
           const certificate = verifyResult && verifyResult.host === domain.host ? verifyResult.certificate : undefined;
-          const certActive = certificate?.status === "active";
+          // A fresh page load has no verify result yet — the stored edge state
+          // keeps a live domain from greeting its owner with "being issued".
+          const certActive = certificate ? certificate.status === "active" : domain.cfSslStatus === "active";
           const statusLabel = domain.status === "active"
             ? certActive ? `🟢 ${t("Live")}` : `🟢 ${t("Domain verified")}`
             : isVerifying ? t("Verifying...") : t("DNS required");
