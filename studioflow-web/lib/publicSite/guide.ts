@@ -59,6 +59,9 @@ const TREE_EN: GuideNode[] = [
         "Payments Received counts only money actually collected in the period — compare it with Revenue to see what is still out.",
         "Outstanding Balance is what customers still owe across those orders.",
         "Net Profit is revenue minus base cost, extra spending, platform fees, shipping and VAT. Hover any card title for its exact formula.",
+        "Cancelled and refunded orders are left out of every money figure; the Financial Breakdown shows them on their own \"Cancelled or refunded\" line.",
+        "The Tax set-aside card holds net VAT — VAT collected on sales minus reclaimable VAT inside bank payments marked Standard or Reduced rate — plus Corporation Tax when enabled.",
+        "Click any point on the Net Profit chart to zoom the dashboard to that period.",
         "The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range."
       ] }
     ]
@@ -848,6 +851,9 @@ const TREE_TR: GuideNode[] = [
         "Payments Received yalnız dönemde fiilen tahsil edilen parayı sayar; dışarıda ne kaldığını görmek için Revenue ile karşılaştırın.",
         "Outstanding Balance, o siparişlerde müşterilerin hâlâ borçlu olduğu tutardır.",
         "Net Profit = gelir − temel maliyet − ek harcama − platform komisyonu − kargo − KDV. Tam formül için kart başlığının üzerine gelin.",
+        "İptal ve iade edilen siparişler hiçbir para rakamına girmez; Financial Breakdown bunları kendi \"Cancelled or refunded\" satırında gösterir.",
+        "Tax set-aside kartı net KDV tutar — satışlarda tahsil edilen KDV eksi Standart/İndirimli oranlı banka ödemelerindeki iade alınabilir KDV — açıksa Kurumlar Vergisi de eklenir.",
+        "Net Profit grafiğinde bir noktaya tıklayın; panel o döneme yakınlaşır.",
         "Dönem seçicide hazır aralıklar var — Son 7/30 gün, bu/geçen çeyrek, İngiltere vergi yılı — ve özel aralık."
       ] }
     ]

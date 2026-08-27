@@ -345,6 +345,17 @@ const ORDER_CARDS: OrderCardInfo[] = [
 
 const ORDER_CARD_TONES = ["default", "green", "blue", "yellow", "pink", "purple"] as const;
 
+// Follow-up report: 19 titles at once read as noise. The grid keeps every
+// card but seats them under five category labels so a visitor scans the
+// shape of the system before the parts.
+const ORDER_CARD_GROUPS: { labelKey: PublicSiteTranslationKey; titleKeys: string[] }[] = [
+  { labelKey: "orderCards.group.customer", titleKeys: ["orderCard.customer", "orderCard.customerPortal", "orderCard.clientFiles"] },
+  { labelKey: "orderCards.group.work", titleKeys: ["orderCard.todo", "orderCard.workTime", "orderCard.status", "orderCard.schedule"] },
+  { labelKey: "orderCards.group.order", titleKeys: ["orderCard.preview", "orderCard.summary", "orderCard.delivery", "orderCard.priority", "orderCard.shipping"] },
+  { labelKey: "orderCards.group.money", titleKeys: ["orderCard.estimate", "orderCard.invoiceItems", "orderCard.financial"] },
+  { labelKey: "orderCards.group.items", titleKeys: ["orderCard.repairIntake", "orderCard.materials", "orderCard.notes", "orderCard.history"] }
+];
+
 const SCROLL_STORY_STEPS: ScrollStoryStep[] = [
   {
     eyebrowKey: "scrollStory.step1.eyebrow",
@@ -1105,6 +1116,7 @@ function ProductScene() {
                 </button>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/hero-app2.webp" alt="NivaDesk order workspace" />
+                <p className="public-shot-caption">{t("hero.shotCaption")}</p>
               </div>
             </div>,
             document.body
@@ -1205,51 +1217,63 @@ function FeatureCard({ feature, index }: { feature: FeatureHighlight; index: num
 
 function OrderCardTitleGrid() {
   const { t } = usePublicSiteLanguage();
-  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string>(ORDER_CARDS[0].titleKey);
   const assembleRef = useOrderCardAssembly();
-  const selectedCard = ORDER_CARDS[selectedCardIndex] ?? ORDER_CARDS[0];
+  const selectedCard = ORDER_CARDS.find(card => card.titleKey === selectedKey) ?? ORDER_CARDS[0];
 
   return (
     <div className="public-order-card-system" ref={assembleRef}>
       <div className="public-order-card-grid" aria-label={t("orderCards.aria")}>
-        {ORDER_CARDS.flatMap((card, index) => {
-          const isSelected = selectedCardIndex === index;
-          const nodes: ReactNode[] = [
-            <div className="public-order-card-slot" key={card.titleKey}>
-              <article
-                className="public-order-card-chip"
-                data-active={isSelected ? "true" : "false"}
-                data-order-assemble-card="true"
-                data-tone={ORDER_CARD_TONES[index % ORDER_CARD_TONES.length]}
-              >
-                <button
-                  aria-controls="public-order-card-detail-panel"
-                  aria-pressed={isSelected}
-                  className="public-order-card-toggle"
-                  onClick={() => setSelectedCardIndex(index)}
-                  type="button"
-                >
-                  <span className="public-order-card-icon" aria-hidden="true">
-                    <CardIconGlyph icon={card.icon} />
-                  </span>
-                  <h3>{t(card.titleKey)}</h3>
-                </button>
-              </article>
+        {ORDER_CARD_GROUPS.map(group => {
+          const cards = group.titleKeys
+            .map(key => ORDER_CARDS.find(card => card.titleKey === key))
+            .filter((card): card is (typeof ORDER_CARDS)[number] => Boolean(card));
+          const selectedInGroup = cards.findIndex(card => card.titleKey === selectedKey);
+          return (
+            <div className="public-order-card-group" key={group.labelKey}>
+              <span className="public-order-card-group-label">{t(group.labelKey)}</span>
+              <div className="public-order-card-group-grid">
+                {cards.flatMap((card, index) => {
+                  const globalIndex = ORDER_CARDS.findIndex(item => item.titleKey === card.titleKey);
+                  const isSelected = selectedKey === card.titleKey;
+                  const nodes: ReactNode[] = [
+                    <div className="public-order-card-slot" key={card.titleKey}>
+                      <article
+                        className="public-order-card-chip"
+                        data-active={isSelected ? "true" : "false"}
+                        data-order-assemble-card="true"
+                        data-tone={ORDER_CARD_TONES[globalIndex % ORDER_CARD_TONES.length]}
+                      >
+                        <button
+                          aria-controls="public-order-card-detail-panel"
+                          aria-pressed={isSelected}
+                          className="public-order-card-toggle"
+                          onClick={() => setSelectedKey(card.titleKey)}
+                          type="button"
+                        >
+                          <span className="public-order-card-icon" aria-hidden="true">
+                            <CardIconGlyph icon={card.icon} />
+                          </span>
+                          <h3>{t(card.titleKey)}</h3>
+                        </button>
+                      </article>
+                    </div>
+                  ];
+                  // Phone only (CSS-controlled): the tapped card's description
+                  // appears as a full-width strip right after its own row.
+                  const isRowEnd = index % 2 === 1 || index === cards.length - 1;
+                  if (isRowEnd && selectedInGroup >= 0 && Math.floor(index / 2) === Math.floor(selectedInGroup / 2)) {
+                    nodes.push(
+                      <p className="public-order-card-inline-detail" key="inline-detail">
+                        {t(selectedCard.detailKey)}
+                      </p>
+                    );
+                  }
+                  return nodes;
+                })}
+              </div>
             </div>
-          ];
-          // Phone only (CSS-controlled): show the tapped card's description as a
-          // full-width strip right after the row it belongs to, so the two
-          // side-by-side cards stay in place and never reflow.
-          const isRowEnd = index % 2 === 1 || index === ORDER_CARDS.length - 1;
-          const selectedRow = Math.floor(selectedCardIndex / 2);
-          if (isRowEnd && Math.floor(index / 2) === selectedRow) {
-            nodes.push(
-              <p className="public-order-card-inline-detail" key="inline-detail">
-                {t(selectedCard.detailKey)}
-              </p>
-            );
-          }
-          return nodes;
+          );
         })}
       </div>
       <aside className="public-order-card-panel" id="public-order-card-detail-panel">
@@ -1556,7 +1580,7 @@ function StudioAccentBand() {
             <Link href="/features" className="public-button dark large">
               {t("accent.cta.explore")}<span className="public-button-arrow" aria-hidden="true">→</span>
             </Link>
-            <Link href="/features" className="public-button secondary large">{t("accent.cta.customise")}</Link>
+            <Link href="/features#customisation" className="public-button secondary large">{t("accent.cta.customise")}</Link>
           </div>
           <ul className="public-accent-trust">
             <li>
@@ -1640,6 +1664,9 @@ function ScrollStoryShowcase() {
 
   return (
     <section className="public-scroll-story public-scroll-reveal">
+      <div className="public-shell">
+        <p className="public-story-context">{t("scrollStory.context")}</p>
+      </div>
       <div className="public-shell public-scroll-story-grid">
         <div className="public-scroll-stage" data-active-step={activeStep}>
           {/* Faithful mock of the app's real Shipping & Tracking card; the
@@ -2174,10 +2201,13 @@ export function ChatGPTAppShowcase({
       <div className="public-shell">
         <div className="public-section-header">
           {featured ? (
-            <span className="gpt-eyebrow">
-              <span className="gpt-eyebrow-logo"><GptMark /></span>
-              {t("chatgptApp.eyebrow")}
-            </span>
+            <>
+              <span className="gpt-eyebrow">
+                <span className="gpt-eyebrow-logo"><GptMark /></span>
+                {t("chatgptApp.eyebrow")}
+              </span>
+              <p className="gpt-bridge-line">{t("chatgptApp.bridge")}</p>
+            </>
           ) : (
             <span className="public-eyebrow">{t("chatgptApp.eyebrow")}</span>
           )}
@@ -2389,13 +2419,24 @@ export function ChatGPTAppShowcase({
         </div>
       </div>
       {showMoreLink ? (
-        <div className="public-shell gpt-section-more">
-          <Link href="/chatgpt" className="public-button ghost large">
-            {t("aiPage.learnMore")}<span className="public-button-arrow" aria-hidden="true">→</span>
-          </Link>
-          <Link href="/security" className="public-button ghost large">
-            {t("aiPage.securityLink")}
-          </Link>
+        <div className="public-shell gpt-section-more-wrap">
+          <div className="gpt-permission-summary">
+            <strong>{t("chatgptApp.perm.title")}</strong>
+            <ul>
+              <li data-mark="yes">{t("chatgptApp.perm1")}</li>
+              <li data-mark="yes">{t("chatgptApp.perm2")}</li>
+              <li data-mark="yes">{t("chatgptApp.perm3")}</li>
+              <li data-mark="no">{t("chatgptApp.perm4")}</li>
+            </ul>
+          </div>
+          <div className="gpt-section-more">
+            <Link href="/chatgpt" className="public-button ghost large">
+              {t("aiPage.learnMore")}<span className="public-button-arrow" aria-hidden="true">→</span>
+            </Link>
+            <Link href="/security" className="public-button ghost large">
+              {t("aiPage.securityLink")}
+            </Link>
+          </div>
         </div>
       ) : null}
     </section>
@@ -2654,6 +2695,58 @@ function PlatformNote() {
   );
 }
 
+// Follow-up report items 37-38: answer the visitor's last objections right
+// before the final CTA — three plan one-liners and three FAQ links, nothing
+// that adds real page height.
+function HomePricingSummary() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-home-pricing public-scroll-reveal">
+      <div className="public-shell">
+        <h2 className="public-home-pricing-title">{t("homePricing.title")}</h2>
+        <div className="public-home-pricing-grid">
+          <div className="public-card public-home-pricing-card">
+            <strong>Free</strong>
+            <span>{t("homePricing.freeSub")}</span>
+          </div>
+          <div className="public-card public-home-pricing-card">
+            <strong>Pro</strong>
+            <span>{t("homePricing.proSub")}</span>
+          </div>
+          <div className="public-card public-home-pricing-card">
+            <strong>Team</strong>
+            <span>{t("homePricing.teamSub")}</span>
+          </div>
+        </div>
+        <div className="public-home-pricing-more">
+          <Link href="/pricing" className="public-button ghost">{t("homePricing.cta")}<span className="public-button-arrow" aria-hidden="true">→</span></Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HomeFaqSummary() {
+  const { t } = usePublicSiteLanguage();
+  const questions: PublicSiteTranslationKey[] = ["homeFaq.q1", "homeFaq.q2", "homeFaq.q3"];
+  return (
+    <section className="public-section public-home-faq public-scroll-reveal">
+      <div className="public-shell">
+        <nav className="public-home-faq-list" aria-label={t("nav.faq")}>
+          {questions.map(key => (
+            <Link key={key} href="/faq" className="public-card public-home-faq-item">
+              {t(key)}<span aria-hidden="true">→</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="public-home-faq-more">
+          <Link href="/faq">{t("homeFaq.more")}</Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // The newer back-office areas (the global-website report asked the home page
 // to say these exist so visitors understand NivaDesk is more than the order
 // board). Short cards only — the deep explanations live on /features and in
@@ -2771,12 +2864,9 @@ function PublicHomePageContent() {
           )
         : null}
 
-      {/* Report ordering: show what the product does before where it runs.
-          Story and customisation first, then ChatGPT, then the newer
-          back-office areas, and only then the platform strip. */}
-      <ScrollStoryShowcase />
-
-      <StudioAccentBand />
+      {/* Follow-up report ordering: the connected-order workflow is the
+          product's core logic and leads; shipping is a supporting use case
+          and follows the back office instead of hogging the fold. */}
 
       <section className="public-section public-order-flow-section">
         <div className="public-order-flow-sticky">
@@ -2791,11 +2881,19 @@ function PublicHomePageContent() {
         </div>
       </section>
 
+      <StudioAccentBand />
+
       <ChatGPTAppShowcase featured showMoreLink />
 
       <AdvancedAreasSection />
 
+      <ScrollStoryShowcase />
+
       <PlatformNote />
+
+      <HomePricingSummary />
+
+      <HomeFaqSummary />
 
       <section className="public-section public-cta-band public-scroll-reveal">
         <div className="public-shell public-cta-inner">
@@ -2957,7 +3055,7 @@ function PublicFeaturesPageContent() {
         </div>
       </section>
 
-      <section className="public-section">
+      <section className="public-section" id="customisation">
         <div className="public-shell">
           <SectionHeader
             eyebrowKey="capability.eyebrow"
