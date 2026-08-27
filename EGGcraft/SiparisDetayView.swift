@@ -751,6 +751,10 @@ private struct ToDoItemDropDelegate: DropDelegate {
 
 extension Notification.Name {
     static let phoneCardMoveRequested = Notification.Name("phoneCardMoveRequested")
+    // "Match column" from the card options menu needs the whole desktop layout
+    // (kartYerlesimi), which lives in the parent workspace view — same bridge
+    // pattern the phone move menu uses.
+    static let cardSizeActionRequested = Notification.Name("cardSizeActionRequested")
 }
 
 enum KartTipi: String, Codable, Equatable, Identifiable, CaseIterable {
@@ -2241,6 +2245,9 @@ struct SiparisDetayView: View {
             enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: false)
             arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded()
             yenileCalismaAlaniHitbox(delay: 0.01)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .cardSizeActionRequested)) { notification in
+            handleCardSizeActionRequest(notification)
         }
         .onChange(of: siparis.id) { _, _ in startLiveTrackingListener(); loadWorkspaceForCurrentOrderIfNeeded(); otomatikKesintiHesapla(); enforceCardLayoutLockForCurrentPlan(); loadMacFirstProjectGuideState(forceReload: true); enforceMacFirstProjectGuideCustomerOnlyVisibilityIfNeeded(persist: false); arrangeMacFirstProjectGuideFinancialCardLayoutIfNeeded() }
         .onChange(of: authVM.currentBillingPlan) { _, _ in enforceCardLayoutLockForCurrentPlan() }
@@ -5245,6 +5252,25 @@ struct SiparisDetayView: View {
         saveActiveCardHeightsLocally()
         yenileCalismaAlaniHitbox()
         persistWorkspaceCustomizationChange()
+    }
+
+    // "Match column" from the card options menu: every card in the source
+    // card's desktop column (kartYerlesimi) gets the source card's current
+    // effective height. Persists through kaydetKartYukseklikleri — the exact
+    // pipeline the continuous resize handles use.
+    private func handleCardSizeActionRequest(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let rawKart = info["card"] as? String,
+              let kart = KartTipi(rawValue: rawKart),
+              let action = info["action"] as? String else { return }
+        guard action == "matchColumn",
+              let hedefBoy = info["height"] as? Double, hedefBoy > 0 else { return }
+        guard let sutun = kartYerlesimi.first(where: { $0.contains(kart) }), !sutun.isEmpty else { return }
+
+        var guncel = kartYukseklikleri
+        for uye in sutun { guncel[uye.rawValue] = hedefBoy }
+        withAnimation(.snappy) { kartYukseklikleri = guncel }
+        kaydetKartYukseklikleri()
     }
 
     private func yenileCalismaAlaniHitbox(delay: Double = 0.02) {
@@ -13489,6 +13515,93 @@ private let cardColorMeanings: [(String, String)] = [
     ("Green", "Approved"), ("Blue", "In production"), ("Purple", "Finance"), ("Pink", "Special")
 ]
 
+// Card size presets shared with the web block-customisation panel: S/M/L map to
+// the same stored heights on every platform.
+private let cardSizePresets: [(String, Double)] = [("S", 220), ("M", 380), ("L", 560)]
+
+// Emoji dot per colour name for the iOS/iPad colour submenu rows.
+private func cardColorEmoji(_ name: String) -> String {
+    switch name {
+    case "Red": return "🔴"
+    case "Orange": return "🟠"
+    case "Yellow": return "🟡"
+    case "Green": return "🟢"
+    case "Blue": return "🔵"
+    case "Purple": return "🟣"
+    case "Pink": return "🩷"
+    default: return "⚪️"
+    }
+}
+
+// S / M / L preset chip for the macOS card options popover.
+private struct CardSizePresetChip: View {
+    let label: String
+    let isSelected: Bool
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(isSelected ? .white : .primary)
+                .frame(width: 36, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isSelected ? Color.blue : Color.primary.opacity(hovering ? 0.10 : 0.05))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
+// "Card size" submenu rows (iOS/iPad card menu + long-press context menu).
+// Extracted into its own struct: deep inline nesting inside Menu builders can
+// overflow the stack on real iPhones.
+private struct CardSizeSubmenu: View {
+    let seciliDil: String
+    let storedHeight: Double?
+    let showMatchColumn: Bool
+    let onPreset: (Double) -> Void
+    let onFitContent: () -> Void
+    let onMatchColumn: () -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(cardSizePresets, id: \.0) { preset in
+                Button {
+                    onPreset(preset.1)
+                } label: {
+                    if storedHeight == preset.1 {
+                        Label(preset.0, systemImage: "checkmark")
+                    } else {
+                        Text(preset.0)
+                    }
+                }
+            }
+            Divider()
+            Button {
+                onFitContent()
+            } label: {
+                Label(t("Fit content", lang: seciliDil), systemImage: "arrow.down.right.and.arrow.up.left")
+            }
+            if showMatchColumn {
+                Button {
+                    onMatchColumn()
+                } label: {
+                    Label(t("Match column", lang: seciliDil), systemImage: "rectangle.split.3x1")
+                }
+            }
+        } label: {
+            Label(t("Card size", lang: seciliDil), systemImage: "arrow.up.and.down")
+        }
+    }
+}
+
 // A clean, native-feeling macOS menu row: icon + label, full-width, subtle hover highlight.
 private struct CardMenuRow: View {
     let title: String
@@ -13568,7 +13681,10 @@ struct DetayKarti<Content: View>: View {
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @AppStorage("workspaceCardsLockedV1") private var workspaceCardsLocked: Bool = false
     @AppStorage("studioFlowBillingPlanV1") private var storedBillingPlan: String = StudioBillingPlan.teamMonthly.rawValue
-    
+    // Workspace-shared colour meaning labels: companySettings.cardColorMeaningsJSON,
+    // mirrored into UserDefaults by FirebaseManager's companySettings listener.
+    @AppStorage("cardColorMeaningsJSON") private var cardColorMeaningsJSON: String = ""
+
     let title: String
     let iconName: String
     let kartTipi: KartTipi
@@ -13654,13 +13770,27 @@ struct DetayKarti<Content: View>: View {
         }
     }
 
+    // Workspace overrides for the colour meanings, keyed by English colour name.
+    // A key present with an empty string deliberately hides that colour's label;
+    // a missing key falls back to the fixed default meaning (mirrors the web).
+    private var sharedColorMeaningOverrides: [String: String] {
+        guard let data = cardColorMeaningsJSON.data(using: .utf8),
+              let dict = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return dict
+    }
+
     private func cardColorMeaning(for renk: String) -> String? {
+        if let override = sharedColorMeaningOverrides[renk] {
+            let temiz = override.trimmingCharacters(in: .whitespacesAndNewlines)
+            return temiz.isEmpty ? nil : t(String(temiz.prefix(40)), lang: seciliDil)
+        }
         guard let anlam = cardColorMeanings.first(where: { $0.0 == renk })?.1 else { return nil }
         return t(anlam, lang: seciliDil)
     }
 
     private var kartRengiAnlami: String? {
-        cardColorMeanings.first(where: { kartRengi == t($0.0, lang: seciliDil) }).map { t($0.1, lang: seciliDil) }
+        guard let ingilizceAd = cardColorMeanings.first(where: { kartRengi == t($0.0, lang: seciliDil) })?.0 else { return nil }
+        return cardColorMeaning(for: ingilizceAd)
     }
 
     // Dynamic card background colour
@@ -13859,101 +13989,50 @@ struct DetayKarti<Content: View>: View {
         Divider()
 
         if canCustomizeThisCard {
+            CardSizeSubmenu(
+                seciliDil: seciliDil,
+                storedHeight: yukseklik,
+                showMatchColumn: !isPhoneLayout,
+                onPreset: { applyCardSizePreset($0) },
+                onFitContent: { applyFitContent() },
+                onMatchColumn: { sendMatchColumnRequest() }
+            )
             #if os(macOS)
             Button {
                 onColorChange(t("Default", lang: seciliDil))
             } label: {
                 Label(t("Default", lang: seciliDil), systemImage: "circle")
             }
-            Button {
-                onColorChange(t("Red", lang: seciliDil))
-            } label: {
-                Label(t("Red", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Urgent", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Orange", lang: seciliDil))
-            } label: {
-                Label(t("Orange", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Waiting on customer", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Yellow", lang: seciliDil))
-            } label: {
-                Label(t("Yellow", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Needs review", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Green", lang: seciliDil))
-            } label: {
-                Label(t("Green", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Approved", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Blue", lang: seciliDil))
-            } label: {
-                Label(t("Blue", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("In production", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Purple", lang: seciliDil))
-            } label: {
-                Label(t("Purple", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Finance", lang: seciliDil))
-            }
-            Button {
-                onColorChange(t("Pink", lang: seciliDil))
-            } label: {
-                Label(t("Pink", lang: seciliDil), systemImage: "circle.fill")
-                Text(t("Special", lang: seciliDil))
+            ForEach(cardColorMeanings, id: \.0) { renk in
+                Button {
+                    onColorChange(t(renk.0, lang: seciliDil))
+                } label: {
+                    Label(t(renk.0, lang: seciliDil), systemImage: "circle.fill")
+                    if let anlam = cardColorMeaning(for: renk.0) {
+                        Text(anlam)
+                    }
+                }
             }
             #else
             Menu("🎨 " + t("Color", lang: seciliDil)) {
                 Button("⚪️ " + t("Default", lang: seciliDil)) { onColorChange(t("Default", lang: seciliDil)) }
-                Button {
-                    onColorChange(t("Red", lang: seciliDil))
-                } label: {
-                    Text("🔴 " + t("Red", lang: seciliDil))
-                    Text(t("Urgent", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Orange", lang: seciliDil))
-                } label: {
-                    Text("🟠 " + t("Orange", lang: seciliDil))
-                    Text(t("Waiting on customer", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Yellow", lang: seciliDil))
-                } label: {
-                    Text("🟡 " + t("Yellow", lang: seciliDil))
-                    Text(t("Needs review", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Green", lang: seciliDil))
-                } label: {
-                    Text("🟢 " + t("Green", lang: seciliDil))
-                    Text(t("Approved", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Blue", lang: seciliDil))
-                } label: {
-                    Text("🔵 " + t("Blue", lang: seciliDil))
-                    Text(t("In production", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Purple", lang: seciliDil))
-                } label: {
-                    Text("🟣 " + t("Purple", lang: seciliDil))
-                    Text(t("Finance", lang: seciliDil))
-                }
-                Button {
-                    onColorChange(t("Pink", lang: seciliDil))
-                } label: {
-                    Text("🩷 " + t("Pink", lang: seciliDil))
-                    Text(t("Special", lang: seciliDil))
+                ForEach(cardColorMeanings, id: \.0) { renk in
+                    Button {
+                        onColorChange(t(renk.0, lang: seciliDil))
+                    } label: {
+                        Text(cardColorEmoji(renk.0) + " " + t(renk.0, lang: seciliDil))
+                        if let anlam = cardColorMeaning(for: renk.0) {
+                            Text(anlam)
+                        }
+                    }
                 }
             }
             #endif
+            Button {
+                resetCardCustomization()
+            } label: {
+                Label(t("Reset", lang: seciliDil), systemImage: "arrow.counterclockwise")
+            }
         } else {
             Label(t("Card moving, resizing and colours are available from NivaDesk Lite.", lang: seciliDil), systemImage: "lock.fill")
         }
@@ -14029,6 +14108,46 @@ struct DetayKarti<Content: View>: View {
                 "action": action
             ]
         )
+    }
+
+    // S / M / L presets write the same stored height the drag-resize handle
+    // writes, then persist through onHeightChangeEnd — the exact pipeline the
+    // continuous resize uses (kaydetKartYukseklikleri upstream).
+    private func applyCardSizePreset(_ boy: Double) {
+        withAnimation(.snappy) { yukseklik = boy }
+        initialHeight = 0
+        onHeightChangeEnd()
+    }
+
+    // "Fit content": clear the stored height so the card returns to the
+    // measured automatic height (the existing auto-size pass re-measures it).
+    private func applyFitContent() {
+        withAnimation(.snappy) { yukseklik = nil }
+        initialHeight = 0
+        onHeightChangeEnd()
+    }
+
+    // "Match column": handled by the parent workspace view, which owns the
+    // desktop column layout. Hidden on iPhone (single-column ordering).
+    private func sendMatchColumnRequest() {
+        NotificationCenter.default.post(
+            name: .cardSizeActionRequested,
+            object: nil,
+            userInfo: [
+                "card": kartTipi.rawValue,
+                "action": "matchColumn",
+                "height": etkiliYukseklik
+            ]
+        )
+    }
+
+    // Per-card reset: automatic height + Default colour. Position is left
+    // alone — reset must never scatter someone's board (mirrors the web).
+    private func resetCardCustomization() {
+        withAnimation(.snappy) { yukseklik = nil }
+        initialHeight = 0
+        onHeightChangeEnd()
+        onColorChange(t("Default", lang: seciliDil))
     }
     private func makeCardDragProvider() -> NSItemProvider {
         let sessionID = CardDragCoordinator.shared.beginSession()
@@ -14132,6 +14251,42 @@ struct DetayKarti<Content: View>: View {
     }
 
     #if os(macOS)
+    // "Card size" section of the options popover: S/M/L preset chips, fit to
+    // content, and column matching (desktop columns only).
+    @ViewBuilder
+    private var macCardSizeSection: some View {
+        Text(t("Card size", lang: seciliDil))
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 6)
+        HStack(spacing: 6) {
+            ForEach(cardSizePresets, id: \.0) { preset in
+                CardSizePresetChip(
+                    label: preset.0,
+                    isSelected: yukseklik == preset.1,
+                    help: preset.0 + " — " + String(Int(preset.1))
+                ) {
+                    showCardOptionsPopover = false
+                    applyCardSizePreset(preset.1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 2)
+        CardMenuRow(title: t("Fit content", lang: seciliDil), systemImage: "arrow.down.right.and.arrow.up.left") {
+            showCardOptionsPopover = false
+            applyFitContent()
+        }
+        if !isPhoneLayout {
+            CardMenuRow(title: t("Match column", lang: seciliDil), systemImage: "rectangle.split.3x1") {
+                showCardOptionsPopover = false
+                sendMatchColumnRequest()
+            }
+        }
+    }
+
     @ViewBuilder
     private var macCardOptionsMenu: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -14160,6 +14315,8 @@ struct DetayKarti<Content: View>: View {
 
             if canCustomizeThisCard {
                 Divider().padding(.horizontal, 6).padding(.top, 5).padding(.bottom, 6)
+                macCardSizeSection
+                Divider().padding(.horizontal, 6).padding(.vertical, 5)
                 Text(t("Card Colour", lang: seciliDil))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -14186,6 +14343,11 @@ struct DetayKarti<Content: View>: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 10)
                         .padding(.top, 4)
+                }
+                Divider().padding(.horizontal, 6).padding(.vertical, 5)
+                CardMenuRow(title: t("Reset", lang: seciliDil), systemImage: "arrow.counterclockwise") {
+                    showCardOptionsPopover = false
+                    resetCardCustomization()
                 }
             } else {
                 Divider().padding(.horizontal, 6).padding(.vertical, 6)

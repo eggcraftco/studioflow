@@ -2458,6 +2458,9 @@ class AuthViewModel: ObservableObject {
             "kartRenkleriJSONV1",
             "kartYerlesimiJSON",
             "kartYukseklikleriJSON",
+            // Workspace-shared colour meaning labels mirrored from companySettings;
+            // without clearing, another account on this device inherits them.
+            "cardColorMeaningsJSON",
             "sutunGenislikleriJSONV4",
             "phoneKartSirasiJSONV1",
             "phoneOrderCompactViewV1",

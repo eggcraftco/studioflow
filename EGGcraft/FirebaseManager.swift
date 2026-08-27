@@ -1345,6 +1345,11 @@ class FirebaseManager: ObservableObject {
                 // rename made on one device only reached the others while the
                 // Settings screen happened to be open.
                 applyString("repairIntakeFieldsJSON")
+                // Workspace-shared card colour meaning labels (order-card menu
+                // subtitles + header capsule). Written by the web "Manage colour
+                // labels" editor; an empty label deliberately hides that colour's
+                // badge, a missing key falls back to the fixed default meaning.
+                applyString("cardColorMeaningsJSON")
             }
     }
 
