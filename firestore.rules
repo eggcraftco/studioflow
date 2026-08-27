@@ -385,11 +385,19 @@ service cloud.firestore {
 
     match /workspaceJoinRequests/{requestId} {
       // Join requests are created and updated only by verified callable backend actions.
-      // Signed-in requesters and the target owner may still read their relevant request state.
+      // Signed-in requesters and the target workspace owner may still read their relevant request state.
+      //
+      // The requesterUid branch is guarded with `in` so a document that lacks the
+      // field — or a list query that does not pin it — falls through to the owner
+      // branch instead of erroring the whole rule ("Property requesterUid is
+      // undefined"). The owner branch must not assume the company document id
+      // equals the owner uid (legacy/seeded workspaces differ), so it resolves
+      // ownership through isCompanyOwner; list queries pin targetCompanyId with
+      // an equality filter, which keeps that check provable.
       allow read: if signedIn()
         && (
-          resource.data.requesterUid == request.auth.uid
-          || resource.data.targetCompanyId == request.auth.uid
+          ('requesterUid' in resource.data && resource.data.requesterUid == request.auth.uid)
+          || ('targetCompanyId' in resource.data && isCompanyOwner(resource.data.targetCompanyId))
         );
 
       allow create, update, delete: if false;
