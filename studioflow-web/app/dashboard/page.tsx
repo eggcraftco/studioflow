@@ -78,6 +78,24 @@ type BankTx = {
 
 type DashboardChannel = "all" | "shopify" | "woocommerce" | "manual";
 
+// Workspace currency is stored as a display symbol; imported orders carry ISO
+// codes. Real conversion needs exchange-rate decisions that belong to the
+// owner (which rate, which date) — until then, foreign-currency orders are
+// SHOWN in their own breakdown rows, never silently converted.
+const DASHBOARD_SYMBOL_TO_ISO: Record<string, string> = {
+  "£": "GBP", "$": "USD", "€": "EUR", "₺": "TRY", "¥": "JPY",
+  "A$": "AUD", "C$": "CAD", "CHF": "CHF", "د.إ": "AED"
+};
+
+function dashboardOrderCurrency(order: DashboardFinanceOrder): string {
+  return (
+    order.customFields["Shopify Currency"]
+    || order.customFields["WooCommerce Currency"]
+    || order.customFields["Currency"]
+    || ""
+  ).trim().toUpperCase();
+}
+
 function dashboardOrderChannel(order: DashboardFinanceOrder): DashboardChannel {
   const source = (order.customFields["Source"] || "").trim().toLowerCase();
   if (source === "shopify") return "shopify";
@@ -152,7 +170,7 @@ function dashboardVisibilityFromData(data: Record<string, unknown>): DashboardWi
   };
 }
 
-function BreakdownRow({ label, amount, negative, strong, tone, hideNumbers, settings }: {
+function BreakdownRow({ label, amount, negative, strong, tone, hideNumbers, settings, valueOverride }: {
   label: string;
   amount: number;
   negative?: boolean;
@@ -160,8 +178,9 @@ function BreakdownRow({ label, amount, negative, strong, tone, hideNumbers, sett
   tone?: "red" | "green";
   hideNumbers: boolean;
   settings: WorkspaceSettingsOverview | null;
+  valueOverride?: string;
 }) {
-  const text = money(amount, hideNumbers, settings);
+  const text = valueOverride ?? money(amount, hideNumbers, settings);
   return (
     <div className={`financial-breakdown-row${strong ? " is-strong" : ""}`}>
       <span className="financial-breakdown-label">{label}</span>
@@ -532,6 +551,20 @@ export default function DashboardPage() {
     () => totalsForOrders(filteredCountingOrders, settings, dashboardVisibility),
     [dashboardVisibility, filteredCountingOrders, settings]
   );
+  const workspaceCurrencyIso = DASHBOARD_SYMBOL_TO_ISO[(settings?.selectedCurrency || "£").trim()] || "";
+  const foreignCurrencies = useMemo(() => {
+    if (!workspaceCurrencyIso) return [] as Array<[string, { amount: number; count: number }]>;
+    const map = new Map<string, { amount: number; count: number }>();
+    for (const order of filteredCountingOrders) {
+      const code = dashboardOrderCurrency(order);
+      if (!code || code === workspaceCurrencyIso) continue;
+      const row = map.get(code) ?? { amount: 0, count: 0 };
+      row.amount += orderSalesTotal(order);
+      row.count += 1;
+      map.set(code, row);
+    }
+    return [...map.entries()].sort((a, b) => b[1].amount - a[1].amount);
+  }, [filteredCountingOrders, workspaceCurrencyIso]);
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
   const locale = studioLocaleTag(language);
@@ -806,7 +839,7 @@ export default function DashboardPage() {
                     {/* Revenue is invoiced order value; Payments Received is
                         the cash that actually arrived — the report's accrual
                         vs cash split, side by side instead of blended. */}
-                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={`${t("Invoiced order value in this range: paid + still owed (accrual basis).")} ${t("Cancelled and refunded orders are not counted.")}`} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={`${t("Invoiced order value in this range: paid + still owed (accrual basis).")} ${t("Cancelled and refunded orders are not counted.")}${foreignCurrencies.length ? ` ${t("Some orders are in other currencies; the breakdown lists their original amounts without conversion.")}` : ""}`} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.revenue ? <DashboardSummaryCard icon="check" title={t("Payments Received")} hint={t("Money actually collected on these orders (cash basis).")} value={money(totals.received, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Outstanding Balance")} hint={t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
                     {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} hint={t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
@@ -863,6 +896,19 @@ export default function DashboardPage() {
                           settings={settings}
                         />
                       ) : null}
+                      {/* Foreign-currency orders stay in the totals numerically
+                          but are surfaced here in their own currency, honest
+                          and unconverted, until real FX rules exist. */}
+                      {foreignCurrencies.map(([code, row]) => (
+                        <BreakdownRow
+                          key={code}
+                          label={`${code} ${t("(not converted)")} (${row.count})`}
+                          amount={row.amount}
+                          hideNumbers={hideNumbers}
+                          settings={settings}
+                          valueOverride={hideNumbers ? undefined : `${row.amount.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`}
+                        />
+                      ))}
                       <BreakdownRow label={t("Base Cost")} amount={totals.breakdownBaseCost} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Extra Spending")} amount={totals.expenses} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Platform Fee")} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
