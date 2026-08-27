@@ -17251,6 +17251,55 @@ async function findWooMergeCandidate(db, companyId, emailLower, windowMs, now, c
   return matches.length === 1 ? matches[0] : null;
 }
 
+// One decision, testable on its own: how a WooCommerce delivery proves
+// itself. A stored signing secret plus a PRESENT signature header makes the
+// signature authoritative — a wrong signature fails even with a valid URL
+// token, because wrong means forgery or misconfiguration and both must be
+// loud. Without a header, the workspace token decides as before.
+function wooWebhookAuthDecision({ signatureSecret, signatureHeader, rawBody, providedToken, workspaceToken }) {
+  let signatureValid = false;
+  if (signatureSecret && signatureHeader && rawBody) {
+    const expected = crypto.createHmac("sha256", signatureSecret).update(rawBody).digest("base64");
+    signatureValid = nvTimingSafeEqual(signatureHeader, expected);
+  }
+  if (signatureSecret && signatureHeader) {
+    return signatureValid
+      ? { authed: true, method: "signature", reason: "" }
+      : { authed: false, method: "", reason: "invalid WooCommerce signature" };
+  }
+  if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
+    return { authed: true, method: "token", reason: "" };
+  }
+  return { authed: false, method: "", reason: workspaceToken ? "invalid token" : "no token in the delivery URL" };
+}
+exports._wooWebhookAuthDecision = wooWebhookAuthDecision;
+
+// Settings report: store WooCommerce's own webhook signing secret so
+// deliveries can be verified by X-WC-Webhook-Signature, not just the URL
+// token. Owner-only; the secret lives in the server-only integrationSecrets
+// store and is never echoed back in full.
+exports.saveWooSignatureSecret = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const companyId = String(request.data?.companyId || "").trim();
+  if (!companyId) throw new HttpsError("invalid-argument", "companyId is required.");
+  const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+  if (!companySnap.exists) throw new HttpsError("not-found", "Workspace not found.");
+  if (!uidIsCompanyOwner(companySnap.data() || {}, uid)) {
+    throw new HttpsError("permission-denied", "Only the workspace owner can change webhook security.");
+  }
+  const secret = String(request.data?.secret || "").trim();
+  if (secret && (secret.length < 8 || secret.length > 128)) {
+    throw new HttpsError("invalid-argument", "The signing secret must be 8-128 characters, or empty to turn signature checks off.");
+  }
+  await integrationSecretRef(companyId, "woocommerce").set({
+    signatureSecret: secret,
+    signatureSecretUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    signatureSecretUpdatedByUid: uid
+  }, { merge: true });
+  return { ok: true, enabled: Boolean(secret), last4: secret ? secret.slice(-4) : "" };
+});
+
 exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (req, res) => {
   try {
     if (req.method !== "POST") {
@@ -17285,19 +17334,31 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       res.status(404).json({ ok: false, error: "unknown_company" });
       return;
     }
-    const { token: workspaceToken } = await readIntegrationSecret(companyId, "woocommerce");
+    const { token: workspaceToken, data: wooSecretData } = await readIntegrationSecret(companyId, "woocommerce");
     // There was a second way in here: one platform-wide WOOCOMMERCE_WEBHOOK_SECRET
     // accepted as a plain query token against ANY companyId — a single string that
     // could forge orders into every workspace on the service. It never ran, because
     // the variable was never a defineSecret and so was never mounted into this
     // function, but it was one env var away from running. Deleted rather than
     // configured. Auth is the workspace's own token, and only that.
-    let authed = false;
-    if (workspaceToken && nvTimingSafeEqual(providedToken, workspaceToken)) {
-      authed = true;
-    }
+    // Optional second factor (settings report): WooCommerce signs every
+    // delivery with the webhook's own secret when one is set in the Woo admin
+    // (X-WC-Webhook-Signature = base64 HMAC-SHA256 of the raw body). If the
+    // workspace has stored that secret, a present-but-wrong signature is
+    // rejected even with a valid URL token — a wrong signature means either a
+    // forgery or a misconfiguration, and both deserve a loud failure rather
+    // than a quiet pass.
+    const decision = wooWebhookAuthDecision({
+      signatureSecret: String((wooSecretData || {}).signatureSecret || "").trim(),
+      signatureHeader: String(req.headers["x-wc-webhook-signature"] || "").trim(),
+      rawBody: req.rawBody,
+      providedToken,
+      workspaceToken
+    });
+    const authed = decision.authed;
+    const authMethod = decision.method;
     if (!authed) {
-      const reason = workspaceToken ? "invalid token" : "no token in the delivery URL";
+      const reason = decision.reason;
       console.warn(`woocommerceOrderWebhook: rejected request — ${reason}.`);
       await recordIntegrationDelivery(companyId, "woocommerce", { ok: false, error: reason, source: integrationRequestSource(req) });
       res.status(401).json({ ok: false, error: "unauthorized" });
@@ -17313,7 +17374,7 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
     // Recorded here rather than after the order is written: a verification ping
     // that carries no order is still a delivery that arrived and authenticated,
     // which is exactly what "is this connected?" is asking.
-    await recordIntegrationDelivery(companyId, "woocommerce", { ok: true, source: integrationRequestSource(req), orderId: cleanWooText(order?.id || order?.number) });
+    await recordIntegrationDelivery(companyId, "woocommerce", { ok: true, source: integrationRequestSource(req), authMethod, orderId: cleanWooText(order?.id || order?.number) });
 
     const wooOrderId = cleanWooText(order?.id || order?.number);
     if (!wooOrderId) {
