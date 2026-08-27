@@ -17808,6 +17808,22 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       res.status(401).json({ ok: false, error: "unauthorized" });
       return;
     }
+
+    // Settings report: the app used to merely ADVISE against running the
+    // official app and the manual webhook side by side; now the server
+    // enforces it. While any official store connection is ACTIVE for this
+    // workspace, manual deliveries are refused with an explanation instead of
+    // silently double-importing the same orders. Pausing or removing the
+    // official connection reopens this path.
+    const officialSnap = await admin.firestore().collection("shopifyStores")
+      .where("companyId", "==", companyId).limit(5).get();
+    const activeOfficial = officialSnap.docs.find(doc => String((doc.data() || {}).status || "") === "active");
+    if (activeOfficial) {
+      const message = `The official Shopify app is connected for ${activeOfficial.id}; the manual webhook is disabled to prevent duplicate orders. Pause or remove the official connection to use it.`;
+      await recordIntegrationDelivery(companyId, "shopify", { ok: false, error: "official_app_active", source: integrationRequestSource(req) });
+      res.status(409).json({ ok: false, error: "official_app_active", message });
+      return;
+    }
     // A deliberate test press answers like the inbound endpoint: authenticated,
     // recorded as a test, no order created — so the green it paints is honest.
     if (req.body && (req.body.nivadeskTest === true || req.body.test === true)) {
