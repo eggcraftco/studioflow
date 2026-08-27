@@ -34,6 +34,9 @@ import {
   setWorkspaceQuickReplyMenuEnabled,
   normalizeWorkspaceRole,
   workspaceAccessAllows,
+  WORKSPACE_MEMBER_ACCESS_DEFAULTS,
+  WORKSPACE_SETTINGS_ACCESS_OPTIONS,
+  type WorkspaceMemberAccess,
   type JoinRequestDetail,
   type JoinedWorkspaceOption,
   type DashboardCounts,
@@ -60,6 +63,8 @@ import { getMessageWorkspaceSettings, setMessageWorkspaceSettings, type StudioMe
 import { canDeleteWorkspaceDataForRole, canEditWorkspaceSettingsForRole, clearAllOrdersTax, previewClearAllOrdersTax, undoClearAllOrdersTax, deleteWorkspaceData, getPersonalInterfaceSettings, importWorkspaceBackup, previewWorkspaceBackupImport, undoWorkspaceBackupImport, recordWorkspaceBackupExport, previewFinancialRecalculationForOrders, recalculateFinancialSettingsForOrders, saveFinancialSettings, saveLanguageSettings, savePdfExportSettings, savePersonalInterfaceSettings, saveThemeBrandingSettings, saveUploadSafetySettings, saveIntegrationSyncSettings } from "@/lib/studioflow/settingsActions";
 import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, removeTeamMember, requestWorkspaceAccess, saveWorkspaceCustomRole, syncAcceptedJoinRequests, updateTeamMemberRole, WEB_TEAM_ROLES } from "@/lib/studioflow/teamActions";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
+import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
+import { canManageClientFilesForRole } from "@/lib/studioflow/clientFiles";
 import {
   addNivaDeskSupportTicketReply,
   addWorkspaceSupportTicketReply,
@@ -287,6 +292,89 @@ function standardAndCustomRoleOptions(customRoles: { id: string; name: string }[
     ...customRoles.map(role => ({ value: role.id, label: role.name }))
   ];
 }
+
+type PermissionMatrixColumn = {
+  key: string;
+  label: string;
+  count: number;
+  /** Normalized base behavior role ("owner" | "admin" | "member" | "viewer" | "workflow"). */
+  baseRole: string;
+  access: WorkspaceMemberAccess;
+  isCustom: boolean;
+};
+
+type PermissionMatrixCell = boolean | { enabled: number; total: number };
+
+type PermissionMatrixRow = {
+  key: string;
+  label: string;
+  value: (column: PermissionMatrixColumn) => PermissionMatrixCell;
+};
+
+/**
+ * Access map a plain base-role member receives. Mirrors the role defaults and
+ * workflow hard-overrides applied in workspaceMemberAccess()
+ * (lib/studioflow/firestore.ts) — custom roles use their own saved access map
+ * instead and are NOT run through the workflow overrides, matching the server.
+ */
+function baseRoleMatrixAccess(baseRole: string): WorkspaceMemberAccess {
+  const access: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+  if (baseRole === "owner") {
+    // Owners see everything, including the opt-in bank feed.
+    access.bankFeed = true;
+    return access;
+  }
+  if (baseRole === "workflow") {
+    access.dashboard = false;
+    access.financialInfo = false;
+    access.customers = false;
+    access.teamAccess = false;
+    access.cardFinancial = false;
+    access.assignedProjectsOnly = true;
+    access.manageProjectAssignments = false;
+    access.orders = true;
+    access.schedule = true;
+    access.quickReply = true;
+    access.clientFiles = true;
+    access.cardClientFiles = true;
+  }
+  return access;
+}
+
+/**
+ * Read-only matrix rows. Every row derives from something the app actually
+ * enforces: either a workspace access flag (WORKSPACE_*_ACCESS_OPTIONS keys)
+ * or a base-role capability helper (canXxxForRole). Inventory intentionally
+ * has no row of its own — the inventory page shares the "orders" gate.
+ */
+const PERMISSION_MATRIX_ROWS: PermissionMatrixRow[] = [
+  { key: "viewOrders", label: "View orders", value: column => column.access.orders !== false },
+  { key: "editOrders", label: "Edit orders & workflow", value: column => canEditOrderStatusForRole(column.baseRole) },
+  { key: "deleteOrders", label: "Delete orders", value: column => canDeleteOrdersForRole(column.baseRole) },
+  { key: "dashboard", label: "Dashboard", value: column => column.access.dashboard !== false },
+  { key: "financialInfo", label: "Financial Info", value: column => column.access.financialInfo !== false },
+  { key: "customers", label: "Customers", value: column => column.access.customers !== false },
+  { key: "messages", label: "Messages", value: column => column.access.messages !== false },
+  { key: "clientFiles", label: "Client Files", value: column => column.access.clientFiles !== false },
+  {
+    key: "deleteClientFiles",
+    label: "Delete client files",
+    // Same pair of checks the files page and order detail use for the delete button.
+    value: column => canManageClientFilesForRole(column.baseRole) && column.access.deleteClientFiles !== false
+  },
+  { key: "bankFeed", label: "Bank Spending", value: column => column.access.bankFeed !== false },
+  {
+    key: "settingsAreas",
+    label: "Settings areas",
+    value: column => ({
+      enabled: WORKSPACE_SETTINGS_ACCESS_OPTIONS.filter(option => column.access[option.key] !== false).length,
+      total: WORKSPACE_SETTINGS_ACCESS_OPTIONS.length
+    })
+  },
+  // Approving requests, changing roles and removing members are owner-only
+  // (canManageTeam in TeamAccessSection requires the owner role).
+  { key: "manageMembers", label: "Manage members & roles", value: column => column.baseRole === "owner" }
+];
 
 function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
   if (!workspace) return true;
@@ -6226,6 +6314,48 @@ function TeamAccessSection({
       return acc;
     }, {});
   }, [members]);
+  const matrixColumns = useMemo<PermissionMatrixColumn[]>(() => {
+    const customRoleIds = new Set(customRoles.map(role => role.id));
+    const baseRoleCount = (base: string) => members.filter(member =>
+      !member.isOwner && !customRoleIds.has(member.role) && normalizeWorkspaceRole(member.effectiveRole) === base
+    ).length;
+    const columns: PermissionMatrixColumn[] = [{
+      key: "owner",
+      label: "Owner",
+      count: members.filter(member => member.isOwner).length,
+      baseRole: "owner",
+      access: baseRoleMatrixAccess("owner"),
+      isCustom: false
+    }];
+    // Legacy "Admin" assignments still exist in a few workspaces; only show
+    // the column when someone actually holds that role.
+    const adminCount = baseRoleCount("admin");
+    if (adminCount > 0) {
+      columns.push({ key: "admin", label: "Admin", count: adminCount, baseRole: "admin", access: baseRoleMatrixAccess("admin"), isCustom: false });
+    }
+    WEB_TEAM_ROLES.forEach(option => {
+      columns.push({
+        key: option.value,
+        label: option.label,
+        count: baseRoleCount(option.value),
+        baseRole: option.value,
+        access: baseRoleMatrixAccess(option.value),
+        isCustom: false
+      });
+    });
+    customRoles.forEach(role => {
+      columns.push({
+        key: role.id,
+        label: role.name,
+        // A member holds a custom role when their raw role value is the custom role id.
+        count: members.filter(member => member.role === role.id).length,
+        baseRole: normalizeWorkspaceRole(role.baseRole, "member") || "member",
+        access: { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS, ...role.access },
+        isCustom: true
+      });
+    });
+    return columns;
+  }, [customRoles, members]);
 
   async function copyText(value: string, label: string) {
     if (!value) return;
@@ -6564,6 +6694,64 @@ function TeamAccessSection({
         ) : (
           <p className="muted-copy">{t("Only the workspace owner on NivaDesk Team can create custom role profiles.")}</p>
         )}
+      </section>
+
+      <section className="card app-card team-access-panel-card">
+        <div className="team-access-panel-heading">
+          <div>
+            <strong>{t("Permission matrix")}</strong>
+            <p className="muted-copy">{t("What each role can see and do at a glance.")} {t("Owner always has full access")}.</p>
+          </div>
+        </div>
+        <div className="permission-matrix-scroll">
+          <table className="permission-matrix-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("Permission")}</th>
+                {matrixColumns.map(column => (
+                  <th scope="col" key={column.key}>
+                    <span>{column.isCustom ? column.label : t(column.label)}</span>
+                    <small>({column.count})</small>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PERMISSION_MATRIX_ROWS.map(row => (
+                <tr key={row.key}>
+                  <th scope="row">{t(row.label)}</th>
+                  {matrixColumns.map(column => {
+                    const cell = row.value(column);
+                    if (typeof cell === "object") {
+                      const none = cell.enabled === 0;
+                      return (
+                        <td key={column.key} className={none ? "is-off" : "is-on"}>
+                          {cell.enabled >= cell.total ? "✓" : none ? "—" : `${cell.enabled}/${cell.total}`}
+                        </td>
+                      );
+                    }
+                    return <td key={column.key} className={cell ? "is-on" : "is-off"}>{cell ? "✓" : "—"}</td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="muted-copy permission-matrix-legend">
+          ✓ {t("Allowed")} · — {t("Hidden / locked")} · {t("Numbers show how many settings menus the role can open.")}
+        </p>
+        {customRoles.length > 0 ? (
+          <div className="permission-matrix-footnotes">
+            {customRoles.map(role => {
+              const affected = members.filter(member => member.role === role.id).length;
+              return (
+                <p className="muted-copy" key={role.id}>
+                  <strong>{role.name}</strong>: {t("Editing this role affects")} {affected} {affected === 1 ? t("member") : t("members")}.
+                </p>
+              );
+            })}
+          </div>
+        ) : null}
       </section>
 
       <section className="card app-card team-access-panel-card">

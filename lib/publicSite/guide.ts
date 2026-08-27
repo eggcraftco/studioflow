@@ -763,6 +763,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Invite your team and control exactly what each person can see and do." },
           { kind: "bullets", items: [
             "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
+            "The Permission matrix shows every role side by side — what each one can view, edit or delete at a glance, with member counts per role.",
             "Control which menus, order cards and settings each role can see.",
             "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
           ] }
@@ -783,7 +784,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "steps", items: [
             "Enter a subdomain of a website you own, like track.yourdomain.com, and press Connect. A bare domain or a path such as yourdomain.com/track will not work — DNS cannot route paths.",
             "At your domain provider, add the CNAME record shown on screen, pointing to customers.nivadesk.app.",
-            "Press Verify. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. Once the record matches, the domain shows Domain verified."
+            "Press Check again. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. The step flow on the card walks Enter domain → Add the DNS record → Verify ownership → Serving rollout, and the values are copyable with one tap."
           ] },
           { kind: "bullets", items: [
             "A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.",
@@ -1545,6 +1546,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin." },
           { kind: "bullets", items: [
             "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
+            "Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği ve kaç üyeyi kapsadığı tek bakışta.",
             "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
           ] }
@@ -1565,7 +1567,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "steps", items: [
             "Size ait bir sitenin alt alan adını girin — örn. track.sizinsite.com — ve Connect'e basın. Çıplak domain veya sizinsite.com/track gibi yollar çalışmaz; DNS yol yönlendiremez.",
             "Alan adı sağlayıcınızda, ekranda gösterilen CNAME kaydını customers.nivadesk.app hedefiyle ekleyin.",
-            "Verify'a basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Kayıt eşleşince alan adı Domain verified olur."
+            "Check again'e basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Karttaki adım akışı Alan adını gir → DNS kaydını ekle → Sahipliği doğrula → Yayına alma sırasını izler; değerler tek dokunuşla kopyalanır."
           ] },
           { kind: "bullets", items: [
             "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",

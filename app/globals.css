@@ -25801,3 +25801,126 @@ body[data-studio-theme="dark"] .financial-danger-button {
 body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   background: rgba(248, 113, 113, 0.1);
 }
+
+/* Customer Portal Domain: setup step flow + copyable DNS values. */
+.client-domain-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.client-domain-steps li { display: inline-flex; align-items: center; gap: 6px; opacity: 0.55; }
+.client-domain-steps li[data-state="done"] { opacity: 1; color: #16a34a; }
+.client-domain-steps li[data-state="current"] { opacity: 1; }
+.client-domain-step-dot {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  font-size: 11px;
+  font-weight: 800;
+}
+.client-domain-dns-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1.4fr;
+  gap: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+}
+.client-domain-dns-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(120, 120, 140, 0.1);
+  overflow-wrap: anywhere;
+}
+.client-domain-copy {
+  border: 1px solid var(--app-border, rgba(0,0,0,0.15));
+  background: #fff;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+@media (max-width: 620px) {
+  .client-domain-dns-row { grid-template-columns: 1fr; }
+}
+
+/* Team Access — read-only role permission matrix (Settings → Team Access) */
+.permission-matrix-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.permission-matrix-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 560px;
+  font-size: 0.82rem;
+}
+.permission-matrix-table th,
+.permission-matrix-table td {
+  padding: 8px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.permission-matrix-table thead th {
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-strong);
+}
+.permission-matrix-table thead th small {
+  display: block;
+  color: var(--muted);
+  font-weight: 500;
+}
+.permission-matrix-table tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text);
+}
+.permission-matrix-table thead th:first-child,
+.permission-matrix-table tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-strong);
+  border-right: 1px solid var(--border);
+}
+.permission-matrix-table thead th:first-child {
+  text-align: left;
+  z-index: 2;
+}
+.permission-matrix-table tbody tr:last-child th,
+.permission-matrix-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.permission-matrix-table td.is-on {
+  color: var(--success);
+  font-weight: 600;
+}
+.permission-matrix-table td.is-off {
+  color: var(--muted);
+}
+.permission-matrix-legend {
+  margin-top: 10px;
+}
+.permission-matrix-footnotes {
+  margin-top: 4px;
+  display: grid;
+  gap: 2px;
+}
