@@ -931,3 +931,21 @@ Kullanıcı Settings raporu + ortak şablon mock'u verdi ("burdan devam").
 - #5 Inbound para birimi metni: settings sayfası ajandayken metin
   düzeltmesi bekliyor; sunucu tarafı zaten kaynak Currency'yi saklıyor ve
   dashboard artık karışık kurları dönüştürmeden gösteriyor.
+
+### Dalga 1 KAPANIŞ (tur 40 CANLI, 5/5 marker — "·" unicode-escape dersiyle)
+- Financial Settings mock şablonunda (ajan, 5b82556): sticky başlık
+  (breadcrumb + "Workspace · Owner managed" rozeti + Discard/Save),
+  iki kolon, canlı "Current workspace calculation" paneli, kırmızı
+  "Existing order tools" bölgesi (mevcut önizleme/typed-confirm/undo
+  akışları aynen), CT değerine "Estimated — planlama rakamı" satırı.
+  Dirty takibi ve kenar çubuğu noktası bozulmadan.
+- Woo İMZA UI'ı: entegrasyon ekranında "Signature check" kartı (Secret
+  yapıştır → kaydet; Turn off → yalnız token, dürüst mesajla); güvenlik
+  cümlesi sunucunun gerçekten yaptığını anlatıyor.
+- Inbound para birimi metni (kritik #5) dürüstleşti: "workspace
+  currency'de gösterilir" iddiası gitti — sipariş kendi kurunu korur.
+- Rehber: Settings araması + Woo imza kurulumu EN+TR; korpus yeniden;
+  4 asistan fonksiyonu deploy; üretim botu Woo imza sorusuna doğru
+  adımlarla confident:true yanıt verdi.
+- 25 yeni string 12 dilde (16 şablon + 9 Woo/inbound; "Turn off" zaten
+  vardı, atlandı).
