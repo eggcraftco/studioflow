@@ -651,7 +651,10 @@ eklensin, amaç kullanıcının ürünü ANLAMASI; her şey sormadan yapılsın.
   assertHostMayServeCompany: kayıtlı bir client domain'de sunulan token
   sayfası o domain'in workspace'ine ait değilse permission-denied.
   Kayıtsız/birincil host'lar dokunulmadan geçer.
-- **BEKLEYEN DEPLOY (firebase reauth gerekli):** getPortalForVisitor,
-  getEstimateForVisitor + Notes'tan kalan sharePersonalNote.
-  Reauth gelene kadar canlı fonksiyonlar host paramını yok sayar —
-  regresyon yok, guard sadece devreye girmemiş olur.
+- **DEPLOY EDİLDİ (27 Ağu sabah, reauth sonrası):** getPortalForVisitor,
+  getEstimateForVisitor + Notes'tan kalan sharePersonalNoteWithWorkspaceMember
+  (raporlardaki "sharePersonalNote" kısaltmasının gerçek adı buydu).
+  Deploy sonrası bozuk token temiz NOT_FOUND dönüyor; spoof-guard canlı.
+  Not: guard yalnız KAYITLI bir domain'de host≠workspace olduğunda devreye
+  girer; kayıtlı iki domain de bizim workspace'te olduğundan mevcut linkler
+  etkilenmez.
