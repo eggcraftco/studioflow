@@ -22989,15 +22989,14 @@ function nvFileViewerHtml(firebaseUrl, fileName, showBrand = true) {
   } else if (NV_FILE_AUDIO_EXTS.has(ext)) {
     body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><audio src="${safeUrl}" controls></audio></div></div>`;
   } else {
-    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="${safeUrl}" download="${safeName}">Download file</a></div></div>`;
+    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="?dl=1">Download file</a></div></div>`;
   }
   const hasFab = NV_FILE_IMAGE_EXTS.has(ext) || NV_FILE_VIDEO_EXTS.has(ext) || NV_FILE_PDF_EXTS.has(ext);
   const fab = hasFab
-    ? `<a class="dl-fab" href="${safeUrl}" download="${safeName}" onclick="nvDownload(event)">Download</a>` : "";
+    ? `<a class="dl-fab" href="?dl=1">Download</a>` : "";
   // Blob download keeps firebasestorage out of the address bar (needs bucket CORS
   // for nivadesk.app). If blocked, it falls back to the direct link.
-  const script = hasFab
-    ? `<script>async function nvDownload(e){e.preventDefault();try{const r=await fetch(${JSON.stringify(firebaseUrl)},{cache:"no-store"});if(!r.ok)throw 0;const b=await r.blob();const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=${JSON.stringify(fileName)};document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},15000);}catch(_){window.location.href=${JSON.stringify(firebaseUrl)};}}</script>` : "";
+  const script = "";
   return `<!doctype html>
 <html><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -23067,6 +23066,12 @@ exports.nvViewSharedFile = onRequest({ region: "europe-west2" }, async (req, res
     const data = doc.data() || {};
     if (!data.bucket || !data.path || !data.token) {
       res.status(404).send(nvFileErrorHtml("This file link has expired or does not exist."));
+      return;
+    }
+    if (String(req.query.meta || "") === "1") {
+      // The web /f/ route streams downloads itself; this hands it the target.
+      res.set("content-type", "application/json");
+      res.status(200).send(JSON.stringify({ ok: true, bucket: String(data.bucket), path: String(data.path), token: String(data.token), fileName: String(data.fileName || "file") }));
       return;
     }
     const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(data.bucket)}/o/${encodeURIComponent(data.path)}?alt=media&token=${encodeURIComponent(data.token)}`;

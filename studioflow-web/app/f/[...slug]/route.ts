@@ -63,12 +63,45 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const token = (searchParams.get("t") || "").trim();
   const nivadeskHost = isNivaDeskHost(request);
   const brandSuffix = nivadeskHost ? " · NivaDesk" : "";
+  // ?dl=1 streams the bytes through this route with an attachment header, so
+  // the Download button never has to show (or CORS-fetch) the storage URL.
+  const wantsDownload = searchParams.get("dl") === "1";
+
+  async function streamDownload(fileUrl: string, downloadName: string): Promise<Response> {
+    const upstream = await fetch(fileUrl, { cache: "no-store" });
+    if (!upstream.ok || !upstream.body) return errorPage("This file could not be downloaded right now.", nivadeskHost);
+    const safeDownloadName = downloadName.replace(/["\r\n\\]/g, "").slice(0, 180) || "file";
+    return new Response(upstream.body, {
+      status: 200,
+      headers: {
+        "content-type": upstream.headers.get("content-type") || "application/octet-stream",
+        "content-disposition": `attachment; filename="${safeDownloadName}"`,
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow"
+      }
+    });
+  }
 
   // Short-link mode: a single clean segment like /f/aB9xK2.png (no b/t params).
   // Resolve it through the function (it reads the /fileShares mapping and returns
   // the viewer HTML). Company id and token are never exposed in the URL.
   if ((slug || []).length === 1 && !bucket && !token) {
     const id = slug[0].replace(/\.[a-z0-9]+$/i, "");
+    // Short-link download: resolve the mapping to the real target, then
+    // stream it from here — same origin, no CORS, no storage URL anywhere.
+    if (wantsDownload) {
+      try {
+        const metaResponse = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}&meta=1`, { cache: "no-store" });
+        const meta = (await metaResponse.json()) as { ok?: boolean; bucket?: string; path?: string; token?: string; fileName?: string };
+        if (!metaResponse.ok || !meta?.ok || !meta.bucket || !meta.path || !meta.token) {
+          return errorPage("This file link has expired or does not exist.", nivadeskHost);
+        }
+        const target = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(meta.bucket)}/o/${encodeURIComponent(meta.path)}?alt=media&token=${encodeURIComponent(meta.token)}`;
+        return await streamDownload(target, String(meta.fileName || slug[0]));
+      } catch {
+        return errorPage("This file could not be downloaded right now.", nivadeskHost);
+      }
+    }
     try {
       const upstream = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}${nivadeskHost ? "" : "&brand=0"}`, { cache: "no-store" });
       const html = await upstream.text();
@@ -96,9 +129,19 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   // Reconstruct the real Firebase Storage download URL (loaded directly by the browser).
   const firebaseUrl = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
 
+  if (wantsDownload) {
+    try {
+      return await streamDownload(firebaseUrl, fileName);
+    } catch {
+      return errorPage("This file could not be downloaded right now.", nivadeskHost);
+    }
+  }
+
   const ext = extensionOf(fileName);
   const safeUrl = escapeHtml(firebaseUrl);
   const safeName = escapeHtml(fileName);
+  // Download links stay on THIS host: the route streams the bytes itself.
+  const downloadHref = escapeHtml(`${request.nextUrl.pathname}?b=${encodeURIComponent(bucket)}&t=${encodeURIComponent(token)}&dl=1`);
 
   let body: string;
   if (IMAGE_EXTENSIONS.has(ext)) {
@@ -110,7 +153,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   } else if (AUDIO_EXTENSIONS.has(ext)) {
     body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><audio src="${safeUrl}" controls></audio></div></div>`;
   } else {
-    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="${safeUrl}" download="${safeName}">Download file</a></div></div>`;
+    body = `<div class="generic"><div class="filecard"><p class="name">${safeName}</p><a class="dl" href="${downloadHref}">Download file</a></div></div>`;
   }
 
   const html = `<!doctype html>
@@ -134,7 +177,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
 </head>
 <body>
   ${body}
-  ${IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) ? `<a class="dl-fab" href="${safeUrl}" download="${safeName}">Download</a>` : ""}
+  ${IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) ? `<a class="dl-fab" href="${downloadHref}">Download</a>` : ""}
 </body>
 </html>`;
 
