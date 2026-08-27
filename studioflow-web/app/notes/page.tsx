@@ -7,6 +7,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
@@ -189,9 +190,9 @@ export default function NotesPage() {
   // that is what keeps "8 notes" from sitting over a list of 6 (the mismatch
   // QA caught). Order notes and order-linked app notes land in the same group.
   const projectGroups = useMemo(() => {
-    const byOrder = new Map<string, { order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string }> }>();
+    const byOrder = new Map<string, { order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string; orderNote?: boolean }> }>();
     for (const o of orders) {
-      if (o.notes?.trim()) byOrder.set(o.id, { order: o, entries: [{ type: "Note", text: o.notes }] });
+      if (o.notes?.trim()) byOrder.set(o.id, { order: o, entries: [{ type: "Note", text: o.notes, orderNote: true }] });
     }
     for (const n of notes) {
       if (n.isDeleted || n.isArchived || !n.linkedOrderId) continue;
@@ -434,7 +435,18 @@ export default function NotesPage() {
         </div>
 
         {topTab === "project" ? (
-          <ProjectNotesView groups={projectGroups} onOpenNote={(noteId) => { const n = notes.find((x) => x.id === noteId); if (n) setEditing(n); }} />
+          <ProjectNotesView
+            groups={projectGroups}
+            canEditOrders={Boolean(workspace && canEditOrderDetailsForRole(workspace.role))}
+            onOpenNote={(noteId) => { const n = notes.find((x) => x.id === noteId); if (n) setEditing(n); }}
+            onSaveOrderNote={async (orderId, text) => {
+              if (!workspace) throw new Error("Workspace is still loading.");
+              await updateOrderFromWeb(workspace, { orderId, details: { notes: text } });
+              // The list reads from the orders snapshot, so refresh it rather
+              // than guessing: one save, one source of truth.
+              setOrders(await loadRecentOrders(workspace.id));
+            }}
+          />
         ) : (
           <>
             {false && allLabels.length > 0 && (
@@ -1434,9 +1446,13 @@ function NoteEditor({
 function ProjectNotesView({
   groups,
   onOpenNote,
+  onSaveOrderNote,
+  canEditOrders,
 }: {
-  groups: Array<{ order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string }> }>;
+  groups: Array<{ order: OrderListItem; entries: Array<{ type: string; text: string; noteId?: string; orderNote?: boolean }> }>;
   onOpenNote: (noteId: string) => void;
+  onSaveOrderNote: (orderId: string, text: string) => Promise<void>;
+  canEditOrders: boolean;
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
@@ -1455,18 +1471,123 @@ function ProjectNotesView({
           {order.customerName && (
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>{order.customerName}</div>
           )}
-          {entries.map((e, i) => (
-            <div
-              key={e.noteId ?? i}
-              onClick={e.noteId ? () => onOpenNote(e.noteId as string) : undefined}
-              style={{ marginTop: 6, cursor: e.noteId ? "pointer" : undefined, borderRadius: 8, padding: e.noteId ? "4px 6px" : undefined, background: e.noteId ? "rgba(45,123,244,0.05)" : undefined }}
-            >
-              <div style={{ fontSize: 10, fontWeight: 800, color: e.noteId ? "#0e7a55" : "#2D7BF4" }}>{t(e.type).toUpperCase()}</div>
-              <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>{e.text}</div>
-            </div>
-          ))}
+          {entries.map((e, i) =>
+            e.orderNote ? (
+              <OrderNoteEntry
+                key={`order-note-${order.id}`}
+                label={t(e.type).toUpperCase()}
+                text={e.text}
+                canEdit={canEditOrders}
+                onSave={(next) => onSaveOrderNote(order.id, next)}
+              />
+            ) : (
+              <div
+                key={e.noteId ?? i}
+                onClick={e.noteId ? () => onOpenNote(e.noteId as string) : undefined}
+                style={{ marginTop: 6, cursor: e.noteId ? "pointer" : undefined, borderRadius: 8, padding: e.noteId ? "4px 6px" : undefined, background: e.noteId ? "rgba(45,123,244,0.05)" : undefined }}
+              >
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#0e7a55" }}>{t(e.type).toUpperCase()}</div>
+                <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>{e.text}</div>
+              </div>
+            )
+          )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// The order's own note, editable where it is read. It lives on the order
+// document (not in the notes collection), so it saves through the order
+// update path — the Notes menu is a second window onto the same text, never
+// a copy of it.
+function OrderNoteEntry({
+  label,
+  text,
+  canEdit,
+  onSave,
+}: {
+  label: string;
+  text: string;
+  canEdit: boolean;
+  onSave: (text: string) => Promise<void>;
+}) {
+  const { language } = useAuth();
+  const t = (value: string) => studioT(value, language);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!editing) setDraft(text);
+  }, [editing, text]);
+
+  async function submit() {
+    if (draft === text) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(draft);
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : t("The note could not be saved."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div style={{ marginTop: 6, borderRadius: 8, padding: "6px 8px", background: "rgba(45,123,244,0.05)" }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: "#2D7BF4" }}>{label}</div>
+        <textarea
+          autoFocus
+          value={draft}
+          disabled={saving}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setDraft(text);
+              setEditing(false);
+            }
+          }}
+          style={{ width: "100%", minHeight: 84, marginTop: 4, fontSize: 14, borderRadius: 8, border: "1px solid #d7dae0", padding: 8, resize: "vertical", fontFamily: "inherit" }}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => { void submit(); }}
+            style={{ border: "none", background: "#2D7BF4", color: "white", borderRadius: 8, padding: "6px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+          >
+            {saving ? t("Saving...") : t("Save")}
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => { setDraft(text); setEditing(false); }}
+            style={{ border: "1px solid #e5e7eb", background: "white", borderRadius: 8, padding: "6px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+          >
+            {t("Cancel")}
+          </button>
+        </div>
+        {error ? <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{error}</div> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={canEdit ? () => setEditing(true) : undefined}
+      title={canEdit ? t("Click to edit this project note") : undefined}
+      style={{ marginTop: 6, borderRadius: 8, padding: "4px 6px", background: "rgba(45,123,244,0.05)", cursor: canEdit ? "text" : undefined }}
+    >
+      <div style={{ fontSize: 10, fontWeight: 800, color: "#2D7BF4" }}>{label}</div>
+      <div style={{ fontSize: 14, whiteSpace: "pre-wrap" }}>{text}</div>
     </div>
   );
 }
