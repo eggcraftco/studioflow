@@ -484,3 +484,39 @@ Her yeni özellik/modül ancak şunlarla KAPANIR:
 27 Ağu'da Banking + Envanter bölümleri bu kurala göre yazıldı (41→43 bölüm);
 fiş sorusu üç aşamada kanıtlandı: dün blöf → sabah dürüst devir → şimdi
 gerçek adımlar.
+
+---
+
+## SIRADA — İki yeni rapor (27 Ağu, "bu işlerden devam et")
+
+### 1) NivaDesk_dashboard.md — Dashboard finans raporu (ÖNCE BU)
+**Kritik:** üst menü Month/Year Net ≠ Dashboard Net Profit (üst menü VAT ve
+Extra Spending düşmüyor — doğrulanmış; tek formüle bağla + hover'da formül);
+finansal metrik adları tek merkezi tanıma; cash/accrual ayrımı (asgari:
+Invoiced Revenue / Payments Received / Outstanding ayrı kartlar).
+**Yüksek:** Growth işareti yanlış (+24.8% ↔ gerçek −24.8%); "Standard Tax
+(Services/New)" kartı → Revenue (+alt notta vergi kuralı); Pending →
+Outstanding Balance tanımıyla; refund/cancel/chargeback hesapları; Extra
+Spending Summary dönem kapsamı (Year filtresinde all-time gösteriyor);
+VAT set-aside'da input VAT/ödenmiş ayrımı.
+**Orta:** Active orders/Due soon formül tooltip'i + tıklanabilir sayaçlar;
+Bank Activity → "Net Cash Flow This Month" adı + bayat senkron uyarısı
+("Last synced 4 days ago" + turuncu); grafik tooltip/drill-down; Customize
+genişletme (sırala/boyut/preset/reset); store-channel filtreleri; çoklu para
+birimi; Custom aralık preset'leri (Last 7/30, quarter, tax year) + CSV dosya
+adına aralık; Start>End engeli.
+**Ürün:** dashboard şablonları (Owner/Finance/Ecommerce), AOV, new/returning,
+tıklanabilir KPI'lar, muhasebe modu seçimi.
+
+### 2) NivaDesk_domain_link.md — Müşteri portalı özel domain
+Model: varsayılan `workspace.nivadesk.app` + isteğe bağlı CNAME
+`track.musteri.com` → `customers.nivadesk.app` (Dubsado/Plutio modeli;
+Cloudflare for SaaS Custom Hostnames incelenecek). Entity adı genel:
+`workspaceClientDomain` — yalnız tracking değil TÜM client-facing yüzeyler
+(portal, estimate, invoice, pay, files). Branding ayrıları: logo, renk,
+başlık, favicon, iletişim, Powered by NivaDesk ON/OFF. URL'lerde yalnız
+yüksek-entropi token (sıralı ID asla — mevcut /e/<token> zaten böyle).
+Domain değişince eskiler 301 ile yenisine; kaldırılınca fallback çalışır.
+Plan: Pro'da dahil (Seçenek A), Team'de + custom sending email.
+**Altyapı notu:** *.nivadesk.app wildcard DNS + Cloudflare for SaaS kurulumu
+KULLANICI tarafında; kodda host-çözümleme + doğrulama + branding ben yaparım.
