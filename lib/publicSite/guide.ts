@@ -818,7 +818,8 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "bullets", items: [
             "The \"Your customer links\" card in the same section shows a live example of your short links (like https://yourstudio.nivadesk.app/r/…) — order tracking and estimate pages follow whichever name you set up.",
-            "Once a name is set up, the links NivaDesk hands out — the portal link on the order card, estimate links and SMS status updates — use your branded address automatically. Links shared earlier keep working on the old address."
+            "Once a name is set up, the links NivaDesk hands out — the portal link on the order card, estimate links and SMS status updates — use your branded address automatically. Links shared earlier keep working on the old address.",
+            "File links follow your name too: opening or sharing a client file uses a clean viewer link on your address (like track.yourdomain.com/f/…) instead of a raw storage URL, and the files a customer opens from their tracking page stay on your domain as well."
           ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
@@ -1630,7 +1631,8 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "bullets", items: [
             "Aynı bölümdeki \"Your customer links\" kartı kısa bağlantılarınızın canlı bir örneğini gösterir (https://atolyeniz.nivadesk.app/r/… gibi) — sipariş takibi ve teklif sayfaları burada kurduğunuz adı izler.",
-            "Ad kurulduktan sonra NivaDesk'in verdiği bağlantılar — sipariş kartındaki portal bağlantısı, teklif bağlantıları ve SMS durum güncellemeleri — otomatik olarak markalı adresinizi kullanır. Daha önce paylaşılan bağlantılar eski adreste çalışmaya devam eder."
+            "Ad kurulduktan sonra NivaDesk'in verdiği bağlantılar — sipariş kartındaki portal bağlantısı, teklif bağlantıları ve SMS durum güncellemeleri — otomatik olarak markalı adresinizi kullanır. Daha önce paylaşılan bağlantılar eski adreste çalışmaya devam eder.",
+            "Dosya bağlantıları da adınızı taşır: bir müşteri dosyasını açmak veya paylaşmak, ham depolama URL'si yerine sizin adresinizde temiz bir görüntüleyici bağlantısı (track.sizinsite.com/f/… gibi) kullanır; müşterinin takip sayfasından açtığı dosyalar da sizin domain'inizde kalır."
           ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
