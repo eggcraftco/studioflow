@@ -873,3 +873,20 @@ fiyatlar gerçek rakamlarla.
 - Footer mock'a çevrilmedi (yasal bağlantılar korunmalı; mock'ta yok).
 - Sayfa yüksekliği ~7.204px (12.595→9.376→7.204). 37 yeni string +
   hero.body 12 dilde. Tur 38 canlıda 5 marker'la doğrulandı.
+
+### 27 Ağu gece 3b — Mock DETAY geçişi (tur 39 CANLI)
+Kullanıcı yakın-plan kırpımlarla detayları istedi:
+- Hero: ekran görüntüsü DÜZ (perspektif kalktı), demo düğmesi sade
+  play-pill (thumbnail+süre kalktı), gövde metni ilk cümleden sonra
+  satır kırıyor (çok-dil güvenli regex: .。؟!), stat kartlarından
+  görsele kesikli çizgi sarkıyor; in-transit mavi, tasks mor ton.
+- Bağlantı diyagramı: 4 kıvrımlı SVG çizgi kartların arkasında; merkez
+  Order kartında GERÇEK çanta fotoğrafı (hero görselinden sips ile
+  kırpıldı → public/order-bag-thumb.jpg 18KB), çanta ikonlu başlık,
+  YEŞİL In Progress çipi, noktalı mini çipler.
+- Back-office karoları: pastel kare yerine mock'un çıplak indigo
+  ikonları (#4f63d2).
+- Kargo şeridi mock düzeni: yeşil çizgi ÜSTÜNDE beyaz daire ikonlar
+  (pano/kamyon/kurye/koli), etiket + yeşil tik ALTA.
+- Tur 39 canlı: JS'te asset referansı + CSS'te connected-lines + JPEG
+  bayt kontrolüyle doğrulandı.
