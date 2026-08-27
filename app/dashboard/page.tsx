@@ -652,6 +652,42 @@ export default function DashboardPage() {
     }
     return [...map.entries()].sort((a, b) => b[1].amount - a[1].amount);
   }, [filteredCountingOrders, workspaceCurrencyIso]);
+  // Average order value and the new/returning split follow the same
+  // exclusions as Revenue: cancelled/refunded orders are out, foreign-currency
+  // orders count at face value (the card's hint already discloses that).
+  const averageOrderValue = useMemo(
+    () => (filteredCountingOrders.length > 0 ? totals.revenue / filteredCountingOrders.length : 0),
+    [filteredCountingOrders.length, totals.revenue]
+  );
+  const customerSplit = useMemo(() => {
+    // First-order history looks across ALL channels on purpose: a customer
+    // who bought in the shop last year is returning even if this range is
+    // filtered to Shopify.
+    const firstSeen = new Map<string, number>();
+    for (const order of financeOrders) {
+      if (order.countsTowardBalance === false || !order.paymentDate) continue;
+      const key = order.customerName.trim().toLowerCase();
+      if (!key) continue;
+      const at = order.paymentDate.getTime();
+      const prev = firstSeen.get(key);
+      if (prev === undefined || at < prev) firstSeen.set(key, at);
+    }
+    const inWindow = new Set<string>();
+    for (const order of filteredCountingOrders) {
+      const key = order.customerName.trim().toLowerCase();
+      if (key) inWindow.add(key);
+    }
+    let newCount = 0;
+    let returningCount = 0;
+    const startMs = currentWindow.start.getTime();
+    for (const key of inWindow) {
+      const first = firstSeen.get(key);
+      if (first === undefined) continue;
+      if (first < startMs) returningCount += 1;
+      else newCount += 1;
+    }
+    return { newCount, returningCount };
+  }, [financeOrders, filteredCountingOrders, currentWindow.start]);
   const language = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, language);
   const locale = studioLocaleTag(language);
@@ -1005,6 +1041,12 @@ export default function DashboardPage() {
                           valueOverride={hideNumbers ? undefined : `${row.amount.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`}
                         />
                       ))}
+                      <BreakdownRow
+                        label={`${t("Average order value")} (${filteredCountingOrders.length})`}
+                        amount={averageOrderValue}
+                        hideNumbers={hideNumbers}
+                        settings={settings}
+                      />
                       <BreakdownRow label={t("Base Cost")} amount={totals.breakdownBaseCost} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Extra Spending")} amount={totals.expenses} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Platform Fee")} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
@@ -1021,6 +1063,23 @@ export default function DashboardPage() {
                       ) : (
                         <BreakdownRow label={t("Net Profit")} amount={totals.netProfit} tone="green" strong hideNumbers={hideNumbers} settings={settings} />
                       )}
+                      <BreakdownRow
+                        label={t("New customers")}
+                        amount={0}
+                        hideNumbers={hideNumbers}
+                        settings={settings}
+                        valueOverride={hideNumbers ? undefined : String(customerSplit.newCount)}
+                      />
+                      <BreakdownRow
+                        label={t("Returning customers")}
+                        amount={0}
+                        hideNumbers={hideNumbers}
+                        settings={settings}
+                        valueOverride={hideNumbers ? undefined : String(customerSplit.returningCount)}
+                      />
+                      <p className="muted-copy" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
+                        {t("New means the customer's first order falls inside this range — counted across all sales channels.")}
+                      </p>
                     </div>
                   </div>
                 </section>
