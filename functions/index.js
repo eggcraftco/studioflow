@@ -23737,6 +23737,26 @@ async function requirePortalStaff(request) {
   return context;
 }
 
+// The branded base for customer links: the workspace's verified custom domain
+// first, then its claimed nivadesk.app subdomain, then the default host. Every
+// one of these serves the pages — this only decides which name is handed out.
+function clientPortalBaseUrlFromCompany(companyData) {
+  const custom = String((companyData || {}).clientPortalCustomHost || "").trim().toLowerCase();
+  if (custom) return `https://${custom}`;
+  const slug = String((companyData || {}).clientPortalSlug || "").trim().toLowerCase();
+  if (slug) return `https://${slug}.nivadesk.app`;
+  return "https://nivadesk.app";
+}
+
+async function clientPortalBaseUrl(companyId) {
+  try {
+    const snap = await admin.firestore().collection("companies").doc(String(companyId)).get();
+    return clientPortalBaseUrlFromCompany(snap.exists ? snap.data() || {} : {});
+  } catch {
+    return "https://nivadesk.app";
+  }
+}
+
 exports.createOrderPortalLink = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, email, companyId } = await requirePortalStaff(request);
   const orderId = cleanOrderText(request.data && request.data.orderId, "", 200);
@@ -23790,7 +23810,7 @@ exports.createOrderPortalLink = onCall({ region: "europe-west2" }, async (reques
     });
   });
 
-  return { ok: true, url: `https://nivadesk.app/track/${token}`, token };
+  return { ok: true, url: `${await clientPortalBaseUrl(companyId)}/track/${token}`, token };
 });
 
 exports.revokeOrderPortalLink = onCall({ region: "europe-west2" }, async (request) => {
@@ -23935,7 +23955,7 @@ exports.notifyCustomerOnStatusChange = onDocumentWritten(
     // The link only goes in the message when the workspace has actually made one.
     const portalToken = cleanOrderText(after.portalToken, "", 200);
     const portalUrl = portalToken && String(after.portalTokenId || "")
-      ? `https://nivadesk.app/track/${portalToken}`
+      ? `${clientPortalBaseUrlFromCompany(companyData)}/track/${portalToken}`
       : "";
 
     // Branded, one-way, and strictly a service message about an order this
@@ -24485,7 +24505,7 @@ exports.sendOrderEstimate = onCall({ region: "europe-west2" }, async (request) =
   });
 
   console.log("sendOrderEstimate", { companyId, orderId, estimateId, uid });
-  return { ok: true, url: `https://nivadesk.app/e/${token}`, token, expiresAtMs };
+  return { ok: true, url: `${await clientPortalBaseUrl(companyId)}/e/${token}`, token, expiresAtMs };
 });
 
 exports.revokeOrderEstimateLink = onCall({ region: "europe-west2" }, async (request) => {

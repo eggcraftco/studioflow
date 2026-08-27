@@ -296,6 +296,12 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
       ...(verified ? { verifiedAtMs: now } : {}),
       updatedAtMs: now
     }, { merge: true });
+    // The company doc carries the preferred link host so every link builder
+    // (portal, estimate, SMS) reads one field instead of querying the registry.
+    // With several verified customs the most recently verified one wins.
+    if (verified && String((snap.data() || {}).kind) === "custom") {
+      await companyRef(companyId).set({ clientPortalCustomHost: host }, { merge: true });
+    }
 
     // DNS says the CNAME is in place — now make the edge answer TLS for it.
     // A CF failure never un-verifies the domain; it is reported separately so
@@ -352,6 +358,13 @@ function createClientDomainFunctions({ admin, onCall, HttpsError, uidIsCompanyOw
     await ref.delete();
     if (row.kind === "subdomain") {
       await companyRef(companyId).set({ clientPortalSlug: "" }, { merge: true });
+    }
+    if (row.kind === "custom") {
+      const companySnap = await companyRef(companyId).get();
+      const currentHost = String(((companySnap.exists ? companySnap.data() : {}) || {}).clientPortalCustomHost || "").toLowerCase();
+      if (currentHost === host) {
+        await companyRef(companyId).set({ clientPortalCustomHost: "" }, { merge: true });
+      }
     }
     return { ok: true };
   });

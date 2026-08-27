@@ -269,7 +269,7 @@ export function ClientDomainSection({
           {t("Order tracking and estimate pages ride short links; they follow whichever name you set up here.")}
         </p>
         <code style={{ fontSize: 12.5, background: "rgba(120,120,140,0.1)", borderRadius: 8, padding: "8px 10px" }}>
-          https://{subdomain ? `${subdomain.host}.nivadesk.app` : "nivadesk.app"}/r/a1b2c3…
+          https://{customDomains.find(domain => domain.status === "active")?.host ?? (subdomain ? `${subdomain.host}.nivadesk.app` : "nivadesk.app")}/r/a1b2c3…
         </code>
       </section>
 
