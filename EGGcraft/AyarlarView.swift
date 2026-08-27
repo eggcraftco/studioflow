@@ -367,6 +367,11 @@ struct AyarlarView: View {
         case "Branding":
             // Workspace identity/branding — hidden from workflow-only members.
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsGeneral")
+        case "Client Domain":
+            // Customer Portal Domain — workspace-owner only, mirroring the web:
+            // members never see the section and the callables are owner-checked
+            // server-side as well.
+            return firebaseManager.currentWorkspaceRole.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
         case "Workflow":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "PDF":
@@ -412,6 +417,7 @@ struct AyarlarView: View {
             ("Preferences", t("Preferences", lang: seciliDil), "slider.horizontal.3", "Personal"),
             ("About", t("About", lang: seciliDil), "info.circle.fill", "Personal"),
             ("Branding", t("Branding", lang: seciliDil), "paintpalette.fill", "Workspace Design"),
+            ("Client Domain", t("Customer Portal Domain", lang: seciliDil), "globe", "Workspace Design"),
             ("PDF", t("PDF Export Settings", lang: seciliDil), "doc.richtext", "Workspace Design"),
             ("Workflow", t("Workflow Steps", lang: seciliDil), "arrow.triangle.branch", "Workflow"),
             ("Quick Reply", t("Quick Reply Settings", lang: seciliDil), "bolt.horizontal.fill", "Workflow"),
@@ -626,6 +632,8 @@ struct AyarlarView: View {
             return t("App version and product information.", lang: seciliDil)
         case "Branding":
             return t("Workspace name, logo and subtitle.", lang: seciliDil)
+        case "Client Domain":
+            return t("Branded customer links: your subdomain and your own domain.", lang: seciliDil)
         case "Workflow":
             return t("Order steps and custom fields.", lang: seciliDil)
         case "PDF":
@@ -676,6 +684,7 @@ struct AyarlarView: View {
                     AccountProfileView(sectionMode: .workspaceBranding)
                 }
             }
+            else if seciliAyarSekmesi == "Client Domain" { ClientDomainSettingsView(companyId: activeSettingsCompanyId) }
             else if seciliAyarSekmesi == "Workflow" { if canEditWorkspace { islemAdimlariAyari } }
             else if seciliAyarSekmesi == "PDF" {
                 if isWorkflowOnlySettingsRole { workflowOnlyPdfAyari }
