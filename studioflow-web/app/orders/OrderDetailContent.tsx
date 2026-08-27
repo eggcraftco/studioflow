@@ -2005,6 +2005,24 @@ export function OrderDetailContent({
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<OrderDetailCardId | null>(null);
+  // Workspace colour meanings (defaults overridable via Manage colour labels).
+  const [colorMeanings, setColorMeanings] = useState<Record<string, string>>(CARD_COLOR_MEANINGS);
+  const [colorLabelsOpen, setColorLabelsOpen] = useState(false);
+  const [colorLabelDrafts, setColorLabelDrafts] = useState<Record<string, string>>({});
+  const [savingColorLabels, setSavingColorLabels] = useState(false);
+
+  // The customisation panel closes like a dialog: Escape works everywhere.
+  useEffect(() => {
+    if (!openCardMenuId && !colorLabelsOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenCardMenuId(null);
+        setColorLabelsOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [openCardMenuId, colorLabelsOpen]);
   const [headingEditorCardId, setHeadingEditorCardId] = useState<OrderDetailCardId | null>(null);
   const [financeStatus, setFinanceStatus] = useState<string | null>(null);
   const [financeError, setFinanceError] = useState<string | null>(null);
@@ -2921,6 +2939,21 @@ export function OrderDetailContent({
           priorityCardLabel: str("priorityCardLabel", "Priority"),
           riskCardLabel: str("riskCardLabel", "Risk")
         });
+        // Workspace-wide colour meanings: the fixed defaults, overridable per
+        // workshop (an empty label deliberately hides the chip for that colour).
+        const meanings: Record<string, string> = { ...CARD_COLOR_MEANINGS };
+        try {
+          const parsed = JSON.parse(String(data.cardColorMeaningsJSON || "")) as Record<string, unknown>;
+          if (parsed && typeof parsed === "object") {
+            for (const colorName of Object.keys(CARD_COLOR_MEANINGS)) {
+              const value = parsed[colorName];
+              if (typeof value === "string") meanings[colorName] = value.trim().slice(0, 40);
+            }
+          }
+        } catch {
+          // no override stored — defaults stand
+        }
+        setColorMeanings(meanings);
         void refreshBlockHeadings();
       },
       () => {
@@ -5110,6 +5143,54 @@ export function OrderDetailContent({
     );
   }
 
+  // One tap returns the card to how it started: automatic height, no colour.
+  // Position is left alone — "reset" must never scatter someone's board.
+  function resetCard(cardId: OrderDetailCardId) {
+    if (!canEditCardLayout || savingLayout) return;
+    const nextHeights = { ...cardLayout.cardHeights };
+    delete nextHeights[cardId];
+    const nextColors = { ...cardLayout.cardColors };
+    delete nextColors[cardId];
+    void persistLayout({ ...cardLayout, cardHeights: nextHeights, cardColors: nextColors }, "Card reset to defaults.");
+  }
+
+  function openColorLabelsEditor() {
+    setColorLabelDrafts({ ...colorMeanings });
+    setColorLabelsOpen(true);
+  }
+
+  async function saveColorLabels() {
+    setSavingColorLabels(true);
+    try {
+      const cleaned: Record<string, string> = {};
+      for (const colorName of Object.keys(CARD_COLOR_MEANINGS)) {
+        cleaned[colorName] = String(colorLabelDrafts[colorName] ?? "").trim().slice(0, 40);
+      }
+      await setDoc(doc(db, "companySettings", workspace.id), {
+        cardColorMeaningsJSON: JSON.stringify(cleaned),
+        ...(user?.uid ? { lastSettingsWriteByUid: user.uid, lastSettingsWriteAtMs: Date.now() } : {})
+      }, { merge: true });
+      setColorMeanings({ ...CARD_COLOR_MEANINGS, ...cleaned });
+      setColorLabelsOpen(false);
+    } catch {
+      setInlineError("The colour labels could not be saved.");
+    } finally {
+      setSavingColorLabels(false);
+    }
+  }
+
+  // Which size control should light up: the S/M/L presets and "fit" map to
+  // exact stored heights, so the selection is derived, not remembered.
+  function activeCardSizeKey(cardId: OrderDetailCardId): "S" | "M" | "L" | "fit" | null {
+    const stored = cardLayout.cardHeights[cardId];
+    if (typeof stored !== "number") return null;
+    if (stored === 220) return "S";
+    if (stored === 380) return "M";
+    if (stored === 560) return "L";
+    if (stored === Math.max(160, measuredCardMinimums[cardId] ?? 160)) return "fit";
+    return null;
+  }
+
   function renderCardMenu(cardId: OrderDetailCardId) {
     const menuOpen = openCardMenuId === cardId;
     const locked = !canEditCardLayout || !layoutReady;
@@ -5119,6 +5200,8 @@ export function OrderDetailContent({
       : !canEditCardLayout
         ? "Your workspace role cannot edit card layout."
         : "Card layout is loading.";
+    const sizeKey = activeCardSizeKey(cardId);
+    const activeColor = cardProfileColor(cardLayout, cardId);
 
     return (
       <div className="order-card-menu-wrap">
@@ -5131,100 +5214,142 @@ export function OrderDetailContent({
           ...
         </button>
         {menuOpen ? (
-          <div className="order-card-menu-panel">
-            {locked ? (
-              <p className="order-card-menu-note">
-                {t(lockedNote)}
-              </p>
-            ) : null}
-            {cardId === "todo" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenCardMenuId(null);
-                  setTodoError(null);
-                  try {
-                    openTodoPdfPrint(order, optimisticTodoItems, workspace.name);
-                  } catch (exportError) {
-                    setTodoError(exportError instanceof Error ? exportError.message : "To Do PDF could not be opened.");
-                  }
-                }}
-              >
-                Export To Do PDF
-              </button>
-            ) : null}
-            {cardId === "historyLog" && canUseLiteWorkspaceCards ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenCardMenuId(null);
-                  setInlineError(null);
-                  try {
-                    openHistoryPdfPrint(order, workspace.name);
-                  } catch (exportError) {
-                    setInlineError(exportError instanceof Error ? exportError.message : "History Log PDF could not be opened.");
-                  }
-                }}
-              >
-                Export History Log PDF
-              </button>
-            ) : null}
-            <button type="button" disabled={locked || savingLayout} onClick={() => hideCard(cardId)}>
-              Hide Block
-            </button>
-            <button
-              type="button"
-              disabled={locked || savingLayout}
-              onClick={() => editCardHeading(cardId)}
-              title={headingAvailable ? "Edit the headings inside this block" : "This card does not have web heading editing yet"}
-            >
-              Edit Block Headings
-            </button>
-            <div className="order-card-menu-label">Move</div>
-            <div className="order-card-size-steps">
-              <button type="button" disabled={locked || savingLayout} title="Move up" aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑</button>
-              <button type="button" disabled={locked || savingLayout} title="Move down" aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓</button>
-              {!isNarrowLayout ? (
-                <>
-                  <button type="button" disabled={locked || savingLayout} title="Move to previous column" aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>←</button>
-                  <button type="button" disabled={locked || savingLayout} title="Move to next column" aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→</button>
-                </>
-              ) : null}
-            </div>
-            <div className="order-card-menu-label">Size</div>
-            <div className="order-card-size-grid">
-              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "fit")} title="Shrink the card to exactly its content">
-                Fit to content
-              </button>
-              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "default")} title="Return to the default height">
-                Default size
-              </button>
-              <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, "matchColumn")} title="Give every card in this column this card's height">
-                Match column
-              </button>
-              <div className="order-card-size-steps">
-                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
-                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
-                <button type="button" disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
-              </div>
-            </div>
-            <div className="order-card-menu-label">Color</div>
-            <div className="order-card-color-grid">
-              {CARD_COLOR_OPTIONS.map(color => (
+          <>
+            <div className="block-custom-backdrop" onClick={() => setOpenCardMenuId(null)} aria-hidden="true" />
+            <div className="block-custom-panel" role="dialog" aria-label={`${cardLabel(cardId)} — ${t("Block customisation")}`}>
+              <header className="block-custom-header">
+                <strong>{t("Block customisation")}</strong>
+                <span className="block-custom-grip" aria-hidden="true">⠿</span>
+                <button type="button" className="block-custom-close" aria-label={t("Close")} onClick={() => setOpenCardMenuId(null)}>×</button>
+              </header>
+
+              {locked ? <p className="order-card-menu-note">{t(lockedNote)}</p> : null}
+
+              <div className="block-custom-actions">
+                {cardId === "todo" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      setTodoError(null);
+                      try {
+                        openTodoPdfPrint(order, optimisticTodoItems, workspace.name);
+                      } catch (exportError) {
+                        setTodoError(exportError instanceof Error ? exportError.message : "To Do PDF could not be opened.");
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+                    {t("Export to-do PDF")}
+                  </button>
+                ) : null}
+                {cardId === "historyLog" && canUseLiteWorkspaceCards ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenCardMenuId(null);
+                      setInlineError(null);
+                      try {
+                        openHistoryPdfPrint(order, workspace.name);
+                      } catch (exportError) {
+                        setInlineError(exportError instanceof Error ? exportError.message : "History Log PDF could not be opened.");
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+                    {t("Export history PDF")}
+                  </button>
+                ) : null}
                 <button
-                  key={color}
-                  className={cardProfileColor(cardLayout, cardId) === color ? "is-selected" : ""}
                   type="button"
                   disabled={locked || savingLayout}
-                  onClick={() => setCardColor(cardId, color)}
+                  onClick={() => editCardHeading(cardId)}
+                  title={headingAvailable ? t("Edit the headings inside this block") : t("This card does not have web heading editing yet")}
                 >
-                  <span data-card-color={color} />
-                  {color}
-                  {CARD_COLOR_MEANINGS[color] ? <small className="order-card-color-meaning">{t(CARD_COLOR_MEANINGS[color])}</small> : null}
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/></svg>
+                  {t("Edit block heading")}
                 </button>
-              ))}
+                <button type="button" disabled={locked || savingLayout} onClick={() => hideCard(cardId)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10 5.3A9.8 9.8 0 0 1 12 5c7 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A16.4 16.4 0 0 0 2 12s3 7 10 7a9.9 9.9 0 0 0 3.4-.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {t("Hide block")}
+                </button>
+              </div>
+
+              <div className="order-card-menu-label">{t("Position")}</div>
+              <div className="block-custom-move">
+                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑ {t("Up")}</button>
+                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓ {t("Down")}</button>
+                {!isNarrowLayout ? (
+                  <>
+                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>← {t("Left")}</button>
+                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→ {t("Right")}</button>
+                  </>
+                ) : null}
+              </div>
+              <p className="block-custom-hint">{t("You can also drag the block.")}</p>
+
+              <div className="order-card-menu-label">{t("Width")}</div>
+              <div className="block-custom-segment">
+                <button
+                  type="button"
+                  className={sizeKey === "fit" ? "is-active" : ""}
+                  disabled={locked || savingLayout}
+                  onClick={() => applyCardSizePreset(cardId, "fit")}
+                  title={t("Shrink the card to exactly its content")}
+                >
+                  {t("Fit content")}
+                </button>
+                <button
+                  type="button"
+                  disabled={locked || savingLayout}
+                  onClick={() => applyCardSizePreset(cardId, "matchColumn")}
+                  title={t("Give every card in this column this card's height")}
+                >
+                  {t("Match column")}
+                </button>
+              </div>
+
+              <div className="order-card-menu-label">{t("Card size")}</div>
+              <div className="block-custom-segment block-custom-sml">
+                <button type="button" className={sizeKey === "S" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
+                <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
+                <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+              </div>
+
+              <div className="order-card-menu-label">{t("Colour")}</div>
+              <div className="block-custom-color-grid">
+                {CARD_COLOR_OPTIONS.map(color => (
+                  <button
+                    key={color}
+                    className={`block-custom-color${activeColor === color ? " is-selected" : ""}`}
+                    type="button"
+                    disabled={locked || savingLayout}
+                    onClick={() => setCardColor(cardId, color)}
+                  >
+                    <span className="block-custom-swatch" data-card-color={color} aria-hidden="true" />
+                    <span className="block-custom-color-name">
+                      {t(color)}
+                      {colorMeanings[color] ? <small>{t(colorMeanings[color])}</small> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {!locked ? (
+                <button type="button" className="block-custom-link" onClick={openColorLabelsEditor}>
+                  {t("Manage colour labels")}
+                </button>
+              ) : null}
+
+              <footer className="block-custom-footer">
+                <button type="button" className="block-custom-reset" disabled={locked || savingLayout} onClick={() => resetCard(cardId)}>
+                  {t("Reset")}
+                </button>
+                <button type="button" className="block-custom-done" onClick={() => setOpenCardMenuId(null)}>
+                  {t("Done")}
+                </button>
+              </footer>
             </div>
-          </div>
+          </>
         ) : null}
       </div>
     );
@@ -7884,9 +8009,9 @@ export function OrderDetailContent({
         {renderCardMenu(cardId)}
         {(() => {
           const profileColor = cardProfileColor(cardLayout, cardId);
-          return CARD_COLOR_MEANINGS[profileColor] ? (
+          return colorMeanings[profileColor] ? (
             <span className="order-card-meaning-chip" data-card-color={profileColor}>
-              {t(CARD_COLOR_MEANINGS[profileColor])}
+              {t(colorMeanings[profileColor])}
             </span>
           ) : null;
         })()}
@@ -7981,9 +8106,9 @@ export function OrderDetailContent({
         {renderCardMenu(cardId)}
         {(() => {
           const profileColor = cardProfileColor(cardLayout, cardId);
-          return CARD_COLOR_MEANINGS[profileColor] ? (
+          return colorMeanings[profileColor] ? (
             <span className="order-card-meaning-chip" data-card-color={profileColor}>
-              {t(CARD_COLOR_MEANINGS[profileColor])}
+              {t(colorMeanings[profileColor])}
             </span>
           ) : null;
         })()}
@@ -8476,6 +8601,41 @@ export function OrderDetailContent({
         onError={setOrderActionError}
       />
 
+
+      {colorLabelsOpen ? (
+        <div className="block-custom-backdrop is-modal" onClick={() => setColorLabelsOpen(false)}>
+          <div className="block-custom-panel block-custom-labels" role="dialog" aria-label={t("Colour labels")} onClick={event => event.stopPropagation()}>
+            <header className="block-custom-header">
+              <strong>{t("Colour labels")}</strong>
+              <button type="button" className="block-custom-close" aria-label={t("Close")} onClick={() => setColorLabelsOpen(false)}>×</button>
+            </header>
+            <p className="block-custom-hint">{t("What each colour means in your workshop — shown on the card and in this menu. Leave one empty to show no label.")}</p>
+            <div className="block-custom-label-rows">
+              {Object.keys(CARD_COLOR_MEANINGS).map(colorName => (
+                <label key={colorName} className="block-custom-label-row">
+                  <span className="block-custom-swatch" data-card-color={colorName} aria-hidden="true" />
+                  <span className="block-custom-label-name">{t(colorName)}</span>
+                  <input
+                    className="input"
+                    value={colorLabelDrafts[colorName] ?? ""}
+                    maxLength={40}
+                    placeholder={t(CARD_COLOR_MEANINGS[colorName])}
+                    onChange={event => setColorLabelDrafts(current => ({ ...current, [colorName]: event.target.value }))}
+                  />
+                </label>
+              ))}
+            </div>
+            <footer className="block-custom-footer">
+              <button type="button" className="block-custom-reset" disabled={savingColorLabels} onClick={() => setColorLabelDrafts({ ...CARD_COLOR_MEANINGS })}>
+                {t("Reset")}
+              </button>
+              <button type="button" className="block-custom-done" disabled={savingColorLabels} onClick={() => { void saveColorLabels(); }}>
+                {savingColorLabels ? t("Saving...") : t("Save")}
+              </button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
 
       <BlockHeadingsModal
         cardId={headingEditorCardId}

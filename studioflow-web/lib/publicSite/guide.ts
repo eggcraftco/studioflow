@@ -91,7 +91,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Show or hide any card so you only see what matters to you.",
         "Drag a card to reorder it; drag its edge to resize the height.",
-        "Give a card a color (8 options) to make it stand out.",
+        "The ... button on a card opens Block customisation: move it with Up/Down/Left/Right, size it (Fit content, Match column, or S/M/L presets), colour it, hide it, or Reset just that card back to defaults.",
+        "Give a card a color (8 options) to make it stand out — each colour carries a meaning label (Urgent, Approved, ...) shown on the card. Manage colour labels lets you rename these meanings for your whole workspace, on every platform.",
         "Your layout is saved to your own user as a card profile: your teammates keep their own layouts, while the order content stays shared.",
         "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
       ] },
@@ -917,7 +918,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Herhangi bir kartı gösterin veya gizleyin; yalnızca size gerekenleri görün.",
         "Bir kartı sürükleyerek yerini değiştirin; kenarından sürükleyerek yüksekliğini ayarlayın.",
-        "Bir karta renk verin (8 seçenek) ki öne çıksın.",
+        "Kartın ... düğmesi Blok özelleştirme panelini açar: Yukarı/Aşağı/Sol/Sağ ile taşıyın, boyutlandırın (İçeriğe sığdır, Sütuna eşitle veya S/M/L), renklendirin, gizleyin veya yalnız o kartı Sıfırla ile varsayılanlara döndürün.",
+        "Bir karta renk verin (8 seçenek) ki öne çıksın — her renk kartta görünen bir anlam etiketi taşır (Acil, Onaylandı, ...). Renk etiketlerini yönet ile bu anlamları tüm çalışma alanınız için, her platformda geçerli olacak şekilde yeniden adlandırabilirsiniz.",
         "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir: ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
         "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
       ] },
