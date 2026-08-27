@@ -441,6 +441,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [quickReplySettings, setQuickReplySettings] = useState<QuickReplySettings | null>(null);
   const [teamData, setTeamData] = useState<TeamAccessData | null>(null);
+  const [teamDataLoadFailed, setTeamDataLoadFailed] = useState(false);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
   const [sectionSearch, setSectionSearch] = useState("");
@@ -507,6 +508,7 @@ export default function SettingsPage() {
       setError("");
       try {
         const loadedWorkspace = await loadWorkspaceContext(currentUser.uid);
+        let teamLoadFailed = false;
         const teamDataPromise = loadedWorkspace.entitlements.features.team_access
           && workspaceAccessAllows(loadedWorkspace.memberAccess, "teamAccess")
           ? (async () => {
@@ -517,7 +519,11 @@ export default function SettingsPage() {
                   console.warn("Team access sync skipped:", syncError);
                 }
               }
-              return loadTeamAccessData(loadedWorkspace).catch(() => null);
+              return loadTeamAccessData(loadedWorkspace).catch(teamLoadError => {
+                console.warn("Team access data could not be loaded:", teamLoadError);
+                teamLoadFailed = true;
+                return null;
+              });
             })()
           : Promise.resolve(null);
         const isWorkflowOnly = normalizeWorkspaceRole(loadedWorkspace.role) === "workflow";
@@ -534,6 +540,7 @@ export default function SettingsPage() {
         setSettings(loadedSettings);
         setQuickReplySettings(loadedQuickReplySettings);
         setTeamData(loadedTeamData);
+        setTeamDataLoadFailed(teamLoadFailed);
         setSupportUnreadCount(supportUnreadTotal(loadedSupportUnreadSummary));
       } catch (loadError) {
         if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Could not load settings.");
@@ -656,6 +663,7 @@ export default function SettingsPage() {
     }
     const nextTeamData = await loadTeamAccessData(workspace);
     setTeamData(nextTeamData);
+    setTeamDataLoadFailed(false);
     return nextTeamData;
   }
 
@@ -785,6 +793,7 @@ export default function SettingsPage() {
             quickReplySettings,
             onQuickReplySettingsChange: setQuickReplySettings,
             teamData,
+            teamDataLoadFailed,
             onRefreshTeamAccess: refreshTeamAccessData,
             supportUnreadCount,
             onSupportUnreadChanged: setSupportUnreadCount,
@@ -815,6 +824,7 @@ function renderSettingsSection({
   quickReplySettings,
   onQuickReplySettingsChange,
   teamData,
+  teamDataLoadFailed,
   onRefreshTeamAccess,
   supportUnreadCount,
   onSupportUnreadChanged,
@@ -831,6 +841,7 @@ function renderSettingsSection({
   quickReplySettings: QuickReplySettings | null;
   onQuickReplySettingsChange: (settings: QuickReplySettings) => void;
   teamData: TeamAccessData | null;
+  teamDataLoadFailed: boolean;
   onRefreshTeamAccess: () => Promise<TeamAccessData | null>;
   supportUnreadCount: number;
   onSupportUnreadChanged: (count: number) => void;
@@ -876,7 +887,7 @@ function renderSettingsSection({
     case "plan-access":
       return <PlanAccessSection workspace={workspace} counts={counts} storagePercent={storagePercent} language={language} />;
     case "team-access":
-      return <TeamAccessSection workspace={workspace} teamData={teamData} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
+      return <TeamAccessSection workspace={workspace} teamData={teamData} loadFailed={teamDataLoadFailed} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
     case "message-settings":
       return <MessageSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":
@@ -6210,11 +6221,13 @@ function PlanAccessSection({
 function TeamAccessSection({
   workspace,
   teamData,
+  loadFailed = false,
   onRefreshTeamAccess,
   language = "English"
 }: {
   workspace: WorkspaceContext;
   teamData: TeamAccessData | null;
+  loadFailed?: boolean;
   onRefreshTeamAccess: () => Promise<TeamAccessData | null>;
   language?: string;
 }) {
@@ -6293,12 +6306,20 @@ function TeamAccessSection({
   );
 
   useEffect(() => {
+    // joinRequests falls back to a fresh [] whenever teamData is null (e.g. a
+    // failed load), so this effect can run on every render. Returning the
+    // previous object untouched when nothing was added lets React bail out of
+    // the update instead of re-rendering forever.
     setRequestRoles(previous => {
+      let changed = false;
       const next = { ...previous };
       joinRequests.forEach(request => {
-        if (!next[request.id]) next[request.id] = "member";
+        if (!next[request.id]) {
+          next[request.id] = "member";
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : previous;
     });
   }, [joinRequests]);
 
@@ -6392,6 +6413,43 @@ function TeamAccessSection({
       t("Access request sent. The workspace owner can approve it from Team Access.")
     );
     setRequestOwnerIdentifier("");
+  }
+
+  async function retryTeamDataLoad() {
+    if (actioning) return;
+    setActioning("retry-team-data");
+    setError("");
+    try {
+      await onRefreshTeamAccess();
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : t("Team data could not be loaded."));
+    } finally {
+      setActioning("");
+    }
+  }
+
+  if (canViewTeamManagement && loadFailed && !teamData) {
+    return (
+      <div className="settings-stack team-access-shell">
+        <section className="card app-card team-access-hero-card">
+          <CardTitle icon="team" title={t("Team Access")}>
+            <p className="team-access-hero-subtitle">{t("Manage workspace members, roles and join requests.")}</p>
+          </CardTitle>
+          <p className="layout-error">{t("Team data could not be loaded.")}</p>
+          <p className="muted-copy">{t("Check your connection and try again. If the problem continues, contact support.")}</p>
+          {error ? <p className="layout-error">{error}</p> : null}
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => void retryTeamDataLoad()}
+            disabled={Boolean(actioning)}
+            style={{ alignSelf: "flex-start" }}
+          >
+            {actioning === "retry-team-data" ? t("Loading…") : t("Refresh")}
+          </button>
+        </section>
+      </div>
+    );
   }
 
   if (!canViewTeamManagement) {

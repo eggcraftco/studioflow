@@ -53,6 +53,9 @@ const TREE_EN: GuideNode[] = [
         "Spot overdue or at-risk jobs early so they don't slip.",
         "Jump straight to an order that needs you."
       ] },
+      { kind: "bullets", items: [
+        "New workspaces see a Getting started checklist at the top of the Dashboard: create your first order, add a customer, import old orders with ChatGPT, connect a store and claim your customer-link name. The first two tick themselves as your data appears; Hide this checklist puts it away."
+      ] },
       { kind: "sub", text: "Reading the money cards" },
       { kind: "bullets", items: [
         "Revenue counts the value of orders in the selected period, whether or not the money has arrived yet.",
@@ -791,6 +794,9 @@ const TREE_EN: GuideNode[] = [
             "Each hostname belongs to one workspace — a name someone else verified cannot be claimed.",
             "Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
           ] },
+          { kind: "bullets", items: [
+            "The \"Your customer links\" card in the same section shows a live example of your short links (like https://yourstudio.nivadesk.app/r/…) — order tracking and estimate pages follow whichever name you set up."
+          ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
@@ -848,6 +854,9 @@ const TREE_TR: GuideNode[] = [
         "Aktif siparişler, yakında teslim edilecekler ve son etkinlik hakkında hızlı istatistikler.",
         "Geciken veya riskli işleri erkenden fark edin; kaçmasınlar.",
         "Sizi bekleyen bir siparişe doğrudan gidin."
+      ] },
+      { kind: "bullets", items: [
+        "Yeni çalışma alanları Dashboard'ın üstünde bir Başlarken listesi görür: ilk siparişi oluştur, müşteri ekle, eski siparişleri ChatGPT ile aktar, mağaza bağla ve müşteri bağlantısı adını al. İlk ikisi veriniz oluştukça kendiliğinden işaretlenir; Hide this checklist listeyi kaldırır."
       ] },
       { kind: "sub", text: "Para kartlarını okumak" },
       { kind: "bullets", items: [
@@ -1573,6 +1582,9 @@ const TREE_TR: GuideNode[] = [
             "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
             "Her sunucu adı tek bir çalışma alanına aittir — başkasının doğruladığı ad alınamaz.",
             "Remove düğmesiyle istediğiniz an kaldırın; bağlantılarınız standart nivadesk.app adreslerine geri döner."
+          ] },
+          { kind: "bullets", items: [
+            "Aynı bölümdeki \"Your customer links\" kartı kısa bağlantılarınızın canlı bir örneğini gösterir (https://atolyeniz.nivadesk.app/r/… gibi) — sipariş takibi ve teklif sayfaları burada kurduğunuz adı izler."
           ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [

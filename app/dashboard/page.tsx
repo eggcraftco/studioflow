@@ -76,6 +76,93 @@ type BankTx = {
   splits: Array<{ amount: number; vatCode: string }>;
 };
 
+// Activation checklist (first-run report): the dashboard is where a brand-new
+// owner looks first, and an empty KPI wall says nothing. Five small steps with
+// live ticks where the data can prove them (orders, customers) and click-ticks
+// for the rest. Dismissal is a per-workspace device convenience.
+const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?: "orders" | "customers" }[] = [
+  { id: "order", labelKey: "Create your first order", href: "/orders", auto: "orders" },
+  { id: "customer", labelKey: "Add your first customer", href: "/customers", auto: "customers" },
+  { id: "chatgpt", labelKey: "Import your old orders with ChatGPT", href: "/chatgpt" },
+  { id: "store", labelKey: "Connect your online store", href: "/settings?section=woocommerce" },
+  { id: "domain", labelKey: "Put customer links on your name", href: "/settings?section=client-domain" }
+];
+
+function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
+  workspaceId: string;
+  orderCount: number;
+  customerCount: number;
+  t: (text: string) => string;
+}) {
+  const router = useRouter();
+  const dismissKey = `nivadesk-getting-started-dismissed:${workspaceId}`;
+  const clickedKey = `nivadesk-getting-started-clicked:${workspaceId}`;
+  const [dismissed, setDismissed] = useState(true);
+  const [clicked, setClicked] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      setDismissed(window.localStorage.getItem(dismissKey) === "1");
+      setClicked(JSON.parse(window.localStorage.getItem(clickedKey) || "[]"));
+    } catch {
+      setDismissed(false);
+    }
+  }, [dismissKey, clickedKey]);
+
+  const doneFor = (step: (typeof GETTING_STARTED_STEPS)[number]) => {
+    if (step.auto === "orders") return orderCount > 0;
+    if (step.auto === "customers") return customerCount > 0;
+    return clicked.includes(step.id);
+  };
+  const doneCount = GETTING_STARTED_STEPS.filter(doneFor).length;
+  if (dismissed || doneCount >= GETTING_STARTED_STEPS.length) return null;
+
+  return (
+    <section className="card app-card getting-started-card">
+      <div className="getting-started-head">
+        <CardTitle icon="checklist" eyebrow={t("Getting started")} title={t("Set up your workspace in five small steps.")} />
+        <div className="getting-started-meta">
+          <span className="studio-pill">{doneCount}/{GETTING_STARTED_STEPS.length}</span>
+          <button
+            type="button"
+            className="getting-started-hide"
+            onClick={() => {
+              try { window.localStorage.setItem(dismissKey, "1"); } catch { /* storage unavailable */ }
+              setDismissed(true);
+            }}
+          >
+            {t("Hide this checklist")}
+          </button>
+        </div>
+      </div>
+      <ol className="getting-started-steps">
+        {GETTING_STARTED_STEPS.map(step => {
+          const done = doneFor(step);
+          return (
+            <li key={step.id} data-done={done ? "true" : "false"}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!step.auto && !clicked.includes(step.id)) {
+                    const next = [...clicked, step.id];
+                    setClicked(next);
+                    try { window.localStorage.setItem(clickedKey, JSON.stringify(next)); } catch { /* storage unavailable */ }
+                  }
+                  router.push(step.href);
+                }}
+              >
+                <span className="getting-started-tick" aria-hidden="true">{done ? "✓" : ""}</span>
+                {t(step.labelKey)}
+                <span className="getting-started-arrow" aria-hidden="true">›</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 type DashboardChannel = "all" | "shopify" | "woocommerce" | "manual";
 
 // Workspace currency is stored as a display symbol; imported orders carry ISO
@@ -687,6 +774,15 @@ export default function DashboardPage() {
               </button>
             </div>
           </section>
+
+          {workspace ? (
+            <GettingStartedCard
+              workspaceId={workspace.id}
+              orderCount={counts.orderCount}
+              customerCount={counts.customerCount}
+              t={t}
+            />
+          ) : null}
 
           <section className="dashboard-filter-card">
             <div className="segmented-control" aria-label={t("Dashboard time range")}>
