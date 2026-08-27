@@ -23758,12 +23758,35 @@ exports.saveOrderPortalSettings = onCall({ region: "europe-west2" }, async (requ
   return { ok: true, visibility, autoUpdates };
 });
 
+// Client-domain spoof guard: a token page served on a REGISTERED client
+// domain must belong to the workspace that owns that domain. Unregistered and
+// primary hosts pass — the registry is the only authority worth consulting,
+// and the pages must keep working before the custom-hostname serving
+// infrastructure exists.
+async function assertHostMayServeCompany(rawHost, companyId) {
+  const servingHost = String(rawHost || "").trim().toLowerCase().split(":")[0].replace(/\.$/, "");
+  if (!servingHost) return;
+  if (["nivadesk.app", "www.nivadesk.app", "localhost", "127.0.0.1"].includes(servingHost)) return;
+  const hostKey = servingHost.endsWith(".nivadesk.app")
+    ? servingHost.slice(0, -".nivadesk.app".length)
+    : servingHost;
+  const domainSnap = await admin.firestore().collection("clientDomains").doc(hostKey).get().catch(() => null);
+  if (!domainSnap || !domainSnap.exists) return;
+  const domainRow = domainSnap.data() || {};
+  if (String(domainRow.companyId || "") !== String(companyId || "")) {
+    throw new HttpsError("permission-denied", "This link does not belong to this domain.");
+  }
+}
+
 exports.getPortalForVisitor = onCall({ region: "europe-west2" }, async (request) => {
   const token = String(request.data && request.data.token || "").trim();
   await websiteChatCheckRate("portalView", websiteChatClientIp(request), PORTAL_VIEW_PER_HOUR);
   await websiteChatCheckRate("portalViewTok", token, PORTAL_VIEW_TOKEN_PER_HOUR);
 
   const { linkRef, link, orderData } = await portalLinkForVisitor(token);
+
+  await assertHostMayServeCompany(request.data && request.data.host, link.companyId);
+
   await linkRef.set(
     { viewCount: Number(link.viewCount || 0) + 1, viewedAtMs: Date.now() },
     { merge: true }
@@ -24434,6 +24457,7 @@ exports.getEstimateForVisitor = onCall({ region: "europe-west2" }, async (reques
   await websiteChatCheckRate("estimateViewTok", token, ESTIMATE_VIEW_TOKEN_PER_HOUR);
 
   const { linkRef, link, orderRef, orderData, recordRef, record } = await estimateLinkForVisitor(token);
+  await assertHostMayServeCompany(request.data && request.data.host, link.companyId);
   if (record.status === "superseded") {
     throw new HttpsError("failed-precondition", "This estimate has been replaced by a newer one.");
   }

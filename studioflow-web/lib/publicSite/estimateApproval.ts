@@ -66,11 +66,12 @@ function visitorError(error: unknown, fallback: string) {
 
 export async function loadEstimateForVisitor(token: string): Promise<PublicEstimate> {
   try {
-    const callable = httpsCallable<{ token: string }, { ok?: boolean; estimate?: PublicEstimate }>(
+    const callable = httpsCallable<{ token: string; host?: string }, { ok?: boolean; estimate?: PublicEstimate }>(
       functions,
       "getEstimateForVisitor"
     );
-    const result = await callable({ token });
+    // The serving host rides along for the client-domain spoof guard.
+    const result = await callable({ token, host: typeof window !== "undefined" ? window.location.host : "" });
     const estimate = result.data?.estimate;
     if (!estimate) throw new Error("This estimate could not be opened.");
     return estimate;
