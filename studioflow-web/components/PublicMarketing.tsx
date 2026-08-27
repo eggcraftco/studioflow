@@ -1138,13 +1138,13 @@ function ProductScene() {
           <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
         </div>
         <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="violet">
+          <span className="hero-float-icon" data-tone="blue">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6h9v8h-9zM11.5 9h3.2l2.8 2.6V14h-6M5.5 14.4a1.6 1.6 0 1 0 3.2 0M12.5 14.4a1.6 1.6 0 1 0 3.2 0" /></svg>
           </span>
           <div><strong>{t("heroStat.transitTitle")}</strong><span>{t("heroStat.transitSub")}</span></div>
         </div>
         <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="gold">
+          <span className="hero-float-icon" data-tone="violet">
             <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10.5l4 4 8-9" /></svg>
           </span>
           <div><strong>{t("heroStat.tasksTitle")}</strong><span>{t("heroStat.tasksSub")}</span></div>
@@ -2712,6 +2712,12 @@ function ConnectedOrderDiagram() {
       <div className="public-shell">
         <h2 className="public-connected-title">{t("section.flow.title")}</h2>
         <div className="public-connected-diagram">
+          <svg className="public-connected-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M22 26 C 34 26, 36 42, 46 44" />
+            <path d="M22 74 C 34 74, 36 58, 46 56" />
+            <path d="M78 26 C 66 26, 64 42, 54 44" />
+            <path d="M78 74 C 66 74, 64 58, 54 56" />
+          </svg>
           <div className="public-connected-col">
             {sides.slice(0, 2).map(side => (
               <div className="public-card public-connected-card" data-side="left" key={side.titleKey}>
@@ -2726,13 +2732,24 @@ function ConnectedOrderDiagram() {
             ))}
           </div>
           <div className="public-card public-connected-center">
-            <span className="public-connected-center-tag">{t("orderCards.group.order")}</span>
-            <strong>Custom Leather Duffle Bag</strong>
-            <span className="public-connected-status">{t("connected.status")}</span>
+            <div className="public-connected-center-head">
+              <span className="public-connected-center-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 7V5.5a3.5 3.5 0 0 1 7 0V7M4 7h12l-.8 9.5H4.8z" /></svg>
+              </span>
+              <span className="public-connected-center-tag">{t("orderCards.group.order")}</span>
+            </div>
+            <div className="public-connected-center-body">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/order-bag-thumb.jpg" alt="" loading="lazy" decoding="async" />
+              <div>
+                <strong>Custom Leather Duffle Bag</strong>
+                <span className="public-connected-status">{t("connected.status")}</span>
+              </div>
+            </div>
             <div className="public-connected-chips" aria-hidden="true">
-              <span>{t("connected.chipTimeline")}</span>
-              <span>{t("connected.chipFiles")}</span>
-              <span>{t("connected.chipNotes")}</span>
+              <span><i data-tone="green" />{t("connected.chipTimeline")}</span>
+              <span><i data-tone="blue" />{t("connected.chipFiles")}</span>
+              <span><i data-tone="gold" />{t("connected.chipNotes")}</span>
             </div>
           </div>
           <div className="public-connected-col">
@@ -2798,10 +2815,20 @@ function ShippingStrip() {
       <div className="public-shell public-card public-shipstrip-card">
         <h2>{t("shippingStrip.title")}</h2>
         <div className="public-shipstrip" aria-hidden="true">
-          {(["scrollStory.status1", "scrollStory.status2", "scrollStory.status3", "scrollStory.status4"] as PublicSiteTranslationKey[]).map(key => (
+          {([
+            ["scrollStory.status1", <><path key="i" d="M7 4.5h6v2.2H7zM5.2 5.6h9.6l-.7 10.4H5.9zM8.2 10.2l1.5 1.5 2.6-2.8" /></>],
+            ["scrollStory.status2", <><path key="i" d="M2.5 6.6h8.6v7h-8.6zM11.1 9h3l2.4 2.3v2.3h-5.4M4.9 15.6a1.5 1.5 0 1 0 3 0M11.9 15.6a1.5 1.5 0 1 0 3 0" /></>],
+            ["scrollStory.status3", <><circle key="c" cx="11" cy="4" r="1.6" /><path key="i" d="M10.6 6.4 8 9.6l2.3 2-.7 4.6M8 9.6l-2.4-.8M10.3 11.6l2.9 1 1.4 3.4M11.8 8.4l3 .8" /></>],
+            ["scrollStory.status4", <><path key="i" d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path key="j" d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></>]
+          ] as Array<[PublicSiteTranslationKey, ReactNode]>).map(([key, icon]) => (
             <div className="public-shipstrip-step" key={key}>
-              <span className="public-shipstrip-dot">✓</span>
-              <span>{t(key)}</span>
+              <span className="public-shipstrip-icon">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{icon}</svg>
+              </span>
+              <span className="public-shipstrip-label">
+                {t(key)}
+                <i className="public-shipstrip-check">✓</i>
+              </span>
             </div>
           ))}
         </div>
@@ -2909,8 +2936,8 @@ function AdvancedAreasSection() {
               className="public-card public-backoffice-tile"
               title={t(area.bodyKey)}
             >
-              <span className="hero-float-icon" data-tone="sage" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{icons[area.id]}</svg>
+              <span className="public-backoffice-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{icons[area.id]}</svg>
               </span>
               <span>{t(area.titleKey)}</span>
             </Link>
@@ -2934,7 +2961,14 @@ function PublicHomePageContent() {
             <h1>
               {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
             </h1>
-            <p>{t("hero.body")}</p>
+            <p>
+              {(() => {
+                const body = t("hero.body");
+                const match = body.match(/^([^.。؟!]*[.。؟!])\s+([\s\S]*)$/);
+                if (!match) return body;
+                return <>{match[1]}<br />{match[2]}</>;
+              })()}
+            </p>
             <div className="public-hero-actions">
               <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
               <button
@@ -2945,17 +2979,10 @@ function PublicHomePageContent() {
                   trackLandingEvent("homepage_demo_play");
                 }}
               >
-                <span className="public-demo-thumb" aria-hidden="true">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/nivadesk-demo-poster.jpg" alt="" loading="lazy" decoding="async" />
-                  <span className="public-demo-thumb-play">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
-                  </span>
+                <span className="public-demo-play-circle" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M8 5.14v13.72L19 12z" /></svg>
                 </span>
-                <span className="public-demo-button-copy">
-                  <strong>{t("hero.watchDemo")}</strong>
-                  <span>1:17</span>
-                </span>
+                <strong>{t("hero.watchDemo")}</strong>
               </button>
               <Link href="/pricing" className="public-hero-pricing-link">
                 {t("cta.viewPricing")}<span aria-hidden="true"> →</span>
