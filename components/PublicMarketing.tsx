@@ -832,7 +832,7 @@ function PublicLanguageSelector() {
 
   return (
     <label className="public-language-select">
-      <span>{t("language.label")}</span>
+      <span aria-hidden="true">🌐</span>
       <select
         aria-label={t("language.selectorLabel")}
         value={language}
@@ -840,7 +840,7 @@ function PublicLanguageSelector() {
         onInput={event => handleLanguageChange(event.currentTarget.value)}
       >
         {languages.map(option => (
-          <option key={option} value={option}>{option}</option>
+          <option key={option} value={option}>{option.replace(/\s*\([^)]*\)\s*$/, "")}</option>
         ))}
       </select>
     </label>
@@ -864,6 +864,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
           <Link href="/features">{t("nav.features")}</Link>
           <Link href="/pricing">{t("nav.pricing")}</Link>
           <Link href="/faq">{t("nav.faq")}</Link>
+          <Link href="/security">{t("nav.security")}</Link>
         </nav>
 
         <div className="public-header-actions">
@@ -894,6 +895,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
           <Link href="/features" onClick={closeMenu}>{t("nav.features")}</Link>
           <Link href="/pricing" onClick={closeMenu}>{t("nav.pricing")}</Link>
           <Link href="/faq" onClick={closeMenu}>{t("nav.faq")}</Link>
+          <Link href="/security" onClick={closeMenu}>{t("nav.security")}</Link>
           <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu}>
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
@@ -951,7 +953,7 @@ function PublicFooter() {
           </section>
         </div>
         <div className="public-footer-meta">
-          <span>{t("footer.rights")}</span>
+          <span>{t("footer.rights").replace("\u00A9", `\u00A9 ${new Date().getFullYear()}`)}</span>
           <span className="public-footer-recaptcha">
             {(() => {
               const parts = t("footer.recaptcha.text").split(/\{privacy\}|\{terms\}/);
@@ -2600,6 +2602,42 @@ function PlatformNote() {
   );
 }
 
+// The newer back-office areas (the global-website report asked the home page
+// to say these exist so visitors understand NivaDesk is more than the order
+// board). Short cards only — the deep explanations live on /features and in
+// the in-app guide.
+const ADVANCED_AREAS = [
+  { id: "inventory", titleKey: "adv.inventory.title", bodyKey: "adv.inventory.body" },
+  { id: "banking", titleKey: "adv.banking.title", bodyKey: "adv.banking.body" },
+  { id: "estimates", titleKey: "adv.estimates.title", bodyKey: "adv.estimates.body" },
+  { id: "repairs", titleKey: "adv.repairs.title", bodyKey: "adv.repairs.body" },
+  { id: "files", titleKey: "adv.files.title", bodyKey: "adv.files.body" },
+  { id: "domain", titleKey: "adv.domain.title", bodyKey: "adv.domain.body" }
+] as const;
+
+function AdvancedAreasSection() {
+  const { t } = usePublicSiteLanguage();
+  return (
+    <section className="public-section public-scroll-reveal">
+      <div className="public-shell">
+        <SectionHeader
+          eyebrowKey="section.advanced.eyebrow"
+          titleKey="section.advanced.title"
+          bodyKey="section.advanced.body"
+        />
+        <div className="public-advanced-grid">
+          {ADVANCED_AREAS.map(area => (
+            <article key={area.id} className="public-card public-advanced-card">
+              <h3>{t(area.titleKey)}</h3>
+              <p>{t(area.bodyKey)}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PublicHomePageContent() {
   const { t } = usePublicSiteLanguage();
   const [demoOpen, setDemoOpen] = useState(false);
@@ -2674,15 +2712,12 @@ function PublicHomePageContent() {
           )
         : null}
 
-      <PlatformNote />
-
-      {/* The ChatGPT app sits directly under the platform strip: it is part of
-          "where NivaDesk runs", and it was getting lost further down the page. */}
-      <ChatGPTAppShowcase featured showMoreLink />
+      {/* Report ordering: show what the product does before where it runs.
+          Story and customisation first, then ChatGPT, then the newer
+          back-office areas, and only then the platform strip. */}
+      <ScrollStoryShowcase />
 
       <StudioAccentBand />
-
-      <ScrollStoryShowcase />
 
       <section className="public-section public-order-flow-section">
         <div className="public-order-flow-sticky">
@@ -2696,6 +2731,12 @@ function PublicHomePageContent() {
           </div>
         </div>
       </section>
+
+      <ChatGPTAppShowcase featured showMoreLink />
+
+      <AdvancedAreasSection />
+
+      <PlatformNote />
 
       <section className="public-section public-cta-band public-scroll-reveal">
         <div className="public-shell public-cta-inner">

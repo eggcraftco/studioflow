@@ -52,6 +52,14 @@ const TREE_EN: GuideNode[] = [
         "Quick stats on active orders, what is due soon and recent activity.",
         "Spot overdue or at-risk jobs early so they don't slip.",
         "Jump straight to an order that needs you."
+      ] },
+      { kind: "sub", text: "Reading the money cards" },
+      { kind: "bullets", items: [
+        "Revenue counts the value of orders in the selected period, whether or not the money has arrived yet.",
+        "Payments Received counts only money actually collected in the period — compare it with Revenue to see what is still out.",
+        "Outstanding Balance is what customers still owe across those orders.",
+        "Net Profit is revenue minus base cost, extra spending, platform fees, shipping and VAT. Hover any card title for its exact formula.",
+        "The period switcher has quick presets — Last 7 or 30 days, this or last quarter, and the UK tax year — plus a custom range."
       ] }
     ]
   },
@@ -755,6 +763,30 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-client-domain",
+        title: "Customer Portal Domain",
+        blocks: [
+          { kind: "para", text: "Put YOUR name on every link your customers see — order tracking, estimates and future customer pages. Owner only, under Settings ▸ Customer Portal Domain." },
+          { kind: "sub", text: "Your free NivaDesk subdomain" },
+          { kind: "steps", items: [
+            "Open Settings ▸ Customer Portal Domain (you must be the workspace owner).",
+            "Type a name — letters, numbers and hyphens, 3–40 characters — and press Save.",
+            "Your customer links can use name.nivadesk.app. Included on every plan; claiming a new name releases the old one."
+          ] },
+          { kind: "sub", text: "Your own domain (Pro and Team)" },
+          { kind: "steps", items: [
+            "Enter a subdomain of a website you own, like track.yourdomain.com, and press Connect. A bare domain or a path such as yourdomain.com/track will not work — DNS cannot route paths.",
+            "At your domain provider, add the CNAME record shown on screen, pointing to customers.nivadesk.app.",
+            "Press Verify. NivaDesk reports exactly what DNS returned; changes can take up to an hour to spread. Once the record matches, the domain shows Domain verified."
+          ] },
+          { kind: "bullets", items: [
+            "A verified domain is reserved for your workspace; serving your links on it is being rolled out, and existing nivadesk.app links keep working.",
+            "Each hostname belongs to one workspace — a name someone else verified cannot be claimed.",
+            "Remove a domain any time with the Remove button; your links fall back to the standard nivadesk.app addresses."
+          ] }
+        ]
+      },
+      {
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
@@ -803,6 +835,14 @@ const TREE_TR: GuideNode[] = [
         "Aktif siparişler, yakında teslim edilecekler ve son etkinlik hakkında hızlı istatistikler.",
         "Geciken veya riskli işleri erkenden fark edin; kaçmasınlar.",
         "Sizi bekleyen bir siparişe doğrudan gidin."
+      ] },
+      { kind: "sub", text: "Para kartlarını okumak" },
+      { kind: "bullets", items: [
+        "Revenue, seçili dönemdeki siparişlerin değerini sayar — para henüz gelmemiş olsa bile.",
+        "Payments Received yalnız dönemde fiilen tahsil edilen parayı sayar; dışarıda ne kaldığını görmek için Revenue ile karşılaştırın.",
+        "Outstanding Balance, o siparişlerde müşterilerin hâlâ borçlu olduğu tutardır.",
+        "Net Profit = gelir − temel maliyet − ek harcama − platform komisyonu − kargo − KDV. Tam formül için kart başlığının üzerine gelin.",
+        "Dönem seçicide hazır aralıklar var — Son 7/30 gün, bu/geçen çeyrek, İngiltere vergi yılı — ve özel aralık."
       ] }
     ]
   },
@@ -1489,6 +1529,30 @@ const TREE_TR: GuideNode[] = [
             "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
             "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
+          ] }
+        ]
+      },
+      {
+        id: "set-client-domain",
+        title: "Müşteri Portalı Alan Adı",
+        blocks: [
+          { kind: "para", text: "Müşterilerinizin gördüğü her bağlantıya — sipariş takibi, teklifler ve gelecekteki müşteri sayfaları — SİZİN adınızı koyun. Yalnız sahip görür; Settings ▸ Customer Portal Domain altındadır." },
+          { kind: "sub", text: "Ücretsiz NivaDesk alt alan adınız" },
+          { kind: "steps", items: [
+            "Settings ▸ Customer Portal Domain bölümünü açın (çalışma alanı sahibi olmalısınız).",
+            "Bir ad yazın — harf, rakam ve tire; 3–40 karakter — ve Save'e basın.",
+            "Müşteri bağlantılarınız ad.nivadesk.app olabilir. Tüm planlara dahildir; yeni ad almak eskisini serbest bırakır."
+          ] },
+          { kind: "sub", text: "Kendi alan adınız (Pro ve Team)" },
+          { kind: "steps", items: [
+            "Size ait bir sitenin alt alan adını girin — örn. track.sizinsite.com — ve Connect'e basın. Çıplak domain veya sizinsite.com/track gibi yollar çalışmaz; DNS yol yönlendiremez.",
+            "Alan adı sağlayıcınızda, ekranda gösterilen CNAME kaydını customers.nivadesk.app hedefiyle ekleyin.",
+            "Verify'a basın. NivaDesk, DNS'in gerçekte ne döndürdüğünü raporlar; değişikliklerin yayılması bir saati bulabilir. Kayıt eşleşince alan adı Domain verified olur."
+          ] },
+          { kind: "bullets", items: [
+            "Doğrulanan alan adı çalışma alanınız için ayrılır; bağlantıların bu adres üzerinden sunulması kademeli devreye alınıyor ve mevcut nivadesk.app bağlantıları çalışmaya devam eder.",
+            "Her sunucu adı tek bir çalışma alanına aittir — başkasının doğruladığı ad alınamaz.",
+            "Remove düğmesiyle istediğiniz an kaldırın; bağlantılarınız standart nivadesk.app adreslerine geri döner."
           ] }
         ]
       },
