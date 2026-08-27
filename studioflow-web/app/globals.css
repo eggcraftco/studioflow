@@ -24594,3 +24594,27 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
 .order-card-meaning-chip[data-card-color="Purple"] { background: #8e4ec6; }
 .order-card-meaning-chip[data-card-color="Pink"]   { background: #d6409f; }
 .order-card-color-meaning { margin-left: auto; font-size: 10.5px; opacity: 0.62; font-weight: 700; }
+
+/* Advanced-areas grid on the public home page (global-website report). */
+.public-site .public-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+.public-site .public-advanced-card {
+  padding: 22px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.public-site .public-advanced-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.public-site .public-advanced-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--public-muted);
+}
