@@ -1193,3 +1193,34 @@ Google SEO + AI motorları (AEO) için özellikler ön planda, bot da
   yazarken lastSettingsWriteByUid: uid eklemeli — yoksa girdileri
   "Workspace member" görünür (kayıt yine tutulur).
 - Settings raporunun TÜM High maddeleri artık kapalı (1-10).
+
+---
+
+## 28 Ağu — Audit review düzeltmeleri (3 mercekli hasım inceleme; tur 50)
+
+İnceleme kararları: döngü YOK, log gerçekten server-only, 19 damga
+hunk'ının hepsi doğru yerde. Bulunan ve düzeltilenler:
+- **HIGH atıf kaybı:** damga yalnız DEĞİŞİNCE imzalıyordu → aynı kişinin
+  ikinci kaydı anonim kalıyordu. Çözüm: 18 damgaya eş
+  lastSettingsWriteAtMs (her kayıtta değişir) + trigger ikisinden birini
+  kabul eder; bayat damga yine imzalamaz (test 6-7).
+- **HIGH sahte imza:** rules artık istemcinin lastSettingsWriteByUid'i
+  yalnız KENDİ uid'i olarak yazmasına izin veriyor (diff/affectedKeys
+  deseniyle; merge'te miras kalan eski damga serbest). Rules deploy.
+- **MED gürültü:** sidebar/kart sürüklemeleri — aynı kişi + aynı anahtar
+  seti 15 dk içinde → önceki girdi güncellenir (yeni doc değil); sidebar
+  genişlikleri ve workspaceUserProfiles/typeWorkspaceSnapshots artık
+  "Workflow & cards" alanına düşüyor. Okuyucuya 90 gün kesimi eklendi
+  (kartın vaadi artık doğru). Trigger yazımı event.id ile idempotent.
+- **MED Test API Connection:** openAIKeyCheckedAtMs + migratedat
+  bookkeeping sayılıyor — test tıklaması artık girdi üretmiyor
+  (openAIKeyWorks değişirse o hâlâ görünür).
+- **LOW:** aynı anahtarı yeniden kaydetmek rotasyon sayılmıyor (secret
+  ile karşılaştırma); "— → —" satırları atılıyor; SILENT_VALUE_KEY
+  json$/base64'e daraltıldı (orderCardShowPreviewImage değeri görünür);
+  ölü özel-durum bloğu kaldırıldı. Web: OrderDetailContent'in 2 doğrudan
+  yazması artık imzalı (kural gereği yalnız kendi uid'i).
+- 9 test bloğu yeşil; rules + 19 fonksiyon deploy; tur 50 push.
+- Kabul edilen sınırlar: native yazmalar mağaza dalgasına kadar anonim;
+  kayıt her planda sürer (bilinçli); aiKnowledgeBase 57 karakter önizleme
+  yalnız owner'a görünür.
