@@ -963,9 +963,11 @@ private fun dashboardSummaryCards(
         )
     }
 
-    // Same gated base cost as Net Profit (web's dashboardCostTotal → baseCostTotal),
-    // so hiding the base cost field keeps the Cost card and Net Profit consistent.
+    // Web's dashboardCostTotal: gated base cost (same gate as Net Profit) PLUS
+    // extra spending — custom expenses stay in even when base cost is hidden,
+    // because only baseCostTotal() is behind the financialShowBaseCost gate.
     val rolledCost = stats.breakdownBaseCost +
+        stats.extraSpending +
         (if (!visibility.dashShowFee) stats.platformFee else 0.0) +
         (if (!visibility.dashShowShipping) stats.shipping else 0.0) +
         (if (!visibility.dashShowTax) stats.tax else 0.0)
