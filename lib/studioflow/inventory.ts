@@ -6,6 +6,27 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 // only carries shapes and the call plumbing, so there is one place that decides
 // what a thing cost.
 
+/**
+ * What an item's QR code carries.
+ *
+ * A bare item number is useless to a phone camera: it offers a web search for
+ * a meaningless string. The code has to be a link that lands on the item, so
+ * it is built here once — the printable label and the on-screen code both read
+ * from this, because when they drifted apart the on-screen one silently went
+ * back to sending people to Google.
+ *
+ * The number stays printed underneath on the label, readable long after any
+ * phone is gone.
+ */
+export const INVENTORY_LABEL_ORIGIN =
+  (process.env.NEXT_PUBLIC_NIVADESK_PUBLIC_ORIGIN || "https://nivadesk.app").replace(/\/$/, "");
+
+export function inventoryItemQrValue(reference: string) {
+  const clean = String(reference || "").trim();
+  if (!clean) return INVENTORY_LABEL_ORIGIN + "/inventory";
+  return `${INVENTORY_LABEL_ORIGIN}/inventory?item=${encodeURIComponent(clean)}`;
+}
+
 export type InventoryTrackingType = "unique" | "quantity";
 export type InventoryStatus = "available" | "reserved" | "partiallyReserved" | "incoming" | "used" | "sold" | "removed" | "archived";
 export type InventoryOwnership = "business" | "customer";

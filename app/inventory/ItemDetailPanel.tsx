@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivateMoney } from "@/components/PricePrivacy";
 import QRCode from "qrcode";
+import { inventoryItemQrValue } from "@/lib/studioflow/inventory";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -150,7 +151,7 @@ export function ItemDetailPanel({
   // QR — same content contract as the printable label: just the number.
   useEffect(() => {
     let cancelled = false;
-    QRCode.toString(item.number || item.id, { type: "svg", margin: 0, errorCorrectionLevel: "M" })
+    QRCode.toString(inventoryItemQrValue(item.number || item.id), { type: "svg", margin: 0, errorCorrectionLevel: "M" })
       .then(svg => { if (!cancelled) setQrSvg(svg); })
       .catch(() => undefined);
     return () => { cancelled = true; };

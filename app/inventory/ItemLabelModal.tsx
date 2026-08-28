@@ -12,9 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
-import type { InventoryItem } from "@/lib/studioflow/inventory";
-
-const INVENTORY_LABEL_ORIGIN = (process.env.NEXT_PUBLIC_NIVADESK_PUBLIC_ORIGIN || "https://nivadesk.app").replace(/\/$/, "");
+import { inventoryItemQrValue, type InventoryItem } from "@/lib/studioflow/inventory";
 
 export function ItemLabelModal({
   item,
@@ -33,7 +31,7 @@ export function ItemLabelModal({
   useEffect(() => {
     let cancelled = false;
     const reference = item.number || item.id;
-    QRCode.toString(`${INVENTORY_LABEL_ORIGIN}/inventory?item=${encodeURIComponent(reference)}`, {
+    QRCode.toString(inventoryItemQrValue(reference), {
       type: "svg", margin: 0, errorCorrectionLevel: "M"
     })
       .then(svg => { if (!cancelled) setQrSvg(svg); })
