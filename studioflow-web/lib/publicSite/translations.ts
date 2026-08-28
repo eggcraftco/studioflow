@@ -863,6 +863,7 @@ export const PUBLIC_SITE_EN = {
   "pricing.mostValue": "Most value",
   "pricing.yearlyHandNote": "Save {percent} with yearly billing",
   "pricing.yearlySave": "Save {amount} a year",
+  "pricing.perMonthEquivalent": "/ month equivalent",
   "pricing.perMonth": "/ month",
   "pricing.perYear": "/ year",
   "pricing.freeForever": "Free",
@@ -9461,6 +9462,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Türkçe": {
     "pricing.twoMonthsFree": "2 ay bedava",
     "pricing.yearlySave": "Yılda {amount} tasarruf",
+    "pricing.perMonthEquivalent": "/ ay karşılığı",
     "pricing.yearlyBanner.title": "Yıllık öde, {highlight} kullan",
     "pricing.yearlyBanner.body": "10 ay öde, 12 ay kullan. Ödeme dönemini istediğin zaman değiştir.",
     "pricing.saveWord": "Tasarruf",
@@ -9474,6 +9476,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Deutsch": {
     "pricing.twoMonthsFree": "2 Monate gratis",
     "pricing.yearlySave": "{amount} pro Jahr sparen",
+    "pricing.perMonthEquivalent": "/ Monat entspricht",
     "pricing.yearlyBanner.title": "Jährlich zahlen, {highlight} erhalten",
     "pricing.yearlyBanner.body": "Zehn Monate zahlen, zwölf Monate nutzen. Abrechnungszeitraum jederzeit wechselbar.",
     "pricing.saveWord": "Sparen",
@@ -9487,6 +9490,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Français": {
     "pricing.twoMonthsFree": "2 mois offerts",
     "pricing.yearlySave": "Économisez {amount} par an",
+    "pricing.perMonthEquivalent": "/ mois équivalent",
     "pricing.yearlyBanner.title": "Payez à l’année, obtenez {highlight}",
     "pricing.yearlyBanner.body": "Payez 10 mois, utilisez-en 12. Changez de périodicité à tout moment.",
     "pricing.saveWord": "Économie",
@@ -9500,6 +9504,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Italiano": {
     "pricing.twoMonthsFree": "2 mesi gratis",
     "pricing.yearlySave": "Risparmi {amount} all’anno",
+    "pricing.perMonthEquivalent": "/ mese equivalente",
     "pricing.yearlyBanner.title": "Paga annualmente e ottieni {highlight}",
     "pricing.yearlyBanner.body": "Paghi 10 mesi, ne usi 12. Cambia periodicità quando vuoi.",
     "pricing.saveWord": "Risparmio",
@@ -9513,6 +9518,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Español (Spanish)": {
     "pricing.twoMonthsFree": "2 meses gratis",
     "pricing.yearlySave": "Ahorra {amount} al año",
+    "pricing.perMonthEquivalent": "/ mes equivalente",
     "pricing.yearlyBanner.title": "Paga al año y consigue {highlight}",
     "pricing.yearlyBanner.body": "Pagas 10 meses y usas 12. Cambia el periodo de facturación cuando quieras.",
     "pricing.saveWord": "Ahorro",
@@ -9526,6 +9532,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Português": {
     "pricing.twoMonthsFree": "2 meses grátis",
     "pricing.yearlySave": "Poupa {amount} por ano",
+    "pricing.perMonthEquivalent": "/ mês equivalente",
     "pricing.yearlyBanner.title": "Paga anualmente e ganha {highlight}",
     "pricing.yearlyBanner.body": "Pagas 10 meses e usas 12. Muda o período de faturação quando quiseres.",
     "pricing.saveWord": "Poupança",
@@ -9539,6 +9546,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "Русский (Russian)": {
     "pricing.twoMonthsFree": "2 месяца бесплатно",
     "pricing.yearlySave": "Экономия {amount} в год",
+    "pricing.perMonthEquivalent": "/ месяц в пересчёте",
     "pricing.yearlyBanner.title": "Оплата за год — {highlight}",
     "pricing.yearlyBanner.body": "Платите за 10 месяцев, пользуйтесь 12. Период оплаты меняется в любой момент.",
     "pricing.saveWord": "Выгода",
@@ -9552,6 +9560,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "日本語 (Japanese)": {
     "pricing.twoMonthsFree": "2 か月分無料",
     "pricing.yearlySave": "年間 {amount} お得",
+    "pricing.perMonthEquivalent": "/ 月あたり換算",
     "pricing.yearlyBanner.title": "年払いなら{highlight}",
     "pricing.yearlyBanner.body": "10 か月分の支払いで 12 か月使えます。支払い周期はいつでも変更できます。",
     "pricing.saveWord": "お得",
@@ -9565,6 +9574,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "中文 (Chinese)": {
     "pricing.twoMonthsFree": "免费 2 个月",
     "pricing.yearlySave": "每年省 {amount}",
+    "pricing.perMonthEquivalent": "/ 月均",
     "pricing.yearlyBanner.title": "按年付费，{highlight}",
     "pricing.yearlyBanner.body": "付 10 个月，用 12 个月。计费周期随时可改。",
     "pricing.saveWord": "省",
@@ -9578,6 +9588,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "العربية (Arabic)": {
     "pricing.twoMonthsFree": "شهران مجانًا",
     "pricing.yearlySave": "وفّر {amount} سنويًا",
+    "pricing.perMonthEquivalent": "/ شهريًا بالمعادل",
     "pricing.yearlyBanner.title": "ادفع سنويًا واحصل على {highlight}",
     "pricing.yearlyBanner.body": "تدفع 10 أشهر وتستخدم 12. يمكنك تغيير دورة الدفع في أي وقت.",
     "pricing.saveWord": "وفّر",
@@ -9591,6 +9602,7 @@ const FILL_TRANSLATIONS_15: Partial<Record<StudioLanguage, Partial<Record<Public
   "हिन्दी (Hindi)": {
     "pricing.twoMonthsFree": "2 महीने मुफ़्त",
     "pricing.yearlySave": "साल में {amount} की बचत",
+    "pricing.perMonthEquivalent": "/ माह के बराबर",
     "pricing.yearlyBanner.title": "सालाना भुगतान करें, {highlight} पाएँ",
     "pricing.yearlyBanner.body": "10 महीने का भुगतान, 12 महीने का उपयोग। बिलिंग अवधि कभी भी बदलें।",
     "pricing.saveWord": "बचत",
