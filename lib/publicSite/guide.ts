@@ -505,6 +505,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Project notes" },
       { kind: "bullets", items: [
         "Notes can be linked to a project and appear under Project Notes for that order.",
+        "The order's own note appears there too — and you can edit it right in the Notes menu on web, Mac, iPhone and Android. It is the same text the order's Notes card holds, never a copy, so a change shows up in both places.",
         "Restore a project note back to your main Notes board at any time."
       ] },
       { kind: "sub", text: "Archive & Trash" },
@@ -1319,6 +1320,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Proje notları" },
       { kind: "bullets", items: [
         "Notlar bir projeye bağlanabilir ve o siparişin Project Notes bölümünde görünür.",
+        "Siparişin kendi notu da orada görünür — ve artık web, Mac, iPhone ve Android'de Notes menüsünden doğrudan düzenlenebilir. Bu, sipariş kartındaki Notes ile AYNI metindir, kopyası değil; birinde yaptığınız değişiklik diğerinde görünür.",
         "Bir proje notunu istediğiniz zaman ana Notes panonuza geri taşıyın (Restore)."
       ] },
       { kind: "sub", text: "Arşiv & Çöp" },

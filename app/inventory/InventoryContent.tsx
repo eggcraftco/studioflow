@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
   INVENTORY_CATEGORIES,
+  INVENTORY_PHOTO_LIMIT,
   INVENTORY_STATUSES,
   getInventorySummary,
   inventoryItemToInput,
@@ -15,6 +16,7 @@ import {
   type InventoryListCursor,
   saveInventoryItem,
   setInventoryItemStatus,
+  uploadInventoryPhoto,
   type InventoryItem,
   type InventoryItemInput,
   type InventorySummary,
@@ -822,6 +824,19 @@ function NewItemModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tagInput, setTagInput] = useState("");
+  // Photos picked before the item exists. Storage paths are keyed by item id,
+  // so the files wait here and go up the moment the save returns that id —
+  // the form no longer sends people back through the list to add a photo.
+  const [stagedPhotos, setStagedPhotos] = useState<File[]>([]);
+  const [stagedPreviews, setStagedPreviews] = useState<string[]>([]);
+
+  useEffect(() => {
+    const urls = stagedPhotos.map(file => URL.createObjectURL(file));
+    setStagedPreviews(urls);
+    return () => { urls.forEach(url => URL.revokeObjectURL(url)); };
+  }, [stagedPhotos]);
+
+  const photoRoom = INVENTORY_PHOTO_LIMIT - (initialItem?.photos?.length ?? 0) - stagedPhotos.length;
 
   const isUnique = draft.trackingType === "unique";
   const set = <K extends keyof InventoryItemInput>(key: K, value: InventoryItemInput[K]) =>
@@ -853,7 +868,29 @@ function NewItemModal({
     setBusy(true);
     setError("");
     try {
-      await saveInventoryItem(workspace, draft, editingId || undefined);
+      const saved = await saveInventoryItem(workspace, draft, editingId || undefined);
+      const itemId = editingId || saved?.itemId || "";
+      if (stagedPhotos.length > 0 && itemId) {
+        // The item is real now, so the photos have somewhere to live. A photo
+        // that fails to upload must not silently vanish: the item stays saved
+        // and the message says what is missing.
+        const uploaded: string[] = [];
+        try {
+          for (const file of stagedPhotos) {
+            uploaded.push(await uploadInventoryPhoto(workspace, itemId, file));
+          }
+          await saveInventoryItem(
+            workspace,
+            { ...draft, photos: [...(draft.photos ?? []), ...uploaded] },
+            itemId
+          );
+        } catch {
+          await onSaved();
+          setError("The item was saved, but the photos could not be uploaded. Add them from the item's photo button.");
+          setBusy(false);
+          return;
+        }
+      }
       await onSaved();
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : "The item could not be saved.");
@@ -1041,6 +1078,50 @@ function NewItemModal({
             {t("This belongs to a customer, not the business. It will be held and findable, but valued at zero and left out of inventory value.")}
           </span>
         </label>
+
+        <div className="inventory-photo-picker">
+          <div className="inventory-photo-picker-head">
+            <strong>{t("Photos")}</strong>
+            <span className="muted-copy">
+              {editingId
+                ? t("New photos are added when you save.")
+                : t("Pick photos now — they upload as soon as the item is created.")}
+            </span>
+          </div>
+          <div className="inventory-photo-picker-row">
+            {stagedPreviews.map((url, index) => (
+              <div className="inventory-photo-thumb" key={url}>
+                <img src={url} alt="" />
+                <button
+                  type="button"
+                  aria-label={t("Remove")}
+                  onClick={() => setStagedPhotos(current => current.filter((_, i) => i !== index))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            {photoRoom > 0 ? (
+              <label className="inventory-photo-add">
+                <span aria-hidden="true">＋</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  disabled={busy}
+                  onChange={event => {
+                    const picked = [...(event.target.files ?? [])].slice(0, photoRoom);
+                    event.target.value = "";
+                    if (picked.length > 0) setStagedPhotos(current => [...current, ...picked]);
+                  }}
+                />
+              </label>
+            ) : (
+              <span className="muted-copy">{`${t("An item carries at most")} ${INVENTORY_PHOTO_LIMIT} ${t("photos.")}`}</span>
+            )}
+          </div>
+        </div>
 
         {error ? <p className="inventory-notice">{error}</p> : null}
 
