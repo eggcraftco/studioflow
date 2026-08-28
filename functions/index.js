@@ -27796,14 +27796,20 @@ const SHOPIFY_CONNECT_URL = "https://nivadesk.app/connect/shopify";
 // ---------------------------------------------------------------------------
 
 const SHOPIFY_BILLING_PLANS = [
-  { plan: "lifetime_lite", name: "NivaDesk Starter", amount: 9, interval: "EVERY_30_DAYS" },
-  { plan: "pro_monthly", name: "NivaDesk Pro", amount: 19, interval: "EVERY_30_DAYS", recommended: true },
-  { plan: "team_monthly", name: "NivaDesk Team", amount: 49, interval: "EVERY_30_DAYS" }
+  { plan: "lifetime_lite", name: "NivaDesk Starter", amount: 12, interval: "EVERY_30_DAYS" },
+  { plan: "pro_monthly", name: "NivaDesk Pro", amount: 25, interval: "EVERY_30_DAYS", recommended: true },
+  { plan: "team_monthly", name: "NivaDesk Team", amount: 65, interval: "EVERY_30_DAYS" }
 ];
 
-// Shopify bills in the app's own currency. Ours is GBP, matching the prices the
-// website and the App Store listing show.
-const SHOPIFY_BILLING_CURRENCY = "GBP";
+// USD, because the App Store listing form only takes dollars — there is no
+// currency selector on it. Charging GBP while the listing advertises USD would
+// put the invoice and the shop page at odds, which is the same disagreement the
+// server-side catalogue exists to prevent. The website keeps its GBP prices for
+// everyone who does not come through Shopify.
+//
+// These must stay identical to the public plans declared on the listing in the
+// Partner Dashboard: Starter $12, Pro $25, Team $65.
+const SHOPIFY_BILLING_CURRENCY = "USD";
 const SHOPIFY_BILLING_TRIAL_DAYS = AUTOMATIC_TRIAL_DAYS;
 
 function shopifyBillingPlanFor(planKey) {

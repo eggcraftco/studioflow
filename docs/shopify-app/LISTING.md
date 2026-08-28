@@ -47,12 +47,33 @@ every paid order arrives as a production job, not just a line in a list.
   home-screen widgets and a ChatGPT app.
 
 **Pricing** — charged through Shopify Billing, on the merchant's Shopify invoice.
-Free tier, then Starter £9, Pro £19 and Team £49 per month, each with a 14-day free
-trial. These three plans must be declared on the listing's Pricing section in the
-Partner Dashboard, matching `SHOPIFY_BILLING_PLANS` in functions/index.js exactly.
+Declared on the listing (28 Aug 2026) and matching `SHOPIFY_BILLING_PLANS` in
+functions/index.js:
 
-The previous wording ("billed by NivaDesk, not through Shopify") is what App Review
-rejected under 1.2.1 — do not restore it.
+| Listing handle | Display name | Charge | Trial |
+|---|---|---|---|
+| `free` | Free | — | — |
+| `lifetime-lite` | Starter | $12 / month | 14 days |
+| `pro-monthly` | Pro | $25 / month | 14 days |
+| `team-monthly` | Team | $65 / month | 14 days |
+
+**USD, not GBP.** The listing's plan form takes dollars and has no currency
+selector, so the server charges USD too — an invoice in one currency and a shop
+page in another is the disagreement the server-side catalogue exists to prevent.
+The website keeps its GBP prices for everyone who does not come through Shopify.
+
+**Handles use hyphens**, not underscores: the form rewrites `pro_monthly` to
+`pro-monthly` and the handle cannot be changed after saving.
+
+Kept on "Manual pricing", NOT Shopify's newer "App Pricing" — the latter has
+Shopify manage the subscription lifecycle, which would make our own
+`appSubscriptionCreate` flow redundant. The "I have approval to charge merchants
+outside of the Shopify Billing API" box stays UNCHECKED.
+
+The old wording ("this app is free… paid plans are billed by NivaDesk, not through
+Shopify") is what 1.2.1 rejected. It was never in the listing's App details; it
+lived here and in the reviewer testing instructions, which now describe the Plans
+page and say a development store always takes a test charge.
 
 **Getting started** takes about two minutes: install the app, press Connect, sign in
 to NivaDesk (or create an account), pick a workspace — new orders start syncing
