@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -86,13 +87,23 @@ private fun InventoryField(
     value: String,
     modifier: Modifier = Modifier,
     placeholder: String = "",
+    /** The workspace currency, drawn inside the box. A money field that looks
+     *  like every other number field reads as a quantity, not as an amount. */
+    currencyPrefix: String = "",
+    /** A quiet line under the box, for a field that needs a sentence. */
+    hint: String = "",
     onChange: (String) -> Unit
 ) {
+    val money = currencyPrefix.isNotBlank()
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label, fontSize = 12.sp) },
         placeholder = if (placeholder.isBlank()) null else ({ Text(placeholder, fontSize = 12.sp) }),
+        prefix = if (!money) null else ({ Text(currencyPrefix, fontSize = 13.sp) }),
+        supportingText = if (hint.isBlank()) null else ({ Text(hint, fontSize = 10.sp, color = Color.Gray) }),
+        keyboardOptions = if (money) KeyboardOptions(keyboardType = KeyboardType.Decimal)
+            else KeyboardOptions.Default,
         singleLine = true,
         modifier = modifier.fillMaxWidth()
     )
@@ -132,9 +143,9 @@ private fun TrackingTypeChips(selected: StudioTrackingType, t: (String) -> Strin
  * Create AND edit form. Pass [existing] to prefill (with [itemId] blank this is
  * a duplicate: the server assigns a fresh INV number); pass [itemId] to save
  * over an existing item. When editing, the payload deliberately carries EVERY
- * field — including ones this form has no input for, like description, photos
- * and the estimated current value — because the server rebuilds the whole
- * document from the input and blanks whatever is not sent.
+ * field — including ones this form has no input for, like description and
+ * photos — because the server rebuilds the whole document from the input and
+ * blanks whatever is not sent.
  */
 @Composable
 fun NewInventoryItemDialog(
@@ -169,6 +180,7 @@ fun NewInventoryItemDialog(
     var supplierName by remember { mutableStateOf(existing?.supplierName.orEmpty()) }
     var purchaseDate by remember { mutableStateOf(existing?.purchaseDate.orEmpty()) }
     var purchasePrice by remember { mutableStateOf(numberText(existing?.purchasePrice ?: 0.0)) }
+    var currentValueEst by remember { mutableStateOf(numberText(existing?.currentValueEst ?: 0.0)) }
     var extraLabel by remember { mutableStateOf("") }
     var extraAmount by remember { mutableStateOf("") }
     val extras = remember { existing?.additionalCosts.orEmpty().toMutableList().toMutableStateList() }
@@ -275,7 +287,39 @@ fun NewInventoryItemDialog(
                 Spacer(Modifier.height(10.dp))
                 Text(t("Cost"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
-                InventoryField(t("Purchase price"), purchasePrice) { purchasePrice = it }
+                InventoryField(t("Purchase price"), purchasePrice, currencyPrefix = symbol) { purchasePrice = it }
+                Spacer(Modifier.height(8.dp))
+                // An estimate, not the valuation — the two get confused, so the
+                // field says what it is for and the line below says what the
+                // item will actually carry.
+                InventoryField(
+                    t("Current value (est.)"),
+                    currentValueEst,
+                    currencyPrefix = symbol,
+                    hint = t("An estimate for insurance or resale. Inventory value stays at what you paid — purchase price plus the costs below.")
+                ) { currentValueEst = it }
+
+                Spacer(Modifier.height(8.dp))
+                // The number the item will actually carry in the list and the
+                // KPIs, worked out here so nobody has to guess which field
+                // moves it.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (trackingType == StudioTrackingType.Unique) t("This item's inventory value")
+                        else t("Inventory value per unit"),
+                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        inventoryMoney(symbol, if (isCustomerOwned) 0.0 else internalTotal),
+                        fontSize = 13.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+                if (isCustomerOwned) {
+                    Text(
+                        t("Customer property is held, not owned — it stays at zero."),
+                        fontSize = 10.sp, color = Color.Gray
+                    )
+                }
 
                 extras.forEachIndexed { index, extra ->
                     Spacer(Modifier.height(6.dp))
@@ -296,7 +340,9 @@ fun NewInventoryItemDialog(
                     OutlinedTextField(
                         value = extraAmount, onValueChange = { extraAmount = it },
                         label = { Text("0.00", fontSize = 11.sp) },
-                        singleLine = true, modifier = Modifier.width(96.dp)
+                        prefix = { Text(symbol, fontSize = 12.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true, modifier = Modifier.width(112.dp)
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -451,12 +497,12 @@ fun NewInventoryItemDialog(
                             // Always sent (key-present semantics): an empty list
                             // is a deliberate clearing, a missing key is not.
                             "tags" to tags.toList(),
+                            "currentValueEst" to inventoryParse(currentValueEst),
                             // Fields the form has no input for, carried through
                             // untouched — the server blanks whatever an edit
                             // does not send.
                             "description" to existing?.description.orEmpty(),
-                            "photos" to existing?.photos.orEmpty(),
-                            "currentValueEst" to (existing?.currentValueEst ?: 0.0)
+                            "photos" to existing?.photos.orEmpty()
                         ),
                         itemId,
                         stagedPhotos.toList()
