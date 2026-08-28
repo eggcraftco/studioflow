@@ -712,7 +712,7 @@ function TrialBanner({
       </button>
       <button
         type="button"
-        aria-label="Collapse"
+        aria-label={t("Collapse")}
         onClick={() => setCollapsed(true)}
         style={{
           border: 0, background: "rgba(120, 120, 140, 0.12)", color: "inherit",
@@ -924,7 +924,7 @@ function DemoPlanBanner({
       </button>
       <button
         type="button"
-        aria-label="Collapse"
+        aria-label={t("Collapse")}
         onClick={() => setCollapsed(true)}
         style={{
           border: 0,
@@ -1891,7 +1891,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               <Link
                 href="/orders"
                 className="toolbar-brand native-brand"
-                aria-label="Orders"
+                aria-label={t("Orders")}
               >
                 <span
                   className="native-brand-logo-frame"
@@ -1925,7 +1925,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                 </div>
               ) : (
-                <div className="toolbar-role-strip" aria-label="Workspace role">
+                <div className="toolbar-role-strip" aria-label={t("Workspace role")}>
                   <span>{workspace?.roleLabel?.trim() || t("Workflow Only")}</span>
                 </div>
               )}
@@ -1937,7 +1937,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   ? "toolbar-nav native-toolbar-nav is-open"
                   : "toolbar-nav native-toolbar-nav"
               }
-              aria-label="Main navigation"
+              aria-label={t("Main navigation")}
             >
               {NAV_ITEMS.map((item) => {
                 if (
@@ -2112,8 +2112,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               <button
                 className="toolbar-icon-button notif-bell-btn"
                 type="button"
-                title="Notifications"
-                aria-label="Notifications"
+                title={t("Notifications")}
+                aria-label={t("Notifications")}
                 onClick={() => setNotifDrawerOpen(true)}
               >
                 <ToolbarIcon name="bell" />

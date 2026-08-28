@@ -965,7 +965,7 @@ function NewItemModal({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <div className="modal inventory-modal" role="dialog" aria-modal="true" aria-label="Add inventory item">
+      <div className="modal inventory-modal" role="dialog" aria-modal="true" aria-label={t("Add inventory item")}>
         <div className="inventory-modal-head">
           <h2>{editingId ? t("Edit Item") : t("Add Inventory Item")}</h2>
           <button type="button" className="inventory-modal-close" onClick={onClose} aria-label={t("Close")}>×</button>

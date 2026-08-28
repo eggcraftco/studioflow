@@ -97,13 +97,15 @@ function FilesPreviewModal({
   activeFile,
   onClose,
   onSelect,
-  brandedHost
+  brandedHost,
+  t
 }: {
   files: ClientFileListItem[];
   activeFile: ClientFileListItem;
   onClose: () => void;
   onSelect: (fileId: string) => void;
   brandedHost?: string;
+  t: (text: string) => string;
 }) {
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
@@ -125,7 +127,7 @@ function FilesPreviewModal({
         className="client-file-preview-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Client file preview"
+        aria-label={t("Client file preview")}
         onMouseDown={event => event.stopPropagation()}
       >
         <header className="client-file-preview-header">
@@ -136,7 +138,7 @@ function FilesPreviewModal({
               {uploaderLabel(activeFile) ? ` · Added by ${uploaderLabel(activeFile)}` : ""}
             </p>
           </div>
-          <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label="Close file preview">
+          <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label={t("Close file preview")}>
             ×
           </button>
         </header>
@@ -524,7 +526,7 @@ export default function FilesPage() {
 
       {error ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <CardTitle icon="lock" eyebrow="File error" title="Could not load client files" />
+          <CardTitle icon="lock" eyebrow={t("File error")} title={t("Could not load client files")} />
           <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
         </section>
       ) : null}
@@ -556,7 +558,7 @@ export default function FilesPage() {
 
       {workspace && !canUseClientFiles ? (
         <section className="card locked-panel" style={{ padding: 22, marginBottom: 18 }}>
-          <CardTitle icon="lock" eyebrow="Locked" title="Open and download require Pro or Team" />
+          <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Open and download require Pro or Team")} />
           <p style={{ color: "var(--muted)", margin: 0 }}>
             File metadata is listed for reference, but full Client Files cloud access stays locked on Free and NivaDesk Lite. Data export remains available separately.
           </p>
@@ -565,7 +567,7 @@ export default function FilesPage() {
 
       {workspace && canUseClientFiles ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <CardTitle icon="files" eyebrow="Upload" title="Add a client file" />
+          <CardTitle icon="files" eyebrow={t("Upload")} title={t("Add a client file")} />
 
           {canUploadClientFiles ? (
             <>
@@ -651,7 +653,7 @@ export default function FilesPage() {
       <section className="card" style={{ padding: 22 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
           <div>
-            <CardTitle icon="files" eyebrow={`${files.length} files`} title="Workspace client files" />
+            <CardTitle icon="files" eyebrow={`${files.length} files`} title={t("Workspace client files")} />
             <p style={{ color: "var(--muted)", margin: 0 }}>
               Total listed size: {clientFileSizeLabel(totalSize)}
             </p>
@@ -659,7 +661,7 @@ export default function FilesPage() {
               <input
                 className="input"
                 style={{ maxWidth: 260 }}
-                placeholder="Search files, customer, design…"
+                placeholder={t("Search files, customer, design…")}
                 value={fileSearch}
                 onChange={event => setFileSearch(event.target.value)}
               />
@@ -807,6 +809,7 @@ export default function FilesPage() {
 
       {activePreview ? (
         <FilesPreviewModal
+          t={t}
           brandedHost={workspace?.clientPortalHost}
           files={previewFiles}
           activeFile={activePreview}
