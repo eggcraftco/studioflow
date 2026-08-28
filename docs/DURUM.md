@@ -8,6 +8,26 @@ Son güncelleme: 28 Ağustos 2026.
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
 
+### Ana sayfa hero hizası — 28 Ağu, CANLI (Round 66)
+Şikâyet: "orantısız, kayık, çizgilerin gösterdiği yerler tam görünmüyor". Ölçüm
+üçünü de doğruladı; dört kart ile ekran görüntüsü viewport'a AYRI AYRI
+sabitlenmişti ve birbirlerinden kaymışlardı.
+- Şerit 636px / görsel 620px (16px taşma) → ikisi de 620, sol+sağ kenar birebir.
+- Kartlarla görsel arası 78px boşluk ama kesikli çizgi 22px → boşluk = çizgi
+  (tek değişken `--hero-connector`), artık yapı gereği ulaşıyor.
+- Görsel blok metinden 126px yukarıdaydı → 28px.
+- `rotateY(-3deg)` kaldırıldı ("kayık" olan buydu).
+- Kartlar doğal genişlikte kalıp boşluğu paylaşıyor; hiçbir etiket sarmıyor.
+- Şerit yalnız ≥1320px'de görünüyor (altında görsel ~571px kartı taşıyamıyor;
+  eskiden şerit görselden 84px taşıp metnin üstüne giriyordu).
+- **Yan bulgu:** `@media (max-width: 1180px)` yığılma kuralı, dosyada SONRA gelen
+  iki koşulsuz kural tarafından eziliyordu (medya sorgusu özgüllük eklemez).
+  Tablet/küçük dizüstünde hero 760px yükseklikte kalıyordu: başlık üstünde
+  ~220px ölü boşluk, ekran görüntüsü katlamanın altında. 1100px'de başlık
+  y=297 → y=171. Kural, ezenlerden sonra tekrar yazıldı.
+- 1920/1400/1360/1320/1200/1100/768/700/375'te ölçüldü: hizalama tam, yatay
+  taşma yok.
+
 ### Production menüsü (yeni özellik) — 28 Ağu, CANLI (Round 65)
 Siparişler "ne istendi", Takvim "ne zaman"; eksik olan katman "hangi iş şu anda
 nerede" idi. Yeni üst menü + Kanban.
