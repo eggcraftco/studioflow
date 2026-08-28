@@ -26,14 +26,23 @@ function lift(name) {
   const next = rest.search(/\n(?:function |const |async function |exports\.)/);
   return server.slice(start, start + 1 + next);
 }
+function liftConst(name) {
+  const start = server.indexOf(`const ${name} =`);
+  assert(start > 0, `${name} is in index.js`);
+  const rest = server.slice(start + 1);
+  const next = rest.search(/\n(?:function |const |async function |exports\.)/);
+  return server.slice(start, start + 1 + next);
+}
+// The constant it closes over has to come along, or the lift throws at the
+// first paid provider it checks.
 const workspaceBilledOutsideShopify = new Function(
-  `${lift("workspaceBilledOutsideShopify")}\nreturn workspaceBilledOutsideShopify;`
+  `${liftConst("SHOPIFY_PAYING_PROVIDERS")}\n${lift("workspaceBilledOutsideShopify")}\nreturn workspaceBilledOutsideShopify;`
 )();
 
 // 1. A workspace already paying by Stripe must never be sold a second time.
 {
   const stripeCustomer = {
-    billingProvider: "stripe",
+    billingPlanSource: "stripe",
     billingStatus: "active",
     billingSubscriptionId: "sub_123"
   };
@@ -46,7 +55,45 @@ const workspaceBilledOutsideShopify = new Function(
     workspaceBilledOutsideShopify({ ...stripeCustomer, billingStatus: "past_due" }),
     "and one that is late — it is still their subscription"
   );
+  for (const provider of ["apple", "google"]) {
+    assert(
+      workspaceBilledOutsideShopify({
+        billingPlanSource: "entitlement_resolver",
+        billingEffectiveProvider: provider,
+        billingStatus: "active"
+      }),
+      `an App Store / Play subscription (${provider}) counts too`
+    );
+  }
   pass("an existing subscriber cannot be charged twice");
+}
+
+// 1b. But a subscription id alone is NOT proof of payment. The App Review
+// workspace carries one left over from a Stripe test while its plan is a
+// complimentary grant — under the old rule the app refused to sell to it, so
+// the reviewer could never reach the Billing API and would reject us again for
+// the very thing we had just built.
+{
+  const reviewWorkspace = {
+    companyName: "My Studio",
+    billingPlan: "team_monthly",
+    billingStatus: "active",
+    billingPlanSource: "comp_review",
+    billingSubscriptionId: "sub_1Tcu1WD3VBItFZ5TwF5iJvqD"
+  };
+  assert(
+    !workspaceBilledOutsideShopify(reviewWorkspace),
+    "a complimentary grant with a stale subscription id is not a paying customer"
+  );
+  assert(
+    !workspaceBilledOutsideShopify({
+      billingProvider: "nivadesk_trial",
+      billingStatus: "trialing",
+      billingPlanSource: "signup_free"
+    }),
+    "and neither is the automatic trial — a free fortnight cannot be double charged"
+  );
+  pass("comp grants and trials stay buyable, so review can reach the Billing API");
 }
 
 // 2. But a workspace Shopify already bills is not "elsewhere" — otherwise it
@@ -55,6 +102,7 @@ const workspaceBilledOutsideShopify = new Function(
   assert(
     !workspaceBilledOutsideShopify({
       billingProvider: "shopify",
+      billingPlanSource: "shopify",
       billingStatus: "active",
       billingSubscriptionId: "gid://shopify/AppSubscription/1"
     }),
@@ -133,6 +181,28 @@ const workspaceBilledOutsideShopify = new Function(
     "a failed lookup charges for real — silently not billing a paying merchant is worse"
   );
   pass("test charges follow the shop, so a reviewer is never blocked");
+}
+
+// 8. The webhook has to stand on its own. The first live one died on
+// "body is not defined" (the handler names it `payload`), and it identified the
+// plan from a field only a completed return trip writes — so a cancellation
+// arriving before any return would have found nothing.
+{
+  const start = server.indexOf('topic === "app_subscriptions/update"');
+  assert(start > 0, "the topic is handled");
+  const handler = server.slice(start, start + 1400);
+  assert(!/\bbody\?\./.test(handler), "it reads `payload`, the name the handler actually uses");
+  assert(
+    /shopifyBillingPlanByName\(subscription\.name\)/.test(handler),
+    "and identifies the plan from the subscription's own name"
+  );
+  const byName = new Function(
+    `${liftConst("SHOPIFY_BILLING_PLANS")}\n${lift("shopifyBillingPlanByName")}\nreturn shopifyBillingPlanByName;`
+  )();
+  assert.strictEqual(byName("NivaDesk Pro")?.plan, "pro_monthly", "Pro maps back");
+  assert.strictEqual(byName("nivadesk team")?.plan, "team_monthly", "case does not matter");
+  assert.strictEqual(byName("Something Else"), null, "an unknown name maps to nothing");
+  pass("the webhook can identify the plan without a prior return trip");
 }
 
 console.log("\n✅ SHOPIFY BILLING GEÇTİ");

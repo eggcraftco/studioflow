@@ -27816,6 +27816,14 @@ function shopifyBillingPlanFor(planKey) {
   return SHOPIFY_BILLING_PLANS.find((entry) => entry.plan === String(planKey || "")) || null;
 }
 
+/** The reverse lookup: Shopify hands back the subscription's display name, not
+ *  our plan key, so app_subscriptions/update can identify the plan on its own. */
+function shopifyBillingPlanByName(name) {
+  const clean = String(name || "").trim().toLowerCase();
+  if (!clean) return null;
+  return SHOPIFY_BILLING_PLANS.find((entry) => entry.name.toLowerCase() === clean) || null;
+}
+
 /**
  * Is this workspace already paying us somewhere else?
  *
@@ -27824,12 +27832,30 @@ function shopifyBillingPlanFor(planKey) {
  * workspace — it says where the billing lives and links there instead. No new
  * off-platform charge can be created, which is what the policy is about.
  */
+const SHOPIFY_PAYING_PROVIDERS = new Set(["stripe", "apple", "google", "play"]);
+
 function workspaceBilledOutsideShopify(companyData = {}) {
-  const provider = String(companyData.billingProvider || "").toLowerCase();
-  if (provider === "shopify") return false;
+  if (String(companyData.billingProvider || "").toLowerCase() === "shopify") return false;
+
   const status = String(companyData.billingStatus || "").toLowerCase();
-  const paidStatus = status === "active" || status === "trialing" || status === "past_due";
-  return paidStatus && Boolean(String(companyData.billingSubscriptionId || "").trim());
+  if (status !== "active" && status !== "trialing" && status !== "past_due") return false;
+
+  // A subscription id alone is not proof of payment. The App Review workspace
+  // carries one left over from a Stripe test while its plan is a complimentary
+  // grant (billingPlanSource "comp_review") — under the old rule the app
+  // refused to sell to it, which would have left the reviewer unable to reach
+  // the Billing API at all. Ask WHO grants the plan, not whether some id
+  // survived.
+  const source = String(companyData.billingPlanSource || "").toLowerCase();
+  if (source === "stripe") return true;
+  if (source === "entitlement_resolver") {
+    return SHOPIFY_PAYING_PROVIDERS.has(
+      String(companyData.billingEffectiveProvider || "").toLowerCase()
+    );
+  }
+  // Complimentary grants, the automatic trial and Free are not billed anywhere,
+  // so Shopify is free to bill them.
+  return false;
 }
 
 /** What the embedded app should show: the catalogue, plus where billing lives. */
@@ -28977,12 +29003,16 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
       // Cancelled, expired, frozen or declined — this has to land whether or not
       // anyone has the embedded app open, which is the whole point of the
       // webhook. Same idempotent writer the approval return uses.
-      const subscription = body?.app_subscription || {};
+      // `payload`, not `body` — the surrounding handler names it that, and the
+      // first live subscription webhook died on "body is not defined".
+      const subscription = payload?.app_subscription || {};
       const status = String(subscription.status || "").toUpperCase();
       const gid = String(subscription.admin_graphql_api_id || "");
-      // Which plan it was is not on this payload, so it is read back from the
-      // store's own record of what the merchant bought.
-      const plan = String(store.billingPlanKey || "");
+      // Read the plan from the subscription's own NAME first. Falling back to
+      // the store's record only works once a return trip has written it, and
+      // the whole point of the webhook is to work when no one is looking.
+      const plan = shopifyBillingPlanByName(subscription.name)?.plan
+        || String(store.billingPlanKey || "");
       await applyShopifySubscription(shop, store.companyId, {
         gid,
         status,

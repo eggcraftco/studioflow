@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { redirect, useFetcher, useLoaderData, useRouteError } from "react-router";
+import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { nivadeskBridge } from "../nivadesk.server";
@@ -34,6 +34,9 @@ type BillingState = {
   subscriptionStatus: string;
   manageUrl: string;
 };
+
+// The handle from shopify.app.toml. Used to build the in-admin return URL.
+const APP_HANDLE = process.env.SHOPIFY_APP_HANDLE || "nivadesk-order-management";
 
 const SUBSCRIPTION_CREATE = `#graphql
   mutation NivaDeskSubscribe($name: String!, $returnUrl: URL!, $trialDays: Int, $test: Boolean, $lineItems: [AppSubscriptionLineItemInput!]!) {
@@ -92,8 +95,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     } catch (error) {
       console.error("plan return failed", error);
     }
-    // Drop charge_id from the address bar so a refresh does not re-run this.
-    throw redirect("/app/plan");
+    // No redirect afterwards. Throwing one here rendered React Router's
+    // "Unhandled Thrown Response!" page, and a redirect is not needed anyway:
+    // applying the same subscription twice writes the same entitlement, so a
+    // refresh with charge_id still in the address bar is harmless.
   }
 
   const state = await nivadeskBridge<{ billing: BillingState }>("billingState", {
@@ -150,7 +155,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { error: "Could not price that plan. Please try again." };
   }
 
-  const returnUrl = `${process.env.SHOPIFY_APP_URL}/app/plan?plan=${encodeURIComponent(quote.plan)}`;
+  // Back INSIDE the admin, not to the bare Cloud Run origin: approving on
+  // Shopify's screen and landing on a naked app server URL drops the merchant
+  // out of the iframe, out of the nav, and out of session context.
+  const storeName = session.shop.replace(/\.myshopify\.com$/, "");
+  const returnUrl =
+    `https://admin.shopify.com/store/${storeName}/apps/${APP_HANDLE}/app/plan` +
+    `?plan=${encodeURIComponent(quote.plan)}`;
   const response = await admin.graphql(SUBSCRIPTION_CREATE, {
     variables: {
       name: quote.name,
@@ -240,7 +251,8 @@ export default function PlanPage() {
       {billing.plans.map((plan) => (
         <s-section key={plan.plan} heading={plan.name}>
           <s-paragraph>
-            {plan.currency === "GBP" ? "£" : ""}{plan.amount} per month
+            {plan.currency === "GBP" ? "£" : plan.currency === "USD" ? "$" : ""}
+            {plan.amount} per month
             {plan.recommended ? " — most studios start here" : ""}
           </s-paragraph>
           {billing.currentPlan === plan.plan ? (
