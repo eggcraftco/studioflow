@@ -973,6 +973,10 @@ class FirebaseManager: ObservableObject {
     @Published var isCurrentUserWorkspaceSupportManager: Bool = false
     @Published var isLoadingWorkspaceSupportManagers: Bool = false
     @Published var isSavingWorkspaceSupportManagers: Bool = false
+    /// The connected Shopify shop domain, from the workspace document. Lets the
+    /// customer screen open a store-fed record where it actually lives, the same
+    /// way the web app does.
+    @Published var shopifyLinkedShop: String = ""
     @Published var isAssigningWorkspaceTicket: Bool = false
     @Published var messageThreads: [StudioMessageThread] = []
     @Published var messageTeamMembers: [StudioMessageTeamMember] = []
@@ -995,6 +999,7 @@ class FirebaseManager: ObservableObject {
     private var messageThreadsListenerRegistration: ListenerRegistration?
     private var personalInterfaceListenerRegistration: ListenerRegistration?
     private var companySettingsListenerRegistration: ListenerRegistration?
+    private var companyDocListenerRegistration: ListenerRegistration?
     private var personalInterfaceListenerKey: String = ""
     private var messageThreadsListenerCompanyId: String = ""
     private var messageItemsListenerRegistration: ListenerRegistration?
@@ -1248,6 +1253,7 @@ class FirebaseManager: ObservableObject {
         startMessageThreadsRealtime(companyId: cleanCompanyId)
         startPersonalInterfaceRealtime(companyId: cleanCompanyId)
         startCompanySettingsSync(companyId: cleanCompanyId)
+        startCompanyDocSync(companyId: cleanCompanyId)
 
         fetchSiparisler()
         fetchMusteriler()
@@ -1289,6 +1295,34 @@ class FirebaseManager: ObservableObject {
     /// always reflect the live workspace value. These used to refresh only while the
     /// Settings screen was open, so Mac/iPhone could show a stale value (e.g.
     /// Corporation Tax) that web/Android — reading the live setting — did not.
+    /// The workspace document itself — not companySettings, which is a different
+    /// doc. Only the fields the app actually shows are read; today that is the
+    /// connected Shopify shop, so a Shopify-fed customer can be opened in the
+    /// store admin from Mac and iPhone and not only from the web.
+    private func startCompanyDocSync(companyId: String) {
+        companyDocListenerRegistration?.remove()
+        let cleanId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanId.isEmpty else {
+            DispatchQueue.main.async { self.shopifyLinkedShop = "" }
+            return
+        }
+        companyDocListenerRegistration = Firestore.firestore()
+            .collection("companies")
+            .document(cleanId)
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self else { return }
+                if let error = error {
+                    print("Company document sync listener error: \(error)")
+                    return
+                }
+                let shop = (snapshot?.data()?["shopifyLinkedShop"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                DispatchQueue.main.async {
+                    if self.shopifyLinkedShop != shop { self.shopifyLinkedShop = shop }
+                }
+            }
+    }
+
     private func startCompanySettingsSync(companyId: String) {
         companySettingsListenerRegistration?.remove()
         let cleanId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3535,6 +3569,9 @@ class FirebaseManager: ObservableObject {
         messageThreadsListenerRegistration?.remove()
         personalInterfaceListenerRegistration?.remove()
         companySettingsListenerRegistration?.remove()
+        companyDocListenerRegistration?.remove()
+        companyDocListenerRegistration = nil
+        shopifyLinkedShop = ""
         listenerRegistration = nil
         musteriListenerRegistration = nil
         supportTicketsListenerRegistration = nil

@@ -1165,6 +1165,23 @@ struct MusteriDetayView: View {
         return text
     }
 
+    /// admin.shopify.com/store/<handle>/customers/<id>, built only when both
+    /// halves are the real thing: the webhook stores Shopify's numeric customer
+    /// id, and anything that is not all digits is not it. A guessed link would
+    /// be worse than no link, so an odd value produces none.
+    private var shopifyAdminCustomerURL: URL? {
+        guard (musteri.source ?? "").lowercased() == "shopify" else { return nil }
+        let id = (musteri.externalCustomerId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, id.allSatisfy({ $0.isNumber }) else { return nil }
+        var handle = firebaseManager.shopifyLinkedShop
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if handle.hasSuffix(".myshopify.com") { handle = String(handle.dropLast(".myshopify.com".count)) }
+        guard !handle.isEmpty,
+              handle.allSatisfy({ $0.isLowercase || $0.isNumber || $0 == "-" }) else { return nil }
+        return URL(string: "https://admin.shopify.com/store/\(handle)/customers/\(id)")
+    }
+
     @ViewBuilder
     private var integrationPanelCard: some View {
         if let storeLabel = customerSourceLabel {
@@ -1183,6 +1200,12 @@ struct MusteriDetayView: View {
                 let externalId = (musteri.externalCustomerId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !externalId.isEmpty {
                     integrationInfoRow(label: t("Store customer ID", lang: seciliDil), value: externalId)
+                }
+                if let storeURL = shopifyAdminCustomerURL {
+                    Link(destination: storeURL) {
+                        Text("\(t("Open in Shopify", lang: seciliDil)) ↗")
+                            .font(.system(size: 12.5, weight: .bold))
+                    }
                 }
                 integrationInfoRow(
                     label: t("Last synced", lang: seciliDil),

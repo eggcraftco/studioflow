@@ -295,6 +295,7 @@ class StudioFlowRepository(
         return StudioWorkspace(
             id = companyId,
             name = stringValue(data["name"], stringValue(data["companyName"], "My Studio")),
+            shopifyLinkedShop = stringValue(data["shopifyLinkedShop"], ""),
             ownerUid = ownerUid,
             role = role,
             roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),

@@ -154,6 +154,9 @@ data class StudioWorkspace(
     val storageAddonMB: Long = 0,
     val teamMemberLimitEffective: Int = 0,
     val quickReplyMenuEnabled: Boolean = true,
+    /** Connected Shopify shop domain, so a store-fed customer can be opened where
+     *  it lives — the same link the web and Mac customer screens offer. */
+    val shopifyLinkedShop: String = "",
     val memberAccess: WorkspaceMemberAccess,
     val accountDisplayName: String = "",
     val accountPhotoUrl: String = "",

@@ -219,6 +219,7 @@ fun CustomersScreen(
                             customer = paneCustomer,
                             orders = state.orders,
                             currencySymbol = state.workspaceSettings.selectedCurrency,
+                            shopifyShop = state.workspace?.shopifyLinkedShop.orEmpty(),
                             onBack = { selectedCustomerId = null },
                             showBack = false,
                             onUpdateCustomer = onUpdateCustomer,
@@ -246,6 +247,7 @@ fun CustomersScreen(
                 customer = selected,
                 orders = state.orders,
                 currencySymbol = state.workspaceSettings.selectedCurrency,
+                shopifyShop = state.workspace?.shopifyLinkedShop.orEmpty(),
                 onBack = { selectedCustomerId = null },
                 onUpdateCustomer = onUpdateCustomer,
                 onUpdateCustomerPrefs = onUpdateCustomerPrefs,
@@ -675,6 +677,8 @@ private fun CustomerDetail(
     customer: StudioCustomer,
     orders: List<StudioOrder>,
     currencySymbol: String,
+    /** Connected Shopify shop domain; empty when the workspace has no store. */
+    shopifyShop: String = "",
     onBack: () -> Unit,
     showBack: Boolean = true,
     onUpdateCustomer: (StudioCustomer) -> Unit,
@@ -916,6 +920,19 @@ private fun CustomerDetail(
                 infoLine(t("Connected store"), sourceLabel)
                 if (customer.externalCustomerId.isNotBlank()) {
                     infoLine(t("Store customer ID"), customer.externalCustomerId)
+                }
+                // The store id is what settles a duplicate or a sync argument;
+                // reading it off the screen to search for it by hand is the slow
+                // way. Built only when both halves are real — a guessed link
+                // would be worse than none.
+                shopifyAdminCustomerUrl(customer, shopifyShop)?.let { storeUrl ->
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(storeUrl)))
+                        }
+                    }) {
+                        Text("${t("Open in Shopify")} ↗", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
                 infoLine(t("Last synced"), customer.integrationSyncedAt?.let { dateTimeFormatter.format(it) } ?: "—")
                 if (customer.integrationLastPayload.isNotBlank()) {
@@ -1750,3 +1767,18 @@ private fun CustomerField(label: String, value: String, onChange: (String) -> Un
     }
 }
 
+
+/**
+ * admin.shopify.com/store/<handle>/customers/<id>. The webhook stores Shopify's
+ * own numeric customer id, which is exactly what this path wants; anything that
+ * is not all digits is not that id, so no link is offered rather than a broken
+ * one. Same rule as the web and Mac customer screens.
+ */
+private fun shopifyAdminCustomerUrl(customer: StudioCustomer, shopifyShop: String): String? {
+    if (!customer.source.equals("shopify", ignoreCase = true)) return null
+    val id = customer.externalCustomerId.trim()
+    if (id.isEmpty() || !id.all { it.isDigit() }) return null
+    val handle = shopifyShop.trim().lowercase().removeSuffix(".myshopify.com")
+    if (handle.isEmpty() || !handle.all { it.isLetterOrDigit() || it == '-' }) return null
+    return "https://admin.shopify.com/store/$handle/customers/$id"
+}
