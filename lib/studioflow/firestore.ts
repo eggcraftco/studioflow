@@ -37,6 +37,14 @@ export type WorkspaceContext = {
   billingPlanName: string;
   billingStatus: string;
   billingProviderRawStatus: string;
+  /** Who charges this workspace. "shopify" means Shopify's Billing API owns it,
+   *  so no Stripe control may be offered for it — their rule 1.2.1, and a
+   *  second charge would be a real double bill. */
+  billingProvider: string;
+  /** Set when this workspace was reached through a Shopify App Store install.
+   *  Purchases for it belong to Shopify Billing from that moment, not only once
+   *  a Shopify subscription exists. */
+  shopifyLinkedShop: string;
   billingCustomerId: string;
   billingSubscriptionId: string;
   billingEffectiveProvider: string;
@@ -945,6 +953,8 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingInterval: stringValue(companyData.billingInterval, ""),
     billingSubscriptionItemKey: stringValue(companyData.billingSubscriptionItemKey, ""),
     billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
+    billingProvider: stringValue(companyData.billingProvider, ""),
+    shopifyLinkedShop: stringValue(companyData.shopifyLinkedShop, ""),
     billingCustomerId: stringValue(companyData.billingCustomerId, stringValue(companyData.billingStripeCustomerId, "")),
     billingSubscriptionId: stringValue(companyData.billingSubscriptionId, ""),
     billingEffectiveProvider: stringValue(companyData.billingEffectiveProvider, stringValue(companyData.billingPlanSource, "")),
