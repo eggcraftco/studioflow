@@ -55,6 +55,18 @@ const dict = readLiteral(
   "GUIDE_T"
 );
 
+// A chapter's sub-headings are what it is ABOUT — "Blocked means blocked, with
+// a reason" is a heading, not prose. Kept as their own field so the retrieval
+// can weight them above body text; buried in `text` they scored the same as an
+// incidental mention and whole chapters lost to bigger ones.
+function nodeHeadings(node) {
+  return (node.blocks || [])
+    .filter((block) => block.kind === "sub")
+    .map((block) => String(block.text || "").trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function nodeText(node) {
   const parts = [];
   for (const block of node.blocks || []) {
@@ -75,6 +87,7 @@ function walk(nodes, trail) {
         id: String(node.id || ""),
         title,
         path: pathTitles.join(" › "),
+        headings: nodeHeadings(node),
         text
       });
     }

@@ -45,9 +45,18 @@ Kategoriler 10 sabit kelimeydi; kuyumcu yüzüğü "Watches" altına koymak zoru
 - Rehber: guide.ts'e EN+TR "Production" düğümü + Envanter altına "Categories"
   bölümü eklendi, korpus yeniden üretildi (45 bölüm).
 - Çeviri: 96 yeni dize × 12 dil, web + Android (TR_15) + Apple (chunk 10).
-- **BEKLİYOR:** `firebase login --reauth` gerekiyor — rehber/asistan fonksiyonları
-  (askAppAssistant, getUserGuide, getAppAssistantAvailability) deploy edilemedi.
-  Diğer 8 fonksiyon (production + kategoriler) oturum dolmadan önce CANLI oldu.
+- Rehber/asistan 4 fonksiyonu da CANLI (kullanıcı reauth ettikten sonra).
+- **Sonda bir gerileme buldu ve düzeltildi:** "hangi siparişler bloke?" sorusu
+  Production'a değil Orders'ın alt kartlarına gidiyordu. Sebep: bölüm ALT
+  BAŞLIKLARI gövde metnine gömülüydü, aramada tesadüfi bir kelime kadar ağırlık
+  taşıyordu; Orders'ın 19 bölümü her "order" geçen soruda ilk 4 yuvayı
+  dolduruyordu. `buildGuideCorpus.js` artık `headings` alanı üretiyor ve scorer
+  onu başlık kadar (+2) ağırlıklandırıyor. Önce denenen "bölüm başına en çok 2"
+  kapağı geri alındı — dosya paylaşımı sorusundan Client Files kartını
+  düşürüyordu; başlık ağırlığı tek başına yetiyor.
+  Regresyon: `test/qa/guide-retrieval.test.js`.
+- Bilinen ESKİ eksik (bu işin sebebi değil, ayrı iş olarak işaretlendi): "how do
+  I record a payment?" Orders › Financial card'a ulaşmıyor.
 
 ### Banka bağlantısı her sabah kopuyordu — 28 Ağu, CANLI
 Şikâyet: "her gün bağlantı yenilemek zorunda kalıyorum". Normal değildi.

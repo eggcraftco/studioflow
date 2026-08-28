@@ -3688,12 +3688,18 @@ function appAssistantRelevantSections(question, limit = 4) {
   const corpus = appAssistantCorpus();
   const tokens = appAssistantTokens(question);
   const scored = corpus.map((section) => {
-    const haystack = `${section.path} ${section.title} ${section.text}`.toLowerCase();
+    const headings = String(section.headings || "");
+    const haystack = `${section.path} ${section.title} ${headings} ${section.text}`.toLowerCase();
     let score = 0;
     for (const token of new Set(tokens)) {
       if (!haystack.includes(token)) continue;
       score += 1;
       if (section.title.toLowerCase().includes(token)) score += 2;
+      // A sub-heading is what a chapter is ABOUT, so it counts for nearly as
+      // much as the title — without it "which orders are blocked?" ranked the
+      // Orders cards above the Production board, which is the chapter that
+      // answers it.
+      if (headings.toLowerCase().includes(token)) score += 2;
       if (section.path.toLowerCase().includes(token)) score += 1;
     }
     return { section, score };
