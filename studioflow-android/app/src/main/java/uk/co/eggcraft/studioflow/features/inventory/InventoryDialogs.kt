@@ -5,6 +5,11 @@ package uk.co.eggcraft.studioflow.features.inventory
 // the answer: a unique object carries identity (serial, condition, year) and a
 // counted material carries an amount and a reorder point.
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,10 +24,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -37,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,11 +53,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
 import uk.co.eggcraft.studioflow.data.model.StudioBankTransaction
@@ -63,6 +75,10 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 
 internal fun inventoryParse(text: String): Double =
     text.replace(',', '.').filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0
+
+/** How many photos one item carries. The same cap the web and the Apple apps
+ *  hold, kept in one place so the form and the photo manager cannot drift. */
+internal const val INVENTORY_PHOTO_LIMIT = 12
 
 @Composable
 private fun InventoryField(
@@ -130,7 +146,9 @@ fun NewInventoryItemDialog(
      *  suggestions. The field stays free text — any location is still legal. */
     locationPaths: List<String> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (Map<String, Any?>, String) -> Unit
+    /** The payload, the id to save over ("" for a new item), and the photos
+     *  picked here — which the caller uploads once the save hands back an id. */
+    onSave: (Map<String, Any?>, String, List<Uri>) -> Unit
 ) {
     fun numberText(value: Double): String = if (value <= 0.0) "" else inventoryQuantity(value)
 
@@ -158,6 +176,16 @@ fun NewInventoryItemDialog(
     var notes by remember { mutableStateOf(existing?.notes.orEmpty()) }
     val tags = remember { existing?.tags.orEmpty().toMutableList().toMutableStateList() }
     var tagInput by remember { mutableStateOf("") }
+
+    // Photos picked before the item exists. Storage paths are keyed by the item
+    // id, which only exists once the server has assigned one, so the files wait
+    // here and go up the moment the save hands that id back. Nobody has to save
+    // the item, find it in the list and come back for its photo button.
+    val stagedPhotos = remember { mutableStateListOf<Uri>() }
+    val photoRoom = INVENTORY_PHOTO_LIMIT - existing?.photos.orEmpty().size - stagedPhotos.size
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(INVENTORY_PHOTO_LIMIT)
+    ) { picked -> stagedPhotos.addAll(picked.take(photoRoom)) }
 
     // The same caps the server enforces (20 tags of 30 characters), applied
     // here so nothing typed is silently shortened after the save.
@@ -339,6 +367,69 @@ fun NewInventoryItemDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 InventoryField(t("Notes"), notes) { notes = it }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(t("Photos"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (itemId.isBlank()) t("Pick photos now — they upload as soon as the item is created.")
+                    else t("New photos are added when you save."),
+                    fontSize = 11.sp, color = Color.Gray
+                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    stagedPhotos.forEach { uri ->
+                        Box {
+                            AsyncImage(
+                                model = uri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))
+                            )
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = t("Remove"),
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xAA000000))
+                                    .clickable { stagedPhotos.remove(uri) }
+                                    .padding(3.dp)
+                            )
+                        }
+                    }
+                    if (photoRoom > 0) {
+                        Box(
+                            Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0x142563EB))
+                                .clickable {
+                                    photoPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = t("Add photos"), tint = StudioBlue)
+                        }
+                    }
+                }
+                if (photoRoom <= 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "${t("An item carries at most")} $INVENTORY_PHOTO_LIMIT ${t("photos.")}",
+                        fontSize = 11.sp, color = Color.Gray
+                    )
+                }
             }
         },
         confirmButton = {
@@ -367,7 +458,8 @@ fun NewInventoryItemDialog(
                             "photos" to existing?.photos.orEmpty(),
                             "currentValueEst" to (existing?.currentValueEst ?: 0.0)
                         ),
-                        itemId
+                        itemId,
+                        stagedPhotos.toList()
                     )
                 }
             ) { Text(t("Save")) }

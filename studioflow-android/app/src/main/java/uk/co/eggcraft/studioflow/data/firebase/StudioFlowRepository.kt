@@ -2810,8 +2810,12 @@ class StudioFlowRepository(
         return StudioInventorySummary.from(raw["summary"] as? Map<*, *> ?: emptyMap<String, Any?>())
     }
 
-    suspend fun inventorySaveItem(workspaceId: String, item: Map<String, Any?>, itemId: String = "") {
-        inventoryCall("saveInventoryItem", workspaceId, mapOf("itemId" to itemId, "item" to item))
+    /** Returns the saved item's id — for a new item the one the server has just
+     *  assigned. Photo storage paths are keyed by that id, so a form that picked
+     *  photos before the item existed needs it back to upload them. */
+    suspend fun inventorySaveItem(workspaceId: String, item: Map<String, Any?>, itemId: String = ""): String {
+        val raw = inventoryCall("saveInventoryItem", workspaceId, mapOf("itemId" to itemId, "item" to item))
+        return raw["itemId"] as? String ?: itemId
     }
 
     suspend fun inventorySetStatus(workspaceId: String, itemId: String, status: StudioInventoryStatus) {

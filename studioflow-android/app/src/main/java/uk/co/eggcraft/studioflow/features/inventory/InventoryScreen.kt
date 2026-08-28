@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,6 +112,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
     val lang = LocalStudioLanguage.current
     val t: (String) -> String = { studioT(it, lang) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val repository = remember { StudioFlowRepository() }
     val workspaceId = state.workspace?.id.orEmpty()
     val symbol = state.workspaceSettings.selectedCurrency
@@ -402,12 +404,38 @@ fun InventoryScreen(state: StudioFlowUiState) {
             itemId = editingItemId,
             locationPaths = locationPaths,
             onDismiss = { itemEditor = null },
-            onSave = { payload, savingItemId ->
+            onSave = { payload, savingItemId, stagedPhotos ->
                 scope.launch {
                     try {
-                        repository.inventorySaveItem(workspaceId, payload, savingItemId)
+                        val savedId = repository.inventorySaveItem(workspaceId, payload, savingItemId)
+                        // The item exists now, so the photos picked on the form
+                        // finally have somewhere to live: storage paths are keyed
+                        // by the item id. A photo that will not upload must not
+                        // take the saved item down with it — the item stays, and
+                        // the screen says plainly what is missing.
+                        var photosFailed = false
+                        if (stagedPhotos.isNotEmpty() && savedId.isNotBlank()) {
+                            try {
+                                val uploaded = stagedPhotos.map { uri ->
+                                    val bytes = context.contentResolver.openInputStream(uri)
+                                        ?.use { it.readBytes() }
+                                        ?: throw IllegalStateException("empty")
+                                    repository.inventoryUploadPhoto(workspaceId, savedId, bytes)
+                                }
+                                val kept = (payload["photos"] as? List<*>).orEmpty().filterIsInstance<String>()
+                                repository.inventorySaveItem(
+                                    workspaceId, payload + mapOf("photos" to kept + uploaded), savedId
+                                )
+                            } catch (photoFailure: Exception) {
+                                photosFailed = true
+                            }
+                        }
                         itemEditor = null
+                        // After the reload, which clears the notice on success.
                         reloadItems()
+                        if (photosFailed) {
+                            notice = t("The item was saved, but the photos could not be uploaded. Add them from the item's photo button.")
+                        }
                     } catch (error: Exception) { notice = error.message }
                 }
             }

@@ -155,7 +155,7 @@ fun ItemPhotosDialog(
                         Text(
                             if (busy) t("Uploading…") else t("Add photos"),
                             fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2563EB),
-                            modifier = Modifier.clickable(enabled = !busy && paths.size < 12) {
+                            modifier = Modifier.clickable(enabled = !busy && paths.size < INVENTORY_PHOTO_LIMIT) {
                                 picker.launch("image/*")
                             }
                         )
