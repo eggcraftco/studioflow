@@ -3,6 +3,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "@/lib/firebase/client";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 
 const PREVIEW_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 
@@ -25,6 +26,12 @@ export type CreateOrderResult = {
   orderId?: string;
   customerId?: string;
   customerCreated?: boolean;
+  /** The first real order starts the 14-day trial. The server says so here so
+   *  the app can tell the owner rather than changing their plan silently. */
+  trialStarted?: boolean;
+  trialPlan?: string;
+  trialEndsAtMs?: number;
+  trialDays?: number;
   message?: string;
   [key: string]: unknown;
 };
@@ -227,6 +234,16 @@ function previewFileName(extension: string) {
   return `${id}.${extension || "jpg"}`;
 }
 
+/** Fired once, when the workspace's first real order turns Free into a trial. */
+function announceTrialStart(result: CreateOrderResult) {
+  const days = Number(result.trialDays) || 14;
+  const plan = String(result.trialPlan || "").startsWith("team") ? "Team" : "Pro";
+  dispatchStudioToast({
+    message: `Your ${plan} trial has started. Full access for ${days} days, no card required.`,
+    durationMs: 9000,
+  });
+}
+
 export async function createOrderFromWeb(workspace: WorkspaceContext, input: Partial<CreateOrderInput> = {}) {
   if (!workspace.entitlements.features.orders_create) {
     throw new Error("Creating projects is not available on the current workspace plan.");
@@ -245,6 +262,13 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
       });
       if (response.data?.ok === false || !response.data?.orderId) {
         throw new Error(response.data?.message || "Could not create the project.");
+      }
+      // The first real order starts the trial, and the owner must hear it from
+      // us rather than notice their plan changed. Announced here — the one
+      // funnel every create-order button goes through — so no call site can
+      // forget it.
+      if (response.data?.trialStarted) {
+        announceTrialStart(response.data);
       }
       return response.data;
     }, "Saving new project to cloud.");

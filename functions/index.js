@@ -2023,6 +2023,67 @@ function trialHasExpired(data = {}) {
   return Date.now() > endsAt + graceMs;
 }
 
+/**
+ * The 14-day trial, started by doing real work rather than by signing up.
+ *
+ * The report's rule: a trial that begins the moment someone registers is mostly
+ * spent looking around. It should start when the workspace holds something the
+ * owner would miss — a first real order, an import, a connected store — so all
+ * fourteen days are useful ones.
+ *
+ * No card, no Stripe subscription, no checkout: this is a server-granted
+ * entitlement that simply expires. `trialHasExpired` above already drops a
+ * workspace back to Free when `billingTrialEndsAt` passes, so nothing needs to
+ * chase it. It spends the SAME one-per-workspace stamp the paid checkout reads,
+ * so nobody collects fourteen automatic days and then fourteen more at checkout.
+ */
+const AUTOMATIC_TRIAL_DAYS = 14;
+
+function automaticTrialPlanFor(companyData = {}) {
+  // A workspace that told us it has a team gets the plan that actually covers
+  // one; giving them Pro would hide the very features they came to try.
+  const seats = Number(companyData.onboardingTeamSize || 0);
+  return seats > 1 ? "team_monthly" : "pro_monthly";
+}
+
+function workspaceHasUsedTrial(companyData = {}) {
+  return Boolean(companyData.billingTrialUsedAt)
+    || Boolean(String(companyData.billingSubscriptionId || "").trim());
+}
+
+/**
+ * Grants the trial if this workspace has never had one and is not already
+ * paying. Returns what happened so the caller can tell the client; never
+ * throws, because failing to start a trial must not fail the order that
+ * triggered it.
+ */
+async function startAutomaticTrial(companyRef, companyData = {}, reason = "first_order") {
+  try {
+    const plan = normalizeBillingPlan(companyData.billingPlan, "demo");
+    if (plan !== "demo") return { started: false, why: "already_on_a_plan" };
+    if (workspaceHasUsedTrial(companyData)) return { started: false, why: "trial_already_used" };
+
+    const trialPlan = automaticTrialPlanFor(companyData);
+    const endsAtMs = Date.now() + AUTOMATIC_TRIAL_DAYS * 24 * 60 * 60 * 1000;
+    await companyRef.set({
+      billingPlan: trialPlan,
+      billingStatus: "trialing",
+      billingProvider: "nivadesk_trial",
+      billingTrialEndsAt: admin.firestore.Timestamp.fromMillis(endsAtMs),
+      billingTrialStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+      billingTrialStartReason: String(reason || "").slice(0, 40),
+      // The same stamp the Stripe checkout guard reads: one trial per workspace,
+      // however it was started.
+      billingTrialUsedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return { started: true, plan: trialPlan, endsAtMs, days: AUTOMATIC_TRIAL_DAYS };
+  } catch (error) {
+    console.warn("startAutomaticTrial failed:", companyRef?.id, error?.message || error);
+    return { started: false, why: "error" };
+  }
+}
+
 function billingPlanFromCompanyData(data = {}) {
   // Fail closed: missing or invalid billing data must never unlock paid/team features.
   const plan = normalizeBillingPlan(data.billingPlan, "demo");
@@ -13185,12 +13246,21 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     console.warn("Order billing usage update failed:", error?.message || error);
   }
 
+  // The first real order is what starts the fourteen days — see
+  // startAutomaticTrial. Returned so the client can say so out loud rather than
+  // changing the workspace's plan behind the owner's back.
+  const trial = await startAutomaticTrial(companyRef, companyData, "first_order");
+
   return {
     ok: true,
     companyId,
     orderId: orderRef.id,
     customerId: customerResult.customerId,
     customerCreated: customerResult.created,
+    trialStarted: trial.started === true,
+    trialPlan: trial.plan || "",
+    trialEndsAtMs: trial.endsAtMs || 0,
+    trialDays: trial.days || 0,
     message: "Order created."
   };
 });
@@ -13776,11 +13846,20 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
     console.warn("Swift order billing usage update failed:", error?.message || error);
   }
 
+  // Mac and iPhone create orders through here, so the first real order starts
+  // the trial from those apps too — the entitlement belongs to the workspace,
+  // not to whichever client happened to be open.
+  const swiftTrial = await startAutomaticTrial(companyRef, companyData, "first_order");
+
   return {
     ok: true,
     companyId,
     orderId: orderRef.id,
     changedFields: createdFields,
+    trialStarted: swiftTrial.started === true,
+    trialPlan: swiftTrial.plan || "",
+    trialEndsAtMs: swiftTrial.endsAtMs || 0,
+    trialDays: swiftTrial.days || 0,
     message: "Order created."
   };
 });
