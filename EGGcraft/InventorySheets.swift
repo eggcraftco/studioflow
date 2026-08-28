@@ -62,6 +62,13 @@ struct NewInventoryItemSheet: View {
     @State private var tags: [String] = []
     @State private var saving = false
     @State private var error = ""
+    /// Photos picked before the item has an id to file them under. They ride
+    /// along with Save: the item goes up first, then these land under the id it
+    /// comes back with.
+    @State private var stagedPhotos: [StagedInventoryPhoto] = []
+    /// Set when a create succeeded but its photos did not, so pressing Save
+    /// again edits the item that now exists instead of making a second one.
+    @State private var createdItemId = ""
 
     init(
         currencySymbol: String,
@@ -184,6 +191,14 @@ struct NewInventoryItemSheet: View {
                         .font(.system(size: 10))
                 }
 
+                InventoryPhotoStagingSection(
+                    staged: $stagedPhotos,
+                    lang: lang,
+                    alreadyOnItem: existing?.photos.count ?? 0,
+                    isEdit: !itemId.isEmpty,
+                    busy: saving
+                )
+
                 Section {
                     Toggle(t("This belongs to a customer", lang: lang), isOn: $isCustomerOwned)
                     if isCustomerOwned {
@@ -213,6 +228,7 @@ struct NewInventoryItemSheet: View {
     private func save() {
         saving = true
         error = ""
+        let existingPhotos = existing?.photos ?? []
         // The server rebuilds the WHOLE document from this payload — any field
         // not sent is blanked. Fields the form does not show (description,
         // current value estimate, photos) still have to travel, carried over
@@ -229,14 +245,37 @@ struct NewInventoryItemSheet: View {
             "additionalCosts": extras.map { ["label": $0.label, "amount": $0.amount] },
             "description": existing?.description ?? "",
             "currentValueEst": existing?.currentValueEst ?? 0,
-            "photos": existing?.photos ?? [],
+            "photos": existingPhotos,
             // Always sent (key-present semantics server-side), so edits
             // round-trip and an emptied editor genuinely clears the tags.
             "tags": tags
         ]
+        let target = itemId.isEmpty ? createdItemId : itemId
         Task {
             do {
-                try await firebaseManager.saveInventoryItem(payload, itemId: itemId)
+                let savedId = try await firebaseManager.saveInventoryItem(payload, itemId: target)
+                if !stagedPhotos.isEmpty && !savedId.isEmpty {
+                    // The item is real now, so its photos have somewhere to
+                    // live. If they do not make it, the item still stands and
+                    // the form says exactly what is missing — losing the whole
+                    // entry over a failed upload would be the worse trade.
+                    do {
+                        var uploaded: [String] = []
+                        for photo in stagedPhotos {
+                            uploaded.append(try await firebaseManager.uploadInventoryPhoto(
+                                itemId: savedId, data: photo.data, fileName: photo.fileName))
+                        }
+                        var withPhotos = payload
+                        withPhotos["photos"] = existingPhotos + uploaded
+                        try await firebaseManager.saveInventoryItem(withPhotos, itemId: savedId)
+                    } catch {
+                        createdItemId = savedId
+                        onSaved()
+                        self.error = t("The item was saved, but the photos could not be uploaded. Add them from the item's photo button.", lang: lang)
+                        saving = false
+                        return
+                    }
+                }
                 onSaved()
                 dismiss()
             } catch {

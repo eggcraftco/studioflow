@@ -901,8 +901,14 @@ extension FirebaseManager {
         return InventorySummary(raw["summary"] as? [String: Any] ?? [:])
     }
 
-    func saveInventoryItem(_ item: [String: Any], itemId: String = "") async throws {
-        _ = try await inventoryCall("saveInventoryItem", ["itemId": itemId, "item": item])
+    /// Returns the id the server settled on — a fresh one for a create, the
+    /// same one back for an edit. The item form needs it: photo storage paths
+    /// are keyed by item id, so photos picked while the item did not yet exist
+    /// can only be uploaded once this hands the id over.
+    @discardableResult
+    func saveInventoryItem(_ item: [String: Any], itemId: String = "") async throws -> String {
+        let raw = try await inventoryCall("saveInventoryItem", ["itemId": itemId, "item": item])
+        return raw["itemId"] as? String ?? itemId
     }
 
     func setInventoryItemStatus(_ itemId: String, status: InventoryStatus) async throws {
