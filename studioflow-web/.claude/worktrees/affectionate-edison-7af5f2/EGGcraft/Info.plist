@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.477037475099-23s8q3t5g7uggfs5jvaue0u0l0pdo1mr</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>NivaDeskShareImport</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>studioflow</string>
+				<string>nivadesk</string>
+			</array>
+		</dict>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<!-- The app localizes all UI through its own translation engine (DilMotoru),
+	     so there are no .lproj bundles. Declare the supported languages here so
+	     the system and the App Store "Languages" row reflect them. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>tr</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>it</string>
+		<string>es</string>
+		<string>pt</string>
+		<string>ru</string>
+		<string>ja</string>
+		<string>zh</string>
+		<string>ar</string>
+		<string>hi</string>
+	</array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.business</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>NivaDesk uses Apple Calendar to create and update order timeline events from the created date to the delivery due date.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>NivaDesk uses Apple Calendar to create order timeline events from the created date to the delivery due date.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NivaDesk uses the camera to attach client photos directly to order Client Files.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>NivaDesk can use the photo library to attach client images directly to order Client Files.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>NivaDesk uses Apple Reminders to create order due-date alerts that can sync across your Apple devices.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>NivaDesk uses Apple Reminders to create order due-date alerts that can sync across your Apple devices.</string>
+</dict>
+</plist>

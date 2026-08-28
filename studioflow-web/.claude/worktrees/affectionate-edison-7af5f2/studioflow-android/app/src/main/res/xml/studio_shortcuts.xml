@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press launcher shortcut: jumps straight into Notes with a new note
+     editor open (mirrors the iOS home-screen quick action). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_note"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new_note"
+        android:shortcutShortLabel="@string/shortcut_new_note_short"
+        android:shortcutLongLabel="@string/shortcut_new_note_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="uk.co.eggcraft.studioflow"
+            android:targetClass="uk.co.eggcraft.studioflow.MainActivity">
+            <extra
+                android:name="studio_new_note"
+                android:value="true" />
+        </intent>
+    </shortcut>
+</shortcuts>

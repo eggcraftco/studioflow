@@ -1,0 +1,207 @@
+{
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ],
+  "hosting": [
+    {
+      "site": "eggcraft-studio",
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/.well-known/oauth-protected-resource",
+          "function": {
+            "functionId": "chatgptOAuthProtectedResource",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-authorization-server",
+          "function": {
+            "functionId": "chatgptOAuthAuthorizationServer",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptMcp",
+          "function": {
+            "functionId": "chatgptMcp",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthAuthorizationServer",
+          "function": {
+            "functionId": "chatgptOAuthAuthorizationServer",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthAuthorize",
+          "function": {
+            "functionId": "chatgptOAuthAuthorize",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthToken",
+          "function": {
+            "functionId": "chatgptOAuthToken",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthRegister",
+          "function": {
+            "functionId": "chatgptOAuthRegister",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthApprove",
+          "function": {
+            "functionId": "chatgptOAuthApprove",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthWorkspaces",
+          "function": {
+            "functionId": "chatgptOAuthWorkspaces",
+            "region": "europe-west2"
+          }
+        }
+      ]
+    },
+    {
+      "site": "nivadesk-mcp",
+      "public": "mcp-public",
+      "ignore": [
+        "firebase.json",
+        "**/node_modules/**"
+      ],
+      "cleanUrls": false,
+      "trailingSlash": false,
+      "rewrites": [
+        {
+          "source": "/chatgptMcp",
+          "function": {
+            "functionId": "chatgptMcp",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthAuthorize",
+          "function": {
+            "functionId": "chatgptOAuthAuthorize",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthToken",
+          "function": {
+            "functionId": "chatgptOAuthToken",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthRegister",
+          "function": {
+            "functionId": "chatgptOAuthRegister",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthApprove",
+          "function": {
+            "functionId": "chatgptOAuthApprove",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthWorkspaces",
+          "function": {
+            "functionId": "chatgptOAuthWorkspaces",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/chatgptOAuthAuthorizationServer",
+          "function": {
+            "functionId": "chatgptOAuthAuthorizationServer",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-authorization-server",
+          "function": {
+            "functionId": "chatgptOAuthAuthorizationServer",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/openid-configuration",
+          "function": {
+            "functionId": "chatgptOAuthAuthorizationServer",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource",
+          "function": {
+            "functionId": "chatgptOAuthProtectedResource",
+            "region": "europe-west2"
+          }
+        },
+        {
+          "source": "/.well-known/oauth-protected-resource/chatgptMcp",
+          "function": {
+            "functionId": "chatgptOAuthProtectedResource",
+            "region": "europe-west2"
+          }
+        }
+      ]
+    }
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4000
+    },
+    "singleProjectMode": true,
+    "storage": {
+      "port": 9199
+    }
+  }
+}

@@ -1,0 +1,55 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "5a55941c16fd51545392f39e314dc186"
+name = "nivadesk-order-management"
+application_url = "https://nivadesk-connect-477037475099.europe-west2.run.app"
+embedded = true
+
+[access_scopes]
+# Minimum permissions: NivaDesk only reads orders/customers/products to sync
+# them into the merchant's NivaDesk workspace. Write scopes for the optional
+# tracking push-back are requested separately when the merchant enables it.
+scopes = "read_orders,read_customers,read_products,read_fulfillments"
+
+[webhooks]
+api_version = "2026-10"
+
+  # Order/customer traffic goes straight to the Firebase Functions ingest
+  # (HMAC-verified, idempotent); the app server only keeps scopes_update.
+  [[webhooks.subscriptions]]
+  uri = "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyAppWebhook"
+  topics = [
+    "orders/create",
+    "orders/updated",
+    "orders/paid",
+    "orders/cancelled",
+    "orders/fulfilled",
+    "fulfillments/create",
+    "fulfillments/update",
+    "refunds/create",
+    "customers/create",
+    "customers/update",
+    "app/uninstalled"
+  ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  # Mandatory GDPR topics — same HMAC-verified ingest.
+  [webhooks.privacy_compliance]
+  customer_data_request_url = "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyAppWebhook"
+  customer_deletion_url = "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyAppWebhook"
+  shop_deletion_url = "https://europe-west2-eggcraft-studio.cloudfunctions.net/shopifyAppWebhook"
+
+[auth]
+redirect_urls = [
+  "https://nivadesk-connect-477037475099.europe-west2.run.app/auth/callback",
+  "https://nivadesk-connect-477037475099.europe-west2.run.app/auth/session-token",
+  "https://nivadesk-connect-477037475099.europe-west2.run.app/api/auth/callback"
+]
+
+[build]
+# Cloud Run is the canonical app URL now. Running `shopify app dev` would
+# rewrite these URLs to a throwaway tunnel — re-enable consciously if needed.
+automatically_update_urls_on_dev = false

@@ -1,0 +1,1037 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		93A148B92FF9E0340080C409 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148B82FF9E0340080C409 /* WidgetKit.framework */; };
+		93A148BB2FF9E0340080C409 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93A148BA2FF9E0340080C409 /* SwiftUI.framework */; };
+		93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B42E74B12FA431BC00B96FEA /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B02FA431BC00B96FEA /* GoogleSignIn */; };
+		B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */; };
+		B433DF5D2FA75FB000A7CD26 /* ClientFileShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B4382D2A2F9CC1E2004BB413 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D292F9CC1E2004BB413 /* FirebaseAuth */; };
+		B4382D2C2F9CC1E2004BB413 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D2B2F9CC1E2004BB413 /* FirebaseFirestore */; };
+		B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = B4382D372F9D879F004BB413 /* FirebaseStorage */; };
+		B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = B440FCAB2FA291B3007D3DED /* FirebaseFunctions */; };
+		B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */; };
+		B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = B4A9C5010000000000000002 /* FirebaseAppCheck */; };
+		B4A9C5010000000000000003 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = B4A9C5010000000000000004 /* FirebaseAnalytics */; };
+		B4A9C5010000000000000005 /* AdServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B4A9C5010000000000000006 /* AdServices.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		93A148CA2FF9E0350080C409 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 93A148B62FF9E0340080C409;
+			remoteInfo = NivaDeskWidgetsExtension;
+		};
+		B433DF5E2FA7611C00A7CD26 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B433DF3D2FA74BD100A7CD26;
+			remoteInfo = ClientFileShareExtension;
+		};
+		B45DF6202FB917BB00C59217 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4382CDA2F9A845F004BB413 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B45DF61A2FB917BB00C59217;
+			remoteInfo = EGGcraftNotificationService;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B433DF4D2FA74BD100A7CD26 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B433DF5D2FA75FB000A7CD26 /* ClientFileShareExtension.appex in Embed Foundation Extensions */,
+				93A148CC2FF9E0350080C409 /* NivaDeskWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NivaDeskWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		93A148B82FF9E0340080C409 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		93A148BA2FF9E0340080C409 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClientFileShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4382CE22F9A845F004BB413 /* NivaDesk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NivaDesk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EGGcraftNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4A9C5010000000000000006 /* AdServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AdServices.framework; path = System/Library/Frameworks/AdServices.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		93A148D02FF9E0350080C409 /* Exceptions for "NivaDeskWidgets" folder in "NivaDeskWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */;
+		};
+		B433DF352FA6C78C00A7CD26 /* Exceptions for "EGGcraft" folder in "EGGcraft" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B4382CE12F9A845F004BB413 /* EGGcraft */;
+		};
+		B433DF4C2FA74BD100A7CD26 /* Exceptions for "ClientFileShareExtension" folder in "ClientFileShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */;
+		};
+		B433DF5A2FA751A700A7CD26 /* Exceptions for "EGGcraft" folder in "ClientFileShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				SharedClientFileInbox.swift,
+			);
+			target = B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */;
+		};
+		B45DF6262FB917BB00C59217 /* Exceptions for "EGGcraftNotificationService" folder in "EGGcraftNotificationService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		93A148BC2FF9E0340080C409 /* NivaDeskWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				93A148D02FF9E0350080C409 /* Exceptions for "NivaDeskWidgets" folder in "NivaDeskWidgetsExtension" target */,
+			);
+			path = NivaDeskWidgets;
+			sourceTree = "<group>";
+		};
+		B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B433DF4C2FA74BD100A7CD26 /* Exceptions for "ClientFileShareExtension" folder in "ClientFileShareExtension" target */,
+			);
+			path = ClientFileShareExtension;
+			sourceTree = "<group>";
+		};
+		B4382CE42F9A845F004BB413 /* EGGcraft */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B433DF352FA6C78C00A7CD26 /* Exceptions for "EGGcraft" folder in "EGGcraft" target */,
+				B433DF5A2FA751A700A7CD26 /* Exceptions for "EGGcraft" folder in "ClientFileShareExtension" target */,
+			);
+			path = EGGcraft;
+			sourceTree = "<group>";
+		};
+		B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B45DF6262FB917BB00C59217 /* Exceptions for "EGGcraftNotificationService" folder in "EGGcraftNotificationService" target */,
+			);
+			path = EGGcraftNotificationService;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		93A148B42FF9E0340080C409 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93A148BB2FF9E0340080C409 /* SwiftUI.framework in Frameworks */,
+				93A148B92FF9E0340080C409 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B433DF3B2FA74BD100A7CD26 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4382CDF2F9A845F004BB413 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B42E74B12FA431BC00B96FEA /* GoogleSignIn in Frameworks */,
+				B4382D2A2F9CC1E2004BB413 /* FirebaseAuth in Frameworks */,
+				B45DF6162FB8FDAB00C59217 /* FirebaseMessaging in Frameworks */,
+				B4382D2C2F9CC1E2004BB413 /* FirebaseFirestore in Frameworks */,
+				B42E74B32FA431BC00B96FEA /* GoogleSignInSwift in Frameworks */,
+				B4382D382F9D879F004BB413 /* FirebaseStorage in Frameworks */,
+				B440FCAC2FA291B3007D3DED /* FirebaseFunctions in Frameworks */,
+				B4A9C5010000000000000001 /* FirebaseAppCheck in Frameworks */,
+				B4A9C5010000000000000003 /* FirebaseAnalytics in Frameworks */,
+				B4A9C5010000000000000005 /* AdServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B45DF6182FB917BB00C59217 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B4382CD92F9A845F004BB413 = {
+			isa = PBXGroup;
+			children = (
+				B4382CE42F9A845F004BB413 /* EGGcraft */,
+				B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */,
+				B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */,
+				93A148BC2FF9E0340080C409 /* NivaDeskWidgets */,
+				B4382D362F9D879F004BB413 /* Frameworks */,
+				B4382CE32F9A845F004BB413 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B4382CE32F9A845F004BB413 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B4382CE22F9A845F004BB413 /* NivaDesk.app */,
+				B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */,
+				B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */,
+				93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B4382D362F9D879F004BB413 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				93A148B82FF9E0340080C409 /* WidgetKit.framework */,
+				93A148BA2FF9E0340080C409 /* SwiftUI.framework */,
+				B4A9C5010000000000000006 /* AdServices.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 93A148CF2FF9E0350080C409 /* Build configuration list for PBXNativeTarget "NivaDeskWidgetsExtension" */;
+			buildPhases = (
+				93A148B32FF9E0340080C409 /* Sources */,
+				93A148B42FF9E0340080C409 /* Frameworks */,
+				93A148B52FF9E0340080C409 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				93A148BC2FF9E0340080C409 /* NivaDeskWidgets */,
+			);
+			name = NivaDeskWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = NivaDeskWidgetsExtension;
+			productReference = 93A148B72FF9E0340080C409 /* NivaDeskWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B433DF492FA74BD100A7CD26 /* Build configuration list for PBXNativeTarget "ClientFileShareExtension" */;
+			buildPhases = (
+				B433DF3A2FA74BD100A7CD26 /* Sources */,
+				B433DF3B2FA74BD100A7CD26 /* Frameworks */,
+				B433DF3C2FA74BD100A7CD26 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B433DF3F2FA74BD100A7CD26 /* ClientFileShareExtension */,
+			);
+			name = ClientFileShareExtension;
+			packageProductDependencies = (
+			);
+			productName = ClientFileShareExtension;
+			productReference = B433DF3E2FA74BD100A7CD26 /* ClientFileShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		B4382CE12F9A845F004BB413 /* EGGcraft */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B4382CEF2F9A8460004BB413 /* Build configuration list for PBXNativeTarget "EGGcraft" */;
+			buildPhases = (
+				B4382CDE2F9A845F004BB413 /* Sources */,
+				B4382CDF2F9A845F004BB413 /* Frameworks */,
+				B4382CE02F9A845F004BB413 /* Resources */,
+				B433DF4D2FA74BD100A7CD26 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B433DF5F2FA7611C00A7CD26 /* PBXTargetDependency */,
+				B45DF6212FB917BB00C59217 /* PBXTargetDependency */,
+				93A148CB2FF9E0350080C409 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B4382CE42F9A845F004BB413 /* EGGcraft */,
+			);
+			name = EGGcraft;
+			packageProductDependencies = (
+				B4382D292F9CC1E2004BB413 /* FirebaseAuth */,
+				B4382D2B2F9CC1E2004BB413 /* FirebaseFirestore */,
+				B4382D372F9D879F004BB413 /* FirebaseStorage */,
+				B440FCAB2FA291B3007D3DED /* FirebaseFunctions */,
+				B42E74B02FA431BC00B96FEA /* GoogleSignIn */,
+				B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */,
+				B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */,
+				B4A9C5010000000000000002 /* FirebaseAppCheck */,
+				B4A9C5010000000000000004 /* FirebaseAnalytics */,
+			);
+			productName = EGGcraft;
+			productReference = B4382CE22F9A845F004BB413 /* NivaDesk.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B45DF6232FB917BB00C59217 /* Build configuration list for PBXNativeTarget "EGGcraftNotificationService" */;
+			buildPhases = (
+				B45DF6172FB917BB00C59217 /* Sources */,
+				B45DF6182FB917BB00C59217 /* Frameworks */,
+				B45DF6192FB917BB00C59217 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B45DF61C2FB917BB00C59217 /* EGGcraftNotificationService */,
+			);
+			name = EGGcraftNotificationService;
+			packageProductDependencies = (
+			);
+			productName = EGGcraftNotificationService;
+			productReference = B45DF61B2FB917BB00C59217 /* EGGcraftNotificationService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B4382CDA2F9A845F004BB413 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2640;
+				TargetAttributes = {
+					93A148B62FF9E0340080C409 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					B433DF3D2FA74BD100A7CD26 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					B4382CE12F9A845F004BB413 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+					B45DF61A2FB917BB00C59217 = {
+						CreatedOnToolsVersion = 26.4.1;
+					};
+				};
+			};
+			buildConfigurationList = B4382CDD2F9A845F004BB413 /* Build configuration list for PBXProject "EGGcraft" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				tr,
+				de,
+				fr,
+				it,
+				es,
+				pt,
+				ru,
+				ja,
+				zh,
+				ar,
+				hi,
+			);
+			mainGroup = B4382CD92F9A845F004BB413;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				B42E74AF2FA431BC00B96FEA /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B4382CE32F9A845F004BB413 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B4382CE12F9A845F004BB413 /* EGGcraft */,
+				B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */,
+				B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */,
+				93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		93A148B52FF9E0340080C409 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B433DF3C2FA74BD100A7CD26 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4382CE02F9A845F004BB413 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B45DF6192FB917BB00C59217 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		93A148B32FF9E0340080C409 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B433DF3A2FA74BD100A7CD26 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B4382CDE2F9A845F004BB413 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B45DF6172FB917BB00C59217 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		93A148CB2FF9E0350080C409 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 93A148B62FF9E0340080C409 /* NivaDeskWidgetsExtension */;
+			targetProxy = 93A148CA2FF9E0350080C409 /* PBXContainerItemProxy */;
+		};
+		B433DF5F2FA7611C00A7CD26 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = B433DF3D2FA74BD100A7CD26 /* ClientFileShareExtension */;
+			targetProxy = B433DF5E2FA7611C00A7CD26 /* PBXContainerItemProxy */;
+		};
+		B45DF6212FB917BB00C59217 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B45DF61A2FB917BB00C59217 /* EGGcraftNotificationService */;
+			targetProxy = B45DF6202FB917BB00C59217 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		93A148CD2FF9E0350080C409 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		93A148CE2FF9E0350080C409 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = NivaDeskWidgets/NivaDeskWidgets.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = NivaDeskWidgets/NivaDeskWidgetsMac.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NivaDeskWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDeskWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.NivaDeskWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B433DF4A2FA74BD100A7CD26 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ClientFileShareExtension/ClientFileShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ClientFileShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.ClientFileShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B433DF4B2FA74BD100A7CD26 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ClientFileShareExtension/ClientFileShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClientFileShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ClientFileShareExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.ClientFileShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B4382CED2F9A8460004BB413 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B4382CEE2F9A8460004BB413 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = incremental;
+			};
+			name = Release;
+		};
+		B4382CF02F9A8460004BB413 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EGGcraft/EGGcraft.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraft/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDesk;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "NivaDesk uses Face ID or your device passcode to unlock your existing session securely.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow;
+				PRODUCT_NAME = NivaDesk;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Debug;
+		};
+		B4382CF12F9A8460004BB413 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EGGcraft/EGGcraft.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraft/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NivaDesk;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "NivaDesk uses Face ID or your device passcode to unlock your existing session securely.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
+				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow;
+				PRODUCT_NAME = NivaDesk;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 2.0;
+			};
+			name = Release;
+		};
+		B45DF6242FB917BB00C59217 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B45DF6252FB917BB00C59217 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 5QG48AF86V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EGGcraftNotificationService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EGGcraftNotificationService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.co.eggcraft.studioflow.EGGcraftNotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		93A148CF2FF9E0350080C409 /* Build configuration list for PBXNativeTarget "NivaDeskWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93A148CD2FF9E0350080C409 /* Debug */,
+				93A148CE2FF9E0350080C409 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B433DF492FA74BD100A7CD26 /* Build configuration list for PBXNativeTarget "ClientFileShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B433DF4A2FA74BD100A7CD26 /* Debug */,
+				B433DF4B2FA74BD100A7CD26 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B4382CDD2F9A845F004BB413 /* Build configuration list for PBXProject "EGGcraft" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B4382CED2F9A8460004BB413 /* Debug */,
+				B4382CEE2F9A8460004BB413 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B4382CEF2F9A8460004BB413 /* Build configuration list for PBXNativeTarget "EGGcraft" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B4382CF02F9A8460004BB413 /* Debug */,
+				B4382CF12F9A8460004BB413 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B45DF6232FB917BB00C59217 /* Build configuration list for PBXNativeTarget "EGGcraftNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B45DF6242FB917BB00C59217 /* Debug */,
+				B45DF6252FB917BB00C59217 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B42E74AF2FA431BC00B96FEA /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
+		B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.12.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B42E74B02FA431BC00B96FEA /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B42E74AF2FA431BC00B96FEA /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		B42E74B22FA431BC00B96FEA /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B42E74AF2FA431BC00B96FEA /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+		B4382D292F9CC1E2004BB413 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		B4382D2B2F9CC1E2004BB413 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		B4382D372F9D879F004BB413 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		B440FCAB2FA291B3007D3DED /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		B45DF6152FB8FDAB00C59217 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		B4A9C5010000000000000002 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		B4A9C5010000000000000004 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4382D282F9CC1E2004BB413 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B4382CDA2F9A845F004BB413 /* Project object */;
+}

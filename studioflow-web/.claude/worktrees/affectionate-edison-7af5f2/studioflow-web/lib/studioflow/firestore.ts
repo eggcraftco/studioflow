@@ -1,0 +1,2241 @@
+import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+  type DocumentData,
+  type DocumentSnapshot
+} from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "@/lib/firebase/client";
+import { entitlementsForPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+
+export type JoinedWorkspaceOption = {
+  id: string;
+  name: string;
+  role: string;
+  roleLabel: string;
+  isCurrent: boolean;
+};
+
+export type WorkspaceContext = {
+  id: string;
+  name: string;
+  ownerUid: string;
+  role: string;
+  roleLabel: string;
+  memberAccess: WorkspaceMemberAccess;
+  billingPlan: StudioBillingPlan;
+  billingPlanSource: string;
+  billingPlanName: string;
+  billingStatus: string;
+  billingProviderRawStatus: string;
+  billingCustomerId: string;
+  billingSubscriptionId: string;
+  billingEffectiveProvider: string;
+  billingActivePlanSubscriptionCount: number;
+  billingActivePlanProviders: string[];
+  billingHasMultipleActiveSubscriptions: boolean;
+  billingEntitlementResolutionReason: string;
+  billingStorageLimitMB: number;
+  billingTeamMemberLimit: number;
+  /** When the current paid period ends — a renewal date while active, an access-until date once cancelled. */
+  billingCurrentPeriodEndMs: number;
+  /** "month" or "year" — written by the entitlement resolver; empty when unknown. */
+  billingInterval: string;
+  /** The subscription's item key (e.g. "pro_monthly") — the same catalog key checkout uses. */
+  billingSubscriptionItemKey: string;
+  storageAddonMB: number;
+  storageAddonKey: string;
+  currentMemberDisplayName: string;
+  currentMemberPhotoURL: string;
+  quickReplyMenuEnabled: boolean;
+  /** Branded host for customer links (custom domain, else slug.nivadesk.app); empty = default nivadesk.app. */
+  clientPortalHost: string;
+  entitlements: PlanEntitlements;
+};
+
+export const WORKSPACE_NAVIGATION_ACCESS_OPTIONS = [
+  { key: "orders", label: "Orders", description: "Order list, order detail and order edits." },
+  { key: "dashboard", label: "Dashboard", description: "Dashboard and workspace analytics." },
+  { key: "schedule", label: "Schedule", description: "Timeline and schedule planning." },
+  { key: "customers", label: "Customers", description: "Customer list and contact directory." },
+  { key: "messages", label: "Messages", description: "Messages navigation and conversations area." },
+  { key: "teamChat", label: "Team Chat posting", description: "Post in the team-wide chat thread. Reading it stays under Messages." },
+  { key: "notes", label: "Notes", description: "Personal Notes navigation area." },
+  { key: "quickReply", label: "Quick Reply", description: "Quick Reply page and AI reply tools." },
+  { key: "settings", label: "Settings", description: "Main Settings navigation." },
+  { key: "teamAccess", label: "Team Access", description: "Team members and access controls." },
+  { key: "clientFiles", label: "Client Files", description: "Client file upload, rename and delete." },
+  { key: "financialInfo", label: "Financial Info", description: "Prices, profit, dashboard finance and finance cards." },
+  { key: "exportData", label: "Export Data", description: "PDF, backup and data export actions." },
+  { key: "bankFeed", label: "Bank Spending", description: "View the Open Banking spending feed (read-only). Connecting banks and Pandle stay with the owner." }
+] as const;
+
+export const WORKSPACE_SETTINGS_ACCESS_OPTIONS = [
+  { key: "settingsGeneral", label: "General / Personal Settings", description: "Appearance, language and profile/security settings area." },
+  { key: "settingsPdf", label: "PDF Export Settings", description: "PDF export settings menu." },
+  { key: "settingsQuickReply", label: "Quick Reply Settings", description: "Quick Reply settings menu, subject to OpenAI owner-only controls." },
+  { key: "settingsMessageSettings", label: "Message Settings", description: "Workspace message preferences when the base role permits editing." },
+  { key: "settingsWorkflow", label: "Workflow Steps", description: "Workspace workflow settings menu." },
+  { key: "settingsFinancial", label: "Financial Settings", description: "Finance settings menu when financial access is also enabled." },
+  { key: "settingsSafetyUploads", label: "Safety & Uploads", description: "Upload safety settings menu." },
+  { key: "settingsData", label: "Data Management", description: "Import, export and backup screens inside Settings." },
+  { key: "settingsTeamAccess", label: "Team Access", description: "Workspace viewing and switching area; owner-only member management remains protected." },
+  { key: "settingsPlanAccess", label: "Plan & Access", description: "Plan, limits and billing screens. Owner-only edits remain protected server-side." },
+  { key: "settingsSupport", label: "Support / Tickets", description: "Support and ticket area." }
+] as const;
+
+export const WORKSPACE_CARD_ACCESS_OPTIONS = [
+  { key: "cardPreview", label: "Preview", description: "Preview image and visual reference card." },
+  { key: "cardSummary", label: "Order Summary", description: "Project summary, value-safe overview and due status." },
+  { key: "cardCustomer", label: "Customer & Communication", description: "Customer details, channels and contact fields." },
+  { key: "cardMaterials", label: "Materials & Inventory", description: "Material checklist and inventory notes." },
+  { key: "cardPriority", label: "Priority / Risk", description: "Priority, risk and blocker context." },
+  { key: "cardDelivery", label: "Timeline & Delivery", description: "Created date, delivery due date and remaining time." },
+  { key: "cardNotes", label: "Notes", description: "Main notes and custom note sections." },
+  { key: "cardClientFiles", label: "Client Files", description: "Client files card inside project detail." },
+  { key: "cardTodo", label: "To Do", description: "Project task list and task controls." },
+  { key: "cardWorkTime", label: "Work Time", description: "Work session timer and time log." },
+  { key: "cardFinancial", label: "Financial Info", description: "Financial card inside project detail." },
+  { key: "cardStatus", label: "Production Status", description: "Production stages and status toggles." },
+  { key: "cardShipping", label: "Shipping & Tracking", description: "Dispatch, courier and tracking fields." },
+  { key: "cardSchedule", label: "Schedule & Alerts", description: "Order reminders, calendar and alerts card." },
+  { key: "cardHistoryLog", label: "History / Log", description: "Project audit trail and change history." }
+] as const;
+
+export const WORKSPACE_SCOPE_ACCESS_OPTIONS = [
+  { key: "assignedProjectsOnly", label: "Assigned Projects Only", description: "Limit this role to projects assigned to the current member." },
+  { key: "manageProjectAssignments", label: "Change Project Assignments", description: "Allow this role to assign and reassign projects from the order card menu." }
+] as const;
+
+export const WORKSPACE_FILE_ACCESS_OPTIONS = [
+  { key: "deleteClientFiles", label: "Delete client files", description: "Allow this role to delete client files. Uploading and viewing follow Client Files access above." }
+] as const;
+
+export const WORKSPACE_MEMBER_ACCESS_OPTIONS = [
+  ...WORKSPACE_NAVIGATION_ACCESS_OPTIONS,
+  ...WORKSPACE_SETTINGS_ACCESS_OPTIONS,
+  ...WORKSPACE_CARD_ACCESS_OPTIONS,
+  ...WORKSPACE_SCOPE_ACCESS_OPTIONS,
+  ...WORKSPACE_FILE_ACCESS_OPTIONS
+] as const;
+
+export type WorkspaceMemberAccessKey = (typeof WORKSPACE_MEMBER_ACCESS_OPTIONS)[number]["key"];
+export type WorkspaceMemberAccess = Record<WorkspaceMemberAccessKey, boolean>;
+
+export type WorkspaceCustomRole = {
+  id: string;
+  name: string;
+  /** Optional owner-written note on what this role is for. */
+  description: string;
+  baseRole: string;
+  access: WorkspaceMemberAccess;
+};
+
+export const WORKSPACE_MEMBER_ACCESS_DEFAULTS: WorkspaceMemberAccess = WORKSPACE_MEMBER_ACCESS_OPTIONS.reduce((acc, option) => {
+  acc[option.key] = option.key === "assignedProjectsOnly" || option.key === "manageProjectAssignments" || option.key === "bankFeed" ? false : true;
+  return acc;
+}, {} as WorkspaceMemberAccess);
+
+export type DashboardCounts = {
+  orderCount: number;
+  customerCount: number;
+  activeOrderCount: number;
+  completedOrderCount: number;
+  cancelledOrderCount: number;
+  dueSoonCount: number;
+  estimatedFileUsageMB: number;
+  sampledOrderCount: number;
+};
+
+export type DashboardFinanceOrder = {
+  id: string;
+  paymentDate: Date | null;
+  paidAmount: number;
+  remainingAmount: number;
+  watchPurchasePrice: number;
+  paymentFee: number;
+  deliveryCost: number;
+  taxAmount: number;
+  customFields: Record<string, string>;
+  customerName: string;
+  designName: string;
+  watchRef: string;
+  /** False for cancelled or refunded orders — they must not count in revenue,
+   * payments, outstanding or profit (same rule the customers page applies).
+   * Optional so structural supersets (the order-detail model) stay assignable
+   * to the finance helpers; absent means "counts". */
+  countsTowardBalance?: boolean;
+};
+
+export type WorkspaceSettingsOverview = {
+  /** When this workspace last downloaded a backup, so the delete screen can stop guessing. */
+  lastBackupExportedAtMs: number;
+  lastBackupExportedHash: string;
+  appTheme: string;
+  appSubtitle: string;
+  appLogoUrl: string;
+  selectedLanguage: string;
+  selectedCurrency: string;
+  selectedDecimalSeparator: string;
+  feePercentage: number;
+  defaultTaxRate: number;
+  defaultDeliveryTime: number;
+  taxCalculationType: string;
+  taxMilestoneEnabled: boolean;
+  taxMilestoneDate: number;
+  companyNumbers: CompanyNumberSetting[];
+  pdfShowCustomer: boolean;
+  pdfShowContact: boolean;
+  pdfShowPreview: boolean;
+  pdfShowFinCustomer: boolean;
+  pdfShowPaymentMethod: boolean;
+  pdfShowFinInternal: boolean;
+  pdfShowStatus: boolean;
+  pdfShowShipping: boolean;
+  pdfShowMaterials: boolean;
+  pdfShowPriority: boolean;
+  pdfShowAddress: boolean;
+  pdfShowShippingAddress: boolean;
+  orderItemsHeading: string;
+  financialExpenseItemsJSON: string;
+  financialRemainingItemsJSON: string;
+  financialShowBaseCost: boolean;
+  taxRuleNameRevenue: string;
+  taxRuleNameProfit: string;
+  corporationTaxEnabled: boolean;
+  corporationTaxRate: number;
+  invoiceFooterNote: string;
+  uploadSafetyRequirePolicyAcceptance: boolean;
+  uploadSafetyMaxFileSizeMB: number;
+  uploadSafetyPolicyText: string;
+  // Who wins when a store updates an existing customer: "store" | "nivadesk".
+  integrationCustomerSync: string;
+  dashboardWidgetVisibility: DashboardWidgetVisibility;
+  orderCardShowStatusBadges: boolean;
+  businessOnboardingCompleted: boolean;
+};
+
+export type DashboardWidgetVisibility = {
+  revenue: boolean;
+  pending: boolean;
+  cost: boolean;
+  fee: boolean;
+  shipping: boolean;
+  tax: boolean;
+  profit: boolean;
+  // Bank spending line on the profit chart (owner-only data; toggle hides it).
+  bankSpending: boolean;
+};
+
+export type CompanyNumberSetting = {
+  id: string;
+  title: string;
+  value: string;
+};
+
+export type QuickReplyTemplateItem = {
+  id: string;
+  title: string;
+  desc: string;
+};
+
+export type QuickReplySettings = {
+  replyMode: string;
+  quickReplyPoliteness: string;
+  quickReplyLength: string;
+  aiKnowledgeBase: string;
+  /** One previous version, kept server-side on every real change; empty when none. */
+  aiKnowledgeBasePrevious: string;
+  aiKnowledgeBasePreviousSavedAtMs: number;
+  hasOpenAIKey: boolean;
+  /** When the stored OpenAI key was last checked against OpenAI, and whether it worked. */
+  openAIKeyCheckedAtMs: number;
+  openAIKeyWorks: boolean;
+  products: QuickReplyTemplateItem[];
+  rules: QuickReplyTemplateItem[];
+};
+
+export type OrderListItem = {
+  id: string;
+  assignedToUid: string;
+  assignedToEmail: string;
+  customerName: string;
+  designName: string;
+  watchRef: string;
+  status: string;
+  designStatus: string;
+  priority: string;
+  risk: string;
+  riskReason: string;
+  notes: string;
+  emailAddress: string;
+  instagramUsername: string;
+  whatsappNumber: string;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentDate: Date | null;
+  dueDate: Date | null;
+  isDispatched: boolean;
+  isDelivered: boolean;
+  clientFileCount: number;
+  previewImageUrl: string;
+  customFields: Record<string, string>;
+  extraStatuses: Record<string, string>;
+};
+
+export type ScheduleOrderItem = {
+  id: string;
+  assignedToUid: string;
+  assignedToEmail: string;
+  customerName: string;
+  designName: string;
+  watchRef: string;
+  status: string;
+  designStatus: string;
+  priority: string;
+  risk: string;
+  riskReason: string;
+  notes: string;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentDate: Date | null;
+  deliveryTime: number;
+  dueDate: Date | null;
+  isDispatched: boolean;
+  isDelivered: boolean;
+  previewImageUrl: string;
+  clientFileCount: number;
+  customFields: Record<string, string>;
+  extraStatuses: Record<string, string>;
+  // Production board: only the human override and the blocker are stored; the
+  // stage itself is derived from the steps (lib/studioflow/production.ts).
+  productionStageOverride: string;
+  productionBlocker: { reason: string; note: string } | null;
+  materialsDefaultToggles: Record<string, boolean>;
+  materialsToggles: Record<string, boolean>;
+};
+
+export type OrderOptionItem = {
+  id: string;
+  customerName: string;
+  designName: string;
+  status: string;
+  paymentDate: Date | null;
+};
+
+export type CustomerOrderFile = {
+  id: string;
+  fileName: string;
+  downloadUrl: string;
+  contentType: string;
+  fileSize: number;
+  uploadedAt: Date | null;
+};
+
+export type CustomerOrderActivity = {
+  id: string;
+  title: string;
+  oldValue: string;
+  newValue: string;
+  createdAt: Date | null;
+  // Who and where from — present on newer history entries, "" on older ones.
+  byEmail: string;
+  source: string;
+};
+
+export type CustomerOrderSummary = {
+  id: string;
+  customerName: string;
+  designName: string;
+  status: string;
+  notes: string;
+  // Custom "Remaining" receivables total — part of the order's value.
+  customRemainingTotal: number;
+  previewImageUrl: string;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentDate: Date | null;
+  dueDate: Date | null;
+  invoiceNumber: string;
+  isDispatched: boolean;
+  isDelivered: boolean;
+  // False for cancelled/refunded orders — they owe nothing.
+  countsTowardBalance: boolean;
+  files: CustomerOrderFile[];
+  activity: CustomerOrderActivity[];
+};
+
+export type CustomerDirectoryItem = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  primaryPhone: string;
+  /** The customer's own WhatsApp number — separate from the store-fed phone. */
+  whatsappNumber: string;
+  /** Trade customers: the business the person buys for. */
+  company: string;
+  instagram: string;
+  address: string;
+  streetAddress: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  shippingAddress: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
+  notes: string;
+  profileImageUrl: string;
+  lastContactDate: Date | null;
+  // Where this customer record originated: "web" | "woocommerce" | "shopify" | "inbound" | "".
+  source: string;
+  externalCustomerId: string;
+  // Integration panel: when the store last spoke, and its last normalized payload (JSON string).
+  integrationSyncedAt: Date | null;
+  integrationLastPayload: string;
+  // Segments: workspace tags like "VIP" or "Wholesale".
+  tags: string[];
+  preferredChannel: string;
+  doNotContact: boolean;
+  marketingOptIn: string;
+  nextFollowUpDate: Date | null;
+  orderCount: number;
+  totalPaid: number;
+  totalValue: number;
+  // What the customer still owes, counting only orders that can owe.
+  totalOutstanding: number;
+  // The slice of totalValue sitting in cancelled/refunded orders — shown so
+  // the gross figure cannot quietly overstate a customer's worth.
+  totalRefunded: number;
+  orders: CustomerOrderSummary[];
+};
+
+export type SerializableFirestoreDocument = {
+  id: string;
+  data: Record<string, unknown>;
+};
+
+export type WorkspaceExportData = {
+  workspace: WorkspaceContext;
+  generatedAt: string;
+  orders: SerializableFirestoreDocument[];
+  customers: SerializableFirestoreDocument[];
+  settings: Record<string, unknown>;
+};
+
+
+
+export type ClientFileDetail = {
+  id: string;
+  fileName: string;
+  downloadURL: string;
+  storagePath: string;
+  contentType: string;
+  fileSize: number;
+  uploadedByUid: string;
+  uploadedByEmail: string;
+  uploadedBy: string;
+  uploadedAt: Date | null;
+  source: string;
+  note: string;
+};
+
+export type ClientFileListItem = ClientFileDetail & {
+  fileId: string;
+  orderId: string;
+  customerName: string;
+  designName: string;
+  orderStatus: string;
+};
+
+export type ToDoDetail = {
+  id: string;
+  title: string;
+  note: string;
+  assignedToUid: string;
+  assignedToEmail: string;
+  dueAt: Date | null;
+  priority: string;
+  isDone: boolean;
+};
+
+export type WorkSessionDetail = {
+  id: string;
+  title: string;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  durationSeconds: number;
+  createdAt: Date | null;
+  createdByUid: string;
+  createdByEmail: string;
+  source: string;
+};
+
+export type HistoryLogDetail = {
+  id: string;
+  title: string;
+  oldValue: string;
+  newValue: string;
+  createdAt: Date | null;
+};
+
+export type PaymentEntryDetail = {
+  id: string;
+  amount: number;
+  date: Date | null;
+  method: string;
+  note: string;
+  createdByUid: string;
+  createdByEmail: string;
+};
+
+// One billable invoice line (gross / VAT-inclusive). When present, their sum drives the
+// order total. Mirrors the Swift LineItem, Android StudioLineItem, and backend webhook schema.
+export type LineItemDetail = {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+export type OrderDetail = {
+  id: string;
+  companyId: string;
+  assignedToUid: string;
+  assignedToEmail: string;
+  customerName: string;
+  designName: string;
+  designLink: string;
+  watchRef: string;
+  status: string;
+  designStatus: string;
+  priority: string;
+  risk: string;
+  riskReason: string;
+  paymentMethod: string;
+  paymentDate: Date | null;
+  deliveryTime: number;
+  dueDate: Date | null;
+  paidAmount: number;
+  remainingAmount: number;
+  watchPurchasePrice: number;
+  paymentFee: number;
+  deliveryCost: number;
+  taxType: string;
+  taxRate: number;
+  taxAmount: number;
+  netProfit: number;
+  emailAddress: string;
+  instagramUsername: string;
+  whatsappNumber: string;
+  shippingName: string;
+  shippingStreetAddress: string;
+  shippingCity: string;
+  shippingPostalCode: string;
+  shippingCountry: string;
+  shippingPhone: string;
+  communication: string[];
+  notes: string;
+  invoiceNote: string;
+  invBool1: boolean;
+  invBool2: boolean;
+  invBool3: boolean;
+  invBool4: boolean;
+  invNotes: string;
+  trackingNumber: string;
+  courier: string;
+  isDispatched: boolean;
+  isDelivered: boolean;
+  customFields: Record<string, string>;
+  customToggles: Record<string, boolean>;
+  extraStatuses: Record<string, string>;
+  // The two production-board facts stored on the order; the stage itself is
+  // derived from the steps above (lib/studioflow/production.ts).
+  productionStageOverride: string;
+  productionBlocker: { reason: string; note: string } | null;
+  clientFiles: ClientFileDetail[];
+  todoItems: ToDoDetail[];
+  workSessions: WorkSessionDetail[];
+  historyLog: HistoryLogDetail[];
+  payments: PaymentEntryDetail[];
+  lineItems: LineItemDetail[];
+  invoiceNumber: string;
+  // "custom" or "repair". A repair order carries the customer's own item, which
+  // is recorded below and is deliberately not stock.
+  orderType: string;
+  repairIntake: RepairIntakeDetail | null;
+  // The index the order carries. Full line items and the approval evidence live
+  // in a subcollection no client can read; these rows are what the card shows.
+  estimates: EstimateSummary[];
+  customerPortal: CustomerPortalDetail;
+  estimateStatus: string;
+};
+
+export type CustomerPortalDetail = {
+  token: string;
+  active: boolean;
+  createdAtMs: number;
+  visibility: {
+    status: boolean;
+    estimate: boolean;
+    payments: boolean;
+    photos: boolean;
+    expectedDate: boolean;
+  };
+  autoUpdates: { enabled: boolean; email: boolean; sms: boolean };
+};
+
+export type EstimateSummary = {
+  id: string;
+  number: string;
+  version: number;
+  status: string;
+  total: number;
+  subtotal: number;
+  taxAmount: number;
+  taxRate: number;
+  taxType: string;
+  itemCount: number;
+  createdAtMs: number;
+  sentAtMs: number;
+  viewedAtMs: number;
+  decidedAtMs: number;
+  decidedBy: string;
+  decisionMethod: string;
+  hasSignature: boolean;
+  supersedesId: string;
+  supersededById: string;
+  linkState: string;
+};
+
+export type RepairIntakeDetail = {
+  fields: Record<string, string>;
+  condition: string[];
+  requestedWork: string[];
+  customerInstructions: string;
+  receivedAt: Date | null;
+  receivedByUid: string;
+  receivedByName: string;
+  customerOwned: boolean;
+};
+
+const ACTIVE_CLOSED_STATUSES = new Set(["done", "completed", "cancelled", "canceled"]);
+
+function stringValue(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function firstStringValue(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return "";
+}
+
+function recordStringValue(value: unknown) {
+  const output: Record<string, string> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return output;
+  Object.entries(value as Record<string, unknown>).forEach(([key, childValue]) => {
+    if (typeof childValue === "string") output[key] = childValue;
+  });
+  return output;
+}
+
+function decodeCompanyNumbers(value: unknown): CompanyNumberSetting[] {
+  if (typeof value !== "string" || value.trim().length === 0) return [];
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    if (!Array.isArray(decoded)) return [];
+    return decoded.map((item, index) => {
+      const source = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        id: idFromUnknown(source.id, `company-number-${index}`),
+        title: stringValue(source.title, ""),
+        value: stringValue(source.value, "")
+      };
+    }).filter(item => item.title.trim().length > 0 || item.value.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function numberValue(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function dateValue(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "object" && value !== null && "toDate" in value && typeof value.toDate === "function") {
+    return value.toDate();
+  }
+  return null;
+}
+
+function normalizedCustomerName(value: unknown) {
+  return typeof value === "string" ? value.trim().toLocaleLowerCase() : "";
+}
+
+export function normalizeWorkspaceRole(value: unknown, fallback = ""): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const compact = raw.toLowerCase().replace(/[\s_-]+/g, "");
+  if (compact === "owner") return "owner";
+  if (compact === "admin") return "admin";
+  if (compact === "member") return "member";
+  if (compact === "viewer" || compact === "viewonly" || compact === "readonly") return "viewer";
+  if (compact === "workflow" || compact === "workflowonly") return "workflow";
+  return fallback ? normalizeWorkspaceRole(fallback) : "";
+}
+
+function normalizeWorkspaceMemberRole(entry: unknown, fallback = ""): string {
+  if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+    const raw = entry as Record<string, unknown>;
+    const customRoleId = stringValue(raw.customRoleId, "");
+    if (/^custom_[A-Za-z0-9_-]{6,64}$/.test(customRoleId)) return customRoleId;
+    return stringValue(raw.role, fallback);
+  }
+  return stringValue(entry, fallback);
+}
+
+function memberCustomRolesMap(companyData: Record<string, unknown>) {
+  return companyData.memberCustomRoles && typeof companyData.memberCustomRoles === "object" && !Array.isArray(companyData.memberCustomRoles)
+    ? companyData.memberCustomRoles as Record<string, unknown>
+    : {};
+}
+
+function customRolesMap(companyData: Record<string, unknown>) {
+  const raw = companyData.customRoles && typeof companyData.customRoles === "object" && !Array.isArray(companyData.customRoles)
+    ? companyData.customRoles as Record<string, unknown>
+    : {};
+  const roles: Record<string, WorkspaceCustomRole> = {};
+  Object.entries(raw).forEach(([id, value]) => {
+    const data = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const roleId = stringValue(data.id, id);
+    if (!/^custom_[A-Za-z0-9_-]{6,64}$/.test(roleId)) return;
+    roles[roleId] = {
+      id: roleId,
+      name: stringValue(data.name, "Custom Role"),
+      description: stringValue(data.description, ""),
+      baseRole: normalizeWorkspaceRole(data.baseRole, "member") || "member",
+      access: normalizeWorkspaceMemberAccess(data.access)
+    };
+  });
+  return roles;
+}
+
+function effectiveWorkspaceRole(companyData: Record<string, unknown>, roleValue: string, fallback = "member") {
+  const custom = customRolesMap(companyData)[roleValue];
+  if (custom) return normalizeWorkspaceRole(custom.baseRole, fallback) || fallback;
+  return normalizeWorkspaceRole(roleValue, fallback);
+}
+
+function workspaceMemberRoleValue(companyData: Record<string, unknown>, uid: string, memberFallback = "member"): string {
+  const members = companyData.members && typeof companyData.members === "object"
+    ? companyData.members as Record<string, unknown>
+    : {};
+  const roles = companyData.memberRoles && typeof companyData.memberRoles === "object"
+    ? companyData.memberRoles as Record<string, unknown>
+    : {};
+  const customRoles = customRolesMap(companyData);
+  const assignedCustomRole = stringValue(memberCustomRolesMap(companyData)[uid], "");
+  if (customRoles[assignedCustomRole]) return assignedCustomRole;
+  const memberExists = Object.prototype.hasOwnProperty.call(members, uid);
+  const memberRole = memberExists ? normalizeWorkspaceMemberRole(members[uid], "") : "";
+  if (memberRole) return memberRole;
+  if (Object.prototype.hasOwnProperty.call(roles, uid)) return stringValue(roles[uid], "");
+  return memberExists ? memberFallback : "";
+}
+
+function workspaceMemberRole(companyData: Record<string, unknown>, uid: string, memberFallback = "member"): string {
+  const roleValue = workspaceMemberRoleValue(companyData, uid, memberFallback);
+  return roleValue ? effectiveWorkspaceRole(companyData, roleValue, memberFallback) : "";
+}
+
+export function normalizeWorkspaceMemberAccess(value: unknown, forceFullAccess = false): WorkspaceMemberAccess {
+  const output: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+  // Owners see everything, including the opt-in bank feed.
+  if (forceFullAccess) return { ...output, bankFeed: true };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return output;
+
+  const raw = value as Record<string, unknown>;
+  WORKSPACE_MEMBER_ACCESS_OPTIONS.forEach(option => {
+    if (typeof raw[option.key] === "boolean") output[option.key] = raw[option.key] as boolean;
+  });
+  return output;
+}
+
+function defaultWorkspaceAccessForRole(roleValue: string): WorkspaceMemberAccess {
+  const access: WorkspaceMemberAccess = { ...WORKSPACE_MEMBER_ACCESS_DEFAULTS };
+  if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
+    access.dashboard = false;
+    access.financialInfo = false;
+    access.customers = false;
+    access.teamAccess = false;
+    access.cardFinancial = false;
+    access.assignedProjectsOnly = true;
+    access.manageProjectAssignments = false;
+    access.orders = true;
+    access.schedule = true;
+    access.quickReply = true;
+    access.clientFiles = true;
+    access.cardClientFiles = true;
+  }
+  return access;
+}
+
+export function workspaceAccessAllows(access: WorkspaceMemberAccess | undefined, key: WorkspaceMemberAccessKey) {
+  if (key === "assignedProjectsOnly" || key === "manageProjectAssignments") return access?.[key] === true;
+  return access?.[key] !== false;
+}
+
+export function workspaceAssignedProjectsOnly(access: WorkspaceMemberAccess | undefined) {
+  return access?.assignedProjectsOnly === true;
+}
+
+export function orderIsAssignedToCurrentUser(
+  order: { assignedToUid?: string; assignedToEmail?: string },
+  user: { uid?: string; email?: string | null } | null | undefined
+) {
+  const uid = user?.uid?.trim() ?? "";
+  const email = user?.email?.trim().toLowerCase() ?? "";
+  const assignedUid = order.assignedToUid?.trim() ?? "";
+  const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+  return Boolean((uid && assignedUid === uid) || (email && assignedEmail === email));
+}
+
+function workspaceMemberAccess(companyData: Record<string, unknown>, uid: string, isOwner = false): WorkspaceMemberAccess {
+  if (isOwner) return normalizeWorkspaceMemberAccess(null, true);
+  const members = companyData.members && typeof companyData.members === "object" && !Array.isArray(companyData.members)
+    ? companyData.members as Record<string, unknown>
+    : {};
+  const memberData = members[uid] && typeof members[uid] === "object" && !Array.isArray(members[uid])
+    ? members[uid] as Record<string, unknown>
+    : {};
+  const roleValue = workspaceMemberRoleValue(companyData, uid, "member");
+  const customRole = customRolesMap(companyData)[roleValue];
+  if (customRole) return normalizeWorkspaceMemberAccess(customRole.access);
+  const memberAccess = companyData.memberAccess && typeof companyData.memberAccess === "object" && !Array.isArray(companyData.memberAccess)
+    ? companyData.memberAccess as Record<string, unknown>
+    : {};
+  const rootAccess = memberAccess[uid] && typeof memberAccess[uid] === "object" && !Array.isArray(memberAccess[uid])
+    ? memberAccess[uid] as Record<string, unknown>
+    : {};
+  const inlineAccess = memberData.access && typeof memberData.access === "object" && !Array.isArray(memberData.access)
+    ? memberData.access as Record<string, unknown>
+    : {};
+  const defaults = defaultWorkspaceAccessForRole(roleValue);
+  const merged = normalizeWorkspaceMemberAccess({ ...defaults, ...inlineAccess, ...rootAccess });
+  if (normalizeWorkspaceRole(roleValue, "member") === "workflow") {
+    merged.dashboard = false;
+    merged.financialInfo = false;
+    merged.customers = false;
+    merged.teamAccess = false;
+    merged.cardFinancial = false;
+    merged.assignedProjectsOnly = true;
+    merged.manageProjectAssignments = false;
+    merged.orders = true;
+    merged.schedule = true;
+    merged.quickReply = true;
+    merged.clientFiles = true;
+    merged.cardClientFiles = true;
+  }
+  return merged;
+}
+
+function resolveRole(companyData: Record<string, unknown>, uid: string, companyId: string) {
+  const ownerUid = stringValue(companyData.ownerUid, companyId);
+  if (uid === ownerUid || uid === companyId) return "owner";
+
+  return workspaceMemberRole(companyData, uid, "member");
+}
+
+export function roleLabel(role: string) {
+  switch (normalizeWorkspaceRole(role)) {
+    case "owner":
+      return "Owner";
+    case "admin":
+      return "Admin";
+    case "viewer":
+      return "View Only";
+    case "workflow":
+      return "Workflow Only";
+    case "member":
+      return "Member";
+    default:
+      return "Unknown";
+  }
+}
+
+async function readWorkspaceDocument(companyId: string) {
+  const snapshot = await getDoc(doc(db, "companies", companyId));
+  return snapshot.exists() ? snapshot : null;
+}
+
+export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContext> {
+  // Speed: read the user doc and the (most likely) own workspace doc in
+  // parallel. Most accounts have activeCompanyId === uid, so this saves a full
+  // network round trip; members of someone else's workspace fall back to one
+  // extra read below.
+  const [userSnapshot, ownWorkspaceSnapshot] = await Promise.all([
+    getDoc(doc(db, "users", uid)),
+    readWorkspaceDocument(uid)
+  ]);
+  const userData = userSnapshot.exists() ? userSnapshot.data() : {};
+  let companyId = stringValue(userData.activeCompanyId, uid);
+
+  let companySnapshot = companyId === uid ? ownWorkspaceSnapshot : await readWorkspaceDocument(companyId);
+  if (!companySnapshot && companyId !== uid) {
+    companyId = uid;
+    companySnapshot = ownWorkspaceSnapshot;
+  }
+
+  const companyData = companySnapshot?.data() ?? {};
+  const hasBillingPlan = typeof companyData.billingPlan === "string" && companyData.billingPlan.length > 0;
+  const entitlements = entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
+  const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
+  const storageAddonStatus = stringValue(companyData.billingStorageAddonStatus, "");
+  const storageAddonActive = ["active", "trialing", "past_due"].includes(storageAddonStatus.toLowerCase());
+  const storageAddonKey = storageAddonActive ? stringValue(companyData.billingStorageAddonKey, "") : "";
+  const storedStorageLimitMB = numberValue(companyData.billingStorageLimitMB, entitlements.storageLimitMB);
+  const ownerUid = stringValue(companyData.ownerUid, companyId);
+  const rawRoleValue = uid === ownerUid || uid === companyId ? "owner" : workspaceMemberRoleValue(companyData, uid, "member");
+  const customRoles = customRolesMap(companyData);
+  const role = resolveRole(companyData, uid, companyId);
+  const members = companyData.members && typeof companyData.members === "object" && !Array.isArray(companyData.members)
+    ? companyData.members as Record<string, unknown>
+    : {};
+  const memberData = members[uid] && typeof members[uid] === "object" && !Array.isArray(members[uid])
+    ? members[uid] as Record<string, unknown>
+    : {};
+
+  return {
+    id: companyId,
+    name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
+    ownerUid,
+    role,
+    roleLabel: customRoles[rawRoleValue]?.name ?? roleLabel(role),
+    memberAccess: workspaceMemberAccess(companyData, uid, normalizeWorkspaceRole(role) === "owner"),
+    billingPlan: entitlements.plan,
+    billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
+    billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
+    billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
+    billingCurrentPeriodEndMs: dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
+    billingInterval: stringValue(companyData.billingInterval, ""),
+    billingSubscriptionItemKey: stringValue(companyData.billingSubscriptionItemKey, ""),
+    billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
+    billingCustomerId: stringValue(companyData.billingCustomerId, stringValue(companyData.billingStripeCustomerId, "")),
+    billingSubscriptionId: stringValue(companyData.billingSubscriptionId, ""),
+    billingEffectiveProvider: stringValue(companyData.billingEffectiveProvider, stringValue(companyData.billingPlanSource, "")),
+    billingActivePlanSubscriptionCount: numberValue(companyData.billingActivePlanSubscriptionCount, 0),
+    billingActivePlanProviders: stringArrayValue(companyData.billingActivePlanProviders),
+    billingHasMultipleActiveSubscriptions: booleanValue(companyData.billingHasMultipleActiveSubscriptions, false),
+    billingEntitlementResolutionReason: stringValue(companyData.billingEntitlementResolutionReason, ""),
+    billingStorageLimitMB: storedStorageLimitMB + storageAddonMB,
+    storageAddonKey,
+    billingTeamMemberLimit: numberValue(companyData.billingTeamMemberLimit, entitlements.teamMemberLimit),
+    storageAddonMB,
+    currentMemberDisplayName: Object.prototype.hasOwnProperty.call(memberData, "displayName")
+      ? (typeof memberData.displayName === "string" ? memberData.displayName : "")
+      : stringValue(userData.displayName, ""),
+    currentMemberPhotoURL: Object.prototype.hasOwnProperty.call(memberData, "photoURL")
+      ? stringValue(memberData.photoURL, "")
+      : "",
+    quickReplyMenuEnabled: booleanValue(companyData.quickReplyMenuEnabled, true),
+    clientPortalHost: (() => {
+      const customHost = stringValue(companyData.clientPortalCustomHost, "").trim().toLowerCase();
+      if (customHost) return customHost;
+      const slug = stringValue(companyData.clientPortalSlug, "").trim().toLowerCase();
+      return slug ? `${slug}.nivadesk.app` : "";
+    })(),
+    entitlements
+  };
+}
+
+// Owner toggle: show/hide the AI Replies (Quick Reply) item in the main menu.
+export async function setWorkspaceQuickReplyMenuEnabled(companyId: string, enabled: boolean): Promise<void> {
+  await setDoc(doc(db, "companies", companyId), { quickReplyMenuEnabled: enabled }, { merge: true });
+}
+
+export async function loadJoinedWorkspaceOptions(uid: string, currentCompanyId: string): Promise<JoinedWorkspaceOption[]> {
+  const accessSnapshot = await getDocs(collection(db, "users", uid, "workspaceAccess"));
+  const ids = Array.from(new Set([uid, ...accessSnapshot.docs.map(item => item.id)]));
+
+  const options = await Promise.all(ids.map(async companyId => {
+    const companySnapshot = await readWorkspaceDocument(companyId);
+    if (!companySnapshot) return null;
+
+    if (companyId !== uid) {
+      const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", companyId));
+      if (!accessSnapshot.exists()) return null;
+    }
+
+    const companyData = companySnapshot.data();
+    const ownerUid = stringValue(companyData.ownerUid, companyId);
+    const role = uid === ownerUid || uid === companyId
+      ? "owner"
+      : resolveRole(companyData, uid, companyId);
+
+    return {
+      id: companyId,
+      name: stringValue(companyData.name, stringValue(companyData.companyName, "My Studio")),
+      role,
+      roleLabel: roleLabel(role),
+      isCurrent: companyId === currentCompanyId
+    } satisfies JoinedWorkspaceOption;
+  }));
+
+  return options
+    .filter((option): option is JoinedWorkspaceOption => option !== null)
+    .sort((lhs, rhs) => {
+      if (lhs.isCurrent !== rhs.isCurrent) return lhs.isCurrent ? -1 : 1;
+      if (lhs.role === "owner" && rhs.role !== "owner") return -1;
+      if (lhs.role !== "owner" && rhs.role === "owner") return 1;
+      return lhs.name.localeCompare(rhs.name);
+    });
+}
+
+export async function switchActiveWorkspace(uid: string, companyId: string) {
+  const cleanCompanyId = companyId.trim();
+  if (!cleanCompanyId) throw new Error("Workspace could not be selected.");
+
+  if (cleanCompanyId !== uid) {
+    const accessSnapshot = await getDoc(doc(db, "users", uid, "workspaceAccess", cleanCompanyId));
+    if (!accessSnapshot.exists()) {
+      throw new Error("Your access to this workspace is no longer available.");
+    }
+  }
+
+  const companySnapshot = await readWorkspaceDocument(cleanCompanyId);
+  if (!companySnapshot) throw new Error("This workspace is no longer available.");
+
+  await setDoc(doc(db, "users", uid), {
+    activeCompanyId: cleanCompanyId,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+export async function loadDashboardCounts(companyId: string): Promise<DashboardCounts> {
+  const ordersQuery = query(collection(db, "siparisler"), where("companyId", "==", companyId));
+  const customersQuery = query(collection(db, "musteriler"), where("companyId", "==", companyId));
+
+  const [ordersCountSnapshot, customersCountSnapshot, sampledOrdersSnapshot] = await Promise.all([
+    getCountFromServer(ordersQuery),
+    getCountFromServer(customersQuery),
+    // 1000, not 200: the pills silently understated for workspaces past the
+    // sample size (the dashboard report's caveat). Count aggregates stay exact.
+    getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId), limit(1000)))
+  ]);
+
+  let activeOrderCount = 0;
+  let completedOrderCount = 0;
+  let cancelledOrderCount = 0;
+  let dueSoonCount = 0;
+  let estimatedFileBytes = 0;
+  const now = new Date();
+  const inFourteenDays = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+  sampledOrdersSnapshot.docs.forEach(orderDocument => {
+    const data = orderDocument.data();
+    if (data.isDeleted === true) return; // trash never counts as active work
+    const status = stringValue(data.status, "").toLowerCase();
+    if (status === "cancelled" || status === "canceled") cancelledOrderCount += 1;
+    if (status === "done" || status === "completed") completedOrderCount += 1;
+    if (!ACTIVE_CLOSED_STATUSES.has(status)) activeOrderCount += 1;
+
+    const paymentDate = dateValue(data.paymentDate);
+    const deliveryTime = numberValue(data.deliveryTime, 0);
+    const dueDate = paymentDate && deliveryTime > 0
+      ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
+      : null;
+    if (dueDate && dueDate >= now && dueDate <= inFourteenDays && !ACTIVE_CLOSED_STATUSES.has(status)) {
+      dueSoonCount += 1;
+    }
+
+    if (Array.isArray(data.clientFiles)) {
+      data.clientFiles.forEach(file => {
+        if (file && typeof file === "object") {
+          estimatedFileBytes += numberValue((file as Record<string, unknown>).fileSize, 0);
+        }
+      });
+    }
+  });
+
+  return {
+    orderCount: ordersCountSnapshot.data().count,
+    customerCount: customersCountSnapshot.data().count,
+    activeOrderCount,
+    completedOrderCount,
+    cancelledOrderCount,
+    dueSoonCount,
+    estimatedFileUsageMB: Math.round((estimatedFileBytes / 1024 / 1024) * 10) / 10,
+    sampledOrderCount: sampledOrdersSnapshot.size
+  };
+}
+
+// A cancelled or refunded order owes nothing and earned nothing: the single
+// canonical rule, shared by the customers page and the dashboard aggregates.
+function orderCountsTowardBalance(data: Record<string, unknown>): boolean {
+  return !stringValue(data.status, "").toLowerCase().includes("cancel")
+    && stringValue(
+      (data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+        ? (data.customFields as Record<string, unknown>)["Shopify Status"]
+        : ""),
+      ""
+    ).toLowerCase() !== "refunded";
+}
+
+export async function loadDashboardFinanceOrders(companyId: string): Promise<DashboardFinanceOrder[]> {
+  const snapshot = await getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+  return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
+    const data = orderDocument.data();
+    return {
+      id: orderDocument.id,
+      paymentDate: dateValue(data.paymentDate),
+      paidAmount: numberValue(data.paidAmount, 0),
+      remainingAmount: numberValue(data.remainingAmount, 0),
+      watchPurchasePrice: numberValue(data.watchPurchasePrice, 0),
+      paymentFee: numberValue(data.paymentFee, 0),
+      deliveryCost: numberValue(data.deliveryCost, 0),
+      taxAmount: numberValue(data.taxAmount, 0),
+      customFields: stringMapValue(data.customFields),
+      customerName: stringValue(data.customerName, ""),
+      designName: stringValue(data.designName, ""),
+      watchRef: stringValue(data.watchRef, ""),
+      countsTowardBalance: orderCountsTowardBalance(data)
+    };
+  });
+}
+
+export async function loadWorkspaceSettingsOverview(companyId: string): Promise<WorkspaceSettingsOverview> {
+  const currentUserId = auth.currentUser?.uid ?? "";
+  const [snapshot, personalSnapshot] = await Promise.all([
+    getDoc(doc(db, "companySettings", companyId)),
+    currentUserId
+      ? getDoc(doc(db, "companies", companyId, "personalInterfaceSettings", currentUserId)).catch(() => null)
+      : Promise.resolve(null)
+  ]);
+  const data = snapshot.exists() ? snapshot.data() : {};
+  const personalData = personalSnapshot?.exists() ? personalSnapshot.data() : {};
+  const dashboardVisibility = dashboardWidgetVisibilityValue(data);
+
+  return {
+    // Theme and language are per-user. Never surface the workspace legacy
+    // values to the signed-in user's UI.
+    appTheme: stringValue(personalData.appTheme, "System"),
+    appSubtitle: stringValue(data.appSubtitle, "Bespoke Hand-Painted Dials"),
+    appLogoUrl: stringValue(data.appLogoUrl, ""),
+    selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
+    lastBackupExportedAtMs: numberValue(data.lastBackupExportedAtMs, 0),
+    lastBackupExportedHash: stringValue(data.lastBackupExportedHash, ""),
+    selectedCurrency: stringValue(data.seciliParaBirimi, "£"),
+    selectedDecimalSeparator: stringValue(data.seciliOndalik, "."),
+    feePercentage: numberValue(data.feePercentage, 3),
+    defaultTaxRate: numberValue(data.defaultTaxRate, 20),
+    defaultDeliveryTime: numberValue(data.defaultDeliveryTime, 30),
+    taxCalculationType: stringValue(data.taxCalculationType, "Revenue"),
+    taxMilestoneEnabled: booleanValue(data.taxMilestoneEnabled, false),
+    taxMilestoneDate: numberValue(data.taxMilestoneDate, Date.now() / 1000),
+    companyNumbers: decodeCompanyNumbers(data.companyNumbersJSON),
+    pdfShowCustomer: booleanValue(data.pdfShowCustomer, true),
+    pdfShowContact: booleanValue(data.pdfShowContact, true),
+    pdfShowPreview: booleanValue(data.pdfShowPreview, true),
+    pdfShowFinCustomer: booleanValue(data.pdfShowFinCustomer, true),
+    pdfShowPaymentMethod: booleanValue(data.pdfShowPaymentMethod, true),
+    pdfShowFinInternal: booleanValue(data.pdfShowFinInternal, false),
+    pdfShowStatus: booleanValue(data.pdfShowStatus, true),
+    pdfShowShipping: booleanValue(data.pdfShowShipping, true),
+    pdfShowMaterials: booleanValue(data.pdfShowMaterials, true),
+    pdfShowAddress: booleanValue(data.pdfShowAddress, true),
+    pdfShowShippingAddress: booleanValue(data.pdfShowShippingAddress, true),
+    orderItemsHeading: stringValue(data.orderItemsHeading, ""),
+    pdfShowPriority: booleanValue(data.pdfShowPriority, true),
+    financialExpenseItemsJSON: stringValue(data.financialExpenseItemsJSON, ""),
+    financialRemainingItemsJSON: stringValue(data.financialRemainingItemsJSON, ""),
+    financialShowBaseCost: booleanValue(data.financialShowBaseCost, true),
+    taxRuleNameRevenue: stringValue(data.taxRuleNameRevenue, "Standard VAT (Services/New)"),
+    taxRuleNameProfit: stringValue(data.taxRuleNameProfit, "Margin Scheme (2nd Hand)"),
+    corporationTaxEnabled: booleanValue(data.corporationTaxEnabled, false),
+    corporationTaxRate: numberValue(data.corporationTaxRate, 19),
+    invoiceFooterNote: stringValue(data.invoiceFooterNote, ""),
+    uploadSafetyRequirePolicyAcceptance: booleanValue(
+      data.uploadSafetyRequirePolicyAcceptanceV1,
+      booleanValue(data.uploadSafetyRequirePolicyAcceptance, true)
+    ),
+    uploadSafetyMaxFileSizeMB: numberValue(
+      data.uploadSafetyMaxFileSizeMBV1,
+      numberValue(data.uploadSafetyMaxFileSizeMB, 10)
+    ),
+    uploadSafetyPolicyText: stringValue(data.uploadSafetyPolicyText, ""),
+    integrationCustomerSync: stringValue(data.integrationCustomerSync, "store"),
+    dashboardWidgetVisibility: dashboardVisibility,
+    orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
+    businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
+      booleanValue(data.businessOnboardingCompleted, false)
+  };
+}
+
+function dashboardWidgetVisibilityValue(data: DocumentData): DashboardWidgetVisibility {
+  const mapValue = data.dashboardWidgetVisibility && typeof data.dashboardWidgetVisibility === "object"
+    ? data.dashboardWidgetVisibility as Record<string, unknown>
+    : {};
+
+  return {
+    revenue: booleanValue(mapValue.revenue, booleanValue(data.dashShowRevenue, true)),
+    pending: booleanValue(mapValue.pending, booleanValue(data.dashShowPending, true)),
+    cost: booleanValue(mapValue.cost, booleanValue(data.dashShowCost, true)),
+    fee: booleanValue(mapValue.fee, booleanValue(data.dashShowFee, true)),
+    shipping: booleanValue(mapValue.shipping, booleanValue(data.dashShowShipping, true)),
+    bankSpending: booleanValue(mapValue.bankSpending, true),
+    tax: booleanValue(mapValue.tax, booleanValue(data.dashShowTax, true)),
+    profit: booleanValue(mapValue.profit, booleanValue(data.dashShowProfit, true))
+  };
+}
+
+export async function loadWorkspaceStatusOptions(companyId: string): Promise<string[]> {
+  const snapshot = await getDoc(doc(db, "companySettings", companyId));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  const json = stringValue(data.activeStatusesJSON, "");
+  if (!json) return [];
+
+  try {
+    const decoded = JSON.parse(json) as unknown;
+    if (!Array.isArray(decoded)) return [];
+    return decoded
+      .map(item => typeof item === "string" ? item.trim() : "")
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// The Production board's columns. Returned raw so production.ts can apply the
+// same repair rule the server uses rather than duplicating it here.
+export async function loadWorkspaceProductionStages(companyId: string): Promise<unknown> {
+  const snapshot = await getDoc(doc(db, "companySettings", companyId));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  return data.productionStages;
+}
+
+function decodeQuickReplyTemplateItems(value: unknown): QuickReplyTemplateItem[] {
+  if (typeof value !== "string" || value.trim().length === 0) return [];
+  try {
+    const decoded = JSON.parse(value) as unknown;
+    if (!Array.isArray(decoded)) return [];
+    return decoded.map((item, index) => {
+      const source = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      return {
+        id: idFromUnknown(source.id, `template-${index}`),
+        title: stringValue(source.title, ""),
+        desc: stringValue(source.desc, "")
+      };
+    }).filter(item => item.title.trim().length > 0 || item.desc.trim().length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export async function loadQuickReplySettings(companyId: string): Promise<QuickReplySettings> {
+  const snapshot = await getDoc(doc(db, "companySettings", companyId));
+  const data = snapshot.exists() ? snapshot.data() : {};
+
+  return {
+    replyMode: stringValue(data.replyMode, "AI"),
+    quickReplyPoliteness: stringValue(data.quickReplyPoliteness, "Warm"),
+    quickReplyLength: stringValue(data.quickReplyLength, "Short"),
+    aiKnowledgeBase: stringValue(data.aiKnowledgeBase, ""),
+    aiKnowledgeBasePrevious: stringValue(data.aiKnowledgeBasePrevious, ""),
+    // Stored as a server Timestamp on the doc; the callable variant hands back millis.
+    aiKnowledgeBasePreviousSavedAtMs: dateValue(data.aiKnowledgeBasePreviousSavedAt)?.getTime()
+      ?? numberValue(data.aiKnowledgeBasePreviousSavedAtMs, 0),
+    hasOpenAIKey: booleanValue(data.hasOpenAIKey, false),
+    openAIKeyCheckedAtMs: numberValue(data.openAIKeyCheckedAtMs, 0),
+    openAIKeyWorks: booleanValue(data.openAIKeyWorks, false),
+    products: decodeQuickReplyTemplateItems(data.customProductsJSON),
+    rules: decodeQuickReplyTemplateItems(data.customRulesJSON)
+  };
+}
+
+// Only strict Workflow Only role uses the finance-free /workflowOrders subcollection.
+// Custom-role members with "Assigned Projects Only" toggled ON still query /siparisler
+// directly (filtered to their own assignedToUid) — Firestore rules grant them full
+// member-tier access to their own assigned orders, including financial fields.
+function isWorkflowAssignedView(workspace?: WorkspaceContext | null) {
+  return normalizeWorkspaceRole(workspace?.role) === "workflow";
+}
+
+// Returns true when the user is restricted to seeing only their own assigned orders.
+// Covers both strict workflow and custom-role "Assigned Projects Only" members.
+function requiresAssignedToSelfFilter(workspace?: WorkspaceContext | null) {
+  if (normalizeWorkspaceRole(workspace?.role) === "workflow") return true;
+  return workspace?.memberAccess.assignedProjectsOnly === true
+    && workspace?.memberAccess.manageProjectAssignments !== true;
+}
+
+const workflowViewSyncByWorkspace = new Map<string, Promise<void>>();
+
+async function ensureWorkflowAssignedOrderViews(companyId: string, workspace?: WorkspaceContext | null) {
+  if (!isWorkflowAssignedView(workspace) || !companyId) return;
+  const existing = workflowViewSyncByWorkspace.get(companyId);
+  if (existing) return existing;
+
+  const sync = (async () => {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean }>(functions, "ensureWorkflowAssignedOrderViews");
+    await callable({ companyId });
+  })().catch(error => {
+    workflowViewSyncByWorkspace.delete(companyId);
+    throw error;
+  });
+  workflowViewSyncByWorkspace.set(companyId, sync);
+  return sync;
+}
+
+function workspaceOrderCollection(companyId: string, workspace?: WorkspaceContext | null) {
+  return isWorkflowAssignedView(workspace)
+    ? collection(db, "companies", companyId, "workflowOrders")
+    : collection(db, "siparisler");
+}
+
+function workspaceOrderQuery(companyId: string, workspace?: WorkspaceContext | null, uid = "") {
+  if (isWorkflowAssignedView(workspace) && uid.trim()) {
+    return query(workspaceOrderCollection(companyId, workspace), where("assignedToUid", "==", uid.trim()));
+  }
+  // Custom-role members with "Assigned Projects Only" (but NOT strict workflow) hit
+  // /siparisler with a (companyId, assignedToUid) compound filter so Firestore rules
+  // can validate per-document access without scanning the whole company.
+  if (requiresAssignedToSelfFilter(workspace) && uid.trim()) {
+    return query(
+      workspaceOrderCollection(companyId, workspace),
+      where("companyId", "==", companyId),
+      where("assignedToUid", "==", uid.trim())
+    );
+  }
+  return query(workspaceOrderCollection(companyId, workspace), where("companyId", "==", companyId));
+}
+
+function workspaceOrderDoc(companyId: string, orderId: string, workspace?: WorkspaceContext | null) {
+  return isWorkflowAssignedView(workspace)
+    ? doc(db, "companies", companyId, "workflowOrders", orderId)
+    : doc(db, "siparisler", orderId);
+}
+
+export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = "", trashedOnly = false): Promise<OrderListItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  // No limit: load every order in the workspace scope so the web list matches
+  // the Mac and Android apps (which load the full set).
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const orders = snapshot.docs.filter(orderDocument => booleanValue(orderDocument.data().isDeleted, false) === trashedOnly).map(orderDocument => {
+    const data = orderDocument.data();
+    const paymentDate = dateValue(data.paymentDate);
+    const deliveryTime = numberValue(data.deliveryTime, 0);
+    const dueDate = paymentDate && deliveryTime > 0
+      ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
+      : null;
+
+    return {
+      id: orderDocument.id,
+      assignedToUid: stringValue(data.assignedToUid, ""),
+      assignedToEmail: stringValue(data.assignedToEmail, ""),
+      customerName: stringValue(data.customerName, "New Project"),
+      designName: stringValue(data.designName, "Untitled design"),
+      watchRef: stringValue(data.watchRef, ""),
+      status: stringValue(data.status, "Not Yet"),
+      designStatus: stringValue(data.designStatus, "Not Yet"),
+      priority: stringValue(data.priority, "Normal"),
+      risk: stringValue(data.risk, "None"),
+      riskReason: stringValue(data.riskReason, ""),
+      notes: stringValue(data.notes, ""),
+      emailAddress: stringValue(data.emailAddress, ""),
+      instagramUsername: stringValue(data.instagramUsername, ""),
+      whatsappNumber: stringValue(data.whatsappNumber, ""),
+      paidAmount: numberValue(data.paidAmount, 0),
+      remainingAmount: numberValue(data.remainingAmount, 0),
+      paymentDate,
+      dueDate,
+      isDispatched: booleanValue(data.isDispatched, false),
+      isDelivered: booleanValue(data.isDelivered, false),
+      clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
+      previewImageUrl: firstStringValue(
+        data.previewImageUrl,
+        data.previewImageURL,
+        data.previewURL,
+        data.previewUrl,
+        data.imageUrl,
+        data.imageURL,
+        data.designImageUrl,
+        data.designImageURL,
+        data.designLink
+      ),
+      customFields: recordStringValue(data.customFields),
+      extraStatuses: recordStringValue(data.extraStatuses)
+    };
+  });
+
+  return orders.sort((lhs, rhs) => {
+    const left = lhs.paymentDate?.getTime() ?? 0;
+    const right = rhs.paymentDate?.getTime() ?? 0;
+    return right - left;
+  });
+}
+
+export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
+    const data = orderDocument.data();
+    const paymentDate = dateValue(data.paymentDate);
+    const deliveryTime = numberValue(data.deliveryTime, 0);
+    const dueDate = paymentDate && deliveryTime > 0
+      ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
+      : null;
+
+    return {
+      id: orderDocument.id,
+      assignedToUid: stringValue(data.assignedToUid, ""),
+      assignedToEmail: stringValue(data.assignedToEmail, ""),
+      customerName: stringValue(data.customerName, "New Project"),
+      designName: stringValue(data.designName, "Untitled design"),
+      watchRef: stringValue(data.watchRef, ""),
+      status: stringValue(data.status, "Not Yet"),
+      designStatus: stringValue(data.designStatus, "Not Yet"),
+      priority: stringValue(data.priority, "Normal"),
+      risk: stringValue(data.risk, "None"),
+      riskReason: stringValue(data.riskReason, ""),
+      notes: stringValue(data.notes, ""),
+      paidAmount: numberValue(data.paidAmount, 0),
+      remainingAmount: numberValue(data.remainingAmount, 0),
+      paymentDate,
+      deliveryTime,
+      dueDate,
+      isDispatched: booleanValue(data.isDispatched, false),
+      isDelivered: booleanValue(data.isDelivered, false),
+      previewImageUrl: firstStringValue(
+        data.previewImageUrl,
+        data.previewImageURL,
+        data.previewURL,
+        data.previewUrl,
+        data.imageUrl,
+        data.imageURL,
+        data.designImageUrl,
+        data.designImageURL,
+        data.designLink
+      ),
+      clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
+      customFields: stringMapValue(data.customFields),
+      extraStatuses: stringMapValue(data.extraStatuses),
+      productionStageOverride: stringValue(data.productionStageOverride, ""),
+      productionBlocker: productionBlockerValue(data.productionBlocker),
+      materialsDefaultToggles: booleanMapValue(data.materialsDefaultToggles),
+      materialsToggles: booleanMapValue(data.materialsToggles)
+    };
+  });
+
+  return orders.sort((lhs, rhs) => {
+    const left = lhs.dueDate?.getTime() ?? lhs.paymentDate?.getTime() ?? 0;
+    const right = rhs.dueDate?.getTime() ?? rhs.paymentDate?.getTime() ?? 0;
+    return left - right;
+  });
+}
+
+export async function loadWorkspaceOrderOptions(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderOptionItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
+    const data = orderDocument.data();
+    return {
+      id: orderDocument.id,
+      customerName: stringValue(data.customerName, "New Project"),
+      designName: stringValue(data.designName, "Untitled design"),
+      status: stringValue(data.status, "Not Yet"),
+      paymentDate: dateValue(data.paymentDate)
+    };
+  });
+
+  return orders.sort((lhs, rhs) => {
+    const left = lhs.paymentDate?.getTime() ?? 0;
+    const right = rhs.paymentDate?.getTime() ?? 0;
+    return right - left;
+  });
+}
+
+function parseCustomerOrderFiles(raw: unknown): CustomerOrderFile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const item = entry as Record<string, unknown>;
+      const fileName = stringValue(item.fileName, "");
+      const downloadUrl = firstStringValue(item.downloadURL, item.downloadUrl);
+      if (!fileName && !downloadUrl) return null;
+      return {
+        id: stringValue(item.id, `${index}`),
+        fileName: fileName || "File",
+        downloadUrl,
+        contentType: stringValue(item.contentType, ""),
+        fileSize: numberValue(item.fileSize, 0),
+        uploadedAt: dateValue(item.uploadedAt)
+      };
+    })
+    .filter((item): item is CustomerOrderFile => item !== null);
+}
+
+function parseCustomerOrderActivity(raw: unknown): CustomerOrderActivity[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const item = entry as Record<string, unknown>;
+      const title = stringValue(item.title, "");
+      if (!title) return null;
+      return {
+        id: stringValue(item.id, `${index}`),
+        title,
+        oldValue: stringValue(item.oldValue, ""),
+        newValue: stringValue(item.newValue, ""),
+        createdAt: dateValue(item.createdAt),
+        byEmail: stringValue(item.createdByEmail, ""),
+        source: stringValue(item.source, "")
+      };
+    })
+    .filter((item): item is CustomerOrderActivity => item !== null)
+    .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
+}
+
+export async function loadWorkspaceCustomers(companyId: string): Promise<CustomerDirectoryItem[]> {
+  const [customersSnapshot, ordersSnapshot] = await Promise.all([
+    getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId))),
+    getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId)))
+  ]);
+
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
+    const data = orderDocument.data();
+    const paymentDate = dateValue(data.paymentDate);
+    const deliveryTime = numberValue(data.deliveryTime, 0);
+    const dueDate = paymentDate && deliveryTime > 0
+      ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
+      : null;
+
+    return {
+      id: orderDocument.id,
+      customerName: stringValue(data.customerName, "New Project"),
+      designName: stringValue(data.designName, "Untitled design"),
+      status: stringValue(data.status, "Not Yet"),
+      notes: stringValue(data.notes, ""),
+      previewImageUrl: firstStringValue(
+        data.previewImageUrl,
+        data.previewImageURL,
+        data.previewURL,
+        data.previewUrl,
+        data.imageUrl,
+        data.imageURL,
+        data.designImageUrl,
+        data.designImageURL,
+        data.designLink
+      ),
+      paidAmount: numberValue(data.paidAmount, 0),
+      remainingAmount: numberValue(data.remainingAmount, 0),
+      customRemainingTotal: Object.entries(
+        data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+          ? data.customFields as Record<string, unknown>
+          : {}
+      ).reduce((total, [key, raw]) => {
+        if (!key.startsWith("financialRemaining::")) return total;
+        const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+        return total + (Number.isFinite(parsed) ? parsed : 0);
+      }, 0),
+      paymentDate,
+      dueDate,
+      invoiceNumber: stringValue(data.invoiceNumber, ""),
+      isDispatched: booleanValue(data.isDispatched, false),
+      isDelivered: booleanValue(data.isDelivered, false),
+      // A cancelled or refunded order owes nothing: it must not inflate the
+      // customer's outstanding balance (the report's refund complaint).
+      countsTowardBalance: orderCountsTowardBalance(data),
+      files: parseCustomerOrderFiles(data.clientFiles),
+      activity: parseCustomerOrderActivity(data.historyLog)
+    };
+  });
+
+  const ordersByCustomer = new Map<string, CustomerOrderSummary[]>();
+  orders.forEach(order => {
+    const key = normalizedCustomerName(order.customerName);
+    if (!key) return;
+    const existing = ordersByCustomer.get(key) ?? [];
+    existing.push(order);
+    ordersByCustomer.set(key, existing);
+  });
+
+  const customers = customersSnapshot.docs.map(customerDocument => {
+    const data = customerDocument.data();
+    const name = stringValue(data.name, "Unnamed customer");
+    const customerOrders = (ordersByCustomer.get(normalizedCustomerName(name)) ?? [])
+      .sort((lhs, rhs) => (rhs.paymentDate?.getTime() ?? 0) - (lhs.paymentDate?.getTime() ?? 0));
+
+    return {
+      id: customerDocument.id,
+      name,
+      email: stringValue(data.email, ""),
+      phone: stringValue(data.phone, ""),
+      primaryPhone: stringValue(data.primaryPhone, ""),
+      whatsappNumber: stringValue(data.whatsappNumber, ""),
+      company: stringValue(data.company, ""),
+      instagram: stringValue(data.instagram, ""),
+      address: stringValue(data.address, ""),
+      streetAddress: firstStringValue(data.streetAddress, data.addressLine1, data.street),
+      city: firstStringValue(data.city, data.town),
+      postalCode: firstStringValue(data.postalCode, data.postcode, data.zipCode, data.zip),
+      country: stringValue(data.country, ""),
+      shippingAddress: stringValue(data.shippingAddress, ""),
+      shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+      shippingCity: stringValue(data.shippingCity, ""),
+      shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+      shippingCountry: stringValue(data.shippingCountry, ""),
+      shippingPhone: stringValue(data.shippingPhone, ""),
+      notes: stringValue(data.notes, ""),
+      profileImageUrl: stringValue(data.profileImageUrl, ""),
+      lastContactDate: dateValue(data.lastContactDate),
+      source: stringValue(data.source, ""),
+      externalCustomerId: stringValue(data.externalCustomerId, ""),
+      integrationSyncedAt: dateValue(data.integrationSyncedAt),
+      integrationLastPayload: stringValue(data.integrationLastPayload, ""),
+      tags: Array.isArray(data.tags) ? (data.tags as unknown[]).map(tag => String(tag || "").trim()).filter(Boolean) : [],
+      preferredChannel: stringValue(data.preferredChannel, ""),
+      doNotContact: data.doNotContact === true,
+      marketingOptIn: stringValue(data.marketingOptIn, ""),
+      nextFollowUpDate: dateValue(data.nextFollowUpDate),
+      orderCount: customerOrders.length,
+      totalPaid: customerOrders.reduce((total, order) => total + order.paidAmount, 0),
+      totalValue: customerOrders.reduce((total, order) => total + order.paidAmount + order.remainingAmount + order.customRemainingTotal, 0),
+      totalOutstanding: customerOrders.reduce(
+        (total, order) => order.countsTowardBalance ? total + order.remainingAmount + order.customRemainingTotal : total,
+        0
+      ),
+      totalRefunded: customerOrders.reduce(
+        (total, order) => order.countsTowardBalance ? total : total + order.paidAmount + order.remainingAmount + order.customRemainingTotal,
+        0
+      ),
+      orders: customerOrders
+    };
+  });
+
+  return customers.sort((lhs, rhs) => {
+    const left = lhs.lastContactDate?.getTime() ?? 0;
+    const right = rhs.lastContactDate?.getTime() ?? 0;
+    if (left !== right) return right - left;
+    return lhs.name.localeCompare(rhs.name);
+  });
+}
+
+export function serializeFirestoreValue(value: unknown): unknown {
+  if (value === null || value === undefined) return value ?? null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+  if (Array.isArray(value)) return value.map(item => serializeFirestoreValue(item));
+  if (typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, childValue]) => {
+      output[key] = serializeFirestoreValue(childValue);
+    });
+    return output;
+  }
+  return value;
+}
+
+function serializableDocument(id: string, data: Record<string, unknown>): SerializableFirestoreDocument {
+  return {
+    id,
+    data: serializeFirestoreValue(data) as Record<string, unknown>
+  };
+}
+
+export async function loadWorkspaceExportData(workspace: WorkspaceContext): Promise<WorkspaceExportData> {
+  const [ordersSnapshot, customersSnapshot, settingsSnapshot] = await Promise.all([
+    getDocs(query(collection(db, "siparisler"), where("companyId", "==", workspace.id))),
+    getDocs(query(collection(db, "musteriler"), where("companyId", "==", workspace.id))),
+    getDoc(doc(db, "companySettings", workspace.id))
+  ]);
+
+  const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => serializableDocument(orderDocument.id, orderDocument.data()));
+  const customers = customersSnapshot.docs.map(customerDocument => serializableDocument(customerDocument.id, customerDocument.data()));
+
+  return {
+    workspace,
+    generatedAt: new Date().toISOString(),
+    orders,
+    customers,
+    settings: settingsSnapshot.exists()
+      ? serializeFirestoreValue(settingsSnapshot.data()) as Record<string, unknown>
+      : {}
+  };
+}
+
+
+function booleanValue(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function stringArrayValue(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function stringMapValue(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output: Record<string, string> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, childValue]) => {
+    if (typeof childValue === "string" && childValue.trim().length > 0) output[key] = childValue;
+  });
+  return output;
+}
+
+function booleanMapValue(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output: Record<string, boolean> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, childValue]) => {
+    if (typeof childValue === "boolean") output[key] = childValue;
+  });
+  return output;
+}
+
+// A blocker without a reason is not a blocker — the Blocked column exists to
+// say why a job stopped, so an empty reason reads as "not blocked".
+function productionBlockerValue(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+  if (!reason) return null;
+  return { reason, note: typeof record.note === "string" ? record.note : "" };
+}
+
+function idFromUnknown(value: unknown, fallback: string) {
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (value && typeof value === "object") {
+    const maybeUuid = (value as Record<string, unknown>).uuidString;
+    if (typeof maybeUuid === "string" && maybeUuid.trim().length > 0) return maybeUuid;
+  }
+  return fallback;
+}
+
+function collectionItemsValue(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    try {
+      return collectionItemsValue(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>);
+  }
+  return [];
+}
+
+function mapClientFiles(value: unknown): ClientFileDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const file = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(file.id, `file-${index}`),
+      fileName: stringValue(file.fileName, "Untitled file"),
+      downloadURL: stringValue(file.downloadURL, ""),
+      storagePath: stringValue(file.storagePath, ""),
+      contentType: stringValue(file.contentType, ""),
+      fileSize: numberValue(file.fileSize, numberValue(file.sizeBytes, 0)),
+      uploadedByUid: stringValue(file.uploadedByUid, ""),
+      uploadedByEmail: stringValue(file.uploadedByEmail, ""),
+      uploadedBy: stringValue(file.uploadedBy, ""),
+      uploadedAt: dateValue(file.uploadedAt),
+      source: stringValue(file.source, ""),
+      note: stringValue(file.note, "")
+    };
+  });
+}
+
+export async function loadWorkspaceClientFiles(companyId: string, includeCloudAccess = false, workspace?: WorkspaceContext | null, uid = ""): Promise<ClientFileListItem[]> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const files = snapshot.docs.flatMap(orderDocument => {
+    const data = orderDocument.data();
+    const orderId = orderDocument.id;
+    const customerName = stringValue(data.customerName, "New Project");
+    const designName = stringValue(data.designName, "Untitled design");
+    const orderStatus = stringValue(data.status, "Not Yet");
+
+    return mapClientFiles(data.clientFiles).map(file => ({
+      ...file,
+      id: `${orderId}-${file.id}`,
+      fileId: file.id,
+      downloadURL: includeCloudAccess ? file.downloadURL : "",
+      storagePath: includeCloudAccess ? file.storagePath : "",
+      orderId,
+      customerName,
+      designName,
+      orderStatus
+    }));
+  });
+
+  return files.sort((lhs, rhs) => {
+    const left = lhs.uploadedAt?.getTime() ?? 0;
+    const right = rhs.uploadedAt?.getTime() ?? 0;
+    if (left !== right) return right - left;
+    return lhs.fileName.localeCompare(rhs.fileName);
+  });
+}
+
+function mapTodoItems(value: unknown): ToDoDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const task = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(task.id, `task-${index}`),
+      title: stringValue(task.title, "Untitled task"),
+      note: stringValue(task.note, ""),
+      assignedToUid: stringValue(task.assignedToUid, ""),
+      assignedToEmail: stringValue(task.assignedToEmail, ""),
+      dueAt: dateValue(task.dueAt),
+      priority: stringValue(task.priority, "Normal"),
+      isDone: booleanValue(task.isDone, false)
+    };
+  });
+}
+
+function mapWorkSessions(value: unknown): WorkSessionDetail[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item, index) => {
+    const session = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(session.id, `work-${index}`),
+      title: stringValue(session.title, "Work session"),
+      startedAt: dateValue(session.startedAt),
+      endedAt: dateValue(session.endedAt),
+      durationSeconds: numberValue(session.durationSeconds, 0),
+      createdAt: dateValue(session.createdAt),
+      createdByUid: stringValue(session.createdByUid, ""),
+      createdByEmail: stringValue(session.createdByEmail, ""),
+      source: stringValue(session.source, "")
+    };
+  }).sort((first, second) => {
+    if (!first.endedAt && second.endedAt) return -1;
+    if (first.endedAt && !second.endedAt) return 1;
+    return (second.startedAt?.getTime() ?? 0) - (first.startedAt?.getTime() ?? 0);
+  });
+}
+
+function mapHistoryLog(value: unknown): HistoryLogDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `history-${index}`),
+      title: stringValue(entry.title, "Update"),
+      oldValue: stringValue(entry.oldValue, ""),
+      newValue: stringValue(entry.newValue, ""),
+      createdAt: dateValue(entry.createdAt)
+    };
+  }).sort((first, second) => (second.createdAt?.getTime() ?? 0) - (first.createdAt?.getTime() ?? 0));
+}
+
+function mapPayments(value: unknown): PaymentEntryDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `payment-${index}`),
+      amount: numberValue(entry.amount),
+      date: dateValue(entry.date),
+      method: stringValue(entry.method, ""),
+      note: stringValue(entry.note, ""),
+      createdByUid: stringValue(entry.createdByUid, ""),
+      createdByEmail: stringValue(entry.createdByEmail, "")
+    };
+  }).sort((first, second) => (second.date?.getTime() ?? 0) - (first.date?.getTime() ?? 0));
+}
+
+function mapLineItems(value: unknown): LineItemDetail[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `item-${index}`),
+      name: stringValue(entry.name, ""),
+      quantity: numberValue(entry.quantity, 1),
+      unitPrice: numberValue(entry.unitPrice),
+      lineTotal: numberValue(entry.lineTotal)
+    };
+  });
+}
+
+function mapCustomerPortal(data: Record<string, unknown>): CustomerPortalDetail {
+  const flag = (source: unknown, key: string, fallback: boolean) => {
+    if (!source || typeof source !== "object" || Array.isArray(source)) return fallback;
+    const value = (source as Record<string, unknown>)[key];
+    return typeof value === "boolean" ? value : fallback;
+  };
+  const visibility = data.portalVisibility;
+  const autoUpdates = data.portalAutoUpdates;
+  return {
+    token: stringValue(data.portalToken, ""),
+    // A token id with no revoke stamp is what makes a link live; the plaintext
+    // is only there so the workspace can copy it again.
+    active: Boolean(stringValue(data.portalTokenId, "")),
+    createdAtMs: numberValue(data.portalCreatedAtMs),
+    visibility: {
+      status: flag(visibility, "status", true),
+      estimate: flag(visibility, "estimate", true),
+      payments: flag(visibility, "payments", true),
+      photos: flag(visibility, "photos", true),
+      expectedDate: flag(visibility, "expectedDate", true)
+    },
+    autoUpdates: {
+      enabled: flag(autoUpdates, "enabled", true),
+      email: flag(autoUpdates, "email", true),
+      sms: flag(autoUpdates, "sms", false)
+    }
+  };
+}
+
+function mapEstimates(value: unknown): EstimateSummary[] {
+  return collectionItemsValue(value).map((item, index) => {
+    const entry = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      id: idFromUnknown(entry.id, `estimate-${index}`),
+      number: stringValue(entry.number, ""),
+      version: numberValue(entry.version, 1),
+      status: stringValue(entry.status, "draft"),
+      total: numberValue(entry.total),
+      subtotal: numberValue(entry.subtotal),
+      taxAmount: numberValue(entry.taxAmount),
+      taxRate: numberValue(entry.taxRate),
+      taxType: stringValue(entry.taxType, ""),
+      itemCount: numberValue(entry.itemCount),
+      createdAtMs: numberValue(entry.createdAtMs),
+      sentAtMs: numberValue(entry.sentAtMs),
+      viewedAtMs: numberValue(entry.viewedAtMs),
+      decidedAtMs: numberValue(entry.decidedAtMs),
+      decidedBy: stringValue(entry.decidedBy, ""),
+      decisionMethod: stringValue(entry.decisionMethod, ""),
+      hasSignature: entry.hasSignature === true,
+      supersedesId: stringValue(entry.supersedesId, ""),
+      supersededById: stringValue(entry.supersededById, ""),
+      linkState: stringValue(entry.linkState, "none")
+    };
+  });
+}
+
+function mapRepairIntake(value: unknown): RepairIntakeDetail | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entry = value as Record<string, unknown>;
+  const fields: Record<string, string> = {};
+  const rawFields = entry.fields && typeof entry.fields === "object" && !Array.isArray(entry.fields)
+    ? entry.fields as Record<string, unknown>
+    : {};
+  for (const [key, raw] of Object.entries(rawFields)) {
+    const text = stringValue(raw, "");
+    if (text) fields[key] = text;
+  }
+  const lines = (raw: unknown) => collectionItemsValue(raw)
+    .map(item => (typeof item === "string" ? item : stringValue((item as Record<string, unknown>)?.text, "")))
+    .filter(Boolean);
+  return {
+    fields,
+    condition: lines(entry.condition),
+    requestedWork: lines(entry.requestedWork),
+    customerInstructions: stringValue(entry.customerInstructions, ""),
+    receivedAt: dateValue(entry.receivedAt),
+    receivedByUid: stringValue(entry.receivedByUid, ""),
+    receivedByName: stringValue(entry.receivedByName, ""),
+    customerOwned: true
+  };
+}
+
+function mapOrderDetailSnapshot(
+  snapshot: DocumentSnapshot<DocumentData>,
+  companyId: string,
+  includeClientFileCloudAccess = true
+): OrderDetail {
+  if (!snapshot.exists()) {
+    throw new Error("Order not found.");
+  }
+
+  const data = snapshot.data();
+  const orderCompanyId = stringValue(data.companyId, companyId);
+  if (orderCompanyId !== companyId) {
+    throw new Error("You do not have access to this order.");
+  }
+
+  const paymentDate = dateValue(data.paymentDate);
+  const deliveryTime = numberValue(data.deliveryTime, 0);
+  const dueDate = paymentDate && deliveryTime > 0
+    ? new Date(paymentDate.getTime() + deliveryTime * 24 * 60 * 60 * 1000)
+    : null;
+
+  const paidAmount = numberValue(data.paidAmount, 0);
+  const remainingAmount = numberValue(data.remainingAmount, 0);
+  const watchPurchasePrice = numberValue(data.watchPurchasePrice, 0);
+  const paymentFee = numberValue(data.paymentFee, 0);
+  const deliveryCost = numberValue(data.deliveryCost, 0);
+  const taxAmount = numberValue(data.taxAmount, 0);
+  // Custom "Remaining" receivables count toward the sales total exactly like
+  // remainingAmount (same rule as Mac, Android and the backend).
+  const rawCustomFields = data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
+    ? data.customFields as Record<string, unknown>
+    : {};
+  const customRemainingTotal = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
+    if (!key.startsWith("financialRemaining::")) return total;
+    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+    return total + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+  // Custom spending reduces the profit shown before Corporation Tax, matching
+  // the Mac card and the optimistic client-side recalculation.
+  const customExpenseTotalParsed = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
+    if (!key.startsWith("financialExpense::")) return total;
+    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
+    return total + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+
+  return {
+    id: snapshot.id,
+    companyId: orderCompanyId,
+    assignedToUid: stringValue(data.assignedToUid, ""),
+    assignedToEmail: stringValue(data.assignedToEmail, ""),
+    customerName: stringValue(data.customerName, "New Project"),
+    designName: stringValue(data.designName, "Untitled design"),
+    designLink: stringValue(data.designLink, ""),
+    watchRef: stringValue(data.watchRef, ""),
+    status: stringValue(data.status, "Not Yet"),
+    designStatus: stringValue(data.designStatus, "Not Yet"),
+    priority: stringValue(data.priority, "Normal"),
+    risk: stringValue(data.risk, "None"),
+    riskReason: stringValue(data.riskReason, ""),
+    paymentMethod: stringValue(data.paymentMethod, ""),
+    paymentDate,
+    deliveryTime,
+    dueDate,
+    paidAmount,
+    remainingAmount,
+    watchPurchasePrice,
+    paymentFee,
+    deliveryCost,
+    taxType: stringValue(data.taxType, ""),
+    taxRate: numberValue(data.taxRate, 0),
+    taxAmount,
+    netProfit: paidAmount + remainingAmount + customRemainingTotal - watchPurchasePrice - customExpenseTotalParsed - paymentFee - deliveryCost - taxAmount,
+    emailAddress: stringValue(data.emailAddress, ""),
+    instagramUsername: stringValue(data.instagramUsername, ""),
+    whatsappNumber: stringValue(data.whatsappNumber, ""),
+    shippingName: stringValue(data.shippingName, ""),
+    shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
+    shippingCity: stringValue(data.shippingCity, ""),
+    shippingPostalCode: stringValue(data.shippingPostalCode, ""),
+    shippingCountry: stringValue(data.shippingCountry, ""),
+    shippingPhone: stringValue(data.shippingPhone, ""),
+    communication: stringArrayValue(data.communication),
+    notes: stringValue(data.notes, ""),
+    invBool1: booleanValue(data.invBool1, false),
+    invBool2: booleanValue(data.invBool2, false),
+    invBool3: booleanValue(data.invBool3, false),
+    invBool4: booleanValue(data.invBool4, false),
+    invNotes: stringValue(data.invNotes, ""),
+    trackingNumber: stringValue(data.trackingNumber, ""),
+    courier: stringValue(data.courier, ""),
+    isDispatched: booleanValue(data.isDispatched, false),
+    isDelivered: booleanValue(data.isDelivered, false),
+    customFields: stringMapValue(data.customFields),
+    customToggles: booleanMapValue(data.customToggles),
+    extraStatuses: stringMapValue(data.extraStatuses),
+    productionStageOverride: stringValue(data.productionStageOverride, ""),
+    productionBlocker: productionBlockerValue(data.productionBlocker),
+    clientFiles: mapClientFiles(data.clientFiles).map(file => includeClientFileCloudAccess ? file : {
+      ...file,
+      downloadURL: "",
+      storagePath: ""
+    }),
+    todoItems: mapTodoItems(data.todoItems),
+    workSessions: mapWorkSessions(data.workSessions),
+    historyLog: mapHistoryLog(data.historyLog),
+    payments: mapPayments(data.payments),
+    invoiceNote: stringValue(data.invoiceNote, ""),
+    lineItems: mapLineItems(data.lineItems),
+    invoiceNumber: stringValue(data.invoiceNumber, ""),
+    orderType: stringValue(data.orderType, "custom") === "repair" ? "repair" : "custom",
+    repairIntake: mapRepairIntake(data.repairIntake),
+    estimates: mapEstimates(data.estimates),
+    customerPortal: mapCustomerPortal(data),
+    estimateStatus: stringValue(data.estimateStatus, "")
+  };
+}
+
+export async function loadOrderDetail(
+  companyId: string,
+  orderId: string,
+  includeClientFileCloudAccess = true,
+  workspace?: WorkspaceContext | null
+): Promise<OrderDetail> {
+  await ensureWorkflowAssignedOrderViews(companyId, workspace);
+  const snapshot = await getDoc(workspaceOrderDoc(companyId, orderId, workspace));
+  return mapOrderDetailSnapshot(snapshot, companyId, includeClientFileCloudAccess);
+}
+
+export function subscribeOrderDetail(
+  companyId: string,
+  orderId: string,
+  includeClientFileCloudAccess: boolean,
+  onOrder: (order: OrderDetail) => void,
+  onError: (message: string) => void,
+  workspace?: WorkspaceContext | null
+) {
+  if (!companyId || !orderId) return () => {};
+
+  let cancelled = false;
+  let unsubscribe = () => {};
+  void ensureWorkflowAssignedOrderViews(companyId, workspace)
+    .then(() => {
+      if (cancelled) return;
+      unsubscribe = onSnapshot(
+        workspaceOrderDoc(companyId, orderId, workspace),
+        snapshot => {
+          try {
+            onOrder(mapOrderDetailSnapshot(snapshot, companyId, includeClientFileCloudAccess));
+          } catch (error) {
+            onError(error instanceof Error ? error.message : "Could not load this order.");
+          }
+        },
+        error => {
+          onError(error.message || "Could not listen to this order.");
+        }
+      );
+    })
+    .catch(error => {
+      onError(error instanceof Error ? error.message : "Could not prepare assigned projects.");
+    });
+
+  return () => {
+    cancelled = true;
+    unsubscribe();
+  };
+}
+
+export type TeamMemberDetail = {
+  id: string;
+  email: string;
+  displayName: string;
+  photoURL: string;
+  role: string;
+  effectiveRole: string;
+  roleLabel: string;
+  access: WorkspaceMemberAccess;
+  addedAt: Date | null;
+  isOwner: boolean;
+};
+
+export type JoinRequestDetail = {
+  id: string;
+  requesterUid: string;
+  requesterEmail: string;
+  requesterDisplayName: string;
+  requesterPhotoURL: string;
+  status: string;
+  createdAt: Date | null;
+};
+
+export type TeamAccessData = {
+  members: TeamMemberDetail[];
+  joinRequests: JoinRequestDetail[];
+  customRoles: WorkspaceCustomRole[];
+};
+
+function mapCompanyMembers(companyData: Record<string, unknown>, companyId: string): TeamMemberDetail[] {
+  const ownerUid = stringValue(companyData.ownerUid, companyId);
+  const customRoles = customRolesMap(companyData);
+  const members = companyData.members && typeof companyData.members === "object"
+    ? companyData.members as Record<string, unknown>
+    : {};
+
+  const output: TeamMemberDetail[] = Object.entries(members).map(([uid, raw]) => {
+    const memberData = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+    const role = workspaceMemberRoleValue(companyData, uid, uid === ownerUid ? "owner" : "member");
+    const effectiveRole = effectiveWorkspaceRole(companyData, role, uid === ownerUid ? "owner" : "member");
+    return {
+      id: uid,
+      email: stringValue(memberData.email, uid === ownerUid ? stringValue(companyData.ownerEmail, "") : ""),
+      displayName: stringValue(memberData.displayName, uid === ownerUid ? stringValue(companyData.ownerDisplayName, "") : ""),
+      photoURL: stringValue(memberData.photoURL, uid === ownerUid ? stringValue(companyData.ownerPhotoURL, "") : ""),
+      role,
+      effectiveRole,
+      roleLabel: customRoles[role]?.name ?? roleLabel(effectiveRole),
+      access: workspaceMemberAccess(companyData, uid, uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"),
+      addedAt: dateValue(memberData.addedAt) ?? dateValue(memberData.updatedAt),
+      isOwner: uid === ownerUid || normalizeWorkspaceRole(effectiveRole) === "owner"
+    };
+  });
+
+  if (!output.some(member => member.id === ownerUid)) {
+    output.unshift({
+      id: ownerUid,
+      email: stringValue(companyData.ownerEmail, ""),
+      displayName: stringValue(companyData.ownerDisplayName, "Owner"),
+      photoURL: stringValue(companyData.ownerPhotoURL, ""),
+      role: "owner",
+      effectiveRole: "owner",
+      roleLabel: "Owner",
+      access: normalizeWorkspaceMemberAccess(null, true),
+      addedAt: dateValue(companyData.createdAt),
+      isOwner: true
+    });
+  }
+
+  return output.sort((lhs, rhs) => {
+    if (lhs.isOwner && !rhs.isOwner) return -1;
+    if (!lhs.isOwner && rhs.isOwner) return 1;
+    const roleRank: Record<string, number> = { owner: 0, admin: 1, member: 2, viewer: 3, workflow: 4 };
+    const lhsRank = roleRank[normalizeWorkspaceRole(lhs.effectiveRole)] ?? 9;
+    const rhsRank = roleRank[normalizeWorkspaceRole(rhs.effectiveRole)] ?? 9;
+    if (lhsRank !== rhsRank) return lhsRank - rhsRank;
+    return (lhs.displayName || lhs.email || lhs.id).localeCompare(rhs.displayName || rhs.email || rhs.id);
+  });
+}
+
+function mapJoinRequest(documentId: string, data: Record<string, unknown>): JoinRequestDetail | null {
+  const requesterUid = stringValue(data.requesterUid, "");
+  if (!requesterUid) return null;
+  return {
+    id: documentId,
+    requesterUid,
+    requesterEmail: stringValue(data.requesterEmail, ""),
+    requesterDisplayName: stringValue(data.requesterDisplayName, ""),
+    requesterPhotoURL: stringValue(data.requesterPhotoURL, ""),
+    status: stringValue(data.status, "pending"),
+    createdAt: dateValue(data.createdAt)
+  };
+}
+
+export async function loadTeamAccessData(workspace: WorkspaceContext): Promise<TeamAccessData> {
+  const companySnapshot = await getDoc(doc(db, "companies", workspace.id));
+  const companyData = companySnapshot.exists() ? companySnapshot.data() : {};
+  const members = mapCompanyMembers(companyData, workspace.id);
+  const customRoles = Object.values(customRolesMap(companyData))
+    .sort((lhs, rhs) => lhs.name.localeCompare(rhs.name));
+
+  let joinRequests: JoinRequestDetail[] = [];
+  if (normalizeWorkspaceRole(workspace.role) === "owner") {
+    const joinSnapshot = await getDocs(query(collection(db, "workspaceJoinRequests"), where("targetCompanyId", "==", workspace.id)));
+    joinRequests = joinSnapshot.docs
+      .map(joinDocument => mapJoinRequest(joinDocument.id, joinDocument.data()))
+      .filter((request): request is JoinRequestDetail => Boolean(request))
+      .filter(request => request.status.toLowerCase() === "pending")
+      .sort((lhs, rhs) => (rhs.createdAt?.getTime() ?? 0) - (lhs.createdAt?.getTime() ?? 0));
+  }
+
+  return { members, joinRequests, customRoles };
+}

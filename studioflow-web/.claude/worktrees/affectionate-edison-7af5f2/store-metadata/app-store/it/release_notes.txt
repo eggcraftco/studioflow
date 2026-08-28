@@ -1,0 +1,5 @@
+• Integrazione Shopify: gli ordini del tuo negozio Shopify arrivano ora automaticamente in NivaDesk.
+• Widget: widget della schermata Home rinnovati, incluso un nuovo widget Note.
+• Nota rapida: tieni premuta l'icona dell'app per iniziare una nuova nota.
+• Al primo avvio l'app si apre nella lingua del dispositivo (12 lingue).
+• Correzioni di bug e miglioramenti delle prestazioni.

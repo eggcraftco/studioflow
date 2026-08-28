@@ -1,0 +1,815 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function companyPath(companyId) {
+      return /databases/$(database)/documents/companies/$(companyId);
+    }
+
+    function isOwnWorkspace(companyId) {
+      return signedIn() && companyId == request.auth.uid;
+    }
+
+    function companyExists(companyId) {
+      return exists(companyPath(companyId));
+    }
+
+    function memberRole(companyId) {
+      return get(companyPath(companyId)).data.members[request.auth.uid].role;
+    }
+
+    function isCompanyOwner(companyId) {
+      return isOwnWorkspace(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && get(companyPath(companyId)).data.ownerUid == request.auth.uid
+        );
+    }
+
+    function canReadCompany(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
+        );
+    }
+
+    function canWriteCompanyData(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member']
+        );
+    }
+
+    function isWorkflowOnlyMember(companyId) {
+      return signedIn()
+        && !isCompanyOwner(companyId)
+        && companyExists(companyId)
+        && memberRole(companyId) in ['workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only'];
+    }
+
+    // Custom role with "Assigned Projects Only" toggled ON and "Change Project Assignments"
+    // toggled OFF — base role is still `member`, but the user is restricted to their own
+    // assigned orders. They can create/read/update/delete their OWN orders directly
+    // (full member-tier access including financial fields), but cannot reassign them
+    // to someone else and cannot see other people's orders.
+    function isAssignedOnlyCustomMember(companyId) {
+      return signedIn()
+        && !isCompanyOwner(companyId)
+        && companyExists(companyId)
+        && !isWorkflowOnlyMember(companyId)
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].assignedProjectsOnly == true
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid].manageProjectAssignments != true;
+    }
+
+    // Per-member access flag granted by the owner in Team Access. The server
+    // always mirrors the effective access into memberAccess[uid] (custom-role
+    // fan-out included), so one lookup is enough here.
+    function memberAccessAllows(companyId, key) {
+      return signedIn()
+        && companyExists(companyId)
+        && get(companyPath(companyId)).data.memberAccess[request.auth.uid][key] == true;
+    }
+
+    // Bank Spending feed: owner, or a member the owner explicitly granted bankFeed.
+    function canReadBankFeed(companyId) {
+      return isCompanyOwner(companyId)
+        || (canReadCompany(companyId) && memberAccessAllows(companyId, 'bankFeed'));
+    }
+
+    // Strict workflow-only members read finance-free order summaries from the
+    // /workflowOrders subcollection and must use callables to write — they never
+    // touch /siparisler directly.
+    function usesWorkflowSafeView(companyId) {
+      return isWorkflowOnlyMember(companyId);
+    }
+
+    // Combined "needs assigned-to-self filter on /siparisler reads".
+    function requiresAssignedToSelfFilter(companyId) {
+      return isAssignedOnlyCustomMember(companyId);
+    }
+
+    function canReadOrderDocument(data) {
+      return data.companyId is string
+        && canReadCompany(data.companyId)
+        && (!requiresAssignedToSelfFilter(data.companyId) || data.assignedToUid == request.auth.uid);
+    }
+
+    function hasTeamPlan(companyId) {
+      return companyExists(companyId)
+        && get(companyPath(companyId)).data.billingPlan in [
+          'team_monthly', 'team_yearly', 'teamMonthly', 'teamYearly'
+        ];
+    }
+
+    function hasAdvancedFinancePlan(companyId) {
+      return companyExists(companyId)
+        && get(companyPath(companyId)).data.billingPlan in [
+          'pro_monthly', 'pro_yearly', 'team_monthly', 'team_yearly',
+          'proMonthly', 'proYearly', 'teamMonthly', 'teamYearly'
+        ];
+    }
+
+    function canReadMessages(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member', 'viewer', 'workflow', 'workflowOnly', 'workflow_only', 'workflow-only', 'Workflow Only']
+        );
+    }
+
+    function canWriteMessages(companyId) {
+      return isCompanyOwner(companyId)
+        || (
+          signedIn()
+          && companyExists(companyId)
+          && memberRole(companyId) in ['owner', 'admin', 'member']
+        );
+    }
+
+    function protectedTeamWorkspaceFields() {
+      return [
+        'members',
+        'memberRoles',
+        'memberCustomRoles',
+        'memberAccess',
+        'memberUids',
+        'removedMemberUids',
+        'customRoles'
+      ];
+    }
+
+    // ownerUid is what both the server (uidIsCompanyOwner) and these rules
+    // (isCompanyOwner) treat as the real owner, and nothing pinned it: an owner
+    // could write any uid there from a plain client write and hand out full
+    // owner rights off the books. It may only ever be set to your own uid — the
+    // apps' self-repair writes do exactly that, an off-book co-owner does not.
+    function validOwnerUidUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid'])
+        || request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function validTeamWorkspaceUpdate(companyId) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedTeamWorkspaceFields())
+        || hasTeamPlan(companyId);
+    }
+
+    function advancedFinanceFields() {
+      return [
+        'paymentFee',
+        'deliveryCost',
+        'taxType',
+        'taxRate',
+        'taxAmount',
+        'financialRemainingValues',
+        'financialExpenseValues'
+      ];
+    }
+
+    function safeBasicFinanceCreateValues(data) {
+      return (!data.keys().hasAny(['paymentFee']) || data.paymentFee == 0)
+        && (!data.keys().hasAny(['deliveryCost']) || data.deliveryCost == 0)
+        && (!data.keys().hasAny(['taxType']) || data.taxType == '')
+        && (!data.keys().hasAny(['taxRate']) || data.taxRate == 0)
+        && (!data.keys().hasAny(['taxAmount']) || data.taxAmount == 0)
+        && !data.keys().hasAny(['financialRemainingValues', 'financialExpenseValues']);
+    }
+
+    // Dynamic advanced finance values currently live under customFields keys such as
+    // financialExpense::<title> and financialRemaining::<title>. Firestore Rules cannot
+    // safely validate arbitrary map-key prefixes, so basic plans must use the verified
+    // backend callable whenever customFields are written.
+    function safeBasicCustomFieldsCreate(data) {
+      return !data.keys().hasAny(['customFields']);
+    }
+
+    function validBasicCustomFieldsUpdate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['customFields']);
+    }
+
+    function validOrderFinanceCreate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || (safeBasicFinanceCreateValues(request.resource.data)
+          && safeBasicCustomFieldsCreate(request.resource.data));
+    }
+
+    // The `estimates` array on an order is a display index, not the record. The
+    // record — line items, totals, who approved and when, the signature — lives
+    // in siparisler/{id}/estimateRecords, which the catch-all at the bottom of
+    // this file denies to every client.
+    //
+    // It is deliberately NOT locked here. The Apple apps replace the whole order
+    // document on save (FirebaseManager.setData(from:), no merge), so any rule
+    // forbidding a change to these keys rejects every Mac and iPhone save — the
+    // model re-encodes the array, and Firestore counts an integer rewritten as a
+    // double as a change. The guard cost real saves and protected only a cache.
+
+    function validOrderFinanceUpdate(companyId) {
+      return hasAdvancedFinancePlan(companyId)
+        || !request.resource.data.diff(resource.data).affectedKeys().hasAny(advancedFinanceFields());
+    }
+
+    function protectedBillingFields() {
+      return [
+        'billingPlan',
+        'billingPlanName',
+        'billingPlanSource',
+        'billingStatus',
+        'billingProviderRawStatus',
+        'billingEffectivePlan',
+        'billingEffectivePlanTier',
+        'billingEffectiveStatus',
+        'billingEffectiveProvider',
+        'billingEffectiveSubscriptionId',
+        'billingEntitlementUpdatedAt',
+        'billingActivePlanSubscriptionCount',
+        'billingActivePlanProviders',
+        'billingHasMultipleActiveSubscriptions',
+        'billingDuplicateSubscriptionDetectedAt',
+        'billingEntitlementResolutionReason',
+        'billingEntitlementTriggerEvent',
+        'billingEntitlementResolvedAt',
+        'billingLastEntitlementResyncRequestedAt',
+        'billingLastEntitlementResyncRequestedBy',
+        'billingLastEntitlementResyncProvider',
+        'billingLastEntitlementResyncCompletedAt',
+        'billingLastEntitlementResyncCompletedBy',
+        'billingLastEntitlementResyncFoundSubscriptions',
+        'billingLastEntitlementResyncRecognisedSubscriptions',
+        'billingLastEntitlementResyncStaleRecordsDeactivated',
+        'billingStorageLimitMB',
+        'billingTeamMemberLimit',
+        'billingTeamIncludedSeats',
+        'billingTeamSelfServiceMax',
+        'billingAdditionalTeamSeatQuantity',
+        'billingAdditionalTeamSeatKey',
+        'billingAdditionalTeamSeatStatus',
+        'billingAdditionalTeamSeatSubscriptionId',
+        'billingAdditionalTeamSeatCurrentPeriodEnd',
+        'billingStorageAddonMB',
+        'billingStorageAddonKey',
+        'billingStorageAddonStatus',
+        'billingStorageAddonSubscriptionId',
+        'billingStorageAddonCurrentPeriodEnd',
+        'billingCustomerId',
+        'billingStripeCustomerId',
+        'billingCustomerCreatedAt',
+        'billingSubscriptionId',
+        'billingSubscriptionItemKey',
+        'billingInterval',
+        'billingCurrentPeriodEnd',
+        'billingPreviousPaidPlan',
+        'billingPreviousSubscriptionItemKey',
+        'billingPreviousInterval',
+        'billingCheckoutSessionId',
+        'billingCheckoutCompletedAt',
+        'billingEnvironment',
+        'billingExportAccessPreserved',
+        'billingLastInvoiceId',
+        'billingLastInvoicePaidAt',
+        'billingPaymentFailedAt',
+        'billingUpdatedAt',
+        'billingUpdatedBy',
+        'woocommerceWebhookToken',
+        'woocommerceWebhookTokenCreatedAt',
+        'shopifyWebhookToken',
+        'shopifyWebhookTokenCreatedAt',
+        'inboundWebhookToken',
+        'inboundWebhookTokenCreatedAt'
+      ];
+    }
+
+    function hasSafeFreeDemoBillingValues(data) {
+      return data.billingPlan == 'demo'
+        && data.billingPlanName == 'Free Demo'
+        && data.billingPlanSource in ['new_workspace_default', 'signup_free_demo']
+        && data.billingStorageLimitMB == 50
+        && data.billingTeamMemberLimit == 1
+        && (!('billingStatus' in data) || data.billingStatus == 'free')
+        && (!('billingProviderRawStatus' in data) || data.billingProviderRawStatus == 'free')
+        && !data.keys().hasAny([
+          'billingCustomerId',
+          'billingStripeCustomerId',
+          'billingSubscriptionId',
+          'billingSubscriptionItemKey',
+          'billingEffectivePlan',
+          'billingEffectivePlanTier',
+          'billingEffectiveStatus',
+          'billingEffectiveProvider',
+          'billingEffectiveSubscriptionId',
+          'billingEntitlementUpdatedAt',
+          'billingActivePlanSubscriptionCount',
+          'billingActivePlanProviders',
+          'billingHasMultipleActiveSubscriptions',
+          'billingDuplicateSubscriptionDetectedAt',
+          'billingEntitlementResolutionReason',
+          'billingEntitlementTriggerEvent',
+          'billingEntitlementResolvedAt',
+          'billingLastEntitlementResyncRequestedAt',
+          'billingLastEntitlementResyncRequestedBy',
+          'billingLastEntitlementResyncProvider',
+          'billingLastEntitlementResyncCompletedAt',
+          'billingLastEntitlementResyncCompletedBy',
+          'billingLastEntitlementResyncFoundSubscriptions',
+          'billingLastEntitlementResyncRecognisedSubscriptions',
+          'billingLastEntitlementResyncStaleRecordsDeactivated',
+          'billingAdditionalTeamSeatQuantity',
+          'billingStorageAddonMB'
+        ]);
+    }
+
+    function validNewCompanyBillingState() {
+      return !request.resource.data.keys().hasAny(protectedBillingFields())
+        || hasSafeFreeDemoBillingValues(request.resource.data);
+    }
+
+    function validCompanyBillingUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedBillingFields())
+        || (
+          (!resource.data.keys().hasAny(['billingPlan']) || resource.data.billingPlan == 'demo')
+          && hasSafeFreeDemoBillingValues(request.resource.data)
+        );
+    }
+
+    function isOwnMessagePreferenceDoc(userId) {
+      return signedIn() && userId == request.auth.uid;
+    }
+
+    function validMessagePreferenceWrite(companyId, userId) {
+      return isOwnMessagePreferenceDoc(userId)
+        && canReadCompany(companyId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.companyId == companyId;
+    }
+
+    function canAccessOwnPersonalNotes(companyId, userId) {
+      return signedIn()
+        && userId == request.auth.uid
+        && canReadCompany(companyId);
+    }
+
+    function validPersonalNoteCreate(companyId, userId) {
+      return canAccessOwnPersonalNotes(companyId, userId)
+        && request.resource.data.ownerUserId == request.auth.uid;
+    }
+
+    function validPersonalNoteUpdate(companyId, userId) {
+      return canAccessOwnPersonalNotes(companyId, userId)
+        && request.resource.data.ownerUserId == resource.data.ownerUserId;
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && userId == request.auth.uid;
+
+      match /workspaceAccess/{companyId} {
+        allow read: if signedIn() && userId == request.auth.uid;
+
+        allow create, update, delete: if signedIn()
+          && (
+            userId == request.auth.uid
+            || isCompanyOwner(companyId)
+          );
+      }
+    }
+
+    match /workspaceJoinRequests/{requestId} {
+      // Join requests are created and updated only by verified callable backend actions.
+      // Signed-in requesters and the target workspace owner may still read their relevant request state.
+      //
+      // The requesterUid branch is guarded with `in` so a document that lacks the
+      // field — or a list query that does not pin it — falls through to the owner
+      // branch instead of erroring the whole rule ("Property requesterUid is
+      // undefined"). The owner branch must not assume the company document id
+      // equals the owner uid (legacy/seeded workspaces differ), so it resolves
+      // ownership through isCompanyOwner; list queries pin targetCompanyId with
+      // an equality filter, which keeps that check provable.
+      allow read: if signedIn()
+        && (
+          ('requesterUid' in resource.data && resource.data.requesterUid == request.auth.uid)
+          || ('targetCompanyId' in resource.data && isCompanyOwner(resource.data.targetCompanyId))
+        );
+
+      allow create, update, delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow create: if signedIn()
+        && companyId == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && validNewCompanyBillingState();
+
+      allow read: if canReadCompany(companyId);
+      // Query form used by the workspace pickers (e.g. /connect/shopify):
+      // memberUids array-contains own uid. Must stay resource-only — get()
+      // based helpers like canReadCompany are not provable for list queries.
+      allow list: if signedIn() && request.auth.uid in resource.data.memberUids;
+      allow update: if isCompanyOwner(companyId)
+        && validCompanyBillingUpdate()
+        && validOwnerUidUpdate()
+        && validTeamWorkspaceUpdate(companyId);
+      allow delete: if isCompanyOwner(companyId);
+    }
+
+    match /companies/{companyId}/billing/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    // Verified provider subscriptions are server-owned billing records.
+    // Only the owner may read them; clients must never create or change them.
+    match /companies/{companyId}/subscriptions/{document=**} {
+      allow read: if isCompanyOwner(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/messageUserPreferences/{userId} {
+      allow read: if hasTeamPlan(companyId)
+        && isOwnMessagePreferenceDoc(userId)
+        && canReadMessages(companyId);
+      allow create, update: if hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && validMessagePreferenceWrite(companyId, userId);
+      allow delete: if false;
+    }
+
+    match /companies/{companyId}/messageSettings/{document=**} {
+      allow read: if hasTeamPlan(companyId) && canReadMessages(companyId);
+      allow write: if hasTeamPlan(companyId) && canWriteMessages(companyId);
+    }
+
+    // Personal Notes are available to every workspace role, including View Only
+    // and Workflow Only, but they remain private to the signed-in user's mirror.
+    // Collaborative note mirrors are distributed and synchronised by verified
+    // callable functions using Admin SDK permissions.
+    match /companies/{companyId}/personal_notes/{userId}/notes/{noteId} {
+      allow read: if canAccessOwnPersonalNotes(companyId, userId);
+      allow create: if validPersonalNoteCreate(companyId, userId);
+      allow update: if validPersonalNoteUpdate(companyId, userId);
+      allow delete: if canAccessOwnPersonalNotes(companyId, userId);
+    }
+
+    match /companies/{companyId}/personal_note_collaboration_invites/{document=**} {
+      // Invitations are created/read/responded to only through verified callables.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/quickReplyContributions/{document=**} {
+      // Contributions are filtered and written through verified callables.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/quickReplyUserSettings/{document=**} {
+      // Each user's On-Device and Offline Template settings are accessed
+      // through role-validated callable functions only.
+      allow read, write: if false;
+    }
+
+    // Bank feed (Open Banking) data is server-written and owner-only: the
+    // connection docs and transaction feed never open to other roles.
+    match /companies/{companyId}/bankConnections/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/bankTransactions/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Inventory. Readable by anyone who can read the workspace so a screen can
+    // list stock without a round trip, but written only through the callables:
+    // status transitions, cost splitting and the sequential item number are
+    // decided on the server, and a direct write would sidestep all three.
+    match /companies/{companyId}/inventoryItems/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    // Purchases and suppliers follow the same rule as inventory: readable so a
+    // screen can list them, server-written because a purchase decides how the
+    // shipping is split across its lines and when its stock becomes real.
+    match /companies/{companyId}/purchases/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/suppliers/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    // The movement ledger and the counts that write to it. Readable so a
+    // report can be drawn, server-written because a stock figure that moved
+    // without a ledger line — or a line without the move — would both be lies.
+    match /companies/{companyId}/inventoryMovements/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/stocktakes/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    // Provider consent tokens — server-only, never client-readable.
+    match /companies/{companyId}/bankTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Vendor grouping / manual "this repeats" marks — owner-readable, server-written.
+    match /companies/{companyId}/bankVendors/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Workspace-defined bank categories (name, type, default VAT, connector
+    // mappings) — owner-readable, written only through the callables.
+    match /companies/{companyId}/bankCategories/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Accounting-connector idempotency ledger — server-only.
+    match /companies/{companyId}/pandleSyncRuns/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Receipts waiting for their bank transaction — owner-readable, server-written.
+    match /companies/{companyId}/bankReceiptInbox/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Categorisation rules — owner-readable, written only via callables.
+    match /companies/{companyId}/bankRules/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Pandle bookkeeping bridge — connection/meta/mapping is owner-readable,
+    // OAuth tokens are server-only.
+    match /companies/{companyId}/pandleConnection/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/pandleTokens/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/orderDeletionRequests/{document=**} {
+      // Workflow deletion approval is validated by callable functions only.
+      allow read, write: if false;
+    }
+
+    match /companies/{companyId}/personalInterfaceSettings/{userId} {
+      // Per-user appearance, language and finance-free PDF preferences.
+      // READ: allow the signed-in user to live-subscribe to their OWN doc so
+      // theme/language changes made on another device (Mac, iPhone, Android, Web)
+      // sync instantly via Firestore snapshot listeners. Other members of the
+      // workspace cannot read each other's personal preferences.
+      // WRITE: still routed through the `savePersonalInterfaceSettings` callable
+      // so the Cloud Function validates role + workspace membership server-side.
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    function canReadMessageThread(companyId, threadId) {
+      return hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && (
+          threadId == 'team'
+          || isCompanyOwner(companyId)
+          || (
+            exists(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId))
+            && get(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids is list
+            && request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)/messageThreads/$(threadId)).data.memberUids
+          )
+        );
+    }
+
+    match /companies/{companyId}/messageThreads/{threadId} {
+      allow read: if hasTeamPlan(companyId)
+        && canReadMessages(companyId)
+        && (
+          isCompanyOwner(companyId)
+          || (resource.data.memberUids is list && request.auth.uid in resource.data.memberUids)
+        );
+      // Message writes are server-owned through callable functions, which validate
+      // thread participants and role-specific actions.
+      allow write: if false;
+
+      match /{messagePath=**} {
+        allow read: if canReadMessageThread(companyId, threadId);
+        allow write: if false;
+      }
+    }
+
+    match /companies/{companyId}/workflowOrders/{orderId} {
+      // Finance-free order summary view used only by strict workflow-only members.
+      // Custom-role assigned-only members read the full /siparisler doc directly.
+      allow read: if usesWorkflowSafeView(companyId)
+        && resource.data.assignedToUid == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/{collectionId}/{document=**} {
+      allow read: if collectionId != 'messageUserPreferences'
+        && collectionId != 'messageSettings'
+        && collectionId != 'messageThreads'
+        && collectionId != 'billing'
+        && collectionId != 'subscriptions'
+        && collectionId != 'workflowOrders'
+        && collectionId != 'personal_notes'
+        && collectionId != 'personal_note_collaboration_invites'
+        && collectionId != 'quickReplyContributions'
+        && collectionId != 'quickReplyUserSettings'
+        && collectionId != 'orderDeletionRequests'
+        && collectionId != 'personalInterfaceSettings'
+        && collectionId != 'bankConnections'
+        && collectionId != 'bankTransactions'
+        && collectionId != 'bankTokens'
+        && collectionId != 'bankRules'
+        && collectionId != 'bankReceiptInbox'
+        && collectionId != 'bankVendors'
+        && collectionId != 'pandleConnection'
+        && collectionId != 'pandleTokens'
+        && collectionId != 'pandleSyncRuns'
+        && collectionId != 'bankCategories'
+        && collectionId != 'inventoryItems'
+        && collectionId != 'purchases'
+        && collectionId != 'suppliers'
+        && collectionId != 'inventoryMovements'
+        && collectionId != 'stocktakes'
+        && collectionId != 'integrationSecrets'
+        && collectionId != 'financeBulkRuns'
+        && collectionId != 'fileRecords'
+        && collectionId != 'customerMergeLog'
+        && collectionId != 'settingsAuditLog'
+        && canReadCompany(companyId);
+      allow write: if collectionId != 'messageUserPreferences'
+        && collectionId != 'messageSettings'
+        && collectionId != 'messageThreads'
+        && collectionId != 'billing'
+        && collectionId != 'subscriptions'
+        && collectionId != 'workflowOrders'
+        && collectionId != 'personal_notes'
+        && collectionId != 'personal_note_collaboration_invites'
+        && collectionId != 'quickReplyContributions'
+        && collectionId != 'quickReplyUserSettings'
+        && collectionId != 'orderDeletionRequests'
+        && collectionId != 'personalInterfaceSettings'
+        && collectionId != 'bankConnections'
+        && collectionId != 'bankTransactions'
+        && collectionId != 'bankTokens'
+        && collectionId != 'bankRules'
+        && collectionId != 'bankReceiptInbox'
+        && collectionId != 'bankVendors'
+        && collectionId != 'pandleConnection'
+        && collectionId != 'pandleTokens'
+        && collectionId != 'pandleSyncRuns'
+        && collectionId != 'bankCategories'
+        && collectionId != 'inventoryItems'
+        && collectionId != 'purchases'
+        && collectionId != 'suppliers'
+        && collectionId != 'inventoryMovements'
+        && collectionId != 'stocktakes'
+        && collectionId != 'integrationSecrets'
+        && collectionId != 'financeBulkRuns'
+        && collectionId != 'fileRecords'
+        && collectionId != 'customerMergeLog'
+        && collectionId != 'settingsAuditLog'
+        && canWriteCompanyData(companyId);
+    }
+
+    match /siparisler/{orderId} {
+      // Workflow Only order creation and updates must use verified callables so
+      // assignment cannot be removed or redirected client-side. Custom roles with
+      // "Assigned Projects Only" CAN write directly here, as long as the order's
+      // assignedToUid stays equal to their own uid (they cannot reassign).
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && canWriteCompanyData(request.resource.data.companyId)
+        && !usesWorkflowSafeView(request.resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(request.resource.data.companyId)
+          || request.resource.data.assignedToUid == request.auth.uid
+        )
+        && validOrderFinanceCreate(request.resource.data.companyId);
+
+      // Workflow Only reads finance-free assigned views under the workspace,
+      // never the full order document that also contains financial fields.
+      // Assigned-only custom-role members get the full document IF the order
+      // is assigned to them.
+      allow read: if canReadOrderDocument(resource.data)
+        && !usesWorkflowSafeView(resource.data.companyId);
+
+      allow update: if resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && canWriteCompanyData(resource.data.companyId)
+        && !usesWorkflowSafeView(resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(resource.data.companyId)
+          || (
+            resource.data.assignedToUid == request.auth.uid
+            && request.resource.data.assignedToUid == request.auth.uid
+          )
+        )
+        && validOrderFinanceUpdate(resource.data.companyId)
+        && validBasicCustomFieldsUpdate(resource.data.companyId);
+
+      allow delete: if resource.data.companyId is string
+        && canWriteCompanyData(resource.data.companyId)
+        && !usesWorkflowSafeView(resource.data.companyId)
+        && (
+          !isAssignedOnlyCustomMember(resource.data.companyId)
+          || resource.data.assignedToUid == request.auth.uid
+        );
+    }
+
+    match /musteriler/{customerId} {
+      allow create: if signedIn()
+        && request.resource.data.companyId is string
+        && canWriteCompanyData(request.resource.data.companyId);
+
+      allow read: if resource.data.companyId is string
+        && canReadCompany(resource.data.companyId);
+
+      allow update: if resource.data.companyId is string
+        && request.resource.data.companyId == resource.data.companyId
+        && canWriteCompanyData(resource.data.companyId);
+
+      allow delete: if resource.data.companyId is string
+        && canWriteCompanyData(resource.data.companyId);
+    }
+
+    match /companySettings/{companyId} {
+      allow read: if canReadCompany(companyId);
+      // API credentials and owner-controlled Knowledge Base fields must be
+      // changed only through saveQuickReplySettings callable validation.
+      // The audit stamp is writable, but only as yourself — the change
+      // history must not let one member sign another member's name.
+      allow write: if canWriteCompanyData(companyId)
+        && (
+          resource == null
+            ? (!request.resource.data.keys().hasAny([
+                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+                'customProductsJSON', 'customRulesJSON'
+              ])
+              && (!request.resource.data.keys().hasAny(['lastSettingsWriteByUid'])
+                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
+            : (!request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'openAIKey', 'hasOpenAIKey', 'aiKnowledgeBase', 'replyMode',
+                'customProductsJSON', 'customRulesJSON'
+              ])
+              && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastSettingsWriteByUid'])
+                || request.resource.data.lastSettingsWriteByUid == request.auth.uid))
+        );
+    }
+
+    match /quickReplySecrets/{companyId} {
+      allow read, write: if false;
+    }
+
+    match /shopifyStores/{document=**} {
+      // Shopify App Store integration: shop↔workspace links, settings and the
+      // OAuth access tokens. Strictly server-side (Admin SDK); clients read
+      // integration state only through verified callables.
+      allow read, write: if false;
+    }
+
+    // The customer's link. Minted, read and retired by the Admin SDK only: the
+    // document id is the hash of the token, so nothing here is guessable and
+    // nothing client-side ever needs to see it.
+    match /estimateLinks/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Customer portal token lookup. The document id is sha256 of the token and
+    // no client ever reads it — getPortalForVisitor resolves it server-side, so
+    // the collection stays unreachable even to a signed-in workspace member.
+    match /portalLinks/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /shopifySessions/{document=**} {
+      // Embedded-app session storage written by the app server only.
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

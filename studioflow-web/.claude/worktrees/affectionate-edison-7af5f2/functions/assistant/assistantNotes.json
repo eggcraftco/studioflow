@@ -1,0 +1,13 @@
+{
+  "readme": "Assistant-only knowledge. NOT published on nivadesk.app/guide — only people who ask the in-app assistant see this. Add corrections and details here rather than in the public guide. Deployed with the functions.",
+  "notes": [
+    {
+      "title": "Showing and hiding order cards",
+      "text": "Every order card can be switched off, and a card that is off is hidden, not missing. To turn one on: open any order, choose Actions ▸ Customize (top right), then under Workspace Blocks switch the card on — Materials & Inventory, Notes and the rest are all listed there. Changes update the shared layout for normal orders; 'Make this order independent' gives just that order its own layout. Whenever an answer sends someone to a card, mention this in one line in case they cannot see it."
+    },
+    {
+      "title": "How someone joins a workspace (Team Access)",
+      "text": "There is NO 'add member' button anywhere in NivaDesk. People join by requesting access and being approved. Be precise about whose details get shared: (1) the OWNER opens Settings > Team Access and copies THEIR OWN account email, or the Company ID shown under Invite People, and sends that to the person joining — never the joiner's own email; (2) the person joining opens Settings > Team Access on their own account, enters the owner's email or that Company ID under Request Access, and presses Send; (3) the request appears in the owner's Join Requests list, where the owner approves it; (4) after approval the owner sets their role (Member, View Only, Workflow Only or a custom role) and can limit them to specific projects."
+    }
+  ]
+}

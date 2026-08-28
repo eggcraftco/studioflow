@@ -1,0 +1,11 @@
+.gradle/
+.idea/
+build/
+local.properties
+app/build/
+app/google-services.json
+
+# Release signing (never commit)
+keystore.properties
+*.jks
+*.keystore
