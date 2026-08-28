@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Refresh
@@ -123,23 +124,29 @@ fun ScheduleScreen(
     var statusFilter by rememberSaveable { mutableStateOf(ScheduleStatusFilter.All) }
     var sortMode by rememberSaveable { mutableStateOf(ScheduleSortMode.Smart) }
     var viewMode by rememberSaveable { mutableStateOf(ScheduleViewMode.Weekly) }
-    var anchorToCurrentDate by rememberSaveable { mutableStateOf(false) }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    // The date the visible window is built around. 0 means "no explicit anchor" (fall back
+    // to the earliest open order). "Today" parks it on now; "Jump to selected" parks it on
+    // the selected order's start date, exactly like the web toolbar.
+    var anchorMillis by rememberSaveable { mutableStateOf(0L) }
     var searchText by rememberSaveable { mutableStateOf("") }
     var statusMenuOpen by rememberSaveable { mutableStateOf(false) }
     var sortMenuOpen by rememberSaveable { mutableStateOf(false) }
-    var viewMenuOpen by rememberSaveable { mutableStateOf(false) }
     var selectedScheduleOrderId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Bumped on every "Jump to selected" so the timeline scroller can bring the bar into view.
+    var jumpTick by remember { mutableIntStateOf(0) }
     val visibleOrders = remember(state.orders, statusFilter, sortMode, searchText) {
         scheduleVisibleOrders(state.orders, statusFilter, sortMode, searchText)
     }
+    // Mirrors the web: an explicit pick wins, otherwise the first order in the filtered list.
+    val selectedOrder = visibleOrders.firstOrNull { it.id == selectedScheduleOrderId }
+        ?: visibleOrders.firstOrNull()
     val locale = uk.co.eggcraft.studioflow.language.studioLocale(lang)
-    val range = remember(visibleOrders, rangeOffset, viewMode, anchorToCurrentDate, locale) {
+    val range = remember(visibleOrders, rangeOffset, viewMode, anchorMillis, locale) {
         ScheduleRange.from(
             orders = visibleOrders,
             rangeOffset = rangeOffset,
             viewMode = viewMode,
-            anchorDate = if (anchorToCurrentDate) Date() else null,
+            anchorDate = if (anchorMillis > 0L) Date(anchorMillis) else null,
             locale = locale
         )
     }
@@ -225,13 +232,13 @@ fun ScheduleScreen(
                 canEditSchedule = canEditSchedule,
                 onStatusFilterChange = { next ->
                     statusFilter = next
-                    anchorToCurrentDate = next == ScheduleStatusFilter.ThisWeek
+                    anchorMillis = if (next == ScheduleStatusFilter.ThisWeek) System.currentTimeMillis() else 0L
                     rangeOffset = 0
                 },
                 onSortModeChange = { sortMode = it },
                 onViewModeChange = { next ->
                     viewMode = next
-                    anchorToCurrentDate = true
+                    anchorMillis = System.currentTimeMillis()
                     rangeOffset = 0
                 },
                 onSearchChange = {
@@ -241,10 +248,20 @@ fun ScheduleScreen(
                 onPreviousRange = { rangeOffset -= 1 },
                 onNextRange = { rangeOffset += 1 },
                 onResetRange = {
-                    anchorToCurrentDate = true
+                    anchorMillis = System.currentTimeMillis()
                     rangeOffset = 0
                 },
                 onZoomChange = { zoom = it.coerceIn(0.45, 2.20) },
+                jumpTarget = selectedOrder,
+                onJumpToSelected = {
+                    selectedOrder?.let { order ->
+                        selectedScheduleOrderId = order.id
+                        anchorMillis = orderStartDate(order).time
+                        rangeOffset = 0
+                        jumpTick += 1
+                    }
+                },
+                jumpTick = jumpTick,
                 onMoveOrder = { order, days -> moveScheduleOrder(order, days, onUpdateOrderFields) },
                 onResizeLeading = { order, days -> resizeScheduleOrderLeading(order, days, onUpdateOrderFields) },
                 onResizeTrailing = { order, days -> resizeScheduleOrderTrailing(order, days, onUpdateOrderFields) },
@@ -261,13 +278,37 @@ fun ScheduleScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
         item {
-            SectionHeader(title = "Schedule", subtitle = "See who is doing what and when.")
+            SectionHeader(title = t("Schedule"), subtitle = t("See who is doing what and when."))
+        }
+        // One control row, phone shape: the search field carries its own magnifier and
+        // placeholder (no label above it), then the value-only status and sort controls.
+        item {
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = {
+                    searchText = it
+                    rangeOffset = 0
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = StudioBlue) },
+                trailingIcon = {
+                    if (searchText.isNotBlank()) {
+                        IconButton(onClick = { searchText = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = t("Clear search"))
+                        }
+                    }
+                },
+                placeholder = { Text(t("Search orders")) }
+            )
         }
         item {
             Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(modifier = Modifier.weight(1f)) {
                     ScheduleControl(
-                        label = statusFilter.controlLabel(visibleOrders.size),
+                        label = "${t(statusFilter.label)} · ${visibleOrders.size}",
                         icon = Icons.Outlined.FilterList,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { statusMenuOpen = true }
@@ -275,10 +316,10 @@ fun ScheduleScreen(
                     DropdownMenu(expanded = statusMenuOpen, onDismissRequest = { statusMenuOpen = false }) {
                         ScheduleStatusFilter.values().forEach { item ->
                             DropdownMenuItem(
-                                text = { Text(item.menuLabel(state.orders), fontWeight = FontWeight.Bold) },
+                                text = { Text("${t(item.label)} (${state.orders.count { o -> item.matches(o) }})", fontWeight = FontWeight.Bold) },
                                 onClick = {
                                     statusFilter = item
-                                    anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek
+                                    anchorMillis = if (item == ScheduleStatusFilter.ThisWeek) System.currentTimeMillis() else 0L
                                     rangeOffset = 0
                                     statusMenuOpen = false
                                 }
@@ -288,7 +329,7 @@ fun ScheduleScreen(
                 }
                 Box(modifier = Modifier.weight(1f)) {
                     ScheduleControl(
-                        label = sortMode.label,
+                        label = t(sortMode.label),
                         icon = Icons.Outlined.AutoAwesome,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { sortMenuOpen = true }
@@ -296,7 +337,7 @@ fun ScheduleScreen(
                     DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
                         ScheduleSortMode.values().forEach { item ->
                             DropdownMenuItem(
-                                text = { Text(item.label, fontWeight = FontWeight.Bold) },
+                                text = { Text(t(item.label), fontWeight = FontWeight.Bold) },
                                 onClick = {
                                     sortMode = item
                                     sortMenuOpen = false
@@ -305,92 +346,44 @@ fun ScheduleScreen(
                         }
                     }
                 }
-                Box(modifier = Modifier.weight(1f)) {
-                    ScheduleControl(
-                        label = viewMode.label,
-                        icon = Icons.Filled.DateRange,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { viewMenuOpen = true }
-                    )
-                    DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
-                        ScheduleViewMode.menuOptions.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.label, fontWeight = FontWeight.Bold) },
-                                onClick = {
-                                    viewMode = item
-                                    anchorToCurrentDate = true
-                                    rangeOffset = 0
-                                    viewMenuOpen = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        if (searchOpen) {
-            item {
-                OutlinedTextField(
-                    value = searchText,
-                    onValueChange = {
-                        searchText = it
-                        rangeOffset = 0
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = StudioBlue) },
-                    trailingIcon = {
-                        if (searchText.isNotBlank()) {
-                            IconButton(onClick = { searchText = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = t("Clear search"))
-                            }
-                        }
-                    },
-                    placeholder = { Text("Search customer, design, status or assignee") }
-                )
             }
         }
         item {
             Row(modifier = Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ArrowButton(Icons.Filled.ArrowBackIosNew) { rangeOffset -= 1 }
-                ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos) { rangeOffset += 1 }
-                Surface(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                SchedulePeriodGroup(
+                    rangeTitle = range.title,
+                    onPrevious = { rangeOffset -= 1 },
+                    onNext = { rangeOffset += 1 },
+                    modifier = Modifier.weight(1f)
+                )
+                ScheduleToolbarButton(
+                    label = t("Today"),
                     onClick = {
-                        anchorToCurrentDate = true
+                        anchorMillis = System.currentTimeMillis()
                         rangeOffset = 0
                     }
-                ) {
-                    Text(range.title, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (searchOpen) StudioBlue.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (searchOpen && searchText.isBlank()) {
-                                searchOpen = false
-                            } else if (searchOpen) {
-                                searchText = ""
-                            } else {
-                                searchOpen = true
-                            }
-                        },
-                        modifier = Modifier.size(52.dp)
-                    ) {
-                        Icon(
-                            if (searchOpen && searchText.isNotBlank()) Icons.Filled.Close else Icons.Filled.Search,
-                            contentDescription = "Search schedule",
-                            tint = if (searchOpen) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                )
             }
+        }
+        // The old "Range" dropdown is gone: the segmented control carries the value itself.
+        item {
+            ScheduleRangeSegments(
+                selected = viewMode,
+                onSelect = { next ->
+                    viewMode = next
+                    anchorMillis = System.currentTimeMillis()
+                    rangeOffset = 0
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                stretch = true
+            )
+        }
+        item {
+            SchedulePeriodHeader(
+                rangeTitle = "",
+                orders = visibleOrders,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
         item {
             ScheduleAgendaHint(modifier = Modifier.padding(horizontal = 16.dp))
@@ -408,29 +401,17 @@ fun ScheduleScreen(
                 )
             }
         }
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FooterMetric("${visibleOrders.size} orders", Icons.Filled.Inventory2)
-                FooterMetric("${visibleOrders.count { orderIsLate(it) }} Late", Icons.Filled.Warning)
-                FooterMetric("${visibleOrders.count { orderIsReadyToShip(it) }} Ready\nto Ship", Icons.Filled.Inventory2)
+        if (!canEditSchedule) {
+            item {
                 Text(
-                    text = if (canEditSchedule) {
-                        "Drag blocks to\nmove dates. Pull\nedges to resize."
-                    } else {
-                        "Read-only\nschedule view."
-                    },
+                    text = t("Read-only schedule view."),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 17.sp
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
+        item { Spacer(modifier = Modifier.height(8.dp)) }
             }
         }
     }
@@ -508,7 +489,6 @@ fun TeamScheduleScreen(
         var membersLimit by rememberSaveable { mutableIntStateOf(8) }
         var statusMenuOpen by remember { mutableStateOf(false) }
         var sortMenuOpen by remember { mutableStateOf(false) }
-        var viewMenuOpen by remember { mutableStateOf(false) }
         var fStatusMenuOpen by remember { mutableStateOf(false) }
         var fSortMenuOpen by remember { mutableStateOf(false) }
 
@@ -533,27 +513,38 @@ fun TeamScheduleScreen(
         val dayWidth = baseDayWidth.coerceAtLeast(18.0).dp
         val timelineWidth = dayWidth * range.days.size.toFloat()
 
+        // Same one-row shape as the Schedule toolbar: a search field that carries its own
+        // placeholder, value-only status and sort controls, then the period group.
         @Composable
         fun ControlsRow(modifier: Modifier = Modifier) {
-            Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(1f)) {
-                    ScheduleControl(label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label, icon = Icons.Outlined.FilterList, modifier = Modifier.fillMaxWidth(), onClick = { statusMenuOpen = true })
-                    DropdownMenu(expanded = statusMenuOpen, onDismissRequest = { statusMenuOpen = false }) {
-                        ScheduleStatusFilter.values().forEach { item ->
-                            DropdownMenuItem(text = { Text(item.menuLabel(state.orders), fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; statusMenuOpen = false })
+            Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it; rangeOffset = 0 },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailingIcon = {
+                        if (searchText.isNotBlank()) {
+                            IconButton(onClick = { searchText = "" }) { Icon(Icons.Filled.Close, contentDescription = t("Clear search")) }
+                        }
+                    },
+                    placeholder = { Text(t("Search orders"), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        ScheduleControl(label = t(statusFilter.label), icon = Icons.Outlined.FilterList, modifier = Modifier.fillMaxWidth(), onClick = { statusMenuOpen = true })
+                        DropdownMenu(expanded = statusMenuOpen, onDismissRequest = { statusMenuOpen = false }) {
+                            ScheduleStatusFilter.values().forEach { item ->
+                                DropdownMenuItem(text = { Text("${t(item.label)} (${state.orders.count { o -> item.matches(o) }})", fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; statusMenuOpen = false })
+                            }
                         }
                     }
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    ScheduleControl(label = sortMode.label, icon = Icons.Outlined.AutoAwesome, modifier = Modifier.fillMaxWidth(), onClick = { sortMenuOpen = true })
-                    DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
-                        ScheduleSortMode.values().forEach { item -> DropdownMenuItem(text = { Text(item.label, fontWeight = FontWeight.Bold) }, onClick = { sortMode = item; sortMenuOpen = false }) }
-                    }
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    ScheduleControl(label = viewMode.label, icon = Icons.Filled.DateRange, modifier = Modifier.fillMaxWidth(), onClick = { viewMenuOpen = true })
-                    DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
-                        ScheduleViewMode.menuOptions.forEach { item -> DropdownMenuItem(text = { Text(item.label, fontWeight = FontWeight.Bold) }, onClick = { viewMode = item; anchorToCurrentDate = true; rangeOffset = 0; viewMenuOpen = false }) }
+                    Box(modifier = Modifier.weight(1f)) {
+                        ScheduleControl(label = t(sortMode.label), icon = Icons.Outlined.AutoAwesome, modifier = Modifier.fillMaxWidth(), onClick = { sortMenuOpen = true })
+                        DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
+                            ScheduleSortMode.values().forEach { item -> DropdownMenuItem(text = { Text(t(item.label), fontWeight = FontWeight.Bold) }, onClick = { sortMode = item; sortMenuOpen = false }) }
+                        }
                     }
                 }
             }
@@ -561,12 +552,23 @@ fun TeamScheduleScreen(
 
         @Composable
         fun RangeRow(modifier: Modifier = Modifier) {
-            Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                ArrowButton(Icons.Filled.ArrowBackIosNew) { rangeOffset -= 1 }
-                ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos) { rangeOffset += 1 }
-                Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = { anchorToCurrentDate = true; rangeOffset = 0 }) {
-                    Text(range.title, modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SchedulePeriodGroup(
+                        rangeTitle = range.title,
+                        onPrevious = { rangeOffset -= 1 },
+                        onNext = { rangeOffset += 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ScheduleToolbarButton(label = t("Today"), onClick = { anchorToCurrentDate = true; rangeOffset = 0 })
                 }
+                ScheduleRangeSegments(
+                    selected = viewMode,
+                    onSelect = { next -> viewMode = next; anchorToCurrentDate = true; rangeOffset = 0 },
+                    modifier = Modifier.fillMaxWidth(),
+                    stretch = true
+                )
+                SchedulePeriodHeader(rangeTitle = "", orders = visibleOrders)
             }
         }
 
@@ -669,7 +671,7 @@ fun TeamScheduleScreen(
                 Box {
                     ScheduleControl(label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label, icon = Icons.Outlined.FilterList, modifier = Modifier.fillMaxWidth(), onClick = { fStatusMenuOpen = true })
                     DropdownMenu(expanded = fStatusMenuOpen, onDismissRequest = { fStatusMenuOpen = false }) {
-                        ScheduleStatusFilter.values().forEach { item -> DropdownMenuItem(text = { Text(item.menuLabel(state.orders), fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; fStatusMenuOpen = false }) }
+                        ScheduleStatusFilter.values().forEach { item -> DropdownMenuItem(text = { Text("${t(item.label)} (${state.orders.count { o -> item.matches(o) }})", fontWeight = FontWeight.Bold) }, onClick = { statusFilter = item; anchorToCurrentDate = item == ScheduleStatusFilter.ThisWeek; rangeOffset = 0; fStatusMenuOpen = false }) }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -717,9 +719,15 @@ fun TeamScheduleScreen(
                         Row(modifier = Modifier.horizontalScroll(hScroll)) {
                             range.days.forEach { day ->
                                 val today = isSameScheduleDay(day.date, Date())
-                                Column(modifier = Modifier.width(dayWidth).height(56.dp).background(if (today) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                Column(modifier = Modifier.width(dayWidth).height(56.dp).background(MaterialTheme.colorScheme.surface), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                     Text(day.weekday, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                    Text(day.day, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                    if (today) {
+                                        Box(modifier = Modifier.size(22.dp).clip(CircleShape).background(StudioBlue), contentAlignment = Alignment.Center) {
+                                            Text(day.day, color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold)
+                                        }
+                                    } else {
+                                        Text(day.day, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                    }
                                 }
                             }
                         }
@@ -739,6 +747,16 @@ fun TeamScheduleScreen(
                                 }
                             }
                             Box(modifier = Modifier.horizontalScroll(hScroll).width(timelineWidth).fillMaxHeight()) {
+                                // Today's accent line, carried down behind every member row.
+                                Row(modifier = Modifier.fillMaxSize()) {
+                                    range.days.forEach { day ->
+                                        Box(modifier = Modifier.width(dayWidth).fillMaxHeight()) {
+                                            if (isSameScheduleDay(day.date, Date())) {
+                                                Box(modifier = Modifier.align(Alignment.Center).width(2.dp).fillMaxHeight().background(StudioBlue.copy(alpha = 0.35f)))
+                                            }
+                                        }
+                                    }
+                                }
                                 list.forEachIndexed { i, order ->
                                     val metrics = timelineMetrics(order, range) ?: return@forEachIndexed
                                     val barX = dayWidth * metrics.offsetDays.toFloat()
@@ -846,6 +864,9 @@ private fun ScheduleDesktopTimelineScreen(
     onNextRange: () -> Unit,
     onResetRange: () -> Unit,
     onZoomChange: (Double) -> Unit,
+    jumpTarget: StudioOrder?,
+    onJumpToSelected: () -> Unit,
+    jumpTick: Int,
     onMoveOrder: (StudioOrder, Int) -> Unit,
     onResizeLeading: (StudioOrder, Int) -> Unit,
     onResizeTrailing: (StudioOrder, Int) -> Unit,
@@ -855,71 +876,107 @@ private fun ScheduleDesktopTimelineScreen(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(t("Schedule"), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(
-                        "See who is doing what and when.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
+        // The timeline scroller sits inside 18.dp of padding, so this is what a viewer
+        // actually sees. It drives both the live "N days" readout and the Fit button.
+        val viewportWidth = maxWidth - 36.dp
+        val baseDayWidth = scheduleTimelineBaseDayWidth(range.days.size)
+        val dayWidth = (baseDayWidth * zoom).coerceAtLeast(18.0)
+        val daysOnScreen = (viewportWidth.value / dayWidth).roundToInt().coerceAtLeast(1)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 22.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(t("Schedule"), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(
+                            t("See who is doing what and when."),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    ScheduleDesktopControls(
+                        allOrders = allOrders,
+                        rangeTitle = range.title,
+                        zoom = zoom,
+                        daysOnScreen = daysOnScreen,
+                        statusFilter = statusFilter,
+                        sortMode = sortMode,
+                        viewMode = viewMode,
+                        searchText = searchText,
+                        canJumpToSelected = jumpTarget != null,
+                        onStatusFilterChange = onStatusFilterChange,
+                        onSortModeChange = onSortModeChange,
+                        onViewModeChange = onViewModeChange,
+                        onSearchChange = onSearchChange,
+                        onPreviousRange = onPreviousRange,
+                        onNextRange = onNextRange,
+                        onResetRange = onResetRange,
+                        onJumpToSelected = onJumpToSelected,
+                        onZoomChange = onZoomChange,
+                        // Fit picks the zoom that puts the whole range in the viewport; the
+                        // caller still clamps it, and the 18.dp day floor keeps long ranges legible.
+                        onFit = {
+                            val span = (range.days.size.coerceAtLeast(1)) * baseDayWidth
+                            if (span > 0) onZoomChange((viewportWidth.value - 34.0) / span)
+                        }
+                    )
+                    ScheduleTipLine(
+                        note = if (canEditSchedule) {
+                            t("Team includes shared schedule planning for the whole workspace.")
+                        } else {
+                            t("Read-only schedule view.")
+                        },
+                        showGuide = canEditSchedule
                     )
                 }
-                ScheduleDesktopControls(
-                    allOrders = allOrders,
-                    rangeTitle = range.title,
-                    zoom = zoom,
-                    statusFilter = statusFilter,
-                    sortMode = sortMode,
-                    viewMode = viewMode,
-                    searchText = searchText,
-                    onStatusFilterChange = onStatusFilterChange,
-                    onSortModeChange = onSortModeChange,
-                    onViewModeChange = onViewModeChange,
-                    onSearchChange = onSearchChange,
-                    onPreviousRange = onPreviousRange,
-                    onNextRange = onNextRange,
-                    onResetRange = onResetRange,
-                    onZoomChange = onZoomChange
-                )
-                SchedulePlanNotice()
             }
+            // Period + counts stay pinned here, above the horizontally scrolling timeline.
+            SchedulePeriodHeader(
+                rangeTitle = range.title,
+                orders = visibleOrders,
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp)
+            )
+            ScheduleTimelineBoard(
+                range = range,
+                visibleOrders = visibleOrders,
+                zoom = zoom,
+                canEditSchedule = canEditSchedule,
+                onMoveOrder = onMoveOrder,
+                onResizeLeading = onResizeLeading,
+                onResizeTrailing = onResizeTrailing,
+                selectedOrderId = selectedOrderId,
+                onSelectOrder = onSelectOrder,
+                jumpTarget = jumpTarget,
+                jumpTick = jumpTick,
+                modifier = Modifier.weight(1f)
+            )
         }
-        ScheduleTimelineBoard(
-            range = range,
-            visibleOrders = visibleOrders,
-            zoom = zoom,
-            canEditSchedule = canEditSchedule,
-            onMoveOrder = onMoveOrder,
-            onResizeLeading = onResizeLeading,
-            onResizeTrailing = onResizeTrailing,
-            selectedOrderId = selectedOrderId,
-            onSelectOrder = onSelectOrder,
-            modifier = Modifier.weight(1f)
-        )
-        ScheduleTimelineFooter(visibleOrders = visibleOrders, canEditSchedule = canEditSchedule)
     }
 }
 
+// One control row, in the order the web toolbar reads: search, status, sort, the period
+// group, the width group, then the segmented range. No labels above the controls — each
+// control shows its own value, which is what the label used to say twice.
 @Composable
 private fun ScheduleDesktopControls(
     allOrders: List<StudioOrder>,
     rangeTitle: String,
     zoom: Double,
+    daysOnScreen: Int,
     statusFilter: ScheduleStatusFilter,
     sortMode: ScheduleSortMode,
     viewMode: ScheduleViewMode,
     searchText: String,
+    canJumpToSelected: Boolean,
     onStatusFilterChange: (ScheduleStatusFilter) -> Unit,
     onSortModeChange: (ScheduleSortMode) -> Unit,
     onViewModeChange: (ScheduleViewMode) -> Unit,
@@ -927,24 +984,33 @@ private fun ScheduleDesktopControls(
     onPreviousRange: () -> Unit,
     onNextRange: () -> Unit,
     onResetRange: () -> Unit,
-    onZoomChange: (Double) -> Unit
+    onJumpToSelected: () -> Unit,
+    onZoomChange: (Double) -> Unit,
+    onFit: () -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var statusMenuOpen by rememberSaveable { mutableStateOf(false) }
     var sortMenuOpen by rememberSaveable { mutableStateOf(false) }
-    var viewMenuOpen by rememberSaveable { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.width(188.dp)) {
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = onSearchChange,
+            modifier = Modifier.width(268.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            placeholder = { Text(t("Search orders"), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        )
+        Box(modifier = Modifier.width(168.dp)) {
             ScheduleDesktopControl(
-                label = if (statusFilter == ScheduleStatusFilter.All) t("Filter by Status") else statusFilter.label,
+                label = t(statusFilter.label),
                 icon = Icons.Outlined.FilterList,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { statusMenuOpen = true }
@@ -952,7 +1018,7 @@ private fun ScheduleDesktopControls(
             DropdownMenu(expanded = statusMenuOpen, onDismissRequest = { statusMenuOpen = false }) {
                 ScheduleStatusFilter.values().forEach { item ->
                     DropdownMenuItem(
-                        text = { Text(item.menuLabel(allOrders), fontWeight = FontWeight.Bold) },
+                        text = { Text("${t(item.label)} (${allOrders.count { o -> item.matches(o) }})", fontWeight = FontWeight.Bold) },
                         onClick = {
                             onStatusFilterChange(item)
                             statusMenuOpen = false
@@ -961,9 +1027,9 @@ private fun ScheduleDesktopControls(
                 }
             }
         }
-        Box(modifier = Modifier.width(138.dp)) {
+        Box(modifier = Modifier.width(158.dp)) {
             ScheduleDesktopControl(
-                label = sortMode.label,
+                label = t(sortMode.label),
                 icon = Icons.Outlined.AutoAwesome,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { sortMenuOpen = true }
@@ -971,7 +1037,7 @@ private fun ScheduleDesktopControls(
             DropdownMenu(expanded = sortMenuOpen, onDismissRequest = { sortMenuOpen = false }) {
                 ScheduleSortMode.values().forEach { item ->
                     DropdownMenuItem(
-                        text = { Text(item.label, fontWeight = FontWeight.Bold) },
+                        text = { Text(t(item.label), fontWeight = FontWeight.Bold) },
                         onClick = {
                             onSortModeChange(item)
                             sortMenuOpen = false
@@ -980,48 +1046,117 @@ private fun ScheduleDesktopControls(
                 }
             }
         }
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = onSearchChange,
-            modifier = Modifier.width(310.dp),
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            placeholder = { Text(t("Search Tasks")) }
+        SchedulePeriodGroup(
+            rangeTitle = rangeTitle,
+            onPrevious = onPreviousRange,
+            onNext = onNextRange,
+            modifier = Modifier.width(262.dp)
         )
-        Spacer(modifier = Modifier.width(12.dp))
-        ArrowButton(Icons.Filled.ArrowBackIosNew, onClick = onPreviousRange)
-        ArrowButton(Icons.AutoMirrored.Filled.ArrowForwardIos, onClick = onNextRange)
-        Surface(
-            modifier = Modifier.width(260.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            onClick = onResetRange
-        ) {
-            Text(
-                rangeTitle,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold
+        ScheduleToolbarButton(label = t("Today"), onClick = onResetRange)
+        if (canJumpToSelected) {
+            ScheduleToolbarIconButton(
+                icon = Icons.Filled.MyLocation,
+                contentDescription = t("Jump to selected order"),
+                onClick = onJumpToSelected
             )
         }
-        ScheduleDesktopZoomControls(zoom = zoom, onZoomChange = onZoomChange)
-        Box(modifier = Modifier.width(176.dp)) {
-            ScheduleDesktopControl(
-                label = viewMode.label,
-                icon = Icons.Filled.DateRange,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { viewMenuOpen = true }
+        ScheduleWidthGroup(zoom = zoom, daysOnScreen = daysOnScreen, onZoomChange = onZoomChange)
+        ScheduleToolbarButton(label = t("Fit"), onClick = onFit)
+        ScheduleRangeSegments(selected = viewMode, onSelect = onViewModeChange)
+    }
+}
+
+// `‹  <period text>  ›` — the arrows sit inside the same pill as the period text so the
+// three read as one control instead of three loose buttons.
+@Composable
+private fun SchedulePeriodGroup(
+    rangeTitle: String,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onPrevious, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.ArrowBackIosNew, contentDescription = t("Previous range"), tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+            }
+            Text(
+                rangeTitle,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold
             )
-            DropdownMenu(expanded = viewMenuOpen, onDismissRequest = { viewMenuOpen = false }) {
-                ScheduleViewMode.menuOptions.forEach { item ->
-                    DropdownMenuItem(
-                        text = { Text(item.label, fontWeight = FontWeight.Bold) },
-                        onClick = {
-                            onViewModeChange(item)
-                            viewMenuOpen = false
-                        }
+            IconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = t("Next range"), tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleToolbarButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant, onClick = onClick) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            maxLines = 1,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
+}
+
+@Composable
+private fun ScheduleToolbarIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+            Icon(icon, contentDescription = contentDescription, tint = StudioBlue, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+// The segmented range control replaces the old "Range" dropdown: Week | Month | 3M | 6M | Year.
+@Composable
+private fun ScheduleRangeSegments(
+    selected: ScheduleViewMode,
+    onSelect: (ScheduleViewMode) -> Unit,
+    modifier: Modifier = Modifier,
+    stretch: Boolean = false
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(modifier = Modifier.padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            ScheduleViewMode.menuOptions.forEach { option ->
+                val active = option == selected
+                Surface(
+                    modifier = if (stretch) Modifier.weight(1f) else Modifier,
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    tonalElevation = if (active) 2.dp else 0.dp,
+                    onClick = { onSelect(option) }
+                ) {
+                    Text(
+                        t(option.shortLabel),
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (active) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
@@ -1048,46 +1183,133 @@ private fun ScheduleDesktopControl(
     }
 }
 
+// The width group reads in days, not per cent: "how many days fit on screen right now".
+// The −/+ steps and the [0.45, 2.20] clamp are unchanged — only the readout is new.
 @Composable
-private fun ScheduleDesktopZoomControls(zoom: Double, onZoomChange: (Double) -> Unit) {
+private fun ScheduleWidthGroup(zoom: Double, daysOnScreen: Int, onZoomChange: (Double) -> Unit) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onZoomChange(zoom - 0.15) }, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Remove, contentDescription = "Zoom out", tint = StudioBlue)
+        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { onZoomChange(zoom - 0.15) }, enabled = zoom > 0.45 + 0.001, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Remove, contentDescription = t("Zoom out"), tint = StudioBlue)
             }
-            Text("${(zoom * 100).roundToInt()}%", modifier = Modifier.width(48.dp), fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-            IconButton(onClick = { onZoomChange(zoom + 0.15) }, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Add, contentDescription = "Zoom in", tint = StudioBlue)
+            Text(
+                "$daysOnScreen ${t("days")}",
+                modifier = Modifier.width(66.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 1,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.sp
+            )
+            IconButton(onClick = { onZoomChange(zoom + 0.15) }, enabled = zoom < 2.20 - 0.001, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Add, contentDescription = t("Zoom in"), tint = StudioBlue)
             }
             IconButton(onClick = { onZoomChange(1.0) }, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Reset zoom", tint = StudioBlue)
+                Icon(Icons.Filled.Refresh, contentDescription = t("Reset zoom"), tint = StudioBlue)
             }
         }
     }
 }
 
+// One quiet line: the plan/team note, and — when the viewer can actually edit — a single
+// "ⓘ How moving and resizing works" link that expands the explanation on demand.
 @Composable
-private fun SchedulePlanNotice() {
+private fun ScheduleTipLine(note: String, showGuide: Boolean, modifier: Modifier = Modifier) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E2E2))
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFD12EF2).copy(alpha = 0.12f)) {
-                Icon(Icons.Filled.People, contentDescription = null, tint = Color(0xFFD12EF2), modifier = Modifier.padding(6.dp).size(22.dp))
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (showGuide) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { expanded = !expanded }
+                        .padding(horizontal = 4.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Filled.Info, contentDescription = null, tint = StudioBlue, modifier = Modifier.size(16.dp))
+                    Text(
+                        t("How moving and resizing works"),
+                        color = StudioBlue,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Text(
-                "Team includes shared schedule planning for the whole workspace.",
+                note,
+                modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.ExtraBold
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
+        if (showGuide && expanded) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = StudioBlue.copy(alpha = 0.06f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, StudioBlue.copy(alpha = 0.18f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(t("Three ways to move an order"), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        t("Drag the bar to move the whole order, its left edge to change the start date, its right edge to change the delivery date."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        t("Got it"),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { expanded = false }
+                            .padding(horizontal = 4.dp, vertical = 3.dp),
+                        color = StudioBlue,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+// "<period>" left, "N orders · N late · N ready to ship" right. Lives outside the
+// horizontal scroller so the counts stay put while the timeline pans sideways.
+@Composable
+private fun SchedulePeriodHeader(rangeTitle: String, orders: List<StudioOrder>, modifier: Modifier = Modifier) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val late = orders.count { orderIsLate(it) }
+    val ready = orders.count { orderIsReadyToShip(it) }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Blank title where the period already reads out right above (phone, team grid) —
+        // the counts still hold the right-hand edge.
+        if (rangeTitle.isBlank()) {
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Text(rangeTitle, modifier = Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(
+            "${orders.size} ${t("orders")} · $late ${t("late")} · $ready ${t("ready to ship")}",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1200,12 +1422,15 @@ private fun ScheduleTimelineBoard(
     onResizeTrailing: (StudioOrder, Int) -> Unit,
     selectedOrderId: String? = null,
     onSelectOrder: (StudioOrder) -> Unit = {},
+    jumpTarget: StudioOrder? = null,
+    jumpTick: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     val horizontalState = rememberScrollState()
     val verticalState = rememberScrollState()
+    val density = LocalDensity.current
     val baseDayWidth = scheduleTimelineBaseDayWidth(range.days.size)
     val dayWidth = (baseDayWidth * zoom).coerceAtLeast(18.0).dp
     val timelineOrders = remember(visibleOrders, range) {
@@ -1214,6 +1439,15 @@ private fun ScheduleTimelineBoard(
             .sortedWith(compareBy<StudioOrder> { it.isClosed }.thenBy { orderStartDate(it) }.thenBy { deliveryDueDate(it) })
     }
     val timelineWidth = dayWidth * range.days.size.toFloat()
+    // "Jump to selected" re-anchors the range in the caller; here we bring the bar itself
+    // into view, so the order lands on screen rather than just inside the window.
+    LaunchedEffect(jumpTick) {
+        if (jumpTick <= 0) return@LaunchedEffect
+        val target = jumpTarget ?: return@LaunchedEffect
+        val metrics = timelineMetrics(target, range) ?: return@LaunchedEffect
+        val targetPx = with(density) { (dayWidth * metrics.offsetDays.toFloat()).toPx() }
+        runCatching { horizontalState.animateScrollTo(targetPx.roundToInt().coerceAtLeast(0)) }
+    }
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
         if (timelineOrders.isEmpty()) {
             Column(
@@ -1223,8 +1457,8 @@ private fun ScheduleTimelineBoard(
             ) {
                 Icon(Icons.Filled.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), modifier = Modifier.size(44.dp))
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("No orders in this schedule range.", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Use the arrows, filters or search to find scheduled work.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Text(t("No orders in this schedule range."), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                Text(t("Use the arrows, filters or search to find scheduled work."), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             }
         } else {
             Box(
@@ -1235,7 +1469,6 @@ private fun ScheduleTimelineBoard(
                     .padding(18.dp)
             ) {
                 Column(modifier = Modifier.width(timelineWidth)) {
-                    ScheduleTimelineTitleRow(range = range, orderCount = timelineOrders.size)
                     ScheduleTimelineDayHeader(range = range, dayWidth = dayWidth)
                     timelineOrders.forEach { order ->
                         ScheduleTimelineRow(
@@ -1258,27 +1491,10 @@ private fun ScheduleTimelineBoard(
     }
 }
 
-@Composable
-private fun ScheduleTimelineTitleRow(range: ScheduleRange, orderCount: Int) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(range.title, modifier = Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-            Text("$orderCount orders", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
+// Today is a filled accent circle around the day number with an accent line running down
+// the grid — a marker you can find at a glance, instead of a whole tinted column.
 @Composable
 private fun ScheduleTimelineDayHeader(range: ScheduleRange, dayWidth: Dp) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Row(modifier = Modifier.fillMaxWidth().height(72.dp)) {
         range.days.forEach { day ->
             val today = isSameScheduleDay(day.date, Date())
@@ -1286,13 +1502,31 @@ private fun ScheduleTimelineDayHeader(range: ScheduleRange, dayWidth: Dp) {
                 modifier = Modifier
                     .width(dayWidth)
                     .fillMaxSize()
-                    .background(if (today) StudioBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .border(1.dp, scheduleGridColor()),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(day.weekday, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-                    Text(day.day, color = if (today) StudioBlue else MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    if (today) {
+                        Box(
+                            modifier = Modifier.size(26.dp).clip(CircleShape).background(StudioBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(day.day, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                        }
+                    } else {
+                        Text(day.day, color = MaterialTheme.colorScheme.onSurface, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                    }
+                }
+                if (today) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .width(2.dp)
+                            .height(9.dp)
+                            .background(StudioBlue.copy(alpha = 0.35f))
+                    )
                 }
             }
         }
@@ -1351,9 +1585,19 @@ private fun ScheduleTimelineRow(
                     modifier = Modifier
                         .width(dayWidth)
                         .fillMaxSize()
-                        .background(if (isSameScheduleDay(day.date, Date())) StudioBlue.copy(alpha = 0.04f) else Color.Transparent)
                         .border(1.dp, cellGrid)
-                )
+                ) {
+                    // The accent line under today's circle, carried down every row.
+                    if (isSameScheduleDay(day.date, Date())) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(StudioBlue.copy(alpha = 0.35f))
+                        )
+                    }
+                }
             }
         }
         Surface(
@@ -1519,28 +1763,6 @@ private fun ScheduleTimelineThumbnail(order: StudioOrder) {
 }
 
 @Composable
-private fun ScheduleTimelineFooter(visibleOrders: List<StudioOrder>, canEditSchedule: Boolean) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FooterMetric("${visibleOrders.size} orders", Icons.Filled.Inventory2)
-            FooterMetric("${visibleOrders.count { orderIsLate(it) }} Late", Icons.Filled.Warning)
-            FooterMetric("${visibleOrders.count { orderIsReadyToShip(it) }} Ready to Ship", Icons.Filled.Inventory2)
-            Text(
-                if (canEditSchedule) "Drag blocks to move dates. Pull the edges to resize." else t("Read-only schedule view."),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-@Composable
 private fun ScheduleControl(
     label: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1559,16 +1781,6 @@ private fun ScheduleControl(
     }
 }
 
-@Composable
-private fun ArrowButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        IconButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        }
-    }
-}
 
 @Composable
 private fun ScheduleQuickAction(label: String, active: Boolean, onClick: () -> Unit) {
@@ -1988,16 +2200,6 @@ private fun ScheduleMiniAction(label: String, modifier: Modifier = Modifier, onC
     }
 }
 
-@Composable
-private fun FooterMetric(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
-    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, lineHeight = 16.sp)
-    }
-}
-
 private data class ScheduleRange(
     val title: String,
     val days: List<DayBucket>,
@@ -2078,10 +2280,13 @@ private data class ScheduleRange(
             val endCalendar = Calendar.getInstance(locale)
             endCalendar.time = start
             endCalendar.add(Calendar.DAY_OF_MONTH, rangeDayCount - 1)
-            val title = if (rangeDayCount == 1) {
-                rangeFormatter(locale).format(start)
-            } else {
-                "${rangeFormatter(locale).format(start)} - ${rangeFormatter(locale).format(endCalendar.time)}"
+            // Period text mirrors the web toolbar: a month view names the month, a year
+            // view names the year, everything else spells out the first and last day.
+            val title = when {
+                viewMode == ScheduleViewMode.Monthly -> SimpleDateFormat("MMM yyyy", locale).format(start)
+                viewMode == ScheduleViewMode.Yearly -> SimpleDateFormat("yyyy", locale).format(start)
+                rangeDayCount == 1 -> rangeFormatter(locale).format(start)
+                else -> "${rangeFormatter(locale).format(start)} - ${rangeFormatter(locale).format(endCalendar.time)}"
             }
             val endExclusiveCalendar = Calendar.getInstance(locale).apply {
                 time = start
@@ -2114,7 +2319,7 @@ private data class ScheduleBoardColumnSpec(
 )
 
 private enum class ScheduleStatusFilter(val label: String) {
-    All("All statuses"),
+    All("All"),
     ThisWeek("This Week"),
     Active("Active"),
     WaitingCustomer("Waiting Customer"),
@@ -2138,20 +2343,12 @@ private enum class ScheduleStatusFilter(val label: String) {
         }
     }
 
-    fun controlLabel(visibleCount: Int): String {
-        return when (this) {
-            All -> "All statuses · $visibleCount"
-            else -> "$label · $visibleCount"
-        }
-    }
-
-    fun menuLabel(orders: List<StudioOrder>): String = "$label (${orders.count { matches(it) }})"
 }
 
 private enum class ScheduleSortMode(val label: String) {
-    Smart("Smart"),
+    Smart("Smart sort"),
     DeliveryDue("Delivery due"),
-    CreatedDate("Created date"),
+    CreatedDate("Recent first"),
     Customer("Customer");
 
     fun sort(orders: List<StudioOrder>): List<StudioOrder> {
@@ -2169,12 +2366,14 @@ private enum class ScheduleSortMode(val label: String) {
     }
 }
 
-private enum class ScheduleViewMode(val label: String, val dayCount: Int, val monthCount: Int = 0) {
-    Weekly("Weekly", 7),
-    Monthly("Monthly", 31, monthCount = 1),
-    ThreeMonths("3 Months", 92, monthCount = 3),
-    SixMonths("6 Months", 184, monthCount = 6),
-    Yearly("Yearly", 366);
+// `shortLabel` is what the segmented range control shows (Week | Month | 3M | 6M | Year),
+// matching the web toolbar; `label` stays the long name used in menus and accessibility.
+private enum class ScheduleViewMode(val label: String, val shortLabel: String, val dayCount: Int, val monthCount: Int = 0) {
+    Weekly("Weekly", "Week", 7),
+    Monthly("Monthly", "Month", 31, monthCount = 1),
+    ThreeMonths("3 Months", "3M", 92, monthCount = 3),
+    SixMonths("6 Months", "6M", 184, monthCount = 6),
+    Yearly("Yearly", "Year", 366);
 
     companion object {
         val menuOptions = listOf(Weekly, Monthly, ThreeMonths, SixMonths, Yearly)
