@@ -27818,6 +27818,24 @@ function shopifyBillingPlanFor(planKey) {
 
 /** The reverse lookup: Shopify hands back the subscription's display name, not
  *  our plan key, so app_subscriptions/update can identify the plan on its own. */
+/**
+ * Has this workspace already had its free fortnight?
+ *
+ * NOT `workspaceHasUsedTrial`, which counts any surviving subscription id as
+ * proof. That is right for the Stripe checkout — a real customer has had their
+ * chance — but the App Review workspace carries a stale id beside a
+ * complimentary plan, and it cost the reviewer's approval screen its trial
+ * while the listing promised one on every plan. Contradicting our own listing
+ * on the charge screen is exactly what review looks for.
+ *
+ * The explicit stamp still counts, so a fortnight taken here or at a Stripe
+ * checkout is not handed out twice.
+ */
+function shopifyWorkspaceHasUsedTrial(companyData = {}) {
+  if (companyData.billingTrialUsedAt) return true;
+  return workspaceBilledOutsideShopify(companyData);
+}
+
 function shopifyBillingPlanByName(name) {
   const clean = String(name || "").trim().toLowerCase();
   if (!clean) return null;
@@ -28137,7 +28155,7 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
         interval: entry.interval,
         // One trial per workspace, however it was started — the same stamp the
         // Stripe checkout and the automatic trial both read.
-        trialDays: workspaceHasUsedTrial(companyData) ? 0 : SHOPIFY_BILLING_TRIAL_DAYS
+        trialDays: shopifyWorkspaceHasUsedTrial(companyData) ? 0 : SHOPIFY_BILLING_TRIAL_DAYS
       });
       return;
     }

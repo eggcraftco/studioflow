@@ -205,4 +205,44 @@ const workspaceBilledOutsideShopify = new Function(
   pass("the webhook can identify the plan without a prior return trip");
 }
 
+// 9. The listing promises a 14-day trial on every paid plan. If the charge
+// screen says "due today" instead, the two contradict each other in front of
+// the reviewer. The first live approval did exactly that, because the shared
+// workspaceHasUsedTrial counts any surviving subscription id as proof — true
+// for a real Stripe customer, false for the App Review workspace's stale one.
+{
+  const hasUsedTrial = new Function(
+    `${liftConst("SHOPIFY_PAYING_PROVIDERS")}
+     ${lift("workspaceBilledOutsideShopify")}
+     ${lift("shopifyWorkspaceHasUsedTrial")}
+     return shopifyWorkspaceHasUsedTrial;`
+  )();
+
+  assert(
+    !hasUsedTrial({
+      billingPlanSource: "comp_review",
+      billingStatus: "active",
+      billingSubscriptionId: "sub_1Tcu1WD3VBItFZ5TwF5iJvqD"
+    }),
+    "a stale id beside a complimentary plan does not spend the fortnight"
+  );
+  assert(
+    hasUsedTrial({ billingTrialUsedAt: { seconds: 1 } }),
+    "but the explicit stamp does — one fortnight per workspace, wherever it started"
+  );
+  assert(
+    hasUsedTrial({
+      billingPlanSource: "stripe",
+      billingStatus: "active",
+      billingSubscriptionId: "sub_real"
+    }),
+    "and so does a real paying subscription"
+  );
+  assert(
+    /shopifyWorkspaceHasUsedTrial\(companyData\)/.test(server),
+    "billingPlanRequest uses the Shopify-specific check, not the shared one"
+  );
+  pass("the trial the listing promises is the trial the charge screen shows");
+}
+
 console.log("\n✅ SHOPIFY BILLING GEÇTİ");

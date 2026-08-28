@@ -35,9 +35,6 @@ type BillingState = {
   manageUrl: string;
 };
 
-// The handle from shopify.app.toml. Used to build the in-admin return URL.
-const APP_HANDLE = process.env.SHOPIFY_APP_HANDLE || "nivadesk-order-management";
-
 const SUBSCRIPTION_CREATE = `#graphql
   mutation NivaDeskSubscribe($name: String!, $returnUrl: URL!, $trialDays: Int, $test: Boolean, $lineItems: [AppSubscriptionLineItemInput!]!) {
     appSubscriptionCreate(name: $name, returnUrl: $returnUrl, trialDays: $trialDays, test: $test, lineItems: $lineItems) {
@@ -158,9 +155,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Back INSIDE the admin, not to the bare Cloud Run origin: approving on
   // Shopify's screen and landing on a naked app server URL drops the merchant
   // out of the iframe, out of the nav, and out of session context.
+  // Read inside the action, not at module scope: this module is also part of
+  // the CLIENT bundle, `process` does not exist in a browser, and a throw while
+  // the module evaluates kills hydration — the page renders and every button
+  // does nothing, which is exactly what it did.
+  const appHandle = process.env.SHOPIFY_APP_HANDLE || "nivadesk-order-management";
   const storeName = session.shop.replace(/\.myshopify\.com$/, "");
   const returnUrl =
-    `https://admin.shopify.com/store/${storeName}/apps/${APP_HANDLE}/app/plan` +
+    `https://admin.shopify.com/store/${storeName}/apps/${appHandle}/app/plan` +
     `?plan=${encodeURIComponent(quote.plan)}`;
   const response = await admin.graphql(SUBSCRIPTION_CREATE, {
     variables: {
@@ -258,7 +260,13 @@ export default function PlanPage() {
           {billing.currentPlan === plan.plan ? (
             <s-paragraph>This is your current plan.</s-paragraph>
           ) : (
-            <fetcher.Form method="post">
+            // The pattern app.connection.tsx already proved in this app, copied
+            // exactly: a real form submission, and `display: contents` so the
+            // form does not sit between the button and the Polaris section it
+            // belongs to. React 18 does not attach JSX event props to custom
+            // elements, so an onClick on s-button never fires in the embedded
+            // iframe — it renders perfectly and does nothing.
+            <fetcher.Form method="POST" style={{ display: "contents" }}>
               <input type="hidden" name="plan" value={plan.plan} />
               <s-button type="submit" variant={plan.recommended ? "primary" : undefined}>
                 {fetcher.state === "submitting" ? "Opening Shopify…" : `Choose ${plan.name}`}
