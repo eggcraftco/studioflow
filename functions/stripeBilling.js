@@ -1457,6 +1457,16 @@ function createStripeBillingFunctions({
         || Boolean(String(companyData.billingSubscriptionId || "").trim());
       if (item.type === "plan" && !hasUsedTrial) {
         sessionPayload.subscription_data.trial_period_days = 14;
+        // No card to start the trial. We can afford that because Free is a
+        // permanent tier: a trial nobody pays for has somewhere safe to land,
+        // so the subscription simply cancels and the workspace drops back to
+        // Free with its data intact — the same path an ordinary cancellation
+        // already takes. Stripe requires an explicit end_behavior whenever
+        // payment_method_collection is "if_required".
+        sessionPayload.payment_method_collection = "if_required";
+        sessionPayload.subscription_data.trial_settings = {
+          end_behavior: { missing_payment_method: "cancel" }
+        };
       }
     } else {
       sessionPayload.payment_intent_data = { metadata };
