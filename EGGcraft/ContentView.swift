@@ -1887,6 +1887,7 @@ struct StudioKeepNotesView: View {
     @State private var pendingCollaboratorInviteKeys: Set<String> = []
     @State private var editingProjectNoteItem: StudioProjectNoteItem?
     @State private var editingProjectNoteText: String = ""
+    @FocusState private var isProjectNoteEditorFocused: Bool
     @State private var keepWorkspaceMembers: [KeepWorkspaceMember] = []
     @State private var keepCollaborationInvites: [KeepCollaborationInvite] = []
     @State private var isLoadingKeepInvites: Bool = false
@@ -2456,9 +2457,6 @@ struct StudioKeepNotesView: View {
         }
         .sheet(item: $collaboratorNote) { note in
             collaboratorSheet(for: note)
-        }
-        .sheet(item: $editingProjectNoteItem) { item in
-            projectNoteEditorSheet(for: item)
         }
         .alert(
             t("Rename label", lang: seciliDil),
@@ -3677,6 +3675,19 @@ struct StudioKeepNotesView: View {
         return CGFloat(rows) * 210.0
     }
 
+    // The order's own note lives on the order document, so Project Notes is a
+    // second window onto order data — never a looser door into it. It uses the
+    // same gate the order screen uses for editing order details.
+    private var canEditOrderNotes: Bool {
+        let ordersAllowed = authVM.currentWorkspaceAccess["orders"] ?? true
+        let roleCanEdit = authVM.isCompanyOwner || studioOrderDetailRoleCanEdit(authVM.currentWorkspaceRole)
+        return roleCanEdit && ordersAllowed
+    }
+
+    private func isEditingProjectNote(_ item: StudioProjectNoteItem) -> Bool {
+        editingProjectNoteItem?.id == item.id
+    }
+
     private func beginEditingProjectNote(_ item: StudioProjectNoteItem) {
         // Linked keep-notes open their own note editor, not the order-field editor.
         if !item.keepNoteId.isEmpty {
@@ -3686,16 +3697,35 @@ struct StudioKeepNotesView: View {
             return
         }
 
+        guard canEditOrderNotes else { return }
+
         editingProjectNoteItem = item
         editingProjectNoteText = item.text
+        isProjectNoteEditorFocused = true
+    }
+
+    private func cancelProjectNoteEditing() {
+        editingProjectNoteItem = nil
+        editingProjectNoteText = ""
+        isProjectNoteEditorFocused = false
     }
 
     private func saveEditedProjectNote(_ item: StudioProjectNoteItem) {
+        guard canEditOrderNotes else {
+            cancelProjectNoteEditing()
+            return
+        }
+
         let cleanText = editingProjectNoteText.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Nothing typed that differs from what is on the order: close without a write.
+        guard cleanText != item.text else {
+            cancelProjectNoteEditing()
+            return
+        }
+
         guard let orderIndex = firebaseManager.siparisler.firstIndex(where: { orderSelectionKeyForNotes($0) == item.orderKey }) else {
-            editingProjectNoteItem = nil
-            editingProjectNoteText = ""
+            cancelProjectNoteEditing()
             return
         }
 
@@ -3727,103 +3757,60 @@ struct StudioKeepNotesView: View {
             }
         }
 
+        // The same order-update path the order screen's Notes card autosaves
+        // through: one field on one document, so the list re-reads the change
+        // from the orders snapshot instead of keeping a copy of its own.
         firebaseManager.updateSiparis(updatedOrder, previousSiparis: previousOrder)
-        editingProjectNoteItem = nil
-        editingProjectNoteText = ""
+        cancelProjectNoteEditing()
     }
 
-    private func projectNoteEditorSheet(for item: StudioProjectNoteItem) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.blue)
-                    .frame(width: 38, height: 38)
-                    .background(Color.blue.opacity(0.12))
-                    .clipShape(Circle())
+    // Editing happens where the note is read: the entry becomes a text box with
+    // Save and Cancel, and Escape backs out without writing anything.
+    private func projectNoteInlineEditor(for item: StudioProjectNoteItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextEditor(text: $editingProjectNoteText)
+                .font(.system(size: 14.5))
+                .scrollContentBackground(.hidden)
+                .padding(8)
+                .frame(minHeight: 96)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.blue.opacity(0.35), lineWidth: 1)
+                )
+                .focused($isProjectNoteEditorFocused)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(t("Edit project note", lang: seciliDil))
-                        .font(.system(size: 20, weight: .bold))
-                    Text(item.displayProjectTitle)
-                        .font(.system(size: 12.5))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
+            HStack(spacing: 8) {
                 Button {
-                    editingProjectNoteItem = nil
-                    editingProjectNoteText = ""
+                    saveEditedProjectNote(item)
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .frame(width: 30, height: 30)
-                        .background(Color.primary.opacity(0.06))
-                        .clipShape(Circle())
+                    Text(t("Save", lang: seciliDil))
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color.blue.opacity(0.16))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-            }
-            .padding(18)
 
-            Divider().opacity(0.35)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text(item.noteType)
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundColor(.secondary)
-
-                TextEditor(text: $editingProjectNoteText)
-                    .font(.system(size: 14.5))
-                    .scrollContentBackground(.hidden)
-                    .padding(10)
-                    .frame(minHeight: 220)
-                    .background(Color.primary.opacity(0.045))
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                HStack {
-                    Button(role: .destructive) {
-                        editingProjectNoteText = ""
-                    } label: {
-                        Label(t("Clear", lang: seciliDil), systemImage: "trash")
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button {
-                        editingProjectNoteItem = nil
-                        editingProjectNoteText = ""
-                    } label: {
-                        Text(t("Cancel", lang: seciliDil))
-                            .font(.system(size: 13, weight: .bold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 9)
-                            .background(Color.primary.opacity(0.055))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        saveEditedProjectNote(item)
-                    } label: {
-                        Text(t("Save", lang: seciliDil))
-                            .font(.system(size: 13, weight: .bold))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(Color.blue.opacity(0.16))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    cancelProjectNoteEditing()
+                } label: {
+                    Text(t("Cancel", lang: seciliDil))
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color.primary.opacity(0.055))
+                        .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
             }
-            .padding(18)
-        }
-        .frame(minWidth: 520, minHeight: 430)
-        .background(keepColorScheme == .dark ? Color(white: 0.10) : Color.white)
-        .onAppear {
-            editingProjectNoteText = item.text
         }
     }
 
@@ -4079,6 +4066,11 @@ struct StudioKeepNotesView: View {
                     withAnimation(.spring(response: 0.26, dampingFraction: 0.88)) {
                         if isExpanded {
                             _ = expandedProjectNoteKeys.remove(group.id)
+                            // Collapsing hides the inline editor, so drop the
+                            // half-typed draft rather than leaving it stranded.
+                            if editingProjectNoteItem?.orderKey == group.orderKey {
+                                cancelProjectNoteEditing()
+                            }
                         } else {
                             _ = expandedProjectNoteKeys.insert(group.id)
                         }
@@ -4139,7 +4131,14 @@ struct StudioKeepNotesView: View {
 
 
     private func projectNoteCard(_ item: StudioProjectNoteItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // An order's own note fields (Project Note / Inventory Note / special
+        // notes) belong to the order document; linked entries are keep-notes and
+        // keep opening their own editor.
+        let isOrderNote = item.keepNoteId.isEmpty
+        let canEditThisNote = isOrderNote && canEditOrderNotes
+        let isEditingThisNote = canEditThisNote && isEditingProjectNote(item)
+
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "doc.text")
                     .font(.system(size: 13.5, weight: .bold))
@@ -4166,19 +4165,21 @@ struct StudioKeepNotesView: View {
 
                 Spacer()
 
-                Button {
-                    beginEditingProjectNote(item)
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 12.5, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.055))
-                        .clipShape(Circle())
+                if canEditThisNote && !isEditingThisNote {
+                    Button {
+                        beginEditingProjectNote(item)
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.055))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("Click to edit this project note", lang: seciliDil))
+                    .accessibilityLabel(t("Edit", lang: seciliDil))
                 }
-                .buttonStyle(.plain)
-                .help(t("Edit", lang: seciliDil))
-                .accessibilityLabel(t("Edit", lang: seciliDil))
 
                 Button {
                     copyProjectNoteToClipboard(item)
@@ -4225,22 +4226,31 @@ struct StudioKeepNotesView: View {
                 .accessibilityLabel(keepShortcutText("Open project"))
             }
 
-            Text(item.text)
-                .font(.system(size: 14.5))
-                .foregroundColor(.primary.opacity(0.88))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(10)
+            if isEditingThisNote {
+                projectNoteInlineEditor(for: item)
+            } else {
+                Text(item.text)
+                    .font(.system(size: 14.5))
+                    .foregroundColor(.primary.opacity(0.88))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(10)
+            }
         }
         .padding(14)
         .background(Color.primary.opacity(0.035))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
-            if !item.keepNoteId.isEmpty {
+            guard !isEditingThisNote else { return }
+            // Linked notes open their own editor; an order's note opens in place
+            // for the roles that may edit order details, and stays plain text
+            // for everyone else.
+            if !item.keepNoteId.isEmpty || canEditThisNote {
                 beginEditingProjectNote(item)
             }
         }
+        .help(canEditThisNote && !isEditingThisNote ? t("Click to edit this project note", lang: seciliDil) : "")
     }
 
     private var labelManagerSheet: some View {
