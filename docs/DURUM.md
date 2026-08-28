@@ -1377,3 +1377,35 @@ kondu — artık yalnız "gerçekten yüklendi VE gerçekten sıfır" halinde
 - 1 yeni string 12 dilde; agent'lar Fable 5 limitine takıldı, build+commit
   Opus ile elle tamamlandı (Android APK zaman damgası kaynaktan yeni →
   değişiklikler gerçekten derlendi).
+
+---
+
+## 28 Ağu — Proje notu okuduğun yerde düzenlenir (tur 58, 3 platform)
+
+İstek: Notes menüsündeki Project Notes kayıtları da düzenlenebilsin.
+Bulgu: o listede İKİ tür kayıt var — siparişe bağlı uygulama notları
+(zaten tıklanınca açılıyordu) ve **siparişin KENDİ notu** (order doc'un
+`notes` alanı) — düzenlenemeyen buydu.
+- **Web (tur 58 canlı):** ProjectNotesView'da order-note girdisi artık
+  OrderNoteEntry: tıkla→textarea, Save/Cancel, Escape iptal; kayıt
+  updateOrderFromWeb({details:{notes}}) ile SİPARİŞ dokümanına gider
+  (kopya yok), sonra orders yeniden okunur. Rol kapısı
+  canEditOrderDetailsForRole. Dev E2E: emülatörde QA-ORDER-1'e not
+  yazıldı → menüden düzenlendi → order doc'ta yeni metin doğrulandı.
+- **Android (bfe41cf, BUILD SUCCESSFUL):** aynı davranış; save yolu
+  onUpdateOrderFields → updateWebOrder callable (web ile AYNI sunucu
+  fonksiyonu); liste canlı akıştan geldiği için yeniden okuma bile
+  gerekmedi; rol kapısı order ekranının canEditWorkflow kuralının aynısı.
+- **Mac/iOS (271fd01, macOS + iOS BUILD SUCCEEDED):** düzenleme modal
+  sheet'ten YERİNDE editöre taşındı (TextEditor + Save/Cancel, Escape
+  = cancelAction); save yolu firebaseManager.updateSiparis — sipariş
+  ekranının autosave'iyle aynı. **GÜVENLİK BULGUSU (agent yakaladı):**
+  Swift'teki eski sheet'in HİÇ rol kapısı yoktu — sipariş detayını
+  düzenleyemeyen roller bile Notes menüsünden sipariş notunu
+  değiştirebiliyordu; artık canEditOrderNotes (order ekranıyla birebir)
+  hem editörü hem kaydı koruyor. 1 yeni string 12 dilde.
+- Ek küçük düzeltme: ContentView'daki "projectNotes" (camelCase) anahtarı
+  hiçbir zaman eşleşmiyordu (her yerde "projectnotes"), bu yüzden
+  "New note" düğmesi Project Notes'ta da görünüyordu — düzeltildi.
+- Rehber: Notes bölümü EN+TR bulleti (aynı metin, kopya değil vurgusu);
+  corpus + 4 fonksiyon deploy; bot sondası confident:True.
