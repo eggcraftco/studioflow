@@ -1484,3 +1484,35 @@ KARIŞMASIN.
 - **Bayrak açılınca yapılacaklar:** NIVADESK_MCP_INVENTORY=1 →
   chatgptMcp deploy → rehbere ChatGPT bölümü (EN+TR) + corpus + 4 asistan
   deploy + bot sondası → OpenAI'ye yeni sürümde iki aracı bildir.
+
+---
+
+## 28 Ağu — Schedule düzeni 3 PLATFORMDA (tur 63 + native)
+
+- **Web (tur 63 canlı):** araç çubuğu tek satır (arama/durum/sıralama →
+  ‹ dönem › + Today → − N days + ↺ Fit → Week|Month|3M|6M|Year segmenti);
+  etiket sütunları kalktı, "Range" açılır menüsü segmente dönüştü; zoom
+  yüzdesi yerine ekrana sığan GÜN sayısı (ResizeObserver ile ölçülür);
+  Team bandı + "Three ways to move" tek sessiz satırda (ⓘ ile açılır);
+  dönem başlığı + "N orders · N late · N ready to ship" kaydırıcının
+  DIŞINDA sabit (eskiden sağa kayıp kayboluyordu); bugün = dolu daire +
+  dikey çizgi; team mini takvimi ferahlatıldı (268px sütun, 32px kare
+  hücre, bugün dolu daire). 9 string 12 dilde.
+- **Mac/iOS (7c0b443, macOS + iOS BUILD SUCCEEDED):** altı maddenin
+  TAMAMI uygulandı (mini takvim Apple'da VAR); dokuz yeni alt-view ayrı
+  file-private struct (gerçek-iPhone kuralı); 16 anahtar 12 dilde, metin
+  web'den birebir kopyalandı; sürükle/boyutlandır/undo ve plan kapıları
+  ellenmedi.
+- **Android (ea2fb8a, BUILD SUCCESSFUL):** beş madde uygulandı; mini
+  takvim Android'de YOK (parite değil yeni özellik olurdu, yapılmadı).
+  Team ekranı hiç olmayan arama alanını kazandı. 27 çeviri girdisi.
+  İki not: Android'in dört sıralama modu korundu (adları web'e
+  uyarlandı) ve 3M/6M/Year plan kapısı Android'de hiç yoktu — dokunulmadı.
+- Ayrıca aynı turda: kart panelinin kendi kaydırma çubuğu kaldırıldı
+  (772→657px içerik), ana kabuktaki GEREKSİZ dış kaydırma çubuğu
+  düzeltildi (11 yerde `calc(100vh - 104px)` sabiti gerçek yükseklikten
+  81px büyüktü → paneller alana tam oturuyor) ve ana sayfadaki
+  "Everything stays connected" diyagramı düzeldi (bağlantı SVG'sinin
+  position:absolute'unu SONRAKİ bir kural eziyordu; SVG bir ızgara
+  sütunu işgal edip kartları alt satıra atıyordu — kural :not() ile
+  daraltıldı, üretimde ölçülerek doğrulandı).
