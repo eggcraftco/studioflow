@@ -82,6 +82,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.activity.compose.BackHandler
+import uk.co.eggcraft.studioflow.features.onboarding.OnboardingAnswers
+import uk.co.eggcraft.studioflow.features.onboarding.OnboardingReadyScreen
+import uk.co.eggcraft.studioflow.features.onboarding.OnboardingWizardScreen
+import uk.co.eggcraft.studioflow.features.onboarding.onboardingWizardUpdates
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -1021,6 +1025,11 @@ private fun DemoPlanUpgradeBanner(
     }
 }
 
+/**
+ * The four-question wizard (see features/onboarding), in place of the old
+ * business-type dropdown and prompt box. There is no Skip: the last step offers
+ * "Start empty" and "I'll set this up later" as real answers instead.
+ */
 @Composable
 private fun WorkspaceOnboardingScreen(
     state: StudioFlowUiState,
@@ -1028,224 +1037,27 @@ private fun WorkspaceOnboardingScreen(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var businessType by rememberSaveable {
-        mutableStateOf(state.workspaceSettings.businessType.ifBlank { "Photography Studio" })
-    }
-    var businessPromptEdited by rememberSaveable { mutableStateOf(false) }
-    var businessPrompt by rememberSaveable {
-        mutableStateOf(
-            state.workspaceSettings.businessDescriptionPrompt
-                .takeIf { it.isNotBlank() && !isOnboardingPromptSeed(it) && it != onboardingDefaultModelPrompt }
-                ?: onboardingPromptSeed(state.workspaceSettings.businessType.ifBlank { "Photography Studio" }, lang)
-        )
-    }
-    var menuOpen by remember { mutableStateOf(false) }
-    val businessTypes = listOf(
-        "Custom Art Studio",
-        "Freelancer / Designer",
-        "Repair Service",
-        "Handmade Products",
-        "Photography Studio",
-        "Tailor / Alteration Studio",
-        "Jewellery Studio",
-        "Agency / Creative Studio",
-        "Food / Bakery / Catering",
-        "Beauty / Clinic / Wellness",
-        "Consultancy / Professional Service",
-        "General Small Business",
-        "Other / Prompt Based"
-    )
-    val saving = state.settingsSaving
-    val scrollState = rememberScrollState()
+    var finished by rememberSaveable { mutableStateOf(false) }
+    var savedAnswers by remember { mutableStateOf(OnboardingAnswers()) }
 
-    fun completionUpdates(action: String): Map<String, Any?> {
-        return mapOf(
-            "businessOnboardingCompletedAt" to FieldValue.serverTimestamp(),
-            "businessOnboardingCompletedAction" to action,
-            "businessOnboardingCompletedBy" to (state.user?.uid ?: "")
-        )
-    }
-
-    fun saveSmartTemplate() {
-        onUpdateWorkspaceSettings(
-            smartWorkflowTemplateUpdates(businessPrompt, businessType) + completionUpdates("smart"),
-            "Workspace setup completed."
-        )
-    }
-
-    fun saveStandardTemplate() {
-        onUpdateWorkspaceSettings(
-            standardWorkflowTemplate(businessType) + completionUpdates("standard"),
-            "Workspace setup completed."
-        )
-    }
-
-    fun skipSetup() {
-        onUpdateWorkspaceSettings(completionUpdates("skip"), "Workspace setup skipped.")
-    }
-
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF121212))
-            .verticalScroll(scrollState),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        val isCompact = maxWidth < 720.dp
-        val cardWidth = if (isCompact) maxWidth else 760.dp
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = cardWidth)
-                .padding(horizontal = if (isCompact) 18.dp else 42.dp, vertical = 34.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(22.dp)
-        ) {
-            Surface(
-                modifier = Modifier.size(if (isCompact) 88.dp else 110.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = Color.Transparent
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF4B83F5), Color(0xFFD42FE5))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AutoAwesome,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(46.dp)
-                    )
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Set up your workspace",
-                    color = Color(0xFFF4F4F5),
-                    fontSize = if (isCompact) 34.sp else 48.sp,
-                    fontWeight = FontWeight.Black,
-                    lineHeight = if (isCompact) 38.sp else 52.sp
-                )
-                Text(
-                    "Choose your business type first. NivaDesk can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.",
-                    color = Color(0xFF9D9DA3),
-                    fontSize = 18.sp,
-                    lineHeight = 25.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                color = Color(0xFF1B1B1C),
-                shadowElevation = 16.dp
-            ) {
-                Column(
-                    modifier = Modifier.padding(if (isCompact) 20.dp else 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Business Type", color = Color(0xFFA3A3A8), fontWeight = FontWeight.Black)
-                        Box {
-                            Button(
-                                onClick = { menuOpen = true },
-                                enabled = !saving,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF343437), contentColor = Color.White),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(t(businessType), fontWeight = FontWeight.Black)
-                            }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                businessTypes.forEach { type ->
-                                    DropdownMenuItem(
-                                        text = { Text(t(type)) },
-                                        onClick = {
-                                            businessType = type
-                                            if (!businessPromptEdited || isOnboardingPromptSeed(businessPrompt)) {
-                                                businessPrompt = onboardingPromptSeed(type, lang)
-                                                businessPromptEdited = false
-                                            }
-                                            menuOpen = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = Color(0xFFCC2FE1))
-                            Text("Optional smart description", color = Color(0xFFF4F4F5), fontWeight = FontWeight.Black, fontSize = 18.sp)
-                        }
-                        Text(
-                            "You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, NivaDesk will use the standard template for the selected business type.",
-                            color = Color(0xFFA3A3A8),
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = businessPrompt,
-                        onValueChange = { businessPrompt = it; businessPromptEdited = true },
-                        enabled = !saving,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(if (isCompact) 230.dp else 180.dp),
-                        placeholder = {
-                            Text(
-                                "Example: We create custom painted watch dials. We need watch model, dial size, artwork theme, client approval, deposit, painting stage, curing, final photos and shipping.",
-                                color = Color(0xFF7A7A80)
-                            )
-                        },
-                        shape = RoundedCornerShape(14.dp)
-                    )
-
-                    Button(
-                        onClick = ::saveSmartTemplate,
-                        enabled = !saving,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFCC2FE1), contentColor = Color.White),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text(if (saving) "Saving..." else "Smart Customize", fontWeight = FontWeight.Black, fontSize = 17.sp)
-                    }
-                    Button(
-                        onClick = ::saveStandardTemplate,
-                        enabled = !saving,
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D2A38), contentColor = StudioBlue),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("Use Standard Template", fontWeight = FontWeight.Black, fontSize = 17.sp)
-                    }
-                    TextButton(
-                        onClick = ::skipSetup,
-                        enabled = !saving,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) {
-                        Text("Skip for now", color = Color(0xFF9D9DA3), fontWeight = FontWeight.Black)
-                    }
-                }
-            }
-
-            Text(
-                "You can change this later from Settings > Workflow > Business Type.",
-                color = Color(0xFF9D9DA3),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+    if (finished) {
+        OnboardingReadyScreen(answers = savedAnswers, t = t) {
+            // Nothing more to write: the settings patch already carried the
+            // completion stamp, so opening the workspace just leaves this screen.
         }
+        return
+    }
+
+    OnboardingWizardScreen(saving = state.settingsSaving, t = t) { answers ->
+        savedAnswers = answers
+        finished = true
+        onUpdateWorkspaceSettings(
+            // The chosen work kinds become the business type the preset engine
+            // has always understood, so the card/step/label presets keep working.
+            standardWorkflowTemplate(answers.businessType) +
+                onboardingWizardUpdates(answers, state.user?.uid ?: ""),
+            "Workspace setup completed."
+        )
     }
 }
 

@@ -7611,11 +7611,13 @@ struct ContentView: View {
     @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
     @AppStorage("businessType") private var businessType: String = "Custom Art Studio"
     @AppStorage("businessDescriptionPrompt") private var businessDescriptionPrompt: String = ""
-    @State private var onboardingPromptUserEdited: Bool = false
     @AppStorage("settingsStartSection") private var settingsStartSection: String = ""
     @AppStorage("businessOnboardingCompletedCompanyIdsJSON") private var businessOnboardingCompletedCompanyIdsJSON: String = "[]"
     @State private var businessOnboardingGateOpen: Bool = false
     @State private var businessOnboardingCompletedInCloud: Bool = false
+    @State private var onboardingWizardAnswers: OnboardingAnswers?
+    @State private var onboardingWizardSaving: Bool = false
+    @State private var onboardingWizardError: String = ""
     @AppStorage("activeStatusesJSON") private var activeStatusesJSON: String = "[\"New\",\"Not Yet\",\"In Progress\",\"Done\",\"Cancelled\"]"
     @AppStorage("customFieldsJSON") private var customFieldsJSON: String = ""
     @AppStorage("customTogglesJSON") private var customTogglesJSON: String = ""
@@ -10274,193 +10276,81 @@ struct ContentView: View {
         .frame(maxWidth: 540)
     }
 
+    /// The four-question wizard (see OnboardingWizardView.swift), in place of the
+    /// old business-type dropdown and prompt box. There is no Skip: the last step
+    /// offers "Start empty" and "I'll set this up later" as real answers instead.
     private var businessTemplateOnboardingView: some View {
         ZStack {
             bgMain.ignoresSafeArea()
-
             ScrollView {
-                VStack(spacing: 22) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "wand.and.stars")
-                            .font(.system(size: 46, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(18)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.blue, Color.purple],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-                        Text(t("Set up your workspace", lang: seciliDil))
-                            .font(.system(size: isPhoneLayout ? 28 : 34, weight: .bold))
-                            .multilineTextAlignment(.center)
-
-                        Text(t("Choose your business type first. NivaDesk can then prepare useful workflow steps, fields, card labels and statuses before you create your first order.", lang: seciliDil))
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(3)
-                            .frame(maxWidth: 620)
+                if let finished = onboardingWizardAnswers {
+                    OnboardingReadyView(answers: finished, lang: seciliDil) {
+                        markBusinessOnboardingCompletedForCurrentCompany(action: "wizard")
                     }
-
-                    VStack(alignment: .leading, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(t("Business Type", lang: seciliDil))
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.secondary)
-
-                            onboardingBusinessTypeMenu
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "sparkles")
-                                    .foregroundColor(.purple)
-                                Text(t("Optional smart description", lang: seciliDil))
-                                    .font(.system(size: 13, weight: .bold))
-                            }
-
-                            Text(t("You can describe how your work flows, what information you collect from customers, approvals, materials, appointments, deposits, shipping or delivery. If you leave this empty, NivaDesk will use the standard template for the selected business type.", lang: seciliDil))
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                                .lineSpacing(3)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            ZStack(alignment: .topLeading) {
-                                TextEditor(text: Binding(
-                                    get: { businessDescriptionPrompt },
-                                    set: { newValue in
-                                        if newValue != businessDescriptionPrompt { onboardingPromptUserEdited = true }
-                                        businessDescriptionPrompt = newValue
-                                    }
-                                ))
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.primary)
-                                    .frame(minHeight: isPhoneLayout ? 160 : 130)
-                                    .padding(8)
-                                    .background(Color.primary.opacity(0.05))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                                    )
-
-                                if businessDescriptionPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text(t("Example: We create custom painted watch dials. We need watch model, dial size, artwork theme, client approval, deposit, painting stage, curing, final photos and shipping.", lang: seciliDil))
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.gray.opacity(0.72))
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 18)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                        }
-
-                        VStack(spacing: 10) {
-                            Button {
-                                applyBusinessOnboardingTemplate(smart: true)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "wand.and.stars")
-                                    Text(t("Smart Customize", lang: seciliDil))
-                                }
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.purple)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                applyBusinessOnboardingTemplate(smart: false)
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "square.grid.2x2")
-                                    Text(t("Use Standard Template", lang: seciliDil))
-                                }
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.blue)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .background(Color.blue.opacity(0.10))
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                markBusinessOnboardingCompletedForCurrentCompany(action: "skip")
-                            } label: {
-                                Text(t("Skip for now", lang: seciliDil))
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(.secondary)
-                                    .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                } else {
+                    OnboardingWizardView(
+                        lang: seciliDil,
+                        saving: onboardingWizardSaving,
+                        errorText: onboardingWizardError
+                    ) { answers in
+                        applyOnboardingWizardAnswers(answers)
                     }
-                    .padding(22)
-                    .frame(maxWidth: 680)
-                    .background(bgHeader)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(colorScheme == .dark ? 0.20 : 0.08), radius: 24, x: 0, y: 12)
-
-                    Text(t("You can change this later from Settings > Workflow > Business Type.", lang: seciliDil))
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
                 }
-                .padding(isPhoneLayout ? 18 : 38)
-                .frame(maxWidth: .infinity)
             }
-        }
-        .onAppear {
-            onboardingPromptUserEdited = false
-            seedOnboardingPromptIfNeeded(for: businessType)
         }
     }
 
-    private var onboardingBusinessTypeMenu: some View {
-        Menu {
-            ForEach(businessTypes, id: \.self) { type in
-                Button {
-                    businessType = type
-                    seedOnboardingPromptIfNeeded(for: type)
-                } label: {
-                    HStack {
-                        Text(type)
-                        if businessType == type {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "briefcase.fill")
-                    .foregroundColor(.blue)
+    private func applyOnboardingWizardAnswers(_ answers: OnboardingAnswers) {
+        onboardingWizardSaving = true
+        onboardingWizardError = ""
 
-                Text(businessType)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+        // The chosen work kinds become the business type the preset engine has
+        // always understood, so the card/step/label presets keep working and the
+        // wizard only has to supply better answers to them.
+        businessType = answers.businessType
+        applyBusinessOnboardingPreset(onboardingPreset(for: answers.businessType.lowercased()))
 
-                Spacer()
-
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(Color.primary.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty else {
+            onboardingWizardSaving = false
+            onboardingWizardAnswers = answers
+            return
         }
+
+        let stages: [[String: Any]] = answers.workflow.productionStages.map { stage in
+            ["id": stage.id, "title": stage.title, "kind": stage.kind.rawValue, "wipLimit": stage.wipLimit]
+        }
+
+        var payload: [String: Any] = [
+            "selectedCountry": answers.country,
+            "selectedCurrency": answers.currency,
+            "selectedTimeZone": answers.timeZone,
+            "onboardingWorkKinds": answers.workKinds.map { $0.rawValue },
+            "onboardingWorkflow": answers.workflow.rawValue,
+            "onboardingTeamSizeBand": answers.teamSize.rawValue,
+            "onboardingGoals": answers.goals,
+            "onboardingStartChoice": answers.start?.rawValue ?? "",
+            "productionStages": stages
+        ]
+        if let mainGoal = answers.mainGoal { payload["onboardingMainGoal"] = mainGoal.rawValue }
+        if let volume = answers.volume { payload["onboardingOrderVolume"] = volume.rawValue }
+
+        let database = Firestore.firestore()
+        database.collection("companySettings").document(companyId).setData(payload, merge: true) { error in
+            DispatchQueue.main.async {
+                onboardingWizardSaving = false
+                if let error = error {
+                    onboardingWizardError = error.localizedDescription
+                    return
+                }
+                onboardingWizardAnswers = answers
+            }
+        }
+
+        // Seats live on the COMPANY, because that is where the trial engine reads
+        // them to decide whether the fortnight should be Pro or Team.
+        database.collection("companies").document(companyId)
+            .setData(["onboardingTeamSize": answers.teamSize.seats], merge: true)
     }
 
     private struct BusinessOnboardingPreset {
@@ -10478,62 +10368,6 @@ struct ContentView: View {
         let showShipping: Bool
         let showPriority: Bool
         let showCustomerNotes: Bool
-    }
-
-    private func onboardingPromptSeed(for type: String) -> String {
-        switch type {
-        case "Watch Dial Painting Studio":
-            return "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
-        case "Custom Art Studio":
-            return "We create custom artwork commissions. We need customer details, design theme, reference images, approval stages, deposit, production stages, final review and shipping."
-        case "Freelancer / Designer":
-            return "We deliver design and freelance projects. We need project brief, scope, reference files, revision rounds, client approval, deadline, final files and balance payment."
-        case "Repair Service":
-            return "We repair customer items. We need model, serial number, issue reported, diagnostics, quote approval, parts order, repair, testing and collection or shipping."
-        case "Handmade Products":
-            return "We make custom products. We need product type, size, colour, material, customer approval, production, packaging, shipping and balance payment."
-        case "Photography Studio":
-            return "We manage photo shoots. We need client details, shoot type, location, date, package, booking deposit, selection, editing, delivery and follow-up notes."
-        case "Tailor / Alteration Studio":
-            return "We tailor and alter garments. We need garment type, measurements, fabric details, fitting appointments, alteration notes, deposit, final fitting and collection date."
-        case "Jewellery Studio":
-            return "We create custom jewellery. We need metal, stone, size, design sketch, customer approval, deposit, casting, setting, polishing, quality check and delivery."
-        case "Agency / Creative Studio":
-            return "We run creative client projects. We need project brief, deliverables, timeline, team assignment, draft versions, client feedback rounds, approval, launch and invoicing."
-        case "Food / Bakery / Catering":
-            return "We prepare custom food orders. We need event date, servings, flavours, dietary notes, design reference, deposit, preparation, decoration and delivery or pickup."
-        case "Beauty / Clinic / Wellness":
-            return "We manage client appointments and treatments. We need client details, treatment type, consultation notes, appointment date, payment, aftercare and follow-up reminders."
-        case "Consultancy / Professional Service":
-            return "We deliver consultancy engagements. We need client details, scope, proposal, contract, milestones, meetings, deliverables, review and invoicing."
-        case "General Small Business":
-            return "We handle customer orders. We need customer details, order items, pricing, deposit, preparation, quality check, delivery or pickup and balance payment."
-        default:
-            return "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
-        }
-    }
-
-    private func isOnboardingPromptSeed(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return true }
-        return (businessTypes + ["Watch Dial Painting Studio"]).contains { onboardingPromptSeed(for: $0) == trimmed }
-            || trimmed == "This business offers professional photography services for individuals, families, events, brands, and products.\nCustomers should provide their name, contact details, preferred date, location, type of shoot, style preferences, deadline, and any special requests.\nThe process includes enquiry, consultation, quote, deposit payment, shoot planning, editing, client review, final delivery and follow-up."
-            || trimmed == "Describe this business here, including customer information needed, workflow stages, approval steps, materials, shipping, appointments, deposits and delivery."
-    }
-
-    private func seedOnboardingPromptIfNeeded(for type: String) {
-        // The description follows the selected business type until the user
-        // edits it by hand on this screen (covers stale cloud/device text too).
-        guard !onboardingPromptUserEdited || isOnboardingPromptSeed(businessDescriptionPrompt) else { return }
-        businessDescriptionPrompt = onboardingPromptSeed(for: type)
-        onboardingPromptUserEdited = false
-    }
-
-    private func applyBusinessOnboardingTemplate(smart: Bool) {
-        let text = smart ? (businessType + "\n" + businessDescriptionPrompt).lowercased() : businessType.lowercased()
-        let preset = onboardingPreset(for: text)
-        applyBusinessOnboardingPreset(preset)
-        markBusinessOnboardingCompletedForCurrentCompany(action: smart ? "smart" : "standard")
     }
 
     private func applyBusinessOnboardingPreset(_ preset: BusinessOnboardingPreset) {
