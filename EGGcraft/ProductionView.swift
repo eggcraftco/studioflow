@@ -93,6 +93,12 @@ struct ProductionView: View {
         .sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
     }
 
+    /// The card being dragged, and the lane under the pointer. Mirrors the web
+    /// board: the same gesture moves a job on every platform, and the lane it
+    /// would land in lights up so the drop is never a guess.
+    @State private var draggingOrderId: String = ""
+    @State private var dropTargetStageId: String = ""
+
     private var doneStageId: String { stages.first { $0.kind == .done }?.id ?? "" }
 
     private func cardsIn(_ stage: ProductionStage) -> [Card] {
@@ -226,6 +232,16 @@ struct ProductionView: View {
                             LazyVStack(spacing: 8) {
                                 ForEach(cardsIn(stage)) { card in
                                     cardView(card)
+                                        .opacity(draggingOrderId == card.id ? 0.45 : 1)
+                                        .draggable(card.id) {
+                                            // The drag preview. Just the name:
+                                            // a full card under the pointer
+                                            // hides the lane you are aiming at.
+                                            Text(card.order.designName)
+                                                .font(.caption.bold())
+                                                .padding(8)
+                                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                        }
                                 }
                                 if cardsIn(stage).isEmpty {
                                     Text(t("Nothing here", lang: seciliDil))
@@ -237,7 +253,24 @@ struct ProductionView: View {
                         }
                     }
                     .frame(width: 250)
-                    .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
+                    .background(
+                        dropTargetStageId == stage.id
+                            ? Color.accentColor.opacity(0.14)
+                            : Color.secondary.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 14)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.accentColor, lineWidth: dropTargetStageId == stage.id ? 1.6 : 0)
+                    )
+                    .dropDestination(for: String.self) { items, _ in
+                        dropTargetStageId = ""
+                        draggingOrderId = ""
+                        guard canEdit, let orderId = items.first else { return false }
+                        return acceptDrop(orderId: orderId, stageId: stage.id)
+                    } isTargeted: { targeted in
+                        dropTargetStageId = targeted && canEdit ? stage.id : ""
+                    }
                 }
             }
             .padding(.bottom, 4)
@@ -366,6 +399,28 @@ struct ProductionView: View {
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 11))
         }
         .buttonStyle(.plain)
+        // Dragging is right on a Mac and an iPad; on a phone the lanes are
+        // stacked in a list and there is nowhere to drag TO. Long press (or
+        // right click) moves the job from either board without opening it.
+        .contextMenu {
+            if canEdit {
+                Section(t("Move to", lang: seciliDil)) {
+                    ForEach(stages) { stage in
+                        Button {
+                            requestMove(order: card.order, stageId: stage.id)
+                        } label: {
+                            if stage.id == card.resolved.stageId {
+                                Label(t(stage.title, lang: seciliDil), systemImage: "checkmark")
+                            } else {
+                                Text(t(stage.title, lang: seciliDil))
+                            }
+                        }
+                        .disabled(busy || stage.id == card.resolved.stageId)
+                    }
+                }
+            }
+            Button(t("Open order", lang: seciliDil)) { selected = card.order }
+        }
     }
 
     private func priorityTint(_ priority: String) -> Color {
@@ -414,6 +469,17 @@ struct ProductionView: View {
     }
 
     // MARK: - Moving work
+
+    /// A card dropped on a lane. Same route as the menu: the blocked lane still
+    /// asks why before it accepts the job, so a drag cannot smuggle a blocker
+    /// in without a reason.
+    @discardableResult
+    private func acceptDrop(orderId: String, stageId: String) -> Bool {
+        guard let card = cards.first(where: { $0.id == orderId }) else { return false }
+        guard card.resolved.stageId != stageId else { return false }
+        requestMove(order: card.order, stageId: stageId)
+        return true
+    }
 
     private func requestMove(order: Siparis, stageId: String) {
         guard let target = stages.first(where: { $0.id == stageId }) else { return }

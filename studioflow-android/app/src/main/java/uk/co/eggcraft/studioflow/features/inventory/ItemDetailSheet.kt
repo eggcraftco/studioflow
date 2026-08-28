@@ -178,6 +178,7 @@ fun ItemDetailSheet(
     var historyOpen by remember(item.id) { mutableStateOf(false) }
     var movements by remember(item.id) { mutableStateOf<List<StudioInventoryMovement>?>(null) }
     var filesOpen by remember(item.id) { mutableStateOf(false) }
+    var labelOpen by remember(item.id) { mutableStateOf(false) }
     var libraryFiles by remember(item.id) { mutableStateOf<List<StudioLibraryFile>?>(null) }
 
     fun run(failText: String, action: suspend () -> Unit) {
@@ -528,6 +529,15 @@ fun ItemDetailSheet(
                         }
                     }
 
+                    // ---- QR / Barcode ----
+                    InventoryQrCard(
+                        reference = item.number.ifEmpty { item.id },
+                        t = t
+                    )
+                    TextButton(onClick = { labelOpen = true }) {
+                        Text("🖨  " + t("Print label"), fontSize = 12.sp)
+                    }
+
                     // ---- History ----
                     Card(colors = inventoryCardColors(), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -636,6 +646,17 @@ fun ItemDetailSheet(
                     repository.inventoryReserve(workspaceId, item.id, orderId, quantity)
                 }
             }
+        )
+    }
+
+    if (labelOpen) {
+        InventoryLabelDialog(
+            reference = item.number.ifEmpty { item.id },
+            name = item.name,
+            location = item.location,
+            workspaceName = "",
+            t = t,
+            onDismiss = { labelOpen = false }
         )
     }
 }

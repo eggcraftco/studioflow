@@ -270,6 +270,44 @@ fun ProductionScreen(state: StudioFlowUiState, onOpenOrder: (StudioOrder) -> Uni
                                         )
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        // Dragging is right on a desktop board;
+                                        // a phone stacks the lanes and there is
+                                        // nowhere to drag TO, so Move does the
+                                        // same job in one tap without opening
+                                        // the order.
+                                        Box {
+                                            var moveOpen by remember { mutableStateOf(false) }
+                                            TextButton(
+                                                onClick = { moveOpen = true },
+                                                enabled = canEdit && !busy
+                                            ) {
+                                                Text(t("Move"), fontSize = 12.sp)
+                                            }
+                                            DropdownMenu(
+                                                expanded = moveOpen,
+                                                onDismissRequest = { moveOpen = false }
+                                            ) {
+                                                stages.forEach { target ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                if (target.id == card.resolved.stageId) {
+                                                                    "✓ " + t(target.title)
+                                                                } else {
+                                                                    t(target.title)
+                                                                },
+                                                                fontSize = 13.sp
+                                                            )
+                                                        },
+                                                        enabled = target.id != card.resolved.stageId,
+                                                        onClick = {
+                                                            moveOpen = false
+                                                            requestMove(card.order, target.id)
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
                                         TextButton(onClick = { selected = card.order }) {
                                             Text(t("Details"), fontSize = 12.sp)
                                         }

@@ -8,6 +8,7 @@ import SwiftUI
 
 struct ItemDetailSheet: View {
     @EnvironmentObject var firebaseManager: FirebaseManager
+    @EnvironmentObject var authVM: AuthViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     let currencySymbol: String
@@ -49,6 +50,8 @@ struct ItemDetailSheet: View {
 
     private var cardBackground: Color { colorScheme == .dark ? Color.white.opacity(0.05) : Color.white }
 
+    @State private var labelSheetOpen = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -64,10 +67,27 @@ struct ItemDetailSheet: View {
                     purchaseInfoCard
                     inventoryDetailsCard
                     if canEdit { quickActionsCard }
+                    InventoryQRCard(reference: item.number.isEmpty ? item.id : item.number, lang: lang)
+                    Button {
+                        labelSheetOpen = true
+                    } label: {
+                        Label(t("Print label", lang: lang), systemImage: "printer")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
                     historyCard
                     filesCard
                 }
                 .padding(16)
+            }
+            .sheet(isPresented: $labelSheetOpen) {
+                InventoryLabelSheet(
+                    reference: item.number.isEmpty ? item.id : item.number,
+                    name: item.name,
+                    location: item.location,
+                    workspaceName: authVM.companyName,
+                    lang: lang
+                ) { labelSheetOpen = false }
             }
             .navigationTitle(t("Item details", lang: lang))
             #if os(iOS)

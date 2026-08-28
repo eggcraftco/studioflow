@@ -71,6 +71,9 @@ dependencies {
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-analytics")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // QR codes for inventory labels. `core` only — no camera/UI extras: the
+    // app draws the code, it does not scan with it.
+    implementation("com.google.zxing:core:3.5.3")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("com.android.billingclient:billing-ktx:8.1.0")
     implementation("androidx.fragment:fragment:1.8.5")
