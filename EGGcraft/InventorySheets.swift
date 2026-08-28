@@ -56,6 +56,9 @@ struct NewInventoryItemSheet: View {
     @State private var supplierName = ""
     @State private var purchaseDate = ""
     @State private var purchasePrice = ""
+    /// An insurance/resale figure kept on the item. It deliberately moves
+    /// nothing: the inventory value is the cost basis below.
+    @State private var currentValueEst = ""
     @State private var extras: [InventoryAdditionalCost] = []
     @State private var isCustomerOwned = false
     @State private var notes = ""
@@ -104,6 +107,7 @@ struct NewInventoryItemSheet: View {
         _supplierName = State(initialValue: item.supplierName)
         _purchaseDate = State(initialValue: item.purchaseDate)
         _purchasePrice = State(initialValue: item.purchasePrice > 0 ? editPrecise(item.purchasePrice) : "")
+        _currentValueEst = State(initialValue: item.currentValueEst > 0 ? editPrecise(item.currentValueEst) : "")
         _extras = State(initialValue: item.additionalCosts)
         _isCustomerOwned = State(initialValue: item.ownership == .customer)
         _notes = State(initialValue: item.notes)
@@ -162,14 +166,32 @@ struct NewInventoryItemSheet: View {
                 }
 
                 Section {
-                    TextField(t("Purchase price", lang: lang), text: $purchasePrice)
+                    InventoryPriceField(
+                        label: trackingType == .unique
+                            ? t("Purchase price", lang: lang)
+                            : t("Purchase price (per unit)", lang: lang),
+                        symbol: currencySymbol,
+                        text: $purchasePrice
+                    )
+                    InventoryPriceField(
+                        label: t("Current value (est.)", lang: lang),
+                        symbol: currencySymbol,
+                        text: $currentValueEst
+                    )
+                    Text(t("An estimate for insurance or resale. Inventory value stays at what you paid — purchase price plus the costs below.", lang: lang))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    // The number the item will actually carry in the list and
+                    // the totals, worked out here so nobody has to guess which
+                    // field moves it.
+                    InventoryValuePreviewRow(
+                        lang: lang,
+                        symbol: currencySymbol,
+                        isUnique: trackingType == .unique,
+                        isCustomerOwned: isCustomerOwned,
+                        amount: internalTotal
+                    )
                     ForEach($extras) { $extra in
-                        HStack {
-                            TextField(t("What for", lang: lang), text: $extra.label)
-                            Spacer()
-                            TextField("0.00", value: $extra.amount, format: .number)
-                                .frame(width: 90).multilineTextAlignment(.trailing)
-                        }
+                        InventoryExtraCostRow(lang: lang, symbol: currencySymbol, extra: $extra)
                     }
                     Button(t("Add a cost", lang: lang)) {
                         extras.append(InventoryAdditionalCost(label: "", amount: 0))
@@ -231,8 +253,8 @@ struct NewInventoryItemSheet: View {
         let existingPhotos = existing?.photos ?? []
         // The server rebuilds the WHOLE document from this payload — any field
         // not sent is blanked. Fields the form does not show (description,
-        // current value estimate, photos) still have to travel, carried over
-        // from the item being edited.
+        // photos) still have to travel, carried over from the item being
+        // edited.
         let payload: [String: Any] = [
             "name": name, "category": category, "trackingType": trackingType.rawValue,
             "ownership": isCustomerOwned ? "customer" : "business",
@@ -244,7 +266,7 @@ struct NewInventoryItemSheet: View {
             "purchasePrice": parseAmount(purchasePrice),
             "additionalCosts": extras.map { ["label": $0.label, "amount": $0.amount] },
             "description": existing?.description ?? "",
-            "currentValueEst": existing?.currentValueEst ?? 0,
+            "currentValueEst": parseAmount(currentValueEst),
             "photos": existingPhotos,
             // Always sent (key-present semantics server-side), so edits
             // round-trip and an emptied editor genuinely clears the tags.
@@ -281,6 +303,81 @@ struct NewInventoryItemSheet: View {
             } catch {
                 self.error = error.localizedDescription
                 saving = false
+            }
+        }
+    }
+}
+
+/// A price field that reads as money: the workspace's currency symbol sits
+/// ahead of the figure the way it does on a price tag, so a typed 40 is plainly
+/// £40 and not a count. Its own struct — the real-iPhone stack guard punishes
+/// rows inlined into a sheet body.
+struct InventoryPriceField: View {
+    let label: String
+    let symbol: String
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label).font(.system(size: 13))
+            Spacer(minLength: 8)
+            Text(symbol).font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
+            TextField("0.00", text: $text)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 96)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+        }
+    }
+}
+
+/// One additional-cost row — what it was for, and how much. The symbol leads
+/// the amount for the same reason it leads the purchase price.
+struct InventoryExtraCostRow: View {
+    let lang: String
+    let symbol: String
+    @Binding var extra: InventoryAdditionalCost
+
+    var body: some View {
+        HStack {
+            TextField(t("What for", lang: lang), text: $extra.label)
+            Spacer()
+            Text(symbol).font(.system(size: 13, weight: .semibold)).foregroundColor(.secondary)
+            TextField("0.00", value: $extra.amount, format: .number)
+                .frame(width: 90).multilineTextAlignment(.trailing)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
+        }
+    }
+}
+
+/// The figure the item will actually carry on the shelf. "Current value (est.)"
+/// is an insurance number and moves nothing; the value is the cost basis —
+/// purchase price plus the costs — and customer property is held, not owned, so
+/// it stays at zero. Saying so in the form is cheaper than a support email.
+struct InventoryValuePreviewRow: View {
+    let lang: String
+    let symbol: String
+    let isUnique: Bool
+    let isCustomerOwned: Bool
+    let amount: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(isUnique
+                     ? t("This item's inventory value", lang: lang)
+                     : t("Inventory value per unit", lang: lang))
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text(inventoryMoney(symbol, isCustomerOwned ? 0 : amount))
+                    .font(.system(size: 13, weight: .bold))
+            }
+            if isCustomerOwned {
+                Text(t("Customer property is held, not owned — it stays at zero.", lang: lang))
+                    .font(.system(size: 10)).foregroundColor(.secondary)
             }
         }
     }
