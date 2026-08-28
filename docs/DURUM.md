@@ -1449,3 +1449,38 @@ koyu rgb(31,31,31), açık rgb(255,255,255) — tam opak.
 grupları, sipariş notu başlıkları), --plan-accent/--plan-accent-soft
 (public fiyatlandırma öne çıkan kart, rozet, ikon zemini), --primary
 (roller paneli). Tur 60 yayında.
+
+---
+
+## 28 Ağu — ChatGPT ile fotoğraftan envanter (KODLANDI, BAYRAK KAPALI)
+
+İstek: fotoğraf çek → ChatGPT ne olduğunu tahmin etsin → kullanıcı
+onaylasın (adet/fiyat konuşulsun) → envantere eklensin; fatura akışıyla
+KARIŞMASIN.
+- **Kısıt (kullanıcının kendi kararı):** 1.1.1 OpenAI incelemesindeyken
+  yayınlanan tools/list DEĞİŞMEMELİ. Bu yüzden e-posta fişlerindeki
+  desenin aynısı kullanıldı: yeni araçlar `NIVADESK_MCP_INVENTORY`
+  bayrağının arkasında. Bayrak KAPALI deploy edildi ve canlı tools/list
+  deploy öncesi/sonrası **byte-byte aynı** olarak doğrulandı (19 araç).
+- **Yeni araçlar (bayrak açılınca görünür):** `search_inventory`
+  (salt-okunur; önce ara ki kopya üretilmesin) ve `create_inventory_item`
+  (yazar). İkincisi `confirmed:true` olmadan REDDEDER — ChatGPT önce
+  okuduğunu (ad/kategori/marka/durum) kullanıcıya gösterip adet ve alış
+  fiyatını sormak zorunda. Fotoğraf `photo` dosya parametresiyle gelir,
+  SSRF-korumalı indirilip inventory_photos/<itemId>/ altına yazılır ve
+  ürüne bağlanır (uygulamalardaki yolun aynısı).
+- **Karışma koruması:** fatura/fiş sözcükleri (invoice, receipt, fatura,
+  fiş, makbuz, irsaliye, Rechnung, facture, subtotal, total due…) ad/not/
+  dosya adında geçerse araç ekleme YAPMAZ, kullanıcıyı
+  attach_bank_receipt'e yönlendirir. Ters yönde de attach_bank_receipt'in
+  açıklamasına "fotoğraf bir eşyaysa create_inventory_item kullan" cümlesi
+  eklenir (o da bayrağa bağlı).
+- Yazma yolu ORTAK: inventory.js'ten saveItemForWorkspace çıkarıldı;
+  callable ve MCP aynı transaction'ı (numaralandırma, hareket defteri,
+  rezervasyonlar) kullanıyor — ikinci bir ince yol yok.
+- Test: test/qa/mcp-inventory.test.js 3 senaryo yeşil (bayrak kapalıyken
+  liste değişmiyor; açıkken tam olarak 2 araç ekleniyor ve sıra korunuyor;
+  fiş/fatura reddi ile gerçek ürün ayrımı).
+- **Bayrak açılınca yapılacaklar:** NIVADESK_MCP_INVENTORY=1 →
+  chatgptMcp deploy → rehbere ChatGPT bölümü (EN+TR) + corpus + 4 asistan
+  deploy + bot sondası → OpenAI'ye yeni sürümde iki aracı bildir.
