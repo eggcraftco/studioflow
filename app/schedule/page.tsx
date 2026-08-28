@@ -1582,6 +1582,7 @@ export default function SchedulePage() {
                       visibleEnd={visibleEnd}
                       canSeeFinance={canSeeFinance}
                       moneySettings={moneySettings}
+                      language={language}
                       selected={order.id === selectedOrderId}
                       hovered={order.id === hoveredOrderId}
                       onHoverChange={next => setHoveredOrderId(current => next ? order.id : (current === order.id ? "" : current))}
@@ -1620,6 +1621,7 @@ function ScheduleTimelineRow({
   visibleEnd,
   canSeeFinance,
   moneySettings,
+  language,
   selected,
   hovered,
   onHoverChange,
@@ -1638,6 +1640,7 @@ function ScheduleTimelineRow({
   visibleEnd: Date;
   canSeeFinance: boolean;
   moneySettings: StudioMoneySettings;
+  language: string;
   selected: boolean;
   hovered: boolean;
   onHoverChange: (hovered: boolean) => void;
@@ -1650,6 +1653,15 @@ function ScheduleTimelineRow({
   onResizeTrailing: (deltaDays: number) => void;
 }) {
   const { hideNumbers } = usePricePrivacy();
+  // The one label on this bar that never went through t(): every other string
+  // here is translated, so a Turkish workspace read "Due ₺1,050". The language
+  // already travels with moneySettings, so no extra prop is needed.
+  //
+  // "Outstanding", not "Due": the existing "Due" key is about a delivery date
+  // and translates as one ("Teslim"), which on an amount would say the wrong
+  // thing entirely. "Outstanding" is what the Customers screen calls the same
+  // number.
+  const t = (text: string) => studioT(text, language);
   const interactionRef = useRef<{ mode: "move" | "leading" | "trailing"; startX: number; startScrollLeft: number; moved: boolean } | null>(null);
   const lastClickAtRef = useRef(0);
   const [dragPreview, setDragPreview] = useState<{ mode: "move" | "leading" | "trailing"; delta: number } | null>(null);
@@ -1803,7 +1815,7 @@ function ScheduleTimelineRow({
             {countdown ? <span>{countdown}</span> : null}
           </span>
         </span>
-        {canSeeFinance ? <span className="schedule-order-money">{`Due ${money(order.remainingAmount, hideNumbers, moneySettings)}`}</span> : null}
+        {canSeeFinance ? <span className="schedule-order-money">{`${t("Outstanding")} ${money(order.remainingAmount, hideNumbers, moneySettings)}`}</span> : null}
         {canEdit ? (
           <>
             <span className="schedule-order-grip" aria-hidden="true">≡</span>
