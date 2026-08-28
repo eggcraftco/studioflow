@@ -8,6 +8,47 @@ Son güncelleme: 28 Ağustos 2026.
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
 
+### Production menüsü (yeni özellik) — 28 Ağu, SUNUCU CANLI
+Siparişler "ne istendi", Takvim "ne zaman"; eksik olan katman "hangi iş şu anda
+nerede" idi. Yeni üst menü + Kanban.
+- **İki seviye, spec'teki gibi:** Production Steps zaten siparişte var; Production
+  Stage bunlardan HESAPLANIR, ayrıca saklanmaz — böylece pano ile sipariş çelişemez.
+  Siparişe yalnız iki şey yazılır: elle geçersiz kılma + blokaj.
+- Sütunlar workspace'in kendi kelimeleri; yalnız `kind` sabit (hangi şerit blokaj
+  sebebi sorar, hangisi kapatır). Kuyumcu Döküm/Mıhlama/Cila yazabilir.
+- WIP kapasitesi uyarır, engellemez (yeşil/sarı/kırmızı).
+- Sürükle-bırak gerçek durumu yazar: History'ye eski→yeni, atanan kişiye (herkese
+  değil) bildirim, ardından Undo. Blocked şeridine bırakınca sebep ZORUNLU.
+- Board / List / Workload üç görünüm. Sipariş kartında da aynı tek satır özet.
+- Sunucu: `functions/production.js` + 3 callable CANLI. Test:
+  `test/qa/production-stage.test.js` (12 senaryo).
+- 4 platform: web (/production), macOS+iOS (ProductionView), Android
+  (ProductionScreen). Hepsi derleniyor; web emülatörde uçtan uca test edildi
+  (taşıma, blokaj sebebi, Undo, sütun yeniden adlandırma).
+
+### Envanter kategorileri artık atölyenin — 28 Ağu, SUNUCU CANLI
+Kategoriler 10 sabit kelimeydi; kuyumcu yüzüğü "Watches" altına koymak zorundaydı.
+- Envanter → Categories: yeniden adlandır / ikon / sırala / gizle / birleştir /
+  varsayılan seç.
+- **Tek merkezi ad:** ürün kategoriyi BAŞLIK olarak saklar (CSV okunur kalsın diye),
+  bu yüzden yeniden adlandırma sunucuda ürünlere taşınır. Kenar çubuğu, filtre,
+  ürün formu, satın alma kalemleri ve sayım seçicisi aynı listeyi okur.
+- **Hiçbir ürün ortada kalmaz:** dolu kategori silinemez — nereye gidecekleri
+  sorulur (başka kategori / Diğer / kategoriyi gizle). Listede olmayan kategoriye
+  ait ürünler ekranın üstünde bildirilir.
+- Sunucu: `functions/inventory.js` + 4 callable CANLI. Test:
+  `test/qa/inventory-categories.test.js` (9 senaryo).
+- 4 platform tamam; web emülatörde test edildi (rename → 3 ürün taşındı,
+  Packaging silme → 12 ürün Diğer'e).
+
+### Bu iki özellik için ev kuralları
+- Rehber: guide.ts'e EN+TR "Production" düğümü + Envanter altına "Categories"
+  bölümü eklendi, korpus yeniden üretildi (45 bölüm).
+- Çeviri: 96 yeni dize × 12 dil, web + Android (TR_15) + Apple (chunk 10).
+- **BEKLİYOR:** `firebase login --reauth` gerekiyor — rehber/asistan fonksiyonları
+  (askAppAssistant, getUserGuide, getAppAssistantAvailability) deploy edilemedi.
+  Diğer 8 fonksiyon (production + kategoriler) oturum dolmadan önce CANLI oldu.
+
 ### Banka bağlantısı her sabah kopuyordu — 28 Ağu, CANLI
 Şikâyet: "her gün bağlantı yenilemek zorunda kalıyorum". Normal değildi.
 - **Kanıt (üretim, EGGcraft/HSBC):** bağlantı 26 Ağu 16:07'de kuruldu, 16:08'de BİR
