@@ -14,10 +14,22 @@ export const INVENTORY_STATUSES: InventoryStatus[] = [
   "available", "reserved", "partiallyReserved", "incoming", "used", "sold", "removed", "archived"
 ];
 
+// The starting point for a new workspace only — the live list is the
+// workspace's own (Inventory → Manage → Categories) and arrives with the items.
 export const INVENTORY_CATEGORIES = [
   "Watches", "Dials", "Movements", "Bracelets", "Straps",
   "Parts", "Consumables", "Packaging", "Tools", "Other"
 ];
+
+export type InventoryCategory = {
+  id: string;
+  title: string;
+  icon: string;
+  archived: boolean;
+  itemCount?: number;
+};
+
+export type InventoryCategoryDisposition = "move" | "archive" | "other";
 
 export type InventoryAdditionalCost = { label: string; amount: number };
 
@@ -137,6 +149,8 @@ export async function listInventoryItems(
     ok?: boolean;
     items?: InventoryItem[];
     categories?: string[];
+    categoryDetails?: InventoryCategory[];
+    defaultCategory?: string;
     hasMore?: boolean;
     cursor?: InventoryListCursor | null;
   }>(
@@ -952,4 +966,58 @@ export async function inventoryPhotoUrl(path: string) {
 
 export async function deleteInventoryPhoto(path: string) {
   await deleteObject(storageRef(storage, path)).catch(() => undefined);
+}
+
+
+// ---------------------------------------------------------------------------
+// Categories. A workshop names what it keeps: a jeweller wants Gemstones and
+// Clasps, not Dials and Movements. Items store the category TITLE, so a rename
+// is carried to them server-side — see functions/inventory.js.
+// ---------------------------------------------------------------------------
+
+export async function listInventoryCategories(workspace: WorkspaceContext) {
+  return call<{
+    ok?: boolean;
+    categories?: InventoryCategory[];
+    defaultCategory?: string;
+    orphans?: { title: string; itemCount: number }[];
+  }>(
+    "listInventoryCategories",
+    { companyId: workspace.id },
+    "Categories could not be loaded."
+  );
+}
+
+export async function saveInventoryCategories(
+  workspace: WorkspaceContext,
+  categories: InventoryCategory[],
+  defaultCategory = ""
+) {
+  return call<{ ok?: boolean; categories?: InventoryCategory[]; renamedItems?: number }>(
+    "saveInventoryCategories",
+    { companyId: workspace.id, categories, defaultCategory },
+    "Categories could not be saved."
+  );
+}
+
+export async function deleteInventoryCategory(
+  workspace: WorkspaceContext,
+  input: { categoryId: string; disposition?: InventoryCategoryDisposition; moveToId?: string }
+) {
+  return call<{ ok?: boolean; categories?: InventoryCategory[]; archived?: boolean; itemsMoved?: number }>(
+    "deleteInventoryCategory",
+    { companyId: workspace.id, ...input },
+    "Category could not be removed."
+  );
+}
+
+export async function mergeInventoryCategories(
+  workspace: WorkspaceContext,
+  input: { fromId: string; intoId: string }
+) {
+  return call<{ ok?: boolean; categories?: InventoryCategory[]; itemsMoved?: number; into?: string }>(
+    "mergeInventoryCategories",
+    { companyId: workspace.id, ...input },
+    "Categories could not be merged."
+  );
 }

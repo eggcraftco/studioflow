@@ -530,6 +530,46 @@ const TREE_EN: GuideNode[] = [
     ]
   },
   {
+    id: "production",
+    title: "Production",
+    blocks: [
+      { kind: "para", text: "The operations layer between Orders and Schedule. Orders says what a customer asked for; Schedule says when it must be ready; Production answers the question you actually ask each morning — where is every live job right now, and what has stopped." },
+      { kind: "para", text: "Production status is deliberately separate from order, payment and delivery status. A job can be paid for, undelivered, and still sitting in Quality Check; keeping the three apart is what stops a workshop losing track of its own work." },
+      { kind: "sub", text: "The board" },
+      { kind: "bullets", items: [
+        "Columns are lanes: Ready, In Production, Waiting / Blocked, Quality Check, Ready to Ship and Done to begin with.",
+        "The five figures across the top answer the first five questions: how many jobs are active, how many are due this week, how many are blocked, how many are at risk, and how many are ready to go out.",
+        "Each column shows its count and, if you set one, its capacity — green under the limit, amber approaching it, red over. The limit warns; it never blocks. You can always move one more job.",
+        "Cards carry only what production needs: order number, customer, item, due date, who has it, priority, steps completed, and the blocker if there is one. The money stays on the order."
+      ] },
+      { kind: "sub", text: "Where a job sits, and why" },
+      { kind: "bullets", items: [
+        "The stage is worked out from the production steps already on the order, not typed in twice — so the board and the order can never disagree about where a job is.",
+        "Nothing started yet reads as Ready. Every step done reads as Ready to Ship. Anything in between is In Production, unless the step being worked shares its name with a column (a step called 'Quality check' puts the card in Quality Check by itself).",
+        "Dragging a card is a real decision: it sets the stage by hand, writes the old and new value into the order's History, and tells whoever the job is assigned to — not the whole workshop. Undo is offered straight afterwards.",
+        "A delivered order closes to Done; you cannot still be making something the customer already has."
+      ] },
+      { kind: "sub", text: "Blocked means blocked, with a reason" },
+      { kind: "bullets", items: [
+        "Dropping a card into the blocked lane always asks why: waiting for customer approval, material unavailable, supplier delay, technical problem, or other — plus a note in your own words.",
+        "The reason shows on the card, so a stalled job is visible at a glance instead of quietly ageing.",
+        "Moving the card out of the lane clears the blocker."
+      ] },
+      { kind: "sub", text: "Three views" },
+      { kind: "bullets", items: [
+        "Board: where each job stands. The default.",
+        "List: filter and edit many jobs at once; the stage is a dropdown on every row.",
+        "Workload: who is carrying what, and how much of it is late or blocked."
+      ] },
+      { kind: "sub", text: "Making the board yours" },
+      { kind: "bullets", items: [
+        "Production settings renames the columns to match how you actually work — a jeweller runs Design, Casting, Setting, Polishing, Quality Check; a leather workshop cuts, sews, finishes edges and packs.",
+        "Each column keeps a behaviour: which one means 'not started', which one asks for a blocker reason, which one closes a job. Rename freely; the machinery keeps working.",
+        "Renaming or reordering never strands the jobs standing in a lane — they move with it."
+      ] }
+    ]
+  },
+  {
     id: "inventory",
     title: "Inventory",
     blocks: [
@@ -566,6 +606,14 @@ const TREE_EN: GuideNode[] = [
         "Record a Loss… on an item logs stock leaving for a reason that is not a sale or a job: damaged, lost, returned to supplier or wastage — the reason lands in the ledger.",
         "Stocktake walks you through counting what is really on the shelf and corrects the records with a full audit trail.",
         "Every change is a movement in the item's History; Reports sums value, movement kinds and category totals over time."
+      ] },
+      { kind: "sub", text: "Categories" },
+      { kind: "bullets", items: [
+        "Inventory ▸ Categories is where you name what your workshop actually keeps — a jeweller wants Gemstones and Clasps, not Dials and Movements. Rename, re-icon, reorder, hide and merge them.",
+        "There is one central name: renaming a category here renames it on every item, filter, form and report, because the new title is carried to the items that used the old one.",
+        "Nothing is orphaned. A category holding items cannot simply be removed — you are asked where those items go: into another category, into Other, or hide the category and leave them where they are.",
+        "Merge is the same question said plainly: 'Bracelets into Straps' moves the items across and the category disappears.",
+        "Set a default so a new item starts on the category you use most. Items whose category has vanished by some other route (an old import, say) are reported at the top of the screen rather than quietly filtered out of every view."
       ] },
       { kind: "sub", text: "Locations and suppliers" },
       { kind: "bullets", items: [
@@ -1345,6 +1393,46 @@ const TREE_TR: GuideNode[] = [
     ]
   },
   {
+    id: "production",
+    title: "Üretim",
+    blocks: [
+      { kind: "para", text: "Siparişler ile Takvim arasındaki operasyon katmanı. Siparişler müşterinin ne istediğini, Takvim ne zaman hazır olması gerektiğini söyler; Üretim ise her sabah gerçekten sorduğunuz soruyu cevaplar — hangi iş şu anda nerede ve ne durmuş?" },
+      { kind: "para", text: "Üretim durumu; sipariş, ödeme ve teslimat durumundan bilinçli olarak ayrıdır. Bir iş ödenmiş, teslim edilmemiş ve hâlâ Kalite Kontrol'de olabilir; bu üçünü ayrı tutmak, atölyenin kendi işini gözden kaçırmasını önler." },
+      { kind: "sub", text: "Pano" },
+      { kind: "bullets", items: [
+        "Sütunlar birer şerittir: başlangıçta Hazır, Üretimde, Bekliyor / Bloke, Kalite Kontrol, Sevke Hazır ve Bitti.",
+        "Üstteki beş rakam ilk beş soruyu cevaplar: kaç iş aktif, kaçı bu hafta teslim, kaçı bloke, kaçı riskli ve kaçı çıkmaya hazır.",
+        "Her sütun kendi sayısını ve — belirlediyseniz — kapasitesini gösterir: sınırın altında yeşil, sınıra yaklaşınca sarı, aşınca kırmızı. Sınır uyarır, asla engellemez. Her zaman bir iş daha taşıyabilirsiniz.",
+        "Kartlar yalnızca üretimin ihtiyacı olanı taşır: sipariş numarası, müşteri, ürün, teslim tarihi, kimde olduğu, öncelik, tamamlanan adımlar ve varsa blokaj. Para siparişte kalır."
+      ] },
+      { kind: "sub", text: "İş nerede duruyor ve neden" },
+      { kind: "bullets", items: [
+        "Aşama, siparişte zaten bulunan üretim adımlarından hesaplanır; iki kez yazılmaz — böylece pano ile sipariş bir işin nerede olduğu konusunda asla çelişemez.",
+        "Hiç başlanmamış iş Hazır okunur. Tüm adımları biten iş Sevke Hazır okunur. Arası Üretimde'dir; ancak üzerinde çalışılan adımın adı bir sütunla aynıysa ('Kalite kontrol' adlı bir adım) kart kendiliğinden o sütuna gider.",
+        "Kartı sürüklemek gerçek bir karardır: aşamayı elle belirler, eski ve yeni değeri siparişin Geçmiş kaydına yazar ve işi üstlenen kişiye haber verir — bütün atölyeye değil. Hemen ardından Geri Al sunulur.",
+        "Teslim edilmiş sipariş Bitti'ye kapanır; müşterinin elindeki bir şeyi hâlâ yapıyor olamazsınız."
+      ] },
+      { kind: "sub", text: "Bloke demek, sebebiyle bloke demek" },
+      { kind: "bullets", items: [
+        "Kartı bloke şeridine bırakmak her zaman sebebini sorar: müşteri onayı bekleniyor, malzeme yok, tedarikçi gecikmesi, teknik sorun ya da diğer — üstüne kendi cümlenizle bir not.",
+        "Sebep kartın üzerinde görünür; böylece duran iş sessizce yaşlanmak yerine bir bakışta fark edilir.",
+        "Kartı şeritten çıkarmak blokajı temizler."
+      ] },
+      { kind: "sub", text: "Üç görünüm" },
+      { kind: "bullets", items: [
+        "Pano: her işin nerede olduğu. Varsayılan.",
+        "Liste: çok sayıda işi süzüp topluca düzenleyin; aşama her satırda bir açılır menüdür.",
+        "İş Yükü: kim neyi taşıyor, ne kadarı geç kalmış veya bloke."
+      ] },
+      { kind: "sub", text: "Panoyu kendinize göre kurun" },
+      { kind: "bullets", items: [
+        "Üretim ayarları sütunları gerçekte nasıl çalıştığınıza göre yeniden adlandırır — bir kuyumcu Tasarım, Döküm, Mıhlama, Cila, Kalite Kontrol yürütür; bir deri atölyesi keser, diker, kenar yapar ve paketler.",
+        "Her sütun bir davranışı korur: hangisi 'başlanmadı' demek, hangisi blokaj sebebi soruyor, hangisi işi kapatıyor. Serbestçe yeniden adlandırın; mekanizma çalışmaya devam eder.",
+        "Yeniden adlandırma veya sıralama, o şeritte duran işleri asla ortada bırakmaz — onlar da taşınır."
+      ] }
+    ]
+  },
+  {
     id: "inventory",
     title: "Envanter",
     blocks: [
@@ -1381,6 +1469,14 @@ const TREE_TR: GuideNode[] = [
         "Üründe Kayıp Kaydet…, satış ya da iş olmayan bir sebeple çıkan stoğu işler: hasarlı, kayıp, tedarikçiye iade veya fire — sebep deftere yazılır.",
         "Sayım, rafta gerçekte ne olduğunu adım adım saydırır ve kayıtları tam izle düzeltir.",
         "Her değişiklik ürünün Geçmiş'inde bir harekettir; Raporlar zaman içinde değeri, hareket türlerini ve kategori toplamlarını özetler."
+      ] },
+      { kind: "sub", text: "Kategoriler" },
+      { kind: "bullets", items: [
+        "Envanter ▸ Kategoriler, atölyenizin gerçekte ne tuttuğunu adlandırdığınız yer — bir kuyumcu Değerli Taşlar ve Klipsler ister, Kadranlar ve Mekanizmalar değil. Yeniden adlandırın, ikonunu değiştirin, sıralayın, gizleyin ve birleştirin.",
+        "Tek merkezi ad vardır: burada bir kategoriyi yeniden adlandırmak, onu her üründe, filtrede, formda ve raporda yeniden adlandırır; yeni başlık eskisini kullanan ürünlere taşınır.",
+        "Hiçbir ürün ortada kalmaz. İçinde ürün olan bir kategori öylece silinemez — o ürünlerin nereye gideceği sorulur: başka bir kategoriye, Diğer'e, ya da kategoriyi gizleyip ürünleri yerinde bırakın.",
+        "Birleştir aynı sorunun sade hâlidir: 'Bilezikler → Kayışlar' ürünleri taşır ve kategori kaybolur.",
+        "Bir varsayılan belirleyin ki yeni ürün en çok kullandığınız kategoriden başlasın. Kategorisi başka bir yoldan kaybolmuş ürünler (eski bir içe aktarma gibi) her görünümden sessizce süzülmek yerine ekranın üstünde bildirilir."
       ] },
       { kind: "sub", text: "Konumlar ve tedarikçiler" },
       { kind: "bullets", items: [

@@ -13,7 +13,6 @@ import { usePrivateMoney } from "@/components/PricePrivacy";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import {
-  INVENTORY_CATEGORIES,
   deletePurchase,
   linkPurchaseToBankTransaction,
   listPurchases,
@@ -76,12 +75,15 @@ export function PurchasesPanel({
   workspace,
   currencySymbol,
   canEdit,
+  categoryOptions,
   supplierNames,
   onStockChanged
 }: {
   workspace: WorkspaceContext;
   currencySymbol: string;
   canEdit: boolean;
+  /** The workspace's own category names, so every picker agrees. */
+  categoryOptions: string[];
   supplierNames: string[];
   onStockChanged: () => void;
 }) {
@@ -295,6 +297,7 @@ export function PurchasesPanel({
           workspace={workspace}
           currencySymbol={currencySymbol}
           supplierNames={supplierNames}
+          categoryOptions={categoryOptions}
           onClose={() => setModalOpen(false)}
           onSaved={async () => {
             setModalOpen(false);
@@ -337,12 +340,15 @@ function NewPurchaseModal({
   workspace,
   currencySymbol,
   supplierNames,
+  categoryOptions,
   onClose,
   onSaved
 }: {
   workspace: WorkspaceContext;
   currencySymbol: string;
   supplierNames: string[];
+  /** The workspace's own category names, so every picker agrees. */
+  categoryOptions: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -498,7 +504,7 @@ function NewPurchaseModal({
                   <label className="inventory-field">
                     <span>{t("Category")}</span>
                     <select className="input" value={line.category} onChange={e => updateLine(index, { category: e.target.value })}>
-                      {INVENTORY_CATEGORIES.map(category => <option key={category} value={category}>{t(category)}</option>)}
+                      {categoryOptions.map(category => <option key={category} value={category}>{t(category)}</option>)}
                     </select>
                   </label>
                   {line.trackingType === "quantity" ? (

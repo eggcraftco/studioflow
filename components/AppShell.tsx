@@ -87,6 +87,7 @@ const NAV_ITEMS: Array<
   | { label: string; icon: NavIconName; disabled: true }
 > = [
   { href: "/orders", label: "Orders", icon: "orders" },
+  { href: "/production", label: "Production", icon: "schedule" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/bank", label: "Banking", icon: "bank" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
@@ -103,6 +104,9 @@ const NAV_ITEMS: Array<
 
 const NAV_ACCESS_BY_HREF: Record<string, WorkspaceMemberAccessKey> = {
   "/orders": "orders",
+  // Production is a view of the same work Orders holds, so it rides the same
+  // permission: no orders access, no board.
+  "/production": "orders",
   "/dashboard": "dashboard",
   "/bank": "bankFeed",
   // Inventory rides the orders permission: someone who cannot see orders has no
@@ -725,6 +729,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const wideWorkspace =
     pathname === "/orders" ||
     pathname.startsWith("/orders/") ||
+    pathname === "/production" ||
     pathname === "/customers" ||
     pathname === "/files" ||
     pathname === "/export" ||

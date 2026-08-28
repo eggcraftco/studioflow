@@ -5,6 +5,7 @@ import { usePrivateMoney } from "@/components/PricePrivacy";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
   INVENTORY_CATEGORIES,
+  type InventoryCategory,
   INVENTORY_PHOTO_LIMIT,
   INVENTORY_STATUSES,
   getInventorySummary,
@@ -33,13 +34,14 @@ import { ItemLabelModal } from "./ItemLabelModal";
 import { ItemPhotosModal } from "./ItemPhotosModal";
 import { OpeningStockModal } from "./OpeningStockModal";
 import { PurchasesPanel } from "./PurchasesPanel";
+import { CategoriesPanel } from "./CategoriesPanel";
 import { ReportsPanel } from "./ReportsPanel";
 import { LocationsPanel } from "./LocationsPanel";
 import { RecipesPanel } from "./RecipesPanel";
 import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
-type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports";
+type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports" | "categories";
 
 // Small glyphs so a long list scans by shape, not by reading every word.
 const CATEGORY_ICON: Record<string, string> = {
@@ -153,6 +155,10 @@ export function InventoryContent({
   // Defined location paths ("Safe A / Drawer 3") — offered in the item form so
   // a fresh, still-empty location is pickable before anything stands in it.
   const [locationPaths, setLocationPaths] = useState<string[]>([]);
+  // The workspace's own categories, served with the item list. The constant is
+  // only a fallback for the first render before that arrives.
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const [defaultCategory, setDefaultCategory] = useState("");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -163,6 +169,8 @@ export function InventoryContent({
       ]);
       setItems(list?.items ?? []);
       setListCursor(list?.hasMore ? list?.cursor ?? null : null);
+      setCategories(list?.categoryDetails ?? []);
+      setDefaultCategory(list?.defaultCategory ?? "");
       setSummary(totals?.summary ?? null);
       setNotice("");
     } catch (failure) {
@@ -296,6 +304,24 @@ export function InventoryContent({
     });
   }
 
+  // Falls back to the shipped list only until the server's answer lands, so the
+  // sidebar never flashes empty on first paint.
+  const visibleCategories = useMemo(() => {
+    const rows = categories.filter(row => !row.archived && row.title.trim());
+    if (rows.length > 0) return rows;
+    return INVENTORY_CATEGORIES.map(title => ({
+      id: title.toLowerCase(), title, icon: CATEGORY_ICON[title] ?? CATEGORY_ICON.Other, archived: false
+    }));
+  }, [categories]);
+
+  // The picker also offers whatever an item already says, so a category that
+  // was archived or removed elsewhere cannot silently rewrite the item on save.
+  const categoryOptions = useMemo(() => {
+    const names = visibleCategories.map(row => row.title);
+    const extra = items.map(item => item.category).filter(Boolean);
+    return [...new Set([...names, ...extra])];
+  }, [visibleCategories, items]);
+
   const checkedItems = useMemo(
     () => items.filter(item => checkedIds.has(item.id)),
     [items, checkedIds]
@@ -425,14 +451,14 @@ export function InventoryContent({
           {t("Reserved")}{summary && summary.reservedCount > 0 ? <span className="inventory-nav-badge">{summary.reservedCount}</span> : null}
         </button>
         <p className="inventory-nav-group">{t("Items")}</p>
-        {INVENTORY_CATEGORIES.map(category => (
+        {visibleCategories.map(category => (
           <button
-            key={category}
+            key={category.id}
             type="button"
-            data-active={tab === "items" && categoryFilter === category}
-            onClick={() => openCategory(category)}
+            data-active={tab === "items" && categoryFilter === category.title}
+            onClick={() => openCategory(category.title)}
           >
-            <span aria-hidden="true">{CATEGORY_ICON[category] ?? CATEGORY_ICON.Other}</span> {t(category)}
+            <span aria-hidden="true">{category.icon || CATEGORY_ICON[category.title] || CATEGORY_ICON.Other}</span> {t(category.title)}
           </button>
         ))}
         <p className="inventory-nav-group">{t("Purchasing")}</p>
@@ -443,6 +469,7 @@ export function InventoryContent({
         <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
         <button type="button" data-active={tab === "recipes"} onClick={() => { setTab("recipes"); setSelectedId(""); }}>{t("Recipes")}</button>
         <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
+        <button type="button" data-active={tab === "categories"} onClick={() => { setTab("categories"); setSelectedId(""); }}>{t("Categories")}</button>
       </nav>
 
       <div className="inventory-main">
@@ -452,6 +479,7 @@ export function InventoryContent({
           currencySymbol={currencySymbol}
           canEdit={canEdit}
           supplierNames={supplierNames}
+          categoryOptions={categoryOptions}
           onStockChanged={() => { void reload(); void reloadSuppliers(); }}
         />
       ) : tab === "stocktake" ? (
@@ -459,6 +487,7 @@ export function InventoryContent({
           workspace={workspace}
           currencySymbol={currencySymbol}
           canEdit={canEdit}
+          categoryOptions={categoryOptions}
           onStockChanged={() => void reload()}
         />
       ) : tab === "recipes" ? (
@@ -472,6 +501,12 @@ export function InventoryContent({
         />
       ) : tab === "reports" ? (
         <ReportsPanel workspace={workspace} currencySymbol={currencySymbol} />
+      ) : tab === "categories" ? (
+        <CategoriesPanel
+          workspace={workspace}
+          canEdit={canEdit}
+          onCategoriesChanged={() => void reload()}
+        />
       ) : tab === "suppliers" ? (
         <SuppliersPanel
           workspace={workspace}
@@ -509,7 +544,7 @@ export function InventoryContent({
         />
         <select className="input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
           <option value="">{t("All Categories")}</option>
-          {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
+          {categoryOptions.map(c => <option key={c} value={c}>{t(c)}</option>)}
         </select>
         <select className="input" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
           <option value="">{t("All Types")}</option>
@@ -787,6 +822,8 @@ export function InventoryContent({
           currencySymbol={currencySymbol}
           tagSuggestions={allTags}
           locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
+          categoryOptions={categoryOptions}
+          defaultCategory={defaultCategory}
           onClose={() => setModalOpen(false)}
           onSaved={async () => { setModalOpen(false); await reload(); }}
         />
@@ -798,6 +835,8 @@ export function InventoryContent({
           currencySymbol={currencySymbol}
           tagSuggestions={allTags}
           locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
+          categoryOptions={categoryOptions}
+          defaultCategory={defaultCategory}
           initialItem={editing}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }}
@@ -816,6 +855,8 @@ function NewItemModal({
   currencySymbol,
   tagSuggestions,
   locationSuggestions,
+  categoryOptions,
+  defaultCategory,
   initialItem,
   onClose,
   onSaved
@@ -826,6 +867,10 @@ function NewItemModal({
   tagSuggestions: string[];
   /** Defined location paths plus every location already in use. */
   locationSuggestions: string[];
+  /** The workspace's own categories, plus whatever this item already says. */
+  categoryOptions: string[];
+  /** The category a brand-new item starts on, if the workspace picked one. */
+  defaultCategory: string;
   /** When set, the form edits this item (or, with a blank id, creates a copy). */
   initialItem?: InventoryItem | null;
   onClose: () => void;
@@ -835,8 +880,11 @@ function NewItemModal({
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const editingId = initialItem?.id || "";
-  const [draft, setDraft] = useState<InventoryItemInput>(() =>
-    initialItem ? inventoryItemToInput(initialItem) : emptyDraft("unique"));
+  const [draft, setDraft] = useState<InventoryItemInput>(() => {
+    if (initialItem) return inventoryItemToInput(initialItem);
+    const blank = emptyDraft("unique");
+    return defaultCategory ? { ...blank, category: defaultCategory } : blank;
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tagInput, setTagInput] = useState("");
@@ -958,7 +1006,10 @@ function NewItemModal({
           <label className="inventory-field">
             <span>{t("Category")}</span>
             <select className="input" value={draft.category} onChange={e => set("category", e.target.value)}>
-              {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
+              {categoryOptions.map(c => <option key={c} value={c}>{t(c)}</option>)}
+              {draft.category && !categoryOptions.includes(draft.category)
+                ? <option value={draft.category}>{t(draft.category)}</option>
+                : null}
             </select>
           </label>
 
