@@ -2921,7 +2921,7 @@ const ADVANCED_AREAS = [
   { id: "domain", titleKey: "adv.domain.title", bodyKey: "adv.domain.body" }
 ] as const;
 
-function AdvancedAreasSection() {
+function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
   const { t } = usePublicSiteLanguage();
   const icons: Record<string, ReactNode> = {
     inventory: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></>,
@@ -2931,6 +2931,49 @@ function AdvancedAreasSection() {
     files: <><path d="M3 6l1.5-2h4l1 1.5H17v10.5H3z" /></>,
     domain: <><circle cx="10" cy="10" r="7" /><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7S12.2 15 10 17c-2.2-2-3.3-4.4-3.3-7S7.8 5 10 3z" /></>
   };
+  const areaIcon = (id: string) => (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{icons[id]}</svg>
+  );
+
+  // On /features the same six areas are written out in full. The home tiles
+  // link here, and until now they landed on a page that never said the words
+  // inventory, banking, estimates or repairs — six of the product's larger
+  // areas were missing from the page that exists to explain features. The body
+  // copy already existed for the tile tooltips, in every language.
+  //
+  // Anchors are "area-", not "feature-": FEATURE_DEEP_DIVES already owns
+  // #feature-files, and a second element with that id would send both links to
+  // whichever came first.
+  if (detailed) {
+    return (
+      <section className="public-section public-features-deep-section public-scroll-reveal">
+        <div className="public-shell public-features-deep-panel">
+          <div className="public-features-deep-copy">
+            <span className="public-eyebrow">{t("section.backoffice.eyebrow")}</span>
+            <h2>{t("section.backoffice.title")}</h2>
+            <p>{t("section.backoffice.body")}</p>
+          </div>
+          <div className="public-features-deep-list">
+            {ADVANCED_AREAS.map(area => (
+              <article id={`area-${area.id}`} key={area.id}>
+                <span className="public-features-deep-icon" aria-hidden="true">{areaIcon(area.id)}</span>
+                <div className="public-features-deep-titles">
+                  <h3>{t(area.titleKey)}</h3>
+                  <p>{t(area.bodyKey)}</p>
+                  {area.id === "domain" ? (
+                    <a className="public-shipstrip-link" href="#customer-portal">
+                      {t("section.backoffice.portalLink")}<span aria-hidden="true"> →</span>
+                    </a>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="public-section public-backoffice-section public-scroll-reveal">
       <div className="public-shell">
@@ -2939,13 +2982,11 @@ function AdvancedAreasSection() {
           {ADVANCED_AREAS.map(area => (
             <Link
               key={area.id}
-              href={area.id === "domain" ? "/features#customer-portal" : "/features"}
+              href={`/features#area-${area.id}`}
               className="public-card public-backoffice-tile"
               title={t(area.bodyKey)}
             >
-              <span className="public-backoffice-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{icons[area.id]}</svg>
-              </span>
+              <span className="public-backoffice-icon" aria-hidden="true">{areaIcon(area.id)}</span>
               <span>{t(area.titleKey)}</span>
             </Link>
           ))}
@@ -3174,6 +3215,8 @@ function PublicFeaturesPageContent() {
       <FeatureWorkflowPanel />
 
       <FeatureDeepDiveSection />
+
+      <AdvancedAreasSection detailed />
 
       {/* The shipping scroll story moved here from the home page (mock
           redesign); the home strip links to this anchor. */}

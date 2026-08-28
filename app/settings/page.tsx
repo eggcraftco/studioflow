@@ -7529,6 +7529,8 @@ function SupportTicketsSection({
                         {ticket.accountUid ? (
                           <small className="muted-copy">
                             {ticket.accountPlan ? `${t("Plan")}: ${ticket.accountPlan}` : t("Signed-in user")}
+                            {typeof ticket.accountOrderCount === "number" && ticket.accountOrderCount > 0
+                              ? ` · ${t("Orders")}: ${ticket.accountOrderCount}` : ""}
                             {ticket.accountEmail ? ` · ${ticket.accountEmail}` : ""}
                           </small>
                         ) : null}

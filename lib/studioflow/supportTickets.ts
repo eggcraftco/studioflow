@@ -40,6 +40,7 @@ export type StudioSupportTicket = {
   accountName?: string;
   accountCompanyName?: string;
   accountPlan?: string;
+  accountOrderCount?: number;
 };
 
 export type StudioSupportTicketAttachment = {
