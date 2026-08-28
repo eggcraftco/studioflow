@@ -33,14 +33,84 @@ const TREE_EN: GuideNode[] = [
     id: "getting-started",
     title: "Getting started",
     blocks: [
-      { kind: "para", text: "When you first open NivaDesk, a short setup gets your workspace ready for your kind of work." },
-      { kind: "steps", items: [
-        "Pick your industry: NivaDesk tailors the workflow steps, order fields and labels to your craft.",
-        "Review the business description: it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.",
-        "Explore the Free workspace: sample orders and customers let you try everything before adding real data.",
-        "Add your first real order with Add Project when you are ready."
-      ] },
-      { kind: "para", text: "You can change your industry, workflow steps and labels later in Settings, so nothing here is permanent." }
+      { kind: "para", text: "What happens the first time you sign in, and how to set up your new workspace." }
+    ],
+    children: [
+      {
+        id: "first-sign-in-setup",
+        title: "Setting up your workspace when you first sign in",
+        blocks: [
+          { kind: "para", text: "When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps." },
+          { kind: "steps", items: [
+            "Workspace basics: country, currency and time zone, guessed from where you are and editable now or later.",
+            "Your work: what you make or repair, and how you mainly work.",
+            "What NivaDesk should help with first: your answer decides the three starting tasks you see when setup finishes.",
+            "How you would like to start: your first order, a sample workspace, a Shopify or WooCommerce connection, a spreadsheet import, or an empty workspace."
+          ] },
+          { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." }
+        ]
+      },
+      {
+        id: "what-the-setup-changes",
+        title: "What your setup answers change",
+        blocks: [
+          { kind: "para", text: "The questions are not a survey: each answer changes the workspace you get." },
+          { kind: "bullets", items: [
+            "What you make or repair picks your order card layout, your fields and your labels.",
+            "How you mainly work picks your production board's lanes — a repair shop gets Intake, In Repair, Waiting, Testing and Ready for Collection instead of Ready to Ship.",
+            "What you want help with first picks the three starting tasks on the ready screen.",
+            "How many people will use NivaDesk decides whether your free fortnight runs on Pro or on Team."
+          ] },
+          { kind: "para", text: "Nothing here is permanent: your business type, workflow steps, labels and production stages can all be changed later in Settings." }
+        ]
+      }
+    ]
+  },
+  {
+    id: "trial-and-plans",
+    title: "Your free trial and plans",
+    blocks: [
+      { kind: "para", text: "What signing up costs, when the paid trial starts, and what happens when it ends." }
+    ],
+    children: [
+      {
+        id: "trial-no-credit-card",
+        title: "No credit card to sign up",
+        blocks: [
+          { kind: "para", text: "You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, 10 customers, your personal notes and export access, at no cost and with no time limit." },
+          { kind: "para", text: "The 14-day trial of the paid plan is separate, and it does not start when you register." }
+        ]
+      },
+      {
+        id: "trial-when-it-starts",
+        title: "When the 14-day trial starts",
+        blocks: [
+          { kind: "steps", items: [
+            "It starts when you create your first order — not at sign-up, so the fortnight is spent working rather than looking around.",
+            "It runs on Pro, or on Team if you said more than one person would use NivaDesk during setup.",
+            "No credit card is taken and no subscription is created. Nothing renews and nothing can be charged.",
+            "A banner shows what is left, and what the trial has been worth so far. It collapses if you would rather not see it."
+          ] },
+          { kind: "para", text: "Each workspace gets one trial, so starting a paid plan at checkout does not add another fortnight on top." }
+        ]
+      },
+      {
+        id: "trial-when-it-ends",
+        title: "What happens when the trial ends",
+        blocks: [
+          { kind: "para", text: "The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable." },
+          { kind: "para", text: "What stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep." },
+          { kind: "para", text: "Upgrading later picks everything up exactly where it stopped." }
+        ]
+      },
+      {
+        id: "trial-monthly-yearly",
+        title: "Monthly and yearly billing",
+        blocks: [
+          { kind: "para", text: "Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly." },
+          { kind: "para", text: "You can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us." }
+        ]
+      }
     ]
   },
   {
@@ -909,14 +979,84 @@ const TREE_TR: GuideNode[] = [
     id: "getting-started",
     title: "Başlarken",
     blocks: [
-      { kind: "para", text: "NivaDesk'i ilk açtığınızda kısa bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar." },
-      { kind: "steps", items: [
-        "İş kolunuzu seçin: NivaDesk iş akışı adımlarını, sipariş alanlarını ve etiketleri mesleğinize göre ayarlar.",
-        "İş açıklamasını gözden geçirin: mesleğinize uyacak şekilde otomatik dolar ve siparişlerin nasıl kurulacağını belirler. İstediğiniz zaman Settings ▸ Workflow Steps'ten düzenleyebilirsiniz.",
-        "Free çalışma alanını keşfedin: örnek siparişler ve müşteriler, gerçek veri eklemeden her şeyi denemenizi sağlar.",
-        "Hazır olduğunuzda Add Project ile ilk gerçek siparişinizi ekleyin."
-      ] },
-      { kind: "para", text: "İş kolunuzu, iş akışı adımlarınızı ve etiketleri sonradan Settings'ten değiştirebilirsiniz; burada hiçbir şey kalıcı değildir." }
+      { kind: "para", text: "İlk kez giriş yaptığınızda ne olur ve yeni çalışma alanınızı nasıl kurarsınız." }
+    ],
+    children: [
+      {
+        id: "first-sign-in-setup",
+        title: "İlk girişte çalışma alanınızı kurma",
+        blocks: [
+          { kind: "para", text: "NivaDesk'i ilk açtığınızda dört soruluk bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her soru cevaplanabilir ve son adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesiyle adımlar arasında dolaşabilirsiniz." },
+          { kind: "steps", items: [
+            "Çalışma alanı temelleri: ülke, para birimi ve saat dilimi. Konumunuzdan tahmin edilir, şimdi veya sonra değiştirilebilir.",
+            "İşiniz: ne ürettiğiniz ya da onardığınız ve ağırlıklı olarak nasıl çalıştığınız.",
+            "NivaDesk önce neye yardım etsin: cevabınız, kurulum bitince göreceğiniz üç başlangıç görevini belirler.",
+            "Nasıl başlamak istediğiniz: ilk siparişiniz, örnek bir çalışma alanı, Shopify veya WooCommerce bağlantısı, tablo içe aktarma ya da boş bir çalışma alanı."
+          ] },
+          { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." }
+        ]
+      },
+      {
+        id: "what-the-setup-changes",
+        title: "Kurulum cevaplarınız neyi değiştirir",
+        blocks: [
+          { kind: "para", text: "Sorular anket değildir: her cevap elinize geçen çalışma alanını değiştirir." },
+          { kind: "bullets", items: [
+            "Ne ürettiğiniz ya da onardığınız; sipariş kartı düzeninizi, alanlarınızı ve etiketlerinizi belirler.",
+            "Ağırlıklı olarak nasıl çalıştığınız; üretim panosu şeritlerinizi belirler — bir onarım atölyesi \"Ready to Ship\" yerine Intake, In Repair, Waiting, Testing ve Ready for Collection alır.",
+            "Önce neye yardım istediğiniz; hazır ekranındaki üç başlangıç görevini belirler.",
+            "NivaDesk'i kaç kişinin kullanacağı; ücretsiz iki haftanızın Pro mu Team mi olacağını belirler."
+          ] },
+          { kind: "para", text: "Burada hiçbir şey kalıcı değildir: iş türünüzü, iş akışı adımlarınızı, etiketlerinizi ve üretim aşamalarınızı sonradan Settings'ten değiştirebilirsiniz." }
+        ]
+      }
+    ]
+  },
+  {
+    id: "trial-and-plans",
+    title: "Ücretsiz denemeniz ve planlar",
+    blocks: [
+      { kind: "para", text: "Kaydolmanın maliyeti, ücretli denemenin ne zaman başladığı ve bittiğinde ne olduğu." }
+    ],
+    children: [
+      {
+        id: "trial-no-credit-card",
+        title: "Kaydolmak için kredi kartı yok",
+        blocks: [
+          { kind: "para", text: "NivaDesk'e kaydolmak için kredi kartı gerekmez; kurulumun hiçbir yerinde ödeme bilgisi istenmez. Free planın süresi hiç dolmaz: 10 aktif sipariş, 10 müşteri, kişisel notlarınız ve dışa aktarma erişimi; ücretsiz ve süresiz." },
+          { kind: "para", text: "Ücretli planın 14 günlük denemesi bundan ayrıdır ve kaydolduğunuzda başlamaz." }
+        ]
+      },
+      {
+        id: "trial-when-it-starts",
+        title: "14 günlük deneme ne zaman başlar",
+        blocks: [
+          { kind: "steps", items: [
+            "İlk siparişinizi oluşturduğunuzda başlar — kayıtta değil; böylece iki hafta etrafa bakarak değil çalışarak geçer.",
+            "Pro üzerinde çalışır; kurulumda NivaDesk'i birden fazla kişinin kullanacağını söylediyseniz Team üzerinde.",
+            "Kredi kartı alınmaz ve abonelik oluşturulmaz. Hiçbir şey yenilenmez, hiçbir ücret çekilemez.",
+            "Bir şerit kalan süreyi ve denemenin şu ana dek ne kazandırdığını gösterir. Görmek istemezseniz katlanır."
+          ] },
+          { kind: "para", text: "Her çalışma alanına bir deneme verilir; ödeme sayfasından ücretli plan başlatmak üstüne ikinci bir iki hafta eklemez." }
+        ]
+      },
+      {
+        id: "trial-when-it-ends",
+        title: "Deneme bitince ne olur",
+        blocks: [
+          { kind: "para", text: "Çalışma alanı Free'ye döner ve bir bildirim bunu açıkça söyler; \"Free ile devam et\" ile \"Bir plan seç\" yan yana durur. Hiçbir şey silinmez: bütün siparişler, müşteriler, dosyalar ve notlar görünür ve dışa aktarılabilir kalır." },
+          { kind: "para", text: "Duran şeyler ücretli plan özellikleridir — Client Files, gelişmiş finans, ekip mesajlaşması — ve Free'nin 10 aktif sipariş sınırının üstünde yeni sipariş açmak. Biten siparişleri arşivlemek sizi sınırın altına döndürür. NivaDesk hangi siparişlerinizin kalacağına asla kendisi karar vermez." },
+          { kind: "para", text: "Sonradan yükseltmek her şeyi kaldığı yerden devam ettirir." }
+        ]
+      },
+      {
+        id: "trial-monthly-yearly",
+        title: "Aylık ve yıllık faturalandırma",
+        blocks: [
+          { kind: "para", text: "Yıllık faturalandırma, on iki ay için on aylık fiyattır. Plan sayfası her yıllık fiyatın yanında aylık karşılığını ve tam tasarruf tutarını gösterir — Pro yılda £190, yani ayda £15.83 ve £38 tasarruf — böylece ikisini dürüstçe karşılaştırabilirsiniz." },
+          { kind: "para", text: "Aylık ve yıllık arasında istediğiniz zaman geçebilir, Settings ▸ Plan & Access üzerinden bize yazmadan iptal edebilirsiniz." }
+        ]
+      }
     ]
   },
   {

@@ -6,7 +6,56 @@
    "title": "Getting started",
    "path": "Getting started",
    "headings": "",
-   "text": "When you first open NivaDesk, a short setup gets your workspace ready for your kind of work.\n- Pick your industry: NivaDesk tailors the workflow steps, order fields and labels to your craft.\n- Review the business description: it auto-fills to fit your trade and shapes how orders are set up. You can edit it any time in Settings ▸ Workflow Steps.\n- Explore the Free workspace: sample orders and customers let you try everything before adding real data.\n- Add your first real order with Add Project when you are ready.\nYou can change your industry, workflow steps and labels later in Settings, so nothing here is permanent."
+   "text": "What happens the first time you sign in, and how to set up your new workspace."
+  },
+  {
+   "id": "first-sign-in-setup",
+   "title": "Setting up your workspace when you first sign in",
+   "path": "Getting started › Setting up your workspace when you first sign in",
+   "headings": "",
+   "text": "When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps.\n- Workspace basics: country, currency and time zone, guessed from where you are and editable now or later.\n- Your work: what you make or repair, and how you mainly work.\n- What NivaDesk should help with first: your answer decides the three starting tasks you see when setup finishes.\n- How you would like to start: your first order, a sample workspace, a Shopify or WooCommerce connection, a spreadsheet import, or an empty workspace.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings."
+  },
+  {
+   "id": "what-the-setup-changes",
+   "title": "What your setup answers change",
+   "path": "Getting started › What your setup answers change",
+   "headings": "",
+   "text": "The questions are not a survey: each answer changes the workspace you get.\n- What you make or repair picks your order card layout, your fields and your labels.\n- How you mainly work picks your production board's lanes — a repair shop gets Intake, In Repair, Waiting, Testing and Ready for Collection instead of Ready to Ship.\n- What you want help with first picks the three starting tasks on the ready screen.\n- How many people will use NivaDesk decides whether your free fortnight runs on Pro or on Team.\nNothing here is permanent: your business type, workflow steps, labels and production stages can all be changed later in Settings."
+  },
+  {
+   "id": "trial-and-plans",
+   "title": "Your free trial and plans",
+   "path": "Your free trial and plans",
+   "headings": "",
+   "text": "What signing up costs, when the paid trial starts, and what happens when it ends."
+  },
+  {
+   "id": "trial-no-credit-card",
+   "title": "No credit card to sign up",
+   "path": "Your free trial and plans › No credit card to sign up",
+   "headings": "",
+   "text": "You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, 10 customers, your personal notes and export access, at no cost and with no time limit.\nThe 14-day trial of the paid plan is separate, and it does not start when you register."
+  },
+  {
+   "id": "trial-when-it-starts",
+   "title": "When the 14-day trial starts",
+   "path": "Your free trial and plans › When the 14-day trial starts",
+   "headings": "",
+   "text": "- It starts when you create your first order — not at sign-up, so the fortnight is spent working rather than looking around.\n- It runs on Pro, or on Team if you said more than one person would use NivaDesk during setup.\n- No credit card is taken and no subscription is created. Nothing renews and nothing can be charged.\n- A banner shows what is left, and what the trial has been worth so far. It collapses if you would rather not see it.\nEach workspace gets one trial, so starting a paid plan at checkout does not add another fortnight on top."
+  },
+  {
+   "id": "trial-when-it-ends",
+   "title": "What happens when the trial ends",
+   "path": "Your free trial and plans › What happens when the trial ends",
+   "headings": "",
+   "text": "The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable.\nWhat stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep.\nUpgrading later picks everything up exactly where it stopped."
+  },
+  {
+   "id": "trial-monthly-yearly",
+   "title": "Monthly and yearly billing",
+   "path": "Your free trial and plans › Monthly and yearly billing",
+   "headings": "",
+   "text": "Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly.\nYou can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us."
   },
   {
    "id": "dashboard",

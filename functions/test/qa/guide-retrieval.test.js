@@ -109,4 +109,75 @@ function topPaths(question, limit = 4) {
   pass("the bot can answer why production status is its own thing");
 }
 
+// 5. The billing questions people actually ask before they trust a product with
+// their work. These have to land on the trial chapter, not on Plan & Access —
+// the settings page says what the plans are, not when the fortnight starts or
+// what happens when it ends.
+{
+  const questions = [
+    "when does my free trial start?",
+    "will I be charged when the trial ends?",
+    "what happens to my orders after the trial?",
+    "do I need a credit card to sign up?",
+    "how much do I save with yearly billing?"
+  ];
+  for (const question of questions) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /trial/i.test(p)),
+      `"${question}" should reach the trial chapter, got: ${paths.join(" | ")}`
+    );
+  }
+  pass("trial and billing questions reach the trial chapter");
+}
+
+// 6. The two promises that make the trial safe to start have to be in the text,
+// not merely implied, because the bot answers only from these excerpts.
+{
+  // The chapter is split into sub-sections, so read the whole subtree: what
+  // matters is that the promises are somewhere the retrieval can hand over.
+  const trial = CORPUS.filter((s) => /trial/i.test(s.id || "") || /trial/i.test(s.path || ""));
+  const text = trial.map((s) => s.text).join("\n");
+  assert(trial.length >= 4, `expected the trial sub-sections, got ${trial.length}`);
+  assert(/no credit card/i.test(text), "the guide says no credit card is taken");
+  assert(/[Nn]othing is deleted/.test(text), "the guide says nothing is deleted");
+  assert(
+    /first order/i.test(text),
+    "the guide says the trial starts at the first order, not at sign-up"
+  );
+  pass("the trial chapter states no credit card, nothing deleted, and when it starts");
+}
+
+// 7. The setup screen the guide describes has to be the one that ships. The old
+// chapter still described an industry dropdown and a business-description box.
+{
+  const setup = CORPUS.filter((s) =>
+    /getting-started|first-sign-in-setup|what-the-setup-changes/.test(s.id || "")
+  );
+  const text = setup.map((s) => s.text).join("\n");
+  assert(setup.length >= 3, `expected the setup sub-sections, got ${setup.length}`);
+  assert(
+    /four-question/i.test(text),
+    "getting started describes the wizard that actually ships"
+  );
+  assert(
+    /Ready for Collection/i.test(text),
+    "it shows that the answers change the product, not just the copy"
+  );
+  // The live probe had this land on Settings > PDF Export, where the bot then
+  // invented a setup flow out of whatever Settings pages it had been handed.
+  for (const question of [
+    "how do I set up my workspace when I first sign in?",
+    "what happens the first time I open NivaDesk?",
+    "can I change the answers I gave during setup?"
+  ]) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /getting started|setup/i.test(p)),
+      `"${question}" should reach the setup chapter, got: ${paths.join(" | ")}`
+    );
+  }
+  pass("getting started matches the setup screen that ships, and is reachable");
+}
+
 console.log("\n✅ GUIDE RETRIEVAL GEÇTİ");
