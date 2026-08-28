@@ -2,11 +2,33 @@
 
 Amaç: yapılanlar ile yapılacakların birbirine karışmaması. Her büyük iş bittiğinde
 buraya taşınır; yeni raporlar "SIRADA" bölümüne girer ve bitince yukarı çıkar.
-Son güncelleme: 26 Ağustos 2026.
+Son güncelleme: 28 Ağustos 2026.
 
 ---
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
+
+### Banka bağlantısı her sabah kopuyordu — 28 Ağu, CANLI
+Şikâyet: "her gün bağlantı yenilemek zorunda kalıyorum". Normal değildi.
+- **Kanıt (üretim, EGGcraft/HSBC):** bağlantı 26 Ağu 16:07'de kuruldu, 16:08'de BİR
+  kez senkron oldu, sonraki her zamanlanmış senkron (22:47, 06:47, 14:47, 22:47)
+  "Bank data request failed: Access denied" ile düştü. Token tazeleme hep başarılı;
+  düşen yalnızca veri isteğiydi.
+- **Sebep:** her gözetimsiz senkron 2 yıllık geçmiş istiyordu. PSD2 altında banka
+  derin geçmişi yalnız müşteri huzurdayken (taze SCA) vermek zorunda; HSBC bunu
+  uyguluyor ve reddediyor. Kod bu reddi "rıza öldü" diye okuyup her sabah yeniden
+  bağlanmayı dayatıyordu.
+- **Düzeltme (`functions/bankFeed.js`):** derin geçmiş yalnızca bağlanma anında;
+  rutin senkron 90 gün. Geniş aralık 401/403 alırsa dar aralıkla tekrar denenir.
+  Hatalar artık aşamayla etiketli (`tlStage` auth/data): yalnız auth-aşaması ve
+  `invalid_grant` "reconnect" demek; veri reddi ilk seferde amber "Sync failing",
+  ancak üst üste ikincide reconnect'e yükseliyor (gerçekten iptal edilmiş rıza
+  saklanmasın diye).
+- **Doğrulama:** düzeltme deploy edildikten sonra aynı bağlantıda gerçek gözetimsiz
+  senkron çalıştırıldı → `synced: 1, imported: 145`, `syncState: ok`, hata yok.
+  4 kez üst üste reddedilen bağlantı, biriken 145 işlemi de içeri aldı.
+- Teşhis için kullanılan tek seferlik `nvBankHealthOnce` fonksiyonu silindi (uç 404).
+- Regresyon: `functions/test/qa/bank-consent.test.js` (5 senaryo).
 
 ### Settings raporu (notes3) — 26 Ağu, CANLI
 Tamamı: yedek v3 (kayıt-kimlikli eşleştirme + içe aktarma önizleme/atlama/geri alma),
