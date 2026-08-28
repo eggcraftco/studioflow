@@ -2544,6 +2544,77 @@ async function requireWorkspaceForBilling(request, requireOwner = false) {
  * skip exactly those. Only ever called for a plan that HAS a limit, so the scan
  * is over a small workspace by definition.
  */
+/**
+ * Whether a connected store may still bring an order in.
+ *
+ * Until now the webhooks ignored the plan entirely, so a Free workspace with a
+ * store attached quietly sailed past its limit. Enforcing it is the report's
+ * rule — but refusing an order outright would mean a customer bought something
+ * and NivaDesk never recorded it, which is a worse failure than an unenforced
+ * limit. So an order that will not fit is PARKED, not dropped: the raw payload
+ * is kept and can be brought in the moment there is room, exactly the way a
+ * receipt that arrives before its bank transaction waits in the bank inbox.
+ */
+async function integrationOrderCapacity(companyId, companyData = {}) {
+  const entitlements = billingEntitlementsForCompany(companyData);
+  const limit = numericLimit(entitlements.orderLimit);
+  if (limit === null) return { allowed: true, limit: null, active: 0 };
+  const active = await countActiveOrders(companyId);
+  return { allowed: active < limit, limit, active };
+}
+
+function heldIntegrationOrdersRef(companyId) {
+  return admin.firestore().collection("companies").doc(String(companyId))
+    .collection("heldIntegrationOrders");
+}
+
+/**
+ * Parks one order and tells the owner — once a day at most, because a busy
+ * store would otherwise send a notification per sale.
+ */
+async function holdIntegrationOrder(companyId, provider, externalId, payload, capacity) {
+  const id = `${provider}_${String(externalId || Date.now()).replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 180);
+  await heldIntegrationOrdersRef(companyId).doc(id).set({
+    provider,
+    externalId: String(externalId || ""),
+    payload,
+    heldAtMs: Date.now(),
+    heldAt: admin.firestore.FieldValue.serverTimestamp(),
+    reason: "plan_limit_reached",
+    activeAtHold: capacity.active,
+    limitAtHold: capacity.limit
+  }, { merge: true });
+
+  try {
+    const companyRef = admin.firestore().collection("companies").doc(String(companyId));
+    const snap = await companyRef.get();
+    const lastNotifiedMs = Number((snap.data() || {}).heldOrdersNotifiedAtMs || 0);
+    if (Date.now() - lastNotifiedMs < 24 * 60 * 60 * 1000) return;
+    await companyRef.set({ heldOrdersNotifiedAtMs: Date.now() }, { merge: true });
+
+    const waiting = await heldIntegrationOrdersRef(companyId).count().get()
+      .then((agg) => agg.data().count || 1)
+      .catch(() => 1);
+    const ref = notificationCollectionRef(companyId).doc("held_integration_orders");
+    const payloadOut = {
+      companyId,
+      type: "integration_orders_held",
+      title: "Store orders are waiting",
+      message: `${waiting} order${waiting === 1 ? "" : "s"} from your store ${waiting === 1 ? "is" : "are"} waiting for room on your plan. Nothing is lost — mark finished work delivered, or choose a plan, and they come straight in.`,
+      route: "orders",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+      actioned: false,
+      source: "integrations"
+    };
+    await ref.set(payloadOut, { merge: true });
+    await sendPushNotificationToCompany(companyId, { ...payloadOut, notificationId: ref.id, createdAt: new Date().toISOString() })
+      .catch(() => {});
+  } catch (error) {
+    console.warn("holdIntegrationOrder notify failed:", companyId, error?.message || error);
+  }
+}
+
 async function countActiveOrders(companyId) {
   const snap = await admin.firestore()
     .collection("siparisler")
@@ -13165,6 +13236,94 @@ exports.mergeWebCustomers = onCall({ region: "europe-west2" }, async (request) =
   };
 });
 
+/**
+ * How many store orders are parked, and how much room there is for them.
+ * Read by the Orders screen so the owner can see the queue rather than
+ * discovering it in a notification they already dismissed.
+ */
+exports.listHeldIntegrationOrders = onCall({ region: "europe-west2" }, async (request) => {
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const [snap, capacity] = await Promise.all([
+    heldIntegrationOrdersRef(companyId).orderBy("heldAtMs", "asc").limit(200).get(),
+    integrationOrderCapacity(companyId, companyData)
+  ]);
+  return {
+    ok: true,
+    companyId,
+    held: snap.docs.map((doc) => {
+      const data = doc.data() || {};
+      return {
+        id: doc.id,
+        provider: String(data.provider || ""),
+        externalId: String(data.externalId || ""),
+        heldAtMs: Number(data.heldAtMs) || 0
+      };
+    }),
+    heldCount: snap.size,
+    activeOrderCount: capacity.active,
+    orderLimit: capacity.limit,
+    roomAvailable: capacity.limit === null ? snap.size : Math.max(0, capacity.limit - capacity.active)
+  };
+});
+
+/**
+ * Brings parked orders in, oldest first, and stops the moment the plan is full
+ * again. Deliberately does NOT choose what to drop: it fills the room that
+ * exists and leaves the rest parked, because deciding which of someone's orders
+ * to keep is not ours to make.
+ */
+exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  if (!uidCanEditWorkspaceOrders(companyData, uid)) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot import orders.");
+  }
+
+  const snap = await heldIntegrationOrdersRef(companyId).orderBy("heldAtMs", "asc").limit(100).get();
+  if (snap.empty) return { ok: true, imported: 0, stillHeld: 0 };
+
+  const settings = (await companySettingsDocRef(companyId).get()).data() || {};
+  const defaultDeliveryTime = resolveDefaultDeliveryTime(settings);
+  let imported = 0;
+
+  for (const doc of snap.docs) {
+    const capacity = await integrationOrderCapacity(companyId, companyData);
+    if (!capacity.allowed) break;
+
+    const data = doc.data() || {};
+    const provider = String(data.provider || "");
+    const order = data.payload;
+    if (!order || typeof order !== "object") { await doc.ref.delete(); continue; }
+
+    try {
+      if (provider === "woocommerce") {
+        const docId = wooOrderDocId(companyId, data.externalId);
+        const ref = orderDocRef(docId);
+        const existing = await ref.get();
+        const mapped = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, defaultDeliveryTime);
+        await ref.set(integrationOrderUpdate(mapped, !existing.exists), { merge: true });
+      } else if (provider === "shopify") {
+        const docId = shopifyOrderDocId(companyId, data.externalId);
+        const ref = orderDocRef(docId);
+        const existing = await ref.get();
+        const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
+        await ref.set(integrationOrderUpdate(mapped, !existing.exists), { merge: true });
+      } else {
+        await doc.ref.delete();
+        continue;
+      }
+      await doc.ref.delete();
+      imported += 1;
+    } catch (error) {
+      console.warn("releaseHeldIntegrationOrders failed for", doc.id, error?.message || error);
+    }
+  }
+
+  const remaining = await heldIntegrationOrdersRef(companyId).count().get()
+    .then((agg) => agg.data().count || 0)
+    .catch(() => 0);
+  return { ok: true, imported, stillHeld: remaining };
+});
+
 exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceOrders(companyData, uid)) {
@@ -17709,6 +17868,20 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
       }
     }
 
+    // A NEW order has to fit the plan; an update to one already here always
+    // goes through, because refusing it would leave a stale record on screen.
+    if (!existing.exists) {
+      const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+      const capacity = await integrationOrderCapacity(companyId, companySnap.data() || {});
+      if (!capacity.allowed) {
+        await holdIntegrationOrder(companyId, "woocommerce", wooOrderId, order, capacity);
+        // 200 on purpose: the store must not retry forever over something only
+        // the workspace owner can resolve.
+        res.status(200).json({ ok: true, held: true, reason: "plan_limit_reached" });
+        return;
+      }
+    }
+
     const wooDefaultDeliveryTime = resolveDefaultDeliveryTime((await companySettingsDocRef(companyId).get()).data());
     const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, wooDefaultDeliveryTime);
     await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
@@ -18099,6 +18272,19 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     if (!existing.exists && !SHOPIFY_PAID_STATUSES.has(financialStatus)) {
       res.status(200).json({ ok: true, ignored: "unpaid_status", status: financialStatus, orderId: docId });
       return;
+    }
+
+    // Same rule as WooCommerce: a new order has to fit the plan, an update to
+    // one already here always lands. Parked rather than dropped, so a sale is
+    // never lost to a limit only the owner can lift.
+    if (!existing.exists) {
+      const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+      const capacity = await integrationOrderCapacity(companyId, companySnap.data() || {});
+      if (!capacity.allowed) {
+        await holdIntegrationOrder(companyId, "shopify", shopifyOrderId, order, capacity);
+        res.status(200).json({ ok: true, held: true, reason: "plan_limit_reached" });
+        return;
+      }
     }
 
     const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);

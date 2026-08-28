@@ -479,3 +479,39 @@ export async function uploadOrderPreviewImage({
     throw new Error(message || "Could not upload preview image.");
   }
 }
+
+// ---------------------------------------------------------------------------
+// Store orders parked because the plan is full.
+//
+// A connected store keeps selling whether or not the workspace has room. Rather
+// than dropping those orders (a sale NivaDesk never recorded) or letting them
+// past the limit, the server parks them — these two calls are how the owner
+// sees the queue and brings it in once there is space.
+// ---------------------------------------------------------------------------
+
+export type HeldIntegrationOrders = {
+  ok?: boolean;
+  held?: { id: string; provider: string; externalId: string; heldAtMs: number }[];
+  heldCount?: number;
+  activeOrderCount?: number;
+  orderLimit?: number | null;
+  roomAvailable?: number;
+};
+
+export async function listHeldIntegrationOrders(workspace: WorkspaceContext) {
+  const callable = httpsCallable<Record<string, unknown>, HeldIntegrationOrders>(functions, "listHeldIntegrationOrders");
+  const response = await callable({ companyId: workspace.id });
+  return response.data ?? {};
+}
+
+export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext) {
+  return withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; stillHeld?: number; message?: string }>(
+      functions,
+      "releaseHeldIntegrationOrders"
+    );
+    const response = await callable({ companyId: workspace.id });
+    if (response.data?.ok === false) throw new Error(response.data.message || "Could not import the waiting orders.");
+    return response.data;
+  }, "Importing waiting store orders.");
+}
