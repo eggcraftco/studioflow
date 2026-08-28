@@ -1856,9 +1856,15 @@ const PLAN_ENTITLEMENTS = {
     // Free is now a permanent tier rather than a trial shop window, so it has to
     // hold enough work for a real week. The 14-day trial is sold separately and
     // falls back here when it ends.
+    //
+    // One number, not two: "10 orders and 10 customers" was the wrong pair to
+    // keep in your head, and it counted finished work against you. The limit is
+    // ten ACTIVE orders — deleted and delivered ones are not using anything —
+    // which also gives a natural way back under it when the trial ends. The
+    // customer limit is gone; a customer without an order costs nothing.
     displayName: "Free",
     orderLimit: 10,
-    customerLimit: 10,
+    customerLimit: null,
     storageLimitMB: 50,
     teamMemberLimit: 1,
     clientFilesEnabled: false,
@@ -1886,7 +1892,7 @@ const PLAN_ENTITLEMENTS = {
   },
   lifetime_lite: {
     plan: "lifetime_lite",
-    displayName: "NivaDesk Lite",
+    displayName: "NivaDesk Starter",
     orderLimit: null,
     customerLimit: null,
     storageLimitMB: 250,
@@ -1985,7 +1991,7 @@ const PLAN_ENTITLEMENTS = {
 };
 
 const BILLING_ACTIONS = {
-  create_order: { limitKey: "orderLimit", usageKey: "orderCount", requiredFeature: null, requiredPlan: "demo" },
+  create_order: { limitKey: "orderLimit", usageKey: "activeOrderCount", requiredFeature: null, requiredPlan: "demo" },
   create_customer: { limitKey: "customerLimit", usageKey: "customerCount", requiredFeature: null, requiredPlan: "demo" },
   upload_client_file: { requiredFeature: "clientFilesEnabled", requiredPlan: "pro_monthly", usesStorage: true },
   rename_client_file: { requiredFeature: "clientFilesEnabled", requiredPlan: "pro_monthly" },
@@ -2523,6 +2529,37 @@ async function requireWorkspaceForBilling(request, requireOwner = false) {
   return { uid, email, companyId, companyRef, companyData };
 }
 
+/**
+ * Orders that still count against a limited plan.
+ *
+ * The report's change: "10 orders and 10 customers" is two numbers to keep in
+ * your head, and the wrong two — a workshop that has finished fifty jobs has
+ * not used up its workspace. Free is now "10 ACTIVE orders", which means one
+ * number, and a natural way back under it: mark finished work delivered.
+ *
+ * Deleted orders never counted as work either, though they used to count here.
+ *
+ * Filtered in memory rather than in the query because `isDeleted` and
+ * `isDelivered` are absent on older documents, and `== false` would silently
+ * skip exactly those. Only ever called for a plan that HAS a limit, so the scan
+ * is over a small workspace by definition.
+ */
+async function countActiveOrders(companyId) {
+  const snap = await admin.firestore()
+    .collection("siparisler")
+    .where("companyId", "==", companyId)
+    .select("isDeleted", "isDelivered")
+    .get();
+  let active = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() || {};
+    if (data.isDeleted === true) continue;
+    if (data.isDelivered === true) continue;
+    active += 1;
+  }
+  return active;
+}
+
 async function countCompanyCollection(collectionName, companyId) {
   const query = admin.firestore().collection(collectionName).where("companyId", "==", companyId);
   try {
@@ -2558,14 +2595,22 @@ async function calculateClientFilesStorageBytes(companyId) {
 }
 
 async function workspaceBillingUsage(companyId, companyData = {}) {
-  const [orderCount, customerCount, fileUsage] = await Promise.all([
+  // The active count is the one a limited plan is measured against, and it costs
+  // a document scan — so it is only paid for when a limit actually applies.
+  const entitlements = billingEntitlementsForCompany(companyData);
+  const wantsActiveCount = numericLimit(entitlements.orderLimit) !== null;
+  const [orderCount, customerCount, fileUsage, activeOrderCount] = await Promise.all([
     countCompanyCollection("siparisler", companyId),
     countCompanyCollection("musteriler", companyId),
-    calculateClientFilesStorageBytes(companyId)
+    calculateClientFilesStorageBytes(companyId),
+    wantsActiveCount ? countActiveOrders(companyId) : Promise.resolve(0)
   ]);
 
   return {
     orderCount,
+    // What the plan limit reads. On an unlimited plan the scan is skipped, so
+    // this falls back to the total rather than reporting a misleading zero.
+    activeOrderCount: wantsActiveCount ? activeOrderCount : orderCount,
     customerCount,
     teamMemberCount: teamMemberCountFromCompanyData(companyData),
     clientFilesCount: fileUsage.clientFilesCount,
@@ -3485,9 +3530,9 @@ function websiteAssistantConfigRef() {
 const WEBSITE_ASSISTANT_FACTS = [
   "NivaDesk is studio management software for creative and custom-order businesses: orders, customers, scheduling, invoices, client files, notes, to-dos, team roles, dashboards and bank spending.",
   "Platforms: web (nivadesk.app), macOS, iPhone, iPad and Android. The same workspace syncs across all of them. There is no Windows app yet.",
-  "Plans: Free (permanent, no card, room for 10 orders and 10 customers), Lite £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
+  "Plans: Free (permanent, no card, room for 10 orders and 10 customers), Starter £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
   "Every paid plan starts with a 14-day free trial. A card is needed to start it and nothing is charged until the trial ends. Cancel inside the 14 days and the workspace falls back to Free: the orders and customers already saved stay readable and exportable, but no new ones can be added until a plan is picked again.",
-  "The step-by-step user guide at nivadesk.app/guide and the in-app help assistant are part of Lite, Pro and Team. On Free, this chat is the place to ask: answer what NivaDesk does, what it costs and whether it fits, and leave the menu-by-menu detail to the guide.",
+  "The step-by-step user guide at nivadesk.app/guide and the in-app help assistant are part of Starter, Pro and Team. On Free, this chat is the place to ask: answer what NivaDesk does, what it costs and whether it fits, and leave the menu-by-menu detail to the guide.",
   "Every plan includes the NivaDesk ChatGPT app. It connects a workspace to ChatGPT through OAuth so the owner can ask about orders, notes, finances and bank spending in plain language, create orders from existing records, and attach receipts to bank transactions.",
   "Banking: business bank accounts connect through Open Banking. NivaDesk shows spending by category, recurring payments, receipts matched to transactions and VAT treatment. Bank access is owner-only unless the owner grants a member the Bank Spending permission.",
   "Billing is monthly or yearly through Stripe, on Apple and Google in-app purchase where applicable. Plans can be changed or cancelled at any time.",
@@ -3837,7 +3882,7 @@ exports.askAppAssistant = onCall({ region: "europe-west2" }, async (request) => 
     const { companyData } = await requireWorkspaceForBilling(request, false);
     const plan = billingPlanFromCompanyData(companyData);
     if (plan === "demo") {
-      throw new HttpsError("failed-precondition", "The in-app help assistant is available on Lite, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.");
+      throw new HttpsError("failed-precondition", "The in-app help assistant is available on Starter, Pro and Team. On the Free plan you can ask us from the chat on nivadesk.app.");
     }
 
     const question = cleanSupportMultiline(request.data?.question, 1000);
@@ -3965,7 +4010,7 @@ exports.getUserGuide = onCall({ region: "europe-west2" }, async (request) => {
     if (plan === "demo") {
       throw new HttpsError(
         "failed-precondition",
-        "The full user guide is part of Lite, Pro and Team. On the Free plan you can ask the chat on nivadesk.app."
+        "The full user guide is part of Starter, Pro and Team. On the Free plan you can ask the chat on nivadesk.app."
       );
     }
 
@@ -5650,7 +5695,7 @@ function cleanDashboardWidgetVisibility(value = {}) {
 function requireWorkspaceCardCustomization(companyData = {}) {
   const entitlements = billingEntitlementsForCompany(companyData);
   if (entitlements.cardCustomizationEnabled !== true) {
-    throw new HttpsError("failed-precondition", "Card customization is available from NivaDesk Lite.", {
+    throw new HttpsError("failed-precondition", "Card customization is available from NivaDesk Starter.", {
       requiredPlan: "lifetime_lite",
       plan: entitlements.plan,
       planName: entitlements.displayName
@@ -11880,7 +11925,7 @@ function applyWebSchedulePatch({ patch, orderData, updates, historyEntries, uid,
 
   const assertNotifyAllowed = (notify) => {
     if (notify && entitlements?.calendarRemindersEnabled !== true) {
-      throw new HttpsError("failed-precondition", "Apple Calendar and Reminders are available from NivaDesk Lite.");
+      throw new HttpsError("failed-precondition", "Apple Calendar and Reminders are available from NivaDesk Starter.");
     }
   };
 
@@ -13617,7 +13662,7 @@ const SWIFT_ORDER_FIELDS = [
   "workSessions",
   // Invoice, shipping and payment data the Swift apps show on every plan. These
   // were missing from the allowlist, so on plans that save through this callable
-  // (Free Demo / Lite) an invoice line the user typed never reached Firestore and
+  // (Free Demo / Starter) an invoice line the user typed never reached Firestore and
   // the next snapshot wiped it off their screen.
   "lineItems",
   "invoiceNote",
@@ -13976,7 +14021,7 @@ exports.updateWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   }
   const entitlements = billingEntitlementsForCompany(companyData);
   if (attemptedMaterialsEdit && !entitlements.materialsInventoryCardsEnabled) {
-    throw new HttpsError("failed-precondition", "Materials & Inventory is available from NivaDesk Lite.");
+    throw new HttpsError("failed-precondition", "Materials & Inventory is available from NivaDesk Starter.");
   }
   if (attemptedProjectAssignmentEdit && !canManageProjectAssignments(companyData, uid, normalizedRole)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot assign projects.");
@@ -22866,7 +22911,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_dashboard_summary",
       title: "Get dashboard summary",
-      description: "Read the connected workspace dashboard summary. ChatGPT App is available on every plan. Free Demo and Lite return permitted basic finance totals (Received, Base Cost and Basic Balance); Pro and Team can return advanced finance when the user role allows it.",
+      description: "Read the connected workspace dashboard summary. ChatGPT App is available on every plan. Free Demo and Starter return permitted basic finance totals (Received, Base Cost and Basic Balance); Pro and Team can return advanced finance when the user role allows it.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -22892,7 +22937,7 @@ function nvMcpOrderToolSchemas() {
     {
       name: "get_extra_spending_overview",
       title: "Get extra spending overview",
-      description: "Read permitted spending summary data for the connected workspace. Free Demo and Lite return Base Cost only. Pro and Team may include Shipping, Platform Fee, VAT / Tax and custom expenses when the user role allows financial access. Supports thisMonth, thisYear, allTime and customRange.",
+      description: "Read permitted spending summary data for the connected workspace. Free Demo and Starter return Base Cost only. Pro and Team may include Shipping, Platform Fee, VAT / Tax and custom expenses when the user role allows financial access. Supports thisMonth, thisYear, allTime and customRange.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -26817,7 +26862,7 @@ exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 6
   // Static comparison straight from the entitlement constants used by the app.
   const comparison = [
     { plan: "demo", label: "Free Demo", orders: "5", customers: "3", storage: "50 MB", seats: "1", monthly: 0, yearly: 0 },
-    { plan: "lifetime_lite", label: "Lite", orders: "Unlimited", customers: "Unlimited", storage: "250 MB", seats: "1", monthly: 9, yearly: 90 },
+    { plan: "lifetime_lite", label: "Starter", orders: "Unlimited", customers: "Unlimited", storage: "250 MB", seats: "1", monthly: 9, yearly: 90 },
     { plan: "pro_monthly", label: "Pro", orders: "Unlimited", customers: "Unlimited", storage: "10 GB", seats: "1", monthly: 19, yearly: 190 },
     { plan: "team_monthly", label: "Team", orders: "Unlimited", customers: "Unlimited", storage: "50 GB", seats: "5 (+5 add-on)", monthly: 49, yearly: 490 }
   ];

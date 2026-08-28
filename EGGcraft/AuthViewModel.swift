@@ -248,7 +248,7 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
     var displayName: String {
         switch self {
         case .demo: return "Free"
-        case .lifetimeLite: return "NivaDesk Lite"
+        case .lifetimeLite: return "NivaDesk Starter"
         case .proMonthly: return "NivaDesk Pro"
         case .teamMonthly: return "NivaDesk Team"
         }

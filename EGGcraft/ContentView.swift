@@ -17060,7 +17060,7 @@ struct SchedulePlannerView: View {
     private var schedulePlanNoticeText: String {
         switch authVM.currentBillingPlan {
         case .demo:
-            return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
         case .lifetimeLite:
             return t("Lite includes personal weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.", lang: seciliDil)
         case .proMonthly:
@@ -19176,7 +19176,7 @@ struct SchedulePlannerView: View {
     private func addAppleReminder(for order: Siparis) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
             reminderAlertTitle = t("Plan upgrade needed", lang: seciliDil)
-            reminderAlertMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            reminderAlertMessage = t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
             reminderAlertCanOpenSettings = false
             showReminderAlert = true
             return

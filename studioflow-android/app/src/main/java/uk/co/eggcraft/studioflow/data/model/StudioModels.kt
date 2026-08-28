@@ -17,7 +17,7 @@ enum class StudioBillingPlan(
     val accessLevel: Int
 ) {
     Demo("demo", "Free", 1, 50, 0),
-    LifetimeLite("lifetime_lite", "NivaDesk Lite", 1, 250, 1),
+    LifetimeLite("lifetime_lite", "NivaDesk Starter", 1, 250, 1),
     ProMonthly("pro_monthly", "NivaDesk Pro", 1, 10240, 2),
     TeamMonthly("team_monthly", "NivaDesk Team", 5, 51200, 3);
 
