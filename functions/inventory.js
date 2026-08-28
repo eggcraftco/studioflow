@@ -288,16 +288,16 @@ function createInventoryFunctions({
     });
   }
 
-  const saveInventoryItem = onCall({ region: REGION }, async (request) => {
-    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
-    const itemId = clean(request.data && request.data.itemId, "", 80);
-    const input = request.data && request.data.item;
+  // The write itself, callable-free: the ChatGPT tool creates items through the
+  // same transaction (numbering, ledger movement, reservations) rather than a
+  // second, thinner path that would drift from this one.
+  async function saveItemForWorkspace({ companyId, uid, email, itemId = "", input }) {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw new HttpsError("invalid-argument", "item is required.");
     }
     const now = Date.now();
 
-    const result = await db().runTransaction(async (tx) => {
+    return db().runTransaction(async (tx) => {
       let ref;
       let existing = null;
       if (itemId) {
@@ -373,7 +373,18 @@ function createInventoryFunctions({
 
       return { itemId: ref.id, number };
     });
+  }
 
+  const saveInventoryItem = onCall({ region: REGION }, async (request) => {
+    const { uid, email, companyId } = await requireInventoryAccess(request, { write: true });
+    const itemId = clean(request.data && request.data.itemId, "", 80);
+    const result = await saveItemForWorkspace({
+      companyId,
+      uid,
+      email,
+      itemId,
+      input: request.data && request.data.item
+    });
     return { ok: true, ...result };
   });
 
@@ -2622,7 +2633,7 @@ function createInventoryFunctions({
     applyRecipeToOrder,
     consumeInventoryForOrder,
     swapInventoryForOrder,
-    _internal: { normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
+    _internal: { saveItemForWorkspace, itemsRef, normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
   };
 }
 

@@ -20949,12 +20949,167 @@ function nvChatGPTDispatchAction(context, action = "", args = {}) {
       return nvChatGPTSearchBankTransactions(context, args);
     case "attach_bank_receipt":
       return nvChatGPTAttachBankReceipt(context, args);
+    case "search_inventory":
+      return nvChatGPTSearchInventory(context, args);
+    case "create_inventory_item":
+      return nvChatGPTCreateInventoryItem(context, args);
     default:
-      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_bank_spending_summary, search_bank_transactions, attach_bank_receipt.");
+      throw new HttpsError("invalid-argument", "Unknown action. Supported actions: create_order, search_orders, get_order_detail, add_order_note, update_order_status, create_note, search_notes, get_note_detail, append_note, update_note, pin_note, archive_note, get_order_financials, get_dashboard_summary, get_financial_overview, get_extra_spending_overview, get_bank_spending_summary, search_bank_transactions, attach_bank_receipt" + (NV_MCP_INVENTORY ? ", search_inventory, create_inventory_item." : "."));
   }
 }
 
 
+
+
+// MARK: - ChatGPT inventory tools
+//
+// The photo flow: ChatGPT looks at the picture the user took, says what it
+// thinks the item is, asks for whatever it cannot see (price, how many), and
+// only then calls create_inventory_item with confirmed:true. NivaDesk does the
+// writing, not the guessing — and it refuses the one confusion that would hurt:
+// a receipt photographed instead of a thing.
+
+const NV_RECEIPT_LOOKING_WORDS = /\b(invoice|receipt|vat\s*no|tax\s*invoice|subtotal|sub total|total due|amount due|fatura|fi[sş]|makbuz|irsaliye|rechnung|quittung|facture|factura|recibo|ricevuta)\b/i;
+
+function nvInventoryLooksLikeDocument(args = {}) {
+  const text = [args.name, args.description, args.notes, args.category, args.photo?.file_name]
+    .map((value) => nvCleanString(value || "", 300))
+    .join(" ");
+  return NV_RECEIPT_LOOKING_WORDS.test(text);
+}
+
+function nvRequireInventoryAccess(context) {
+  if (uidIsCompanyOwner(context.companyData, context.uid)) return true;
+  requireWorkspaceAreaAccess(context.companyData, context.uid, "orders", "Inventory is not enabled for your role. Ask the workspace owner to grant it in Team Access.");
+  if (!canFullyEditOrder(workspaceOrderRole(context.companyData, context.uid))) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot add inventory items.");
+  }
+  return true;
+}
+
+async function nvChatGPTSearchInventory(context, args = {}) {
+  nvRequireInventoryAccess(context);
+  const needle = nvCleanString(args.query || "", 120).toLowerCase();
+  const limit = Math.min(25, Math.max(1, Number(args.limit) || 10));
+  const snap = await inventoryInternal.itemsRef(context.companyId).limit(400).get();
+  const rows = [];
+  for (const doc of snap.docs) {
+    const data = doc.data() || {};
+    const haystack = [data.name, data.sku, data.serialNumber, data.brand, data.model, data.category, data.location]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+    if (needle && !haystack.includes(needle)) continue;
+    rows.push({
+      itemId: doc.id,
+      number: String(data.number || ""),
+      name: String(data.name || ""),
+      category: String(data.category || ""),
+      trackingType: String(data.trackingType || "unique"),
+      onHand: data.trackingType === "unique" ? 1 : Number((data.quantity || {}).onHand) || 0,
+      unit: String((data.quantity || {}).unit || ""),
+      location: String(data.location || ""),
+      status: String(data.status || "")
+    });
+    if (rows.length >= limit) break;
+  }
+  return { action: "search_inventory", ok: true, count: rows.length, items: rows };
+}
+
+async function nvChatGPTCreateInventoryItem(context, args = {}) {
+  nvRequireInventoryAccess(context);
+  const companyId = context.companyId;
+
+  // The boundary the user asked for: a photographed invoice belongs in the bank
+  // feed, never in stock. Refuse rather than quietly create "Invoice 4471".
+  if (nvInventoryLooksLikeDocument(args)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "That looks like an invoice or receipt, not a stock item. Use attach_bank_receipt to file it against a bank transaction. If it really is a physical item, name it as the item itself."
+    );
+  }
+
+  const name = nvCleanString(args.name || "", 160);
+  if (!name) throw new HttpsError("invalid-argument", "Tell NivaDesk what the item is (name).");
+  if (args.confirmed !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Show the user what you read from the photo — name, category, how many, unit price — ask them to confirm or correct it, then call again with confirmed:true."
+    );
+  }
+
+  const trackingType = args.trackingType === "quantity" ? "quantity" : "unique";
+  const quantity = Math.max(0, Number(args.quantity) || (trackingType === "quantity" ? 1 : 1));
+  const item = {
+    name,
+    category: nvCleanString(args.category || "", 60),
+    trackingType,
+    ownership: args.customerOwned === true ? "customer" : "business",
+    brand: nvCleanString(args.brand || "", 80),
+    model: nvCleanString(args.model || "", 80),
+    serialNumber: nvCleanString(args.serialNumber || "", 80),
+    sku: nvCleanString(args.sku || "", 60),
+    condition: nvCleanString(args.condition || "", 40),
+    description: nvCleanString(args.description || "", 2000),
+    location: nvCleanString(args.location || "", 80),
+    supplierName: nvCleanString(args.supplierName || "", 160),
+    purchasePrice: Number(args.purchasePrice) || 0,
+    currentValueEst: Number(args.currentValueEst) || 0,
+    notes: nvCleanString(args.notes || "", 2000),
+    source: "chatgpt",
+    ...(trackingType === "quantity"
+      ? { onHand: quantity, unit: nvCleanString(args.unit || "", 12) }
+      : {})
+  };
+
+  const saved = await inventoryInternal.saveItemForWorkspace({
+    companyId,
+    uid: context.uid,
+    email: context.email || "",
+    input: item
+  });
+
+  // The photo rides along when ChatGPT can hand us one: same storage shape the
+  // apps use, so it shows on the item everywhere.
+  let photoStored = false;
+  const photo = args.photo && typeof args.photo === "object" ? args.photo : null;
+  const photoUrl = nvCleanString(photo?.download_url || args.photoUrl || "", 2000);
+  if (photoUrl) {
+    try {
+      const source = /^https:\/\//i.test(photoUrl) ? photoUrl : nvAssertPublicHttpsUrl(photoUrl);
+      const response = await fetch(source, { redirect: "follow", headers: { Accept: "image/*" } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 0 && buffer.length <= 15 * 1024 * 1024) {
+        const mime = nvCleanString(photo?.mime_type || response.headers.get("content-type") || "", 100).split(";")[0].trim().toLowerCase();
+        if (mime.startsWith("image/")) {
+          const extension = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("heic") ? "heic" : "jpg";
+          const path = `companies/${companyId}/inventory_photos/${saved.itemId}/${Date.now()}-chatgpt.${extension}`;
+          await admin.storage().bucket().file(path).save(buffer, { contentType: mime, resumable: false });
+          await inventoryInternal.itemsRef(companyId).doc(saved.itemId).set({ photos: [path] }, { merge: true });
+          photoStored = true;
+        }
+      }
+    } catch (error) {
+      // The item is real and saved; a photo that would not download must not
+      // undo it — say so instead.
+      console.warn("create_inventory_item photo skipped:", error?.message || error);
+    }
+  }
+
+  return {
+    action: "create_inventory_item",
+    ok: true,
+    itemId: saved.itemId,
+    number: saved.number,
+    name,
+    trackingType,
+    quantity: trackingType === "quantity" ? quantity : 1,
+    photoStored,
+    message: photoStored
+      ? `Added ${name} to inventory as ${saved.number}, with the photo.`
+      : `Added ${name} to inventory as ${saved.number}.${photoUrl ? " The photo could not be saved — add it from the item's photo button." : ""}`
+  };
+}
 
 // MARK: - ChatGPT bank feed tools
 
@@ -22189,6 +22344,11 @@ function nvMcpToolsWithSecuritySchemes() {
 // receiptUrl / emailReceipt inputs to attach_bank_receipt so ChatGPT can pull an
 // invoice straight out of the user's mail. The handler already accepts them.
 const NV_MCP_EMAIL_RECEIPTS = process.env.NIVADESK_MCP_EMAIL_RECEIPTS === "1";
+// Same rule as the email receipts above: the published tools/list must stay
+// byte-identical to the snapshot OpenAI is reviewing. The inventory tools are
+// coded, tested and dispatchable; flip this to "1" and redeploy chatgptMcp once
+// the verdict lands, then tell OpenAI about the two new tools.
+const NV_MCP_INVENTORY = process.env.NIVADESK_MCP_INVENTORY === "1";
 
 function nvMcpOrderToolSchemas() {
   return [
@@ -22708,7 +22868,7 @@ function nvMcpOrderToolSchemas() {
       title: "Attach receipt to a bank transaction",
       description: (NV_MCP_EMAIL_RECEIPTS
         ? "Attach an invoice/receipt to the matching bank transaction in NivaDesk. The document can come from the chat (`receipt`), from a link you found for the user — including an attachment in their email or a hosted invoice page (`receiptUrl`) — or, when the invoice is only in an email body, from the message itself (`emailReceipt`). When the user asks to file the invoices sitting in their mail, read each one, then call this tool per invoice; NivaDesk matches it to the bank transaction by amount and date."
-        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : ""),
+        : "Attach an invoice/receipt the user shared in the chat to the matching bank transaction in NivaDesk. Pass the user's file as `receipt`.") + (NV_MCP_INVENTORY ? " If the photo shows a physical item rather than a document, use create_inventory_item instead." : "") + " NivaDesk OCRs images itself; for PDFs (or to help matching) also pass the total amount, the document date (YYYY-MM-DD) and the merchant name you read from the document. If NivaDesk finds one confident match it attaches the file immediately; if several transactions could match it returns candidates with an inboxPath — show them to the user, then call again with the chosen transactionId and the same inboxPath (no need to resend the file). Workspace owner only. Do not ask for companyId." + (NV_MCP_EMAIL_RECEIPTS ? " If nothing matches yet, NivaDesk keeps the receipt waiting and attaches it automatically when the payment reaches the bank feed." : ""),
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -22752,7 +22912,69 @@ function nvMcpOrderToolSchemas() {
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       _meta: { "openai/fileParams": ["receipt"] }
-    }
+    },
+    ...(NV_MCP_INVENTORY ? [
+      {
+        name: "search_inventory",
+        title: "Search inventory",
+        description: "Search the workspace's inventory by name, SKU, serial number, brand or location. Use it before adding something, so an item the workshop already has gets topped up instead of duplicated. Do not ask for companyId.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: [],
+          properties: {
+            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+            query: { type: "string", description: "What to look for — part of a name, SKU, serial number, brand or location." },
+            limit: { type: "integer", minimum: 1, maximum: 25, description: "Max items to return (default 10)." }
+          }
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+      },
+      {
+        name: "create_inventory_item",
+        title: "Add an inventory item",
+        description: "Add a physical item to NivaDesk inventory — typically from a photo the user just took. Look at the photo, say what you think it is (name, category, brand/model, condition) and ask the user to confirm or correct it, along with anything the photo cannot tell you: how many, and the purchase price. Only after they agree, call this with confirmed:true; pass the same photo as `photo` so it is stored on the item. IMPORTANT: this is for physical stock only. If the picture is an invoice, receipt or bill, do NOT use this tool — use attach_bank_receipt, which files it against a bank transaction. Workspace roles that can edit orders may use this. Do not ask for companyId.",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "confirmed"],
+          properties: {
+            companyId: { type: "string", description: "Optional. Usually omit this; the connected workspace is used automatically." },
+            confirmed: { type: "boolean", description: "Must be true, and only after the user has seen your reading of the photo and agreed to it." },
+            name: { type: "string", description: "What the item is, as the workshop would call it — e.g. \"Rolex Oyster bracelet 20mm\"." },
+            category: { type: "string", description: "Category, e.g. Watch, Part, Material, Tool, Packaging." },
+            trackingType: { type: "string", enum: ["unique", "quantity"], description: "unique = one identifiable object (has a serial); quantity = countable stock. Default unique." },
+            quantity: { type: "number", minimum: 0, description: "How many, for quantity items. Ask the user; do not guess from the photo." },
+            unit: { type: "string", description: "Unit for quantity items, e.g. pcs, m, g." },
+            purchasePrice: { type: "number", minimum: 0, description: "What the workshop paid, per unit. Ask the user; inventory value is based on this." },
+            currentValueEst: { type: "number", minimum: 0, description: "Optional estimate of today's value (insurance/resale). It does not change inventory value." },
+            brand: { type: "string" },
+            model: { type: "string" },
+            serialNumber: { type: "string", description: "Serial/reference if it is visible in the photo or the user gives it." },
+            sku: { type: "string" },
+            condition: { type: "string", description: "e.g. New, Used, Damaged." },
+            location: { type: "string", description: "Where it is kept, e.g. Drawer 3, Safe." },
+            supplierName: { type: "string" },
+            description: { type: "string" },
+            notes: { type: "string" },
+            customerOwned: { type: "boolean", description: "true when the item belongs to a customer (held, not owned). It is then valued at zero." },
+            photo: {
+              type: "object",
+              description: "The photo of the item the user shared in the chat.",
+              properties: {
+                download_url: { type: "string" },
+                file_id: { type: "string" },
+                mime_type: { type: "string" },
+                file_name: { type: "string" }
+              },
+              required: ["download_url", "file_id"]
+            }
+          }
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+        _meta: { "openai/fileParams": ["photo"] }
+      }
+    ] : [])
   ];
 }
 
