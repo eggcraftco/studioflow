@@ -37,6 +37,11 @@ struct NewInventoryItemSheet: View {
     /// Defined location paths plus every location already in use, offered
     /// beside the Location field. Free text still works.
     let locationSuggestions: [String]
+    /// The workspace's own category names, so this picker says what the
+    /// sidebar and the web say.
+    let categoryOptions: [String]
+    /// The category a brand-new item starts on, when the workspace picked one.
+    let defaultCategory: String
     let onSaved: () -> Void
 
     @State private var trackingType: InventoryTrackingType = .unique
@@ -80,6 +85,8 @@ struct NewInventoryItemSheet: View {
         itemId: String = "",
         tagSuggestions: [String] = [],
         locationSuggestions: [String] = [],
+        categoryOptions: [String] = [],
+        defaultCategory: String = "",
         onSaved: @escaping () -> Void
     ) {
         self.currencySymbol = currencySymbol
@@ -88,7 +95,14 @@ struct NewInventoryItemSheet: View {
         self.itemId = itemId
         self.tagSuggestions = tagSuggestions
         self.locationSuggestions = locationSuggestions
+        self.categoryOptions = categoryOptions.isEmpty ? inventoryCategories : categoryOptions
+        self.defaultCategory = defaultCategory
         self.onSaved = onSaved
+        // A new item starts on the workspace's chosen default rather than a
+        // category picked for it by us.
+        if existing == nil, !defaultCategory.isEmpty {
+            _category = State(initialValue: defaultCategory)
+        }
         guard let item = existing else { return }
         _trackingType = State(initialValue: item.trackingType)
         _name = State(initialValue: item.name)
@@ -138,7 +152,7 @@ struct NewInventoryItemSheet: View {
                 Section(t("Details", lang: lang)) {
                     TextField(t("Name", lang: lang), text: $name)
                     Picker(t("Category", lang: lang), selection: $category) {
-                        ForEach(inventoryCategories, id: \.self) { Text(t($0, lang: lang)).tag($0) }
+                        ForEach(categoryOptions, id: \.self) { Text(t($0, lang: lang)).tag($0) }
                     }
                     if trackingType == .unique {
                         TextField(t("Brand", lang: lang), text: $brand)
@@ -389,6 +403,8 @@ struct NewPurchaseSheet: View {
     let currencySymbol: String
     let lang: String
     let supplierNames: [String]
+    /// The workspace's own category names — same list the item form uses.
+    let categoryOptions: [String]
     let onSaved: () -> Void
 
     @State private var supplierName = ""
@@ -431,7 +447,7 @@ struct NewPurchaseSheet: View {
                         .pickerStyle(.segmented)
                         TextField(t("Name", lang: lang), text: $line.name)
                         Picker(t("Category", lang: lang), selection: $line.category) {
-                            ForEach(inventoryCategories, id: \.self) { Text(t($0, lang: lang)).tag($0) }
+                            ForEach(categoryOptions, id: \.self) { Text(t($0, lang: lang)).tag($0) }
                         }
                         if line.trackingType == .quantity {
                             TextField(t("Quantity", lang: lang), value: $line.quantity, format: .number)

@@ -8440,6 +8440,11 @@ struct ContentView: View {
                 }
             }
             if canAccessOrders {
+                phoneNavMenuRow(t("Production", lang: seciliDil), "hammer.fill") {
+                    aktifSekme = "Production"; phoneShowsOrderDetail = false
+                }
+            }
+            if canAccessOrders {
                 phoneNavMenuRow(t("Inventory", lang: seciliDil), "shippingbox.fill") {
                     aktifSekme = "Inventory"; phoneShowsOrderDetail = false
                 }
@@ -8773,6 +8778,9 @@ struct ContentView: View {
             }
             if canAccessBankSpending {
                 UstMenuButonu(title: t("Bank", lang: seciliDil), icon: "building.columns.fill", isSelected: aktifSekme == "BankSpending") { aktifSekme = "BankSpending" }
+            }
+            if canAccessOrders {
+                UstMenuButonu(title: t("Production", lang: seciliDil), icon: "hammer.fill", isSelected: aktifSekme == "Production") { aktifSekme = "Production" }
             }
             if canAccessOrders {
                 UstMenuButonu(title: t("Inventory", lang: seciliDil), icon: "shippingbox.fill", isSelected: aktifSekme == "Inventory") { aktifSekme = "Inventory" }
@@ -9179,6 +9187,22 @@ struct ContentView: View {
                     .environmentObject(firebaseManager)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(bgMain)
+            } else if aktifSekme == "Production" {
+                if canAccessOrders {
+                    ProductionView(canEdit: canEditWorkflowFields, onOpenOrder: { order in
+                        handleOrderTap(order)
+                        aktifSekme = "Orders"
+                        orderSelectionShouldScroll = true
+                    })
+                    .environmentObject(firebaseManager)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(bgMain)
+                } else {
+                    restrictedAccessView(
+                        title: t("Production hidden", lang: seciliDil),
+                        message: t("Your current workspace role does not include order access.", lang: seciliDil)
+                    )
+                }
             } else if aktifSekme == "Inventory" {
                 if canAccessOrders {
                     InventoryView().frame(maxWidth: .infinity, maxHeight: .infinity).background(bgMain)
@@ -11083,6 +11107,8 @@ struct ContentView: View {
         case "Orders": return canAccessOrders
         case "Dashboard": return canAccessDashboard
         case "BankSpending": return canAccessBankSpending
+        // Production is a view of the same work Orders holds.
+        case "Production": return canAccessOrders
         case "Inventory": return canAccessOrders
         case "Schedule": return canAccessSchedule
         case "TeamSchedule": return canAccessTeamSchedule

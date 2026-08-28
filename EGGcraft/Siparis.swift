@@ -236,6 +236,16 @@ struct OrderEstimateRecord: Equatable {
     }
 }
 
+/// Why a job stopped, as written on the order by the server. `reason` is a code
+/// so the wording can be translated; `note` is the operator's own words.
+struct OrderProductionBlocker: Codable, Equatable {
+    var reason: String
+    var note: String?
+    var atMs: Double?
+    var byUid: String?
+    var byName: String?
+}
+
 struct Siparis: Identifiable, Codable {
     @DocumentID var id: String?
     
@@ -279,6 +289,11 @@ struct Siparis: Identifiable, Codable {
     var deliveryCost: Double
     var taxType: String = "" // "Profit" veya "Revenue"
     var extraStatuses: [String: String]?
+    // Production board. Only these two are stored; the stage itself is derived
+    // from the steps above (see ProductionModels.swift), so the board and the
+    // order can never disagree. Optional so existing orders still decode.
+    var productionStageOverride: String?
+    var productionBlocker: OrderProductionBlocker?
     var taxRate: Double = 0.0    // Tax rate applied to the order (%)
     var invBool1: Bool = false
         var invBool2: Bool = false

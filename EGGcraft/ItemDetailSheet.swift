@@ -16,6 +16,9 @@ struct ItemDetailSheet: View {
     /// Defined location paths plus every location already in use — offered by
     /// the Move / Change Location editor. Free text still works.
     let locationSuggestions: [String]
+    /// The workspace's own category names, passed on to the edit form.
+    let categoryOptions: [String]
+    let defaultCategory: String
     let onChanged: () -> Void
 
     @State private var item: InventoryItem
@@ -32,13 +35,15 @@ struct ItemDetailSheet: View {
     @State private var locationDraft = ""
     @FocusState private var locationFocused: Bool
 
-    init(item: InventoryItem, currencySymbol: String, lang: String, canEdit: Bool, locationSuggestions: [String] = [], onChanged: @escaping () -> Void) {
+    init(item: InventoryItem, currencySymbol: String, lang: String, canEdit: Bool, locationSuggestions: [String] = [], categoryOptions: [String] = [], defaultCategory: String = "", onChanged: @escaping () -> Void) {
         _item = State(initialValue: item)
         _locationDraft = State(initialValue: item.location)
         self.currencySymbol = currencySymbol
         self.lang = lang
         self.canEdit = canEdit
         self.locationSuggestions = locationSuggestions
+        self.categoryOptions = categoryOptions
+        self.defaultCategory = defaultCategory
         self.onChanged = onChanged
     }
 
@@ -82,13 +87,13 @@ struct ItemDetailSheet: View {
             await loadLibraryFiles()
         }
         .sheet(isPresented: $editing) {
-            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: item, itemId: item.id, locationSuggestions: locationSuggestions) {
+            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: item, itemId: item.id, locationSuggestions: locationSuggestions, categoryOptions: categoryOptions, defaultCategory: defaultCategory) {
                 Task { await refresh() }
             }
             .environmentObject(firebaseManager)
         }
         .sheet(item: $duplicating) { source in
-            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: source, itemId: "", locationSuggestions: locationSuggestions) {
+            NewInventoryItemSheet(currencySymbol: currencySymbol, lang: lang, existing: source, itemId: "", locationSuggestions: locationSuggestions, categoryOptions: categoryOptions, defaultCategory: defaultCategory) {
                 Task { await refresh() }
             }
             .environmentObject(firebaseManager)

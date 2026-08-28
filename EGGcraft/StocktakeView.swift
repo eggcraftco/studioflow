@@ -16,6 +16,8 @@ struct StocktakeTab: View {
     let currencySymbol: String
     let lang: String
     let canEdit: Bool
+    /// The workspace's own category names, for the count filter.
+    let categoryOptions: [String]
     let onStockChanged: () -> Void
 
     @State private var summaries: [StocktakeSummary] = []
@@ -167,7 +169,7 @@ struct StocktakeTab: View {
                     .textFieldStyle(.roundedBorder)
                 Picker(t("Category", lang: lang), selection: $startCategory) {
                     Text(t("All Categories", lang: lang)).tag("")
-                    ForEach(inventoryCategories, id: \.self) { Text(t($0, lang: lang)).tag($0) }
+                    ForEach(categoryOptions, id: \.self) { Text(t($0, lang: lang)).tag($0) }
                 }
                 .pickerStyle(.menu).font(.system(size: 12))
                 Button(busy ? t("Starting…", lang: lang) : t("Start a count", lang: lang)) {

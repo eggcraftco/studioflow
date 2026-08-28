@@ -55,10 +55,34 @@ enum InventoryStatus: String, CaseIterable, Codable {
     }
 }
 
+/// The starting point for a brand-new workspace only. The live list belongs to
+/// the workspace (Inventory → Categories on web) and arrives with the item
+/// list; this is the fallback for the first paint before that lands.
 let inventoryCategories = [
     "Watches", "Dials", "Movements", "Bracelets", "Straps",
     "Parts", "Consumables", "Packaging", "Tools", "Other"
 ]
+
+/// One of the workspace's own categories. An item stores the TITLE, so a rename
+/// is carried to the items server-side; the id only lets an editor follow a row
+/// across a rename.
+struct InventoryCategory: Identifiable, Equatable {
+    let id: String
+    var title: String
+    var icon: String
+    var archived: Bool
+    var itemCount: Int
+
+    init?(_ raw: [String: Any]) {
+        guard let title = (raw["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else { return nil }
+        self.id = (raw["id"] as? String) ?? title.lowercased()
+        self.title = title
+        self.icon = (raw["icon"] as? String) ?? ""
+        self.archived = (raw["archived"] as? Bool) ?? false
+        self.itemCount = (raw["itemCount"] as? NSNumber)?.intValue ?? 0
+    }
+}
 
 struct InventoryAdditionalCost: Identifiable, Equatable {
     let id = UUID()
@@ -795,6 +819,10 @@ struct InventoryListCursor: Equatable {
 struct InventoryListPage {
     let items: [InventoryItem]
     let cursor: InventoryListCursor?
+    /// The workspace's own categories, served alongside the page so every
+    /// picker on this screen shows the same words the web does.
+    var categories: [InventoryCategory] = []
+    var defaultCategory: String = ""
 }
 
 /// One node of the location tree ("Safe A / Drawer 3"). The tree lives
@@ -893,7 +921,54 @@ extension FirebaseManager {
             next = InventoryListCursor(
                 updatedAtMs: (tail["updatedAtMs"] as? NSNumber)?.doubleValue ?? 0, id: id)
         }
-        return InventoryListPage(items: items, cursor: next)
+        let categories = (raw["categoryDetails"] as? [[String: Any]] ?? []).compactMap(InventoryCategory.init)
+        return InventoryListPage(
+            items: items,
+            cursor: next,
+            categories: categories,
+            defaultCategory: raw["defaultCategory"] as? String ?? "")
+    }
+
+    // MARK: - Categories
+    //
+    // A workshop names what it keeps. Renaming here renames it on every item,
+    // because the server carries the new title across — see
+    // functions/inventory.js. Removing one always says where its items go.
+
+    func loadInventoryCategories() async throws -> (categories: [InventoryCategory], defaultCategory: String, orphans: [(title: String, count: Int)]) {
+        let raw = try await inventoryCall("listInventoryCategories")
+        let rows = (raw["categories"] as? [[String: Any]] ?? []).compactMap(InventoryCategory.init)
+        let orphans = (raw["orphans"] as? [[String: Any]] ?? []).compactMap { entry -> (String, Int)? in
+            guard let title = entry["title"] as? String, !title.isEmpty else { return nil }
+            return (title, (entry["itemCount"] as? NSNumber)?.intValue ?? 0)
+        }
+        return (rows, raw["defaultCategory"] as? String ?? "", orphans)
+    }
+
+    @discardableResult
+    func saveInventoryCategories(_ categories: [InventoryCategory], defaultCategory: String) async throws -> [InventoryCategory] {
+        let payload: [String: Any] = [
+            "categories": categories.map { ["id": $0.id, "title": $0.title, "icon": $0.icon, "archived": $0.archived] },
+            "defaultCategory": defaultCategory
+        ]
+        let raw = try await inventoryCall("saveInventoryCategories", payload)
+        return (raw["categories"] as? [[String: Any]] ?? []).compactMap(InventoryCategory.init)
+    }
+
+    /// `disposition` is "move" (with `moveToId`), "archive" or "other". Without
+    /// one the server refuses to remove a category that still holds items.
+    @discardableResult
+    func deleteInventoryCategory(_ categoryId: String, disposition: String, moveToId: String = "") async throws -> Int {
+        var payload: [String: Any] = ["categoryId": categoryId, "disposition": disposition]
+        if disposition == "move" { payload["moveToId"] = moveToId }
+        let raw = try await inventoryCall("deleteInventoryCategory", payload)
+        return (raw["itemsMoved"] as? NSNumber)?.intValue ?? 0
+    }
+
+    @discardableResult
+    func mergeInventoryCategories(from: String, into: String) async throws -> Int {
+        let raw = try await inventoryCall("mergeInventoryCategories", ["fromId": from, "intoId": into])
+        return (raw["itemsMoved"] as? NSNumber)?.intValue ?? 0
     }
 
     func loadInventorySummary() async throws -> InventorySummary {

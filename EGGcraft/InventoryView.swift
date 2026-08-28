@@ -8,7 +8,7 @@ import SwiftUI
 
 
 enum InventoryTab: String, CaseIterable {
-    case items, purchases, suppliers, stocktake, locations, recipes, reports
+    case items, purchases, suppliers, stocktake, locations, recipes, reports, categories
 
     var label: String {
         switch self {
@@ -19,6 +19,7 @@ enum InventoryTab: String, CaseIterable {
         case .locations: return "Locations"
         case .recipes: return "Recipes"
         case .reports: return "Reports"
+        case .categories: return "Categories"
         }
     }
 }
@@ -38,6 +39,22 @@ final class InventoryScreenModel: ObservableObject {
     // Defined location paths ("Safe A / Drawer 3") — offered in the item form
     // so a fresh, still-empty location is pickable before anything stands in it.
     @Published var locationPaths: [String] = []
+    /// The workspace's own categories, served with the item page. Every picker
+    /// on this screen reads `categoryNames` so a rename on any platform shows
+    /// up here too.
+    @Published var categories: [InventoryCategory] = []
+    @Published var defaultCategory: String = ""
+
+    /// Visible categories, falling back to the shipped list only until the
+    /// server's answer lands, plus any category an item already claims so a
+    /// stale name can never be silently rewritten by the picker.
+    var categoryNames: [String] {
+        let live = categories.filter { !$0.archived }.map(\.title)
+        let base = live.isEmpty ? inventoryCategories : live
+        let used = items.map(\.category).filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return (base + used).filter { seen.insert($0).inserted }
+    }
 
     func loadLocationPaths(_ manager: FirebaseManager) async {
         // Best-effort, like the web: the item form works fine without the tree.
@@ -53,6 +70,8 @@ final class InventoryScreenModel: ObservableObject {
             let page = try await list
             items = page.items
             listCursor = page.cursor
+            categories = page.categories
+            defaultCategory = page.defaultCategory
             summary = try await totals
             notice = ""
         } catch {
@@ -165,7 +184,7 @@ struct InventoryView: View {
                 case .purchases: purchasesTab
                 case .suppliers: suppliersTab
                 case .stocktake:
-                    StocktakeTab(currencySymbol: seciliParaBirimi, lang: seciliDil, canEdit: canEdit) {
+                    StocktakeTab(currencySymbol: seciliParaBirimi, lang: seciliDil, canEdit: canEdit, categoryOptions: model.categoryNames) {
                         Task { await model.loadItems(firebaseManager) }
                     }
                     .environmentObject(firebaseManager)
@@ -177,6 +196,13 @@ struct InventoryView: View {
                             await model.loadItems(firebaseManager)
                             await model.loadLocationPaths(firebaseManager)
                         }
+                    }
+                    .environmentObject(firebaseManager)
+                case .categories:
+                    InventoryCategoriesTab(lang: seciliDil, canEdit: canEdit) {
+                        // A rename cascades into the items' category strings —
+                        // reload so every picker on this screen agrees.
+                        Task { await model.loadItems(firebaseManager) }
                     }
                     .environmentObject(firebaseManager)
                 case .recipes:
@@ -199,7 +225,9 @@ struct InventoryView: View {
                 currencySymbol: seciliParaBirimi,
                 lang: seciliDil,
                 canEdit: canEdit,
-                locationSuggestions: locationSuggestions
+                locationSuggestions: locationSuggestions,
+                categoryOptions: model.categoryNames,
+                defaultCategory: model.defaultCategory
             ) {
                 Task { await model.loadItems(firebaseManager) }
             }
@@ -219,7 +247,7 @@ struct InventoryView: View {
             .environmentObject(firebaseManager)
         }
         .sheet(isPresented: $showNewItem) {
-            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil, tagSuggestions: tagSuggestions, locationSuggestions: locationSuggestions) {
+            NewInventoryItemSheet(currencySymbol: seciliParaBirimi, lang: seciliDil, tagSuggestions: tagSuggestions, locationSuggestions: locationSuggestions, categoryOptions: model.categoryNames, defaultCategory: model.defaultCategory) {
                 Task { await model.loadItems(firebaseManager) }
             }
             .environmentObject(firebaseManager)
@@ -228,7 +256,8 @@ struct InventoryView: View {
             NewPurchaseSheet(
                 currencySymbol: seciliParaBirimi,
                 lang: seciliDil,
-                supplierNames: model.suppliers.map(\.name)
+                supplierNames: model.suppliers.map(\.name),
+                categoryOptions: model.categoryNames
             ) {
                 Task {
                     await model.loadPurchases(firebaseManager)
@@ -287,7 +316,7 @@ struct InventoryView: View {
                 case .suppliers:
                     Button { showNewSupplier = true } label: { Label(t("New Supplier", lang: seciliDil), systemImage: "plus") }
                         .buttonStyle(.borderedProminent)
-                case .stocktake, .locations, .recipes, .reports:
+                case .stocktake, .locations, .recipes, .reports, .categories:
                     EmptyView()
                 }
             }
@@ -311,7 +340,8 @@ struct InventoryView: View {
                         // fresh; the standing-item counts and the recipes'
                         // line summaries ride on the already-loaded item list.
                         case .locations, .recipes: if model.items.isEmpty { await model.loadItems(firebaseManager) }
-                        case .stocktake, .reports: break
+                        // Categories fetch their own list on appear.
+                        case .stocktake, .reports, .categories: break
                         }
                     }
                 } label: {
@@ -425,7 +455,7 @@ struct InventoryView: View {
               HStack(spacing: 8) {
                 Picker(t("Category", lang: seciliDil), selection: $categoryFilter) {
                     Text(t("All Categories", lang: seciliDil)).tag("")
-                    ForEach(inventoryCategories, id: \.self) { Text(t($0, lang: seciliDil)).tag($0) }
+                    ForEach(model.categoryNames, id: \.self) { Text(t($0, lang: seciliDil)).tag($0) }
                 }
                 Picker(t("Type", lang: seciliDil), selection: $typeFilter) {
                     Text(t("All Types", lang: seciliDil)).tag(InventoryTrackingType?.none)
