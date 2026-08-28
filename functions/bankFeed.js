@@ -147,7 +147,12 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const json = await res.json().catch(() => null);
     if (!res.ok || !json?.access_token) {
       const detail = json?.error_description || json?.error || `HTTP ${res.status}`;
-      throw new HttpsError("internal", `Bank data auth failed: ${detail}`);
+      const authError = new HttpsError("internal", `Bank data auth failed: ${detail}`);
+      // Which stage failed decides what we tell the owner: a refused consent
+      // is a reconnect, a refused request is a retry.
+      authError.tlStage = "auth";
+      authError.tlStatus = res.status;
+      throw authError;
     }
     return json;
   }
@@ -161,6 +166,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       const detail = json?.error_description || json?.error || `HTTP ${res.status}`;
       const err = new HttpsError(res.status === 429 ? "resource-exhausted" : "internal", `Bank data request failed: ${detail}`);
       err.tlStatus = res.status;
+      err.tlStage = "data";
       throw err;
     }
     return json;
@@ -233,14 +239,32 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     return token.access_token;
   }
 
-  async function syncAccountTransactions(companyId, connectionId, accountId, accessToken, rules = []) {
-    // Without an explicit range TrueLayer returns only ~3 months; ask for two
-    // years so the Year view can walk back. Providers cap this at whatever
-    // history the bank exposes — anything extra is simply not returned.
+  async function syncAccountTransactions(companyId, connectionId, accountId, accessToken, rules = [], { fullHistory = false } = {}) {
+    // Under PSD2 a bank only has to serve deep history while the customer is
+    // actually present (fresh SCA). An unattended sync asking for two years is
+    // answered with 403 Access denied by banks that enforce it — HSBC does —
+    // which looked exactly like a dead consent and sent people to reconnect
+    // every morning. So: the wide window right after authorisation, a 90-day
+    // window afterwards (everything older is already imported and kept), and a
+    // narrow retry before believing the connection is broken.
     const to = new Date();
-    const from = new Date(to.getFullYear() - 2, to.getMonth(), to.getDate());
-    const range = `from=${from.toISOString().slice(0, 10)}&to=${to.toISOString().slice(0, 10)}`;
-    const payload = await tlData(accessToken, `/data/v1/accounts/${accountId}/transactions?${range}`);
+    const wideFrom = new Date(to.getFullYear() - 2, to.getMonth(), to.getDate());
+    const recentFrom = new Date(to.getTime() - 89 * 24 * 60 * 60 * 1000);
+    const rangeFor = (from) => `from=${from.toISOString().slice(0, 10)}&to=${to.toISOString().slice(0, 10)}`;
+
+    let payload;
+    if (fullHistory) {
+      try {
+        payload = await tlData(accessToken, `/data/v1/accounts/${accountId}/transactions?${rangeFor(wideFrom)}`);
+      } catch (error) {
+        const status = Number(error?.tlStatus) || 0;
+        if (status !== 401 && status !== 403) throw error;
+        console.warn("bank sync: deep history refused, falling back to 90 days", accountId, error?.message || error);
+        payload = await tlData(accessToken, `/data/v1/accounts/${accountId}/transactions?${rangeFor(recentFrom)}`);
+      }
+    } else {
+      payload = await tlData(accessToken, `/data/v1/accounts/${accountId}/transactions?${rangeFor(recentFrom)}`);
+    }
     const booked = Array.isArray(payload?.results) ? payload.results : [];
     let pending = [];
     try {
@@ -391,7 +415,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const rules = await loadRules(companyId);
     for (const account of accounts) {
       try {
-        imported += await syncAccountTransactions(companyId, state, account.id, token.access_token, rules);
+        imported += await syncAccountTransactions(companyId, state, account.id, token.access_token, rules, { fullHistory: true });
       } catch (error) {
         console.warn("bankFinalizeRequisition initial sync failed:", account.id, error?.message || error);
       }
@@ -459,9 +483,17 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
   function classifySyncError(error) {
     const message = String(error?.message || error || "");
     const status = Number(error?.tlStatus) || 0;
+    const stage = String(error?.tlStage || "");
     if (status === 429) return { kind: "rate_limited", message };
-    if (status === 401 || status === 403 || /access denied|access_denied|invalid_grant|consent|unauthori[sz]ed|reconnect/i.test(message)) {
+    // The consent itself was refused: only the token exchange can prove that.
+    if (stage === "auth" || /invalid_grant/i.test(message)) {
       return { kind: "needs_reconsent", message: message.slice(0, 300) };
+    }
+    // A refused data request might be the bank narrowing what it serves while
+    // the customer is away. Report it as an error first; two in a row are
+    // treated as a dead consent by recordSyncFailure.
+    if (status === 401 || status === 403 || /access denied|access_denied|consent|unauthori[sz]ed|reconnect/i.test(message)) {
+      return { kind: "data_denied", message: message.slice(0, 300) };
     }
     return { kind: "error", message: message.slice(0, 300) };
   }
@@ -485,7 +517,11 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const failures = (Number(data.syncFailures) || 0) + 1;
     // One-off blips stay "ok"; a consent problem flips straight away, anything
     // else after two consecutive failures.
-    const nextState = failure.kind === "needs_reconsent" ? "needs_reconsent" : failures >= 2 ? "error" : (data.syncState || "ok");
+    const nextState = failure.kind === "needs_reconsent"
+      ? "needs_reconsent"
+      : failure.kind === "data_denied"
+        ? (failures >= 2 ? "needs_reconsent" : "error")
+        : failures >= 2 ? "error" : (data.syncState || "ok");
     await doc.ref.set({
       syncState: nextState,
       syncFailures: failures,
@@ -541,7 +577,7 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
         const accounts = Array.isArray(data.accounts) ? data.accounts : [];
         for (const account of accounts) {
           try {
-            const importedForAccount = await syncAccountTransactions(companyId, doc.id, account.id, accessToken, rules);
+            const importedForAccount = await syncAccountTransactions(companyId, doc.id, account.id, accessToken, rules, { fullHistory: false });
             imported += importedForAccount;
             importedForConnection += importedForAccount;
             ok = true;
