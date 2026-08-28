@@ -173,14 +173,39 @@ same `status` field every client already renders.
   write_orders` ONLY when the user enables reverse sync — requested via optional scope
   update flow). No others.
 
-## 10. Billing stance (v1)
+## 10. Billing (v2 — Shopify Billing API)
 
-The Shopify app is **free to install**; it requires a NivaDesk account whose subscription
-is billed by NivaDesk (Stripe) outside Shopify — the app itself charges nothing through
-Shopify, so the Billing API is not triggered. Listing copy discloses this explicitly.
-If App Review pushes back, fallback design (documented, not built): Shopify Billing
-subscription mapped to a NivaDesk entitlement doc — requires owner approval before any
-live charge.
+v1's stance was that the app charged nothing through Shopify and the NivaDesk subscription
+was billed by Stripe outside it. **App Review rejected that** (1.2.1, ref 129635, 28 Aug
+2026): an app distributed on their App Store must charge through their Billing API, and the
+reviewer saw a Stripe redirect. The fallback the section named is now the design.
+
+**The rule.** A workspace reached through a Shopify install is billed by Shopify. The stamp
+goes on at connect time (`companies/{id}.shopifyLinkedShop`), not at first purchase, so a
+merchant cannot route around Shopify by opening nivadesk.app.
+
+**Except** a workspace that already pays us: `workspaceBilledOutsideShopify()` — a live
+Stripe subscription (`active` / `trialing` / `past_due` with a subscription id) keeps its
+billing, and the embedded app then sells nothing and says where the billing lives. No new
+off-platform charge can be created, which is what the policy protects.
+
+**The catalogue lives on the server** (`SHOPIFY_BILLING_PLANS` in functions/index.js):
+Starter £9, Pro £19, Team £49 per month, GBP, 14-day trial through Shopify's own
+`trialDays`. The embedded app hardcodes no price — one place to change, so the listing, the
+charge and the entitlement cannot disagree. The trial spends the same one-per-workspace
+`billingTrialUsedAt` stamp the Stripe checkout and the automatic trial read.
+
+**Flow.** `/app/plan` → bridge `billingPlanRequest` (server prices it) → `appSubscriptionCreate`
+→ Shopify's approval screen → return to `/app/plan?charge_id=…&plan=…` → the subscription is
+read back from `currentAppInstallation` (never trusted from the query string) → bridge
+`billingApply` writes the entitlement. `app_subscriptions/update` runs the same idempotent
+writer, so a cancellation, expiry or freeze lands whether or not anyone has the app open.
+
+**Development stores** can only take test charges; `SHOPIFY_BILLING_TEST=true` sets
+`test: true` on the mutation. A live charge against a dev store fails in a way that reads to
+a reviewer as a server error.
+
+Regression: `functions/test/qa/shopify-billing.test.js`.
 
 ## 11. Reverse sync (opt-in, default off)
 

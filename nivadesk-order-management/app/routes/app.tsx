@@ -23,6 +23,7 @@ export default function App() {
         <s-link href="/app/settings">Sync settings</s-link>
         <s-link href="/app/import">Import orders</s-link>
         <s-link href="/app/history">Sync history</s-link>
+        <s-link href="/app/plan">Plans</s-link>
         <s-link href="/app/support">Support</s-link>
       </s-app-nav>
       <Outlet />

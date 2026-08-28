@@ -29,7 +29,8 @@ api_version = "2026-10"
     "refunds/create",
     "customers/create",
     "customers/update",
-    "app/uninstalled"
+    "app/uninstalled",
+    "app_subscriptions/update"
   ]
 
   [[webhooks.subscriptions]]

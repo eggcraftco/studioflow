@@ -46,8 +46,13 @@ every paid order arrives as a production job, not just a line in a list.
 - **Works everywhere** — NivaDesk runs on the web, Mac, iPhone and Android, with
   home-screen widgets and a ChatGPT app.
 
-**Pricing** — this app is free. It connects to a NivaDesk account (free demo tier
-available; paid plans are billed by NivaDesk, not through Shopify).
+**Pricing** — charged through Shopify Billing, on the merchant's Shopify invoice.
+Free tier, then Starter £9, Pro £19 and Team £49 per month, each with a 14-day free
+trial. These three plans must be declared on the listing's Pricing section in the
+Partner Dashboard, matching `SHOPIFY_BILLING_PLANS` in functions/index.js exactly.
+
+The previous wording ("billed by NivaDesk, not through Shopify") is what App Review
+rejected under 1.2.1 — do not restore it.
 
 **Getting started** takes about two minutes: install the app, press Connect, sign in
 to NivaDesk (or create an account), pick a workspace — new orders start syncing

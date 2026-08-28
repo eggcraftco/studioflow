@@ -27781,6 +27781,153 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
 // ---------------------------------------------------------------------------
 
 const SHOPIFY_CONNECT_URL = "https://nivadesk.app/connect/shopify";
+// ---------------------------------------------------------------------------
+// Shopify Billing
+//
+// Shopify's rule 1.2.1: an app distributed on their App Store must charge
+// through THEIR Billing API, not an outside gateway. Sending a merchant to
+// Stripe Checkout is what got the listing paused, so a workspace linked to a
+// Shopify store is billed by Shopify — full stop.
+//
+// The catalogue lives here, on the server, and reaches the embedded app through
+// the bridge. The app never hardcodes a price: one place to change, and the
+// listing, the charge and the entitlement can never disagree about what Pro
+// costs.
+// ---------------------------------------------------------------------------
+
+const SHOPIFY_BILLING_PLANS = [
+  { plan: "lifetime_lite", name: "NivaDesk Starter", amount: 9, interval: "EVERY_30_DAYS" },
+  { plan: "pro_monthly", name: "NivaDesk Pro", amount: 19, interval: "EVERY_30_DAYS", recommended: true },
+  { plan: "team_monthly", name: "NivaDesk Team", amount: 49, interval: "EVERY_30_DAYS" }
+];
+
+// Shopify bills in the app's own currency. Ours is GBP, matching the prices the
+// website and the App Store listing show.
+const SHOPIFY_BILLING_CURRENCY = "GBP";
+const SHOPIFY_BILLING_TRIAL_DAYS = AUTOMATIC_TRIAL_DAYS;
+
+function shopifyBillingPlanFor(planKey) {
+  return SHOPIFY_BILLING_PLANS.find((entry) => entry.plan === String(planKey || "")) || null;
+}
+
+/**
+ * Is this workspace already paying us somewhere else?
+ *
+ * A merchant who already subscribes through Stripe must not be sold the same
+ * thing twice, so the embedded app shows no purchase buttons for that
+ * workspace — it says where the billing lives and links there instead. No new
+ * off-platform charge can be created, which is what the policy is about.
+ */
+function workspaceBilledOutsideShopify(companyData = {}) {
+  const provider = String(companyData.billingProvider || "").toLowerCase();
+  if (provider === "shopify") return false;
+  const status = String(companyData.billingStatus || "").toLowerCase();
+  const paidStatus = status === "active" || status === "trialing" || status === "past_due";
+  return paidStatus && Boolean(String(companyData.billingSubscriptionId || "").trim());
+}
+
+/** What the embedded app should show: the catalogue, plus where billing lives. */
+async function shopifyBillingStateFor(companyId) {
+  const empty = {
+    plans: SHOPIFY_BILLING_PLANS.map((entry) => ({ ...entry, currency: SHOPIFY_BILLING_CURRENCY })),
+    currency: SHOPIFY_BILLING_CURRENCY,
+    trialDays: SHOPIFY_BILLING_TRIAL_DAYS,
+    connected: false,
+    billedElsewhere: false,
+    currentPlan: "demo",
+    currentPlanName: "Free",
+    subscriptionStatus: "",
+    manageUrl: ""
+  };
+  const clean = String(companyId || "").trim();
+  if (!clean) return empty;
+
+  const snap = await admin.firestore().collection("companies").doc(clean).get();
+  if (!snap.exists) return empty;
+  const data = snap.data() || {};
+  const plan = billingPlanFromCompanyData(data);
+  const entitlements = PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.demo;
+
+  return {
+    ...empty,
+    connected: true,
+    billedElsewhere: workspaceBilledOutsideShopify(data),
+    currentPlan: plan,
+    currentPlanName: entitlements.displayName || String(data.billingPlanName || "Free"),
+    subscriptionStatus: String(data.shopifySubscriptionStatus || data.billingStatus || ""),
+    // Where a Stripe-billed merchant goes to see their own billing.
+    manageUrl: "https://nivadesk.app/plan"
+  };
+}
+
+/**
+ * Writes the entitlement a Shopify subscription grants.
+ *
+ * Called twice on purpose: once when the merchant returns from Shopify's
+ * approval screen (so the plan is live before they can blink) and again from
+ * the app_subscriptions/update webhook (so a cancellation, expiry or freeze
+ * lands even if nobody has the app open). Both routes are idempotent.
+ */
+async function applyShopifySubscription(shop, companyId, subscription = {}) {
+  const clean = String(companyId || "").trim();
+  if (!clean) return { ok: false, error: "no_company" };
+
+  const status = String(subscription.status || "").toUpperCase();
+  const planKey = String(subscription.plan || "");
+  const catalogue = shopifyBillingPlanFor(planKey);
+  const companyRef = admin.firestore().collection("companies").doc(clean);
+  const snap = await companyRef.get();
+  if (!snap.exists) return { ok: false, error: "unknown_company" };
+  const data = snap.data() || {};
+
+  // Never overwrite a Stripe/Apple/Google subscription with a Shopify one: the
+  // merchant would lose what they are already paying for.
+  if (workspaceBilledOutsideShopify(data)) {
+    return { ok: false, error: "billed_elsewhere" };
+  }
+
+  const active = status === "ACTIVE" || status === "ACCEPTED";
+  const update = {
+    shopifyShop: String(shop || ""),
+    shopifySubscriptionGid: String(subscription.gid || ""),
+    shopifySubscriptionStatus: status,
+    shopifySubscriptionUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    billingProvider: "shopify",
+    billingPlanSource: "shopify",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (active && catalogue) {
+    const entitlements = PLAN_ENTITLEMENTS[catalogue.plan] || PLAN_ENTITLEMENTS.demo;
+    Object.assign(update, {
+      billingPlan: catalogue.plan,
+      billingPlanName: entitlements.displayName || catalogue.name,
+      billingStatus: subscription.trialing ? "trialing" : "active",
+      billingStorageLimitMB: entitlements.storageLimitMB ?? null,
+      billingTeamMemberLimit: entitlements.teamMemberLimit ?? null
+    });
+    if (subscription.trialEndsAtMs) {
+      update.billingTrialEndsAt = admin.firestore.Timestamp.fromMillis(Number(subscription.trialEndsAtMs));
+      // Spends the same one-per-workspace stamp the Stripe checkout reads, so
+      // nobody collects a fortnight here and another one there.
+      update.billingTrialUsedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+  } else {
+    // Cancelled, expired, declined or frozen: back to Free, nothing deleted.
+    const free = PLAN_ENTITLEMENTS.demo;
+    Object.assign(update, {
+      billingPlan: "demo",
+      billingPlanName: free.displayName || "Free",
+      billingStatus: "free",
+      billingStorageLimitMB: free.storageLimitMB ?? null,
+      billingTeamMemberLimit: free.teamMemberLimit ?? null
+    });
+  }
+
+  await companyRef.set(update, { merge: true });
+  return { ok: true, plan: update.billingPlan, status };
+}
+
 const SHOPIFY_STORE_DEFAULT_SETTINGS = {
   autoSync: true,
   filterMode: "all", // all | include_products | include_collections | exclude_products
@@ -27929,6 +28076,62 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
     const snap = await ref.get();
     if (!snap.exists) { res.status(404).json({ ok: false, error: "unknown_store" }); return; }
     const data = snap.data() || {};
+
+    if (action === "billingState") {
+      // What the embedded app shows on its Plans page: the catalogue, and where
+      // this workspace's billing actually lives.
+      res.json({ ok: true, billing: await shopifyBillingStateFor(data.companyId) });
+      return;
+    }
+
+    if (action === "billingPlanRequest") {
+      // The app asks what to charge; it never decides the price itself.
+      const companyId = String(data.companyId || "").trim();
+      if (!companyId) { res.status(400).json({ ok: false, error: "not_connected" }); return; }
+      const entry = shopifyBillingPlanFor(req.body?.plan);
+      if (!entry) { res.status(400).json({ ok: false, error: "unknown_plan" }); return; }
+      const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+      const companyData = companySnap.exists ? (companySnap.data() || {}) : {};
+      if (workspaceBilledOutsideShopify(companyData)) {
+        res.status(409).json({ ok: false, error: "billed_elsewhere" });
+        return;
+      }
+      res.json({
+        ok: true,
+        plan: entry.plan,
+        name: entry.name,
+        amount: entry.amount,
+        currency: SHOPIFY_BILLING_CURRENCY,
+        interval: entry.interval,
+        // One trial per workspace, however it was started — the same stamp the
+        // Stripe checkout and the automatic trial both read.
+        trialDays: workspaceHasUsedTrial(companyData) ? 0 : SHOPIFY_BILLING_TRIAL_DAYS
+      });
+      return;
+    }
+
+    if (action === "billingApply") {
+      // Called when the merchant returns from Shopify's approval screen, and
+      // again by the app_subscriptions/update webhook. Idempotent either way.
+      const result = await applyShopifySubscription(shop, data.companyId, {
+        gid: req.body?.subscriptionGid,
+        status: req.body?.status,
+        plan: req.body?.plan,
+        trialing: req.body?.trialing === true,
+        trialEndsAtMs: Number(req.body?.trialEndsAtMs) || 0
+      });
+      if (!result.ok) { res.status(409).json({ ok: false, error: result.error }); return; }
+      await ref.set({
+        billingSubscriptionGid: String(req.body?.subscriptionGid || ""),
+        billingSubscriptionStatus: String(req.body?.status || ""),
+        // Remembered because app_subscriptions/update does not say which plan
+        // the subscription was for.
+        billingPlanKey: String(req.body?.plan || ""),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.json({ ok: true, plan: result.plan, status: result.status });
+      return;
+    }
 
     if (action === "beginConnect") {
       const nonce = crypto.randomBytes(24).toString("hex");
@@ -28158,6 +28361,19 @@ exports.shopifyCompleteConnect = onCall({ region: "europe-west2" }, async (reque
     connectNonceExpiresAt: admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp()
   }, { merge: true });
+
+  // Mark the workspace as reached through Shopify. A merchant who arrives from
+  // the App Store must buy through Shopify's Billing API — rule 1.2.1 — so the
+  // Stripe controls have to disappear from the moment the store is linked, not
+  // only once a Shopify subscription exists. An existing NivaDesk subscriber
+  // keeps theirs: the stamp says where they came from, and
+  // workspaceBilledOutsideShopify still wins over it.
+  await admin.firestore().collection("companies").doc(companyId).set({
+    shopifyLinkedShop: shop,
+    shopifyLinkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
   return {
     ok: true,
     shop,
@@ -28748,6 +28964,32 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
     if (!store) {
       console.warn("shopifyAppWebhook: unknown store", shop, topic);
       res.status(200).json({ ok: true, ignored: "unknown_store" });
+      return;
+    }
+
+    if (topic === "app_subscriptions/update") {
+      // Cancelled, expired, frozen or declined — this has to land whether or not
+      // anyone has the embedded app open, which is the whole point of the
+      // webhook. Same idempotent writer the approval return uses.
+      const subscription = body?.app_subscription || {};
+      const status = String(subscription.status || "").toUpperCase();
+      const gid = String(subscription.admin_graphql_api_id || "");
+      // Which plan it was is not on this payload, so it is read back from the
+      // store's own record of what the merchant bought.
+      const plan = String(store.billingPlanKey || "");
+      await applyShopifySubscription(shop, store.companyId, {
+        gid,
+        status,
+        plan,
+        trialing: false,
+        trialEndsAtMs: 0
+      });
+      await shopifyStoreRef(shop).set({
+        billingSubscriptionGid: gid,
+        billingSubscriptionStatus: status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      res.status(200).json({ ok: true });
       return;
     }
 

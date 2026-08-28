@@ -165,7 +165,15 @@ export default function PlanPage() {
   // the gated test accounts. Purchase buttons are shown to workspace owners;
   // the backend enforces who can actually complete a checkout.
   const liveBillingEnabled = process.env.NEXT_PUBLIC_NIVADESK_BILLING_LIVE !== "false";
-  const purchasesEnabled = liveBillingEnabled || allowInternalBillingTests;
+  // A workspace billed through Shopify is billed by Shopify — full stop. Their
+  // rule 1.2.1 forbids an outside gateway for an App Store app, and offering
+  // Stripe here would be a genuine double charge on top of that.
+  // Either already billed by Shopify, or reached through a Shopify install and
+  // not already paying us elsewhere. A merchant who arrived from the App Store
+  // must not be able to route around Shopify by opening the website.
+  const shopifyBilled = (workspace?.billingProvider || "").toLowerCase() === "shopify"
+    || (Boolean(workspace?.shopifyLinkedShop) && !workspace?.billingSubscriptionId);
+  const purchasesEnabled = !shopifyBilled && (liveBillingEnabled || allowInternalBillingTests);
   const purchaseLabel = (label: string) =>
     liveBillingEnabled || !allowInternalBillingTests ? label : `Test ${label}`;
 
@@ -350,6 +358,18 @@ export default function PlanPage() {
             </div>
           </section>
 
+          {shopifyBilled ? (
+            <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+              <div className="pill">Billing</div>
+              <h2 style={{ margin: "10px 0 6px" }}>This workspace is billed through Shopify</h2>
+              <p style={{ color: "var(--muted)", margin: 0, maxWidth: 720 }}>
+                Your NivaDesk plan is charged on your Shopify invoice, and changing or cancelling it
+                happens in the NivaDesk app inside your Shopify admin — under Settings ▸ Apps.
+                Nothing is charged here.
+              </p>
+            </section>
+          ) : null}
+
           <section className="plan-compare-grid" style={{ marginBottom: 18 }}>
             {Object.values(PLAN_ENTITLEMENTS).map(plan => {
               const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
@@ -357,6 +377,10 @@ export default function PlanPage() {
               const canManage = isWorkspaceOwner(workspace.role);
               const footer = isActive ? (
                 <span>Your workspace is using this plan.</span>
+              ) : shopifyBilled ? (
+                // Not a dead card: say where the plan is bought instead of
+                // showing a button that must not exist here.
+                <span>Change this plan from NivaDesk inside your Shopify admin.</span>
               ) : checkout && purchasesEnabled ? (
                 <div style={{ display: "grid", gap: 8, width: "100%" }}>
                   <button
