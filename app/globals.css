@@ -25302,7 +25302,13 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
   stroke-width: 1.6px;
 }
 .public-site .public-connected-diagram { position: relative; }
-.public-site .public-connected-diagram > * { position: relative; z-index: 1; }
+/* The connector SVG must stay OUT of the grid flow: this blanket rule used to
+   win over its own position:absolute (same specificity, later in the file),
+   so the lines took a column and shoved the cards into a broken layout. */
+.public-site .public-connected-diagram > *:not(.public-connected-lines) {
+  position: relative;
+  z-index: 1;
+}
 .public-site .public-connected-card::after { display: none; }
 .public-site .public-connected-center-head {
   display: flex;
