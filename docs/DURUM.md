@@ -1429,7 +1429,14 @@ yer yok — o yüzden ancak listeden, kayıt sonrası izin veriyordu.
   yeniden kullanıldı. Yan bulgu: repository inventorySaveItem sunucunun
   döndürdüğü itemId'yi ATIYORDU — artık döndürüyor (bu olmadan
   kayıt-sonrası yükleme mümkün değildi). 12 sınırı ortak sabite alındı.
-- Mac/iOS: agent çalışıyor.
+- Mac/iOS (8023948, macOS + iOS BUILD SUCCEEDED): aynı akış; PhotosPicker
+  ile sahneleme + ImageIO ile 320px küçük önizleme (12 tam çözünürlüklü
+  görsel telefonda bellek yükü), upload yolu ItemPhotosSheet'in ta kendisi.
+  Swift'te de saveInventoryItem sunucunun itemId'sini ATIYORDU — artık
+  döndürüyor (Android'dekiyle aynı sessiz eksik). 12 sınırı sabite alındı.
+  İki bilinçli sapma (ikisi de daha güvenli): küçültülmüş önizleme ve
+  kısmi hatadan sonra ikinci Save AYNI ürünü düzenler (web'de yeni kayıt
+  oluşurdu) — createdItemId ile.
 
 **2) "How do I…?" yardım paneli saydam görünüyor (kullanıcı bildirimi):**
 Panel saydam DEĞİLDİ — hiç arka planı yoktu: CSS'te hiçbir yerde
