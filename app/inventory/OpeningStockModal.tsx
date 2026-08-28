@@ -10,6 +10,7 @@
 // skipped says so and why.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -31,13 +32,6 @@ const SAMPLE = `Name\tType\tCategory\tOn hand\tUnit\tPurchase price\tLocation
 Rolex 1601 silver dial\tunique\tDials\t1\t\t2300\tSafe A
 Dial feet solder\tquantity\tConsumables\t20\tpcs\t5\tDrawer 3`;
 
-function money(symbol: string, value: number) {
-  return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
-
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -53,6 +47,7 @@ export function OpeningStockModal({
   onClose: () => void;
   onImported: (count: number) => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 

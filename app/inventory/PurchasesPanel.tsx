@@ -9,6 +9,7 @@
 // from a bank feed.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import {
@@ -48,13 +49,6 @@ type BankRow = {
   purchaseNumber: string;
 };
 
-function money(symbol: string, value: number) {
-  return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
-
 function emptyLine(): DraftLine {
   return {
     name: "",
@@ -91,6 +85,7 @@ export function PurchasesPanel({
   supplierNames: string[];
   onStockChanged: () => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 
@@ -351,6 +346,7 @@ function NewPurchaseModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const [supplierName, setSupplierName] = useState("");
@@ -721,6 +717,7 @@ function MatchPaymentModal({
   onClose: () => void;
   onMatched: () => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const [rows, setRows] = useState<BankRow[]>([]);
