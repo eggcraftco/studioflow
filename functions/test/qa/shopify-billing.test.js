@@ -245,4 +245,117 @@ const workspaceBilledOutsideShopify = new Function(
   pass("the trial the listing promises is the trial the charge screen shows");
 }
 
-console.log("\n✅ SHOPIFY BILLING GEÇTİ");
+// 11. An upgrade does not cancel the plan it just bought.
+//
+// Shopify does not amend a subscription in place: it activates the new one and
+// cancels the old one. Our dev store received both webhooks inside the same
+// second (two POSTs, 20:28:03, both 200). Read naively, the cancellation of the
+// REPLACED plan says "this merchant has no subscription" and writes Free over
+// the upgrade they just paid for. The workspace survived on Team that time by
+// the luck of which write landed second — which is not a property to ship.
+{
+  const fn = server.slice(
+    server.indexOf("async function applyShopifySubscription("),
+    server.indexOf("const SHOPIFY_STORE_DEFAULT_SETTINGS")
+  );
+  assert(fn.length > 200, "applyShopifySubscription is in index.js");
+
+  assert(
+    /runTransaction\(/.test(fn),
+    "the writer is transactional, so two deliveries cannot both read the stale doc"
+  );
+  assert(
+    /tx\.get\(companyRef\)/.test(fn) && /tx\.set\(companyRef/.test(fn),
+    "and it reads and writes inside that transaction, not around it"
+  );
+  assert(
+    /superseded_subscription/.test(fn),
+    "a cancellation naming a subscription we no longer hold is ignored"
+  );
+  // The guard must not swallow a genuine cancellation of the CURRENT plan —
+  // that is the whole reason the webhook exists.
+  const guard = fn.slice(fn.indexOf("const heldGid"), fn.indexOf("superseded_subscription"));
+  assert(
+    /!active/.test(guard) && /gid !== heldGid/.test(guard),
+    "it only ignores a NON-active status for a DIFFERENT subscription"
+  );
+  assert(
+    !/heldGid\s*\|\|\s*!gid/.test(guard),
+    "an unknown-gid workspace still downgrades, rather than becoming uncancellable"
+  );
+  pass("an upgrade does not cancel the plan it just bought");
+}
+
+// 12. The same, actually executed — both delivery orders, not just grepped.
+//
+// #11 reads the source; this one runs it. Shopify sent the pair 144ms apart on
+// the live switch, and a single run only ever exercises one order. So drive the
+// real function with both, against a transaction that serialises the way
+// Firestore does, and require the workspace to land on the plan the merchant
+// bought either way.
+{
+  const src = server.slice(
+    server.indexOf("async function applyShopifySubscription("),
+    server.indexOf("const SHOPIFY_STORE_DEFAULT_SETTINGS")
+  );
+
+  function runOrder(deliveries) {
+    let doc = {
+      billingPlan: "team_monthly",
+      billingProvider: "shopify",
+      billingPlanSource: "shopify",
+      billingStatus: "active",
+      shopifySubscriptionGid: "gid://shopify/AppSubscription/TEAM"
+    };
+    // One doc, one lock: a transaction body sees the latest write, and the
+    // real one retries rather than committing on a stale read.
+    const stamp = { seconds: 0 };
+    const fakeAdmin = {
+      firestore: Object.assign(() => ({
+        collection: () => ({ doc: () => ({ __ref: true }) }),
+        runTransaction: async (fn) => fn({
+          get: async () => ({ exists: true, data: () => ({ ...doc }) }),
+          set: (_ref, update) => { doc = { ...doc, ...update }; }
+        })
+      }), {
+        FieldValue: { serverTimestamp: () => stamp },
+        Timestamp: { fromMillis: (ms) => ({ ms }) }
+      })
+    };
+    const apply = new Function(
+      "admin", "workspaceBilledOutsideShopify", "shopifyBillingPlanFor", "PLAN_ENTITLEMENTS",
+      `${src}\nreturn applyShopifySubscription;`
+    )(
+      fakeAdmin,
+      () => false,
+      (key) => (key === "pro_monthly" ? { plan: "pro_monthly", name: "NivaDesk Pro" } : null),
+      { pro_monthly: { displayName: "Pro" }, demo: { displayName: "Free" } }
+    );
+    return deliveries
+      .reduce((chain, d) => chain.then(() => apply("shop", "c1", d)), Promise.resolve())
+      .then(() => doc.billingPlan);
+  }
+
+  const activated = {
+    gid: "gid://shopify/AppSubscription/PRO", status: "ACTIVE", plan: "pro_monthly"
+  };
+  const cancelledOld = {
+    gid: "gid://shopify/AppSubscription/TEAM", status: "CANCELLED", plan: "team_monthly"
+  };
+
+  Promise.all([
+    runOrder([activated, cancelledOld]),
+    runOrder([cancelledOld, activated])
+  ]).then(([first, second]) => {
+    assert.strictEqual(first, "pro_monthly",
+      "activation first: the replaced plan's cancellation must not undo it");
+    assert.strictEqual(second, "pro_monthly",
+      "cancellation first: the activation that follows still wins");
+    pass("both webhook orders converge on the plan the merchant bought");
+    console.log("\n✅ SHOPIFY BILLING GEÇTİ");
+  }).catch((error) => {
+    console.error("FAIL ", error.message);
+    process.exit(1);
+  });
+}
+

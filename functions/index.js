@@ -27917,6 +27917,16 @@ async function shopifyBillingStateFor(companyId) {
  * approval screen (so the plan is live before they can blink) and again from
  * the app_subscriptions/update webhook (so a cancellation, expiry or freeze
  * lands even if nobody has the app open). Both routes are idempotent.
+ *
+ * Runs in a transaction, and ignores the death notice of a subscription we no
+ * longer hold. Both guards exist for the same event: an upgrade. Shopify does
+ * not amend a subscription, it activates the new one and cancels the old one,
+ * and it delivered both webhooks for our dev store inside the same second.
+ * Without the gid check, the cancellation of the plan being REPLACED reads as
+ * "this merchant has no plan" and writes Free over the upgrade they just paid
+ * for; without the transaction, both deliveries read the same stale document
+ * and the later write wins, which on our test was Team purely by luck.
+ * Together they converge on the surviving subscription in either order.
  */
 async function applyShopifySubscription(shop, companyId, subscription = {}) {
   const clean = String(companyId || "").trim();
@@ -27926,7 +27936,11 @@ async function applyShopifySubscription(shop, companyId, subscription = {}) {
   const planKey = String(subscription.plan || "");
   const catalogue = shopifyBillingPlanFor(planKey);
   const companyRef = admin.firestore().collection("companies").doc(clean);
-  const snap = await companyRef.get();
+  const gid = String(subscription.gid || "");
+  const active = status === "ACTIVE" || status === "ACCEPTED";
+
+  return admin.firestore().runTransaction(async (tx) => {
+  const snap = await tx.get(companyRef);
   if (!snap.exists) return { ok: false, error: "unknown_company" };
   const data = snap.data() || {};
 
@@ -27936,7 +27950,14 @@ async function applyShopifySubscription(shop, companyId, subscription = {}) {
     return { ok: false, error: "billed_elsewhere" };
   }
 
-  const active = status === "ACTIVE" || status === "ACCEPTED";
+  // A cancellation only cancels the plan it names. On an upgrade the old
+  // subscription is cancelled a moment after the new one starts, so treating
+  // any cancellation as "no plan" would downgrade a merchant mid-payment.
+  const heldGid = String(data.shopifySubscriptionGid || "");
+  if (!active && gid && heldGid && gid !== heldGid) {
+    return { ok: true, ignored: "superseded_subscription", plan: data.billingPlan };
+  }
+
   const update = {
     shopifyShop: String(shop || ""),
     shopifySubscriptionGid: String(subscription.gid || ""),
@@ -27974,8 +27995,9 @@ async function applyShopifySubscription(shop, companyId, subscription = {}) {
     });
   }
 
-  await companyRef.set(update, { merge: true });
+  tx.set(companyRef, update, { merge: true });
   return { ok: true, plan: update.billingPlan, status };
+  });
 }
 
 const SHOPIFY_STORE_DEFAULT_SETTINGS = {
