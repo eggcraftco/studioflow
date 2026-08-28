@@ -1409,3 +1409,36 @@ Bulgu: o listede İKİ tür kayıt var — siparişe bağlı uygulama notları
   "New note" düğmesi Project Notes'ta da görünüyordu — düzeltildi.
 - Rehber: Notes bölümü EN+TR bulleti (aynı metin, kopya değil vurgusu);
   corpus + 4 fonksiyon deploy; bot sondası confident:True.
+
+---
+
+## 28 Ağu — Envanter fotoğrafı ekleme anında + yardım paneli okunur (tur 59-60)
+
+**1) "Add item ekranından fotoğraf yüklenemiyor" (kullanıcı bildirimi):**
+Sebep: envanter fotoğraf yolu ÜRÜN KİMLİĞİNE göre kuruluyor
+(companies/<c>/inventory_photos/<itemId>/...), ürün yokken yükleyecek
+yer yok — o yüzden ancak listeden, kayıt sonrası izin veriyordu.
+- Web (tur 59 canlı): Add/Edit formuna "Photos" satırı — dosyalar
+  YEREL sahnelenir (önizleme + × ile çıkar, 12 sınırı mevcut fotoğrafları
+  sayar), Save'de sıra: ürünü kaydet → dönen itemId → fotoğrafları o
+  kimliğe yükle → ürünü photos ile tekrar kaydet. Yükleme başarısızsa
+  ürün KAYBOLMAZ, dürüst mesaj çıkar. Dev E2E: gerçek PNG ile yeni ürün
+  → photos dizisinde storage yolu doğrulandı.
+- Android (c3ed821, BUILD SUCCESSFUL): aynı akış; PickMultipleVisualMedia
+  + Coil önizleme; ItemPhotosDialog'un ta kendisi olan upload yolu
+  yeniden kullanıldı. Yan bulgu: repository inventorySaveItem sunucunun
+  döndürdüğü itemId'yi ATIYORDU — artık döndürüyor (bu olmadan
+  kayıt-sonrası yükleme mümkün değildi). 12 sınırı ortak sabite alındı.
+- Mac/iOS: agent çalışıyor.
+
+**2) "How do I…?" yardım paneli saydam görünüyor (kullanıcı bildirimi):**
+Panel saydam DEĞİLDİ — hiç arka planı yoktu: CSS'te hiçbir yerde
+tanımlanmamış `var(--card)` kullanılmış (tasarım sisteminde token
+`--surface`). Yazı kutusu da tanımsız `--bg, #fff` ile koyu temada
+beyaz kalıyordu. İkisi de gerçek token'lara bağlandı; dev'de ölçüldü:
+koyu rgb(31,31,31), açık rgb(255,255,255) — tam opak.
+**Aynı aileden 22 sessiz hata daha taranıp düzeltildi:** --studio-surface
+/--studio-text/--studio-border (dashboard tarih alanı, Extra Spending
+grupları, sipariş notu başlıkları), --plan-accent/--plan-accent-soft
+(public fiyatlandırma öne çıkan kart, rozet, ikon zemini), --primary
+(roller paneli). Tur 60 yayında.
