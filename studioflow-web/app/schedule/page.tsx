@@ -47,12 +47,12 @@ const SCHEDULE_ZOOM_STORAGE_KEY = "studioflow-schedule-timeline-zoom";
 const MIN_SCHEDULE_ZOOM = 0.45;
 const MAX_SCHEDULE_ZOOM = 2.2;
 
-const SPANS: Array<{ id: ScheduleSpan; label: string }> = [
-  { id: "weekly", label: "Weekly" },
-  { id: "monthly", label: "Monthly" },
-  { id: "threeMonths", label: "3 Months" },
-  { id: "sixMonths", label: "6 Months" },
-  { id: "yearly", label: "Yearly" }
+const SPANS: Array<{ id: ScheduleSpan; label: string; short: string }> = [
+  { id: "weekly", label: "Weekly", short: "Week" },
+  { id: "monthly", label: "Monthly", short: "Month" },
+  { id: "threeMonths", label: "3 Months", short: "3M" },
+  { id: "sixMonths", label: "6 Months", short: "6M" },
+  { id: "yearly", label: "Yearly", short: "Year" }
 ];
 
 const FILTERS = ORDER_QUICK_FILTERS;
@@ -413,6 +413,8 @@ export default function SchedulePage() {
   const [hoveredOrderId, setHoveredOrderId] = useState("");
   // One-time gesture guide: shown until dismissed, remembered per browser.
   const [showScheduleGuide, setShowScheduleGuide] = useState(false);
+  // The tip is one line by default; the full explanation opens on demand.
+  const [scheduleGuideOpen, setScheduleGuideOpen] = useState(false);
   useEffect(() => {
     try {
       if (window.localStorage.getItem("studioflow-schedule-guide-seen") !== "1") setShowScheduleGuide(true);
@@ -622,6 +624,21 @@ export default function SchedulePage() {
   const clampedTimelineZoom = Math.min(MAX_SCHEDULE_ZOOM, Math.max(MIN_SCHEDULE_ZOOM, timelineZoom));
   const baseDayWidth = span === "weekly" ? 168 : span === "monthly" ? 118 : span === "threeMonths" ? 58 : span === "sixMonths" ? 38 : 28;
   const dayWidth = Math.max(18, Math.round(baseDayWidth * clampedTimelineZoom));
+  // How many days actually fit on screen right now — the number the zoom
+  // control is really moving.
+  const [timelineViewportWidth, setTimelineViewportWidth] = useState(0);
+  useEffect(() => {
+    const scroller = timelineScrollRef.current;
+    if (!scroller || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      setTimelineViewportWidth(Math.round(width));
+    });
+    observer.observe(scroller);
+    setTimelineViewportWidth(scroller.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+  const daysOnScreen = Math.max(1, Math.round((timelineViewportWidth || 0) / dayWidth) || 1);
   const visibleDayCount = Math.max(1, daysBetween(visibleStart, visibleEnd));
   const visibleDays = useMemo(() => dateRange(visibleStart, visibleDayCount), [visibleDayCount, visibleStart]);
   const minimumTimelineWidth = span === "weekly" ? 980 : span === "monthly" ? 1300 : span === "threeMonths" ? 2100 : span === "sixMonths" ? 2600 : 3600;
@@ -1089,24 +1106,27 @@ export default function SchedulePage() {
               />
             </div>
 
-            <label className="schedule-control">
-              <span>{t("Filter by Status")}</span>
+            {/* One row, three groups: what you are looking at, when, and how
+                wide. The old stacked labels pushed the controls into each
+                other — the value itself now says what the control is. */}
+            <label className="schedule-search-field schedule-search-desktop">
+              <span aria-hidden="true">⌕</span>
+              <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Search orders")} aria-label={t("Search Orders")} />
+            </label>
+
+            <label className="schedule-control schedule-control-bare">
+              <span className="visually-hidden">{t("Filter by Status")}</span>
               <select value={filter} onChange={event => setFilter(event.target.value as ScheduleFilter)}>
                 {filterOptions.map(option => <option key={option.id} value={option.id}>{t(option.label)}</option>)}
               </select>
             </label>
 
-            <label className="schedule-control schedule-mobile-sort-control">
-              <span>{t("Sort")}</span>
+            <label className="schedule-control schedule-control-bare schedule-mobile-sort-control">
+              <span className="visually-hidden">{t("Sort")}</span>
               <select value={sortMode} onChange={event => setSortMode(event.target.value as OrderSortMode)}>
-                <option value="smart">{t("Smart")}</option>
-                <option value="recent">{t("Recent")}</option>
+                <option value="smart">{t("Smart sort")}</option>
+                <option value="recent">{t("Recent first")}</option>
               </select>
-            </label>
-
-            <label className="schedule-control schedule-search-control schedule-search-desktop">
-              <span>{t("Search Orders")}</span>
-              <input value={search} onChange={event => setSearch(event.target.value)} placeholder={t("Customer, design, status...")} />
             </label>
 
             <div className="schedule-range-control">
@@ -1129,43 +1149,41 @@ export default function SchedulePage() {
 
             <div className="schedule-zoom-control" role="group" aria-label={t("Timeline zoom")} title={t("Timeline zoom")}>
               <button type="button" onClick={() => adjustScheduleZoom(-0.15)} disabled={clampedTimelineZoom <= MIN_SCHEDULE_ZOOM + 0.001} aria-label={t("Zoom out")} title={t("Zoom out")}>−</button>
-              {/* The percentage doubles as a preset picker: fixed steps plus
-                  Fit, which sizes the day width so the whole range is visible. */}
-              <select
-                className="schedule-zoom-preset"
-                value={String(Math.round(clampedTimelineZoom * 100))}
-                aria-label={t("Zoom presets")}
-                onChange={event => {
-                  if (event.target.value === "fit") {
-                    const scroller = timelineScrollRef.current;
-                    if (scroller && scroller.clientWidth > 0) {
-                      setScheduleZoom((scroller.clientWidth - 34) / (visibleDayCount * baseDayWidth));
-                    }
-                    return;
-                  }
-                  setScheduleZoom(Number(event.target.value) / 100);
-                }}
-              >
-                {[75, 100, 125, 150].includes(Math.round(clampedTimelineZoom * 100)) ? null : (
-                  <option value={String(Math.round(clampedTimelineZoom * 100))}>{Math.round(clampedTimelineZoom * 100)}%</option>
-                )}
-                <option value="75">75%</option>
-                <option value="100">100%</option>
-                <option value="125">125%</option>
-                <option value="150">150%</option>
-                <option value="fit">{t("Fit")}</option>
-              </select>
+              {/* A percentage told nobody anything; how many days fit on screen
+                  is the thing being changed. */}
+              <span className="schedule-zoom-readout">{daysOnScreen} {t("days")}</span>
               <button type="button" onClick={() => adjustScheduleZoom(0.15)} disabled={clampedTimelineZoom >= MAX_SCHEDULE_ZOOM - 0.001} aria-label={t("Zoom in")} title={t("Zoom in")}>+</button>
               <button type="button" onClick={() => setScheduleZoom(1)} aria-label={t("Reset zoom")} title={t("Reset to 100%")}>↺</button>
+              <button
+                type="button"
+                className="schedule-zoom-fit"
+                onClick={() => {
+                  const scroller = timelineScrollRef.current;
+                  if (scroller && scroller.clientWidth > 0) {
+                    setScheduleZoom((scroller.clientWidth - 34) / (visibleDayCount * baseDayWidth));
+                  }
+                }}
+                title={t("Fit the whole range on screen")}
+              >
+                {t("Fit")}
+              </button>
             </div>
 
             <div className="schedule-mobile-span-row">
-              <label className="schedule-control schedule-span-control">
-                <span>{t("Range")}</span>
-                <select value={span} onChange={event => setSpan(event.target.value as ScheduleSpan)}>
-                  {spanOptions.map(option => <option key={option.id} value={option.id}>{t(option.label)}</option>)}
-                </select>
-              </label>
+              <div className="schedule-span-segment" role="group" aria-label={t("Range")}>
+                {spanOptions.map(option => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={span === option.id ? "is-active" : ""}
+                    aria-pressed={span === option.id}
+                    onClick={() => setSpan(option.id as ScheduleSpan)}
+                    title={t(option.label)}
+                  >
+                    {t(option.short)}
+                  </button>
+                ))}
+              </div>
               <button
                 className={search.trim() || mobileSearchOpen ? "schedule-mobile-search-toggle active" : "schedule-mobile-search-toggle"}
                 type="button"
@@ -1186,17 +1204,26 @@ export default function SchedulePage() {
             ) : null}
           </div>
 
-          {notice ? (
+          {notice || (!teamMode && showScheduleGuide && canEditSchedule) ? (
             <div className="schedule-plan-notice">
-              <span aria-hidden="true">{workspace?.billingPlan === "team_monthly" ? "Team" : "Lite"}</span>
-              <p>{t(notice)}</p>
+              {notice ? (
+                <>
+                  <span aria-hidden="true">{workspace?.billingPlan === "team_monthly" ? "Team" : "Lite"}</span>
+                  <p>{t(notice)}</p>
+                </>
+              ) : null}
+              {!teamMode && showScheduleGuide && canEditSchedule ? (
+                <button type="button" className="schedule-guide-link" onClick={() => setScheduleGuideOpen(value => !value)}>
+                  ⓘ {t("How moving and resizing works")}
+                </button>
+              ) : null}
             </div>
           ) : null}
 
           {scheduleStatus ? <p className="layout-status schedule-action-message">{scheduleStatus}</p> : null}
           {scheduleError ? <p className="layout-error schedule-action-message">{scheduleError}</p> : null}
 
-          {!teamMode && showScheduleGuide && canEditSchedule ? (
+          {!teamMode && showScheduleGuide && canEditSchedule && scheduleGuideOpen ? (
             <div className="schedule-first-use-guide" role="note">
               <div>
                 <strong>{t("Three ways to move an order")}</strong>
@@ -1507,6 +1534,14 @@ export default function SchedulePage() {
                 );
               })}
             </div>
+            {/* Outside the scroller on purpose: the period and its counts must
+                stay put while the timeline scrolls sideways under them. */}
+            <div className="schedule-timeline-card-head">
+              <strong>{rangeText}</strong>
+              <span>
+                {filteredOrders.length} {t("orders")} · {lateCount} {t("late")} · {readyCount} {t("ready to ship")}
+              </span>
+            </div>
             <div
               ref={timelineScrollRef}
               className={`schedule-timeline-scroll${scheduleTimelinePanning ? " is-panning" : ""}`}
@@ -1518,10 +1553,7 @@ export default function SchedulePage() {
               onWheel={handleScheduleTimelineWheel}
             >
               <div className="schedule-timeline-canvas" style={{ width: timelineWidth }}>
-                <div className="schedule-timeline-title-row">
-                  <strong>{rangeText}</strong>
-                  <span>{visibleOrders.length} {t(visibleOrders.length === 1 ? "order" : "orders")}</span>
-                </div>
+
                 {monthSegments.length > 1 ? (
                   <div className="schedule-month-header" aria-hidden="true">
                     {monthSegments.map((segment, index) => (
