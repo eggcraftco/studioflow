@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
@@ -1862,6 +1862,17 @@ function layoutWithCardSize(
     cardHeights: nextHeights,
     columnWidths: nextWidths
   };
+}
+
+
+// The order screen is one file with many small sub-components, and most of them
+// render text. Threading a `t` prop into each was the alternative; this keeps
+// the language in one place and costs one line per component.
+const DetailLanguageContext = createContext("English");
+
+function useDetailT() {
+  const language = useContext(DetailLanguageContext);
+  return (text: string) => studioT(text, language);
 }
 
 export function OrderDetailContent({
@@ -5968,7 +5979,7 @@ export function OrderDetailContent({
                     type="button"
                     className="portal-pill is-off"
                     disabled
-                    title="No SMS provider is connected yet"
+                    title={t("No SMS provider is connected yet")}
                   >
                     OFF
                   </button>
@@ -6012,23 +6023,23 @@ export function OrderDetailContent({
               ))}
 
               <InlineMultilineRow
-                label="Condition"
+                label={t("Condition")}
                 value={linesText(repairIntake?.condition)}
-                placeholder="One per line"
+                placeholder={t("One per line")}
                 disabled={intakeDisabled}
                 onSave={value => saveRepairIntakePatch({ condition: toLines(value) }, "Repair intake · Condition")}
               />
 
               <InlineMultilineRow
-                label="Requested Work"
+                label={t("Requested Work")}
                 value={linesText(repairIntake?.requestedWork)}
-                placeholder="One per line"
+                placeholder={t("One per line")}
                 disabled={intakeDisabled}
                 onSave={value => saveRepairIntakePatch({ requestedWork: toLines(value) }, "Repair intake · Requested Work")}
               />
 
               <InlineMultilineRow
-                label="Customer Instructions"
+                label={t("Customer Instructions")}
                 value={repairIntake?.customerInstructions ?? ""}
                 disabled={intakeDisabled}
                 onSave={value => saveRepairIntakePatch({ customerInstructions: value }, "Repair intake · Customer Instructions")}
@@ -6133,7 +6144,7 @@ export function OrderDetailContent({
                     value={previewLinkDraft}
                     autoFocus
                     disabled={Boolean(previewActioning)}
-                    placeholder="Paste photo link..."
+                    placeholder={t("Paste photo link...")}
                     onChange={event => setPreviewLinkDraft(event.target.value)}
                     onKeyDown={event => {
                       if (event.key === "Escape") {
@@ -6161,7 +6172,7 @@ export function OrderDetailContent({
                     type="button"
                     disabled={Boolean(previewActioning)}
                     aria-expanded={previewMenuOpen}
-                    aria-label="Preview actions"
+                    aria-label={t("Preview actions")}
                     onClick={() => setPreviewMenuOpen(current => !current)}
                   >
                     {previewActioning ? "…" : "..."}
@@ -6342,7 +6353,7 @@ export function OrderDetailContent({
                 />
               </div>
             ) : (
-              <LockedInline title="Materials & Inventory locked" note="Materials cards are available from NivaDesk Lite." />
+              <LockedInline title={t("Materials & Inventory locked")} note={t("Materials cards are available from NivaDesk Lite.")} />
             )}
           </section>
         );
@@ -6374,7 +6385,7 @@ export function OrderDetailContent({
               />
               {order.risk && order.risk !== "None" ? (
                 <InlineSelectRow
-                  label="Risk reason"
+                  label={t("Risk reason")}
                   value={order.riskReason || "-"}
                   options={RISK_REASON_OPTIONS}
                   disabled={!canEditWorkflowFields}
@@ -6394,8 +6405,8 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-delivery-panel">
               <div className="app-delivery-grid">
-                <SoftMetricCard label="Created Date" value={formatShortDate(order.paymentDate)} tone="blue" icon="▦" />
-                <SoftMetricCard label="Delivery Due" value={formatShortDate(order.dueDate)} tone={deliveryMetricTone} icon="⚑" />
+                <SoftMetricCard label={t("Created Date")} value={formatShortDate(order.paymentDate)} tone="blue" icon="▦" />
+                <SoftMetricCard label={t("Delivery Due")} value={formatShortDate(order.dueDate)} tone={deliveryMetricTone} icon="⚑" />
               </div>
               <div className={`app-time-remaining is-${deliveryTone}`}>
                 <span>◔</span>
@@ -6422,7 +6433,7 @@ export function OrderDetailContent({
               </div>
               <div className="app-card-divider" />
               <InlineValueRow
-                label="Delivery Time"
+                label={t("Delivery Time")}
                 value={order.deliveryTime > 0 ? String(order.deliveryTime) : ""}
                 displayValue={order.deliveryTime > 0 ? `${order.deliveryTime} days` : "-"}
                 inputType="number"
@@ -6432,7 +6443,7 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ deliveryTime: Number(value) }, "Delivery Time")}
               />
               <InlineValueRow
-                label="Delivery Due"
+                label={t("Delivery Due")}
                 value={dateInputValue(order.dueDate)}
                 displayValue={formatDate(order.dueDate)}
                 inputType="date"
@@ -6441,7 +6452,7 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ deliveryDueDate: String(value) }, "Delivery Due")}
               />
               <InlineValueRow
-                label="Created Date"
+                label={t("Created Date")}
                 value={dateInputValue(order.paymentDate)}
                 displayValue={formatDate(order.paymentDate)}
                 inputType="date"
@@ -6485,7 +6496,7 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-customer-panel">
               <InlineValueRow
-                label="Customer Name"
+                label={t("Customer Name")}
                 value={order.customerName}
                 displayValue={normalizeOrderCustomerName(order.customerName)}
                 disabled={!canInlineEditFullDetails}
@@ -6522,7 +6533,7 @@ export function OrderDetailContent({
               ) : null}
               {showCommunicationTelephone ? (
                 <InlineValueRow
-                  label="Telephone"
+                  label={t("Telephone")}
                   value={order.whatsappNumber || ""}
                   disabled={!canInlineEditFullDetails}
                   saving={savingInlineField === "Telephone"}
@@ -6531,7 +6542,7 @@ export function OrderDetailContent({
               ) : null}
               {showCommunicationEmail ? (
                 <InlineValueRow
-                  label="Email"
+                  label={t("Email")}
                   value={order.emailAddress || ""}
                   inputType="email"
                   disabled={!canInlineEditFullDetails}
@@ -6541,7 +6552,7 @@ export function OrderDetailContent({
               ) : null}
               {showCommunicationAddress ? (
                 <InlineValueRow
-                  label="Address"
+                  label={t("Address")}
                   value={order.customFields.communicationAddress || order.customFields.Address || ""}
                   disabled={!canInlineEditFullDetails}
                   saving={savingInlineField === "Address"}
@@ -6583,7 +6594,7 @@ export function OrderDetailContent({
                 <>
                   <div className="app-card-divider" />
                   <InlineNotesField
-                    title="Customer Notes"
+                    title={t("Customer Notes")}
                     value={order.customFields.communicationCustomerNotes || ""}
                     disabled={!canInlineEditFullDetails}
                     saving={savingInlineField === "Customer Notes"}
@@ -6615,7 +6626,7 @@ export function OrderDetailContent({
                       onSave={savePaidFinanceValue}
                     />
                     <FinanceInlineRow
-                      label="Remaining"
+                      label={t("Remaining")}
                       displayValue={money(order.remainingAmount, hideNumbers)}
                       value={order.remainingAmount}
                       tone="positive"
@@ -6731,7 +6742,7 @@ export function OrderDetailContent({
                                   <button
                                     type="button"
                                     className="finance-payments-delete"
-                                    aria-label="Cancel note edit"
+                                    aria-label={t("Cancel note edit")}
                                     onClick={() => setEditingPaymentNoteId(null)}
                                   >
                                     ×
@@ -6748,8 +6759,8 @@ export function OrderDetailContent({
                                 <button
                                   type="button"
                                   className="finance-payments-delete"
-                                  aria-label="Edit payment note"
-                                  title="Edit note"
+                                  aria-label={t("Edit payment note")}
+                                  title={t("Edit note")}
                                   disabled={savingFinanceField === "Payment"}
                                   onClick={() => {
                                     setEditingPaymentNoteText(payment.note || "");
@@ -6763,7 +6774,7 @@ export function OrderDetailContent({
                                 <button
                                   type="button"
                                   className="finance-payments-delete"
-                                  aria-label="Remove payment"
+                                  aria-label={t("Remove payment")}
                                   disabled={savingFinanceField === "Payment"}
                                   onClick={() => void deletePaymentEntry(payment.id)}
                                 >
@@ -6776,7 +6787,7 @@ export function OrderDetailContent({
                       ) : null}
                     </div>
                     <FinanceInlineRow
-                      label="Payment method"
+                      label={t("Payment method")}
                       displayValue={order.paymentMethod || "-"}
                       value={order.paymentMethod || "Card"}
                       mode="select"
@@ -6824,7 +6835,7 @@ export function OrderDetailContent({
                       </button>
                     ) : null}
                     <FinanceInlineRow
-                      label="Platform Fee"
+                      label={t("Platform Fee")}
                       displayValue={money(order.paymentFee, hideNumbers)}
                       value={order.paymentFee}
                       tone="negative-soft"
@@ -6833,7 +6844,7 @@ export function OrderDetailContent({
                       onSave={value => saveMoneyFinanceValue("paymentFee", value, "Platform Fee")}
                     />
                     <FinanceInlineRow
-                      label="Shipping Cost"
+                      label={t("Shipping Cost")}
                       displayValue={money(order.deliveryCost, hideNumbers)}
                       value={order.deliveryCost}
                       tone="negative"
@@ -6843,7 +6854,7 @@ export function OrderDetailContent({
                     />
                     <div className="app-card-divider" />
                     <FinanceInlineRow
-                      label="VAT Rule"
+                      label={t("VAT Rule")}
                       displayValue={order.taxType || "-"}
                       value={order.taxType || "Revenue"}
                       mode="select"
@@ -6853,7 +6864,7 @@ export function OrderDetailContent({
                       onSave={value => saveFinancePatch({ taxType: String(value) }, "VAT Rule")}
                     />
                     <FinanceInlineRow
-                      label="VAT Rate (%)"
+                      label={t("VAT Rate (%)")}
                       displayValue={`${order.taxRate}%`}
                       value={order.taxRate}
                       tone="negative"
@@ -6861,7 +6872,7 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "VAT Rate (%)"}
                       onSave={value => saveMoneyFinanceValue("taxRate", value, "VAT Rate (%)")}
                     />
-                    <DetailRow label="VAT Amount" value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
+                    <DetailRow label={t("VAT Amount")} value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
                       <span>Order Value</span>
@@ -6869,18 +6880,18 @@ export function OrderDetailContent({
                     </div>
                     {corporationTaxEnabled ? (
                       <>
-                        <DetailRow label="Profit before Corporation Tax" value={money(order.netProfit, hideNumbers)} />
+                        <DetailRow label={t("Profit before Corporation Tax")} value={money(order.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
-                        <DetailRow label="Net Profit (after CT)" value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
+                        <DetailRow label={t("Net Profit (after CT)")} value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
                       </>
                     ) : (
-                      <DetailRow label="Final Profit" value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
+                      <DetailRow label={t("Final Profit")} value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
                     )}
                   </>
                 ) : (
                   <>
                     <FinanceInlineRow
-                      label="Paid / Received"
+                      label={t("Paid / Received")}
                       displayValue={money(order.paidAmount, hideNumbers)}
                       value={order.paidAmount}
                       tone="positive"
@@ -6889,7 +6900,7 @@ export function OrderDetailContent({
                       onSave={savePaidFinanceValue}
                     />
                     <FinanceInlineRow
-                      label="Base Cost"
+                      label={t("Base Cost")}
                       displayValue={money(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
@@ -6897,14 +6908,14 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
-                    <DetailRow label="Basic Balance" value={money(order.paidAmount - order.watchPurchasePrice, hideNumbers)} tone="positive" emphasis />
+                    <DetailRow label={t("Basic Balance")} value={money(order.paidAmount - order.watchPurchasePrice, hideNumbers)} tone="positive" emphasis />
                     <FinanceUpgradeHint />
                   </>
                   )}
                 </div>
               </>
             ) : (
-              <LockedInline title="Financial info hidden" note="Workflow Only users cannot view price and finance details." />
+              <LockedInline title={t("Financial info hidden")} note={t("Workflow Only users cannot view price and finance details.")} />
             )}
           </section>
         );
@@ -7026,7 +7037,7 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             <div className="app-card-panel">
               <InlineSelectRow
-                label="Courier"
+                label={t("Courier")}
                 value={order.courier || "Auto Detect"}
                 options={COURIER_OPTIONS}
                 disabled={!canEditWorkflowFields}
@@ -7034,14 +7045,14 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ courier: value }, "Courier")}
               />
               <InlineValueRow
-                label="Tracking"
+                label={t("Tracking")}
                 value={order.trackingNumber || ""}
                 disabled={!canEditWorkflowFields}
                 saving={savingInlineField === "Tracking"}
                 onSave={value => saveDetailsPatch({ trackingNumber: String(value) }, "Tracking")}
               />
               <InlineSelectRow
-                label="Dispatched"
+                label={t("Dispatched")}
                 value={order.isDispatched ? "Yes" : "No"}
                 options={["Yes", "No"]}
                 disabled={!canEditWorkflowFields}
@@ -7049,7 +7060,7 @@ export function OrderDetailContent({
                 onSave={value => saveDetailsPatch({ isDispatched: value === "Yes" }, "Dispatched")}
               />
               <InlineSelectRow
-                label="Delivered"
+                label={t("Delivered")}
                 value={order.isDelivered ? "Yes" : "No"}
                 options={["Yes", "No"]}
                 disabled={!canEditWorkflowFields}
@@ -7088,7 +7099,7 @@ export function OrderDetailContent({
                   className="input"
                   value={newScheduleTitle}
                   disabled={!canEditScheduleItems}
-                  placeholder="Reminder title"
+                  placeholder={t("Reminder title")}
                   onChange={event => setNewScheduleTitle(event.target.value)}
                 />
                 <div className="app-schedule-inline-controls">
@@ -7131,7 +7142,7 @@ export function OrderDetailContent({
                   className="input app-schedule-note"
                   value={newScheduleNote}
                   disabled={!canEditScheduleItems}
-                  placeholder="Optional note..."
+                  placeholder={t("Optional note...")}
                   onChange={event => setNewScheduleNote(event.target.value)}
                 />
                 <button
@@ -7277,7 +7288,7 @@ export function OrderDetailContent({
                     onKeyDown={event => {
                       if ((event.key === "Enter" || event.code === "NumpadEnter") && !runningSession && !savingWorkTimeAction) startWorkTimer();
                     }}
-                    placeholder="Work title..."
+                    placeholder={t("Work title...")}
                     disabled={Boolean(runningSession || savingWorkTimeAction)}
                   />
                   {runningSession ? (
@@ -7326,8 +7337,8 @@ export function OrderDetailContent({
                                     type="button"
                                     disabled={Boolean(runningSession || savingWorkTimeAction)}
                                     onClick={() => continueWorkTimer(session)}
-                                    title="Continue"
-                                    aria-label="Continue work session"
+                                    title={t("Continue")}
+                                    aria-label={t("Continue work session")}
                                   >
                                     <WorkTimeActionIcon name="continue" />
                                   </button>
@@ -7338,7 +7349,7 @@ export function OrderDetailContent({
                                     disabled={Boolean(savingWorkTimeAction)}
                                     onClick={() => stopWorkTimer(session)}
                                     title="Stop"
-                                    aria-label="Stop work session"
+                                    aria-label={t("Stop work session")}
                                   >
                                     <WorkTimeActionIcon name="stop" />
                                   </button>
@@ -7348,8 +7359,8 @@ export function OrderDetailContent({
                                   className="danger subtle"
                                   disabled={Boolean(savingWorkTimeAction)}
                                   onClick={() => deleteWorkTimer(session)}
-                                  title="Delete"
-                                  aria-label="Delete work session"
+                                  title={t("Delete")}
+                                  aria-label={t("Delete work session")}
                                 >
                                   <WorkTimeActionIcon name="delete" />
                                 </button>
@@ -7401,7 +7412,7 @@ export function OrderDetailContent({
                 </div>
               </div>
             ) : (
-              <LockedInline title="History / Log locked" note="History cards are available from NivaDesk Lite." />
+              <LockedInline title={t("History / Log locked")} note={t("History cards are available from NivaDesk Lite.")} />
             )}
           </section>
         );
@@ -7441,7 +7452,7 @@ export function OrderDetailContent({
             <div className="app-card-panel app-todo-panel">
               <div className="app-todo-stats">
                 <StatCard label="Open" value={openTasks.length} tone="blue" />
-                <StatCard label="Overdue" value={overdueTasks.length} tone="gray" />
+                <StatCard label={t("Overdue")} value={overdueTasks.length} tone="gray" />
                 <StatCard label="Done" value={doneTasks.length} tone="green" />
               </div>
               {todoStatus ? <p className="layout-status finance-inline-message">{todoStatus}</p> : null}
@@ -7514,7 +7525,7 @@ export function OrderDetailContent({
                 </div>
               </div>
               {todoItems.length > 0 ? (
-                <div className="app-todo-filters" aria-label="To Do filters">
+                <div className="app-todo-filters" aria-label={t("To Do filters")}>
                   {todoFilters.map(filter => (
                     <button
                       key={filter}
@@ -7905,8 +7916,8 @@ export function OrderDetailContent({
                   type="button"
                   className="order-notes-quick-add"
                   onClick={addPerOrderNoteSection}
-                  title="Add note field to this order only"
-                  aria-label="Add note field"
+                  title={t("Add note field to this order only")}
+                  aria-label={t("Add note field")}
                 >
                   +
                 </button>
@@ -7925,14 +7936,14 @@ export function OrderDetailContent({
                           className="order-notes-extra-title"
                           value={section.title}
                           onChange={e => renamePerOrderNoteSection(section.id, e.target.value)}
-                          placeholder="Section title"
+                          placeholder={t("Section title")}
                         />
                         <button
                           type="button"
                           className="order-notes-extra-remove"
                           onClick={() => removePerOrderNoteSection(section.id)}
-                          title="Remove this section"
-                          aria-label="Remove section"
+                          title={t("Remove this section")}
+                          aria-label={t("Remove section")}
                         >
                           ×
                         </button>
@@ -8026,7 +8037,7 @@ export function OrderDetailContent({
             draggable
             onDragStart={event => handleCardDragStart(event, cardId)}
             onDragEnd={handleCardDragEnd}
-            title="Drag to reorder card"
+            title={t("Drag to reorder card")}
             type="button"
           >
             <span />
@@ -8072,7 +8083,7 @@ export function OrderDetailContent({
               className="order-card-height-resize-handle"
               type="button"
               onPointerDown={event => handleCardResizePointerDown(event, cardId, columnIndex, "height")}
-              title="Drag to resize card height"
+              title={t("Drag to resize card height")}
             >
               <span />
             </button>
@@ -8081,7 +8092,7 @@ export function OrderDetailContent({
               className="order-card-corner-resize-handle"
               type="button"
               onPointerDown={event => handleCardResizePointerDown(event, cardId, columnIndex, "corner")}
-              title="Drag to resize card and column"
+              title={t("Drag to resize card and column")}
             >
               <span />
               <span />
@@ -8156,7 +8167,7 @@ export function OrderDetailContent({
             className="order-card-height-resize-handle"
             type="button"
             onPointerDown={event => handleCardResizePointerDown(event, cardId, 0, "height")}
-            title="Drag to resize card height"
+            title={t("Drag to resize card height")}
           >
             <span />
           </button>
@@ -8371,6 +8382,7 @@ export function OrderDetailContent({
   }
 
   return (
+    <DetailLanguageContext.Provider value={detailLanguage}>
     <div className="order-detail-shell">
       <section
         className="order-detail-toolbar"
@@ -8787,7 +8799,7 @@ export function OrderDetailContent({
               <div className="workspace-layout-mode-card">
                 <CardTitle
                   icon={isOrderCardLayoutIndependent ? "folderPerson" : "storage"}
-                  eyebrow="Workspace Customization"
+                  eyebrow={t("Workspace Customization")}
                   title={isOrderCardLayoutIndependent ? "This order uses its own layout" : "This order uses the shared layout"}
                 />
                 <p>
@@ -8835,7 +8847,7 @@ export function OrderDetailContent({
               <input
                 value={customizeSearch}
                 onChange={event => setCustomizeSearch(event.target.value)}
-                placeholder="Search cards..."
+                placeholder={t("Search cards...")}
               />
             </label>
 
@@ -8868,7 +8880,7 @@ export function OrderDetailContent({
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">
           <section className="card order-detail-card">
-            <CardTitle icon="orders" eyebrow="Cards hidden" title="All cards are hidden" />
+            <CardTitle icon="orders" eyebrow={t("Cards hidden")} title={t("All cards are hidden")} />
             <p className="muted-copy">Open Customize cards to show cards again.</p>
           </section>
         </div>
@@ -8938,6 +8950,7 @@ export function OrderDetailContent({
         <div style={customerGuideStyle}>{renderFirstProjectGuideBubble()}</div>
       ) : null}
     </div>
+    </DetailLanguageContext.Provider>
   );
 }
 
@@ -8962,6 +8975,7 @@ function OrderEditModal({
   onSaved: (message: string) => Promise<void>;
   onError: (message: string | null) => void;
 }) {
+  const t = useDetailT();
   const [form, setForm] = useState<CreateOrderInput>(() => orderEditForm(order));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
@@ -9060,7 +9074,7 @@ function OrderEditModal({
             <h2 id="edit-order-title">Edit Order</h2>
             <p>{normalizeOrderCustomerName(order.customerName)} - {order.designName}</p>
           </div>
-          <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label="Close Edit Order">
+          <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label={t("Close Edit Order")}>
             x
           </button>
         </div>
@@ -9228,6 +9242,7 @@ function BlockHeadingsModal({
   onClose: () => void;
   onSaved?: (settings: BlockHeadingSettings) => void;
 }) {
+  const t = useDetailT();
   const [settings, setSettings] = useState<BlockHeadingSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -9464,7 +9479,7 @@ function BlockHeadingsModal({
 
   function renderEditor() {
     if (!canCustomizeCards) {
-      return <LockedInline title="Card customization is available from NivaDesk Lite." note="Demo / Free workspaces cannot edit block headings." />;
+      return <LockedInline title={t("Card customization is available from NivaDesk Lite.")} note={t("Demo / Free workspaces cannot edit block headings.")} />;
     }
 
     if (!supported) {
@@ -9658,7 +9673,7 @@ function BlockHeadingsModal({
             <h2 id="block-heading-title">Edit Block Headings</h2>
             <p>{title}</p>
           </div>
-          <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label="Close Edit Block Headings">
+          <button className="toolbar-icon-button" type="button" onClick={onClose} aria-label={t("Close Edit Block Headings")}>
             x
           </button>
         </div>
@@ -9777,6 +9792,7 @@ function CompanyNumbersEditor({
   disabled: boolean;
   onSave: (numbers: CompanyNumberSetting[]) => void;
 }) {
+  const t = useDetailT();
   const [draft, setDraft] = useState<CompanyNumberSetting[]>(numbers);
   const draftRef = useRef(draft);
   useEffect(() => {
@@ -9815,7 +9831,7 @@ function CompanyNumbersEditor({
           <input
             className="input"
             style={{ flex: "1 1 100px", minWidth: 80 }}
-            placeholder="Label"
+            placeholder={t("Label")}
             value={it.title}
             disabled={disabled}
             onChange={e => updateRow(index, { title: e.target.value })}
@@ -9824,7 +9840,7 @@ function CompanyNumbersEditor({
           <input
             className="input"
             style={{ flex: "1 1 110px", minWidth: 90 }}
-            placeholder="Number / value"
+            placeholder={t("Number / value")}
             value={it.value}
             disabled={disabled}
             onChange={e => updateRow(index, { value: e.target.value })}
@@ -9834,7 +9850,7 @@ function CompanyNumbersEditor({
             <button
               type="button"
               onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
-              aria-label="Remove"
+              aria-label={t("Remove")}
               style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
             >
               ×
@@ -9855,6 +9871,7 @@ function InvoiceFooterEditor({
   disabled: boolean;
   onSave: (note: string) => void;
 }) {
+  const t = useDetailT();
   const [expanded, setExpanded] = useState(note.trim().length > 0);
   const [draft, setDraft] = useState(note);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -9879,7 +9896,7 @@ function InvoiceFooterEditor({
         <textarea
           className="input"
           style={{ width: "100%", minHeight: 70, marginTop: 8, resize: "vertical" }}
-          placeholder="Bank details, payment terms, thank-you note…"
+          placeholder={t("Bank details, payment terms, thank-you note…")}
           value={draft}
           disabled={disabled}
           onChange={e => setDraft(e.target.value)}
@@ -9903,6 +9920,7 @@ function LineItemsEditor({
   formatMoney: (value: number) => string;
   onSave: (items: LineItemDetail[]) => void;
 }) {
+  const t = useDetailT();
   const [draft, setDraft] = useState<LineItemDetail[]>(items);
   const draftRef = useRef(draft);
   useEffect(() => {
@@ -9969,7 +9987,7 @@ function LineItemsEditor({
             <button
               type="button"
               onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
-              aria-label="Remove item"
+              aria-label={t("Remove item")}
               style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
             >
               ×
@@ -10005,6 +10023,7 @@ function InlineEditableLabel({
   editable: boolean;
   onSave: (value: string) => Promise<void> | void;
 }) {
+  const t = useDetailT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(rawValue);
   const cancellingRef = useRef(false);
@@ -10053,7 +10072,7 @@ function InlineEditableLabel({
   }
 
   return (
-    <button type="button" className="app-inline-label" title="Rename" onClick={() => setEditing(true)}>
+    <button type="button" className="app-inline-label" title={t("Rename")} onClick={() => setEditing(true)}>
       <span>{display}</span>
       <svg className="app-inline-label-pencil" viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 20h9" />
@@ -10249,6 +10268,7 @@ function InlineNotesField({
   saving: boolean;
   onSave: (value: string) => Promise<void> | void;
 }) {
+  const t = useDetailT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
@@ -10272,7 +10292,7 @@ function InlineNotesField({
             autoFocus
             value={draft}
             disabled={saving}
-            placeholder="Add note here..."
+            placeholder={t("Add note here...")}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === "Escape") {
@@ -10460,6 +10480,7 @@ function FinanceInlineRow({
   onLabelSave?: (value: string) => Promise<void> | void;
   onRemove?: () => void;
 }) {
+  const t = useDetailT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
   const cancellingRef = useRef(false);
@@ -10569,8 +10590,8 @@ function FinanceInlineRow({
             type="button"
             className="finance-heading-remove"
             onClick={onRemove}
-            title="Remove heading"
-            aria-label="Remove heading"
+            title={t("Remove heading")}
+            aria-label={t("Remove heading")}
           >
             −
           </button>
@@ -10713,6 +10734,7 @@ function ClientFileCard({
   onDelete: () => void;
   onUseAsPreview: () => void;
 }) {
+  const t = useDetailT();
   const canPreviewImage = canUseClientFiles && Boolean(file.downloadURL) && isClientFileImage(file);
   const canUseAsPreview = canManageClientFiles && canPreviewImage;
   const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
@@ -10747,7 +10769,7 @@ function ClientFileCard({
       <div className="client-file-icon-actions">
         {canUseClientFiles ? (
           file.downloadURL ? (
-            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, brandedHost); }} title="Open / Download" aria-label="Open or download file">
+            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, brandedHost); }} title={t("Open / Download")} aria-label={t("Open or download file")}>
               <ClientFileActionIcon name="download" />
             </a>
           ) : (
@@ -10758,13 +10780,13 @@ function ClientFileCard({
         )}
 
         {canUseAsPreview ? (
-          <button className="client-file-icon-button" type="button" onClick={onUseAsPreview} disabled={actionDisabled} title="Use in Preview" aria-label="Use file in Preview card">
+          <button className="client-file-icon-button" type="button" onClick={onUseAsPreview} disabled={actionDisabled} title={t("Use in Preview")} aria-label={t("Use file in Preview card")}>
             {actioning ? <span className="client-file-action-loading">...</span> : <ClientFileActionIcon name="preview" />}
           </button>
         ) : null}
         {canManageClientFiles ? (
           <>
-            <button className="client-file-icon-button" type="button" onClick={onRename} disabled={actionDisabled} title="Rename" aria-label="Rename file">
+            <button className="client-file-icon-button" type="button" onClick={onRename} disabled={actionDisabled} title={t("Rename")} aria-label={t("Rename file")}>
               {actioning ? <span className="client-file-action-loading">...</span> : <ClientFileActionIcon name="rename" />}
             </button>
             {canDeleteFile ? (
@@ -10773,8 +10795,8 @@ function ClientFileCard({
                 type="button"
                 onClick={onDelete}
                 disabled={actionDisabled}
-                title="Delete"
-                aria-label="Delete file"
+                title={t("Delete")}
+                aria-label={t("Delete file")}
               >
                 <ClientFileActionIcon name="delete" />
               </button>
@@ -10809,6 +10831,7 @@ function ClientFilePreviewModal({
   onSelect: (fileId: string) => void;
   onUseAsPreview: () => void;
 }) {
+  const t = useDetailT();
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
   const isPdf = isClientFilePdf(activeFile);
@@ -10831,7 +10854,7 @@ function ClientFilePreviewModal({
         className="client-file-preview-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Client file preview"
+        aria-label={t("Client file preview")}
         onMouseDown={event => event.stopPropagation()}
       >
         <header className="client-file-preview-header">
@@ -10839,7 +10862,7 @@ function ClientFilePreviewModal({
             <h2>{activeFile.fileName}</h2>
             <p>{currentIndex + 1} / {files.length} · {clientFileSizeLabel(activeFile.fileSize)}</p>
           </div>
-          <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label="Close file preview">
+          <button className="workspace-blocks-close" type="button" onClick={onClose} aria-label={t("Close file preview")}>
             ×
           </button>
         </header>
@@ -10890,10 +10913,11 @@ function ClientFilePreviewModal({
 }
 
 function ClientFilesUpgradeHint() {
+  const t = useDetailT();
   return (
     <Link
       href="/plan"
-      aria-label="Client Files available on Pro"
+      aria-label={t("Client Files available on Pro")}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -10918,10 +10942,11 @@ function ClientFilesUpgradeHint() {
 }
 
 function FinanceUpgradeHint() {
+  const t = useDetailT();
   return (
     <Link
       href="/plan"
-      aria-label="Advanced finance is available on Pro"
+      aria-label={t("Advanced finance is available on Pro")}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -10948,9 +10973,10 @@ function FinanceUpgradeHint() {
 }
 
 function LockedInline({ title, note }: { title: string; note: string }) {
+  const t = useDetailT();
   return (
     <div className="mini-panel locked-panel compact-mini-panel">
-      <CardTitle icon="lock" eyebrow="Locked" title={title} />
+      <CardTitle icon="lock" eyebrow={t("Locked")} title={title} />
       <p className="muted-copy">{note}</p>
       <Link className="button secondary" href="/dashboard" style={{ display: "inline-flex", marginTop: 10 }}>View plan</Link>
     </div>
