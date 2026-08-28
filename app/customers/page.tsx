@@ -826,6 +826,7 @@ export default function CustomersPage() {
 
           {selectedCustomer ? (
             <CustomerDetail
+              shopifyShop={workspace?.shopifyLinkedShop ?? ""}
               customer={selectedCustomer}
               canSeeFinance={canSeeFinance}
               canManageCustomers={canManageCustomers}
@@ -994,6 +995,19 @@ function CustomerListCard({
   );
 }
 
+// admin.shopify.com/store/<handle>/customers/<id>. The webhook stores Shopify's
+// own numeric customer id, which is exactly what this path wants; anything that
+// is not all digits is not that id, so no link is offered rather than a broken
+// one.
+function shopifyAdminCustomerUrl(customer: CustomerDirectoryItem, shopifyShop: string) {
+  if (customer.source !== "shopify") return "";
+  const id = customer.externalCustomerId.trim();
+  if (!/^\d+$/.test(id)) return "";
+  const handle = shopifyShop.trim().toLowerCase().replace(/\.myshopify\.com$/, "");
+  if (!/^[a-z0-9-]+$/.test(handle)) return "";
+  return `https://admin.shopify.com/store/${handle}/customers/${id}`;
+}
+
 function CustomerDetail({
   customer,
   canSeeFinance,
@@ -1003,6 +1017,7 @@ function CustomerDetail({
   language,
   duplicate,
   linkedNotes,
+  shopifyShop,
   onResync,
   onReviewMerge,
   onSaveDetails,
@@ -1016,6 +1031,8 @@ function CustomerDetail({
   language: string;
   duplicate: { other: CustomerDirectoryItem; reason: "email" | "phone" } | null;
   linkedNotes: StudioKeepNote[];
+  /** The connected shop domain, so a Shopify record can be opened where it lives. */
+  shopifyShop: string;
   onResync: () => void;
   onReviewMerge: () => void;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
@@ -1195,6 +1212,22 @@ function CustomerDetail({
             <span><span style={{ opacity: 0.6 }}>{t("Connected store")}:</span> <strong>{CUSTOMER_SOURCE_LABEL[customer.source]}</strong></span>
             {customer.externalCustomerId ? <span><span style={{ opacity: 0.6 }}>{t("Store customer ID")}:</span> <strong style={{ fontVariantNumeric: "tabular-nums" }}>{customer.externalCustomerId}</strong></span> : null}
             <span><span style={{ opacity: 0.6 }}>{t("Last synced")}:</span> <strong>{customer.integrationSyncedAt ? formatDateTime(customer.integrationSyncedAt) : "—"}</strong></span>
+            {/* Shopify only, and only with a real id: the store customer id is
+                what settles a duplicate or a sync argument, and reading it off
+                the screen to search for it by hand is the slow way. There is no
+                WooCommerce equivalent here because the site address is not
+                available to this screen — an invented link would be worse than
+                none. */}
+            {shopifyAdminCustomerUrl(customer, shopifyShop) ? (
+              <a
+                className="customer-view-all"
+                href={shopifyAdminCustomerUrl(customer, shopifyShop)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("Open in Shopify")}<span aria-hidden="true"> ↗</span>
+              </a>
+            ) : null}
             <span style={{ flex: 1 }} />
             {canManageCustomers && customer.integrationLastPayload ? (
               <button type="button" className="customer-view-all" disabled={savingInlineField === "Integration resync"}
