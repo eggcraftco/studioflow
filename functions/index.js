@@ -5168,6 +5168,12 @@ const bankFeedExports = createBankFeedFunctions({
     await ref.set(data, { merge: true });
     const pushResult = await sendPushNotificationToCompany(companyId, { ...data, notificationId, createdAt: new Date().toISOString() });
     await ref.set({ pushSent: pushResult.sent > 0, pushResult, pushSentAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  },
+  // A "reconnect your bank" alert that is no longer true is worse than no alert:
+  // it sends people back through the consent flow they did not need. When a
+  // connection recovers, its alert goes with it.
+  clearNotification: async (companyId, notificationId) => {
+    await notificationCollectionRef(companyId).doc(String(notificationId)).delete().catch(() => {});
   }
 });
 const { _internal: bankFeedInternal, ...bankFeedCallables } = bankFeedExports;

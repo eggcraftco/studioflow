@@ -69,7 +69,7 @@ const INCOMING_KINDS = [
   "owner_contribution", "loan", "transfer", "other_income"
 ];
 
-function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany }) {
+function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsCompanyOwner, notifyCompany, clearNotification }) {
   const db = () => admin.firestore();
   const receiptInboxRef = (companyId) =>
     db().collection("companies").doc(companyId).collection("bankReceiptInbox");
@@ -593,6 +593,10 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
       }
       if (ok) {
         synced += 1;
+        if (data.syncState && data.syncState !== "ok" && typeof clearNotification === "function") {
+          await clearNotification(companyId, `bankSync_${doc.id}`).catch((error) =>
+            console.warn("bank sync alert clear failed:", doc.id, error?.message || error));
+        }
         await doc.ref.set({
           lastSyncedAt: admin.firestore.FieldValue.serverTimestamp(),
           syncState: "ok",
