@@ -1580,7 +1580,8 @@ private fun StudioSectionContent(
                 onRemoveCollab = onRemoveKeepCollab,
                 onAcceptInvite = onAcceptKeepInvite,
                 onDeclineInvite = onDeclineKeepInvite,
-                onRefreshInvites = onRefreshKeepInvites
+                onRefreshInvites = onRefreshKeepInvites,
+                onUpdateOrderFields = onUpdateOrderFields
             )
             StudioSection.QuickReply -> QuickReplyScreen(
                 state = state,

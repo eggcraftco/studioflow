@@ -81,7 +81,8 @@ fun NotesScreen(
     onRemoveCollab: (String, String, String) -> Unit = { _, _, _ -> },
     onAcceptInvite: (String) -> Unit = {},
     onDeclineInvite: (String) -> Unit = {},
-    onRefreshInvites: () -> Unit = {}
+    onRefreshInvites: () -> Unit = {},
+    onUpdateOrderFields: (uk.co.eggcraft.studioflow.data.model.StudioOrder, Map<String, Any?>) -> Unit = { _, _ -> }
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -262,7 +263,7 @@ fun NotesScreen(
         val byOrder = linkedMapOf<String, Pair<uk.co.eggcraft.studioflow.data.model.StudioOrder, MutableList<ProjectNoteEntry>>>()
         state.orders.forEach { order ->
             val entries = mutableListOf<ProjectNoteEntry>()
-            if (order.notes.isNotBlank()) entries.add(ProjectNoteEntry("Note", order.notes, null))
+            if (order.notes.isNotBlank()) entries.add(ProjectNoteEntry("Note", order.notes, null, orderNote = true))
             if (order.invNotes.isNotBlank()) entries.add(ProjectNoteEntry("Inventory", order.invNotes, null))
             if (entries.isNotEmpty()) byOrder[order.id] = order to entries
         }
@@ -276,6 +277,12 @@ fun NotesScreen(
         byOrder.values.toList().sortedByDescending { it.first.paymentDate.time }
     }
     val projectNoteCount = projectGroups.sumOf { it.second.size }
+
+    // Editing the order's own note here is editing an order detail, so it takes
+    // the SAME role gate the order screen applies (canEditWorkflow there).
+    val canEditOrders = state.workspace?.let {
+        (it.isOwner || it.role in setOf("admin", "member", "workflow")) && it.memberAccess.orders
+    } == true
 
     // The other reminder system: order Schedule & Alerts items. Surfacing them
     // in Reminders makes it the one central place instead of two disconnected
@@ -542,7 +549,15 @@ fun NotesScreen(
         }
 
         if (topTab == "project") {
-            ProjectNotesList(groups = projectGroups, onOpenNote = { n -> editingNote = n })
+            ProjectNotesList(
+                groups = projectGroups,
+                onOpenNote = { n -> editingNote = n },
+                canEditOrders = canEditOrders,
+                // Same call the order screen's Notes card makes — one write path.
+                onSaveOrderNote = { order, next ->
+                    onUpdateOrderFields(order, mapOf("details" to mapOf("notes" to next)))
+                }
+            )
             return@Column
         }
 
@@ -1846,7 +1861,9 @@ private fun NoteEditorDialog(
 @Composable
 private fun ProjectNotesList(
     groups: List<Pair<uk.co.eggcraft.studioflow.data.model.StudioOrder, MutableList<ProjectNoteEntry>>>,
-    onOpenNote: (StudioKeepNote) -> Unit
+    onOpenNote: (StudioKeepNote) -> Unit,
+    canEditOrders: Boolean = false,
+    onSaveOrderNote: (uk.co.eggcraft.studioflow.data.model.StudioOrder, String) -> Unit = { _, _ -> }
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -1880,6 +1897,16 @@ private fun ProjectNotesList(
                     }
                     entries.forEach { entry ->
                         val linkedNote = entry.note
+                        if (entry.orderNote) {
+                            OrderNoteEntry(
+                                orderId = order.id,
+                                label = t(entry.type).uppercase(),
+                                text = entry.text,
+                                canEdit = canEditOrders,
+                                onSave = { next -> onSaveOrderNote(order, next) }
+                            )
+                            return@forEach
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1908,12 +1935,92 @@ private fun ProjectNotesList(
     }
 }
 
+/** The order's own note, editable where it is read. It lives on the order
+ *  document (not in the notes collection), so it saves through the SAME order
+ *  update path the Notes card on the order screen uses — the Notes menu is a
+ *  second window onto the same text, never a copy of it. The list redraws from
+ *  the live orders flow, so one save leaves one source of truth. */
+@Composable
+private fun OrderNoteEntry(
+    orderId: String,
+    label: String,
+    text: String,
+    canEdit: Boolean,
+    onSave: (String) -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    var editing by remember(orderId) { mutableStateOf(false) }
+    var draft by remember(orderId) { mutableStateOf(text) }
+    // While the editor is closed the draft tracks the order document, so a change
+    // made anywhere else (order screen, another device) is what the editor opens on.
+    LaunchedEffect(text, editing) { if (!editing) draft = text }
+
+    if (editing && canEdit) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(StudioBlue.copy(alpha = 0.05f))
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = StudioBlue)
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = {
+                    if (draft != text) onSave(draft)
+                    editing = false
+                }) { Text(t("Save"), fontWeight = FontWeight.ExtraBold) }
+                TextButton(onClick = {
+                    draft = text
+                    editing = false
+                }) { Text(t("Cancel")) }
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(StudioBlue.copy(alpha = 0.05f))
+            .then(if (canEdit) Modifier.clickable { editing = true } else Modifier)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = StudioBlue)
+            if (canEdit) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = t("Edit"),
+                    tint = StudioBlue,
+                    modifier = Modifier.size(11.dp)
+                )
+            }
+        }
+        Text(text, fontSize = 14.sp, maxLines = 5, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /** One row of the Project Notes tab: an order-field note, an inventory note,
- *  or an order-linked keep-note (which carries the note so a tap can open it). */
+ *  or an order-linked keep-note (which carries the note so a tap can open it).
+ *  [orderNote] marks the order document's OWN `notes` field — the one entry that
+ *  is edited here in place and saved back through the order update path. */
 private data class ProjectNoteEntry(
     val type: String, // translation key: "Note" | "Inventory" | "Linked note"
     val text: String,
-    val note: StudioKeepNote?
+    val note: StudioKeepNote?,
+    val orderNote: Boolean = false
 )
 
 /** One order Schedule & Alerts item surfaced in the central Reminders list. */
