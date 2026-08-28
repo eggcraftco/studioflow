@@ -11,6 +11,7 @@
 // and nothing touches the shelf until the whole thing is committed.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -27,13 +28,6 @@ import {
 } from "@/lib/studioflow/inventory";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 
-function money(symbol: string, value: number) {
-  const formatted = Math.abs(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  });
-  return `${value < 0 ? "−" : ""}${symbol}${formatted}`;
-}
-
 function day(ms: number) {
   return ms > 0 ? new Date(ms).toLocaleDateString() : "—";
 }
@@ -49,6 +43,7 @@ export function StocktakePanel({
   canEdit: boolean;
   onStockChanged: () => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   // Stable across renders: an inline arrow here is a new function every time,
   // and putting that in a useCallback's dependencies turns a load into an

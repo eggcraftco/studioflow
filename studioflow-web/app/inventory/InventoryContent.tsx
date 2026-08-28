@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
   INVENTORY_CATEGORIES,
@@ -39,13 +40,6 @@ import { StocktakePanel } from "./StocktakePanel";
 import { SuppliersPanel } from "./SuppliersPanel";
 
 type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports";
-
-function money(symbol: string, value: number) {
-  return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
 
 // Small glyphs so a long list scans by shape, not by reading every word.
 const CATEGORY_ICON: Record<string, string> = {
@@ -109,6 +103,7 @@ export function InventoryContent({
   currencySymbol: string;
   canEdit: boolean;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 
@@ -816,6 +811,7 @@ function NewItemModal({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const editingId = initialItem?.id || "";

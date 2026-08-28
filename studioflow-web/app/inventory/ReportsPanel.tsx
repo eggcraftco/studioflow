@@ -14,6 +14,7 @@
 // the difference between "nothing moved" and "we were not watching yet".
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -44,13 +45,6 @@ const RANGES: Array<{ key: string; label: string; days: number }> = [
   { key: "365", label: "Last 12 months", days: 365 }
 ];
 
-function money(symbol: string, value: number) {
-  const formatted = Math.abs(value).toLocaleString(undefined, {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  });
-  return `${value < 0 ? "−" : ""}${symbol}${formatted}`;
-}
-
 export function ReportsPanel({
   workspace,
   currencySymbol
@@ -58,6 +52,7 @@ export function ReportsPanel({
   workspace: WorkspaceContext;
   currencySymbol: string;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   // Stable across renders: an inline arrow here is a new function every time,
   // and putting that in a useCallback's dependencies turns a load into an

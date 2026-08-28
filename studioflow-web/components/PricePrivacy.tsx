@@ -50,3 +50,22 @@ export function PricePrivacyProvider({ children }: { children: ReactNode }) {
 export function usePricePrivacy() {
   return useContext(PricePrivacyContext);
 }
+
+/**
+ * Money formatter that obeys the toolbar's hide-figures switch. Screens used
+ * to keep private copies of this formatting, which is why newer areas
+ * (inventory, banking) kept showing figures the switch was meant to cover.
+ */
+export function usePrivateMoney() {
+  const { hideNumbers } = usePricePrivacy();
+  return useMemo(
+    () => (symbol: string, value: number) =>
+      hideNumbers
+        ? hiddenMoneyLabel(symbol)
+        : `${(Number(value) || 0) < 0 ? "−" : ""}${symbol}${Math.abs(Number(value) || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}`,
+    [hideNumbers]
+  );
+}

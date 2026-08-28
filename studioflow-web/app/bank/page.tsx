@@ -5,6 +5,7 @@
 // Read-only account information — the app can never move money.
 
 import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { httpsCallable } from "firebase/functions";
@@ -1437,10 +1438,17 @@ function BankPageContent() {
   }
 
   const avatarColor = (name: string) => CATEGORY_PALETTE[(name.length * 31 + (name.charCodeAt(0) || 7)) % CATEGORY_PALETTE.length];
+  const { hideNumbers } = usePricePrivacy();
   const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
 
-  const money = (value: number, currency: string) =>
-    new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "GBP" }).format(value);
+  // Banking figures obey the toolbar's hide-figures switch like every other
+  // money on screen; the currency symbol still shows so the row keeps its shape.
+  const money = (value: number, currency: string) => {
+    const formatter = new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "GBP" });
+    if (!hideNumbers) return formatter.format(value);
+    const symbol = formatter.formatToParts(0).find(part => part.type === "currency")?.value ?? "";
+    return hiddenMoneyLabel(symbol);
+  };
 
   if (loading || workspaceLoading) return <LoadingScreen />;
   if (!user) return null;

@@ -10,6 +10,7 @@
 // anything the existing callables would not.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import QRCode from "qrcode";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
@@ -79,13 +80,6 @@ const STATUS_LABEL: Record<InventoryStatus, string> = {
   archived: "Archived"
 };
 
-function money(symbol: string, value: number) {
-  return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
-
 type PurchaseJoin = {
   number: string;
   supplierName: string;
@@ -121,6 +115,7 @@ export function ItemDetailPanel({
   onPrintLabel: (item: InventoryItem) => void;
   onManagePhotos: (item: InventoryItem) => void;
 }) {
+  const money = usePrivateMoney();
   const { language, user } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
 

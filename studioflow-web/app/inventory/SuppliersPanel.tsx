@@ -8,17 +8,11 @@
 // The buying is what makes a supplier real; the card is just extra detail.
 
 import { useCallback, useEffect, useState } from "react";
+import { usePrivateMoney } from "@/components/PricePrivacy";
 import { listSuppliers, saveSupplier, type Supplier } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
-
-function money(symbol: string, value: number) {
-  return `${symbol}${(Number(value) || 0).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })}`;
-}
 
 export function SuppliersPanel({
   workspace,
@@ -31,6 +25,7 @@ export function SuppliersPanel({
   canEdit: boolean;
   onChanged: () => void;
 }) {
+  const money = usePrivateMoney();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 
