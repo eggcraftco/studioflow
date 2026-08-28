@@ -110,13 +110,18 @@ private fun InventoryField(
 }
 
 @Composable
-private fun InventoryCategoryPicker(category: String, t: (String) -> String, onPick: (String) -> Unit) {
+private fun InventoryCategoryPicker(
+    category: String,
+    options: List<String>,
+    t: (String) -> String,
+    onPick: (String) -> Unit
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         InventoryField(t("Category"), t(category), Modifier) {}
         Box(Modifier.matchParentSize().clickable { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            inventoryCategoryList.forEach { entry ->
+            (if (options.isEmpty()) inventoryCategoryList else options).forEach { entry ->
                 DropdownMenuItem(
                     text = { Text(t(entry), fontSize = 13.sp) },
                     onClick = { open = false; onPick(entry) }
@@ -156,6 +161,11 @@ fun NewInventoryItemDialog(
     /** Defined location paths ("Safe A / Drawer 3") offered as tap-to-fill
      *  suggestions. The field stays free text — any location is still legal. */
     locationPaths: List<String> = emptyList(),
+    /** The workspace's own category names, so this picker says what the
+     *  sidebar and the web say. */
+    categoryOptions: List<String> = emptyList(),
+    /** The category a brand-new item starts on, when the workspace picked one. */
+    defaultCategory: String = "",
     onDismiss: () -> Unit,
     /** The payload, the id to save over ("" for a new item), and the photos
      *  picked here — which the caller uploads once the save hands back an id. */
@@ -165,7 +175,9 @@ fun NewInventoryItemDialog(
 
     var trackingType by remember { mutableStateOf(existing?.trackingType ?: StudioTrackingType.Unique) }
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    var category by remember { mutableStateOf(existing?.category ?: "Other") }
+    var category by remember {
+        mutableStateOf(existing?.category ?: defaultCategory.ifEmpty { "Other" })
+    }
     var brand by remember { mutableStateOf(existing?.brand.orEmpty()) }
     var model by remember { mutableStateOf(existing?.model.orEmpty()) }
     var reference by remember { mutableStateOf(existing?.reference.orEmpty()) }
@@ -235,7 +247,7 @@ fun NewInventoryItemDialog(
                 Spacer(Modifier.height(12.dp))
                 InventoryField(t("Name"), name) { name = it }
                 Spacer(Modifier.height(8.dp))
-                InventoryCategoryPicker(category, t) { category = it }
+                InventoryCategoryPicker(category, categoryOptions, t) { category = it }
                 Spacer(Modifier.height(8.dp))
 
                 if (trackingType == StudioTrackingType.Unique) {
@@ -518,6 +530,8 @@ fun NewInventoryItemDialog(
 fun NewPurchaseDialog(
     symbol: String,
     supplierNames: List<String>,
+    /** The workspace's own category names — same list the item form uses. */
+    categoryOptions: List<String>,
     t: (String) -> String,
     onDismiss: () -> Unit,
     onSave: (Map<String, Any?>) -> Unit
@@ -575,7 +589,7 @@ fun NewPurchaseDialog(
                     Spacer(Modifier.height(8.dp))
                     InventoryField(t("Name"), line.name) { lines[index] = line.copy(name = it) }
                     Spacer(Modifier.height(8.dp))
-                    InventoryCategoryPicker(line.category, t) { lines[index] = line.copy(category = it) }
+                    InventoryCategoryPicker(line.category, categoryOptions, t) { lines[index] = line.copy(category = it) }
                     Spacer(Modifier.height(8.dp))
                     if (line.trackingType == StudioTrackingType.Quantity) {
                         InventoryField(t("Quantity"), inventoryQuantity(line.quantity)) {

@@ -56,6 +56,11 @@ import uk.co.eggcraft.studioflow.data.model.StudioSupportTicketListResult
 import uk.co.eggcraft.studioflow.data.model.StudioSupportTicket
 import uk.co.eggcraft.studioflow.data.model.StudioTeamMember
 import uk.co.eggcraft.studioflow.data.model.StudioBankAuditEntry
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryCategory
+import uk.co.eggcraft.studioflow.features.production.ProductionBlocker
+import uk.co.eggcraft.studioflow.features.production.ProductionStage
+import uk.co.eggcraft.studioflow.features.production.defaultProductionStages
+import uk.co.eggcraft.studioflow.features.production.productionStagesFrom
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryCursor
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventoryLocation
@@ -2785,6 +2790,46 @@ class StudioFlowRepository(
         return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
     }
 
+    // Production. Only two things are ever written to an order: a person's
+    // explicit override and the blocker; the stage is derived everywhere else.
+
+    /** The workspace's board. Falls back to the default lanes rather than
+     *  failing — a board that will not render answers nothing. */
+    suspend fun productionStages(workspaceId: String): List<ProductionStage> = runCatching {
+        val snap = db.collection("companySettings").document(workspaceId).get().await()
+        productionStagesFrom(snap.get("productionStages"))
+    }.getOrElse { defaultProductionStages }
+
+    /** Moving a card writes the stage, records it in the order's history, tells
+     *  the assignee, and hands back what Undo needs. The blocked lane refuses a
+     *  move with no reason — server-side, so every client is held to it. */
+    suspend fun setOrderProductionStage(
+        workspaceId: String, orderId: String, stageId: String, blocker: ProductionBlocker?
+    ): Pair<String, ProductionBlocker?> {
+        val payload = mutableMapOf<String, Any?>("orderId" to orderId, "stageId" to stageId)
+        if (blocker != null) {
+            payload["blocker"] = mapOf("reason" to blocker.reason, "note" to blocker.note)
+        }
+        val raw = inventoryCall("setOrderProductionStage", workspaceId, payload)
+        val previous = raw["previous"] as? Map<*, *> ?: emptyMap<String, Any?>()
+        val previousBlockerMap = previous["blocker"] as? Map<*, *>
+        val previousReason = (previousBlockerMap?.get("reason") as? String).orEmpty()
+        return (previous["override"] as? String).orEmpty() to
+            if (previousReason in ProductionBlocker.reasons) {
+                ProductionBlocker(previousReason, (previousBlockerMap?.get("note") as? String).orEmpty())
+            } else null
+    }
+
+    suspend fun undoOrderProductionStage(
+        workspaceId: String, orderId: String, previousOverride: String, previousBlocker: ProductionBlocker?
+    ) {
+        val previous = mutableMapOf<String, Any?>("override" to previousOverride)
+        if (previousBlocker != null) {
+            previous["blocker"] = mapOf("reason" to previousBlocker.reason, "note" to previousBlocker.note)
+        }
+        inventoryCall("undoOrderProductionStage", workspaceId, mapOf("orderId" to orderId, "previous" to previous))
+    }
+
     /** One page of items — 500 at a time. Pass the previous page's cursor to
      *  get the next one; the returned cursor is null once everything has been
      *  handed over. Screens that only need "the stock" take the first page. */
@@ -2798,12 +2843,62 @@ class StudioFlowRepository(
         return StudioInventoryPage(
             items = (raw["items"] as? List<*> ?: emptyList<Any?>())
                 .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryItem::from) },
-            cursor = if (hasMore) StudioInventoryCursor.from(raw["cursor"] as? Map<*, *>) else null
+            cursor = if (hasMore) StudioInventoryCursor.from(raw["cursor"] as? Map<*, *>) else null,
+            categories = (raw["categoryDetails"] as? List<*> ?: emptyList<Any?>())
+                .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryCategory::from) },
+            defaultCategory = (raw["defaultCategory"] as? String).orEmpty()
         )
     }
 
     suspend fun inventoryItems(workspaceId: String): List<StudioInventoryItem> =
         inventoryItemsPage(workspaceId).items
+
+    // Categories. A workshop names what it keeps; renaming one here renames it
+    // on every item, because the server carries the new title across.
+
+    suspend fun inventoryCategories(workspaceId: String): Triple<List<StudioInventoryCategory>, String, List<Pair<String, Int>>> {
+        val raw = inventoryCall("listInventoryCategories", workspaceId)
+        val rows = (raw["categories"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryCategory::from) }
+        val orphans = (raw["orphans"] as? List<*> ?: emptyList<Any?>()).mapNotNull { entry ->
+            val map = entry as? Map<*, *> ?: return@mapNotNull null
+            val title = (map["title"] as? String).orEmpty()
+            if (title.isEmpty()) null else title to ((map["itemCount"] as? Number)?.toInt() ?: 0)
+        }
+        return Triple(rows, (raw["defaultCategory"] as? String).orEmpty(), orphans)
+    }
+
+    suspend fun saveInventoryCategories(
+        workspaceId: String,
+        categories: List<StudioInventoryCategory>,
+        defaultCategory: String
+    ): List<StudioInventoryCategory> {
+        val payload = mapOf(
+            "categories" to categories.map {
+                mapOf("id" to it.id, "title" to it.title, "icon" to it.icon, "archived" to it.archived)
+            },
+            "defaultCategory" to defaultCategory
+        )
+        val raw = inventoryCall("saveInventoryCategories", workspaceId, payload)
+        return (raw["categories"] as? List<*> ?: emptyList<Any?>())
+            .mapNotNull { (it as? Map<*, *>)?.let(StudioInventoryCategory::from) }
+    }
+
+    /** [disposition] is "move" (with [moveToId]), "archive" or "other". Without
+     *  one the server refuses to remove a category that still holds items. */
+    suspend fun deleteInventoryCategory(
+        workspaceId: String, categoryId: String, disposition: String, moveToId: String = ""
+    ): Int {
+        val payload = mutableMapOf<String, Any?>("categoryId" to categoryId, "disposition" to disposition)
+        if (disposition == "move") payload["moveToId"] = moveToId
+        val raw = inventoryCall("deleteInventoryCategory", workspaceId, payload)
+        return (raw["itemsMoved"] as? Number)?.toInt() ?: 0
+    }
+
+    suspend fun mergeInventoryCategories(workspaceId: String, fromId: String, intoId: String): Int {
+        val raw = inventoryCall("mergeInventoryCategories", workspaceId, mapOf("fromId" to fromId, "intoId" to intoId))
+        return (raw["itemsMoved"] as? Number)?.toInt() ?: 0
+    }
 
     suspend fun inventorySummary(workspaceId: String): StudioInventorySummary {
         val raw = inventoryCall("getInventorySummary", workspaceId)

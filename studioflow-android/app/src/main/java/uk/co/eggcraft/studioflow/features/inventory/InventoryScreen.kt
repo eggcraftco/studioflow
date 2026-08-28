@@ -65,6 +65,7 @@ import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioPurchase
 import uk.co.eggcraft.studioflow.data.model.StudioSupplier
 import uk.co.eggcraft.studioflow.data.model.StudioTrackingType
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryCategory
 import uk.co.eggcraft.studioflow.data.model.studioInventoryCategories
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
@@ -103,7 +104,8 @@ internal fun inventoryCardColors() =
 
 private enum class InventoryTab(val label: String) {
     Items("Items"), Purchases("Purchases"), Suppliers("Suppliers"),
-    Stocktake("Stocktake"), Locations("Locations"), Recipes("Recipes"), Reports("Reports")
+    Stocktake("Stocktake"), Locations("Locations"), Recipes("Recipes"), Reports("Reports"),
+    Categories("Categories")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -150,6 +152,17 @@ fun InventoryScreen(state: StudioFlowUiState) {
     // item form's free-text location field. Best-effort: the field works without
     // them, so a failed fetch stays silent.
     var locationPaths by remember { mutableStateOf<List<String>>(emptyList()) }
+    // The workspace's own categories, served with the item page. Every picker
+    // on this screen reads categoryOptions, so a rename made on any platform
+    // shows up here too.
+    var categories by remember { mutableStateOf<List<StudioInventoryCategory>>(emptyList()) }
+    var defaultCategory by remember { mutableStateOf("") }
+
+    val categoryOptions = run {
+        val live = categories.filter { !it.archived }.map { it.title }
+        val base = live.ifEmpty { inventoryCategoryList }
+        (base + items.map { it.category }.filter { it.isNotBlank() }).distinct()
+    }
 
     suspend fun reloadLocationPaths() {
         runCatching { repository.inventoryLocations(workspaceId).map { it.path } }
@@ -161,6 +174,8 @@ fun InventoryScreen(state: StudioFlowUiState) {
             val page = repository.inventoryItemsPage(workspaceId)
             items = page.items
             listCursor = page.cursor
+            categories = page.categories
+            defaultCategory = page.defaultCategory
             summary = repository.inventorySummary(workspaceId)
             notice = null
         } catch (error: Exception) {
@@ -354,6 +369,15 @@ fun InventoryScreen(state: StudioFlowUiState) {
                 t = t
             )
 
+            InventoryTab.Categories -> CategoriesTab(
+                workspaceId = workspaceId,
+                canEdit = canEdit,
+                t = t,
+                // A rename cascades into the items' category strings — reload
+                // so every picker on this screen agrees.
+                onChanged = { scope.launch { reloadItems() } }
+            )
+
             InventoryTab.Reports -> ReportsTab(
                 workspaceId = workspaceId,
                 symbol = symbol,
@@ -403,6 +427,8 @@ fun InventoryScreen(state: StudioFlowUiState) {
             existing = prefill,
             itemId = editingItemId,
             locationPaths = locationPaths,
+            categoryOptions = categoryOptions,
+            defaultCategory = defaultCategory,
             onDismiss = { itemEditor = null },
             onSave = { payload, savingItemId, stagedPhotos ->
                 scope.launch {
@@ -463,6 +489,7 @@ fun InventoryScreen(state: StudioFlowUiState) {
         NewPurchaseDialog(
             symbol = symbol,
             supplierNames = suppliers.map { it.name },
+            categoryOptions = categoryOptions,
             t = t,
             onDismiss = { showNewPurchase = false },
             onSave = { payload ->

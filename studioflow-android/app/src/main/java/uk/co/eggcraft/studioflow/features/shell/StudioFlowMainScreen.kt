@@ -133,6 +133,7 @@ import uk.co.eggcraft.studioflow.features.quickreply.QuickReplyScreen
 import uk.co.eggcraft.studioflow.features.schedule.ScheduleScreen
 import uk.co.eggcraft.studioflow.features.settings.SettingsScreen
 import uk.co.eggcraft.studioflow.features.settings.smartWorkflowTemplateUpdates
+import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Inventory2
 import uk.co.eggcraft.studioflow.features.settings.standardWorkflowTemplate
 import uk.co.eggcraft.studioflow.ui.theme.StudioBlue
@@ -144,6 +145,7 @@ enum class StudioSection(val title: String, val icon: ImageVector, val accessKey
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
     BankSpending("Bank", Icons.Filled.AccountBalance, "dashboard"),
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
+    Production("Production", Icons.Filled.Handyman, "orders"),
     Inventory("Inventory", Icons.Filled.Inventory2, "orders"),
     Schedule("Schedule", Icons.Filled.Schedule, "schedule"),
     TeamSchedule("Team Schedule", Icons.Filled.Groups, "schedule"),
@@ -283,6 +285,7 @@ fun StudioFlowMainScreen(
     var isNotificationDrawerOpen by rememberSaveable { mutableStateOf(false) }
     val preferredSectionOrder = listOf(
         StudioSection.Orders,
+        StudioSection.Production,
         StudioSection.Inventory,
         StudioSection.Dashboard,
         StudioSection.BankSpending,
@@ -1568,6 +1571,16 @@ private fun StudioSectionContent(
                 onSaveDraft = onSaveDraft
             )
             StudioSection.BankSpending -> uk.co.eggcraft.studioflow.features.bank.BankSpendingScreen(state = state)
+            StudioSection.Production -> uk.co.eggcraft.studioflow.features.production.ProductionScreen(
+                state = state,
+                onOpenOrder = { order ->
+                    // The board never becomes a second place to edit an order;
+                    // it hands off to Orders. The shell already watches this
+                    // flow and switches section, so setting it is the whole job.
+                    uk.co.eggcraft.studioflow.services.StudioMessageRouteHolder
+                        .setPendingOrderRoute(order.id, card = "status")
+                }
+            )
             StudioSection.Inventory -> uk.co.eggcraft.studioflow.features.inventory.InventoryScreen(state = state)
             StudioSection.Notes -> uk.co.eggcraft.studioflow.features.notes.NotesScreen(
                 state = state,

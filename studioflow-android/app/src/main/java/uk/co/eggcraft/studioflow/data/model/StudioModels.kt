@@ -1299,6 +1299,12 @@ data class StudioOrder(
     val workSessionCount: Int,
     val assignedToUid: String,
     val assignedToEmail: String,
+    // Production board. Only these two are stored; the stage itself is derived
+    // from the steps above (see ProductionRules.kt), so the board and the order
+    // can never disagree about where a job is.
+    val productionStageOverride: String = "",
+    val productionBlockerReason: String = "",
+    val productionBlockerNote: String = "",
     val isDeleted: Boolean = false,
     val deletedAt: Date? = null
 ) {
@@ -1448,6 +1454,11 @@ data class StudioOrder(
                 workSessionCount = workSessions.size,
                 assignedToUid = document.getString("assignedToUid").orEmpty(),
                 assignedToEmail = document.getString("assignedToEmail").orEmpty(),
+                productionStageOverride = document.getString("productionStageOverride").orEmpty(),
+                productionBlockerReason = ((document.get("productionBlocker") as? Map<*, *>)
+                    ?.get("reason") as? String).orEmpty(),
+                productionBlockerNote = ((document.get("productionBlocker") as? Map<*, *>)
+                    ?.get("note") as? String).orEmpty(),
                 isDeleted = document.getBoolean("isDeleted") ?: false,
                 deletedAt = document.getDate("deletedAt")
             )

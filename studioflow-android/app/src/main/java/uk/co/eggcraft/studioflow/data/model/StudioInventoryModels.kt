@@ -36,10 +36,38 @@ enum class StudioInventoryStatus(val raw: String, val label: String) {
     }
 }
 
+/** The starting point for a brand-new workspace only. The live list belongs to
+ *  the workspace (Inventory → Categories) and arrives with the item page; this
+ *  is the fallback for the first paint before that lands. */
 val studioInventoryCategories = listOf(
     "Watches", "Dials", "Movements", "Bracelets", "Straps",
     "Parts", "Consumables", "Packaging", "Tools", "Other"
 )
+
+/** One of the workspace's own categories. An item stores the TITLE, so a rename
+ *  is carried to the items server-side; the id only lets an editor follow a row
+ *  across a rename. */
+data class StudioInventoryCategory(
+    val id: String,
+    val title: String,
+    val icon: String,
+    val archived: Boolean,
+    val itemCount: Int
+) {
+    companion object {
+        fun from(raw: Map<*, *>?): StudioInventoryCategory? {
+            val title = (raw?.get("title") as? String)?.trim().orEmpty()
+            if (title.isEmpty()) return null
+            return StudioInventoryCategory(
+                id = (raw?.get("id") as? String).orEmpty().ifEmpty { title.lowercase() },
+                title = title,
+                icon = (raw?.get("icon") as? String).orEmpty(),
+                archived = raw?.get("archived") as? Boolean ?: false,
+                itemCount = (raw?.get("itemCount") as? Number)?.toInt() ?: 0
+            )
+        }
+    }
+}
 
 /** One order holding a piece of this item. Written only by the server's
  *  reserveInventoryForOrder — never assembled client-side. */
@@ -230,7 +258,11 @@ data class StudioInventoryCursor(val updatedAtMs: Long, val id: String) {
  *  a workshop past 500 items used to fall silently off the end of the list. */
 data class StudioInventoryPage(
     val items: List<StudioInventoryItem> = emptyList(),
-    val cursor: StudioInventoryCursor? = null
+    val cursor: StudioInventoryCursor? = null,
+    /** The workspace's own categories, served alongside the page so every
+     *  picker on the screen shows the same words the web does. */
+    val categories: List<StudioInventoryCategory> = emptyList(),
+    val defaultCategory: String = ""
 )
 
 /** How the shelf value moved over the last 30 days. `available` is the server
