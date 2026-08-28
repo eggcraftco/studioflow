@@ -114,6 +114,18 @@ export function InventoryContent({
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
+  // A scanned label lands here: /inventory?item=INV-00012 puts the number in
+  // the search box, so pointing a phone camera at a drawer opens the item
+  // instead of offering a web search for a bare number.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const scanned = new URLSearchParams(window.location.search).get("item");
+    if (!scanned) return;
+    setSearch(scanned.trim());
+    const url = new URL(window.location.href);
+    url.searchParams.delete("item");
+    window.history.replaceState({}, "", url.pathname + url.search);
+  }, []);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -307,10 +319,18 @@ export function InventoryContent({
   }
 
   function exportChecked() {
-    const header = ["number", "name", "category", "type", "status", "onHand", "unit", "value", "location", "supplier"];
+    // Header names match what the importer understands, and the unit cost
+    // travels as "Purchase price" — exporting only a line total meant prices
+    // never came back on import.
+    const header = [
+      "Number", "Name", "Category", "Type", "Status", "SKU", "Serial number",
+      "On hand", "Unit", "Purchase price", "Line value", "Location", "Supplier"
+    ];
     const rows = checkedItems.map(item => [
       item.number, item.name, item.category, item.trackingType, item.status,
+      item.sku || "", item.serialNumber || "",
       String(inventoryOnHand(item)), item.quantity?.unit || "",
+      (Number(item.valuationCost) || 0).toFixed(2),
       inventoryLineValue(item).toFixed(2), item.location || "", item.supplierName || ""
     ]);
     const csv = [header, ...rows]
@@ -1034,14 +1054,33 @@ function NewItemModal({
           <div className="inventory-form">
             <label className="inventory-field">
               <span>{isUnique ? t("Purchase price") : t("Purchase price (per unit)")}</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ? String(draft.purchasePrice) : ""} placeholder="0.00"
-                onChange={e => set("purchasePrice", Number(e.target.value) || 0)} />
+              <span className="inventory-money-input">
+                <em aria-hidden="true">{currencySymbol}</em>
+                <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ? String(draft.purchasePrice) : ""} placeholder="0.00"
+                  onChange={e => set("purchasePrice", Number(e.target.value) || 0)} />
+              </span>
             </label>
             <label className="inventory-field">
               <span>{t("Current value (est.)")}</span>
-              <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ? String(draft.currentValueEst) : ""} placeholder="0.00"
-                onChange={e => set("currentValueEst", Number(e.target.value) || 0)} />
+              <span className="inventory-money-input">
+                <em aria-hidden="true">{currencySymbol}</em>
+                <input className="input" type="number" min={0} step="0.01" value={draft.currentValueEst ? String(draft.currentValueEst) : ""} placeholder="0.00"
+                  onChange={e => set("currentValueEst", Number(e.target.value) || 0)} />
+              </span>
+              <small className="inventory-field-hint">
+                {t("An estimate for insurance or resale. Inventory value stays at what you paid — purchase price plus the costs below.")}
+              </small>
             </label>
+          </div>
+
+          {/* The number the item will actually carry in the list and the KPIs,
+              worked out here so nobody has to guess which field moves it. */}
+          <div className="inventory-value-preview">
+            <span>{isUnique ? t("This item's inventory value") : t("Inventory value per unit")}</span>
+            <strong>{money(currencySymbol, draft.ownership === "customer" ? 0 : internalTotal)}</strong>
+            {draft.ownership === "customer" ? (
+              <small>{t("Customer property is held, not owned — it stays at zero.")}</small>
+            ) : null}
           </div>
 
           {extras.map((row, index) => (
