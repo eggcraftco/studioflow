@@ -4754,7 +4754,10 @@ struct StudioKeepNotesView: View {
                 }
 
                 if selectedSection != "notes" {
-                    if selectedSection != "projectNotes" {
+                    // The section key is lowercase everywhere else; the old
+                    // camelCase spelling never matched, so this button showed
+                    // in Project Notes where it was meant to stay hidden.
+                    if selectedSection != "projectnotes" {
                         Button {
                             selectedSection = "notes"
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.88)) {
