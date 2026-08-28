@@ -4212,11 +4212,20 @@ exports.createWebsiteChat = onCall({ region: "europe-west2", secrets: [NIVADESK_
           accountName: cleanSupportText(request.auth.token?.name, 120) || accountEmail.split("@")[0],
           accountCompanyId: companySnap && companySnap.exists ? accountCompanyId : "",
           accountCompanyName: cleanSupportText(companyData.name || companyData.companyName, 160),
-          accountPlan: String(billingEntitlementsForCompany(companyData)?.plan || "")
+          accountPlan: String(billingEntitlementsForCompany(companyData)?.plan || ""),
+          // How much of a workspace is behind the question. A one-order trial
+          // asking "how do I attach a receipt?" and a 400-order studio asking
+          // the same thing are not the same conversation. count() reads the
+          // aggregate, not the orders, so this stays cheap on a big workspace.
+          accountOrderCount: accountCompanyId
+            ? (await admin.firestore().collection("orders")
+                .where("companyId", "==", String(accountCompanyId))
+                .count().get()).data().count
+            : 0
         };
       } catch (error) {
         console.warn("createWebsiteChat account context failed:", error?.message || error);
-        account = { accountUid, accountEmail, accountName: accountEmail.split("@")[0], accountCompanyId: "", accountCompanyName: "", accountPlan: "" };
+        account = { accountUid, accountEmail, accountName: accountEmail.split("@")[0], accountCompanyId: "", accountCompanyName: "", accountPlan: "", accountOrderCount: 0 };
       }
     }
 
