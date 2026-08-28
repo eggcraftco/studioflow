@@ -74,6 +74,25 @@ export function CustomerPortalContent({ token }: { token: string }) {
     void load();
   }, [load]);
 
+  // The page wears the studio's logo and colour; the browser tab did not. On a
+  // connected domain that is the one place NivaDesk still showed through —
+  // track.eggcraft.co.uk with our favicon is exactly the mismatch the branded
+  // domain exists to remove.
+  //
+  // Set here rather than in generateMetadata because the studio is identified
+  // by the token, which only this callable can resolve; the page is noindex, so
+  // nothing is lost by the tab settling a moment after the content.
+  useEffect(() => {
+    if (!portal || typeof document === "undefined") return;
+    const name = portal.businessName.trim();
+    if (name) document.title = `${name} — Track your order`;
+    const logo = portal.logoUrl.trim();
+    if (!logo) return;
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+      ?? document.head.appendChild(Object.assign(document.createElement("link"), { rel: "icon" }));
+    link.href = logo;
+  }, [portal]);
+
   if (loading) {
     return <section className="portal-shell"><p className="portal-shell-muted">Loading…</p></section>;
   }
