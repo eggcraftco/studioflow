@@ -77,6 +77,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -468,7 +469,17 @@ fun StudioFlowMainScreen(
         if (showWorkspaceOnboarding) {
             WorkspaceOnboardingScreen(
                 state = state,
-                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings
+                onUpdateWorkspaceSettings = onUpdateWorkspaceSettings,
+                onOpenIntegration = { destination ->
+                    // Bank has its own section; the rest live in Settings, which
+                    // is where their credentials and store URLs already are.
+                    when (destination) {
+                        "tab:bank" -> { settingsStartKey = null; section = StudioSection.BankSpending }
+                        "settings:shopify" -> { settingsStartKey = "shopify"; section = StudioSection.Settings }
+                        "settings:woocommerce" -> { settingsStartKey = "woo"; section = StudioSection.Settings }
+                        else -> { settingsStartKey = "quickReply"; section = StudioSection.Settings }
+                    }
+                }
             )
         } else {
             Column(
@@ -480,7 +491,27 @@ fun StudioFlowMainScreen(
             // workspace is on Pro or Team, so calling it Free would be a lie.
             val isTrialing = state.workspace?.billingStatus == "trialing" &&
                 state.workspace.billingPlan != StudioBillingPlan.Demo
-            if (isTrialing && state.workspace?.isOwner == true && activeSection != StudioSection.Settings) {
+            // Mirrors `trialHasExpired` in functions/index.js: an expired trial
+            // keeps billingStatus "trialing" and the server just stops granting
+            // the paid plan, so without this the countdown sits at "ends today"
+            // forever and nobody is ever told they are back on Free.
+            val trialGraceMs = 36L * 60L * 60L * 1000L
+            val trialEnded = state.workspace?.billingStatus == "trialing" &&
+                (state.workspace.trialEndsAtMs ?: 0L) > 0L &&
+                System.currentTimeMillis() > (state.workspace.trialEndsAtMs ?: 0L) + trialGraceMs
+            if (trialEnded && state.workspace?.isOwner == true && activeSection != StudioSection.Settings) {
+                TrialEndedBanner(
+                    companyId = state.workspace.id,
+                    planName = state.workspace.billingPlan.title,
+                    onViewPlans = {
+                        settingsStartKey = "plan"
+                        if (StudioSection.Settings in availableSections) {
+                            section = StudioSection.Settings
+                        }
+                    }
+                )
+            }
+            if (isTrialing && !trialEnded && state.workspace?.isOwner == true && activeSection != StudioSection.Settings) {
                 TrialBanner(
                     companyId = state.workspace.id,
                     planName = state.workspace.billingPlan.title,
@@ -871,6 +902,46 @@ fun StudioFlowMainScreen(
 // X never fully hides the banner — it collapses to a one-line strip that
 // expands back on tap. Collapsed state is stored per companyId so it never
 // bleeds into a different account on this device.
+/** Shown once, when the trial has run out. Both outcomes look equally available
+ *  on purpose: someone who wants to stay on Free should not have to hunt for the
+ *  way to say so, and nobody should be left wondering whether they were charged. */
+@Composable
+private fun TrialEndedBanner(
+    companyId: String,
+    planName: String,
+    onViewPlans: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("trial_banner", Context.MODE_PRIVATE) }
+    var seenCompanyId by rememberSaveable { mutableStateOf(prefs.getString("endedSeenCompanyId", "") ?: "") }
+    if (companyId.isNotBlank() && seenCompanyId == companyId) return
+
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+            Text(
+                t("Your {plan} trial has ended.").replace("{plan}", planName),
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                t("Nothing was deleted and you haven't been charged. Your workspace is now on Free."),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(modifier = Modifier.padding(top = 8.dp)) {
+                OutlinedButton(onClick = {
+                    seenCompanyId = companyId
+                    prefs.edit().putString("endedSeenCompanyId", companyId).apply()
+                }) { Text(t("Continue on Free"), fontSize = 12.sp) }
+                Spacer(Modifier.size(8.dp))
+                Button(onClick = onViewPlans) { Text(t("Choose a plan"), fontSize = 12.sp) }
+            }
+        }
+    }
+}
+
 /** The trial strip. Shows what the fortnight has been worth rather than only
  *  counting down — a bare "9 days left" is a threat, "9 days left · 8 orders
  *  organised" is a reason. Under three days the reassurance outranks the tally:
@@ -1033,7 +1104,8 @@ private fun DemoPlanUpgradeBanner(
 @Composable
 private fun WorkspaceOnboardingScreen(
     state: StudioFlowUiState,
-    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit
+    onUpdateWorkspaceSettings: (Map<String, Any?>, String) -> Unit,
+    onOpenIntegration: (String) -> Unit
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -1048,9 +1120,7 @@ private fun WorkspaceOnboardingScreen(
         return
     }
 
-    OnboardingWizardScreen(saving = state.settingsSaving, t = t) { answers ->
-        savedAnswers = answers
-        finished = true
+    fun saveAnswers(answers: OnboardingAnswers) {
         onUpdateWorkspaceSettings(
             // The chosen work kinds become the business type the preset engine
             // has always understood, so the card/step/label presets keep working.
@@ -1059,6 +1129,22 @@ private fun WorkspaceOnboardingScreen(
             "Workspace setup completed."
         )
     }
+
+    OnboardingWizardScreen(
+        saving = state.settingsSaving,
+        t = t,
+        onFinish = { answers ->
+            savedAnswers = answers
+            finished = true
+            saveAnswers(answers)
+        },
+        onConnect = { answers, integration ->
+            // Save first: connecting leaves this screen, and the answers must
+            // survive the trip.
+            saveAnswers(answers)
+            onOpenIntegration(integration.destination)
+        }
+    )
 }
 
 // Localized business-description seeds: language name -> business type -> seed

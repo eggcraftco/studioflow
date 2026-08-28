@@ -808,6 +808,16 @@ class AuthViewModel: ObservableObject {
     var isTrialing: Bool {
         currentBillingStatus.lowercased() == "trialing" && currentBillingPlan != .demo
     }
+
+    /// Mirrors `trialHasExpired` in functions/index.js. A trial that has run out
+    /// keeps `billingStatus: "trialing"` on the company doc — the server simply
+    /// stops granting the paid plan. Without this the countdown would sit at
+    /// "ends today" forever and nobody would ever be told they are back on Free.
+    var trialHasEnded: Bool {
+        guard currentBillingStatus.lowercased() == "trialing", let endsAt = trialEndsAt else { return false }
+        let graceSeconds: TimeInterval = 36 * 60 * 60
+        return Date().timeIntervalSince(endsAt) > graceSeconds
+    }
     // Owner toggle: show/hide the "AI Replies" (Quick Reply) item in the main menu.
     @Published var quickReplyMenuEnabled: Bool = true
     @Published var currentStorageAddonKey: String = ""

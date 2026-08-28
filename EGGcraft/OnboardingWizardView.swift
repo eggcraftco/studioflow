@@ -217,8 +217,6 @@ enum OnboardingGoal: String, CaseIterable {
 enum OnboardingStart: String, CaseIterable {
     case firstOrder = "first_order"
     case sample
-    case shopify
-    case woocommerce
     case spreadsheet
     case empty
     case later
@@ -227,8 +225,6 @@ enum OnboardingStart: String, CaseIterable {
         switch self {
         case .firstOrder: return "Create my first order"
         case .sample: return "Explore a sample workspace"
-        case .shopify: return "Connect Shopify"
-        case .woocommerce: return "Connect WooCommerce"
         case .spreadsheet: return "Import a spreadsheet"
         case .empty: return "Start empty"
         case .later: return "I'll set this up later"
@@ -239,13 +235,61 @@ enum OnboardingStart: String, CaseIterable {
         switch self {
         case .firstOrder: return "Start with the thing you actually do."
         case .sample: return "Look around with example orders before adding your own."
-        case .shopify, .woocommerce: return "Bring your store's orders and customers in."
         case .spreadsheet: return "Move what you already track into NivaDesk."
         case .empty: return "A clean workspace, set up your way."
         case .later: return "Go straight to your workspace."
         }
     }
 }
+
+/// The accounts a workspace can genuinely connect today.
+///
+/// Deliberately only these four: a logo for something we cannot actually
+/// connect would cost exactly the trust the grid is here to earn.
+struct OnboardingIntegration: Identifiable {
+    let id: String
+    let name: String
+    let detail: String
+    /// Where tapping Connect lands, once the answers are safely saved.
+    let destination: OnboardingIntegrationDestination
+    let colour: Color
+}
+
+enum OnboardingIntegrationDestination {
+    case settingsSection(String)
+    case tab(String)
+}
+
+let onboardingIntegrations: [OnboardingIntegration] = [
+    OnboardingIntegration(
+        id: "shopify",
+        name: "Shopify",
+        detail: "Import your store's orders and customers automatically.",
+        destination: .settingsSection("Shopify Integration"),
+        colour: Color(red: 0.37, green: 0.56, blue: 0.24)
+    ),
+    OnboardingIntegration(
+        id: "woocommerce",
+        name: "WooCommerce",
+        detail: "Import your store's orders and customers automatically.",
+        destination: .settingsSection("WooCommerce Integration"),
+        colour: Color(red: 0.50, green: 0.33, blue: 0.70)
+    ),
+    OnboardingIntegration(
+        id: "bank",
+        name: "Open Banking",
+        detail: "See what you spent and earned beside the work that earned it.",
+        destination: .tab("BankSpending"),
+        colour: Color(red: 0.06, green: 0.48, blue: 0.42)
+    ),
+    OnboardingIntegration(
+        id: "chatgpt",
+        name: "ChatGPT",
+        detail: "Ask about your orders, and draft replies, from inside ChatGPT.",
+        destination: .settingsSection("Quick Reply Settings"),
+        colour: Color(red: 0.06, green: 0.64, blue: 0.50)
+    )
+]
 
 struct OnboardingAnswers {
     var country: String = "GB"
@@ -572,19 +616,89 @@ private struct OnboardingStepGoal: View {
     }
 }
 
-private struct OnboardingStepStart: View {
-    @Binding var answers: OnboardingAnswers
+private struct OnboardingConnectTile: View {
+    let integration: OnboardingIntegration
     let lang: String
+    let disabled: Bool
+    let connect: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(OnboardingStart.allCases, id: \.self) { option in
-                OnboardingOptionRow(
-                    title: t(option.label, lang: lang),
-                    detail: t(option.detail, lang: lang),
-                    isOn: answers.start == option
+            // The name set in the brand's own colour. No third-party logo files
+            // are shipped: their guidelines want the real mark, unmodified, and
+            // a hand-traced approximation is both worse and a trademark problem.
+            Text(integration.name)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundColor(integration.colour)
+            Text(t(integration.detail, lang: lang))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(t("Connect", lang: lang)) { connect() }
+                .buttonStyle(.bordered)
+                .tint(integration.colour)
+                .disabled(disabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.gray.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.gray.opacity(0.20), lineWidth: 1)
+        )
+    }
+}
+
+private struct OnboardingStepStart: View {
+    @Binding var answers: OnboardingAnswers
+    let lang: String
+    let saving: Bool
+    let onConnect: (OnboardingIntegration) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("Connect your accounts", lang: lang))
+                    .font(.system(size: 14, weight: .semibold))
+                Text(t("Optional. Connecting now means your workspace opens with your real work already in it.", lang: lang))
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 210), spacing: 10, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 10
                 ) {
-                    answers.start = option
+                    ForEach(onboardingIntegrations) { integration in
+                        OnboardingConnectTile(
+                            integration: integration,
+                            lang: lang,
+                            disabled: saving
+                        ) {
+                            onConnect(integration)
+                        }
+                    }
+                }
+                Text(t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time.", lang: lang))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("Or start another way", lang: lang))
+                    .font(.system(size: 14, weight: .semibold))
+                ForEach(OnboardingStart.allCases, id: \.self) { option in
+                    OnboardingOptionRow(
+                        title: t(option.label, lang: lang),
+                        detail: t(option.detail, lang: lang),
+                        isOn: answers.start == option
+                    ) {
+                        answers.start = option
+                    }
                 }
             }
         }
@@ -598,6 +712,10 @@ struct OnboardingWizardView: View {
     let saving: Bool
     let errorText: String
     let onFinish: (OnboardingAnswers) -> Void
+    /// Saves what has been answered so far, then opens the integration. The
+    /// answers have to be on disk before we navigate away, or a person who
+    /// connects Shopify comes back to an empty workspace and the wizard again.
+    let onConnect: (OnboardingAnswers, OnboardingIntegration) -> Void
 
     @State private var step: Int = 1
     @State private var answers = OnboardingAnswers()
@@ -643,7 +761,10 @@ struct OnboardingWizardView: View {
         case 1: OnboardingStepBasics(answers: $answers, lang: lang)
         case 2: OnboardingStepWork(answers: $answers, lang: lang)
         case 3: OnboardingStepGoal(answers: $answers, showAllGoals: $showAllGoals, lang: lang)
-        default: OnboardingStepStart(answers: $answers, lang: lang)
+        default:
+            OnboardingStepStart(answers: $answers, lang: lang, saving: saving) { integration in
+                onConnect(answers, integration)
+            }
         }
     }
 
@@ -676,9 +797,16 @@ struct OnboardingWizardView: View {
                             .buttonStyle(.bordered)
                             .disabled(saving)
                     }
-                    Button(continueLabel) { advance() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!canContinue || saving)
+                    Button { advance() } label: {
+                        // Without this "Open my workspace" hyphenates into
+                        // "Open my / work- / space" on a narrow iPhone footer.
+                        Text(continueLabel)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canContinue || saving)
                 }
             }
             .padding(26)

@@ -1750,6 +1750,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * Connecting an account leaves the app for an OAuth round trip. Save the
+   * answers first, mark setup done, and only then hand off — otherwise a person
+   * who connects Shopify comes back to an empty workspace and the wizard again.
+   */
+  async function connectFromOnboarding(answers: OnboardingAnswers, href: string) {
+    await completeOnboardingWizard(answers);
+    if (onboardingError) return;
+    setSettings((current) => {
+      const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
+      if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+      return merged;
+    });
+    window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
+    router.push(href);
+  }
+
   async function completeWorkspaceOnboarding(
     action: "smart" | "standard" | "skip",
   ) {
@@ -1814,6 +1831,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             saving={onboardingSaving}
             error={onboardingError}
             onFinish={(answers) => void completeOnboardingWizard(answers)}
+            onConnect={(answers, href) => void connectFromOnboarding(answers, href)}
           />
         )}
       </AppShellMountedContext.Provider>

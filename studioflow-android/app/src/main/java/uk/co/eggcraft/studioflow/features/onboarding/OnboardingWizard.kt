@@ -116,8 +116,6 @@ enum class OnboardingGoal(val id: String, val label: String, val isPrimary: Bool
 enum class OnboardingStart(val id: String, val label: String, val detail: String) {
     FIRST_ORDER("first_order", "Create my first order", "Start with the thing you actually do."),
     SAMPLE("sample", "Explore a sample workspace", "Look around with example orders before adding your own."),
-    SHOPIFY("shopify", "Connect Shopify", "Bring your store's orders and customers in."),
-    WOOCOMMERCE("woocommerce", "Connect WooCommerce", "Bring your store's orders and customers in."),
     SPREADSHEET("spreadsheet", "Import a spreadsheet", "Move what you already track into NivaDesk."),
     EMPTY("empty", "Start empty", "A clean workspace, set up your way."),
     LATER("later", "I'll set this up later", "Go straight to your workspace.")
@@ -160,6 +158,26 @@ val onboardingTimeZones = listOf(
     "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles",
     "America/Toronto", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC"
 )
+
+/**
+ * The accounts a workspace can genuinely connect today.
+ *
+ * Deliberately only these four: a logo for something we cannot actually connect
+ * would cost exactly the trust the grid is here to earn.
+ */
+enum class OnboardingIntegration(
+    val id: String,
+    val brand: String,
+    val detail: String,
+    /** Where tapping Connect lands, once the answers are safely saved. */
+    val destination: String,
+    val colour: Long
+) {
+    SHOPIFY("shopify", "Shopify", "Import your store's orders and customers automatically.", "settings:shopify", 0xFF5E8E3E),
+    WOOCOMMERCE("woocommerce", "WooCommerce", "Import your store's orders and customers automatically.", "settings:woocommerce", 0xFF7F54B3),
+    BANK("bank", "Open Banking", "See what you spent and earned beside the work that earned it.", "tab:bank", 0xFF0F7B6C),
+    CHATGPT("chatgpt", "ChatGPT", "Ask about your orders, and draft replies, from inside ChatGPT.", "settings:quickReply", 0xFF10A37F)
+}
 
 data class OnboardingAnswers(
     val country: String = "GB",

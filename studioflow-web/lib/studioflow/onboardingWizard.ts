@@ -91,11 +91,65 @@ export const ONBOARDING_GOALS: { id: OnboardingGoal; label: string; primary: boo
   { id: "other", label: "Something else", primary: false },
 ];
 
+/**
+ * The accounts a workspace can genuinely connect today.
+ *
+ * Deliberately only these four: a logo for something we cannot actually connect
+ * would cost exactly the trust the grid is here to earn. Pandle is left out
+ * until the push side is built.
+ *
+ * `logo` points at an official brand asset under /brand/integrations. When the
+ * file is missing the tile falls back to a wordmark on the brand's own colour,
+ * so the grid looks finished either way and improves the moment a real SVG is
+ * dropped in.
+ */
+export type OnboardingIntegration = {
+  id: "shopify" | "woocommerce" | "bank" | "chatgpt";
+  name: string;
+  detail: string;
+  href: string;
+  logo: string;
+  colour: string;
+};
+
+export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
+  {
+    id: "shopify",
+    name: "Shopify",
+    detail: "Import your store's orders and customers automatically.",
+    href: "/connect/shopify",
+    logo: "/brand/integrations/shopify.svg",
+    colour: "#5E8E3E",
+  },
+  {
+    id: "woocommerce",
+    name: "WooCommerce",
+    detail: "Import your store's orders and customers automatically.",
+    href: "/settings?section=integrations",
+    logo: "/brand/integrations/woocommerce.svg",
+    colour: "#7F54B3",
+  },
+  {
+    id: "bank",
+    name: "Open Banking",
+    detail: "See what you spent and earned beside the work that earned it.",
+    href: "/bank",
+    logo: "/brand/integrations/openbanking.svg",
+    colour: "#0F7B6C",
+  },
+  {
+    id: "chatgpt",
+    name: "ChatGPT",
+    detail: "Ask about your orders, and draft replies, from inside ChatGPT.",
+    href: "/settings?section=quick-reply",
+    logo: "/brand/integrations/chatgpt.svg",
+    colour: "#10A37F",
+  },
+];
+
 export const ONBOARDING_STARTS: { id: OnboardingStart; label: string; detail: string }[] = [
   { id: "first_order", label: "Create my first order", detail: "Start with the thing you actually do." },
   { id: "sample", label: "Explore a sample workspace", detail: "Look around with example orders before adding your own." },
-  { id: "shopify", label: "Connect Shopify", detail: "Bring your store's orders and customers in." },
-  { id: "woocommerce", label: "Connect WooCommerce", detail: "Bring your store's orders and customers in." },
   { id: "spreadsheet", label: "Import a spreadsheet", detail: "Move what you already track into NivaDesk." },
   { id: "empty", label: "Start empty", detail: "A clean workspace, set up your way." },
   { id: "later", label: "I'll set this up later", detail: "Go straight to your workspace." },

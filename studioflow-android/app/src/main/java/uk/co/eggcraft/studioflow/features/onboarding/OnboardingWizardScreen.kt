@@ -113,6 +113,32 @@ private fun WizardPicker(
 }
 
 @Composable
+private fun ConnectTile(
+    integration: OnboardingIntegration,
+    t: (String) -> String,
+    saving: Boolean,
+    onConnect: () -> Unit
+) {
+    val brand = Color(integration.colour)
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.04f),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The name set in the brand's own colour. No third-party logo files
+            // are shipped: their guidelines want the real mark, unmodified, and
+            // a hand-traced approximation is both worse and a trademark problem.
+            Text(integration.brand, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = brand)
+            Text(t(integration.detail), fontSize = 12.sp, color = Muted)
+            OutlinedButton(onClick = onConnect, enabled = !saving) {
+                Text(t("Connect"), color = brand)
+            }
+        }
+    }
+}
+
+@Composable
 private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text("$step / $total", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Muted)
@@ -146,7 +172,11 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
 fun OnboardingWizardScreen(
     saving: Boolean,
     t: (String) -> String,
-    onFinish: (OnboardingAnswers) -> Unit
+    onFinish: (OnboardingAnswers) -> Unit,
+    /** Saves what has been answered so far, then opens the integration — the
+     *  answers must be on disk before we navigate away, or a person who connects
+     *  Shopify comes back to an empty workspace and the wizard again. */
+    onConnect: (OnboardingAnswers, OnboardingIntegration) -> Unit
 ) {
     var step by remember { mutableStateOf(1) }
     var answers by remember { mutableStateOf(OnboardingAnswers()) }
@@ -292,7 +322,20 @@ fun OnboardingWizardScreen(
                         }
                     }
 
-                    else -> Column {
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text(t("Connect your accounts"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(
+                            t("Optional. Connecting now means your workspace opens with your real work already in it."),
+                            fontSize = 12.sp, color = Muted
+                        )
+                        OnboardingIntegration.entries.forEach { integration ->
+                            ConnectTile(integration, t, saving) { onConnect(answers, integration) }
+                        }
+                        Text(
+                            t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time."),
+                            fontSize = 11.sp, color = Muted
+                        )
+                        Text(t("Or start another way"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                         OnboardingStart.entries.forEach { option ->
                             WizardOptionRow(t(option.label), t(option.detail), answers.start == option) {
                                 answers = answers.copy(start = option)

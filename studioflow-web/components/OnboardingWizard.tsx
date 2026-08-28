@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 import {
   ONBOARDING_GOALS,
   ONBOARDING_GOAL_TASKS,
+  ONBOARDING_INTEGRATIONS,
   ONBOARDING_STARTS,
   ONBOARDING_TEAM_SIZES,
   ONBOARDING_VOLUMES,
@@ -74,11 +75,16 @@ export function OnboardingWizard({
   saving,
   error,
   onFinish,
+  onConnect,
 }: {
   t: (text: string) => string;
   saving: boolean;
   error: string;
   onFinish: (answers: OnboardingAnswers) => void;
+  /** Saves what has been answered so far, then hands off to the integration.
+   *  Connecting leaves the app for an OAuth round trip, so the answers have to
+   *  be on disk before we go or the whole wizard is lost on the way back. */
+  onConnect: (answers: OnboardingAnswers, href: string) => void;
 }) {
   const suggested = useMemo(suggestedSettings, []);
   const [step, setStep] = useState(1);
@@ -287,7 +293,48 @@ export function OnboardingWizard({
         ) : null}
 
         {step === 4 ? (
-          <div className="onboard-options">
+          <>
+            <div className="onboard-connect">
+              <h2>{t("Connect your accounts")}</h2>
+              <p>{t("Optional. Connecting now means your workspace opens with your real work already in it.")}</p>
+              <div className="onboard-connect-grid">
+                {ONBOARDING_INTEGRATIONS.map(integration => (
+                  <article
+                    key={integration.id}
+                    className="onboard-connect-tile"
+                    style={{ "--brand": integration.colour } as React.CSSProperties}
+                  >
+                    <span className="onboard-connect-logo">
+                      {/* An official asset when one is present; the wordmark on the
+                          brand's own colour when it is not, so the tile is never
+                          an empty box. */}
+                      <img
+                        src={integration.logo}
+                        alt=""
+                        onError={event => {
+                          event.currentTarget.parentElement?.setAttribute("data-fallback", "1");
+                        }}
+                      />
+                      <b>{integration.name}</b>
+                    </span>
+                    <em>{t(integration.detail)}</em>
+                    <button
+                      type="button"
+                      className="onboard-btn onboard-connect-btn"
+                      disabled={saving}
+                      onClick={() => onConnect(answers, integration.href)}
+                    >
+                      {t("Connect")}
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <p className="onboard-connect-note">
+                {t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time.")}
+              </p>
+            </div>
+            <h2 className="onboard-subhead">{t("Or start another way")}</h2>
+            <div className="onboard-options">
             {ONBOARDING_STARTS.map(option => (
               <label key={option.id} className={answers.start === option.id ? "is-on" : ""}>
                 <input
@@ -302,7 +349,8 @@ export function OnboardingWizard({
                 </span>
               </label>
             ))}
-          </div>
+            </div>
+          </>
         ) : null}
 
         {error ? <p className="onboard-error">{error}</p> : null}

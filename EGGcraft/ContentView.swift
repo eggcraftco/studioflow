@@ -7574,6 +7574,7 @@ struct ContentView: View {
     // account on this device.
     @AppStorage("demoPlanBannerDismissedCompanyV1") private var demoPlanBannerDismissedCompanyId: String = ""
     @AppStorage("trialBannerDismissedCompanyV1") private var trialBannerDismissedCompanyId: String = ""
+    @AppStorage("trialEndedSeenCompanyV1") private var trialEndedSeenCompanyId: String = ""
     @State private var macFirstProjectGuideCompleted: Bool = false
     @State private var macFirstProjectGuideStep: Int = 0
     @State private var macFirstProjectGuideActive: Bool = false
@@ -9317,6 +9318,9 @@ struct ContentView: View {
             if shouldShowTrialBanner {
                 trialBanner
             }
+            if shouldShowTrialEndedNotice {
+                trialEndedNotice
+            }
             if shouldShowDemoPlanBanner {
                 demoPlanUpgradeBanner
             }
@@ -9650,8 +9654,56 @@ struct ContentView: View {
     /// would be a lie, and a countdown is the thing the owner needs.
     private var shouldShowTrialBanner: Bool {
         authVM.isTrialing
+            && !authVM.trialHasEnded
             && authVM.isCompanyOwner
             && aktifSekme != "Settings"
+    }
+
+    private var shouldShowTrialEndedNotice: Bool {
+        authVM.isTrialing
+            && authVM.trialHasEnded
+            && authVM.isCompanyOwner
+            && aktifSekme != "Settings"
+            && trialEndedSeenCompanyId != (authVM.currentCompanyId ?? "")
+    }
+
+    /// Shown once, when the trial has run out. Both outcomes look equally
+    /// available on purpose: someone who wants to stay on Free should not have
+    /// to hunt for the way to say so, and nobody should be left wondering
+    /// whether they were charged.
+    private var trialEndedNotice: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    t("Your {plan} trial has ended.", lang: seciliDil)
+                        .replacingOccurrences(of: "{plan}", with: authVM.currentBillingPlan.displayName)
+                )
+                .font(.system(size: 12.5, weight: .bold))
+                Text(t("Nothing was deleted and you haven't been charged. Your workspace is now on Free.", lang: seciliDil))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button(t("Continue on Free", lang: seciliDil)) {
+                trialEndedSeenCompanyId = authVM.currentCompanyId ?? ""
+            }
+            .buttonStyle(.bordered)
+            Button(t("Choose a plan", lang: seciliDil)) {
+                settingsStartSection = t("Plan & Access", lang: seciliDil)
+                aktifSekme = "Settings"
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+        }
     }
 
     private var isTrialBannerCollapsed: Bool {
@@ -10291,10 +10343,22 @@ struct ContentView: View {
                     OnboardingWizardView(
                         lang: seciliDil,
                         saving: onboardingWizardSaving,
-                        errorText: onboardingWizardError
-                    ) { answers in
-                        applyOnboardingWizardAnswers(answers)
-                    }
+                        errorText: onboardingWizardError,
+                        onFinish: { answers in
+                            applyOnboardingWizardAnswers(answers)
+                        },
+                        onConnect: { answers, integration in
+                            applyOnboardingWizardAnswers(answers)
+                            markBusinessOnboardingCompletedForCurrentCompany(action: "wizard")
+                            switch integration.destination {
+                            case .settingsSection(let section):
+                                settingsStartSection = t(section, lang: seciliDil)
+                                aktifSekme = "Settings"
+                            case .tab(let tab):
+                                aktifSekme = tab
+                            }
+                        }
+                    )
                 }
             }
         }
