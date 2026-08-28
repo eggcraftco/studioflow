@@ -8,7 +8,7 @@ Son güncelleme: 28 Ağustos 2026.
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
 
-### Production menüsü (yeni özellik) — 28 Ağu, SUNUCU CANLI
+### Production menüsü (yeni özellik) — 28 Ağu, CANLI (Round 65)
 Siparişler "ne istendi", Takvim "ne zaman"; eksik olan katman "hangi iş şu anda
 nerede" idi. Yeni üst menü + Kanban.
 - **İki seviye, spec'teki gibi:** Production Steps zaten siparişte var; Production
@@ -26,7 +26,7 @@ nerede" idi. Yeni üst menü + Kanban.
   (ProductionScreen). Hepsi derleniyor; web emülatörde uçtan uca test edildi
   (taşıma, blokaj sebebi, Undo, sütun yeniden adlandırma).
 
-### Envanter kategorileri artık atölyenin — 28 Ağu, SUNUCU CANLI
+### Envanter kategorileri artık atölyenin — 28 Ağu, CANLI (Round 65)
 Kategoriler 10 sabit kelimeydi; kuyumcu yüzüğü "Watches" altına koymak zorundaydı.
 - Envanter → Categories: yeniden adlandır / ikon / sırala / gizle / birleştir /
   varsayılan seç.
