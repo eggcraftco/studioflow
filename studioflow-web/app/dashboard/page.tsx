@@ -390,6 +390,12 @@ function rangeWindow(range: RangeKey, orders: DashboardFinanceOrder[], customSta
   return { start: startOfYear(now), end: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999), unit: "month" as BucketUnit };
 }
 
+// yyyy-mm-dd in LOCAL time. toISOString() would shift a date near midnight
+// into the previous day for anyone west of UTC.
+function isoDay(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function filterOrdersByWindow(orders: DashboardFinanceOrder[], start: Date, end: Date) {
   return orders.filter(order => order.paymentDate && order.paymentDate >= start && order.paymentDate <= end);
 }
@@ -802,7 +808,10 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="studio-pill"
-                onClick={() => router.push("/export")}
+                // Carry the period being looked at. The export screen has its
+                // own range picker, and sending the reader there empty made
+                // the button quietly ignore the filter they had just set.
+                onClick={() => router.push(`/export?from=${isoDay(currentWindow.start)}&to=${isoDay(currentWindow.end)}`)}
                 style={{ cursor: "pointer", border: "none" }}
                 title={t("Export orders to CSV")}
               >
@@ -1293,6 +1302,15 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
     : new Intl.NumberFormat(localeTag, { style: "currency", currency, maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value);
   const delta = summary.lastMonth > 0 ? ((summary.thisMonth - summary.lastMonth) / summary.lastMonth) * 100 : null;
   const incomingDelta = summary.incomingLastMonth > 0 ? ((summary.incomingThisMonth - summary.incomingLastMonth) / summary.incomingLastMonth) * 100 : null;
+  // A percentage on its own hides its own arithmetic: "↑58%" reads very
+  // differently on £396 than on £4. Show both months and the cash difference
+  // on hover, so the reader can see what the percentage was computed from.
+  const deltaTitle = (current: number, previous: number, pct: number | null) => {
+    if (pct === null) return undefined;
+    const diff = current - previous;
+    const sign = diff >= 0 ? "+" : "\u2212";
+    return `${bankMoney(current)} vs ${bankMoney(previous)}\n${sign}${bankMoney(Math.abs(diff))} / ${sign}${Math.abs(pct).toFixed(1)}%`;
+  };
   const syncedRecently = lastSync !== null && Date.now() - lastSync.getTime() < 12 * 60 * 60 * 1000;
   const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
   const tileStyle: React.CSSProperties = { flex: "1 1 220px", maxWidth: 320, border: "1px solid rgba(120,120,140,0.18)", borderRadius: 12, padding: "14px 16px 8px" };
@@ -1318,7 +1336,10 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
           <p className="muted-copy" style={{ margin: 0, fontSize: 12.5 }} title={t("Total money out of the bank this calendar month.")}>{t("Spent this month")}</p>
           <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0" }}>{bankMoney(summary.thisMonth)}</strong>
           {delta !== null ? (
-            <span style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? "#16a34a" : "#dc2626" }}>
+            <span
+              title={deltaTitle(summary.thisMonth, summary.lastMonth, delta)}
+              style={{ fontSize: 12, fontWeight: 700, color: delta <= 0 ? "#16a34a" : "#dc2626", cursor: "help" }}
+            >
               {delta <= 0 ? "↓" : "↑"} {Math.abs(delta).toFixed(0)}% {t("vs last month")}
             </span>
           ) : <span style={{ fontSize: 12, opacity: 0.6 }}>{t("First month of data")}</span>}
@@ -1343,7 +1364,10 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
           <p className="muted-copy" style={{ margin: 0, fontSize: 12.5, color: "#16a34a", fontWeight: 700 }}>↗ {t("Incoming")} · {t("This Month")}</p>
           <strong style={{ fontSize: 27, fontVariantNumeric: "tabular-nums", display: "block", margin: "2px 0", color: "#16a34a" }}>+{bankMoney(summary.incomingThisMonth)}</strong>
           {incomingDelta !== null ? (
-            <span style={{ fontSize: 12, fontWeight: 700, color: incomingDelta >= 0 ? "#16a34a" : "#dc2626" }}>
+            <span
+              title={deltaTitle(summary.incomingThisMonth, summary.incomingLastMonth, incomingDelta)}
+              style={{ fontSize: 12, fontWeight: 700, color: incomingDelta >= 0 ? "#16a34a" : "#dc2626", cursor: "help" }}
+            >
               {incomingDelta >= 0 ? "↑" : "↓"} {Math.abs(incomingDelta).toFixed(0)}% {t("vs last month")}
             </span>
           ) : <span style={{ fontSize: 12, opacity: 0.6 }}>{summary.incomingCountThisMonth} {t("payments received")}</span>}
@@ -2084,13 +2108,16 @@ function ExtraSpendingSection({
 
       {scope === "customRange" && (
         <div className="dashboard-range-fields">
+          {/* Same bound as the page-level range picker above: without it this
+              pair alone would accept a start after its end and quietly report
+              an empty period. */}
           <label className="dashboard-range-field">
             {t("From")}
-            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} />
+            <input type="date" value={customStart} max={customEnd || undefined} onChange={e => setCustomStart(e.target.value)} />
           </label>
           <label className="dashboard-range-field">
             {t("To")}
-            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} />
+            <input type="date" value={customEnd} min={customStart || undefined} onChange={e => setCustomEnd(e.target.value)} />
           </label>
         </div>
       )}

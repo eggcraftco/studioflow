@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   exportOrders,
@@ -46,6 +47,12 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { display: "block", fontWeight: 700, fontSize: 13, margin: "0 0 6px" };
 const optLabelStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 14 };
 
+// Only a well-formed yyyy-mm-dd is accepted: the value comes from the address
+// bar, and anything else is dropped rather than pushed into a date input.
+function isoDayParam(value: string | null | undefined) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+}
+
 export function ExportOrdersPanel({
   workspace,
   canSeeFinance,
@@ -57,9 +64,16 @@ export function ExportOrdersPanel({
 }) {
   const templates = useMemo(() => TEMPLATES.filter((tpl) => canSeeFinance || !tpl.finance), [canSeeFinance]);
   const [template, setTemplate] = useState<ExportTemplate>("finance");
-  const [preset, setPreset] = useState<ExportRangePreset>("thisMonth");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  // The dashboard's Export CSV button arrives with the period the reader was
+  // looking at (?from=&to=). Open on that range rather than on this month, so
+  // the export matches the figures they came from.
+  const params = useSearchParams();
+  const fromParam = isoDayParam(params?.get("from"));
+  const toParam = isoDayParam(params?.get("to"));
+  const arrivedWithRange = Boolean(fromParam && toParam);
+  const [preset, setPreset] = useState<ExportRangePreset>(arrivedWithRange ? "custom" : "thisMonth");
+  const [customFrom, setCustomFrom] = useState(fromParam);
+  const [customTo, setCustomTo] = useState(toParam);
   const [includeTrash, setIncludeTrash] = useState(false);
   const [delimiter, setDelimiter] = useState<"," | ";">(",");
   const [bom, setBom] = useState(true);
