@@ -5202,6 +5202,65 @@ const inventoryExports = createInventoryFunctions({
 const { _internal: inventoryInternal, ...inventoryCallables } = inventoryExports;
 Object.assign(exports, inventoryCallables);
 
+// Production: the operations layer between Orders ("what was ordered") and
+// Schedule ("when is it due"). It answers "where is this on the bench right
+// now" and deliberately keeps that answer apart from order, payment and
+// delivery status — see the header of production.js for the reasoning.
+const { createProductionFunctions } = require("./production");
+const productionExports = createProductionFunctions({
+  admin,
+  onCall,
+  HttpsError,
+  requireWorkspace: async (request, { area = "orders", write = false } = {}) => {
+    const context = await requireWorkspaceForBilling(request, false);
+    requireWorkspaceAreaAccess(context.companyData, context.uid, area);
+    if (write && !uidCanEditWorkspaceOrderStatus(context.companyData, context.uid)) {
+      throw new HttpsError("permission-denied", "Your workspace role cannot move production work.");
+    }
+    return context;
+  },
+  companySettingsDocRef,
+  orderDocRef,
+  ordersOfCompany: (companyId) => admin.firestore().collection("siparisler").where("companyId", "==", companyId),
+  // The board's columns are the workspace's own production steps, so the two
+  // read from one place rather than drifting into two lists of stage names.
+  blockHeadingStepsFromSettings: (settingsData) => {
+    const settings = blockHeadingSettingsFromData(settingsData || {});
+    return (settings.customSteps || [])
+      .map((step) => ({ id: String(step.id || "").trim(), title: String(step.title || "").trim() }))
+      .filter((step) => Boolean(step.title));
+  },
+  notifyOrderAssignee: async (companyId, orderData, { uid, title, message, orderId }) => {
+    const assignee = String((orderData || {}).assignedToUid || "").trim();
+    // Telling someone about their own drag is noise, not news.
+    if (!assignee || assignee === uid) return;
+    const ref = notificationCollectionRef(companyId).doc(`production_${orderId}`);
+    const payload = {
+      companyId,
+      type: "production_stage_changed",
+      title,
+      message,
+      route: "production",
+      orderId: String(orderId || ""),
+      recipientUids: [assignee],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+      actioned: false,
+      source: "production"
+    };
+    await ref.set(payload, { merge: true });
+    // Targeted, not company-wide: only the person holding the job hears about
+    // it. sendPushNotificationToCompany would buzz every phone in the workshop.
+    await sendPushNotificationToRecipients(
+      companyId,
+      { ...payload, notificationId: ref.id, createdAt: new Date().toISOString() },
+      { userIds: [assignee] }
+    ).catch((error) => console.warn("production push failed:", error && error.message));
+  }
+});
+const { _internal: productionInternal, ...productionCallables } = productionExports;
+Object.assign(exports, productionCallables);
+
 // The workspace's client-facing domain layer: subdomain slugs and custom
 // hostnames, one registry, host → workspace in a single read. Module for the
 // same reason inventory is one.

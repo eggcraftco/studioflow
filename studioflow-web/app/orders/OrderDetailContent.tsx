@@ -85,6 +85,7 @@ import {
   type PdfExportSettingsInput
 } from "@/lib/studioflow/settingsActions";
 import {
+  loadWorkspaceProductionStages,
   loadWorkspaceStatusOptions,
   loadTeamAccessData,
   normalizeWorkspaceRole,
@@ -101,6 +102,12 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import {
+  DEFAULT_PRODUCTION_STAGES,
+  productionStagesFromSettings,
+  resolveProductionStage,
+  type ProductionStage
+} from "@/lib/studioflow/production";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
@@ -1942,6 +1949,7 @@ export function OrderDetailContent({
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
+  const [productionStages, setProductionStages] = useState<ProductionStage[]>(DEFAULT_PRODUCTION_STAGES);
   // Scalar per-card heading labels read straight from companySettings (the
   // structured headings come from the block-headings callable). Inline-renamed
   // in place; written back with setDoc(merge) so the Mac/iPhone apps sync them.
@@ -2911,6 +2919,9 @@ export function OrderDetailContent({
     }
 
     let cancelled = false;
+    void loadWorkspaceProductionStages(workspace.id)
+      .then(raw => { if (!cancelled) setProductionStages(productionStagesFromSettings(raw)); })
+      .catch(() => { /* the defaults already render a correct board */ });
     async function refreshBlockHeadings() {
       try {
         const loaded = await loadWorkspaceBlockHeadings(workspace);
@@ -6896,6 +6907,10 @@ export function OrderDetailContent({
         );
       case "status": {
         const statusSteps = productionSteps();
+        // One line, derived from the very steps below it, so the board and the
+        // order can never disagree about where this job is.
+        const stage = resolveProductionStage(order, productionStages, statusSteps);
+        const stageTitle = productionStages.find(item => item.id === stage.stageId)?.title ?? "";
         const statusToggles = blockHeadingSettings?.customToggles
           ?.map(toggle => ({ ...toggle, title: toggle.title.trim() }))
           .filter(toggle => Boolean(toggle.title)) ?? [];
@@ -6905,6 +6920,24 @@ export function OrderDetailContent({
           <section key={cardId} className="card order-detail-card">
             {renderCardTitle(cardId)}
             <div className="app-card-panel">
+              {stageTitle ? (
+                <a
+                  className={`order-production-stage${stage.blocker ? " is-blocked" : ""}`}
+                  href="/production"
+                  title={t("Open the production board")}
+                >
+                  <span className="order-production-stage-label">{t("Production stage")}</span>
+                  <span className="order-production-stage-value">
+                    {t(stageTitle)}
+                    {stage.total > 0 ? <em>{stage.doneCount} / {stage.total}</em> : null}
+                  </span>
+                  {stage.blocker ? (
+                    <span className="order-production-stage-blocker">
+                      {stage.blocker.note || t("Blocked")}
+                    </span>
+                  ) : null}
+                </a>
+              ) : null}
               {statusSteps.map((step, index) => {
                 const stepTitle = step.title;
                 if (index === 0) {
@@ -10982,6 +11015,8 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     customFields: {},
     customToggles: {},
     extraStatuses: {},
+    productionStageOverride: "",
+    productionBlocker: null,
     clientFiles: [],
     todoItems: [],
     workSessions: [],

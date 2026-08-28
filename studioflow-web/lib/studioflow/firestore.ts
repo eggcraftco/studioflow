@@ -316,6 +316,12 @@ export type ScheduleOrderItem = {
   clientFileCount: number;
   customFields: Record<string, string>;
   extraStatuses: Record<string, string>;
+  // Production board: only the human override and the blocker are stored; the
+  // stage itself is derived from the steps (lib/studioflow/production.ts).
+  productionStageOverride: string;
+  productionBlocker: { reason: string; note: string } | null;
+  materialsDefaultToggles: Record<string, boolean>;
+  materialsToggles: Record<string, boolean>;
 };
 
 export type OrderOptionItem = {
@@ -556,6 +562,10 @@ export type OrderDetail = {
   customFields: Record<string, string>;
   customToggles: Record<string, boolean>;
   extraStatuses: Record<string, string>;
+  // The two production-board facts stored on the order; the stage itself is
+  // derived from the steps above (lib/studioflow/production.ts).
+  productionStageOverride: string;
+  productionBlocker: { reason: string; note: string } | null;
   clientFiles: ClientFileDetail[];
   todoItems: ToDoDetail[];
   workSessions: WorkSessionDetail[];
@@ -1211,6 +1221,14 @@ export async function loadWorkspaceStatusOptions(companyId: string): Promise<str
   }
 }
 
+// The Production board's columns. Returned raw so production.ts can apply the
+// same repair rule the server uses rather than duplicating it here.
+export async function loadWorkspaceProductionStages(companyId: string): Promise<unknown> {
+  const snapshot = await getDoc(doc(db, "companySettings", companyId));
+  const data = snapshot.exists() ? snapshot.data() : {};
+  return data.productionStages;
+}
+
 function decodeQuickReplyTemplateItems(value: unknown): QuickReplyTemplateItem[] {
   if (typeof value !== "string" || value.trim().length === 0) return [];
   try {
@@ -1416,7 +1434,11 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
       ),
       clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
       customFields: stringMapValue(data.customFields),
-      extraStatuses: stringMapValue(data.extraStatuses)
+      extraStatuses: stringMapValue(data.extraStatuses),
+      productionStageOverride: stringValue(data.productionStageOverride, ""),
+      productionBlocker: productionBlockerValue(data.productionBlocker),
+      materialsDefaultToggles: booleanMapValue(data.materialsDefaultToggles),
+      materialsToggles: booleanMapValue(data.materialsToggles)
     };
   });
 
@@ -1687,6 +1709,16 @@ function booleanMapValue(value: unknown) {
     if (typeof childValue === "boolean") output[key] = childValue;
   });
   return output;
+}
+
+// A blocker without a reason is not a blocker — the Blocked column exists to
+// say why a job stopped, so an empty reason reads as "not blocked".
+function productionBlockerValue(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const reason = typeof record.reason === "string" ? record.reason.trim() : "";
+  if (!reason) return null;
+  return { reason, note: typeof record.note === "string" ? record.note : "" };
 }
 
 function idFromUnknown(value: unknown, fallback: string) {
@@ -2022,6 +2054,8 @@ function mapOrderDetailSnapshot(
     customFields: stringMapValue(data.customFields),
     customToggles: booleanMapValue(data.customToggles),
     extraStatuses: stringMapValue(data.extraStatuses),
+    productionStageOverride: stringValue(data.productionStageOverride, ""),
+    productionBlocker: productionBlockerValue(data.productionBlocker),
     clientFiles: mapClientFiles(data.clientFiles).map(file => includeClientFileCloudAccess ? file : {
       ...file,
       downloadURL: "",
