@@ -1537,6 +1537,15 @@ struct SiparisDetayView: View {
     @AppStorage("financialRemainingItemsJSON") private var financialRemainingItemsJSON: String = ""
     @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
     @AppStorage("financialBaseCostLabel") private var financialBaseCostLabel: String = "Cost (Base)"
+    /// The workshop's own word for each order card, keyed by card id, as set
+    /// during setup from the trades chosen there. Mirrors the web's
+    /// companySettings.orderCardLabels.
+    @AppStorage("orderCardLabelsJSON") private var orderCardLabelsJSON: String = "{}"
+    private var orderCardLabels: [String: String] {
+        guard let data = orderCardLabelsJSON.data(using: .utf8),
+              let map = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return map
+    }
     @AppStorage("priorityCardLabel") private var priorityCardLabel: String = "Priority"
     @AppStorage("riskCardLabel") private var riskCardLabel: String = "Risk"
     @AppStorage("designNameLabel") private var designNameLabel: String = "Design Name"
@@ -2724,6 +2733,13 @@ struct SiparisDetayView: View {
     }
 
     private func workspaceBlockTitle(for kart: KartTipi) -> String {
+        // The workshop's own word wins over ours. Set during setup from the
+        // trades chosen there, so a jeweller sees "Metals & Stones" where a
+        // baker sees "Ingredients" — same card, same data, their vocabulary.
+        if let custom = orderCardLabels[kart.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !custom.isEmpty {
+            return t(custom, lang: seciliDil)
+        }
         switch kart {
         case .preview: return t("Preview", lang: seciliDil)
         case .summary: return t("Order Summary", lang: seciliDil)

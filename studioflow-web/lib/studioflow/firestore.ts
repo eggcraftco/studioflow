@@ -225,6 +225,10 @@ export type WorkspaceSettingsOverview = {
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
   businessOnboardingCompleted: boolean;
+  /** The workshop's own word for each order card, keyed by card id. Set from
+   *  the trades chosen during setup: a jeweller's materials card reads
+   *  "Metals & Stones", a baker's "Ingredients". Empty means use the defaults. */
+  orderCardLabels: Record<string, string>;
 };
 
 export type DashboardWidgetVisibility = {
@@ -1188,7 +1192,17 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
     businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
-      booleanValue(data.businessOnboardingCompleted, false)
+      booleanValue(data.businessOnboardingCompleted, false),
+    orderCardLabels: (() => {
+      const raw = data.orderCardLabels;
+      if (!raw || typeof raw !== "object") return {};
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        const label = String(value ?? "").trim();
+        if (label) out[key] = label;
+      }
+      return out;
+    })()
   };
 }
 

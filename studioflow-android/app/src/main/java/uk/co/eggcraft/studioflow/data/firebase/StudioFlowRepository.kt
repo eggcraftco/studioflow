@@ -3575,6 +3575,12 @@ private fun workspaceSettings(
         showCardDelivery = boolValue(data["showCardDelivery"], fallback.showCardDelivery),
         showCardPriority = boolValue(data["showCardPriority"], fallback.showCardPriority),
         showCardMaterials = boolValue(data["showCardMaterials"], fallback.showCardMaterials),
+        orderCardLabels = (data["orderCardLabels"] as? Map<*, *>)
+            ?.mapNotNull { (key, value) ->
+                val id = key?.toString()?.trim().orEmpty()
+                val label = value?.toString()?.trim().orEmpty()
+                if (id.isEmpty() || label.isEmpty()) null else id to label
+            }?.toMap() ?: fallback.orderCardLabels,
         showCardCommunication = boolValue(data["showCardCommunication"], fallback.showCardCommunication),
         showCardNotes = boolValue(data["showCardNotes"], fallback.showCardNotes),
         showCardClientFiles = boolValue(data["showCardClientFiles"], fallback.showCardClientFiles),

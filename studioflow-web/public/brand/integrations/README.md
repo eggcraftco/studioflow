@@ -15,3 +15,22 @@ looking and a trademark problem.
 
 Keep them SVG, transparent, and trimmed to the mark — the tile sizes them to
 22px tall.
+
+## What is here now, and where it came from
+
+    shopify.svg      cdn.shopify.com, linked from shopify.com/brand-assets
+                     ("Primary logo"). Carries the wordmark.
+    woocommerce.svg  Woo_logo_color.svg out of woo-logos.zip, linked from
+                     woocommerce.com/brand-and-logo-guidelines/. Carries the wordmark.
+    chatgpt.svg      OpenAI's wordmark, as they serve it on openai.com/brand.
+                     They publish no downloadable ChatGPT mark: the brand page
+                     offers only Photoshop partnership templates and a
+                     clear-space DIAGRAM (the Blossom twice, with guide lines) —
+                     that diagram is not a logo and must not be used as one.
+                     The tile sets "ChatGPT" beside the wordmark, which is
+                     nominative use of the product name and needs no asset.
+    openbanking.svg  Ours, not a third-party mark: what gets connected is the
+                     user's own bank, not one brand, so there is nothing to borrow.
+
+Do not edit the three third-party files. To update one, replace it with a fresh
+download from the same page.

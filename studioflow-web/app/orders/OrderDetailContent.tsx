@@ -2750,7 +2750,10 @@ export function OrderDetailContent({
   }, [customizeOpen, firstProjectGuideStep, customizeCardOrder.length]);
 
   function cardLabel(cardId: OrderDetailCardId) {
-    return CARD_LABELS[cardId];
+    // The workshop's own word wins over ours. Set during setup from the trades
+    // chosen there, so a jeweller sees "Metals & Stones" where a baker sees
+    // "Ingredients" — same card, same data, their vocabulary.
+    return moneySettings?.orderCardLabels?.[cardId] || CARD_LABELS[cardId];
   }
 
   function cardIcon(cardId: OrderDetailCardId): CardIcon {

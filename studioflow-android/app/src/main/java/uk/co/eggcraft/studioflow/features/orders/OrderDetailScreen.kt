@@ -205,6 +205,22 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 private val LocalDetailCardsUnlocked = compositionLocalOf { false }
+
+/** The workshop's own word for each order card, keyed by card id, as set during
+ *  setup from the trades chosen there. Mirrors companySettings.orderCardLabels
+ *  on web and Apple: same card, same data, the workshop's vocabulary. */
+internal val LocalOrderCardLabels = compositionLocalOf { emptyMap<String, String>() }
+
+/** The card's heading: the workspace's own name when it has one, ours otherwise. */
+@Composable
+internal fun orderCardTitle(cardId: String, fallback: String): String {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val custom = LocalOrderCardLabels.current[cardId]?.trim()
+    return uk.co.eggcraft.studioflow.language.studioT(
+        if (custom.isNullOrEmpty()) fallback else custom,
+        lang
+    )
+}
 private val LocalOrderCardActions = compositionLocalOf<OrderCardCustomizationActions?> { null }
 private val LocalOrderHeadingEditorActions = compositionLocalOf<OrderHeadingEditorActions?> { null }
 private val LocalUnifiedBoardVerticalScroll = compositionLocalOf { false }
@@ -1207,6 +1223,7 @@ private fun DesktopOrderDetailBoard(
             ShopifyOrderSourceStrip(order = order)
             CompositionLocalProvider(
                 LocalDetailCardsUnlocked provides (cardsUnlocked && canManageCardLayout),
+                LocalOrderCardLabels provides workspaceSettings.orderCardLabels,
                 LocalUnifiedBoardVerticalScroll provides true
             ) {
                 val lastVisibleColumnIndex = layout.columns.indices.lastOrNull { columnIndex ->
@@ -3294,7 +3311,7 @@ private fun DesktopPreviewCard(
         }
     }
 
-    DetailCard(title = t("Preview")) {
+    DetailCard(title = orderCardTitle("preview", "Preview")) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5198,7 +5215,7 @@ private fun DesktopWorkTimeCard(order: StudioOrder, onUpdateOrderFields: (Studio
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     var workTitle by remember(order.id) { mutableStateOf("Work session") }
 
-    DetailCard(title = t("Work Time")) {
+    DetailCard(title = orderCardTitle("workTime", "Work Time")) {
         WorkTimeCardBody(
             order = order,
             workTitle = workTitle,
@@ -6377,7 +6394,7 @@ private fun SummaryCard(
     val step2 = summaryStepLabel(workspaceSettings.summaryStep2, workspaceSettings, 1)
     val value1 = summaryStepValue(order, workspaceSettings, step1)
     val value2 = summaryStepValue(order, workspaceSettings, step2)
-    DetailCard(title = t("Order Summary")) {
+    DetailCard(title = orderCardTitle("summary", "Order Summary")) {
         // A custom order is something we make; a repair is the customer's own item,
         // left with us. Choosing Repair is what brings the intake card out.
         Row(
@@ -7004,7 +7021,7 @@ private fun MaterialsInventoryCard(
         }
     }
 
-    DetailCard(title = t("Materials & Inventory")) {
+    DetailCard(title = orderCardTitle("materials", "Materials & Inventory")) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),

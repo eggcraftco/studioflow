@@ -110,6 +110,10 @@ export type OnboardingIntegration = {
   href: string;
   logo: string;
   colour: string;
+  /** Whether the asset already carries the brand's name. Shopify, Woo and our
+   *  own bank glyph do; OpenAI's Blossom is the mark alone, and their
+   *  guidelines forbid altering it, so the tile sets the name beside it. */
+  logoIncludesName: boolean;
 };
 
 export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
@@ -120,6 +124,7 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     href: "/connect/shopify",
     logo: "/brand/integrations/shopify.svg",
     colour: "#5E8E3E",
+    logoIncludesName: true,
   },
   {
     id: "woocommerce",
@@ -128,6 +133,7 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     href: "/settings?section=integrations",
     logo: "/brand/integrations/woocommerce.svg",
     colour: "#7F54B3",
+    logoIncludesName: true,
   },
   {
     id: "bank",
@@ -136,6 +142,7 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     href: "/bank",
     logo: "/brand/integrations/openbanking.svg",
     colour: "#0F7B6C",
+    logoIncludesName: true,
   },
   {
     id: "chatgpt",
@@ -144,6 +151,7 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     href: "/settings?section=quick-reply",
     logo: "/brand/integrations/chatgpt.svg",
     colour: "#10A37F",
+    logoIncludesName: false,
   },
 ];
 
@@ -169,6 +177,83 @@ export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, string[]> = {
   team: ["Invite a team member", "Set their permissions", "Assign the first task"],
   other: ["Create your first order", "Add a customer", "Open your dashboard"],
 };
+
+/**
+ * What each card is CALLED, per trade.
+ *
+ * The preset engine already decides which cards appear and what fields and
+ * steps they hold. This is the missing half: a jeweller's materials card is
+ * "Metals & Stones", a baker's is "Ingredients", and a repair shop's is "Parts
+ * Used". Same card, same data — the workshop's own word for it.
+ *
+ * Only cards whose vocabulary genuinely differs are listed. "Customer",
+ * "Notes" and "Status" mean the same thing in every trade and are left alone,
+ * because renaming for the sake of it just makes the app harder to support.
+ *
+ * Keys are the card ids in functions/index.js ORDER_DETAIL_CARD_IDS.
+ */
+export const ONBOARDING_CARD_LABELS: Partial<Record<OnboardingWorkKind, Record<string, string>>> = {
+  watches_jewellery: {
+    preview: "Design Preview",
+    materials: "Metals & Stones",
+    workTime: "Bench Time",
+    summary: "Piece Summary",
+  },
+  repairs: {
+    preview: "Item Photos",
+    materials: "Parts Used",
+    workTime: "Bench Time",
+    summary: "Repair Summary",
+    delivery: "Collection",
+  },
+  leather: {
+    preview: "Design Preview",
+    materials: "Leather & Hardware",
+    workTime: "Bench Time",
+    summary: "Piece Summary",
+  },
+  art_design: {
+    preview: "Artwork Preview",
+    materials: "Media & Supplies",
+    workTime: "Studio Time",
+    summary: "Commission Summary",
+  },
+  clothing: {
+    preview: "Garment Photos",
+    materials: "Fabric & Trims",
+    workTime: "Machine Time",
+    summary: "Garment Summary",
+    delivery: "Fitting & Collection",
+  },
+  food: {
+    preview: "Design Reference",
+    materials: "Ingredients",
+    workTime: "Kitchen Time",
+    summary: "Order Summary",
+    delivery: "Delivery / Pickup",
+  },
+  ceramics: {
+    preview: "Piece Photos",
+    materials: "Clay & Glazes",
+    workTime: "Studio Time",
+    summary: "Piece Summary",
+  },
+};
+
+/** The chosen trades, folded into one map. The first pick wins where two
+ *  trades disagree, so a jeweller who also repairs keeps jeweller wording and
+ *  gains "Collection" from repairs rather than losing it. */
+export function cardLabelsForWorkKinds(kinds: OnboardingWorkKind[]): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const kind of kinds) {
+    const labels = ONBOARDING_CARD_LABELS[kind];
+    if (!labels) continue;
+    for (const [cardId, label] of Object.entries(labels)) {
+      if (!merged[cardId]) merged[cardId] = label;
+    }
+  }
+  return merged;
+}
 
 /** The preset engine keys off a business-type phrase, so the chosen work kinds
  *  are turned back into the vocabulary it already understands. */
@@ -245,6 +330,9 @@ export async function saveOnboardingAnswers(
       onboardingMainGoal: answers.mainGoal,
       onboardingStartChoice: answers.start,
       productionStages: productionStagesForWorkflow(answers.workflow),
+      // The workshop's own word for each card. Read by all four platforms when
+      // they draw an order-detail heading.
+      orderCardLabels: cardLabelsForWorkKinds(answers.workKinds),
       businessOnboardingCompleted: true,
       businessOnboardingCompletedAt: serverTimestamp(),
       businessOnboardingCompletedAction: "wizard",

@@ -11013,6 +11013,11 @@ struct ContentView: View {
                 applyString("communicationChannelLabelsJSON", { communicationChannelLabelsJSON = $0 }, communicationChannelLabelsJSON)
                 applyString("specialNoteSectionsJSON", { specialNoteSectionsJSON = $0 }, specialNoteSectionsJSON)
                 applyString("customStepsJSON", { customStepsJSON = $0 }, customStepsJSON)
+                if let labels = data["orderCardLabels"] as? [String: String],
+                   let encoded = try? JSONEncoder().encode(labels),
+                   let json = String(data: encoded, encoding: .utf8) {
+                    UserDefaults.standard.set(json, forKey: "orderCardLabelsJSON")
+                }
                 applyString("financialExpenseItemsJSON", { financialExpenseItemsJSON = $0 }, financialExpenseItemsJSON)
                 applyString("financialRemainingItemsJSON", { financialRemainingItemsJSON = $0 }, financialRemainingItemsJSON)
                 applyBool("financialShowBaseCost", { financialShowBaseCost = $0 }, financialShowBaseCost)

@@ -676,6 +676,9 @@ data class StudioWorkspaceSettings(
     val showCardDelivery: Boolean = true,
     val showCardPriority: Boolean = true,
     val showCardMaterials: Boolean = false,
+    /** The workshop's own word for each order card, keyed by card id, as set
+     *  during setup from the trades chosen there. Empty means use the defaults. */
+    val orderCardLabels: Map<String, String> = emptyMap(),
     val showCardCommunication: Boolean = true,
     val showCardNotes: Boolean = true,
     val showCardClientFiles: Boolean = true,

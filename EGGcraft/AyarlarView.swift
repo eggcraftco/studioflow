@@ -3348,6 +3348,11 @@ struct AyarlarView: View {
                 applyString("customFieldsJSON", { customFieldsJSON = $0; if let decoded = try? JSONDecoder().decode([CustomStep].self, from: Data($0.utf8)) { customFields = decoded } }, customFieldsJSON)
                 applyString("customTogglesJSON", { customTogglesJSON = $0; if let decoded = try? JSONDecoder().decode([CustomStep].self, from: Data($0.utf8)) { customToggles = decoded } }, customTogglesJSON)
                 applyString("customStepsJSON", { customStepsJSON = $0; if let decoded = try? JSONDecoder().decode([CustomStep].self, from: Data($0.utf8)) { customSteps = decoded } }, customStepsJSON)
+                if let labels = data["orderCardLabels"] as? [String: String],
+                   let encoded = try? JSONEncoder().encode(labels),
+                   let json = String(data: encoded, encoding: .utf8) {
+                    UserDefaults.standard.set(json, forKey: "orderCardLabelsJSON")
+                }
                 applyString("financialExpenseItemsJSON", { financialExpenseItemsJSON = $0 }, financialExpenseItemsJSON)
                 applyString("financialRemainingItemsJSON", { financialRemainingItemsJSON = $0 }, financialRemainingItemsJSON)
                 applyBool("financialShowBaseCost", { financialShowBaseCost = $0 }, financialShowBaseCost)

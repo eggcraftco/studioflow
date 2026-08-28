@@ -27041,7 +27041,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* The wordmark only appears when the asset failed to load, so the two never
    double up. Driven by a data attribute rather than by matching inline style,
    which attribute selectors do not do reliably. */
-.onboard-connect-logo b { display: none; }
+/* Hidden when the asset already carries the name, shown beside a mark-only
+   logo (OpenAI's Blossom), and shown alone when the file failed to load. */
+.onboard-connect-logo[data-name="in-logo"] b { display: none; }
 .onboard-connect-logo[data-fallback="1"] img { display: none; }
 .onboard-connect-logo[data-fallback="1"] b { display: inline; }
 .onboard-connect-logo b {

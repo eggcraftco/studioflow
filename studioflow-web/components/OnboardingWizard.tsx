@@ -304,7 +304,10 @@ export function OnboardingWizard({
                     className="onboard-connect-tile"
                     style={{ "--brand": integration.colour } as React.CSSProperties}
                   >
-                    <span className="onboard-connect-logo">
+                    <span
+                      className="onboard-connect-logo"
+                      data-name={integration.logoIncludesName ? "in-logo" : "beside"}
+                    >
                       {/* An official asset when one is present; the wordmark on the
                           brand's own colour when it is not, so the tile is never
                           an empty box. */}
