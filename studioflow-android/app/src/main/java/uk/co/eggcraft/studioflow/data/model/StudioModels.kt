@@ -145,6 +145,11 @@ data class StudioWorkspace(
     val roleLabel: String,
     val billingPlan: StudioBillingPlan,
     val billingInterval: String = "",
+    /** "trialing" while the workspace is inside its 14 free days. The trial is a
+     *  full plan, so billingPlan already carries Pro or Team — this is what tells
+     *  the UI to say so, and to count down. */
+    val billingStatus: String = "",
+    val trialEndsAtMs: Long = 0L,
     val storageAddonKey: String = "",
     val storageAddonMB: Long = 0,
     val teamMemberLimitEffective: Int = 0,

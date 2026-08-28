@@ -7573,6 +7573,7 @@ struct ContentView: View {
     // to its one-line strip, so the state never bleeds into a different
     // account on this device.
     @AppStorage("demoPlanBannerDismissedCompanyV1") private var demoPlanBannerDismissedCompanyId: String = ""
+    @AppStorage("trialBannerDismissedCompanyV1") private var trialBannerDismissedCompanyId: String = ""
     @State private var macFirstProjectGuideCompleted: Bool = false
     @State private var macFirstProjectGuideStep: Int = 0
     @State private var macFirstProjectGuideActive: Bool = false
@@ -9311,6 +9312,9 @@ struct ContentView: View {
         .background(bgMain)
         .preferredColorScheme(aktifTema)
         .safeAreaInset(edge: .top, spacing: 0) {
+            if shouldShowTrialBanner {
+                trialBanner
+            }
             if shouldShowDemoPlanBanner {
                 demoPlanUpgradeBanner
             }
@@ -9634,8 +9638,143 @@ struct ContentView: View {
     // expands back on tap, so the upgrade path stays reachable.
     private var shouldShowDemoPlanBanner: Bool {
         authVM.currentBillingPlan == .demo
+            && !authVM.isTrialing
             && authVM.isCompanyOwner
             && aktifSekme != "Settings"
+    }
+
+    /// While the fortnight runs, the Free banner steps aside for the trial
+    /// strip: the workspace is on Pro or Team, so telling it it is on Free
+    /// would be a lie, and a countdown is the thing the owner needs.
+    private var shouldShowTrialBanner: Bool {
+        authVM.isTrialing
+            && authVM.isCompanyOwner
+            && aktifSekme != "Settings"
+    }
+
+    private var isTrialBannerCollapsed: Bool {
+        trialBannerDismissedCompanyId == (authVM.currentCompanyId ?? "")
+    }
+
+    @ViewBuilder
+    private var trialBanner: some View {
+        if isTrialBannerCollapsed { trialCollapsedStrip } else { trialExpandedBanner }
+    }
+
+    private var trialCollapsedStrip: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { trialBannerDismissedCompanyId = "" }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(authVM.trialDaysRemaining <= 3 ? .orange : .green)
+                Text("\(authVM.currentBillingPlan.displayName) \(t("trial", lang: seciliDil))")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text("·").font(.system(size: 10.5, weight: .semibold)).foregroundColor(.secondary)
+                Text(trialCountdownText)
+                    .font(.system(size: 10.5, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold)).foregroundColor(.secondary)
+            }
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .background(.regularMaterial)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var trialCountdownText: String {
+        let days = authVM.trialDaysRemaining
+        if days <= 0 { return t("ends today", lang: seciliDil) }
+        return "\(days) \(t("days remaining", lang: seciliDil))"
+    }
+
+    /// Under three days the reassurance outranks the tally: the fear is being
+    /// charged, so that gets answered before anything else.
+    private var trialDetailText: String {
+        let days = authVM.trialDaysRemaining
+        if days <= 3 {
+            return t("You won't be charged automatically. Continue on a plan, or keep using NivaDesk Free.", lang: seciliDil)
+        }
+        let orders = firebaseManager.siparisler.filter { !$0.isDeleted }.count
+        if orders > 0 {
+            let word = orders == 1 ? t("order organised", lang: seciliDil) : t("orders organised", lang: seciliDil)
+            return "\(orders) \(word)"
+        }
+        return t("Full access, no card required.", lang: seciliDil)
+    }
+
+    private var trialExpandedBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .background(
+                    LinearGradient(
+                        colors: authVM.trialDaysRemaining <= 3 ? [Color.orange, Color.red] : [Color.green, Color.blue],
+                        startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(trialHeadlineText)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(trialDetailText)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                settingsStartSection = t("Plan & Access", lang: seciliDil)
+                aktifSekme = "Settings"
+            } label: {
+                Text(t("Keep these features", lang: seciliDil))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Color.blue).cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    trialBannerDismissedCompanyId = authVM.currentCompanyId ?? ""
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(Color.primary.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .background(.regularMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+        }
+    }
+
+    private var trialHeadlineText: String {
+        let days = authVM.trialDaysRemaining
+        if days <= 0 { return t("Your trial ends today.", lang: seciliDil) }
+        if days <= 3 {
+            let word = days == 1 ? t("day", lang: seciliDil) : t("days", lang: seciliDil)
+            return "\(t("Your trial ends in", lang: seciliDil)) \(days) \(word)."
+        }
+        return "\(authVM.currentBillingPlan.displayName) \(t("trial", lang: seciliDil)) · \(days) \(t("days remaining", lang: seciliDil))"
     }
 
     private var isDemoPlanBannerCollapsed: Bool {

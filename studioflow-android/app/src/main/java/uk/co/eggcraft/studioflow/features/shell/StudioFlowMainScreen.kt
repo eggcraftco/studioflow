@@ -472,7 +472,26 @@ fun StudioFlowMainScreen(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
+            // While the fortnight runs the Free banner steps aside: the
+            // workspace is on Pro or Team, so calling it Free would be a lie.
+            val isTrialing = state.workspace?.billingStatus == "trialing" &&
+                state.workspace.billingPlan != StudioBillingPlan.Demo
+            if (isTrialing && state.workspace?.isOwner == true && activeSection != StudioSection.Settings) {
+                TrialBanner(
+                    companyId = state.workspace.id,
+                    planName = state.workspace.billingPlan.title,
+                    trialEndsAtMs = state.workspace.trialEndsAtMs,
+                    orderCount = state.orders.count { !it.isDeleted },
+                    onViewPlans = {
+                        settingsStartKey = "plan"
+                        if (StudioSection.Settings in availableSections) {
+                            section = StudioSection.Settings
+                        }
+                    }
+                )
+            }
             if (state.workspace?.billingPlan == StudioBillingPlan.Demo &&
+                !isTrialing &&
                 state.workspace.isOwner &&
                 activeSection != StudioSection.Settings
             ) {
@@ -848,6 +867,86 @@ fun StudioFlowMainScreen(
 // X never fully hides the banner — it collapses to a one-line strip that
 // expands back on tap. Collapsed state is stored per companyId so it never
 // bleeds into a different account on this device.
+/** The trial strip. Shows what the fortnight has been worth rather than only
+ *  counting down — a bare "9 days left" is a threat, "9 days left · 8 orders
+ *  organised" is a reason. Under three days the reassurance outranks the tally:
+ *  the fear is being charged, so that gets answered first. */
+@Composable
+private fun TrialBanner(
+    companyId: String,
+    planName: String,
+    trialEndsAtMs: Long,
+    orderCount: Int,
+    onViewPlans: () -> Unit
+) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("trial_banner", Context.MODE_PRIVATE) }
+    var collapsedCompanyId by rememberSaveable { mutableStateOf(prefs.getString("collapsedCompanyId", "") ?: "") }
+    val setCollapsed: (Boolean) -> Unit = { collapsed ->
+        collapsedCompanyId = if (collapsed) companyId else ""
+        prefs.edit().putString("collapsedCompanyId", collapsedCompanyId).apply()
+    }
+    val isCollapsed = companyId.isNotBlank() && collapsedCompanyId == companyId
+
+    // Rounded up so the final part-day still reads as a day rather than zero.
+    val daysRemaining = if (trialEndsAtMs <= 0L) 0 else {
+        val ms = trialEndsAtMs - System.currentTimeMillis()
+        if (ms <= 0L) 0 else Math.ceil(ms / 86_400_000.0).toInt()
+    }
+    val countdown = if (daysRemaining <= 0) t("ends today") else "$daysRemaining ${t("days remaining")}"
+    val headline = when {
+        daysRemaining <= 0 -> t("Your trial ends today.")
+        daysRemaining <= 3 -> "${t("Your trial ends in")} $daysRemaining ${if (daysRemaining == 1) t("day") else t("days")}."
+        else -> "$planName ${t("trial")} · $countdown"
+    }
+    val detail = when {
+        daysRemaining <= 3 -> t("You won't be charged automatically. Continue on a plan, or keep using NivaDesk Free.")
+        orderCount > 0 -> "$orderCount ${if (orderCount == 1) t("order organised") else t("orders organised")}"
+        else -> t("Full access, no card required.")
+    }
+
+    Surface(color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
+        if (isCollapsed) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { setCollapsed(false) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("★", fontSize = 13.sp)
+                Text("$planName ${t("trial")}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(countdown, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("★", fontSize = 16.sp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(headline, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(detail, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Button(onClick = onViewPlans, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                    Text(t("Keep these features"), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                IconButton(onClick = { setCollapsed(true) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = t("Close"),
+                        modifier = Modifier.size(15.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun DemoPlanUpgradeBanner(
     companyId: String,

@@ -300,6 +300,12 @@ class StudioFlowRepository(
             roleLabel = customRoles.firstOrNull { it.id == rawRole }?.name ?: roleLabel(role),
             billingPlan = plan,
             billingInterval = stringValue(data["billingInterval"], ""),
+            billingStatus = stringValue(data["billingStatus"], "").lowercase(),
+            // The explicit trial end wins; the period end is the fallback every
+            // store reports a trial's finish as.
+            trialEndsAtMs = ((data["billingTrialEndsAt"] as? com.google.firebase.Timestamp)
+                ?: (data["billingCurrentPeriodEnd"] as? com.google.firebase.Timestamp))
+                ?.toDate()?.time ?: 0L,
             storageAddonKey = run {
                 val status = stringValue(data["billingStorageAddonStatus"], "").lowercase()
                 if (status in setOf("active", "trialing", "past_due")) stringValue(data["billingStorageAddonKey"], "") else ""

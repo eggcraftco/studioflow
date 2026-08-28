@@ -790,6 +790,24 @@ class AuthViewModel: ObservableObject {
     @Published private(set) var currentCompanyId: String? = nil
     @Published private(set) var isWorkspaceReady: Bool = false
     @Published var currentBillingPlan: StudioBillingPlan = .demo
+    /// "trialing" while the workspace is inside its 14 free days. The trial is
+    /// a full plan, so `currentBillingPlan` already carries Pro or Team — this
+    /// is what tells the UI to say so, and to count down.
+    @Published var currentBillingStatus: String = ""
+    @Published var trialEndsAt: Date?
+
+    /// Whole days left in the trial, rounded up so the final part-day still
+    /// reads as a day rather than zero.
+    var trialDaysRemaining: Int {
+        guard let endsAt = trialEndsAt else { return 0 }
+        let seconds = endsAt.timeIntervalSinceNow
+        if seconds <= 0 { return 0 }
+        return max(0, Int(ceil(seconds / 86_400)))
+    }
+
+    var isTrialing: Bool {
+        currentBillingStatus.lowercased() == "trialing" && currentBillingPlan != .demo
+    }
     // Owner toggle: show/hide the "AI Replies" (Quick Reply) item in the main menu.
     @Published var quickReplyMenuEnabled: Bool = true
     @Published var currentStorageAddonKey: String = ""
@@ -2832,6 +2850,11 @@ class AuthViewModel: ObservableObject {
         let rawInterval = (data["billingInterval"] as? String) ?? ""
         currentBillingInterval = resolvedPlan == .demo ? nil : StudioStoreBillingInterval(rawValue: rawInterval)
         billingPlanSource = (data["billingPlanSource"] as? String) ?? (rawPlan.isEmpty ? "legacy_default" : "manual")
+        currentBillingStatus = ((data["billingStatus"] as? String) ?? "").lowercased()
+        // The explicit trial end wins; the period end is the fallback every
+        // store reports a trial's finish as.
+        trialEndsAt = (data["billingTrialEndsAt"] as? Timestamp)?.dateValue()
+            ?? (data["billingCurrentPeriodEnd"] as? Timestamp)?.dateValue()
         billingUpdatedAt = (data["billingUpdatedAt"] as? Timestamp)?.dateValue()
         let addonStatus = ((data["billingStorageAddonStatus"] as? String) ?? "").lowercased()
         let addonActive = ["active", "trialing", "past_due"].contains(addonStatus)
