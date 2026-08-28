@@ -48,6 +48,9 @@ export type WorkspaceContext = {
   billingTeamMemberLimit: number;
   /** When the current paid period ends — a renewal date while active, an access-until date once cancelled. */
   billingCurrentPeriodEndMs: number;
+  /** When the 14-day trial ends. Set by the server when the first real order
+   *  starts it; read as the explicit value in preference to the period end. */
+  billingTrialEndsAtMs: number;
   /** "month" or "year" — written by the entitlement resolver; empty when unknown. */
   billingInterval: string;
   /** The subscription's item key (e.g. "pro_monthly") — the same catalog key checkout uses. */
@@ -222,6 +225,10 @@ export type WorkspaceSettingsOverview = {
   dashboardWidgetVisibility: DashboardWidgetVisibility;
   orderCardShowStatusBadges: boolean;
   businessOnboardingCompleted: boolean;
+  /** The workshop's own word for each order card, keyed by card id. Set from
+   *  the trades chosen during setup: a jeweller's materials card reads
+   *  "Metals & Stones", a baker's "Ingredients". Empty means use the defaults. */
+  orderCardLabels: Record<string, string>;
 };
 
 export type DashboardWidgetVisibility = {
@@ -933,6 +940,8 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
     billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
     billingCurrentPeriodEndMs: dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
+    billingTrialEndsAtMs: dateValue(companyData.billingTrialEndsAt)?.getTime()
+      ?? dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
     billingInterval: stringValue(companyData.billingInterval, ""),
     billingSubscriptionItemKey: stringValue(companyData.billingSubscriptionItemKey, ""),
     billingProviderRawStatus: stringValue(companyData.billingProviderRawStatus, ""),
@@ -1183,7 +1192,17 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     dashboardWidgetVisibility: dashboardVisibility,
     orderCardShowStatusBadges: booleanValue(data.orderCardShowStatusBadges, true),
     businessOnboardingCompleted: Boolean(data.businessOnboardingCompletedAt) ||
-      booleanValue(data.businessOnboardingCompleted, false)
+      booleanValue(data.businessOnboardingCompleted, false),
+    orderCardLabels: (() => {
+      const raw = data.orderCardLabels;
+      if (!raw || typeof raw !== "object") return {};
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+        const label = String(value ?? "").trim();
+        if (label) out[key] = label;
+      }
+      return out;
+    })()
   };
 }
 

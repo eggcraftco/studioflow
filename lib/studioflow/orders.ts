@@ -3,6 +3,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { functions, storage } from "@/lib/firebase/client";
 import { normalizeWorkspaceRole, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 
 const PREVIEW_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "webp"]);
 
@@ -25,6 +26,12 @@ export type CreateOrderResult = {
   orderId?: string;
   customerId?: string;
   customerCreated?: boolean;
+  /** The first real order starts the 14-day trial. The server says so here so
+   *  the app can tell the owner rather than changing their plan silently. */
+  trialStarted?: boolean;
+  trialPlan?: string;
+  trialEndsAtMs?: number;
+  trialDays?: number;
   message?: string;
   [key: string]: unknown;
 };
@@ -227,6 +234,16 @@ function previewFileName(extension: string) {
   return `${id}.${extension || "jpg"}`;
 }
 
+/** Fired once, when the workspace's first real order turns Free into a trial. */
+function announceTrialStart(result: CreateOrderResult) {
+  const days = Number(result.trialDays) || 14;
+  const plan = String(result.trialPlan || "").startsWith("team") ? "Team" : "Pro";
+  dispatchStudioToast({
+    message: `Your ${plan} trial has started. Full access for ${days} days, no card required.`,
+    durationMs: 9000,
+  });
+}
+
 export async function createOrderFromWeb(workspace: WorkspaceContext, input: Partial<CreateOrderInput> = {}) {
   if (!workspace.entitlements.features.orders_create) {
     throw new Error("Creating projects is not available on the current workspace plan.");
@@ -245,6 +262,13 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
       });
       if (response.data?.ok === false || !response.data?.orderId) {
         throw new Error(response.data?.message || "Could not create the project.");
+      }
+      // The first real order starts the trial, and the owner must hear it from
+      // us rather than notice their plan changed. Announced here — the one
+      // funnel every create-order button goes through — so no call site can
+      // forget it.
+      if (response.data?.trialStarted) {
+        announceTrialStart(response.data);
       }
       return response.data;
     }, "Saving new project to cloud.");
@@ -454,4 +478,40 @@ export async function uploadOrderPreviewImage({
     const message = error instanceof Error ? error.message : "";
     throw new Error(message || "Could not upload preview image.");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Store orders parked because the plan is full.
+//
+// A connected store keeps selling whether or not the workspace has room. Rather
+// than dropping those orders (a sale NivaDesk never recorded) or letting them
+// past the limit, the server parks them — these two calls are how the owner
+// sees the queue and brings it in once there is space.
+// ---------------------------------------------------------------------------
+
+export type HeldIntegrationOrders = {
+  ok?: boolean;
+  held?: { id: string; provider: string; externalId: string; heldAtMs: number }[];
+  heldCount?: number;
+  activeOrderCount?: number;
+  orderLimit?: number | null;
+  roomAvailable?: number;
+};
+
+export async function listHeldIntegrationOrders(workspace: WorkspaceContext) {
+  const callable = httpsCallable<Record<string, unknown>, HeldIntegrationOrders>(functions, "listHeldIntegrationOrders");
+  const response = await callable({ companyId: workspace.id });
+  return response.data ?? {};
+}
+
+export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext) {
+  return withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; stillHeld?: number; message?: string }>(
+      functions,
+      "releaseHeldIntegrationOrders"
+    );
+    const response = await callable({ companyId: workspace.id });
+    if (response.data?.ok === false) throw new Error(response.data.message || "Could not import the waiting orders.");
+    return response.data;
+  }, "Importing waiting store orders.");
 }

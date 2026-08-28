@@ -9369,7 +9369,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "अभी छोड़ें"
   },
   "Your workspace is ready": {
-    "Türkçe": "Workspace hazır",
+    "Türkçe": "Çalışma alanın hazır",
     "Deutsch": "Arbeitsbereich ist bereit",
     "Français": "Votre espace est prêt",
     "Italiano": "Workspace pronto",
@@ -10643,7 +10643,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "WooCommerce इंटीग्रेशन"
   },
   "Connect WooCommerce": {
-    "Türkçe": "WooCommerce Bağlantısı",
+    "Türkçe": "WooCommerce bağla",
     "Deutsch": "WooCommerce verbinden",
     "Français": "Connecter WooCommerce",
     "Italiano": "Collega WooCommerce",

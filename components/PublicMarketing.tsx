@@ -1383,7 +1383,13 @@ function PublicPlanCard({ plan, compact = false, billing = "monthly" }: { plan: 
               ) : null}
             </div>
             <div className="public-plan-price-alt">
-              {billing === "yearly" ? `${prices.monthly} ${t("pricing.perMonth")}` : `${prices.yearly} ${t("pricing.perYear")}`}
+              {/* On yearly this must be the monthly EQUIVALENT of the annual
+                  price, not the monthly plan's own price — printing "£19 /
+                  month" under "£190 / year" reads as what the yearly plan
+                  costs per month, which it isn't. */}
+              {billing === "yearly"
+                ? `£${(prices.yearlyValue / 12).toFixed(2)} ${t("pricing.perMonthEquivalent")}`
+                : `${prices.yearly} ${t("pricing.perYear")}`}
               {billing === "monthly" ? <span className="public-plan-save-pill">{t("pricing.twoMonthsFree")}</span> : null}
             </div>
             {billing === "yearly" ? (

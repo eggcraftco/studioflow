@@ -34,6 +34,12 @@ import {
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
+import {
+  businessTypeForWorkKinds,
+  saveOnboardingAnswers,
+  type OnboardingAnswers,
+} from "@/lib/studioflow/onboardingWizard";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
   formatStudioMoney,
@@ -52,6 +58,7 @@ import {
 import {
   saveWorkspaceOnboardingSkip,
   saveWorkspaceOnboardingTemplate,
+  workspaceOnboardingPresetPayload,
   workspaceOnboardingPromptSeed,
   isWorkspaceOnboardingPromptSeed,
   WORKSPACE_ONBOARDING_BUSINESS_TYPES,
@@ -571,6 +578,240 @@ function WorkspaceOnboardingScreen({
 // expands back on click. Collapsed state is stored per companyId so it never
 // bleeds into a different account in this browser.
 const DEMO_BANNER_COLLAPSED_KEY = "demoPlanBannerCollapsedCompanyV1";
+
+const TRIAL_BANNER_COLLAPSED_KEY = "nivadesk-trial-banner-collapsed";
+const TRIAL_ENDED_SEEN_KEY = "nivadesk-trial-ended-seen";
+
+// Mirrors `trialHasExpired` in functions/index.js — a trial that has run out
+// keeps `billingStatus: "trialing"` on the company doc, and the server simply
+// stops granting the paid plan. Without this the countdown banner would sit at
+// "ends today" forever and nobody would ever be told they are back on Free.
+const TRIAL_EXPIRY_GRACE_MS = 36 * 60 * 60 * 1000;
+
+function trialHasEnded(status: string, trialEndsAtMs: number) {
+  if (String(status || "").trim().toLowerCase() !== "trialing") return false;
+  if (!trialEndsAtMs) return false;
+  return Date.now() > trialEndsAtMs + TRIAL_EXPIRY_GRACE_MS;
+}
+
+/**
+ * The trial strip.
+ *
+ * The report's rule for this surface: show the VALUE, not just a countdown. A
+ * bare "9 days left" is a threat; "9 days left · 8 orders organised, 4 customers
+ * added" is a reason. It also has to stay calm — this lives in the header, it is
+ * never a pop-up, and it can be collapsed.
+ *
+ * The wording sharpens as the end approaches, and the last two messages say the
+ * thing that matters most out loud: nothing will be charged, and Free is waiting.
+ */
+function TrialBanner({
+  companyId,
+  planName,
+  daysRemaining,
+  orderCount,
+  customerCount,
+  t,
+  onViewPlans,
+}: {
+  companyId: string;
+  planName: string;
+  daysRemaining: number;
+  orderCount: number;
+  customerCount: number;
+  t: (text: string) => string;
+  onViewPlans: () => void;
+}) {
+  const [collapsedCompanyId, setCollapsedCompanyId] = useState(() => {
+    try {
+      return window.localStorage.getItem(TRIAL_BANNER_COLLAPSED_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const setCollapsed = (collapsed: boolean) => {
+    const next = collapsed ? companyId : "";
+    setCollapsedCompanyId(next);
+    try {
+      window.localStorage.setItem(TRIAL_BANNER_COLLAPSED_KEY, next);
+    } catch {
+      /* private mode — state just won't persist */
+    }
+  };
+
+  const headline = daysRemaining <= 0
+    ? t("Your trial ends today.")
+    : daysRemaining <= 3
+      ? `${t("Your trial ends in")} ${daysRemaining} ${daysRemaining === 1 ? t("day") : t("days")}.`
+      : `${planName} ${t("trial")} · ${daysRemaining} ${t("days remaining")}`;
+
+  // Under three days the reassurance matters more than the tally: the fear is
+  // being charged, so answer it before anything else.
+  const detail = daysRemaining <= 3
+    ? t("You won't be charged automatically. Continue on a plan, or keep using NivaDesk Free.")
+    : [
+        orderCount > 0 ? `${orderCount} ${orderCount === 1 ? t("order organised") : t("orders organised")}` : "",
+        customerCount > 0 ? `${customerCount} ${customerCount === 1 ? t("customer added") : t("customers added")}` : "",
+      ].filter(Boolean).join(" · ") || t("Full access, no card required.");
+
+  if (collapsedCompanyId === companyId) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          width: "100%", padding: "5px 14px", background: "var(--surface, #fff)",
+          border: 0, borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+          fontSize: 11.5, fontWeight: 650, cursor: "pointer", color: "inherit",
+        }}
+      >
+        <span aria-hidden="true">★</span>
+        <span>{planName} {t("trial")}</span>
+        <span style={{ opacity: 0.55 }}>·</span>
+        <span>{daysRemaining <= 0 ? t("ends today") : `${daysRemaining} ${t("days remaining")}`}</span>
+        <span aria-hidden="true" style={{ opacity: 0.55 }}>⌄</span>
+      </button>
+    );
+  }
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10,
+        padding: "9px 14px", background: "var(--surface, #fff)",
+        borderBottom: "1px solid rgba(120, 120, 140, 0.18)", fontSize: 13,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 28, height: 28, borderRadius: 8, fontSize: 14,
+          background: daysRemaining <= 3
+            ? "linear-gradient(135deg, #f59e0b, #ef4444)"
+            : "linear-gradient(135deg, #16a34a, #2563eb)",
+        }}
+      >
+        ★
+      </span>
+      <span style={{ flex: 1, minWidth: 220 }}>
+        <strong style={{ display: "block", fontSize: 12.5 }}>{headline}</strong>
+        <span style={{ fontSize: 11, opacity: 0.7 }}>{detail}</span>
+      </span>
+      <button
+        type="button"
+        onClick={onViewPlans}
+        style={{
+          border: 0, background: "#2563eb", color: "#fff", borderRadius: 8,
+          padding: "7px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+        }}
+      >
+        {t("Keep these features")}
+      </button>
+      <button
+        type="button"
+        aria-label="Collapse"
+        onClick={() => setCollapsed(true)}
+        style={{
+          border: 0, background: "rgba(120, 120, 140, 0.12)", color: "inherit",
+          borderRadius: 999, width: 26, height: 26, fontWeight: 700, fontSize: 12, cursor: "pointer",
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Shown once, when the trial has run out. The report is explicit that both
+ * outcomes must look equally available: someone who wants to stay on Free
+ * should not have to hunt for the way to say so, and nobody should be left
+ * wondering whether they were charged.
+ */
+function TrialEndedBanner({
+  companyId,
+  planName,
+  t,
+  onViewPlans,
+}: {
+  companyId: string;
+  planName: string;
+  t: (text: string) => string;
+  onViewPlans: () => void;
+}) {
+  const [dismissedCompanyId, setDismissedCompanyId] = useState(() => {
+    try {
+      return window.localStorage.getItem(TRIAL_ENDED_SEEN_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  if (dismissedCompanyId === companyId) return null;
+
+  const dismiss = () => {
+    setDismissedCompanyId(companyId);
+    try {
+      window.localStorage.setItem(TRIAL_ENDED_SEEN_KEY, companyId);
+    } catch {
+      /* private mode — it will simply show again next session */
+    }
+  };
+
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10,
+        padding: "9px 14px", background: "var(--surface, #fff)",
+        borderBottom: "1px solid rgba(120, 120, 140, 0.18)", fontSize: 13,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 28, height: 28, borderRadius: 8, fontSize: 14,
+          background: "linear-gradient(135deg, #64748b, #334155)", color: "#fff",
+        }}
+      >
+        ✓
+      </span>
+      <span style={{ flex: 1, minWidth: 240 }}>
+        <strong style={{ display: "block", fontSize: 12.5 }}>
+          {t("Your {plan} trial has ended.").replace("{plan}", planName)}
+        </strong>
+        <span style={{ fontSize: 11, opacity: 0.7 }}>
+          {t("Nothing was deleted and you haven't been charged. Your workspace is now on Free.")}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={dismiss}
+        style={{
+          border: "1px solid rgba(120, 120, 140, 0.35)", background: "transparent",
+          color: "inherit", borderRadius: 8, padding: "7px 12px",
+          fontWeight: 650, fontSize: 12, cursor: "pointer",
+        }}
+      >
+        {t("Continue on Free")}
+      </button>
+      <button
+        type="button"
+        onClick={onViewPlans}
+        style={{
+          border: 0, background: "#2563eb", color: "#fff", borderRadius: 8,
+          padding: "7px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+        }}
+      >
+        {t("Choose a plan")}
+      </button>
+    </div>
+  );
+}
 
 function DemoPlanBanner({
   companyId,
@@ -1322,6 +1563,30 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     settings?.selectedLanguage ||
     studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
   const t = (text: string) => studioT(text, language);
+  // Days left in the trial, counted from the explicit end the server wrote.
+  // Rounded up so the last partial day still reads as a day rather than zero.
+  const trialEnded = useMemo(
+    () => trialHasEnded(workspace?.billingStatus || "", workspace?.billingTrialEndsAtMs ?? 0),
+    [workspace?.billingStatus, workspace?.billingTrialEndsAtMs],
+  );
+  const trialDaysRemaining = useMemo(() => {
+    const endsAt = workspace?.billingTrialEndsAtMs ?? 0;
+    if (!endsAt) return 0;
+    return Math.max(0, Math.ceil((endsAt - Date.now()) / (24 * 60 * 60 * 1000)));
+  }, [workspace?.billingTrialEndsAtMs]);
+
+  // What the trial has been worth so far. Orders are already loaded for the
+  // shell; customers are counted from the distinct names on them rather than
+  // fetching a second collection just to fill a banner line.
+  const workspaceCustomerCount = useMemo(() => {
+    const names = new Set<string>();
+    for (const order of financeOrders) {
+      const name = String(order.customerName || "").trim().toLowerCase();
+      if (name) names.add(name);
+    }
+    return names.size;
+  }, [financeOrders]);
+
   const showWorkspaceOnboarding = Boolean(
     user &&
     workspace &&
@@ -1461,6 +1726,47 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     router.replace("/login");
   }
 
+  const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);
+
+  async function completeOnboardingWizard(answers: OnboardingAnswers) {
+    if (!workspace || !user) return;
+    setOnboardingSaving(true);
+    setOnboardingError("");
+    try {
+      // The chosen work kinds become the business type the preset engine has
+      // always understood, so the card/step/label presets keep working and the
+      // wizard only has to supply better answers to them.
+      const businessType = businessTypeForWorkKinds(answers.workKinds);
+      const preset = workspaceOnboardingPresetPayload(
+        businessType,
+        workspaceOnboardingPromptSeed(businessType, language),
+      );
+      await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
+      setFinishedAnswers(answers);
+    } catch (failure) {
+      setOnboardingError(failure instanceof Error ? failure.message : t("Could not save your setup."));
+    } finally {
+      setOnboardingSaving(false);
+    }
+  }
+
+  /**
+   * Connecting an account leaves the app for an OAuth round trip. Save the
+   * answers first, mark setup done, and only then hand off — otherwise a person
+   * who connects Shopify comes back to an empty workspace and the wizard again.
+   */
+  async function connectFromOnboarding(answers: OnboardingAnswers, href: string) {
+    await completeOnboardingWizard(answers);
+    if (onboardingError) return;
+    setSettings((current) => {
+      const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
+      if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+      return merged;
+    });
+    window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
+    router.push(href);
+  }
+
   async function completeWorkspaceOnboarding(
     action: "smart" | "standard" | "skip",
   ) {
@@ -1506,30 +1812,28 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   if (showWorkspaceOnboarding) {
     return (
       <AppShellMountedContext.Provider value={true}>
-        <WorkspaceOnboardingScreen
-          businessType={onboardingBusinessType}
-          prompt={onboardingPrompt}
-          saving={onboardingSaving}
-          error={onboardingError}
-          language={language}
-          onBusinessTypeChange={(nextType) => {
-            setOnboardingBusinessType(nextType);
-            setOnboardingPrompt((current) =>
-              onboardingPromptEdited && !isWorkspaceOnboardingPromptSeed(current)
-                ? current
-                : workspaceOnboardingPromptSeed(nextType, language),
-            );
-            setOnboardingError("");
-          }}
-          onPromptChange={(nextPrompt) => {
-            setOnboardingPromptEdited(true);
-            setOnboardingPrompt(nextPrompt);
-            setOnboardingError("");
-          }}
-          onSmart={() => completeWorkspaceOnboarding("smart")}
-          onStandard={() => completeWorkspaceOnboarding("standard")}
-          onSkip={() => completeWorkspaceOnboarding("skip")}
-        />
+        {finishedAnswers ? (
+          <OnboardingReady
+            answers={finishedAnswers}
+            t={t}
+            onOpen={() => {
+              setSettings((current) => {
+                const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
+                if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+                return merged;
+              });
+              window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
+            }}
+          />
+        ) : (
+          <OnboardingWizard
+            t={t}
+            saving={onboardingSaving}
+            error={onboardingError}
+            onFinish={(answers) => void completeOnboardingWizard(answers)}
+            onConnect={(answers, href) => void connectFromOnboarding(answers, href)}
+          />
+        )}
       </AppShellMountedContext.Provider>
     );
   }
@@ -1538,7 +1842,35 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     <AppShellMountedContext.Provider value={true}>
       <main className="page-shell app-shell-fixed">
         {workspace &&
+          workspace.billingStatus === "trialing" &&
+          trialEnded &&
+          workspace.role === "owner" &&
+          pathname !== "/settings" ? (
+          <TrialEndedBanner
+            companyId={workspace.id}
+            planName={workspace.billingPlanName || t("Pro")}
+            t={t}
+            onViewPlans={() => router.push("/settings?section=plan-access")}
+          />
+        ) : null}
+        {workspace &&
+          workspace.billingStatus === "trialing" &&
+          !trialEnded &&
+          workspace.role === "owner" &&
+          pathname !== "/settings" ? (
+          <TrialBanner
+            companyId={workspace.id}
+            planName={workspace.billingPlanName || t("Pro")}
+            daysRemaining={trialDaysRemaining}
+            orderCount={financeOrders.length}
+            customerCount={workspaceCustomerCount}
+            t={t}
+            onViewPlans={() => router.push("/settings?section=plan-access")}
+          />
+        ) : null}
+        {workspace &&
           workspace.billingPlan === "demo" &&
+          workspace.billingStatus !== "trialing" &&
           workspace.role === "owner" &&
           pathname !== "/settings" ? (
           <DemoPlanBanner

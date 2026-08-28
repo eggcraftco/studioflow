@@ -68,7 +68,7 @@ export const PLAN_ENTITLEMENTS: Record<StudioBillingPlan, PlanEntitlements> = {
   },
   lifetime_lite: {
     plan: "lifetime_lite",
-    title: "NivaDesk Lite",
+    title: "NivaDesk Starter",
     purchaseModel: "Monthly or Annual Subscription",
     orderLimit: null,
     customerLimit: null,

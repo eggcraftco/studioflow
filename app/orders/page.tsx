@@ -7,6 +7,7 @@ import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   loadWorkspaceBlockHeadings,
@@ -38,7 +39,10 @@ import {
   mergeOrders,
   restoreOrderFromWeb,
   requestWorkflowOrderDeletionFromWeb,
-  updateOrderFromWeb
+  updateOrderFromWeb,
+  listHeldIntegrationOrders,
+  releaseHeldIntegrationOrders,
+  type HeldIntegrationOrders,
 } from "@/lib/studioflow/orders";
 import { saveOrderCardDisplaySettings } from "@/lib/studioflow/settingsActions";
 import {
@@ -122,6 +126,11 @@ export default function OrdersPage() {
   const { user, loading } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  // Store orders the plan had no room for. They are parked server-side rather
+  // than dropped, so the owner needs somewhere to see and claim them — a
+  // notification they already dismissed is not that place.
+  const [heldOrders, setHeldOrders] = useState<HeldIntegrationOrders | null>(null);
+  const [releasingHeld, setReleasingHeld] = useState(false);
   const [deletedOrders, setDeletedOrders] = useState<OrderListItem[]>([]);
   const ordersCountRef = useRef(0);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
@@ -252,6 +261,17 @@ export default function OrdersPage() {
       document.getElementById(`orders-sidebar-order-${selectedOrderId}`)?.scrollIntoView({ block: "nearest" });
     });
   }, [selectedOrderId]);
+
+  // The parked queue only exists for a workspace with a limit, so this is a
+  // cheap no-op for everyone on a paid plan.
+  useEffect(() => {
+    if (!workspace) return;
+    let cancelled = false;
+    void listHeldIntegrationOrders(workspace)
+      .then(result => { if (!cancelled) setHeldOrders(result); })
+      .catch(() => { /* the queue is an extra, never a blocker */ });
+    return () => { cancelled = true; };
+  }, [workspace]);
 
   const canSeeFinance = useMemo(() => workspace ? workspaceAccessAllows(workspace.memberAccess, "financialInfo") : false, [workspace]);
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
@@ -803,6 +823,48 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          {heldOrders && (heldOrders.heldCount ?? 0) > 0 ? (
+            <div className="orders-held-banner" role="status">
+              <strong>
+                {heldOrders.heldCount} {(heldOrders.heldCount ?? 0) === 1
+                  ? t("store order is waiting")
+                  : t("store orders are waiting")}
+              </strong>
+              <span>
+                {t("Your plan is full, so new store orders are being kept safe rather than imported. Mark finished work delivered to make room, or choose a plan.")}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={releasingHeld || (heldOrders.roomAvailable ?? 0) === 0}
+                onClick={() => {
+                  if (!workspace) return;
+                  const currentWorkspace = workspace;
+                  setReleasingHeld(true);
+                  void (async () => {
+                    try {
+                      const result = await releaseHeldIntegrationOrders(currentWorkspace);
+                      dispatchStudioToast({
+                        message: `${result?.imported ?? 0} ${t("orders imported")}`,
+                      });
+                      setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
+                      setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));
+                    } catch (failure) {
+                      dispatchStudioToast({
+                        message: failure instanceof Error ? failure.message : t("Could not import the waiting orders."),
+                      });
+                    } finally {
+                      setReleasingHeld(false);
+                    }
+                  })();
+                }}
+              >
+                {(heldOrders.roomAvailable ?? 0) === 0
+                  ? t("No room yet")
+                  : `${t("Import")} ${Math.min(heldOrders.roomAvailable ?? 0, heldOrders.heldCount ?? 0)}`}
+              </button>
+            </div>
+          ) : null}
           <div className="orders-sidebar-controls">
             <label className="orders-search">
               <span aria-hidden="true">⌕</span>
