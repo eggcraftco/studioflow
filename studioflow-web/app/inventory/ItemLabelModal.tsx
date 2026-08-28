@@ -3,16 +3,18 @@
 // A printable label for one item.
 //
 // The label's job is to survive on a drawer: the number big enough to read at
-// arm's length, and a QR code that types it for you. The QR carries just the
-// item number — INV-00012 — because a label outlives URLs and schemas; scan it
-// with any phone and paste it into the inventory search, and the item is
-// found. Nothing here needs the item to still exist to stay meaningful.
+// arm's length, and a QR code that opens the item. The QR carries a NivaDesk
+// link that ends in the item number, so any phone camera lands on the item
+// instead of offering a web search for a bare number — and the number stays
+// printed underneath, readable long after any phone is gone.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
+
+const INVENTORY_LABEL_ORIGIN = (process.env.NEXT_PUBLIC_NIVADESK_PUBLIC_ORIGIN || "https://nivadesk.app").replace(/\/$/, "");
 
 export function ItemLabelModal({
   item,
@@ -30,7 +32,8 @@ export function ItemLabelModal({
 
   useEffect(() => {
     let cancelled = false;
-    QRCode.toString(item.number || item.id, {
+    const reference = item.number || item.id;
+    QRCode.toString(`${INVENTORY_LABEL_ORIGIN}/inventory?item=${encodeURIComponent(reference)}`, {
       type: "svg", margin: 0, errorCorrectionLevel: "M"
     })
       .then(svg => { if (!cancelled) setQrSvg(svg); })
