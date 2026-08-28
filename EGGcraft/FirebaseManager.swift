@@ -922,6 +922,9 @@ class FirebaseManager: ObservableObject {
     // the user watched an order or edit quietly fail to appear. The order list screen
     // observes this and shows the Plan limit alert.
     @Published var planLimitNotice: String = ""
+    /// A one-off, good-news line after creating an order. Cleared by the view
+    /// that shows it.
+    @Published var orderMilestoneNotice: String = ""
 
     @Published var siparisler: [Siparis] = [] {
         didSet {
@@ -2075,14 +2078,39 @@ class FirebaseManager: ObservableObject {
                     return
                 }
 
-                if let data = result?.data as? [String: Any],
-                   let message = data["message"] as? String {
-                    print("Workflow order create: \(message)")
+                if let data = result?.data as? [String: Any] {
+                    if let message = data["message"] as? String {
+                        print("Workflow order create: \(message)")
+                    }
+                    self.announceOrderMilestone(data)
                 }
             }
         #else
         print("Firebase Functions is not available for workflow order create.")
         #endif
+    }
+
+    /// The first order starts the fortnight, and the owner has to hear it from
+    /// us rather than notice their plan changed. The plain first-order line is
+    /// the other half: the report is explicit that a first success gets said
+    /// out loud and gets NO sales message — so when a trial starts, that line
+    /// is shown instead. One message at this moment, never two.
+    private func announceOrderMilestone(_ data: [String: Any]) {
+        let trialStarted = (data["trialStarted"] as? Bool) ?? false
+        let firstOrder = (data["firstOrder"] as? Bool) ?? false
+        guard trialStarted || firstOrder else { return }
+
+        let text: String
+        if trialStarted {
+            let days = (data["trialDays"] as? Int) ?? 14
+            let plan = String(describing: data["trialPlan"] ?? "").hasPrefix("team") ? "Team" : "Pro"
+            text = "\(plan) trial started — full access for \(days) days, no card required."
+        } else {
+            text = "Your first order is organised."
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.orderMilestoneNotice = text
+        }
     }
 
     private func reportPlanLimitIfNeeded(_ error: Error) {

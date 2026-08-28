@@ -2063,6 +2063,29 @@ function workspaceHasUsedTrial(companyData = {}) {
  * throws, because failing to start a trial must not fail the order that
  * triggered it.
  */
+/**
+ * Was the order just created the only one this workspace has ever had?
+ *
+ * Two docs are read at most: any second order at all is enough to answer no,
+ * and deleted ones still count — someone who created an order, deleted it and
+ * created another has already had this moment.
+ */
+async function workspaceHasOnlyThisOrder(companyId, orderId) {
+  try {
+    const snapshot = await db()
+      .collection("orders")
+      .where("companyId", "==", String(companyId))
+      .limit(2)
+      .get();
+    if (snapshot.empty) return false;
+    return snapshot.docs.every((doc) => doc.id === orderId);
+  } catch (error) {
+    // A confirmation line is never worth failing an order creation over.
+    console.error("workspaceHasOnlyThisOrder", error);
+    return false;
+  }
+}
+
 async function startAutomaticTrial(companyRef, companyData = {}, reason = "first_order") {
   try {
     const plan = normalizeBillingPlan(companyData.billingPlan, "demo");
@@ -13455,12 +13478,18 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
   // changing the workspace's plan behind the owner's back.
   const trial = await startAutomaticTrial(companyRef, companyData, "first_order");
 
+  // Whether this was the first order in the workspace. The report's point: the
+  // first success deserves saying so plainly, and NOT a sales message. When a
+  // trial starts the client says that instead — one line, not two.
+  const firstOrder = await workspaceHasOnlyThisOrder(companyId, orderRef.id);
+
   return {
     ok: true,
     companyId,
     orderId: orderRef.id,
     customerId: customerResult.customerId,
     customerCreated: customerResult.created,
+    firstOrder,
     trialStarted: trial.started === true,
     trialPlan: trial.plan || "",
     trialEndsAtMs: trial.endsAtMs || 0,
@@ -14054,12 +14083,14 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
   // the trial from those apps too — the entitlement belongs to the workspace,
   // not to whichever client happened to be open.
   const swiftTrial = await startAutomaticTrial(companyRef, companyData, "first_order");
+  const swiftFirstOrder = await workspaceHasOnlyThisOrder(companyId, orderRef.id);
 
   return {
     ok: true,
     companyId,
     orderId: orderRef.id,
     changedFields: createdFields,
+    firstOrder: swiftFirstOrder,
     trialStarted: swiftTrial.started === true,
     trialPlan: swiftTrial.plan || "",
     trialEndsAtMs: swiftTrial.endsAtMs || 0,

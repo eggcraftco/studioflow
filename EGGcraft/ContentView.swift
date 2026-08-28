@@ -9365,6 +9365,12 @@ struct ContentView: View {
         } message: {
             Text(sharedClientFileImportErrorMessage)
         }
+        .onChange(of: firebaseManager.orderMilestoneNotice) { _, notice in
+            let cleaned = notice.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { return }
+            presentPlanAccessAlert(title: t("NivaDesk", lang: seciliDil), message: t(cleaned, lang: seciliDil))
+            firebaseManager.orderMilestoneNotice = ""
+        }
         .onChange(of: firebaseManager.planLimitNotice) { _, notice in
             let cleaned = notice.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cleaned.isEmpty else { return }

@@ -747,9 +747,17 @@ class StudioFlowViewModel @JvmOverloads constructor(
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
             mutableState.update { it.copy(creatingOrder = true, errorMessage = "") }
-            runCatching { repository.createOrder(workspace) }
-                .onSuccess {
-                    mutableState.update { it.copy(creatingOrder = false, errorMessage = "") }
+            runCatching { repository.createOrderWithMilestone(workspace) }
+                .onSuccess { milestone ->
+                    // The first order starts the fortnight; say so rather than
+                    // let the owner notice their plan changed on its own.
+                    mutableState.update {
+                        it.copy(
+                            creatingOrder = false,
+                            errorMessage = "",
+                            settingsMessage = milestone.message ?: it.settingsMessage
+                        )
+                    }
                 }
                 .onFailure { error ->
                     mutableState.update {

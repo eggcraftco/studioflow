@@ -28,6 +28,7 @@ export type CreateOrderResult = {
   customerCreated?: boolean;
   /** The first real order starts the 14-day trial. The server says so here so
    *  the app can tell the owner rather than changing their plan silently. */
+  firstOrder?: boolean;
   trialStarted?: boolean;
   trialPlan?: string;
   trialEndsAtMs?: number;
@@ -269,6 +270,14 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
       // forget it.
       if (response.data?.trialStarted) {
         announceTrialStart(response.data);
+      } else if (response.data?.firstOrder) {
+        // The report is explicit that the first success gets a plain
+        // confirmation and NO sales message. When a trial starts, that line
+        // says it instead — one message at this moment, never two.
+        dispatchStudioToast({
+          message: "Your first order is organised.",
+          durationMs: 6000,
+        });
       }
       return response.data;
     }, "Saving new project to cloud.");

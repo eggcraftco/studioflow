@@ -1263,7 +1263,17 @@ class StudioFlowRepository(
         return data?.get("message") as? String ?: "File deleted."
     }
 
-    suspend fun createOrder(workspace: StudioWorkspace): String {
+    /** What creating an order is worth saying out loud, if anything. */
+    data class OrderMilestone(val orderId: String, val message: String?)
+
+    /**
+     * The first order starts the fortnight, and the owner has to hear it from
+     * us rather than notice their plan changed. The plain first-order line is
+     * the other half: the report is explicit that a first success gets said out
+     * loud and gets NO sales message — so when a trial starts, that line is
+     * shown instead. One message at this moment, never two.
+     */
+    suspend fun createOrderWithMilestone(workspace: StudioWorkspace): OrderMilestone {
         val result = functions.getHttpsCallable("createWebOrder")
             .call(
                 mapOf(
@@ -1277,9 +1287,22 @@ class StudioFlowRepository(
                 )
             )
             .await()
-        val data = result.data as? Map<*, *> ?: return ""
-        return data["orderId"] as? String ?: ""
+        val data = result.data as? Map<*, *> ?: return OrderMilestone("", null)
+        val orderId = data["orderId"] as? String ?: ""
+        val message = when {
+            data["trialStarted"] == true -> {
+                val days = (data["trialDays"] as? Number)?.toInt() ?: 14
+                val plan = if ((data["trialPlan"] as? String).orEmpty().startsWith("team")) "Team" else "Pro"
+                "$plan trial started — full access for $days days, no card required."
+            }
+            data["firstOrder"] == true -> "Your first order is organised."
+            else -> null
+        }
+        return OrderMilestone(orderId, message)
     }
+
+    suspend fun createOrder(workspace: StudioWorkspace): String =
+        createOrderWithMilestone(workspace).orderId
 
     suspend fun loadPersonalInterfaceSettings(workspace: StudioWorkspace): Map<String, Any?> {
         val result = functions.getHttpsCallable("getPersonalInterfaceSettings")
