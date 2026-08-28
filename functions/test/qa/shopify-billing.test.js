@@ -114,4 +114,25 @@ const workspaceBilledOutsideShopify = new Function(
   pass("the entitlement follows Shopify, not the address bar");
 }
 
+// 7. A development store can only take a test charge, and App Review tests on
+// one. This must follow the SHOP, not an environment flag — a flag is only ever
+// correct for one of the two audiences at a time, and someone has to remember
+// to flip it on the day of the submission.
+{
+  assert(
+    /partnerDevelopment/.test(shopifyPlan),
+    "the app asks the shop whether it is a development store"
+  );
+  assert(
+    !/SHOPIFY_BILLING_TEST/.test(shopifyPlan),
+    "and does not decide it from config"
+  );
+  const guard = shopifyPlan.slice(shopifyPlan.indexOf("shopChargesAreTestOnly"));
+  assert(
+    /catch[\s\S]{0,200}?return false/.test(guard),
+    "a failed lookup charges for real — silently not billing a paying merchant is worse"
+  );
+  pass("test charges follow the shop, so a reviewer is never blocked");
+}
+
 console.log("\n✅ SHOPIFY BILLING GEÇTİ");

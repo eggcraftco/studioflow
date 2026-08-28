@@ -44,6 +44,16 @@ const SUBSCRIPTION_CREATE = `#graphql
     }
   }`;
 
+// Whether this shop can be charged for real. Shopify refuses a live charge on a
+// development store, and App Review tests on one — which is very likely the
+// "server error" in the rejection. Asking the shop is right where an env flag
+// was wrong: a flag has to be remembered, and it is only ever correct for one
+// of the two audiences at a time.
+const SHOP_BILLING_MODE = `#graphql
+  query NivaDeskShopBillingMode {
+    shop { plan { partnerDevelopment shopifyPlus } }
+  }`;
+
 const ACTIVE_SUBSCRIPTIONS = `#graphql
   query NivaDeskActiveSubscriptions {
     currentAppInstallation {
@@ -93,6 +103,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { shop: session.shop, billing: state?.billing ?? null };
 };
 
+/**
+ * Development stores (and Plus partner sandboxes) can only take test charges;
+ * Shopify rejects a live one outright. Read it from the shop rather than from
+ * config, so a reviewer on a dev store gets a test charge and a real merchant
+ * gets a real one — without anyone having to remember to flip a flag.
+ *
+ * If the query fails we charge for real: a merchant who should be billed and
+ * silently is not is the worse of the two failures.
+ */
+async function shopChargesAreTestOnly(admin: {
+  graphql: (query: string) => Promise<Response>;
+}): Promise<boolean> {
+  try {
+    const response = await admin.graphql(SHOP_BILLING_MODE);
+    const body = (await response.json()) as {
+      data?: { shop?: { plan?: { partnerDevelopment?: boolean; shopifyPlus?: boolean } } };
+    };
+    const plan = body.data?.shop?.plan;
+    return plan?.partnerDevelopment === true;
+  } catch (error) {
+    console.error("shop billing mode lookup failed", error);
+    return false;
+  }
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const form = await request.formData();
@@ -121,9 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       name: quote.name,
       returnUrl,
       trialDays: quote.trialDays,
-      // Development stores can only ever be charged a test charge; Shopify
-      // rejects a live one there, which reads to a reviewer as a server error.
-      test: process.env.SHOPIFY_BILLING_TEST === "true",
+      test: await shopChargesAreTestOnly(admin),
       lineItems: [
         {
           plan: {

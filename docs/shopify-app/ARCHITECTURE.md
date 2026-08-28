@@ -201,9 +201,13 @@ read back from `currentAppInstallation` (never trusted from the query string) â†
 `billingApply` writes the entitlement. `app_subscriptions/update` runs the same idempotent
 writer, so a cancellation, expiry or freeze lands whether or not anyone has the app open.
 
-**Development stores** can only take test charges; `SHOPIFY_BILLING_TEST=true` sets
-`test: true` on the mutation. A live charge against a dev store fails in a way that reads to
-a reviewer as a server error.
+**Development stores** can only take test charges, and App Review tests on one â€” a live
+charge there fails in a way that reads as a server error, which is very likely the second
+half of the rejection. The mutation therefore asks the SHOP
+(`shop.plan.partnerDevelopment`) rather than reading a config flag: a flag is only ever
+correct for one of the two audiences at a time, and someone has to remember to flip it on
+submission day. A failed lookup charges for real, because silently not billing a paying
+merchant is the worse failure.
 
 Regression: `functions/test/qa/shopify-billing.test.js`.
 
