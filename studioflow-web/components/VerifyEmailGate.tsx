@@ -143,7 +143,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
       {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
       <button
         type="button"
-        aria-label="Collapse"
+        aria-label={t("Collapse")}
         onClick={() => setCollapsed(true)}
         style={{
           border: 0,

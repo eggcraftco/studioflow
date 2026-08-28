@@ -970,7 +970,7 @@ function CustomerListCard({
           <small style={{ color: "#b45309", fontWeight: 700 }}>⌕ {t("Matched")}: {matchHint}</small>
         ) : null}
         {designNames.length > 0 ? (
-          <span className="customer-list-designs" aria-label="Customer designs">
+          <span className="customer-list-designs" aria-label={t("Customer designs")}>
             {designNames.map((designName, index) => (
               <span key={`${designName}-${index}`} title={designName}>{designName}</span>
             ))}
@@ -1258,7 +1258,7 @@ function CustomerDetail({
                 saving={savingInlineField === "Customer details"}
                 onSave={patch => onSaveDetails(patch, "Customer details")}
               />
-              <InfoRow label="Last Contact" value={formatDate(customer.lastContactDate)} />
+              <InfoRow label={t("Last Contact")} value={formatDate(customer.lastContactDate)} />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10, fontSize: 12.5 }}>
                 <label>
                   <div style={{ fontSize: 11, fontWeight: 800, opacity: 0.6, marginBottom: 4 }}>{t("Preferred channel")}</div>

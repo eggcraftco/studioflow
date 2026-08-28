@@ -719,10 +719,10 @@ export default function MessagesPage() {
                   <p>{conversationSubtitle(selectedThread, t)}</p>
                 </div>
                 <div className="header-actions">
-                  <button type="button" className={`header-icon-btn${showSavedOnly ? " active" : ""}`} title="Saved" onClick={() => setShowSavedOnly((v) => !v)}>
+                  <button type="button" className={`header-icon-btn${showSavedOnly ? " active" : ""}`} title={t("Saved")} onClick={() => setShowSavedOnly((v) => !v)}>
                     <HeaderIcon name="bookmark" />
                   </button>
-                  <button type="button" className={`header-icon-btn${searchVisible ? " active" : ""}`} title="Search" onClick={() => { setSearchVisible((v) => !v); if (searchVisible) setSearchQuery(""); }}>
+                  <button type="button" className={`header-icon-btn${searchVisible ? " active" : ""}`} title={t("Search")} onClick={() => { setSearchVisible((v) => !v); if (searchVisible) setSearchQuery(""); }}>
                     <HeaderIcon name="search" />
                   </button>
                   <div style={{ position: "relative" }}>
@@ -756,8 +756,8 @@ export default function MessagesPage() {
                       return (
                         <>
                           <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>{matches.length} match{matches.length === 1 ? "" : "es"}</span>
-                          <button type="button" onClick={goPrev} title="Oldest match" style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
-                          <button type="button" onClick={goNext} title="Latest match" style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
+                          <button type="button" onClick={goPrev} title={t("Oldest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
+                          <button type="button" onClick={goNext} title={t("Latest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
                         </>
                       );
                     })()}
@@ -1577,7 +1577,7 @@ function ImageViewerModal({
           border: "none", color: "white", borderRadius: "50%", width: 36, height: 36,
           fontSize: 18, cursor: "pointer", zIndex: 1,
         }}
-        aria-label="Close"
+        aria-label={t("Close")}
       >×</button>
       {gallery.length > 1 && (
         <span style={{ position: "absolute", top: 22, left: 22, color: "white", fontSize: 13, fontWeight: 700, background: "rgba(0,0,0,0.4)", padding: "4px 10px", borderRadius: 999, zIndex: 1 }}>
@@ -1589,7 +1589,7 @@ function ImageViewerModal({
           type="button"
           onClick={(e) => { e.stopPropagation(); goPrev(); }}
           style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,0.18)", color: "white", border: "none", borderRadius: "50%", width: 44, height: 44, fontSize: 22, cursor: "pointer", zIndex: 1 }}
-          aria-label="Previous"
+          aria-label={t("Previous")}
         >‹</button>
       )}
       {hasNext && (

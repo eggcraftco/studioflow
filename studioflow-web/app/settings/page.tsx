@@ -2016,7 +2016,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
   }
 
   if (!blockSettings) {
-    return <PlaceholderSection title={t("Workflow Steps")} detail={error || t("Workflow settings could not be loaded yet.")} />;
+    return <PlaceholderSection t={t} title={t("Workflow Steps")} detail={error || t("Workflow settings could not be loaded yet.")} />;
   }
 
   const steps = workflowStepOptions(blockSettings);
@@ -2376,7 +2376,7 @@ function PdfExportSettingsSection({
   );
 
   if (!draft) {
-    return <PlaceholderSection title={t("PDF Export Settings")} detail={t("PDF settings could not be loaded yet.")} action={<Link className="button secondary" href="/export">{t("Open Export")}</Link>} />;
+    return <PlaceholderSection t={t} title={t("PDF Export Settings")} detail={t("PDF settings could not be loaded yet.")} action={<Link className="button secondary" href="/export">{t("Open Export")}</Link>} />;
   }
 
   function updateBoolean(key: keyof WorkspaceSettingsOverview, value: boolean) {
@@ -2857,7 +2857,7 @@ function QuickReplySettingsSection({
   }
 
   if (!settings) {
-    return <PlaceholderSection title={t("Quick Reply Settings")} detail={t("Quick Reply settings could not be loaded yet.")} />;
+    return <PlaceholderSection t={t} title={t("Quick Reply Settings")} detail={t("Quick Reply settings could not be loaded yet.")} />;
   }
 
   const showMaskedOpenAIKey = canEditCore && settings.hasOpenAIKey && !isReplacingOpenAIKey && !clearOpenAIKey;
@@ -2982,7 +2982,7 @@ function QuickReplySettingsSection({
             <CardTitle icon="dashboard" eyebrow={t("On-Device Settings")} title={t("Personal On-Device Knowledge")} />
             <p className="muted-copy">{t("Use this knowledge with Apple On-Device AI in the Mac/iPhone/iPad app. Android on-device generation requires a separate Gemini Nano integration and is not presented as active on web.")}</p>
             <KnowledgeBaseEditor
-              title="My On-Device Knowledge"
+              title={t("My On-Device Knowledge")}
               value={onDeviceKnowledgeBase}
               disabled={!canEditPersonal}
               onChange={setOnDeviceKnowledgeBase}
@@ -3065,7 +3065,7 @@ function QuickReplySettingsSection({
                   {isReplacingOpenAIKey ? <button className="button secondary" type="button" onClick={() => { setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{t("Cancel Replace")}</button> : null}
                   {settings.hasOpenAIKey ? <button className="button secondary" type="button" onClick={() => { if (!clearOpenAIKey) { setConfirmClearKey(true); return; } setClearOpenAIKey(false); setIsReplacingOpenAIKey(false); setApiKeyInput(""); }}>{clearOpenAIKey ? t("Keep Key") : t("Clear Key")}</button> : null}
                 </div>
-                <KnowledgeBaseEditor title="Company Knowledge Base (For OpenAI)" value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
+                <KnowledgeBaseEditor title={t("Company Knowledge Base (For OpenAI)")} value={mainKnowledgeBase} disabled={false} onChange={setMainKnowledgeBase} language={language} />
                 {/* The one previous version the server keeps on every real
                     change. Restoring only edits the draft — Save is still the
                     moment anything is written, and the replaced text becomes
@@ -3132,9 +3132,9 @@ function QuickReplySettingsSection({
           <div className="quick-reply-settings-panel">
             <CardTitle icon="notes" eyebrow={t("Offline Template")} title={t("My Offline Template")} />
             <p className="muted-copy">{t("Your own reusable products and rules sync across your devices without changing the workspace owner’s Company Knowledge Base.")}</p>
-            <QuickReplyTemplateEditor title="Products / Services" addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} language={language} />
+            <QuickReplyTemplateEditor title={t("Products / Services")} addLabel="Add Product" titlePlaceholder="Product Name" descPlaceholder="Product Detail / Price" items={products} disabled={!canEditPersonal} onAdd={() => setProducts(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setProducts(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateProduct} language={language} />
             <div className="settings-divider" />
-            <QuickReplyTemplateEditor title="Custom Rules / FAQs" addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} language={language} />
+            <QuickReplyTemplateEditor title={t("Custom Rules / FAQs")} addLabel="Add Rule" titlePlaceholder="Rule Title" descPlaceholder="Rule Description" items={rules} disabled={!canEditPersonal} onAdd={() => setRules(current => [...current, newQuickReplyTemplateItem()])} onRemove={index => setRules(current => current.filter((_, itemIndex) => itemIndex !== index))} onChange={updateRule} language={language} />
           </div>
         ) : null}
 
@@ -4169,7 +4169,7 @@ function FinancialSettingsSection({
   );
 
   if (!draft) {
-    return <PlaceholderSection title={t("Financial Settings")} detail={t("Financial settings could not be loaded yet.")} />;
+    return <PlaceholderSection t={t} title={t("Financial Settings")} detail={t("Financial settings could not be loaded yet.")} />;
   }
 
   function updateString(
@@ -7839,7 +7839,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="notes" eyebrow={t("About")} title="NivaDesk" />
+        <CardTitle icon="notes" eyebrow={t("About")} title={t("NivaDesk")} />
         <div className="about-app-panel">
           <span className="about-app-mark" aria-hidden="true">⬢</span>
           <div>
@@ -7884,10 +7884,10 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
   );
 }
 
-function PlaceholderSection({ title, detail, action }: { title: string; detail: string; action?: React.ReactNode }) {
+function PlaceholderSection({ title, detail, action, t }: { title: string; detail: string; action?: React.ReactNode; t: (text: string) => string }) {
   return (
     <section className="card app-card">
-      <CardTitle icon="notes" eyebrow="Status" title={title} />
+      <CardTitle icon="notes" eyebrow={t("Status")} title={title} />
       <p className="muted-copy">{detail}</p>
       {action}
     </section>

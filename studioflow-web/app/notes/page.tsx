@@ -384,7 +384,7 @@ export default function NotesPage() {
         {/* Selection action bar */}
         {selectedIds.size > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 14px", marginBottom: 12 }}>
-            <button onClick={clearSelection} title="Cancel" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#374151" }}>✕</button>
+            <button onClick={clearSelection} title={t("Cancel")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#374151" }}>✕</button>
             <span style={{ fontWeight: 700, color: "#374151" }}>{selectedIds.size} selected</span>
             <div style={{ flex: 1 }} />
             {section === "trash" ? (
