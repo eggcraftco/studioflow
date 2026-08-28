@@ -1668,7 +1668,7 @@ th {
 }
 
 .custom-role-expand-button strong {
-  color: var(--primary);
+  color: var(--accent);
   font-size: 11px;
 }
 
@@ -19064,13 +19064,13 @@ html[dir="rtl"] .login-public-shell {
 .extra-spending-header-actions { display: flex; gap: 8px; }
 .dashboard-range-fields { display: flex; gap: 12px; flex-wrap: wrap; }
 .dashboard-range-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.dashboard-range-field input { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--studio-border); background: var(--studio-surface); }
+.dashboard-range-field input { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
 .extra-spending-toggles { display: flex; flex-wrap: wrap; gap: 12px 18px; font-size: 13px; }
 .extra-spending-toggles label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .extra-spending-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .extra-spending-metric { padding: 12px; border-radius: 12px; background: var(--studio-surface-muted, rgba(0,0,0,0.03)); }
 .extra-spending-groups { display: flex; flex-direction: column; gap: 12px; }
-.extra-spending-group { border: 1px solid var(--studio-border); border-radius: 12px; padding: 12px 14px; }
+.extra-spending-group { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .extra-spending-group-header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .extra-spending-group-title { font-weight: 600; margin: 0; }
 .extra-spending-group-total { font-weight: 700; margin: 0; }
@@ -19085,7 +19085,7 @@ html[dir="rtl"] .login-public-shell {
 .extra-spending-compact {
   display: flex; align-items: center; gap: 14px;
   width: 100%; padding: 14px 16px; background: var(--studio-card-bg, #fff);
-  border: 1px solid var(--studio-border); border-radius: 14px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 14px; cursor: pointer;
   text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: background 0.15s;
 }
 .extra-spending-compact:hover { background: rgba(0,0,0,0.02); }
@@ -19094,7 +19094,7 @@ html[dir="rtl"] .login-public-shell {
   color: #ef4444; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .extra-spending-compact-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.extra-spending-compact-title { font-size: 15px; font-weight: 700; color: var(--studio-text); }
+.extra-spending-compact-title { font-size: 15px; font-weight: 700; color: var(--text); }
 .extra-spending-compact-subtitle { font-size: 12px; font-weight: 500; color: var(--studio-muted, #6b7280); line-height: 1.4; }
 .extra-spending-compact-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
 .extra-spending-compact-amount { font-size: 17px; font-weight: 700; color: #ef4444; font-variant-numeric: tabular-nums; }
@@ -19137,7 +19137,7 @@ html[dir="rtl"] .login-public-shell {
   background: transparent; border: 1px solid transparent; border-radius: 6px;
   color: var(--studio-muted, #6b7280); text-transform: uppercase; letter-spacing: 0.04em;
 }
-.order-notes-extra-title:hover, .order-notes-extra-title:focus { border-color: var(--studio-border); background: var(--studio-surface); outline: none; color: var(--studio-text); }
+.order-notes-extra-title:hover, .order-notes-extra-title:focus { border-color: var(--border); background: var(--surface); outline: none; color: var(--text); }
 .order-notes-extra-remove {
   width: 22px; height: 22px; border-radius: 6px; border: none;
   background: transparent; color: var(--studio-muted, #9ca3af); font-size: 16px;
@@ -20221,12 +20221,12 @@ html[dir="rtl"] .login-public-shell {
 }
 
 .public-plan-card.featured {
-  border: 1.5px solid var(--plan-accent) !important;
+  border: 1.5px solid var(--public-accent, #2f6f6d) !important;
   background: #fff !important;
   box-shadow: 0 22px 56px rgba(47, 111, 109, 0.16) !important;
 }
 
-.public-plan-price-amount { color: var(--plan-accent) !important; }
+.public-plan-price-amount { color: var(--public-accent, #2f6f6d) !important; }
 
 .public-plan-topline {
   display: flex;
@@ -20236,9 +20236,9 @@ html[dir="rtl"] .login-public-shell {
 }
 
 .public-plan-topline .public-eyebrow {
-  border-color: var(--plan-accent);
-  background: var(--plan-accent-soft);
-  color: var(--plan-accent);
+  border-color: var(--public-accent, #2f6f6d);
+  background: var(--public-accent-soft, rgba(47, 111, 109, 0.12));
+  color: var(--public-accent, #2f6f6d);
   font-weight: 700;
 }
 
@@ -20256,8 +20256,8 @@ html[dir="rtl"] .login-public-shell {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: var(--plan-accent-soft);
-  color: var(--plan-accent);
+  background: var(--public-accent-soft, rgba(47, 111, 109, 0.12));
+  color: var(--public-accent, #2f6f6d);
 }
 
 .public-plan-icon svg { width: 21px; height: 21px; }
@@ -20345,8 +20345,8 @@ html[dir="rtl"] .login-public-shell {
   width: 19px;
   height: 19px;
   border-radius: 50%;
-  background: var(--plan-accent-soft);
-  color: var(--plan-accent);
+  background: var(--public-accent-soft, rgba(47, 111, 109, 0.12));
+  color: var(--public-accent, #2f6f6d);
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -20370,14 +20370,14 @@ html[dir="rtl"] .login-public-shell {
 
 .public-plan-card .public-button {
   width: 100%;
-  border: 1.5px solid var(--plan-accent);
+  border: 1.5px solid var(--public-accent, #2f6f6d);
   background: #fff;
-  color: var(--plan-accent);
+  color: var(--public-accent, #2f6f6d);
   font-weight: 700;
 }
 
 .public-plan-card.featured .public-button {
-  background: var(--plan-accent);
+  background: var(--public-accent, #2f6f6d);
   color: #fff;
 }
 
@@ -20391,7 +20391,7 @@ html[dir="rtl"] .login-public-shell {
   gap: 5px;
   border-radius: 999px;
   padding: 6px 14px;
-  background: var(--plan-accent) !important;
+  background: var(--public-accent, #2f6f6d) !important;
   color: #fff !important;
   font-size: 11.5px;
   font-weight: 800;
@@ -20691,7 +20691,9 @@ html[dir="rtl"] .login-public-shell {
   padding: 11px 17px 11px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--card);
+  /* --card was never defined, so this panel painted no background at all and
+     the page showed straight through the text. --surface is the real token. */
+  background: var(--surface);
   color: var(--text);
   font-size: 14px;
   font-weight: 700;
@@ -20712,7 +20714,7 @@ html[dir="rtl"] .login-public-shell {
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: var(--card);
+  background: var(--surface);
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
 }
@@ -20807,7 +20809,7 @@ html[dir="rtl"] .login-public-shell {
   padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg, #fff);
+  background: var(--surface-strong);
   font: inherit;
   font-size: 13px;
   color: var(--text);
@@ -26057,7 +26059,7 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
   width: min(420px, calc(100vw - 24px));
   max-height: min(78vh, 720px);
   overflow-y: auto;
-  background: var(--card-bg, #fff);
+  background: var(--surface);
   border: 1px solid rgba(120, 120, 140, 0.22);
   border-radius: 16px;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
