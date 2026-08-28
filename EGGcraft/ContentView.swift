@@ -16743,6 +16743,18 @@ private enum SchedulePlannerSpan: String, CaseIterable, Identifiable {
     case yearly = "Yearly"
 
     var id: String { rawValue }
+
+    /// Short label for the segmented range switch; the full `rawValue` stays
+    /// as the tooltip so nothing is lost.
+    var shortTitleKey: String {
+        switch self {
+        case .weekly: return "Week"
+        case .monthly: return "Month"
+        case .threeMonths: return "3M"
+        case .sixMonths: return "6M"
+        case .yearly: return "Year"
+        }
+    }
 }
 
 private enum SchedulePlannerFilter: String, CaseIterable, Identifiable {
@@ -16821,6 +16833,9 @@ struct SchedulePlannerView: View {
     @AppStorage("schedulePlannerSpan") private var spanRaw: String = SchedulePlannerSpan.weekly.rawValue
     @AppStorage("schedulePlannerFilter") private var filterRaw: String = SchedulePlannerFilter.all.rawValue
     @AppStorage("schedulePlannerTimelineZoom") private var scheduleTimelineZoom: Double = 1.0
+    // The move/resize tip is a one-line link until the reader asks for it, and
+    // stays gone once dismissed (web parity: studioflow-schedule-guide-seen).
+    @AppStorage("schedulePlannerGuideSeen") private var scheduleGuideSeen: Bool = false
 
     var teamMode: Bool = false
     let canEditWorkspace: Bool
@@ -16843,6 +16858,10 @@ struct SchedulePlannerView: View {
     @State private var reminderAlertMessage: String = ""
     @State private var reminderAlertCanOpenSettings: Bool = false
     @State private var scheduleZoomGestureStart: Double? = nil
+    @State private var scheduleGuideOpen: Bool = false
+    // Live width of the timeline viewport, so the zoom control can say how many
+    // days actually fit on screen instead of an opaque percentage.
+    @State private var timelineViewportWidth: CGFloat = 0
     @FocusState private var compactScheduleSearchFocused: Bool
 
     private var bgMain: Color { colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.93) }
@@ -16870,7 +16889,7 @@ struct SchedulePlannerView: View {
     }
 
     private var selectedSortTitle: String {
-        sortMode == .akilli ? t("Smart", lang: seciliDil) : t("Recent", lang: seciliDil)
+        sortMode == .akilli ? t("Smart sort", lang: seciliDil) : t("Recent first", lang: seciliDil)
     }
 
     private var schedulePlanNoticeText: String {
@@ -17084,7 +17103,7 @@ struct SchedulePlannerView: View {
                 if phoneControlsExpanded {
                     scheduleControlsCompact
                 } else {
-                    scheduleNavigationControls
+                    schedulePeriodGroup
                 }
             } else {
                 ViewThatFits(in: .horizontal) {
@@ -17100,9 +17119,7 @@ struct SchedulePlannerView: View {
                 scheduleAgendaHint
             }
 
-            if (!authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled || authVM.currentBillingPlan == .teamMonthly), (!isPhoneLayout || phoneControlsExpanded) {
-                schedulePlanNotice
-            }
+            scheduleQuietNoteRow
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 16)
@@ -17116,78 +17133,86 @@ struct SchedulePlannerView: View {
             || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var schedulePlanNotice: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: authVM.currentBillingPlan == .teamMonthly ? "person.3.fill" : "lock.open.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(authVM.currentBillingPlan == .teamMonthly ? .purple : studioWarningOrange)
-                .frame(width: 24, height: 24)
-                .background((authVM.currentBillingPlan == .teamMonthly ? Color.purple : studioWarningOrange).opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            Text(schedulePlanNoticeText)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.045))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
-        )
+    private var showsSchedulePlanNotice: Bool {
+        (!authVM.currentPlanEntitlements.scheduleAdvancedFiltersEnabled || authVM.currentBillingPlan == .teamMonthly)
+            && (!isPhoneLayout || phoneControlsExpanded)
     }
 
-    // Mac / iPad narrow window: the full wide row doesn't fit, but stacking every
-    // control full-width wastes the horizontal space. This packs the controls into
-    // two tidy side-by-side rows instead of five stacked ones.
+    // The first-use tip is one quiet line next to the plan note; the full
+    // explanation only opens when the reader asks for it. iPhone shows the
+    // agenda list rather than the draggable timeline, so it is not offered there.
+    private var showsScheduleMoveHelpLink: Bool {
+        !teamMode && !isPhoneLayout && canEditWorkspace && !scheduleGuideSeen
+    }
+
+    @ViewBuilder
+    private var scheduleQuietNoteRow: some View {
+        if showsSchedulePlanNotice || showsScheduleMoveHelpLink {
+            ScheduleQuietNoteRow(
+                noticeText: showsSchedulePlanNotice ? schedulePlanNoticeText : nil,
+                noticeIsTeam: authVM.currentBillingPlan == .teamMonthly,
+                showsHelpLink: showsScheduleMoveHelpLink,
+                helpLinkTitle: t("How moving and resizing works", lang: seciliDil),
+                isExpanded: scheduleGuideOpen,
+                expandedTitle: t("Three ways to move an order", lang: seciliDil),
+                expandedBody: t("Drag the bar to move the whole order, its left edge to change the start date, its right edge to change the delivery date. Every change offers Undo.", lang: seciliDil),
+                dismissTitle: t("Got it", lang: seciliDil),
+                borderColor: borderColor,
+                onToggleHelp: { withAnimation(.snappy) { scheduleGuideOpen.toggle() } },
+                onDismissHelp: {
+                    withAnimation(.snappy) {
+                        scheduleGuideOpen = false
+                        scheduleGuideSeen = true
+                    }
+                }
+            )
+        }
+    }
+
+    // One control row, three groups: what you are looking at, when, and how
+    // wide. Labels above the fields are gone — the value itself says what the
+    // control is, so the row stops elbowing itself.
     private var scheduleControlsMedium: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
+                scheduleSearchField
+                    .frame(maxWidth: .infinity)
                 scheduleFilterMenu
-                    .frame(maxWidth: .infinity)
+                    .frame(width: 150)
                 scheduleSortMenu
-                    .frame(maxWidth: .infinity)
-                scheduleSpanMenu
-                    .frame(maxWidth: .infinity)
+                    .frame(width: 150)
             }
 
             HStack(spacing: 10) {
-                scheduleNavigationControls
+                schedulePeriodGroup
 
-                scheduleSearchField
-                    .frame(width: 220)
+                Spacer(minLength: 6)
 
-                scheduleZoomControls()
-                    .frame(width: 150)
+                scheduleWidthGroup
+
+                scheduleSpanSegment()
             }
         }
     }
 
     private var scheduleControlsWide: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
+            scheduleSearchField
+                .frame(maxWidth: 260)
+
             scheduleFilterMenu
-                .frame(width: 180)
+                .frame(width: 156)
 
             scheduleSortMenu
-                .frame(width: 130)
+                .frame(width: 156)
 
-            scheduleSearchField
-                .frame(maxWidth: 300)
+            Spacer(minLength: 10)
 
+            schedulePeriodGroup
 
-            Spacer(minLength: 12)
+            scheduleWidthGroup
 
-            scheduleNavigationControls
-
-            scheduleZoomControls()
-                .frame(width: 150)
-
-            scheduleSpanMenu
-                .frame(width: 170)
+            scheduleSpanSegment()
         }
     }
 
@@ -17199,19 +17224,19 @@ struct SchedulePlannerView: View {
 
                 scheduleSortMenu
                     .frame(maxWidth: .infinity)
-
-                scheduleSpanMenu
-                    .frame(maxWidth: .infinity)
             }
 
+            scheduleSpanSegment(fillsWidth: true)
+
             HStack(spacing: 8) {
-                scheduleNavigationControls
+                schedulePeriodGroup
+
+                Spacer(minLength: 4)
 
                 scheduleSearchToggleButton
 
                 if !isPhoneLayout {
-                    scheduleZoomControls()
-                        .frame(width: 150)
+                    scheduleWidthGroup
                 }
             }
 
@@ -17225,20 +17250,11 @@ struct SchedulePlannerView: View {
 
 
     private var scheduleSearchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            TextField(t("Search Tasks", lang: seciliDil), text: $searchText)
-                .textFieldStyle(.plain)
-                .focused($compactScheduleSearchFocused)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.065))
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
+        ScheduleSearchBox(
+            placeholder: t("Search orders", lang: seciliDil),
+            text: $searchText,
+            borderColor: borderColor,
+            isFocused: $compactScheduleSearchFocused
         )
     }
 
@@ -17269,85 +17285,87 @@ struct SchedulePlannerView: View {
                 )
         }
         .buttonStyle(.plain)
-        .help(t("Search Tasks", lang: seciliDil))
+        .help(t("Search orders", lang: seciliDil))
     }
 
-    private var scheduleNavigationControls: some View {
-        HStack(spacing: 8) {
-            Button(action: moveToPreviousRange) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 36, height: 36)
-                    .background(Color.primary.opacity(0.065))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    // ‹ period ›, plus Today and — when something is selected — a jump target.
+    private var schedulePeriodGroup: some View {
+        SchedulePeriodGroup(
+            rangeText: activeRangeText,
+            todayTitle: t("Today", lang: seciliDil),
+            previousHelp: t("Previous range", lang: seciliDil),
+            nextHelp: t("Next range", lang: seciliDil),
+            jumpHelp: t("Jump to selected order", lang: seciliDil),
+            showsJump: selectedTimelineOrder() != nil,
+            borderColor: borderColor,
+            onPrevious: moveToPreviousRange,
+            onNext: moveToNextRange,
+            onToday: { anchorDate = Date(); didChooseInitialAnchor = true },
+            onJumpToSelected: {
+                guard let selected = selectedTimelineOrder() else { return }
+                anchorDate = selected.paymentDate
+                didChooseInitialAnchor = true
             }
-            .buttonStyle(.plain)
-
-            Button(action: moveToNextRange) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 36, height: 36)
-                    .background(Color.primary.opacity(0.065))
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            Text(activeRangeText)
-                .font(.system(size: 13.5, weight: .semibold))
-                .foregroundColor(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.065))
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(borderColor, lineWidth: 1)
-                )
-        }
-    }
-
-
-    private func scheduleZoomControls(expanded: Bool = false) -> some View {
-        HStack(spacing: 6) {
-            scheduleZoomButton(systemImage: "minus.magnifyingglass", helpKey: "Zoom out") {
-                adjustScheduleZoom(by: -0.15)
-            }
-            .disabled(clampedScheduleZoom <= minScheduleZoom + 0.001)
-
-            if expanded { Spacer(minLength: 0) }
-
-            Text("\(Int((clampedScheduleZoom * 100).rounded()))%")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.primary)
-                .monospacedDigit()
-                .frame(minWidth: 42)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-
-            scheduleZoomButton(systemImage: "plus.magnifyingglass", helpKey: "Zoom in") {
-                adjustScheduleZoom(by: 0.15)
-            }
-            .disabled(clampedScheduleZoom >= maxScheduleZoom - 0.001)
-
-            if expanded { Spacer(minLength: 0) }
-
-            scheduleZoomButton(systemImage: "arrow.counterclockwise", helpKey: "Reset zoom") {
-                withAnimation(.snappy) { setScheduleZoom(1.0) }
-            }
-        }
-        .frame(maxWidth: expanded ? .infinity : nil)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
-        .background(Color.primary.opacity(0.065))
-        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
         )
-        .help(t("Timeline zoom", lang: seciliDil))
+    }
+
+    // A percentage told nobody anything; how many days fit on screen is the
+    // thing the control is actually moving. Fit is its own button now.
+    private var scheduleWidthGroup: some View {
+        ScheduleWidthGroup(
+            daysOnScreen: daysOnScreen,
+            daysLabel: t("days", lang: seciliDil),
+            fitTitle: t("Fit", lang: seciliDil),
+            fitHelp: t("Fit the whole range on screen", lang: seciliDil),
+            zoomOutHelp: t("Zoom out", lang: seciliDil),
+            zoomInHelp: t("Zoom in", lang: seciliDil),
+            resetHelp: t("Reset zoom", lang: seciliDil),
+            groupHelp: t("Timeline zoom", lang: seciliDil),
+            canZoomOut: clampedScheduleZoom > minScheduleZoom + 0.001,
+            canZoomIn: clampedScheduleZoom < maxScheduleZoom - 0.001,
+            borderColor: borderColor,
+            onZoomOut: { adjustScheduleZoom(by: -0.15) },
+            onZoomIn: { adjustScheduleZoom(by: 0.15) },
+            onReset: { withAnimation(.snappy) { setScheduleZoom(1.0) } },
+            onFit: fitScheduleZoomToViewport
+        )
+    }
+
+    private func scheduleSpanSegment(fillsWidth: Bool = false) -> some View {
+        ScheduleSpanSegmentedControl(
+            options: availableScheduleSpans.map {
+                ScheduleSpanSegmentOption(id: $0.rawValue, title: t($0.shortTitleKey, lang: seciliDil), help: t($0.rawValue, lang: seciliDil))
+            },
+            selectedId: selectedSpan.rawValue,
+            groupHelp: t("Range", lang: seciliDil),
+            borderColor: borderColor,
+            fillsWidth: fillsWidth,
+            onSelect: { spanRaw = $0 }
+        )
+    }
+
+    // How many days actually fit in the timeline viewport right now.
+    private var daysOnScreen: Int {
+        guard timelineViewportWidth > 0, dayWidth > 0 else { return max(1, visibleDays.count) }
+        return max(1, Int((timelineViewportWidth / dayWidth).rounded()))
+    }
+
+    private func fitScheduleZoomToViewport() {
+        guard timelineViewportWidth > 0 else { return }
+        let days = CGFloat(max(visibleDays.count, 1))
+        withAnimation(.snappy) {
+            setScheduleZoom(Double((timelineViewportWidth - 34) / (days * baseDayWidth)))
+        }
+    }
+
+    // Records the live width of the horizontally scrolling timeline so the
+    // width group can report days-on-screen and Fit has something to fit to.
+    private var timelineViewportReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { timelineViewportWidth = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, newValue in timelineViewportWidth = newValue }
+        }
     }
 
     // Shown on iPhone in place of the timeline zoom controls: the drag-and-drop
@@ -17378,19 +17396,6 @@ struct SchedulePlannerView: View {
         )
     }
 
-    private func scheduleZoomButton(systemImage: String, helpKey: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(.blue)
-                .frame(width: 28, height: 28)
-                .background(Color.blue.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .help(t(helpKey, lang: seciliDil))
-    }
-
     private var scheduleFilterMenu: some View {
         Menu {
             ForEach(availableScheduleFilters) { filter in
@@ -17409,7 +17414,9 @@ struct SchedulePlannerView: View {
             HStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .foregroundColor(.blue)
-                Text(t("Filter by Status", lang: seciliDil))
+                // The value carries the meaning — no "Filter by Status" label
+                // above the control any more.
+                Text(t(selectedFilter.rawValue, lang: seciliDil))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 Spacer(minLength: 6)
@@ -17434,55 +17441,19 @@ struct SchedulePlannerView: View {
             Button {
                 sortMode = .akilli
             } label: {
-                Label(t("Smart", lang: seciliDil), systemImage: sortMode == .akilli ? "checkmark.circle.fill" : "sparkles")
+                Label(t("Smart sort", lang: seciliDil), systemImage: sortMode == .akilli ? "checkmark.circle.fill" : "sparkles")
             }
 
             Button {
                 sortMode = .sonEklenen
             } label: {
-                Label(t("Recent", lang: seciliDil), systemImage: sortMode == .sonEklenen ? "checkmark.circle.fill" : "clock.arrow.circlepath")
+                Label(t("Recent first", lang: seciliDil), systemImage: sortMode == .sonEklenen ? "checkmark.circle.fill" : "clock.arrow.circlepath")
             }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: sortMode == .akilli ? "sparkles" : "clock.arrow.circlepath")
                     .foregroundColor(.blue)
                 Text(selectedSortTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color.primary.opacity(0.065))
-            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(borderColor, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var scheduleSpanMenu: some View {
-        Menu {
-            ForEach(availableScheduleSpans) { span in
-                Button {
-                    spanRaw = span.rawValue
-                } label: {
-                    Label(t(span.rawValue, lang: seciliDil), systemImage: selectedSpan == span ? "checkmark.circle.fill" : "calendar")
-                }
-            }
-
-            if !authVM.currentPlanEntitlements.scheduleLongRangeEnabled {
-                Divider()
-                Label(t("3-month, 6-month and yearly schedule views are available on Pro and Team.", lang: seciliDil), systemImage: "lock.fill")
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Text(t(selectedSpan.rawValue, lang: seciliDil))
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
                 Spacer(minLength: 6)
@@ -17509,10 +17480,13 @@ struct SchedulePlannerView: View {
             } else if isPhoneLayout {
                 scheduleAgendaList
             } else {
+                // The period and its counts stay put above the scroller — they
+                // used to scroll sideways out of sight with the timeline.
+                schedulePeriodHeaderBar
+
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: true) {
                         VStack(spacing: 0) {
-                            timelineMonthHeader
                             timelineDayHeader
 
                             ScrollView(.vertical, showsIndicators: true) {
@@ -17527,6 +17501,7 @@ struct SchedulePlannerView: View {
                         .frame(width: timelineContentWidth, alignment: .leading)
                         .padding(18)
                     }
+                    .background(timelineViewportReader)
                     .simultaneousGesture(scheduleZoomGesture)
                     .onAppear {
                         scrollToSelectedOrder(using: proxy, animated: false)
@@ -17592,7 +17567,7 @@ struct SchedulePlannerView: View {
         HStack(spacing: 0) {
             if !isPhoneLayout {
                 teamCalendarSidebar
-                    .frame(width: 252)
+                    .frame(width: 268)
                 Divider()
             }
 
@@ -17612,6 +17587,8 @@ struct SchedulePlannerView: View {
             if timelineOrders.isEmpty {
                 scheduleEmptyState
             } else {
+                schedulePeriodHeaderBar
+
                 ScrollView(.vertical, showsIndicators: true) {
                     HStack(alignment: .top, spacing: 0) {
                         // Frozen member label column.
@@ -17642,6 +17619,7 @@ struct SchedulePlannerView: View {
                             }
                             .frame(width: timelineContentWidth, alignment: .leading)
                         }
+                        .background(timelineViewportReader)
                         .simultaneousGesture(scheduleZoomGesture)
                     }
                 }
@@ -17730,10 +17708,7 @@ struct SchedulePlannerView: View {
         return ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
                 ForEach(visibleDays, id: \.self) { day in
-                    Rectangle()
-                        .fill(calendar.isDateInToday(day) ? Color.blue.opacity(0.055) : (colorScheme == .dark ? Color.white.opacity(0.015) : Color.white.opacity(0.35)))
-                        .frame(width: dayWidth)
-                        .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+                    scheduleGridDayColumn(for: day)
                 }
             }
             .frame(height: height)
@@ -18085,21 +18060,26 @@ struct SchedulePlannerView: View {
                 }.buttonStyle(.plain)
             }
 
+            // Square-ish cells with room to breathe: the old 30pt grid squeezed
+            // the weekday row into an unreadable smear.
             HStack(spacing: 0) {
                 ForEach(teamWeekdaySymbols, id: \.self) { symbol in
                     Text(symbol)
-                        .font(.system(size: 9.5, weight: .bold))
+                        .font(.system(size: 10.5, weight: .bold))
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
                 }
             }
+            .padding(.bottom, 2)
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 3) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 3) {
                 ForEach(Array(teamCalendarCells.enumerated()), id: \.offset) { _, cell in
                     if let day = cell {
                         teamCalendarDayCell(day, hasWork: workDays.contains(calendar.startOfDay(for: day)))
                     } else {
-                        Color.clear.frame(height: 30)
+                        Color.clear.frame(height: 32)
                     }
                 }
             }
@@ -18117,30 +18097,15 @@ struct SchedulePlannerView: View {
     }
 
     private func teamCalendarDayCell(_ day: Date, hasWork: Bool) -> some View {
-        let isToday = calendar.isDateInToday(day)
-        let inRange = teamDayIsInVisibleRange(day)
-        return Button {
+        TeamMiniCalendarDayCell(
+            dayNumber: "\(calendar.component(.day, from: day))",
+            isToday: calendar.isDateInToday(day),
+            inRange: teamDayIsInVisibleRange(day),
+            hasWork: hasWork
+        ) {
             anchorDate = day
             didChooseInitialAnchor = true
-        } label: {
-            VStack(spacing: 1) {
-                Text("\(calendar.component(.day, from: day))")
-                    .font(.system(size: 12, weight: isToday ? .bold : .semibold))
-                    .foregroundColor(isToday ? .blue : .primary)
-                Circle()
-                    .fill(hasWork ? (inRange ? Color.blue : Color.secondary.opacity(0.6)) : Color.clear)
-                    .frame(width: 4, height: 4)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 30)
-            .background(inRange ? Color.blue.opacity(0.14) : Color.clear)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isToday ? Color.blue.opacity(0.55) : Color.clear, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Team side panel (overall workload + selected item)
@@ -18401,42 +18366,43 @@ struct SchedulePlannerView: View {
         return name.replacingOccurrences(of: ".", with: " ").capitalized
     }
 
-    private var timelineMonthHeader: some View {
-        HStack {
-            Text(activeRangeText)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.primary)
-            Spacer()
-            Text("\(timelineOrders.count) " + t("orders", lang: seciliDil))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(bgCard)
-        .overlay(Rectangle().fill(borderColor).frame(height: 1), alignment: .bottom)
-        .overlay(ScheduleTimelinePanSurface())
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    // "<period>" on the left, "N orders · N late · N ready to ship" on the
+    // right — counted over everything the filters let through, like web.
+    private var schedulePeriodHeaderBar: some View {
+        SchedulePeriodHeaderBar(
+            rangeText: activeRangeText,
+            countsText: "\(allFilteredOrders.count) " + t("orders", lang: seciliDil)
+                + " · \(allFilteredOrders.filter { orderIsLate($0) }.count) " + t("late", lang: seciliDil)
+                + " · \(allFilteredOrders.filter { orderIsReadyToShip($0) }.count) " + t("ready to ship", lang: seciliDil),
+            background: bgCard,
+            borderColor: borderColor
+        )
+    }
+
+    // Today is a marker, not a tinted column: a 2pt accent line down the grid
+    // under the filled day circle in the header.
+    private func scheduleGridDayColumn(for day: Date) -> some View {
+        ScheduleGridDayColumn(
+            isToday: calendar.isDateInToday(day),
+            width: dayWidth,
+            fill: colorScheme == .dark ? Color.white.opacity(0.015) : Color.white.opacity(0.35),
+            borderColor: borderColor
+        )
     }
 
     private var timelineDayHeader: some View {
         HStack(spacing: 0) {
             ForEach(visibleDays, id: \.self) { day in
-                VStack(spacing: 4) {
-                    Text(dayHeaderTopText(for: day))
-                        .font(.system(size: dayHeaderTopFontSize, weight: .semibold))
-                        .foregroundColor(calendar.isDateInToday(day) ? .blue : .secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.45)
-                    Text(dayHeaderBottomText(for: day))
-                        .font(.system(size: dayHeaderBottomFontSize, weight: .bold))
-                        .foregroundColor(calendar.isDateInToday(day) ? .blue : .primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.55)
-                }
-                .frame(width: dayWidth, height: 58)
-                .background(calendar.isDateInToday(day) ? Color.blue.opacity(0.08) : bgCard)
-                .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+                ScheduleDayHeaderCell(
+                    topText: dayHeaderTopText(for: day),
+                    bottomText: dayHeaderBottomText(for: day),
+                    topFontSize: dayHeaderTopFontSize,
+                    bottomFontSize: dayHeaderBottomFontSize,
+                    isToday: calendar.isDateInToday(day),
+                    width: dayWidth,
+                    background: bgCard,
+                    borderColor: borderColor
+                )
             }
         }
         .background(bgCard)
@@ -18448,10 +18414,7 @@ struct SchedulePlannerView: View {
         ZStack(alignment: .leading) {
             HStack(spacing: 0) {
                 ForEach(visibleDays, id: \.self) { day in
-                    Rectangle()
-                        .fill(calendar.isDateInToday(day) ? Color.blue.opacity(0.055) : (colorScheme == .dark ? Color.white.opacity(0.015) : Color.white.opacity(0.35)))
-                        .frame(width: dayWidth)
-                        .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+                    scheduleGridDayColumn(for: day)
                 }
             }
 
@@ -19288,6 +19251,455 @@ struct SchedulePlannerView: View {
         formatter.locale = studioLocale(seciliDil)
         formatter.dateFormat = "d"
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Schedule toolbar pieces
+//
+// Each control in the reworked schedule toolbar lives in its own struct: the
+// planner view's body is already deep, and nesting these inline pushes real
+// iPhones into the SwiftUI stack guard.
+
+private struct ScheduleControlChrome: ViewModifier {
+    let borderColor: Color
+    var cornerRadius: CGFloat = 11
+
+    func body(content: Content) -> some View {
+        content
+            .background(Color.primary.opacity(0.065))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+    }
+}
+
+private struct ScheduleSearchBox: View {
+    let placeholder: String
+    @Binding var text: String
+    let borderColor: Color
+    @FocusState.Binding var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .focused($isFocused)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .modifier(ScheduleControlChrome(borderColor: borderColor))
+    }
+}
+
+private struct SchedulePeriodGroup: View {
+    let rangeText: String
+    let todayTitle: String
+    let previousHelp: String
+    let nextHelp: String
+    let jumpHelp: String
+    let showsJump: Bool
+    let borderColor: Color
+    let onPrevious: () -> Void
+    let onNext: () -> Void
+    let onToday: () -> Void
+    let onJumpToSelected: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            stepButton(systemImage: "chevron.left", help: previousHelp, action: onPrevious)
+
+            Text(rangeText)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 8)
+                .frame(minWidth: 116)
+
+            stepButton(systemImage: "chevron.right", help: nextHelp, action: onNext)
+
+            Divider().frame(height: 18)
+
+            Button(action: onToday) {
+                Text(todayTitle)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.blue)
+                    .lineLimit(1)
+                    .padding(.horizontal, 9)
+                    .frame(height: 26)
+                    .background(Color.blue.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(todayTitle)
+
+            if showsJump {
+                Button(action: onJumpToSelected) {
+                    Image(systemName: "scope")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.blue)
+                        .frame(width: 26, height: 26)
+                        .background(Color.blue.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help(jumpHelp)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .modifier(ScheduleControlChrome(borderColor: borderColor))
+    }
+
+    private func stepButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(width: 26, height: 26)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+private struct ScheduleWidthGroup: View {
+    let daysOnScreen: Int
+    let daysLabel: String
+    let fitTitle: String
+    let fitHelp: String
+    let zoomOutHelp: String
+    let zoomInHelp: String
+    let resetHelp: String
+    let groupHelp: String
+    let canZoomOut: Bool
+    let canZoomIn: Bool
+    let borderColor: Color
+    let onZoomOut: () -> Void
+    let onZoomIn: () -> Void
+    let onReset: () -> Void
+    let onFit: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            iconButton(systemImage: "minus", help: zoomOutHelp, action: onZoomOut)
+                .disabled(!canZoomOut)
+
+            Text("\(daysOnScreen) \(daysLabel)")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(minWidth: 56)
+
+            iconButton(systemImage: "plus", help: zoomInHelp, action: onZoomIn)
+                .disabled(!canZoomIn)
+
+            iconButton(systemImage: "arrow.counterclockwise", help: resetHelp, action: onReset)
+
+            Button(action: onFit) {
+                Text(fitTitle)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.blue)
+                    .lineLimit(1)
+                    .padding(.horizontal, 9)
+                    .frame(height: 26)
+                    .background(Color.blue.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(fitHelp)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .modifier(ScheduleControlChrome(borderColor: borderColor))
+        .help(groupHelp)
+    }
+
+    private func iconButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.blue)
+                .frame(width: 26, height: 26)
+                .background(Color.blue.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+private struct ScheduleSpanSegmentOption: Identifiable {
+    let id: String
+    let title: String
+    let help: String
+}
+
+private struct ScheduleSpanSegmentedControl: View {
+    let options: [ScheduleSpanSegmentOption]
+    let selectedId: String
+    let groupHelp: String
+    let borderColor: Color
+    // Fills the row on stacked layouts; stays intrinsic in the single wide row
+    // so it does not fight the search field for space.
+    var fillsWidth: Bool = false
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options) { option in
+                let isActive = option.id == selectedId
+                Button {
+                    onSelect(option.id)
+                } label: {
+                    Text(option.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(isActive ? .white : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(minWidth: 40, maxWidth: fillsWidth ? .infinity : nil)
+                        .padding(.horizontal, 8)
+                        .frame(height: 30)
+                        .background(isActive ? Color.blue : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(option.help)
+            }
+        }
+        .padding(3)
+        .modifier(ScheduleControlChrome(borderColor: borderColor))
+        .help(groupHelp)
+    }
+}
+
+private struct SchedulePeriodHeaderBar: View {
+    let rangeText: String
+    let countsText: String
+    let background: Color
+    let borderColor: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(rangeText)
+                .font(.system(size: 15.5, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(countsText)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(background)
+        .overlay(Rectangle().fill(borderColor).frame(height: 1), alignment: .bottom)
+    }
+}
+
+private struct ScheduleDayHeaderCell: View {
+    let topText: String
+    let bottomText: String
+    let topFontSize: CGFloat
+    let bottomFontSize: CGFloat
+    let isToday: Bool
+    let width: CGFloat
+    let background: Color
+    let borderColor: Color
+
+    // The accent circle must never spill past its column — yearly spans get
+    // day widths down to 18pt.
+    private var circleDiameter: CGFloat {
+        max(14, min(26, min(width - 3, bottomFontSize * 1.85)))
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(topText)
+                .font(.system(size: topFontSize, weight: .semibold))
+                .foregroundColor(isToday ? .blue : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.45)
+
+            if isToday {
+                Text(bottomText)
+                    .font(.system(size: min(bottomFontSize, 13.5), weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                    .frame(width: circleDiameter, height: circleDiameter)
+                    .background(Circle().fill(Color.blue))
+            } else {
+                Text(bottomText)
+                    .font(.system(size: bottomFontSize, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+            }
+        }
+        .frame(width: width, height: 58)
+        .background(background)
+        .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+    }
+}
+
+private struct ScheduleGridDayColumn: View {
+    let isToday: Bool
+    let width: CGFloat
+    let fill: Color
+    let borderColor: Color
+
+    var body: some View {
+        Rectangle()
+            .fill(fill)
+            .frame(width: width)
+            .overlay(Rectangle().fill(borderColor).frame(width: 1), alignment: .trailing)
+            .overlay(alignment: .center) {
+                if isToday {
+                    Rectangle()
+                        .fill(Color.blue.opacity(0.35))
+                        .frame(width: 2)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+private struct ScheduleQuietNoteRow: View {
+    let noticeText: String?
+    let noticeIsTeam: Bool
+    let showsHelpLink: Bool
+    let helpLinkTitle: String
+    let isExpanded: Bool
+    let expandedTitle: String
+    let expandedBody: String
+    let dismissTitle: String
+    let borderColor: Color
+    let onToggleHelp: () -> Void
+    let onDismissHelp: () -> Void
+
+    private var noticeTint: Color { noticeIsTeam ? .purple : studioWarningOrange }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 9) {
+                if let noticeText {
+                    Image(systemName: noticeIsTeam ? "person.3.fill" : "lock.open.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(noticeTint)
+                        .frame(width: 24, height: 24)
+                        .background(noticeTint.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    Text(noticeText)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+
+                if showsHelpLink {
+                    Button(action: onToggleHelp) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 11.5, weight: .bold))
+                            Text(helpLinkTitle)
+                                .font(.system(size: 11.5, weight: .bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .foregroundColor(.blue)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(helpLinkTitle)
+                }
+            }
+
+            if showsHelpLink, isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(expandedTitle)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+                    Text(expandedBody)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(action: onDismissHelp) {
+                        Text(dismissTitle)
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+    }
+}
+
+private struct TeamMiniCalendarDayCell: View {
+    let dayNumber: String
+    let isToday: Bool
+    let inRange: Bool
+    let hasWork: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 2) {
+                Text(dayNumber)
+                    .font(.system(size: 12.5, weight: isToday ? .bold : .semibold))
+                    .foregroundColor(isToday ? .white : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(isToday ? Color.blue : Color.clear))
+
+                Circle()
+                    .fill(workDotColor)
+                    .frame(width: 4, height: 4)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background(inRange && !isToday ? Color.blue.opacity(0.14) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var workDotColor: Color {
+        guard hasWork else { return .clear }
+        if isToday { return Color.blue.opacity(0.85) }
+        return inRange ? Color.blue : Color.secondary.opacity(0.6)
     }
 }
 
