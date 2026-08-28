@@ -1163,6 +1163,14 @@ private struct BankOverviewSection: View {
             BankStatTile(title: fmt.t("Total spent"), value: fmt.money(d.spentTotal),
                          detail: delta.map { String(format: "%@%.0f%% %@", $0 <= 0 ? "↓" : "↑", abs($0), fmt.t(model.period == .year ? "vs last year" : model.period == .week ? "vs last week" : "vs last month")) },
                          detailColor: (delta ?? 0) <= 0 ? .green : .primary, icon: "chart.line.uptrend.xyaxis", tint: .primary, background: background)
+                // A percentage on its own hides what it was computed from:
+                // the same "↑58%" means something very different on a small
+                // previous period. Same hover detail the web dashboard shows.
+                .help(delta.map { pct in
+                    let diff = d.spentTotal - d.previousSpent
+                    let sign = diff >= 0 ? "+" : "\u{2212}"
+                    return "\(fmt.money(d.spentTotal)) vs \(fmt.money(d.previousSpent))\n\(sign)\(fmt.money(abs(diff))) / \(sign)\(String(format: "%.1f", abs(pct)))%"
+                } ?? "")
             BankStatTile(title: fmt.t("Incoming"), value: "+\(fmt.money(d.incomingTotal))",
                          detail: "\(d.incomingCount) \(fmt.t("payments received"))", detailColor: .secondary, icon: "arrow.up.right", tint: .green, background: background,
                          link: (fmt.t("View all incoming"), { model.txFlow = .in; model.txAttention = .none; model.tab = .transactions }))

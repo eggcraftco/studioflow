@@ -574,8 +574,13 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 }
                 item {
                     TileGrid(compact, listOf(
+                        // The percentage carries the figure it was computed
+                        // against. A phone has no hover, so where the web and
+                        // Mac show this on the tooltip, it is written into the
+                        // line: "↑58% vs last month · £396.32" is readable at a
+                        // glance, and "↑58%" on its own is not.
                         StatTileSpec(t("Total spent"), fmt(spentTotal, null),
-                            delta?.let { "${if (it <= 0) "↓" else "↑"}${String.format(Locale.UK, "%.0f", abs(it))}% ${t(when (view) { BankPeriodView.Year -> "vs last year"; BankPeriodView.Week -> "vs last week"; else -> "vs last month" })}" },
+                            delta?.let { "${if (it <= 0) "↓" else "↑"}${String.format(Locale.UK, "%.0f", abs(it))}% ${t(when (view) { BankPeriodView.Year -> "vs last year"; BankPeriodView.Week -> "vs last week"; else -> "vs last month" })} · ${fmt(previousSpent, null)}" },
                             if ((delta ?: 0.0) <= 0) GREEN else MaterialTheme.colorScheme.onSurfaceVariant, RED, Icons.Filled.AccountBalance),
                         StatTileSpec(t("Incoming"), "+" + fmt(incomingTotal, null), "$incomingCount ${t("payments received")}", null, GREEN, Icons.Filled.Check) { flow = BankFlow.Incoming; tab = BankTab.Transactions },
                         StatTileSpec(t("Recurring spend"), "${fmt(recurringMonthly, null)} / ${t("month")}", "${activeRecurring.size} ${t("active")} · ${cancelledRecurring.size} ${t("possibly cancelled")}", null, AMBER, Icons.Filled.Refresh) { tab = BankTab.Recurring },
