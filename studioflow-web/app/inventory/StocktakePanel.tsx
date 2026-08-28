@@ -15,7 +15,6 @@ import { usePrivateMoney } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
-  INVENTORY_CATEGORIES,
   cancelStocktake,
   commitStocktake,
   getStocktake,
@@ -36,11 +35,14 @@ export function StocktakePanel({
   workspace,
   currencySymbol,
   canEdit,
+  categoryOptions,
   onStockChanged
 }: {
   workspace: WorkspaceContext;
   currencySymbol: string;
   canEdit: boolean;
+  /** The workspace's own category names, so every picker agrees. */
+  categoryOptions: string[];
   onStockChanged: () => void;
 }) {
   const money = usePrivateMoney();
@@ -326,7 +328,7 @@ export function StocktakePanel({
                   <span>{t("Category")}</span>
                   <select className="input" value={startCategory} onChange={e => setStartCategory(e.target.value)}>
                     <option value="">{t("All Categories")}</option>
-                    {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
+                    {categoryOptions.map(c => <option key={c} value={c}>{t(c)}</option>)}
                   </select>
                 </label>
               </div>

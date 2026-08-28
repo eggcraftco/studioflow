@@ -26828,3 +26828,31 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .order-production-stage-value { display: flex; align-items: baseline; gap: 8px; font-size: 14px; font-weight: 600; }
 .order-production-stage-value em { font-style: normal; font-size: 12px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 .order-production-stage-blocker { font-size: 12px; color: var(--danger); font-weight: 600; }
+
+/* Inventory → Manage → Categories. The workshop's own words for what it keeps. */
+.inv-categories { display: flex; flex-direction: column; gap: 14px; }
+.inv-categories-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.inv-categories-head h2 { margin: 0; font-size: 18px; }
+.inv-categories-head p { margin: 4px 0 0; font-size: 13px; color: var(--muted); max-width: 62ch; }
+.inv-categories-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.inv-categories-orphans {
+  margin: 0; padding: 10px 14px; border-radius: 10px;
+  background: var(--warning-soft); color: var(--text); font-size: 12.5px;
+}
+.inv-categories-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.inv-categories-table th, .inv-categories-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.inv-categories-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+.inv-categories-table tr.is-archived { opacity: 0.55; }
+.inv-categories-order { display: flex; flex-direction: column; gap: 1px; }
+.inv-categories-order button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 9px; line-height: 1; padding: 2px; }
+.inv-categories-order button:disabled { opacity: 0.3; cursor: not-allowed; }
+.inv-categories-icon { width: 68px; text-align: center; }
+.inv-categories-count { font-variant-numeric: tabular-nums; color: var(--muted); }
+.inv-categories-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.inv-categories-foot { margin: 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.inv-categories-move-to { margin-left: 8px; max-width: 190px; }
+@media (max-width: 860px) {
+  .inv-categories-table thead { display: none; }
+  .inv-categories-table tr { display: grid; grid-template-columns: auto 1fr; gap: 6px; padding: 8px 0; }
+  .inv-categories-table td { border: 0; padding: 4px 6px; }
+}

@@ -47,6 +47,31 @@ const DEFAULT_CATEGORIES = [
   "Parts", "Consumables", "Packaging", "Tools", "Other"
 ];
 
+// Categories used to be this list and nothing else, which meant a jeweller was
+// stuck filing rings under "Watches". They are now the workspace's own, kept in
+// companySettings as an ordered list.
+//
+// An item still stores its category as the TITLE, not an id. That keeps a CSV
+// export readable and an import matchable by the word a human typed — so a
+// rename has to rewrite the items that used the old title, which is exactly
+// what renameCategoryOnItems below does. The id exists only so the settings
+// screen can follow a row across a rename.
+const DEFAULT_CATEGORY_ICONS = {
+  Watches: "⌚",
+  Dials: "◎",
+  Movements: "⚙",
+  Bracelets: "➰",
+  Straps: "➰",
+  Parts: "⚒",
+  Consumables: "⚗",
+  Packaging: "▧",
+  Tools: "✄",
+  Other: "▪"
+};
+
+const CATEGORY_FALLBACK = "Other";
+const MAX_CATEGORIES = 40;
+
 // Where an item may go next. Written down rather than left to the client so a
 // stale screen cannot walk an item backwards out of "sold".
 const STATUS_TRANSITIONS = {
@@ -482,10 +507,13 @@ function createInventoryFunctions({
     const snap = await query.limit(limit).get();
     const docs = snap.docs;
     const last = docs.length > 0 ? docs[docs.length - 1] : null;
+    const { categories: workspaceCategories, defaultCategory } = await loadCategories(companyId);
     return {
       ok: true,
       items: docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) })),
-      categories: DEFAULT_CATEGORIES,
+      categories: workspaceCategories.filter((row) => !row.archived).map((row) => row.title),
+      categoryDetails: workspaceCategories,
+      defaultCategory,
       hasMore: docs.length === limit,
       cursor: last && docs.length === limit
         ? { updatedAtMs: Number((last.data() || {}).updatedAtMs) || 0, id: last.id }
@@ -2134,6 +2162,230 @@ function createInventoryFunctions({
     return parentPath ? `${parentPath}${LOCATION_SEPARATOR}${name}` : name;
   }
 
+  // ---------------------------------------------------------------------
+  // Categories
+  // ---------------------------------------------------------------------
+
+  const settingsRef = (companyId) => db().collection("companySettings").doc(String(companyId));
+
+  function categoryIdFrom(value, fallback) {
+    const slug = String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40);
+    return slug || fallback;
+  }
+
+  function defaultCategories() {
+    return DEFAULT_CATEGORIES.map((title) => ({
+      id: categoryIdFrom(title, "category"),
+      title,
+      icon: DEFAULT_CATEGORY_ICONS[title] || DEFAULT_CATEGORY_ICONS.Other,
+      archived: false
+    }));
+  }
+
+  // Never throws and never returns an empty list: the Inventory screen has to
+  // render even if a stale client wrote nonsense here.
+  function categoriesFromSettings(data = {}) {
+    const raw = Array.isArray(data.inventoryCategories) ? data.inventoryCategories : [];
+    const rows = [];
+    const seen = new Set();
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object") continue;
+      const title = clean(entry.title, "", 60);
+      if (!title) continue;
+      let id = categoryIdFrom(entry.id || title, `category_${rows.length + 1}`);
+      while (seen.has(id)) id = `${id}_${rows.length + 1}`;
+      seen.add(id);
+      rows.push({
+        id,
+        title,
+        icon: clean(entry.icon, "", 8) || DEFAULT_CATEGORY_ICONS[title] || DEFAULT_CATEGORY_ICONS.Other,
+        archived: entry.archived === true
+      });
+    }
+    if (rows.length === 0) return defaultCategories();
+    // Somewhere to put items whose category is deleted, always.
+    if (!rows.some((row) => row.title.toLowerCase() === CATEGORY_FALLBACK.toLowerCase())) {
+      rows.push({ id: categoryIdFrom(CATEGORY_FALLBACK, "other"), title: CATEGORY_FALLBACK, icon: DEFAULT_CATEGORY_ICONS.Other, archived: false });
+    }
+    return rows;
+  }
+
+  async function loadCategories(companyId) {
+    const snap = await settingsRef(companyId).get();
+    const data = snap.exists ? snap.data() || {} : {};
+    return {
+      categories: categoriesFromSettings(data),
+      defaultCategory: clean(data.inventoryDefaultCategory, "", 60)
+    };
+  }
+
+  // Items carry the category TITLE, so a rename has to travel to them. Done in
+  // batches because a workshop can hold thousands of rows.
+  async function renameCategoryOnItems(companyId, fromTitle, toTitle) {
+    const from = String(fromTitle || "").trim();
+    const to = String(toTitle || "").trim();
+    if (!from || !to || from === to) return 0;
+    const snap = await itemsRef(companyId).where("category", "==", from).get();
+    let moved = 0;
+    let batch = db().batch();
+    let pending = 0;
+    for (const doc of snap.docs) {
+      batch.set(doc.ref, { category: to, updatedAtMs: Date.now() }, { merge: true });
+      moved += 1;
+      pending += 1;
+      if (pending >= 400) { await batch.commit(); batch = db().batch(); pending = 0; }
+    }
+    if (pending > 0) await batch.commit();
+    return moved;
+  }
+
+  async function countItemsInCategory(companyId, title) {
+    const snap = await itemsRef(companyId).where("category", "==", String(title || "")).get();
+    return snap.size;
+  }
+
+  const listInventoryCategories = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request);
+    const { categories, defaultCategory } = await loadCategories(companyId);
+    // Counts drive the "this category still holds 12 items" warning before a
+    // delete, so they are worth the read.
+    const snap = await itemsRef(companyId).select("category").get();
+    const counts = new Map();
+    snap.docs.forEach((doc) => {
+      const title = String((doc.data() || {}).category || "");
+      counts.set(title, (counts.get(title) || 0) + 1);
+    });
+    return {
+      ok: true,
+      categories: categories.map((row) => ({ ...row, itemCount: counts.get(row.title) || 0 })),
+      defaultCategory,
+      // Titles held by items but no longer on the list — otherwise those items
+      // would be invisible to every filter on the screen.
+      orphans: [...counts.keys()]
+        .filter((title) => title && !categories.some((row) => row.title === title))
+        .map((title) => ({ title, itemCount: counts.get(title) || 0 }))
+    };
+  });
+
+  // One write for the whole list: rename, re-icon, reorder, archive and add all
+  // arrive together, and every rename is carried to the items that used it.
+  const saveInventoryCategories = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const incoming = Array.isArray(request.data && request.data.categories) ? request.data.categories : [];
+    if (incoming.length === 0) throw new HttpsError("invalid-argument", "Inventory needs at least one category.");
+    if (incoming.length > MAX_CATEGORIES) {
+      throw new HttpsError("invalid-argument", `A workspace is capped at ${MAX_CATEGORIES} categories.`);
+    }
+
+    const next = categoriesFromSettings({ inventoryCategories: incoming });
+    const lowered = next.map((row) => row.title.toLowerCase());
+    const duplicate = lowered.find((title, index) => lowered.indexOf(title) !== index);
+    if (duplicate) {
+      throw new HttpsError("failed-precondition", `Two categories cannot both be called "${duplicate}". Merge them instead.`);
+    }
+
+    const { categories: previous } = await loadCategories(companyId);
+    const previousById = new Map(previous.map((row) => [row.id, row]));
+    let movedItems = 0;
+    for (const row of next) {
+      const before = previousById.get(row.id);
+      if (!before || before.title === row.title) continue;
+      movedItems += await renameCategoryOnItems(companyId, before.title, row.title);
+    }
+
+    const defaultCategory = clean(request.data && request.data.defaultCategory, "", 60);
+    await settingsRef(companyId).set({
+      inventoryCategories: next,
+      inventoryDefaultCategory: next.some((row) => row.title === defaultCategory) ? defaultCategory : "",
+      inventoryCategoriesUpdatedAtMs: Date.now()
+    }, { merge: true });
+
+    return { ok: true, categories: next, renamedItems: movedItems };
+  });
+
+  // A category with items in it is never dropped on the floor. The caller has
+  // to say where those items go first.
+  const deleteInventoryCategory = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const categoryId = clean(request.data && request.data.categoryId, "", 80);
+    const disposition = String((request.data && request.data.disposition) || "");
+    const moveToId = clean(request.data && request.data.moveToId, "", 80);
+    if (!categoryId) throw new HttpsError("invalid-argument", "Which category?");
+
+    const { categories, defaultCategory } = await loadCategories(companyId);
+    const target = categories.find((row) => row.id === categoryId);
+    if (!target) throw new HttpsError("not-found", "Category not found.");
+    if (categories.filter((row) => !row.archived).length <= 1 && disposition !== "archive") {
+      throw new HttpsError("failed-precondition", "Inventory needs at least one category.");
+    }
+
+    const held = await countItemsInCategory(companyId, target.title);
+
+    if (disposition === "archive") {
+      const next = categories.map((row) => (row.id === categoryId ? { ...row, archived: true } : row));
+      await settingsRef(companyId).set({ inventoryCategories: next, inventoryCategoriesUpdatedAtMs: Date.now() }, { merge: true });
+      return { ok: true, categories: next, archived: true, itemsMoved: 0 };
+    }
+
+    let destination = "";
+    if (disposition === "move") {
+      const moveTo = categories.find((row) => row.id === moveToId);
+      if (!moveTo) throw new HttpsError("invalid-argument", "Choose a category to move these items into.");
+      if (moveTo.id === categoryId) throw new HttpsError("invalid-argument", "Pick a different category.");
+      destination = moveTo.title;
+    } else if (disposition === "other") {
+      const other = categories.find((row) => row.title.toLowerCase() === CATEGORY_FALLBACK.toLowerCase() && row.id !== categoryId);
+      destination = other ? other.title : CATEGORY_FALLBACK;
+    } else if (held > 0) {
+      // No disposition and the category is not empty: refuse rather than
+      // silently orphan the items.
+      throw new HttpsError(
+        "failed-precondition",
+        `"${target.title}" still holds ${held} item${held === 1 ? "" : "s"}. Move them, archive the category, or send them to Other.`
+      );
+    }
+
+    const itemsMoved = destination ? await renameCategoryOnItems(companyId, target.title, destination) : 0;
+    let next = categories.filter((row) => row.id !== categoryId);
+    if (next.length === 0) next = defaultCategories();
+    await settingsRef(companyId).set({
+      inventoryCategories: next,
+      inventoryDefaultCategory: defaultCategory === target.title ? "" : defaultCategory,
+      inventoryCategoriesUpdatedAtMs: Date.now()
+    }, { merge: true });
+
+    return { ok: true, categories: next, archived: false, itemsMoved };
+  });
+
+  // Merge is delete-with-a-destination said plainly, because "Bracelets into
+  // Straps" is what a workshop actually asks for.
+  const mergeInventoryCategories = onCall({ region: REGION }, async (request) => {
+    const { companyId } = await requireInventoryAccess(request, { write: true });
+    const fromId = clean(request.data && request.data.fromId, "", 80);
+    const intoId = clean(request.data && request.data.intoId, "", 80);
+    if (!fromId || !intoId || fromId === intoId) {
+      throw new HttpsError("invalid-argument", "Choose two different categories.");
+    }
+    const { categories, defaultCategory } = await loadCategories(companyId);
+    const from = categories.find((row) => row.id === fromId);
+    const into = categories.find((row) => row.id === intoId);
+    if (!from || !into) throw new HttpsError("not-found", "Category not found.");
+
+    const itemsMoved = await renameCategoryOnItems(companyId, from.title, into.title);
+    const next = categories.filter((row) => row.id !== fromId);
+    await settingsRef(companyId).set({
+      inventoryCategories: next,
+      inventoryDefaultCategory: defaultCategory === from.title ? into.title : defaultCategory,
+      inventoryCategoriesUpdatedAtMs: Date.now()
+    }, { merge: true });
+
+    return { ok: true, categories: next, itemsMoved, into: into.title };
+  });
+
   async function loadAllLocations(companyId) {
     const snap = await locationsRef(companyId).limit(500).get();
     return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
@@ -2624,6 +2876,10 @@ function createInventoryFunctions({
     releaseInventoryFromOrder,
     getOrderInventory,
     recordInventoryLoss,
+    listInventoryCategories,
+    saveInventoryCategories,
+    deleteInventoryCategory,
+    mergeInventoryCategories,
     listInventoryLocations,
     saveInventoryLocation,
     deleteInventoryLocation,
@@ -2633,7 +2889,7 @@ function createInventoryFunctions({
     applyRecipeToOrder,
     consumeInventoryForOrder,
     swapInventoryForOrder,
-    _internal: { saveItemForWorkspace, itemsRef, normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES }
+    _internal: { saveItemForWorkspace, itemsRef, normalizeItemInput, costSummary, allocateExtras, purchaseTotals, splitDelimited, guessMapping, spreadsheetNumber, roundSigned, roundUnitMoney, STATUS_TRANSITIONS, DEFAULT_CATEGORIES, categoriesFromSettings, defaultCategories }
   };
 }
 
