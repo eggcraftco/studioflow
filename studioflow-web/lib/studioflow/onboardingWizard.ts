@@ -1,0 +1,204 @@
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase/client";
+import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { DEFAULT_PRODUCTION_STAGES, type ProductionStage } from "@/lib/studioflow/production";
+
+// The four questions worth asking before someone starts work.
+//
+// The report's cut: ask only what genuinely changes the product, and make the
+// answers visibly change it. Business age, inventory experience and "how did you
+// find us" were dropped — they help us, not the person filling the form, and a
+// setup screen that feels like a survey is one people abandon.
+//
+// There is no Skip. Every step is answerable instead: "Start empty" and "I'll
+// set this up later" are real choices on the last step, not an escape hatch, so
+// nobody is trapped and nobody is nagged.
+
+export type OnboardingWorkKind =
+  | "watches_jewellery" | "repairs" | "leather" | "art_design"
+  | "clothing" | "food" | "ceramics" | "made_to_order" | "other";
+
+export type OnboardingWorkflow = "made_to_order" | "repairs" | "batch" | "mixed";
+export type OnboardingTeamSize = "solo" | "2_5" | "6_10" | "10_plus";
+export type OnboardingVolume = "" | "under_10" | "10_30" | "31_100" | "100_plus" | "not_sure";
+
+export type OnboardingGoal =
+  | "orders_customers" | "production_deadlines" | "repairs_service" | "estimates"
+  | "inventory" | "files_notes" | "finance" | "connect_store" | "team" | "other";
+
+export type OnboardingStart =
+  | "sample" | "first_order" | "shopify" | "woocommerce" | "spreadsheet" | "empty" | "later";
+
+export type OnboardingAnswers = {
+  country: string;
+  currency: string;
+  timeZone: string;
+  workKinds: OnboardingWorkKind[];
+  workflow: OnboardingWorkflow;
+  teamSize: OnboardingTeamSize;
+  volume: OnboardingVolume;
+  mainGoal: OnboardingGoal | "";
+  extraGoals: OnboardingGoal[];
+  start: OnboardingStart | "";
+};
+
+export const ONBOARDING_WORK_KINDS: { id: OnboardingWorkKind; label: string }[] = [
+  { id: "watches_jewellery", label: "Watches & jewellery" },
+  { id: "repairs", label: "Repairs & servicing" },
+  { id: "leather", label: "Leather goods" },
+  { id: "art_design", label: "Art & custom design" },
+  { id: "clothing", label: "Clothing & tailoring" },
+  { id: "food", label: "Cakes & food" },
+  { id: "ceramics", label: "Ceramics & crafts" },
+  { id: "made_to_order", label: "General made-to-order" },
+  { id: "other", label: "Other" },
+];
+
+export const ONBOARDING_WORKFLOWS: { id: OnboardingWorkflow; label: string; detail: string }[] = [
+  { id: "made_to_order", label: "Made to order", detail: "I start work after a customer places an order." },
+  { id: "repairs", label: "Repairs and servicing", detail: "Customers send or bring items for work." },
+  { id: "batch", label: "Batch production", detail: "I make products in groups and sell them afterwards." },
+  { id: "mixed", label: "A mix of these", detail: "My business uses more than one workflow." },
+];
+
+export const ONBOARDING_TEAM_SIZES: { id: OnboardingTeamSize; label: string; seats: number }[] = [
+  { id: "solo", label: "Just me", seats: 1 },
+  { id: "2_5", label: "2–5 people", seats: 5 },
+  { id: "6_10", label: "6–10 people", seats: 10 },
+  { id: "10_plus", label: "More than 10", seats: 20 },
+];
+
+export const ONBOARDING_VOLUMES: { id: OnboardingVolume; label: string }[] = [
+  { id: "under_10", label: "Fewer than 10" },
+  { id: "10_30", label: "10–30" },
+  { id: "31_100", label: "31–100" },
+  { id: "100_plus", label: "More than 100" },
+  { id: "not_sure", label: "Not sure yet" },
+];
+
+// Six shown first, the rest behind "Show more goals" — a wall of ten choices is
+// a wall, not a question.
+export const ONBOARDING_GOALS: { id: OnboardingGoal; label: string; primary: boolean }[] = [
+  { id: "orders_customers", label: "Organise my orders and customers", primary: true },
+  { id: "production_deadlines", label: "Plan production and deadlines", primary: true },
+  { id: "repairs_service", label: "Track repairs and service work", primary: true },
+  { id: "estimates", label: "Send estimates and get approvals", primary: true },
+  { id: "inventory", label: "Manage inventory and materials", primary: true },
+  { id: "finance", label: "Track income, expenses and profit", primary: true },
+  { id: "files_notes", label: "Keep files and notes together", primary: false },
+  { id: "connect_store", label: "Connect Shopify or WooCommerce", primary: false },
+  { id: "team", label: "Manage work with my team", primary: false },
+  { id: "other", label: "Something else", primary: false },
+];
+
+export const ONBOARDING_STARTS: { id: OnboardingStart; label: string; detail: string }[] = [
+  { id: "first_order", label: "Create my first order", detail: "Start with the thing you actually do." },
+  { id: "sample", label: "Explore a sample workspace", detail: "Look around with example orders before adding your own." },
+  { id: "shopify", label: "Connect Shopify", detail: "Bring your store's orders and customers in." },
+  { id: "woocommerce", label: "Connect WooCommerce", detail: "Bring your store's orders and customers in." },
+  { id: "spreadsheet", label: "Import a spreadsheet", detail: "Move what you already track into NivaDesk." },
+  { id: "empty", label: "Start empty", detail: "A clean workspace, set up your way." },
+  { id: "later", label: "I'll set this up later", detail: "Go straight to your workspace." },
+];
+
+/** The starting tasks each goal turns into. The report's point: the answers have
+ *  to visibly change the product, or the question was just a survey. */
+export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, string[]> = {
+  orders_customers: ["Create your first order", "Add a customer", "Customise your order cards"],
+  production_deadlines: ["Choose your production stages", "Add a start and delivery date", "Open Schedule"],
+  repairs_service: ["Open a repair intake", "Record what the customer brought in", "Set a promised date"],
+  estimates: ["Send your first estimate", "Turn an approval into an order", "Set your estimate wording"],
+  inventory: ["Add your first inventory item", "Create a location", "Reserve an item for an order"],
+  files_notes: ["Upload a file to an order", "Write your first note", "Open the Files library"],
+  finance: ["Record a payment", "Set your tax rule", "Open the finance dashboard"],
+  connect_store: ["Connect your store", "Review imported orders", "Confirm customer matching"],
+  team: ["Invite a team member", "Set their permissions", "Assign the first task"],
+  other: ["Create your first order", "Add a customer", "Open your dashboard"],
+};
+
+/** The preset engine keys off a business-type phrase, so the chosen work kinds
+ *  are turned back into the vocabulary it already understands. */
+export function businessTypeForWorkKinds(kinds: OnboardingWorkKind[]): string {
+  const first = kinds[0];
+  switch (first) {
+    case "watches_jewellery": return "Jewellery Studio";
+    case "repairs": return "Repair Service";
+    case "leather": return "Handmade Products";
+    case "art_design": return "Custom Art Studio";
+    case "clothing": return "Tailor / Alteration Studio";
+    case "food": return "Food / Bakery / Catering";
+    case "ceramics": return "Handmade Products";
+    case "made_to_order": return "General Small Business";
+    default: return "General Small Business";
+  }
+}
+
+/** How a workshop works decides what its board's lanes are called. A repair
+ *  shop does not have a "Ready to Ship" column; it has a collection counter. */
+export function productionStagesForWorkflow(workflow: OnboardingWorkflow): ProductionStage[] {
+  if (workflow === "repairs") {
+    return [
+      { id: "intake", title: "Intake", kind: "ready", wipLimit: 10 },
+      { id: "in_repair", title: "In Repair", kind: "active", wipLimit: 10 },
+      { id: "waiting_parts", title: "Waiting / Blocked", kind: "blocked", wipLimit: 10 },
+      { id: "testing", title: "Testing", kind: "review", wipLimit: 10 },
+      { id: "ready_for_collection", title: "Ready for Collection", kind: "shipready", wipLimit: 10 },
+      { id: "done", title: "Done", kind: "done", wipLimit: 0 },
+    ];
+  }
+  if (workflow === "batch") {
+    return [
+      { id: "planned", title: "Planned", kind: "ready", wipLimit: 10 },
+      { id: "in_production", title: "In Production", kind: "active", wipLimit: 10 },
+      { id: "blocked", title: "Waiting / Blocked", kind: "blocked", wipLimit: 10 },
+      { id: "quality_check", title: "Quality Check", kind: "review", wipLimit: 10 },
+      { id: "ready_to_ship", title: "Ready to Ship", kind: "shipready", wipLimit: 10 },
+      { id: "done", title: "Done", kind: "done", wipLimit: 0 },
+    ];
+  }
+  return DEFAULT_PRODUCTION_STAGES.map(stage => ({ ...stage }));
+}
+
+export function seatsForTeamSize(size: OnboardingTeamSize) {
+  return ONBOARDING_TEAM_SIZES.find(entry => entry.id === size)?.seats ?? 1;
+}
+
+/**
+ * Saves the wizard's answers, and the things they change.
+ *
+ * Two documents on purpose: the workspace SETTINGS carry everything that shapes
+ * screens, while the team size goes on the COMPANY, because that is where the
+ * trial engine reads it to decide whether the fortnight should be Pro or Team.
+ */
+export async function saveOnboardingAnswers(
+  companyId: string,
+  userId: string,
+  answers: OnboardingAnswers,
+  presetPayload: Record<string, unknown>
+) {
+  const goals = [answers.mainGoal, ...answers.extraGoals].filter(Boolean);
+  await withWebSyncStatus(async () => {
+    await setDoc(doc(db, "companySettings", companyId), {
+      ...presetPayload,
+      selectedCountry: answers.country,
+      selectedCurrency: answers.currency,
+      selectedTimeZone: answers.timeZone,
+      onboardingWorkKinds: answers.workKinds,
+      onboardingWorkflow: answers.workflow,
+      onboardingTeamSizeBand: answers.teamSize,
+      onboardingOrderVolume: answers.volume,
+      onboardingGoals: goals,
+      onboardingMainGoal: answers.mainGoal,
+      onboardingStartChoice: answers.start,
+      productionStages: productionStagesForWorkflow(answers.workflow),
+      businessOnboardingCompleted: true,
+      businessOnboardingCompletedAt: serverTimestamp(),
+      businessOnboardingCompletedAction: "wizard",
+      businessOnboardingCompletedBy: userId,
+    }, { merge: true });
+
+    await setDoc(doc(db, "companies", companyId), {
+      onboardingTeamSize: seatsForTeamSize(answers.teamSize),
+    }, { merge: true });
+  }, "Saving your workspace setup.");
+}

@@ -34,6 +34,12 @@ import {
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
+import {
+  businessTypeForWorkKinds,
+  saveOnboardingAnswers,
+  type OnboardingAnswers,
+} from "@/lib/studioflow/onboardingWizard";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import {
   formatStudioMoney,
@@ -52,6 +58,7 @@ import {
 import {
   saveWorkspaceOnboardingSkip,
   saveWorkspaceOnboardingTemplate,
+  workspaceOnboardingPresetPayload,
   workspaceOnboardingPromptSeed,
   isWorkspaceOnboardingPromptSeed,
   WORKSPACE_ONBOARDING_BUSINESS_TYPES,
@@ -1614,6 +1621,30 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     router.replace("/login");
   }
 
+  const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);
+
+  async function completeOnboardingWizard(answers: OnboardingAnswers) {
+    if (!workspace || !user) return;
+    setOnboardingSaving(true);
+    setOnboardingError("");
+    try {
+      // The chosen work kinds become the business type the preset engine has
+      // always understood, so the card/step/label presets keep working and the
+      // wizard only has to supply better answers to them.
+      const businessType = businessTypeForWorkKinds(answers.workKinds);
+      const preset = workspaceOnboardingPresetPayload(
+        businessType,
+        workspaceOnboardingPromptSeed(businessType, language),
+      );
+      await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
+      setFinishedAnswers(answers);
+    } catch (failure) {
+      setOnboardingError(failure instanceof Error ? failure.message : t("Could not save your setup."));
+    } finally {
+      setOnboardingSaving(false);
+    }
+  }
+
   async function completeWorkspaceOnboarding(
     action: "smart" | "standard" | "skip",
   ) {
@@ -1659,30 +1690,27 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   if (showWorkspaceOnboarding) {
     return (
       <AppShellMountedContext.Provider value={true}>
-        <WorkspaceOnboardingScreen
-          businessType={onboardingBusinessType}
-          prompt={onboardingPrompt}
-          saving={onboardingSaving}
-          error={onboardingError}
-          language={language}
-          onBusinessTypeChange={(nextType) => {
-            setOnboardingBusinessType(nextType);
-            setOnboardingPrompt((current) =>
-              onboardingPromptEdited && !isWorkspaceOnboardingPromptSeed(current)
-                ? current
-                : workspaceOnboardingPromptSeed(nextType, language),
-            );
-            setOnboardingError("");
-          }}
-          onPromptChange={(nextPrompt) => {
-            setOnboardingPromptEdited(true);
-            setOnboardingPrompt(nextPrompt);
-            setOnboardingError("");
-          }}
-          onSmart={() => completeWorkspaceOnboarding("smart")}
-          onStandard={() => completeWorkspaceOnboarding("standard")}
-          onSkip={() => completeWorkspaceOnboarding("skip")}
-        />
+        {finishedAnswers ? (
+          <OnboardingReady
+            answers={finishedAnswers}
+            t={t}
+            onOpen={() => {
+              setSettings((current) => {
+                const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
+                if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+                return merged;
+              });
+              window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
+            }}
+          />
+        ) : (
+          <OnboardingWizard
+            t={t}
+            saving={onboardingSaving}
+            error={onboardingError}
+            onFinish={(answers) => void completeOnboardingWizard(answers)}
+          />
+        )}
       </AppShellMountedContext.Provider>
     );
   }

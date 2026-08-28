@@ -417,6 +417,10 @@ function onboardingPresetFor(rawText: string): WorkspaceOnboardingPreset {
   };
 }
 
+export function workspaceOnboardingPresetPayload(businessType: string, prompt: string) {
+  return onboardingPayload(businessType, prompt, true, "smart", "");
+}
+
 function onboardingPayload(
   businessType: string,
   prompt: string,
