@@ -39,88 +39,301 @@ function cash(value: number, hide: boolean, settings: StudioMoneySettings) {
 /* ------------------------------------------------------------------ Money */
 
 export function MoneyCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
-  const counted = data.financeOrders.filter((order) => order.countsTowardBalance !== false);
-  const revenue = counted.reduce((total, o) => total + o.paidAmount + o.remainingAmount, 0);
-  const received = counted.reduce((total, o) => total + o.paidAmount, 0);
-  const outstanding = counted.reduce((total, o) => total + o.remainingAmount, 0);
-  const costs = counted.reduce((total, o) => total + o.watchPurchasePrice, 0);
-  const fees = counted.reduce((total, o) => total + o.paymentFee, 0);
-  const shipping = counted.reduce((total, o) => total + o.deliveryCost, 0);
-  const vat = counted.reduce((total, o) => total + o.taxAmount, 0);
-  const netProfit = revenue - costs - fees - shipping - vat;
+  const orders = data.financeOrders.filter((order) => order.countsTowardBalance !== false);
+  if (orders.length === 0) return null;
 
+  const money = (value: number) => cash(value, hideNumbers, moneySettings);
+  const revenue = orders.reduce((sum, o) => sum + o.paidAmount + o.remainingAmount, 0);
+  const received = orders.reduce((sum, o) => sum + o.paidAmount, 0);
+  const outstanding = orders.reduce((sum, o) => sum + o.remainingAmount, 0);
+  const costs = orders.reduce((sum, o) => sum + o.watchPurchasePrice, 0);
+  const fees = orders.reduce((sum, o) => sum + o.paymentFee, 0);
+  const shipping = orders.reduce((sum, o) => sum + o.deliveryCost, 0);
+  const vat = orders.reduce((sum, o) => sum + o.taxAmount, 0);
+  const profit = revenue - costs - fees - shipping - vat;
+
+  // 1x1: the one number, the two that qualify it, and how much of revenue the
+  // costs eat — never the bank feed's transactions (§7).
   if (size === "1x1") {
+    const costShare = revenue > 0 ? Math.min(100, (costs / revenue) * 100) : 0;
     return (
       <div className="home-money">
         <p className="home-metric-label">{t("Net profit")}</p>
-        <strong className="home-metric-value is-positive">{cash(netProfit, hideNumbers, moneySettings)}</strong>
-        <div className="home-metric-split">
-          <span><em>{t("Revenue")}</em>{cash(revenue, hideNumbers, moneySettings)}</span>
-          <span><em>{t("Outstanding")}</em>{cash(outstanding, hideNumbers, moneySettings)}</span>
+        <strong className={`home-metric-value ${profit >= 0 ? "is-positive" : "is-negative"}`}>{money(profit)}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("Revenue")}</em><b className="is-positive">{money(revenue)}</b></span>
+          <span><em>{t("Outstanding")}</em><b className="is-info">{money(outstanding)}</b></span>
+        </div>
+        <div className="home-ratio">
+          <span className="home-ratio-head"><em>{t("Revenue")}</em><em>{t("Costs")}</em></span>
+          <span className="home-ratio-bar" aria-hidden="true">
+            <i className="is-revenue" style={{ width: `${Math.max(0, 100 - costShare)}%` }} />
+            <i className="is-costs" style={{ width: `${costShare}%` }} />
+          </span>
+          <span className="home-ratio-foot"><b className="is-positive">{money(revenue)}</b><b className="is-warning">{money(costs)}</b></span>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="home-money-wide">
-      <div className="home-stat-row">
-        <Stat label={t("Revenue")} value={cash(revenue, hideNumbers, moneySettings)} tone="positive" />
-        <Stat label={t("Payments received")} value={cash(received, hideNumbers, moneySettings)} tone="positive" />
-        <Stat label={t("Outstanding")} value={cash(outstanding, hideNumbers, moneySettings)} tone="info" />
-        <Stat label={t("Net profit")} value={cash(netProfit, hideNumbers, moneySettings)} tone="positive" />
-      </div>
-      {size === "2x2" ? (
-        <div className="home-breakdown">
-          <p className="home-sub-title">{t("Cost breakdown")}</p>
-          <BreakdownRow label={t("Costs")} value={cash(costs, hideNumbers, moneySettings)} />
-          <BreakdownRow label={t("Platform fees")} value={cash(fees, hideNumbers, moneySettings)} />
-          <BreakdownRow label={t("Shipping")} value={cash(shipping, hideNumbers, moneySettings)} />
-          <BreakdownRow label={t("VAT Amount")} value={cash(vat, hideNumbers, moneySettings)} />
+  const deductions = [
+    { label: "Costs", value: costs },
+    { label: "Platform fees", value: fees },
+    { label: "Shipping", value: shipping },
+    { label: "VAT Amount", value: vat },
+  ];
+
+  // 2x1: the four headline figures, then how revenue becomes profit.
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        <div className="home-stat-row is-ruled">
+          <Stat label={t("Revenue")} value={money(revenue)} tone="positive" />
+          <Stat label={t("Payments received")} value={money(received)} tone="positive" />
+          <Stat label={t("Outstanding")} value={money(outstanding)} tone="info" />
+          <Stat label={t("Net profit")} value={money(profit)} tone={profit >= 0 ? "positive" : "warning"} />
         </div>
-      ) : null}
+        <ol className="home-waterfall">
+          <li className="is-end"><em>{t("Revenue")}</em><b className="is-positive">{money(revenue)}</b></li>
+          {deductions.map((entry) => (
+            <li key={entry.label}>
+              <em><span className="home-minus" aria-hidden="true">−</span>{t(entry.label)}</em>
+              <b className="is-warning">{money(entry.value)}</b>
+            </li>
+          ))}
+          <li className="is-end"><em>{t("Net profit")}</em><b className="is-positive">{money(profit)}</b></li>
+        </ol>
+      </div>
+    );
+  }
+
+  // 2x2: the figures, the shape of the month, and where the money went.
+  const margin = revenue > 0 ? Math.max(0, Math.min(100, (profit / revenue) * 100)) : 0;
+  return (
+    <div className="home-money is-large">
+      <div className="home-tile-row">
+        <MoneyTile label={t("Revenue")} value={money(revenue)} tone="green" />
+        <MoneyTile label={t("Payments received")} value={money(received)} tone="green" />
+        <MoneyTile label={t("Outstanding")} value={money(outstanding)} tone="blue" />
+        <MoneyTile label={t("Net profit")} value={money(profit)} tone="green" />
+      </div>
+      <div className="home-money-panels">
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Revenue & profit")}</p>
+          <RevenueProfitChart orders={orders} t={t} />
+        </div>
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Cost breakdown")}</p>
+          <ul className="home-cost-list">
+            {deductions.map((entry, index) => (
+              <li key={entry.label}>
+                <span className={`home-cost-dot tone-${index}`} aria-hidden="true" />
+                <em>{t(entry.label)}</em>
+                <b>{money(entry.value)}</b>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="home-margin-strip">
+        <span className="home-eyebrow is-strong">{t("Margin")}</span>
+        <span className="home-progress"><span style={{ width: `${margin}%` }} /></span>
+        <b>{margin.toFixed(0)}%</b>
+      </div>
     </div>
+  );
+}
+
+function MoneyTile({ label, value, tone }: { label: string; value: string; tone: "green" | "blue" | "orange" }) {
+  return (
+    <div className={`home-money-tile tone-${tone}`}>
+      <span className="home-money-tile-dot" aria-hidden="true" />
+      <em>{label}</em>
+      <b>{value}</b>
+    </div>
+  );
+}
+
+/**
+ * Revenue and profit over the last twelve weeks, from the orders themselves.
+ * Drawn inline rather than with a chart library: it is two polylines and two
+ * fills, and a library would be a bigger download than the whole screen.
+ */
+function RevenueProfitChart({ orders, t }: { orders: HomeData["financeOrders"]; t: (text: string) => string }) {
+  const weeks = 12;
+  const now = new Date();
+  const buckets = Array.from({ length: weeks }, () => ({ revenue: 0, profit: 0 }));
+  for (const order of orders) {
+    if (!order.paymentDate) continue;
+    const weeksAgo = Math.floor((now.getTime() - order.paymentDate.getTime()) / (7 * 24 * 3600 * 1000));
+    if (weeksAgo < 0 || weeksAgo >= weeks) continue;
+    const bucket = buckets[weeks - 1 - weeksAgo];
+    const value = order.paidAmount + order.remainingAmount;
+    bucket.revenue += value;
+    bucket.profit += value - order.watchPurchasePrice - order.paymentFee - order.deliveryCost - order.taxAmount;
+  }
+  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.revenue, b.profit)));
+  const width = 100;
+  const height = 46;
+  const point = (index: number, value: number) =>
+    `${(index / (weeks - 1)) * width},${height - (Math.max(0, value) / peak) * height}`;
+  const line = (key: "revenue" | "profit") => buckets.map((b, i) => point(i, b[key])).join(" ");
+  const area = (key: "revenue" | "profit") => `0,${height} ${line(key)} ${width},${height}`;
+
+  if (buckets.every((b) => b.revenue === 0)) {
+    return <p className="home-card-note">{t("Not enough history yet.")}</p>;
+  }
+  return (
+    <>
+      <p className="home-chart-key">
+        <span><i className="is-revenue" aria-hidden="true" />{t("Revenue")}</span>
+        <span><i className="is-profit" aria-hidden="true" />{t("Net profit")}</span>
+      </p>
+      <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
+           aria-label={t("Revenue & profit")}>
+        <polygon className="home-chart-area is-revenue" points={area("revenue")} />
+        <polygon className="home-chart-area is-profit" points={area("profit")} />
+        <polyline className="home-chart-line is-revenue" points={line("revenue")} />
+        <polyline className="home-chart-line is-profit" points={line("profit")} />
+      </svg>
+    </>
   );
 }
 
 /* ---------------------------------------------------------------- Banking */
 
 export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
-  const toReview = data.bankTransactions.filter((tx) => !tx.reviewed).length;
-  const missingReceipts = data.bankTransactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
-  const uncategorised = data.bankTransactions.filter((tx) => !tx.categoryId).length;
+  const transactions = data.bankTransactions;
+  if (transactions.length === 0) return null;
 
+  const money = (value: number) => cash(value, hideNumbers, moneySettings);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const thisMonth = transactions.filter((tx) => tx.bookingDate && tx.bookingDate >= monthStart);
+  const incoming = thisMonth.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+  const spent = thisMonth.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  const toReview = transactions.filter((tx) => !tx.reviewed).length;
+  const missingReceipts = transactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
+
+  // 1x1: the queue, because that is the card's whole job — never Money's
+  // totals again (§7).
   if (size === "1x1") {
     return (
-      <div className="home-banking">
-        <p className="home-count-line"><strong>{toReview}</strong> {t("to review")}</p>
-        <p className="home-count-line is-warning"><strong>{missingReceipts}</strong> {t("missing receipts")}</p>
+      <div className="home-money">
+        <div className="home-count-pair">
+          <span><b className={toReview > 0 ? "is-warning" : ""}>{toReview}</b><em>{t("to review")}</em></span>
+          <span><b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b><em>{t("missing receipts")}</em></span>
+        </div>
+        <p className="home-readonly-note">
+          <span className="home-pill is-warning">{t("Read-only")}</span>
+          {t("NivaDesk never moves money.")}
+        </p>
       </div>
     );
   }
 
-  return (
-    <div className="home-banking-wide">
-      <div className="home-stat-row">
-        <Stat label={t("to review")} value={String(toReview)} tone="info" />
-        <Stat label={t("missing receipts")} value={String(missingReceipts)} tone="warning" />
-        <Stat label={t("uncategorised")} value={String(uncategorised)} tone="warning" />
-      </div>
-      {size === "2x2" ? (
-        <ul className="home-list">
-          {data.bankTransactions.filter((tx) => !tx.reviewed).slice(0, 5).map((tx) => (
-            <li key={tx.id}>
-              <span>{tx.bookingDate ? tx.bookingDate.toLocaleDateString() : "—"}</span>
-              <strong className={tx.amount < 0 ? "is-negative" : "is-positive"}>
-                {cash(tx.amount, hideNumbers, moneySettings)}
-              </strong>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {/* Read-only by design: Banking never offers a way to move money (§7). */}
-      <p className="home-card-note">{t("Read-only bank connection. NivaDesk never moves money.")}</p>
+  const tiles = (
+    <div className="home-tile-row">
+      <MoneyTile label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
+      <MoneyTile label={t("Spent this month")} value={`−${money(spent)}`} tone="orange" />
+      <MoneyTile label={t("to review")} value={String(toReview)} tone={toReview > 0 ? "orange" : "blue"} />
+      <MoneyTile label={t("missing receipts")} value={String(missingReceipts)} tone={missingReceipts > 0 ? "orange" : "blue"} />
     </div>
+  );
+
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        {tiles}
+        <p className="home-readonly-note">
+          <span className="home-pill is-warning">{t("Read-only")}</span>
+          {t("Read-only bank connection. NivaDesk never moves money.")}
+        </p>
+      </div>
+    );
+  }
+
+  const recent = transactions.slice(0, 3);
+  const yearStart = new Date(new Date().getFullYear(), 0, 1);
+  const year = transactions.filter((tx) => tx.bookingDate && tx.bookingDate >= yearStart);
+  const yearIn = year.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+  const yearOut = year.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
+  return (
+    <div className="home-money is-large">
+      {tiles}
+      <div className="home-money-panels">
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Bank activity")}</p>
+          <BankActivityChart transactions={transactions} t={t} />
+        </div>
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Recent transactions")}</p>
+          <ul className="home-cost-list">
+            {recent.map((tx) => (
+              <li key={tx.id}>
+                <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
+                <em>{tx.name || t("Transactions")}</em>
+                <b className={tx.amount < 0 ? "is-warning" : "is-positive"}>
+                  {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
+                </b>
+              </li>
+            ))}
+          </ul>
+          <p className="home-year-line">
+            {t("This year")}: <b className="is-positive">{money(yearIn)}</b> · <b className="is-warning">{money(yearOut)}</b>
+          </p>
+        </div>
+      </div>
+      {missingReceipts > 0 ? (
+        <div className="home-alert-strip">
+          <span className="home-alert-dot" aria-hidden="true">!</span>
+          <span>
+            <strong>{t("{count} transactions need a receipt").replace("{count}", String(missingReceipts))}</strong>
+            <em>{t("Read-only bank connection. NivaDesk never moves money.")}</em>
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Money in and money out, week by week, from the feed itself. */
+function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTransactions"]; t: (text: string) => string }) {
+  const weeks = 12;
+  const now = new Date();
+  const buckets = Array.from({ length: weeks }, () => ({ incoming: 0, spent: 0 }));
+  for (const tx of transactions) {
+    if (!tx.bookingDate) continue;
+    const weeksAgo = Math.floor((now.getTime() - tx.bookingDate.getTime()) / (7 * 24 * 3600 * 1000));
+    if (weeksAgo < 0 || weeksAgo >= weeks) continue;
+    const bucket = buckets[weeks - 1 - weeksAgo];
+    if (tx.amount >= 0) bucket.incoming += tx.amount;
+    else bucket.spent += Math.abs(tx.amount);
+  }
+  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.incoming, b.spent)));
+  const width = 100;
+  const height = 46;
+  const line = (key: "incoming" | "spent") =>
+    buckets.map((b, i) => `${(i / (weeks - 1)) * width},${height - (b[key] / peak) * height}`).join(" ");
+
+  if (buckets.every((b) => b.incoming === 0 && b.spent === 0)) {
+    return <p className="home-card-note">{t("Not enough history yet.")}</p>;
+  }
+  return (
+    <>
+      <p className="home-chart-key">
+        <span><i className="is-profit" aria-hidden="true" />{t("Incoming")}</span>
+        <span><i className="is-spent" aria-hidden="true" />{t("Spent")}</span>
+      </p>
+      <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
+           aria-label={t("Bank activity")}>
+        <polygon className="home-chart-area is-profit" points={`0,${height} ${line("incoming")} ${width},${height}`} />
+        <polyline className="home-chart-line is-profit" points={line("incoming")} />
+        <polyline className="home-chart-line is-spent" points={line("spent")} />
+      </svg>
+    </>
   );
 }
 
