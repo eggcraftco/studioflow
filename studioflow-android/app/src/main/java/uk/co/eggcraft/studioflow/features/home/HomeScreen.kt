@@ -486,7 +486,9 @@ fun HomeCardShell(
     var menuOpen by remember { mutableStateOf(false) }
     // A square phone card has no room for a footer link, and it does not need
     // one: the card itself opens the screen it summarises.
-    val hidesFooter = compact && placement.size != HomeCardSize.TwoByTwo
+    // No footer link on a phone at any size: the sheet draws a chevron in the
+    // header instead, and the card already opens the screen it summarises.
+    val hidesFooter = compact
     Card(
         Modifier
             .fillMaxSize()

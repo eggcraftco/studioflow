@@ -20,7 +20,15 @@ import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -469,6 +477,7 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
     val costs = orders.sumOf { it.watchPurchasePrice }
     val fees = orders.sumOf { it.paymentFee }
     val shipping = orders.sumOf { it.deliveryCost }
+    val vat = orders.sumOf { it.taxAmount }
     val profit = orders.sumOf { it.netProfit }
 
     when (size) {
@@ -538,7 +547,41 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
                 }
             }
         }
-        HomeCardSize.TwoByTwo -> {
+        HomeCardSize.TwoByTwo -> if (compact) {
+            // On a phone the two panels cannot sit side by side — half a phone
+            // turns the chart into a spike and truncates every cost. They each
+            // take the full width, and the tiles pair up so their figures read.
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeMetricTile(t("Revenue"), money(revenue, state), HomeTone.green,
+                        modifier = Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.TrendingUp)
+                    HomeMetricTile(t("Received"), money(received, state), HomeTone.green,
+                        modifier = Modifier.weight(1f), icon = Icons.Filled.CheckCircle)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeMetricTile(t("Outstanding"), money(outstanding, state), HomeTone.accent,
+                        modifier = Modifier.weight(1f), icon = Icons.Filled.Schedule)
+                    HomeMetricTile(t("Net profit"), money(profit, state), HomeTone.green,
+                        modifier = Modifier.weight(1f), icon = Icons.Filled.PieChart)
+                }
+                HomePanel {
+                    HomeEyebrow(t("Revenue & profit"))
+                    RevenueChart(orders, t)
+                }
+                HomePanel {
+                    HomeEyebrow(t("Costs"))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CostCell(HomeTone.orange, Icons.Filled.ShoppingBag, t("Costs"), money(costs, state), Modifier.weight(1f))
+                        CostDivider()
+                        CostCell(HomeTone.purple, Icons.Filled.Percent, t("Fees"), money(fees, state), Modifier.weight(1f))
+                        CostDivider()
+                        CostCell(HomeTone.amber, Icons.Filled.Calculate, t("VAT"), money(vat, state), Modifier.weight(1f))
+                        CostDivider()
+                        CostCell(HomeTone.accent, Icons.Filled.LocalShipping, t("Shipping"), money(shipping, state), Modifier.weight(1f))
+                    }
+                }
+            }
+        } else {
             val margin = if (revenue > 0) (profit / revenue).toFloat() else 0f
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -780,6 +823,30 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
             ReadOnlyNote(t, short = false)
         }
     }
+}
+
+/** One of the four costs across the bottom of the phone 2x2: a filled disc with
+ *  its mark, the label above the figure. */
+@Composable
+private fun CostCell(colour: Color, icon: ImageVector, label: String, value: String, modifier: Modifier) {
+    Row(modifier.padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(Modifier.size(26.dp).background(colour, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(13.dp), Color.White)
+        }
+        Column {
+            Text(label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CostDivider() {
+    Box(Modifier.width(1.dp).height(32.dp)
+        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
 }
 
 /** One of the three figures across the top of the 2x1 Banking card. */

@@ -33,7 +33,9 @@ struct HomeCardShell<CardBody: View>: View {
     private var surface: Color { colorScheme == .dark ? Color(white: 0.13) : .white }
     /// A square phone card has no room for a footer link, and it does not need
     /// one: the card itself opens the screen it summarises.
-    private var hidesFooter: Bool { compact && placement.size != .twoByTwo }
+    /// No footer link on a phone at any size: the sheet draws a chevron in the
+    /// header instead, and the card already opens the screen it summarises.
+    private var hidesFooter: Bool { compact }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

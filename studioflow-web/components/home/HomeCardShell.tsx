@@ -159,10 +159,10 @@ export function HomeCardShell({
         dragHandlers.dropTarget ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
       onClick={(event) => {
-        // Only when the phone layout has hidden the footer link: the card then
-        // stands in for it. A click on something that is already interactive —
-        // a row link, the menu, an action tile — is left alone.
-        if (placement.size !== "1x1" || customising) return;
+        // The phone layout hides the footer link at every size, so the card
+        // stands in for it. A click on something already interactive — a row
+        // link, the menu, an action tile — is left alone.
+        if (customising) return;
         const target = event.target as HTMLElement;
         if (target.closest("a, button, input")) return;
         if (!window.matchMedia("(max-width: 640px)").matches) return;

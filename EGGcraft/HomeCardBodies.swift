@@ -577,6 +577,7 @@ struct HomeMoneyBody: View {
             let costs = orders.reduce(0.0) { $0 + $1.watchPurchasePrice }
             let fees = orders.reduce(0.0) { $0 + $1.paymentFee }
             let shipping = orders.reduce(0.0) { $0 + $1.deliveryCost }
+            let vat = orders.reduce(0.0) { $0 + $1.taxAmount }
             let profit = orders.reduce(0.0) { $0 + $1.netKar }
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
 
@@ -633,6 +634,45 @@ struct HomeMoneyBody: View {
                     HomeWaterfall(revenue: revenue, profit: profit,
                                   deductions: [(t("Costs", lang: lang), costs), (t("Platform fees", lang: lang), fees), (t("Shipping", lang: lang), shipping)],
                                   lang: lang, money: money)
+                    Spacer(minLength: 0)
+                }
+            } else if compact {
+                // On a phone the two panels cannot sit side by side — half a phone
+                // turns the chart into a spike and truncates every cost. They each
+                // take the full width, and the tiles pair up so their figures read.
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        HomeMetricTile(label: t("Revenue", lang: lang), value: money(revenue),
+                                       tone: HomeTone.green, symbol: "chart.line.uptrend.xyaxis")
+                        HomeMetricTile(label: t("Received", lang: lang), value: money(received),
+                                       tone: HomeTone.green, symbol: "checkmark.circle")
+                    }
+                    HStack(spacing: 8) {
+                        HomeMetricTile(label: t("Outstanding", lang: lang), value: money(outstanding),
+                                       tone: HomeTone.accent, symbol: "clock")
+                        HomeMetricTile(label: t("Net profit", lang: lang), value: money(profit),
+                                       tone: HomeTone.green, symbol: "chart.pie")
+                    }
+                    HomePanel {
+                        HomeEyebrow(text: t("Revenue & profit", lang: lang))
+                        HomeRevenueChart(orders: orders, lang: lang)
+                    }
+                    HomePanel {
+                        HomeEyebrow(text: t("Costs", lang: lang))
+                        HStack(spacing: 0) {
+                            HomeCostCell(colour: HomeTone.orange, symbol: "bag.fill",
+                                         label: t("Costs", lang: lang), value: money(costs))
+                            Divider().frame(height: 32)
+                            HomeCostCell(colour: HomeTone.purple, symbol: "percent",
+                                         label: t("Fees", lang: lang), value: money(fees))
+                            Divider().frame(height: 32)
+                            HomeCostCell(colour: HomeTone.amber, symbol: "function",
+                                         label: t("VAT", lang: lang), value: money(vat))
+                            Divider().frame(height: 32)
+                            HomeCostCell(colour: HomeTone.accent, symbol: "shippingbox.fill",
+                                         label: t("Shipping", lang: lang), value: money(shipping))
+                        }
+                    }
                     Spacer(minLength: 0)
                 }
             } else {
@@ -738,6 +778,31 @@ struct HomeWaterfall: View {
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
         .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// One of the four costs across the bottom of the phone 2×2: a filled disc with
+/// its mark, the label above the figure.
+struct HomeCostCell: View {
+    let colour: Color
+    let symbol: String
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(colour))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                Text(value).font(.system(size: 11.5, weight: .bold))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+        }
+        .padding(.horizontal, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
