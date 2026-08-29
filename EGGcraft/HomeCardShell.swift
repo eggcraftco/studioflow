@@ -33,7 +33,7 @@ struct HomeCardShell<CardBody: View>: View {
     private var surface: Color { colorScheme == .dark ? Color(white: 0.13) : .white }
     /// A square phone card has no room for a footer link, and it does not need
     /// one: the card itself opens the screen it summarises.
-    private var hidesFooter: Bool { compact && placement.size == .oneByOne }
+    private var hidesFooter: Bool { compact && placement.size != .twoByTwo }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -201,11 +201,12 @@ struct HomeBadge: View {
 
 struct HomeProgressBar: View {
     let fraction: Double
+    var tint: Color = HomeTone.accent
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.2))
-                Capsule().fill(HomeTone.accent)
+                Capsule().fill(tint)
                     .frame(width: max(0, min(1, fraction)) * proxy.size.width)
             }
         }

@@ -73,6 +73,8 @@ fun HomeCardBody(
     inventory: StudioInventorySummary?,
     inventoryFailed: Boolean,
     stages: List<ProductionStage>,
+    /** Phone layout: the wide cards stack their figures instead of lining them up. */
+    compact: Boolean = false,
     t: (String) -> String,
     onNewOrder: () -> Unit,
     onOpenSection: (String) -> Unit
@@ -81,7 +83,7 @@ fun HomeCardBody(
         HomeCardId.GettingStarted -> HomeGettingStartedBody(size, state, inventory, t)
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
-        HomeCardId.Money -> HomeMoneyBody(size, state, t)
+        HomeCardId.Money -> HomeMoneyBody(size, state, compact, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, t)
         HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, t)
@@ -454,7 +456,7 @@ private fun ActivityRow(
 // --------------------------------------------------------------------- Money
 
 @Composable
-private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
     // The commercial result, never the bank feed's transaction list (§7).
     val orders = state.orders.filter { !it.isDeleted && it.countsTowardBalance }
     if (orders.isEmpty()) {
@@ -480,7 +482,40 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, t: (Stri
                 t("Outstanding"), money(outstanding, state), HomeTone.accent
             )
         }
-        HomeCardSize.TwoByOne -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeCardSize.TwoByOne -> if (compact) {
+            // Four tiles across a phone leaves every label and every figure
+            // truncated. The sheet stacks them two by two instead, and ends with
+            // what share of revenue survives as profit.
+            val margin = if (revenue > 0) (profit / revenue).toFloat().coerceIn(0f, 1f) else 0f
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BankFigure(t("Revenue"), money(revenue, state), HomeTone.green, Modifier.weight(1f))
+                    Box(Modifier.width(1.dp).height(34.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                    BankFigure(t("Payments received"), money(received, state), HomeTone.green, Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(9.dp))
+                HomeDivider()
+                Spacer(Modifier.height(9.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BankFigure(t("Outstanding"), money(outstanding, state), HomeTone.accent, Modifier.weight(1f))
+                    Box(Modifier.width(1.dp).height(34.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                    BankFigure(t("Net profit"), money(profit, state),
+                        if (profit >= 0) HomeTone.green else HomeTone.red, Modifier.weight(1f))
+                }
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("${(margin * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(Modifier.weight(1f)) { HomeProgressBar(margin, tint = HomeTone.green) }
+                    Text(t("Profit of revenue"), fontSize = 11.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HomeMetricTile(t("Revenue"), money(revenue, state), HomeTone.green, modifier = Modifier.weight(1f))
                 HomeMetricTile(t("Payments received"), money(received, state), HomeTone.green, modifier = Modifier.weight(1f))

@@ -18,6 +18,8 @@ struct HomeCardBody: View {
     let currency: String
     let decimal: String
     let stepsJSON: String
+    /// Phone layout: the wide cards stack their figures instead of lining them up.
+    var compact: Bool = false
     let access: HomeAccess
     @ObservedObject var data: HomeData
     let onNewOrder: () -> Void
@@ -34,7 +36,7 @@ struct HomeCardBody: View {
         case .recentActivity:
             HomeRecentActivityBody(size: size, lang: lang)
         case .money:
-            HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal)
+            HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .banking:
             HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
         case .inventory:
@@ -560,6 +562,7 @@ struct HomeMoneyBody: View {
     let lang: String
     let currency: String
     let decimal: String
+    var compact: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -591,6 +594,33 @@ struct HomeMoneyBody: View {
                     }
                     Spacer(minLength: 0)
                     HomeRatioBar(revenue: revenue, costs: costs, lang: lang, money: money)
+                }
+            } else if size == .twoByOne && compact {
+                // Four tiles across a phone leaves every label and every figure
+                // truncated. The sheet stacks them two by two instead, and ends
+                // with what share of revenue survives as profit.
+                let margin = revenue > 0 ? max(0, min(1, profit / revenue)) : 0
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("Revenue", lang: lang), value: money(revenue), tone: HomeTone.green)
+                        Divider().frame(height: 34)
+                        HomeBankFigure(label: t("Payments received", lang: lang), value: money(received), tone: HomeTone.green)
+                    }
+                    Divider().padding(.vertical, 9)
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("Outstanding", lang: lang), value: money(outstanding), tone: HomeTone.accent)
+                        Divider().frame(height: 34)
+                        HomeBankFigure(label: t("Net profit", lang: lang), value: money(profit),
+                                       tone: profit >= 0 ? HomeTone.green : HomeTone.red)
+                    }
+                    Spacer(minLength: 8)
+                    HStack(spacing: 10) {
+                        Text("\(Int(margin * 100))%")
+                            .font(.system(size: 12, weight: .semibold)).foregroundColor(.secondary)
+                        HomeProgressBar(fraction: margin, tint: HomeTone.green)
+                        Text(t("Profit of revenue", lang: lang))
+                            .font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(1)
+                    }
                 }
             } else if size == .twoByOne {
                 VStack(alignment: .leading, spacing: 10) {

@@ -86,7 +86,7 @@ fun HomeBadge(icon: ImageVector, tone: Color = HomeTone.accent, filled: Boolean 
 }
 
 @Composable
-fun HomeProgressBar(fraction: Float, modifier: Modifier = Modifier) {
+fun HomeProgressBar(fraction: Float, modifier: Modifier = Modifier, tint: Color = HomeTone.accent) {
     Box(
         modifier
             .fillMaxWidth()
@@ -97,7 +97,7 @@ fun HomeProgressBar(fraction: Float, modifier: Modifier = Modifier) {
             Modifier
                 .fillMaxWidth(fraction.coerceIn(0f, 1f))
                 .height(6.dp)
-                .background(HomeTone.accent, RoundedCornerShape(3.dp))
+                .background(tint, RoundedCornerShape(3.dp))
         )
     }
 }

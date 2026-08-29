@@ -387,6 +387,7 @@ fun HomeScreen(
                             inventory = inventory,
                             inventoryFailed = inventoryFailed,
                             stages = stages,
+                            compact = compact,
                             t = t,
                             onNewOrder = onNewOrder,
                             onOpenSection = onOpenSection
@@ -485,7 +486,7 @@ fun HomeCardShell(
     var menuOpen by remember { mutableStateOf(false) }
     // A square phone card has no room for a footer link, and it does not need
     // one: the card itself opens the screen it summarises.
-    val hidesFooter = compact && placement.size == HomeCardSize.OneByOne
+    val hidesFooter = compact && placement.size != HomeCardSize.TwoByTwo
     Card(
         Modifier
             .fillMaxSize()

@@ -411,6 +411,7 @@ struct HomeView: View {
                         currency: seciliParaBirimi,
                         decimal: seciliOndalik,
                         stepsJSON: customStepsJSON,
+                        compact: isCompact,
                         access: access,
                         data: data,
                         onNewOrder: onNewOrder,
