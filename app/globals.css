@@ -27915,6 +27915,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-card.is-square .home-card-badge { width: 32px; height: 32px; }
   .home-card.is-square .home-card-badge svg { width: 16px; height: 16px; }
   .home-card.is-square .home-card-title { font-size: 14px; }
+  /* Half a phone turns the chart into a spike and truncates every cost, so the
+     panels take the full width and stack. */
+  .home-money-panels { grid-template-columns: minmax(0, 1fr); }
+  .home-tile-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-tile-row.is-triple { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .home-bank-split { grid-template-columns: minmax(0, 1fr); }
+  .home-bank-aside { padding-left: 0; border-left: 0; border-top: 1px solid var(--border); padding-top: 10px; }
+  /* No footer link on a phone at any size — the card is the tap target. */
+  .home-card .home-card-foot { display: none; }
+  .home-card .home-card-body { padding-bottom: 14px; }
+  .home-card { cursor: pointer; }
   /* Phone cards are tapped, not dragged — long-press enters customise instead. */
   .home-screen:not(.is-customising) .home-card-grip,
   .home-screen:not(.is-customising) .home-card-menu-button { display: none; }
