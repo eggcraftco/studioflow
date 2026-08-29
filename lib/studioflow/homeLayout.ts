@@ -1,5 +1,6 @@
-import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase/client";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "@/lib/firebase/client";
 import {
   defaultHomeLayout,
   normaliseHomeLayout,
@@ -65,12 +66,19 @@ export function subscribeHomeLayout(
   );
 }
 
+/**
+ * Saved through the callable, not written straight to Firestore.
+ *
+ * personalInterfaceSettings is read-your-own but write-denied to clients on
+ * purpose — the rule routes writes through savePersonalInterfaceSettings so the
+ * server checks membership and validates the payload. Writing directly looks
+ * like it works, because the SDK applies it locally first, and then the next
+ * snapshot quietly replaces it with the server's unchanged copy. That is
+ * exactly how this landed the first time: cards resized, then sprang back.
+ */
 export async function saveHomeLayout(companyId: string, layout: HomeLayout): Promise<void> {
   const userId = auth.currentUser?.uid ?? "";
   if (!companyId || !userId) return;
-  await setDoc(
-    homeLayoutRef(companyId, userId),
-    { [FIELD]: JSON.stringify(layout), homeLayoutUpdatedAtMs: Date.now() },
-    { merge: true },
-  );
+  const callable = httpsCallable(functions, "savePersonalInterfaceSettings");
+  await callable({ settings: { homeLayout: JSON.stringify(layout) } });
 }
