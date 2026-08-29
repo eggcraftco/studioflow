@@ -217,19 +217,22 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   const toReview = transactions.filter((tx) => !tx.reviewed).length;
   const missingReceipts = transactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
 
-  // 1x1: the queue, because that is the card's whole job — never Money's
-  // totals again (§7).
+  // 1x1, as the sheet draws it: the freshness of the feed, then what left the
+  // account this month, then what came in against what still needs a receipt.
+  // The read-only promise moved up beside the title where it belongs.
   if (size === "1x1") {
     return (
       <div className="home-money">
-        <div className="home-count-pair">
-          <span><b className={toReview > 0 ? "is-warning" : ""}>{toReview}</b><em>{t("to review")}</em></span>
-          <span><b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b><em>{t("missing receipts")}</em></span>
+        <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
+        <p className="home-metric-label">{t("Spent this month")}</p>
+        <strong className="home-metric-value is-spend">−{money(spent)}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("Incoming")}</em><b className="is-positive">+{money(incoming)}</b></span>
+          <span>
+            <em>{t("missing receipts")}</em>
+            <b className={missingReceipts > 0 ? "is-negative" : ""}>{missingReceipts}</b>
+          </span>
         </div>
-        <p className="home-readonly-note">
-          <span className="home-pill is-warning">{t("Read-only")}</span>
-          {t("NivaDesk never moves money.")}
-        </p>
       </div>
     );
   }
@@ -246,11 +249,8 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   if (size === "2x1") {
     return (
       <div className="home-money is-wide">
+        <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
         {tiles}
-        <p className="home-readonly-note">
-          <span className="home-pill is-warning">{t("Read-only")}</span>
-          {t("Read-only bank connection. NivaDesk never moves money.")}
-        </p>
       </div>
     );
   }
@@ -263,6 +263,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
 
   return (
     <div className="home-money is-large">
+      <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
       {tiles}
       <div className="home-money-panels">
         <div className="home-panel">
@@ -297,6 +298,35 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * How fresh the feed is. The real signal is the connection's own lastSyncedAt —
+ * a live snapshot only says the listener fired, not that the bank handed
+ * anything over, which is exactly the thing that made "Connected" misleading.
+ */
+function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy: boolean; t: (text: string) => string }) {
+  if (!lastSync) {
+    return (
+      <p className={`home-sync-line${unhealthy ? " is-warning" : ""}`}>
+        <span aria-hidden="true">{unhealthy ? "\u26A0" : "\u21BB"}</span>
+        {t("Never synced")}
+      </p>
+    );
+  }
+  const days = Math.floor((Date.now() - lastSync.getTime()) / 86400000);
+  const hours = Math.floor((Date.now() - lastSync.getTime()) / 3600000);
+  const stale = days >= 2 || unhealthy;
+  const label =
+    days >= 1 ? t("Last synced {n} days ago").replace("{n}", String(days))
+    : hours >= 1 ? t("Last synced {n}h ago").replace("{n}", String(hours))
+    : t("Last synced just now");
+  return (
+    <p className={`home-sync-line${stale ? " is-warning" : ""}`}>
+      <span aria-hidden="true">{stale ? "\u26A0" : "\u21BB"}</span>
+      {label}
+    </p>
   );
 }
 

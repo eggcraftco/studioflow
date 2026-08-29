@@ -27203,6 +27203,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   --card-title-icon-cutout: var(--surface, #fff);
 }
 .home-card-badge svg { width: 19px; height: 19px; }
+/* The filled badge: the glyph is knocked out of the colour rather than drawn on
+   it, which is why the cutout has to be the badge's own fill and not the card's. */
+.home-card-badge.is-filled {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+  --card-title-icon-cutout: #2563eb;
+}
 
 .home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .home-card-title {
@@ -27462,6 +27468,15 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid currentColor; white-space: nowrap;
 }
 .home-pill.is-warning { color: #c2410c; }
+.home-pill.is-solid { border-color: transparent; background: rgba(249, 115, 22, 0.16); font-weight: 800; }
+
+/* Freshness, not liveness: a stale or unhealthy feed gets the warning mark, a
+   healthy one gets the refresh mark. */
+.home-sync-line { margin: 0 0 2px; font-size: 11.5px; opacity: 0.7; display: flex; align-items: center; gap: 6px; }
+.home-sync-line.is-warning { color: #c2410c; opacity: 1; font-weight: 600; }
+.home-sync-line span { font-size: 12px; }
+
+.home-metric-value.is-spend { color: #dc2626; }
 
 .home-money-tile.tone-orange .home-money-tile-dot { background: rgba(249, 115, 22, 0.18); }
 .home-money-tile.tone-orange b { color: #c2410c; }

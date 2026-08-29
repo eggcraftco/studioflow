@@ -49,6 +49,9 @@ export type HomeCardDefinition = {
   /** English title. Runs through t() at render, and the owner may rename it. */
   title: string;
   icon: CardIcon;
+  /** "ring" is the default anchor; "filled" is the solid badge the reference
+   *  gives Banking, where the glyph is knocked out of the colour. */
+  badge?: "ring" | "filled";
   sizes: HomeCardSize[];
   defaultSize: HomeCardSize;
   /**
@@ -111,6 +114,7 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     id: "banking",
     title: "Banking",
     icon: "plan",
+    badge: "filled",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     access: "bankFeed",

@@ -73,7 +73,12 @@ export type HomeData = {
   productionStages: ProductionStage[];
   productionSteps: HeadingItem[];
   notes: StudioKeepNote[];
+  /** The newest lastSyncedAt across the workspace's connections. This is the
+   *  real signal — a live snapshot only says the listener fired, not that the
+   *  bank actually handed anything over. */
   bankLastSync: Date | null;
+  /** True when a linked connection is reporting anything other than a clean sync. */
+  bankNeedsAttention: boolean;
   lastLoadedAtMs: number;
   offline: boolean;
   reload: (domain?: HomeDomain) => void;
@@ -102,6 +107,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
   const [productionSteps, setProductionSteps] = useState<HeadingItem[]>([]);
   const [notes, setNotes] = useState<StudioKeepNote[]>([]);
   const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
+  const [bankNeedsAttention, setBankNeedsAttention] = useState(false);
   const [lastLoadedAtMs, setLastLoadedAtMs] = useState(0);
   const [offline, setOffline] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -254,7 +260,6 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
             };
           }),
         );
-        setBankLastSync(new Date());
         setDomain("bank", "ready");
       },
       () => setDomain("bank", "denied"),
@@ -277,6 +282,28 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     return listenToKeepNotes(workspaceId, uid, setNotes);
   }, [workspaceId, uid]);
 
+  // Connection health, from the connections themselves.
+  useEffect(() => {
+    if (!workspaceId || !canSeeBank) return;
+    return onSnapshot(
+      collection(db, "companies", workspaceId, "bankConnections"),
+      (snap) => {
+        let newest: Date | null = null;
+        let unhealthy = false;
+        snap.docs.forEach((docSnap) => {
+          const data = docSnap.data() as Record<string, unknown>;
+          const raw = data.lastSyncedAt as { toDate?: () => Date } | undefined;
+          const synced = raw && typeof raw.toDate === "function" ? raw.toDate() : null;
+          if (synced && (!newest || synced > newest)) newest = synced;
+          if (String(data.status || "") === "linked" && String(data.syncState || "ok") !== "ok") unhealthy = true;
+        });
+        setBankLastSync(newest);
+        setBankNeedsAttention(unhealthy);
+      },
+      () => {},
+    );
+  }, [workspaceId, canSeeBank]);
+
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   return useMemo(
@@ -295,6 +322,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       productionSteps,
       notes,
       bankLastSync,
+      bankNeedsAttention,
       lastLoadedAtMs,
       offline,
       reload,
@@ -302,7 +330,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
       inventory, files, bankTransactions, activity, productionStages, productionSteps, notes,
-      bankLastSync, lastLoadedAtMs, offline, reload,
+      bankLastSync, bankNeedsAttention, lastLoadedAtMs, offline, reload,
     ],
   );
 }
