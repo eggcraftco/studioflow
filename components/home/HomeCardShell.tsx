@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode, useLayoutEffect } from "react";
 import Link from "next/link";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
@@ -107,6 +107,8 @@ export function HomeCardShell({
   lastUpdatedLabel?: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  /** Which way the menu opens. Below by default, above when there is no room. */
+  const [menuAbove, setMenuAbove] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftHeading, setDraftHeading] = useState(placement.heading ?? "");
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -125,6 +127,18 @@ export function HomeCardShell({
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
     };
+  }, [menuOpen]);
+
+  // Decide the direction before the menu paints. The card no longer clips it,
+  // but the shell's scroll area does, so a card low on the screen would open a
+  // menu into the cut edge.
+  useLayoutEffect(() => {
+    if (!menuOpen) return;
+    const button = menuRef.current?.querySelector("button");
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const estimatedHeight = 320;
+    setMenuAbove(rect.bottom + estimatedHeight > window.innerHeight && rect.top > estimatedHeight);
   }, [menuOpen]);
 
   const heading = placement.heading?.trim() || t(definition.title);
@@ -208,7 +222,7 @@ export function HomeCardShell({
             <span aria-hidden="true">···</span>
           </button>
           {menuOpen ? (
-            <div className="home-card-menu" role="menu">
+            <div className={`home-card-menu${menuAbove ? " is-above" : ""}`} role="menu">
               <p className="home-card-menu-label">{t("Resize")}</p>
               <div className="home-card-menu-sizes">
                 {HOME_CARD_SIZES.filter((size) => definition.sizes.includes(size)).map((size) => (

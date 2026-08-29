@@ -27166,7 +27166,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   display: flex; flex-direction: column; min-width: 0;
   border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
   box-shadow: 0 10px 30px rgba(23, 25, 35, 0.05);
-  overflow: hidden;
+  /* Deliberately NOT overflow:hidden. The card menu is positioned against this
+     box, so clipping here cut the menu off inside the card. The body does its
+     own clipping, which is the part that actually needed it. */
 }
 .home-card.is-customising { outline: 1px dashed rgba(37, 99, 235, 0.35); outline-offset: 2px; }
 .home-card.is-dragging { opacity: 0.55; transform: scale(0.99); }
@@ -27225,6 +27227,8 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
   box-shadow: 0 18px 44px rgba(23, 25, 35, 0.18);
 }
+.home-card-menu.is-above { top: auto; bottom: 34px; }
+
 .home-card-menu > button {
   min-height: 36px; text-align: left; padding: 0 10px; border: 0; border-radius: 8px;
   background: transparent; cursor: pointer; font-size: 13px; font-weight: 620; color: inherit;
