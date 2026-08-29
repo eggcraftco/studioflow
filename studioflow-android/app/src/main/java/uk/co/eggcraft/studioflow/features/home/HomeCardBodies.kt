@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
@@ -49,6 +50,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -96,7 +100,7 @@ fun HomeCardBody(
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
         HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, t)
-        HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, t)
+        HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
         HomeCardId.Files -> HomeFilesBody(size, state, t)
         HomeCardId.Notes -> HomeNotesBody(size, state, t)
@@ -1331,6 +1335,31 @@ private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, t: (
 
 // -------------------------------------------------------- Orders & production
 
+private data class Quad(val label: String, val count: Int, val tone: Color, val icon: ImageVector)
+
+/** The whole board as one bar: a segment per stage, sized by how many sit in it.
+ *  The counts above name every stage, so the bar is the shape of the work rather
+ *  than the only place the split is stated (§20). */
+@Composable
+private fun StageBar(stages: List<ProductionStage>, resolved: List<Pair<StudioOrder, uk.co.eggcraft.studioflow.features.production.ResolvedProductionStage>>) {
+    val counts = stages.map { stage -> stage to resolved.count { it.second.stageId == stage.id } }
+        .filter { it.second > 0 }
+    val total = maxOf(1, counts.sumOf { it.second })
+    Row(
+        Modifier.fillMaxWidth().height(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        counts.forEach { (stage, count) ->
+            Box(
+                Modifier
+                    .weight(count.toFloat() / total)
+                    .fillMaxHeight()
+                    .background(stageTone(stage.kind), RoundedCornerShape(999.dp))
+            )
+        }
+    }
+}
+
 /** A stage's colour follows its kind, not its position — a workspace may define
  *  any number of lanes and an index-keyed palette runs out. */
 private fun stageTone(kind: ProductionStageKind): Color = when (kind) {
@@ -1345,7 +1374,7 @@ private fun stageTone(kind: ProductionStageKind): Color = when (kind) {
 @Composable
 private fun HomeOrdersProductionBody(
     size: HomeCardSize, state: StudioFlowUiState,
-    stages: List<ProductionStage>, t: (String) -> String
+    stages: List<ProductionStage>, compact: Boolean, t: (String) -> String
 ) {
     val live = liveOrders(state)
     if (live.isEmpty()) {
@@ -1361,6 +1390,49 @@ private fun HomeOrdersProductionBody(
     val resolved = live.map { it to resolveProductionStage(it, stages, steps) }
     val late = live.filter { homeDueDate(it.paymentDate, it.deliveryTime).before(Date()) }
     val shipReadyIds = stages.filter { it.kind == ProductionStageKind.ShipReady }.map { it.id }.toSet()
+
+    if (size == HomeCardSize.OneByOne && compact) {
+        // The sheet reads left to right: how many are live, then how they are
+        // split, then the split as one bar. Four counts across a square are a
+        // mark and a number — the label would not survive.
+        val readyIds = stages.filter { it.kind == ProductionStageKind.Ready }.map { it.id }.toSet()
+        val activeIds = stages.filter { it.kind == ProductionStageKind.Active }.map { it.id }.toSet()
+        val counts = listOf(
+            Quad(t("Ready"), resolved.count { it.second.stageId in readyIds }, HomeTone.green, Icons.Filled.CheckCircle),
+            Quad(t("In production"), resolved.count { it.second.stageId in activeIds }, HomeTone.accent, Icons.Filled.Build),
+            Quad(t("Ready to ship"), resolved.count { it.second.stageId in shipReadyIds }, HomeTone.green, Icons.Filled.LocalShipping),
+            Quad(t("Overdue"), late.size, if (late.isEmpty()) HomeTone.slate else HomeTone.red, Icons.Filled.Schedule)
+        )
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("${live.size}", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(t("active orders"), fontSize = 12.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                counts.forEach { entry ->
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(9.dp))
+                            .padding(vertical = 5.dp)
+                            .semantics { contentDescription = "${entry.label}: ${entry.count}" },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(entry.icon, null, Modifier.size(12.dp), entry.tone)
+                        Text("${entry.count}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
+                            color = entry.tone, maxLines = 1)
+                    }
+                }
+            }
+            StageBar(stages, resolved)
+        }
+        return
+    }
 
     if (size == HomeCardSize.OneByOne) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

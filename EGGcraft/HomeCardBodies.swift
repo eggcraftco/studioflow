@@ -44,7 +44,7 @@ struct HomeCardBody: View {
         case .customers:
             HomeCustomersBody(size: size, lang: lang)
         case .ordersProduction:
-            HomeOrdersProductionBody(size: size, lang: lang, stepsJSON: stepsJSON, data: data)
+            HomeOrdersProductionBody(size: size, lang: lang, stepsJSON: stepsJSON, compact: compact, data: data)
         case .schedule:
             HomeScheduleBody(size: size, lang: lang)
         case .files:
@@ -1677,6 +1677,7 @@ struct HomeOrdersProductionBody: View {
     let size: HomeCardSize
     let lang: String
     let stepsJSON: String
+    var compact: Bool = false
     @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
@@ -1712,7 +1713,49 @@ struct HomeOrdersProductionBody: View {
             }
             let shipReadyIDs = Set(data.stages.filter { $0.kind == .shipready }.map { $0.id })
 
-            if size == .oneByOne {
+            if size == .oneByOne && compact {
+                // The sheet reads left to right: how many are live, then how they
+                // are split, then the split as one bar. Four counts across a
+                // square are a mark and a number — the label would not survive.
+                let readyIDs = Set(data.stages.filter { $0.kind == .ready }.map { $0.id })
+                let activeIDs = Set(data.stages.filter { $0.kind == .active }.map { $0.id })
+                let counts: [(String, Int, Color, String)] = [
+                    (t("Ready", lang: lang), resolved.filter { readyIDs.contains($0.1.stageId) }.count,
+                     HomeTone.green, "checkmark.circle"),
+                    (t("In production", lang: lang), resolved.filter { activeIDs.contains($0.1.stageId) }.count,
+                     HomeTone.accent, "wrench.adjustable"),
+                    (t("Ready to ship", lang: lang), resolved.filter { shipReadyIDs.contains($0.1.stageId) }.count,
+                     HomeTone.green, "shippingbox"),
+                    (t("Overdue", lang: lang), late.count,
+                     late.isEmpty ? HomeTone.slate : HomeTone.red, "clock"),
+                ]
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("\(live.count)")
+                            .font(.system(size: 32, weight: .heavy))
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                        Text(t("active orders", lang: lang))
+                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                    Spacer(minLength: 0)
+                    HStack(spacing: 5) {
+                        ForEach(Array(counts.enumerated()), id: \.offset) { _, entry in
+                            VStack(spacing: 3) {
+                                Image(systemName: entry.3).font(.system(size: 11)).foregroundColor(entry.2)
+                                Text("\(entry.1)").font(.system(size: 15, weight: .heavy)).foregroundColor(entry.2)
+                                    .lineLimit(1).minimumScaleFactor(0.6)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(entry.0): \(entry.1)")
+                        }
+                    }
+                    HomeStageBar(stages: data.stages, resolved: resolved)
+                }
+            } else if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(t("active orders", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
                     Text("\(live.count)").font(.system(size: 28, weight: .heavy)).foregroundColor(HomeTone.accent)
@@ -1760,6 +1803,31 @@ struct HomeOrdersProductionBody: View {
                 }
             }
         }
+    }
+}
+
+/// The whole board as one bar: a segment per stage, sized by how many sit in it.
+/// The counts above name every stage, so the bar is the shape of the work rather
+/// than the only place the split is stated (§20).
+struct HomeStageBar: View {
+    let stages: [ProductionStage]
+    let resolved: [(Siparis, ResolvedProductionStage)]
+
+    var body: some View {
+        let counts = stages.map { stage in
+            (stage, resolved.filter { $0.1.stageId == stage.id }.count)
+        }.filter { $0.1 > 0 }
+        let total = max(1, counts.reduce(0) { $0 + $1.1 })
+        return GeometryReader { proxy in
+            HStack(spacing: 2) {
+                ForEach(Array(counts.enumerated()), id: \.offset) { _, entry in
+                    Capsule().fill(homeStageTone(entry.0.kind))
+                        .frame(width: max(3, proxy.size.width * CGFloat(entry.1) / CGFloat(total)))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: 7)
     }
 }
 
