@@ -64,6 +64,9 @@ final class HomeData: ObservableObject {
     /// the bank handed anything over.
     @Published var bankLastSync: Date?
     @Published var bankNeedsAttention = false
+    /// What the workspace pays every month on repeat, by the same rule the
+    /// Banking screen uses.
+    @Published var bankMonthlyFixed: Double = 0
 
     private var notesListener: ListenerRegistration?
     private var notesKey = ""

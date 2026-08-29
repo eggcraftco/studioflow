@@ -246,16 +246,51 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
     </div>
   );
 
+  const recentRows = transactions.slice(0, 3);
+
+  // 2x1, as the sheet draws it: the three figures across the top, then the last
+  // few counterparties beside what the workspace pays on repeat and how fresh
+  // the feed is.
   if (size === "2x1") {
     return (
       <div className="home-money is-wide">
-        <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
-        {tiles}
+        <div className="home-figure-row">
+          <span><em>{t("Incoming this month")}</em><b className="is-positive">+{money(incoming)}</b></span>
+          <span><em>{t("Spent this month")}</em><b className="is-negative">−{money(spent)}</b></span>
+          <span>
+            <em>{t("missing receipts")}</em>
+            <b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b>
+          </span>
+        </div>
+        <div className="home-bank-split">
+          <div>
+            <p className="home-eyebrow is-strong">{t("Recent transactions")}</p>
+            <ul className="home-cost-list">
+              {recentRows.map((tx) => (
+                <li key={tx.id}>
+                  <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
+                  <em>{tx.name || t("Transactions")}</em>
+                  <b className={tx.amount < 0 ? "is-negative" : "is-positive"}>
+                    {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
+                  </b>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="home-bank-aside">
+            {data.bankMonthlyFixed > 0 ? (
+              <p className="home-aside-line">
+                <span className="home-aside-mark" aria-hidden="true">£</span>
+                {t("Fixed ≈ {amount}/month").replace("{amount}", money(data.bankMonthlyFixed))}
+              </p>
+            ) : null}
+            <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
+          </div>
+        </div>
       </div>
     );
   }
 
-  const recent = transactions.slice(0, 3);
   const yearStart = new Date(new Date().getFullYear(), 0, 1);
   const year = transactions.filter((tx) => tx.bookingDate && tx.bookingDate >= yearStart);
   const yearIn = year.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
@@ -273,7 +308,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Recent transactions")}</p>
           <ul className="home-cost-list">
-            {recent.map((tx) => (
+            {recentRows.map((tx) => (
               <li key={tx.id}>
                 <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
                 <em>{tx.name || t("Transactions")}</em>

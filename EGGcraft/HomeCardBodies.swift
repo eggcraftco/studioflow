@@ -843,6 +843,50 @@ struct HomeBankingBody: View {
                     }
                     Spacer(minLength: 0)
                 }
+            } else if size == .twoByOne {
+                // As the sheet draws it: three figures across the top, then the
+                // last few counterparties beside what is paid on repeat.
+                let fixed = bankMonthlyFixedTotal(firebaseManager)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
+                        Divider().frame(height: 32)
+                        HomeBankFigure(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.red)
+                        Divider().frame(height: 32)
+                        HomeBankFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
+                                       tone: missing > 0 ? HomeTone.orange : .primary)
+                    }
+                    Divider()
+                    HStack(alignment: .top, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HomeEyebrow(text: t("Recent transactions", lang: lang))
+                            ForEach(transactions.prefix(3), id: \.id) { tx in
+                                HomeRow(title: tx.counterparty.isEmpty ? tx.description : tx.counterparty,
+                                        detail: (tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)),
+                                        tone: tx.amount < 0 ? HomeTone.red : HomeTone.green)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Divider()
+                        VStack(alignment: .leading, spacing: 9) {
+                            if fixed > 0 {
+                                HStack(spacing: 8) {
+                                    Text("£").font(.system(size: 11, weight: .heavy))
+                                        .foregroundColor(HomeTone.accent)
+                                        .frame(width: 22, height: 22)
+                                        .background(Circle().fill(HomeTone.accent.opacity(0.12)))
+                                    Text(t("Fixed ≈ {amount}/month", lang: lang)
+                                        .replacingOccurrences(of: "{amount}", with: money(fixed)))
+                                        .font(.system(size: 11.5)).lineLimit(1)
+                                }
+                            }
+                            HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(width: 190, alignment: .leading)
+                    }
+                    Spacer(minLength: 0)
+                }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
@@ -904,6 +948,30 @@ struct HomeBankingBody: View {
             }
         }
     }
+}
+
+/// One of the three figures across the top of the 2×1 Banking card.
+struct HomeBankFigure: View {
+    let label: String
+    let value: String
+    var tone: Color = .primary
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(1)
+            Text(value).font(.system(size: 19, weight: .heavy)).foregroundColor(tone)
+                .lineLimit(1).minimumScaleFactor(0.55)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// What the workspace pays every month on repeat, by the same rule the Banking
+/// screen uses — detected from the feed plus the owner's own vendors.
+func bankMonthlyFixedTotal(_ manager: FirebaseManager) -> Double {
+    bankDetectRecurring(manager.bankTransactions, vendors: manager.bankVendors)
+        .filter { $0.active }
+        .reduce(0) { $0 + $1.monthlyEquivalent }
 }
 
 /// How fresh the feed is. The real signal is the connection's own lastSyncedAt —

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uk.co.eggcraft.studioflow.data.model.bankDetectRecurring
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
@@ -612,6 +613,58 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
         return
     }
 
+    if (size == HomeCardSize.TwoByOne) {
+        // As the sheet draws it: three figures across the top, then the last few
+        // counterparties beside what is paid on repeat.
+        val fixed = bankMonthlyFixed(state)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BankFigure(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(32.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                BankFigure(t("Spent this month"), "−" + money(spent, state), HomeTone.red, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(32.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                BankFigure(t("missing receipts"), "$missing",
+                    if (missing > 0) HomeTone.orange else MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            }
+            HomeDivider()
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1.6f)) {
+                    HomeEyebrow(t("Recent transactions"))
+                    state.bankTransactions.take(3).forEach { tx ->
+                        val name = tx.counterparty.ifEmpty { tx.description }
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(name, fontSize = 12.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                                color = if (tx.amount < 0) HomeTone.red else HomeTone.green)
+                        }
+                    }
+                }
+                Box(Modifier.width(1.dp).height(70.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    if (fixed > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(Modifier.size(22.dp).background(HomeTone.accent.copy(alpha = 0.12f), CircleShape),
+                                contentAlignment = Alignment.Center) {
+                                Text("£", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+                            }
+                            Text(t("Fixed ≈ {amount}/month").replace("{amount}", money(fixed, state)),
+                                fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    SyncLine(state, t)
+                }
+            }
+        }
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SyncLine(state, t)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -678,6 +731,24 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
         }
     }
 }
+
+/** One of the three figures across the top of the 2x1 Banking card. */
+@Composable
+private fun BankFigure(label: String, value: String, tone: Color, modifier: Modifier) {
+    Column(modifier.padding(horizontal = 10.dp)) {
+        Text(label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = tone,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** What the workspace pays every month on repeat, by the same rule the Banking
+ *  screen uses — detected from the feed plus the owner's own vendors. */
+private fun bankMonthlyFixed(state: StudioFlowUiState): Double =
+    bankDetectRecurring(state.bankTransactions, state.bankVendors)
+        .filter { it.active }
+        .sumOf { it.monthlyEquivalent }
 
 /**
  * How fresh the feed is. The real signal is the connection's own lastSyncedAt —
