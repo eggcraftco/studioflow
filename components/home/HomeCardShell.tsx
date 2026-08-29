@@ -70,6 +70,7 @@ export function HomeCardShell({
   customising,
   t,
   headerSlot,
+  subtitle,
   children,
   onMove,
   onResize,
@@ -86,6 +87,8 @@ export function HomeCardShell({
   customising: boolean;
   t: (text: string) => string;
   headerSlot?: ReactNode;
+  /** Small line under the title — "3 of 6 complete", a date range. */
+  subtitle?: string;
   children: ReactNode;
   onMove: (direction: -1 | 1) => void;
   onResize: (size: HomeCardSize) => void;
@@ -161,9 +164,15 @@ export function HomeCardShell({
             if (event.key === "ArrowRight" || event.key === "ArrowDown") { event.preventDefault(); onMove(1); }
           }}
         >
-          <span aria-hidden="true">⠿</span>
+          {/* Six dots in two columns, as the reference draws it — a braille glyph
+              renders at a different weight in every font on every platform. */}
+          <span className="home-grip-dots" aria-hidden="true">
+            <i /><i /><i /><i /><i /><i />
+          </span>
         </button>
-        <span className="home-card-icon" aria-hidden="true">
+        {/* A ringed badge, not a bare glyph: it is what gives every card the same
+            anchor at the same size regardless of which icon it carries. */}
+        <span className="home-card-badge" aria-hidden="true">
           <CardIconGlyph icon={definition.icon} />
         </span>
         {renaming ? (
@@ -181,7 +190,10 @@ export function HomeCardShell({
             aria-label={t("Edit heading")}
           />
         ) : (
-          <h2 className="home-card-title">{heading}</h2>
+          <span className="home-card-titles">
+            <h2 className="home-card-title">{heading}</h2>
+            {subtitle ? <span className="home-card-subtitle">{subtitle}</span> : null}
+          </span>
         )}
         <span className="home-card-head-slot">{headerSlot}</span>
         <div className="home-card-menu-wrap" ref={menuRef}>
