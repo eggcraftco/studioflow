@@ -48,6 +48,7 @@ import {
 } from "@/lib/studioflow/homeCards";
 import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
+import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 
 /** Which shared domain each card reads, so a card shows its own domain's state. */
 const CARD_DOMAIN: Record<HomeCardId, HomeDomain> = {
@@ -150,14 +151,19 @@ export default function HomePage() {
 
   const handleQuickAction = useCallback(
     (action: QuickActionId) => {
-      const destinations: Record<QuickActionId, string> = {
-        order: "/orders?new=1",
+      // "New order" is the toolbar's own action and AppShell owns it, so this
+      // opens where the user already is instead of navigating away (§6).
+      if (action === "order") {
+        dispatchQuickAction("order");
+        return;
+      }
+      const destinations: Record<Exclude<QuickActionId, "order">, string> = {
         customer: "/customers?new=1",
         note: "/notes?new=1",
         file: "/files?upload=1",
         inventory: "/inventory?new=1",
-        expense: "/bank",
-        receipt: "/bank",
+        reviewSpending: "/bank",
+        receipt: "/bank?receipt=1",
         aiReply: "/messages",
       };
       router.push(destinations[action]);

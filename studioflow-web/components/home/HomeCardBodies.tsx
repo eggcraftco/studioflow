@@ -26,7 +26,7 @@ export type CardBodyProps = {
 };
 
 export type QuickActionId =
-  | "order" | "customer" | "note" | "file" | "inventory" | "expense" | "receipt" | "aiReply";
+  | "order" | "customer" | "note" | "file" | "inventory" | "reviewSpending" | "receipt" | "aiReply";
 
 /** Respects the price-privacy toggle: hidden means hidden everywhere. */
 function cash(value: number, hide: boolean, settings: StudioMoneySettings) {
@@ -371,7 +371,10 @@ const QUICK_ACTIONS: { id: QuickActionId; label: string; primary?: boolean }[] =
   { id: "note", label: "Add note" },
   { id: "file", label: "Upload file" },
   { id: "inventory", label: "Add inventory item" },
-  { id: "expense", label: "Add expense" },
+  // Not "Add expense": NivaDesk has no manual expense form, and it should not
+  // pretend to. Spending arrives from the read-only bank feed (§7) and becomes
+  // an expense when it is categorised — so the action is the review queue.
+  { id: "reviewSpending", label: "Review spending" },
   { id: "receipt", label: "Add receipt" },
   { id: "aiReply", label: "AI reply" },
 ];

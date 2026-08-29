@@ -1,12 +1,13 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioT } from "@/lib/studioflow/language";
 import {
   CLIENT_FILE_ACCEPT,
@@ -204,6 +205,14 @@ export default function FilesPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  // Arriving from Home's "Upload file" quick action. The upload form is always
+  // on this page, so the action brings it into view and puts the cursor in it
+  // rather than opening anything new.
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  useQuickActionParam("upload", Boolean(workspace), () => {
+    uploadInputRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    uploadInputRef.current?.focus();
+  });
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -617,6 +626,7 @@ export default function FilesPage() {
                 <label style={{ display: "grid", gap: 8, fontWeight: 800 }}>
                   File
                   <input
+                    ref={uploadInputRef}
                     key={fileInputKey}
                     className="input"
                     type="file"

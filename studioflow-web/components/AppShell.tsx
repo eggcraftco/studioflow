@@ -15,6 +15,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useQuickActionEvent } from "@/lib/studioflow/quickActions";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
@@ -1573,6 +1574,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const toolbarLogoLabel = showWorkspaceToolbarLogo
     ? `${workspace?.name || "Workspace"} logo`
     : "NivaDesk";
+  // Home's "New order" quick action lands here rather than navigating: this is
+  // the same button the toolbar shows, so the action opens where the user is.
+  useQuickActionEvent("order", handleAddOrder);
+
   const canCreateToolbarOrder = Boolean(
     workspace &&
     memberCanAccess(workspace, "orders") &&
