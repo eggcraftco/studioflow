@@ -53,7 +53,12 @@ struct HomeCardBody: View {
         case .files:
             HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .notes:
-            HomeNotesBody(size: size, lang: lang, compact: compact, data: data)
+            HomeNotesBody(size: size, lang: lang, compact: compact,
+                          onNewNote: {
+                              UserDefaults.standard.set(true, forKey: "pendingQuickActionNewNote")
+                              onOpen("Notes")
+                          },
+                          data: data)
         }
     }
 }
@@ -2578,6 +2583,9 @@ struct HomeNotesBody: View {
     let size: HomeCardSize
     let lang: String
     var compact: Bool = false
+    /// Opens the Notes tab with the composer up — the same route the + in the
+    /// header and the app-icon shortcut take.
+    var onNewNote: () -> Void = {}
     @ObservedObject var data: HomeData
 
     var body: some View {
@@ -2589,13 +2597,33 @@ struct HomeNotesBody: View {
             let pinned = live.filter { $0.isPinned }
             let recent = live.filter { !$0.isPinned }.sorted { $0.updatedAt > $1.updatedAt }
             if size == .twoByTwo {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: compact ? 5 : 8) {
+                    // The sheet opens this card with somewhere to start typing.
+                    // A button, not a field: the composer lives on the Notes
+                    // screen and two places to draft the same note is one too
+                    // many.
+                    Button(action: onNewNote) {
+                        Text(t("Take a note…", lang: lang))
+                            .font(.system(size: compact ? 11 : 12.5)).foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, compact ? 10 : 12).padding(.vertical, compact ? 6 : 9)
+                            .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 11)
+                                .stroke(Color.primary.opacity(0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
                     if !pinned.isEmpty {
                         HomeEyebrow(text: t("Pinned", lang: lang))
-                        HomeNoteGrid(notes: Array(pinned.prefix(2)), lang: lang, columns: 2)
+                        HomeNoteGrid(notes: Array(pinned.prefix(2)), lang: lang, columns: 2, compact: compact)
                     }
                     HomeEyebrow(text: t("Recent", lang: lang))
-                    HomeNoteGrid(notes: Array(recent.prefix(pinned.isEmpty ? 6 : 4)), lang: lang, columns: 2)
+                    // Rows rather than tiles: at this size the title and the one
+                    // fact beside it are what fit, and a row fits three where a
+                    // tile fits two.
+                    VStack(spacing: compact ? 4 : 6) {
+                        ForEach(Array(recent.prefix(pinned.isEmpty ? 5 : 3)), id: \.id) { note in
+                            HomeNoteRow(note: note, lang: lang, compact: compact)
+                        }
+                    }
                     Spacer(minLength: 0)
                 }
             } else {
@@ -2681,6 +2709,45 @@ func homeNoteColour(_ name: String) -> Color {
     case "purple": return Color(red: 0.945, green: 0.925, blue: 0.992)
     case "orange": return Color(red: 0.992, green: 0.933, blue: 0.878)
     default: return Color.primary.opacity(0.03)
+    }
+}
+
+/// What a note is about, and the one fact worth showing beside it: when it is
+/// due, or what it is attached to. Derived from the note — never invented.
+struct HomeNoteRow: View {
+    let note: StudioKeepNote
+    let lang: String
+    var compact: Bool = false
+
+    private var meta: (symbol: String, text: String, overdue: Bool) {
+        if let due = note.reminderDate {
+            return ("calendar", homeDayLabel(due, lang: lang), due < homeStartOfToday())
+        }
+        if !note.linkedOrderLabel.isEmpty { return ("doc.text", note.linkedOrderLabel, false) }
+        if !note.linkedCustomerName.isEmpty { return ("person", note.linkedCustomerName, false) }
+        return ("note.text", "", false)
+    }
+
+    var body: some View {
+        let accent = homeNoteAccent(note.colorName)
+        HStack(spacing: compact ? 7 : 10) {
+            Image(systemName: meta.symbol)
+                .font(.system(size: compact ? 10 : 12, weight: .semibold))
+                .foregroundColor(accent)
+                .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
+                .background(Circle().fill(accent.opacity(0.16)))
+            Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
+                .font(.system(size: compact ? 11 : 12.5, weight: .bold)).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !meta.text.isEmpty {
+                Text(meta.text)
+                    .font(.system(size: compact ? 10 : 11.5, weight: .semibold))
+                    .foregroundColor(meta.overdue ? HomeTone.red : accent)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, compact ? 8 : 10).padding(.vertical, compact ? 4 : 7)
+        .background(RoundedRectangle(cornerRadius: compact ? 9 : 10).fill(homeNoteColour(note.colorName)))
     }
 }
 

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -120,7 +121,7 @@ fun HomeCardBody(
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
         HomeCardId.Files -> HomeFilesBody(size, state, compact, t)
-        HomeCardId.Notes -> HomeNotesBody(size, state, compact, t)
+        HomeCardId.Notes -> HomeNotesBody(size, state, compact, { onOpenSection("Notes") }, t)
     }
 }
 
@@ -2191,7 +2192,11 @@ private fun fileTone(name: String): Color {
 // --------------------------------------------------------------------- Notes
 
 @Composable
-private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
+private fun HomeNotesBody(
+    size: HomeCardSize, state: StudioFlowUiState, compact: Boolean,
+    /** Opens the Notes tab — the same route the + in the header takes. */
+    onNewNote: () -> Unit, t: (String) -> String
+) {
     // Notes only. Not files, not AI replies (§13). Pinned first.
     val live = state.keepNotes.filter { !it.isDeleted && !it.isArchived }
     if (live.isEmpty()) {
@@ -2201,13 +2206,34 @@ private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, compact:
     val pinned = live.filter { it.isPinned }
     val recent = live.filterNot { it.isPinned }.sortedByDescending { it.updatedAt?.time ?: 0L }
     if (size == HomeCardSize.TwoByTwo) {
-        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 7.dp)) {
+            // The sheet opens this card with somewhere to start typing. A
+            // button, not a field: the composer lives on the Notes screen and
+            // two places to draft the same note is one too many.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                        RoundedCornerShape(if (compact) 9.dp else 11.dp))
+                    .clickable(onClick = onNewNote)
+                    .padding(horizontal = if (compact) 10.dp else 12.dp,
+                        vertical = if (compact) 6.dp else 9.dp)
+            ) {
+                Text(t("Take a note…"), fontSize = if (compact) 11.sp else 12.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (pinned.isNotEmpty()) {
                 HomeEyebrow(t("Pinned"))
                 NoteGrid(pinned.take(2), t, compact)
             }
             HomeEyebrow(t("Recent"))
-            NoteGrid(recent.take(if (pinned.isEmpty()) 4 else 2), t, compact)
+            // Rows rather than tiles: at this size the title and the one fact
+            // beside it are what fit, and a row fits three where a tile fits two.
+            Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)) {
+                recent.take(if (pinned.isEmpty()) 5 else 3).forEach { note ->
+                    NoteRow(note, t, compact)
+                }
+            }
         }
     } else {
         // Three across on the wide card, as the sheet lays them out.
@@ -2270,6 +2296,41 @@ private fun NoteTile(note: StudioKeepNote, t: (String) -> String, compact: Boole
                     .size(if (compact) 10.dp else 12.dp),
                 noteAccent(note.colorName)
             )
+        }
+    }
+}
+
+/** What a note is about, and the one fact worth showing beside it: when it is
+ *  due, or what it is attached to. Derived from the note — never invented. */
+@Composable
+private fun NoteRow(note: StudioKeepNote, t: (String) -> String, compact: Boolean) {
+    val accent = noteAccent(note.colorName)
+    val due = note.reminderDate
+    val meta: Triple<ImageVector, String, Boolean> = when {
+        due != null -> Triple(Icons.Filled.CalendarMonth, dayLabel(due, t), due.before(startOfToday()))
+        note.linkedOrderLabel.isNotEmpty() -> Triple(Icons.Filled.DocumentScanner, note.linkedOrderLabel, false)
+        note.linkedCustomerName.isNotEmpty() -> Triple(Icons.Filled.PersonAddAlt, note.linkedCustomerName, false)
+        else -> Triple(Icons.Filled.Edit, "", false)
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(noteColour(note.colorName), RoundedCornerShape(if (compact) 9.dp else 10.dp))
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
+    ) {
+        Box(
+            Modifier.size(if (compact) 22.dp else 26.dp).background(accent.copy(alpha = 0.16f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Icon(meta.first, null, Modifier.size(if (compact) 11.dp else 13.dp), accent) }
+        Text(note.title.ifEmpty { t("Untitled note") },
+            fontSize = if (compact) 11.sp else 12.5.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (meta.second.isNotEmpty()) {
+            Text(meta.second, fontSize = if (compact) 10.sp else 11.5.sp,
+                fontWeight = FontWeight.SemiBold, maxLines = 1,
+                color = if (meta.third) HomeTone.red else accent)
         }
     }
 }

@@ -96,7 +96,9 @@ export type HomeTileIconName =
   // The four production counts the 1x1 square carries.
   | "ready" | "inProduction" | "readyToShip" | "overdue"
   // The two stock holdings that are not free shelf.
-  | "reserved" | "incomingStock";
+  | "reserved" | "incomingStock"
+  // What a note is about.
+  | "reminder" | "order" | "customer" | "note";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -178,6 +180,34 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
           <path d="M3.5 7h9v8h-9zM12.5 10h3.5l2.5 2.5V15h-6z" />
           <circle cx="7" cy="17.5" r="1.6" />
           <circle cx="16" cy="17.5" r="1.6" />
+        </svg>
+      );
+    case "reminder":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M4 9.5h16M8.5 3.5v3M15.5 3.5v3" />
+        </svg>
+      );
+    case "order":
+      return (
+        <svg {...common}>
+          <path d="M6 4h9l3 3v13H6z" />
+          <path d="M9 10h6M9 14h4" />
+        </svg>
+      );
+    case "customer":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8.5" r="3.5" />
+          <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+        </svg>
+      );
+    case "note":
+      return (
+        <svg {...common}>
+          <path d="M5 4h14v16H5z" />
+          <path d="M8.5 9h7M8.5 13h5" />
         </svg>
       );
   }

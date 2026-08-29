@@ -1243,7 +1243,7 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
 
 /* ------------------------------------------------------------------ Notes */
 
-export function NotesCardBody({ size, data, t }: CardBodyProps) {
+export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
   // Notes only — not files, not AI replies (§13). Pinned first, then recent.
   const live = data.notes.filter((note) => !note.isDeleted && !note.isArchived);
   if (live.length === 0) return null;
@@ -1265,6 +1265,16 @@ export function NotesCardBody({ size, data, t }: CardBodyProps) {
 
   return (
     <div className="home-notes-large">
+      {/* The sheet opens this card with somewhere to start typing. It is a
+          button, not a field: the composer lives on the Notes screen and two
+          places to draft the same note is one too many. */}
+      <button
+        type="button"
+        className="home-note-composer"
+        onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
+      >
+        {t("Take a note…")}
+      </button>
       {pinned.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Pinned")}</p>
@@ -1274,10 +1284,45 @@ export function NotesCardBody({ size, data, t }: CardBodyProps) {
         </>
       ) : null}
       <p className="home-eyebrow is-strong">{t("Recent")}</p>
-      <div className="home-note-grid">
-        {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => <NoteTile key={note.id} note={note} t={t} />)}
-      </div>
+      <ul className="home-note-rows">
+        {recent.slice(0, pinned.length > 0 ? 3 : 5).map((note) => (
+          <NoteRow key={note.id} note={note} t={t} />
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/** What a note is about, and the one fact worth showing beside it: when it is
+ *  due, or what it is attached to. Derived from the note — never invented. */
+function noteMeta(note: HomeData["notes"][number], t: (text: string) => string) {
+  if (note.reminderDateMillis) {
+    const due = new Date(note.reminderDateMillis);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const days = Math.round((due.getTime() - startOfDay.getTime()) / 86400000);
+    return {
+      icon: "reminder" as const,
+      text: days === 0 ? t("Today") : days === 1 ? t("Tomorrow") : due.toLocaleDateString(),
+      overdue: days < 0,
+    };
+  }
+  if (note.linkedOrderLabel) return { icon: "order" as const, text: note.linkedOrderLabel, overdue: false };
+  if (note.linkedCustomerName) return { icon: "customer" as const, text: note.linkedCustomerName, overdue: false };
+  return { icon: "note" as const, text: "", overdue: false };
+}
+
+function NoteRow({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
+  const meta = noteMeta(note, t);
+  const hue = note.colorName || "default";
+  return (
+    <li className={`home-note-row hue-${hue}`}>
+      <Link href={`/notes?note=${encodeURIComponent(note.id)}`}>
+        <span className="home-note-row-badge" aria-hidden="true"><HomeTileIcon name={meta.icon} /></span>
+        <strong>{note.title || t("Untitled note")}</strong>
+        {meta.text ? <em className={meta.overdue ? "is-due" : ""}>{meta.text}</em> : null}
+      </Link>
+    </li>
   );
 }
 
