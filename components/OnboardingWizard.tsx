@@ -19,6 +19,7 @@ import {
   ONBOARDING_INTEGRATIONS,
   ONBOARDING_STARTS,
   ONBOARDING_TEAM_SIZES,
+  ONBOARDING_TRIAL_PLANS,
   ONBOARDING_VOLUMES,
   ONBOARDING_WORKFLOWS,
   ONBOARDING_WORK_KINDS,
@@ -29,7 +30,9 @@ import {
   type OnboardingVolume,
   type OnboardingWorkKind,
   type OnboardingWorkflow,
+  recommendedTrialPlan,
 } from "@/lib/studioflow/onboardingWizard";
+import { STRIPE_LIST_PRICE_LABELS } from "@/lib/studioflow/plans";
 
 const CURRENCIES = [
   ["£", "GBP (£)"], ["$", "USD ($)"], ["€", "EUR (€)"], ["₺", "TRY (₺)"],
@@ -100,16 +103,29 @@ export function OnboardingWizard({
     mainGoal: "",
     extraGoals: [],
     start: "",
+    plan: "",
   }));
 
   const set = <K extends keyof OnboardingAnswers>(key: K, value: OnboardingAnswers[K]) =>
     setAnswers(current => ({ ...current, [key]: value }));
 
+  // The plan step arrives with a recommendation already chosen, so it is
+  // answerable the moment it opens — the reader confirms it or picks another.
+  const chosenPlan = answers.plan || recommendedTrialPlan(answers);
   const canContinue =
     step === 1 ? Boolean(answers.country && answers.currency && answers.timeZone)
       : step === 2 ? answers.workKinds.length > 0
         : step === 3 ? Boolean(answers.mainGoal)
-          : Boolean(answers.start);
+          : step === 4 ? Boolean(answers.start)
+            : Boolean(chosenPlan);
+
+  // Fourteen days from now, which is what sign-up wrote. Shown so the price has
+  // a date attached rather than being an abstract "later".
+  const trialEndsLabel = useMemo(() => {
+    const ends = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    try { return ends.toLocaleDateString(undefined, { day: "numeric", month: "long" }); }
+    catch { return ""; }
+  }, []);
 
   const visibleGoals = showMoreGoals ? ONBOARDING_GOALS : ONBOARDING_GOALS.filter(goal => goal.primary);
 
@@ -354,6 +370,49 @@ export function OnboardingWizard({
             ))}
             </div>
           </>
+        ) : null}
+
+        {step === 5 ? (
+          <div className="onboard-plan-list">
+            {ONBOARDING_TRIAL_PLANS.map(plan => {
+              const selected = chosenPlan === plan.id;
+              const recommended = plan.id === recommendedTrialPlan(answers);
+              return (
+                <label
+                  key={plan.id}
+                  className={`onboard-plan${selected ? " is-selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="onboard-plan"
+                    checked={selected}
+                    onChange={() => set("plan", plan.id)}
+                  />
+                  <span className="onboard-plan-body">
+                    <span className="onboard-plan-head">
+                      <strong>{plan.title}</strong>
+                      {recommended ? (
+                        <span className="onboard-plan-badge">{t("Recommended for your answers")}</span>
+                      ) : null}
+                    </span>
+                    <span className="onboard-plan-summary">{t(plan.summary)}</span>
+                    <span className="onboard-plan-price">
+                      {/* One sentence, not three fragments: the free period, the
+                          date it ends and the price after it are one thought,
+                          and splitting them breaks word order in half the
+                          languages we ship. */}
+                      {t("Free until {date}, then {price}.")
+                        .replace("{date}", trialEndsLabel)
+                        .replace("{price}", STRIPE_LIST_PRICE_LABELS[plan.priceKey] ?? "")}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+            <p className="onboard-plan-note">
+              {t("We picked this from your answers — you told us how many people work with you and what you need first. Change it here, or later in Settings; nothing is charged today.")}
+            </p>
+          </div>
         ) : null}
 
         {error ? <p className="onboard-error">{error}</p> : null}
