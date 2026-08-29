@@ -50,7 +50,7 @@ import {
   type HomeCardTone,
   type HomeLayout,
 } from "@/lib/studioflow/homeCards";
-import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
+import { saveHomeLayout, saveSetupSkipped, subscribeHomeLayout, subscribeSetupSkipped } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 
@@ -78,6 +78,9 @@ function greeting(t: (text: string) => string) {
 
 export default function HomePage() {
   const { user, loading: authLoading, language } = useAuth();
+  // Which checklist steps this member has waved off, live like the layout so a
+  // skip on the phone reaches the desktop.
+  const [setupSkipped, setSetupSkipped] = useState<string[]>([]);
   const router = useRouter();
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const { hideNumbers } = usePricePrivacy();
@@ -135,6 +138,23 @@ export default function HomePage() {
     return subscribeHomeLayout(workspace.id, (next) => {
       lastSaved.current = next;
       setLayout(next);
+    });
+  }, [workspace?.id]);
+
+  useEffect(() => {
+    if (!workspace?.id) return;
+    return subscribeSetupSkipped(workspace.id, setSetupSkipped);
+  }, [workspace?.id]);
+
+  // Shown at once, saved behind: a step you waved off should not sit there
+  // while a round trip finishes, and the listener above corrects us if it fails.
+  const handleSkipStep = useCallback((stepId: string) => {
+    if (!workspace?.id) return;
+    setSetupSkipped((current) => {
+      if (current.includes(stepId)) return current;
+      const next = [...current, stepId];
+      void saveSetupSkipped(workspace.id, next);
+      return next;
     });
   }, [workspace?.id]);
 
@@ -239,7 +259,8 @@ export default function HomePage() {
       case "files": return <FilesCardBody {...props} />;
       case "notes": return <NotesCardBody {...props} />;
       case "quickActions": return <QuickActionsCardBody {...props} />;
-      case "gettingStarted": return <GettingStartedCardBody {...props} />;
+      case "gettingStarted":
+        return <GettingStartedCardBody {...props} skipped={setupSkipped} onSkip={handleSkipStep} />;
       default: return null;
     }
   }

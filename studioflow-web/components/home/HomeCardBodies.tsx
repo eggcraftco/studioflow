@@ -1594,13 +1594,16 @@ const SETUP_STEPS = [
   { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
   { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
   { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
-  { id: "shop", label: "Connect your shop", blurb: "Bring Shopify or WooCommerce orders in automatically.", href: "/settings?section=integrations", cta: "Connect shop" },
+  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically.", href: "/settings?section=integrations", cta: "Connect shop" },
   { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
   { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
 ] as const;
 
-export function GettingStartedCardBody({ size, data, t }: CardBodyProps) {
-  const steps = SETUP_STEPS.map((step) => ({
+export function GettingStartedCardBody({ size, data, t, skipped = [], onSkip }: CardBodyProps & {
+  skipped?: string[];
+  onSkip?: (stepId: string) => void;
+}) {
+  const steps = SETUP_STEPS.filter((step) => !skipped.includes(step.id)).map((step) => ({
     ...step,
     done:
       step.id === "profile" ? true :
@@ -1618,25 +1621,26 @@ export function GettingStartedCardBody({ size, data, t }: CardBodyProps) {
   const done = steps.filter((step) => step.done);
   const todo = steps.filter((step) => !step.done && step.id !== next?.id);
 
-  // 1x1 has no room for the completed list, so it leads with the next step and
-  // shows what is still open underneath.
+  // 1x1 has no room for the completed list. The sheet spends the square on the
+  // one thing to do next and the way out of it, rather than on a list of what
+  // is still open — that list is the wall §15 says never to put here.
   if (size === "1x1") {
     return (
-      <div className="home-setup">
+      <div className="home-setup is-square">
         <HomeProgress complete={complete} total={steps.length} t={t} />
         {next ? (
           <>
-            <p className="home-eyebrow">{t("Next step")}</p>
             <NextStepPanel step={next} t={t} compact />
+            {onSkip ? (
+              <button type="button" className="home-setup-skip"
+                      onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                {t("Skip")}
+              </button>
+            ) : null}
           </>
         ) : (
           <p className="home-card-note">{t("All set — nice work.")}</p>
         )}
-        <ul className="home-check-list">
-          {todo.slice(0, 2).map((step) => (
-            <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-          ))}
-        </ul>
       </div>
     );
   }
@@ -1727,16 +1731,22 @@ function NextStepPanel({
   compact?: boolean; inline?: boolean; large?: boolean;
 }) {
   return (
-    <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}`}>
+    <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}${compact ? " is-stacked" : ""}`}>
       {large ? <p className="home-eyebrow is-accent">{t("Recommended next")}</p> : null}
       {inline ? <p className="home-eyebrow is-accent">{t("Up next")}</p> : null}
       <div className="home-next-body">
         <div>
           <strong>{t(step.label)}</strong>
-          <p>{t(step.blurb)}</p>
+          {/* The square keeps the step and the way past it and gives up the
+              line that explains why: measured, "Verbinde deinen Shop" plus its
+              own blurb runs 17px past the bottom of a 174px card. The page the
+              button opens explains itself. */}
+          {compact ? null : <p>{t(step.blurb)}</p>}
         </div>
+        {/* The square has no width for "Connect your shop" twice — the panel's
+            heading already named the step, so the button just moves. */}
         <Link className="home-next-button" href={step.href}>
-          {t(inline ? "Continue" : step.cta)}
+          {t(inline || compact ? "Continue" : step.cta)}
         </Link>
       </div>
     </div>

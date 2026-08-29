@@ -18,6 +18,11 @@ import FirebaseFunctions
 final class HomeLayoutStore: ObservableObject {
     @Published var layout: HomeLayout = .standard
     @Published var saveFailed = false
+    /// Which Getting started steps this member has waved off. Same document as
+    /// the layout, and for the same reason: a workshop with no online shop
+    /// should be able to stop being asked to connect one, without removing the
+    /// step from a colleague's card.
+    @Published var setupSkipped: [String] = []
 
     private var listener: ListenerRegistration?
     private var listenerKey = ""
@@ -37,9 +42,11 @@ final class HomeLayoutStore: ObservableObject {
                 guard let self, error == nil else { return }
                 let stored = snapshot?.data()?["homeLayout"] as? String ?? ""
                 let next = stored.isEmpty ? HomeLayout.standard : HomeLayout.decode(stored)
+                let skipped = snapshot?.data()?["setupSkipped"] as? [String] ?? []
                 Task { @MainActor in
                     self.lastSaved = next
                     self.layout = next
+                    self.setupSkipped = skipped
                 }
             }
     }
@@ -73,6 +80,24 @@ final class HomeLayoutStore: ObservableObject {
             } catch {
                 layout = previous
                 saveFailed = true
+            }
+        }
+    }
+
+    /// Shown at once, saved behind: a step you waved off should not sit there
+    /// while a round trip finishes, and the listener corrects us if it fails.
+    func skipSetupStep(_ stepId: String) {
+        guard !setupSkipped.contains(stepId) else { return }
+        let previous = setupSkipped
+        let next = previous + [stepId]
+        setupSkipped = next
+        Task { @MainActor in
+            do {
+                _ = try await Functions.functions(region: "europe-west2")
+                    .httpsCallable("savePersonalInterfaceSettings")
+                    .call(["settings": ["setupSkipped": next]])
+            } catch {
+                setupSkipped = previous
             }
         }
     }

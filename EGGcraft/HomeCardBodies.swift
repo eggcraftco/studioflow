@@ -26,13 +26,18 @@ struct HomeCardBody: View {
     @ObservedObject var data: HomeData
     let onNewOrder: () -> Void
     let onOpen: (String) -> Void
+    /// Getting started only: the steps this member has waved off, and the way
+    /// to wave one off.
+    var setupSkipped: [String] = []
+    var onSkipSetupStep: ((String) -> Void)? = nil
 
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
         switch id {
         case .gettingStarted:
-            HomeGettingStartedBody(size: size, lang: lang, data: data)
+            HomeGettingStartedBody(size: size, lang: lang, data: data,
+                                   skipped: setupSkipped, onSkip: onSkipSetupStep)
         case .quickActions:
             HomeQuickActionsBody(size: size, lang: lang, access: access, onNewOrder: onNewOrder, onOpen: onOpen)
         case .recentActivity:
@@ -177,6 +182,9 @@ struct HomeGettingStartedBody: View {
     let size: HomeCardSize
     let lang: String
     @ObservedObject var data: HomeData
+    /// Steps this member has waved off, and the way to wave one off.
+    var skipped: [String] = []
+    var onSkip: ((String) -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     private var steps: [HomeSetupStep] {
@@ -196,7 +204,7 @@ struct HomeGettingStartedBody: View {
                           blurb: "The record everything else in NivaDesk attaches to.",
                           destination: "Orders", cta: "Create order", done: !firebaseManager.siparisler.isEmpty),
             HomeSetupStep(id: "shop", label: "Connect your shop",
-                          blurb: "Bring Shopify or WooCommerce orders in automatically.",
+                          blurb: "Import orders automatically.",
                           destination: "Settings", cta: "Connect shop", done: fromStore),
             HomeSetupStep(id: "inventory", label: "Add an inventory item",
                           blurb: "Track what you own, what is reserved and what is low.",
@@ -208,7 +216,7 @@ struct HomeGettingStartedBody: View {
     }
 
     var body: some View {
-        let all = steps
+        let all = steps.filter { !skipped.contains($0.id) }
         let done = all.filter { $0.done }
         let next = all.first { !$0.done }
         let todo = all.filter { !$0.done && $0.id != next?.id }
@@ -225,16 +233,22 @@ struct HomeGettingStartedBody: View {
 
             if size == .oneByOne {
                 if let step = next {
-                    HomeEyebrow(text: t("Next step", lang: lang), strong: false)
+                    // The square spends itself on the one thing to do next and
+                    // the way past it, not on a list of what is still open —
+                    // that list is the wall §15 says never to put here.
                     HomeNextPanel(step: step, lang: lang, style: .compact)
+                    if let onSkip {
+                        Button { onSkip(step.id) } label: {
+                            Text(t("Skip", lang: lang))
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundColor(HomeTone.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 } else {
                     HomeCardNote(text: t("All set — nice work.", lang: lang))
                 }
-                // One remaining item at 1x1: the panel above it is the point, and a
-                // second row pushed the footer link out of the card.
-                ForEach(todo.prefix(1), id: \.id) { step in
-                    HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
-                }
+                Spacer(minLength: 0)
             } else if size == .twoByOne {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -348,7 +362,8 @@ struct HomeNextPanel: View {
                 body(vertical: style == .compact)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, style == .compact ? 10 : 12)
+        .padding(.vertical, style == .compact ? 7 : 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.accent.opacity(0.07)))
     }
@@ -374,16 +389,27 @@ struct HomeNextPanel: View {
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(t(step.label, lang: lang)).font(.system(size: 14, weight: .heavy)).lineLimit(1)
-            Text(t(step.blurb, lang: lang)).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+            Text(t(step.label, lang: lang))
+                .font(.system(size: style == .compact ? 12.5 : 14, weight: .heavy))
+                .lineLimit(2)
+            // The square gives up the line that explains why: measured, the
+            // step's own name plus its blurb runs past the bottom of a 174pt
+            // card in German. The page the button opens explains itself.
+            if style != .compact {
+                Text(t(step.blurb, lang: lang))
+                    .font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+            }
         }
     }
 
     private var button: some View {
-        Text(t(style == .inline ? "Continue" : step.cta, lang: lang))
-            .font(.system(size: 12, weight: .bold))
+        // The square has no width for "Connect your shop" twice — the panel's
+        // heading already named the step, so the button just moves.
+        Text(t(style == .large ? step.cta : "Continue", lang: lang))
+            .font(.system(size: style == .compact ? 11 : 12, weight: .bold))
             .foregroundColor(.white)
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, style == .compact ? 11 : 16)
+            .padding(.vertical, style == .compact ? 4 : 8)
             .frame(maxWidth: style == .large ? .infinity : nil)
             .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
     }

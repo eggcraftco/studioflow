@@ -28227,8 +28227,35 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* The recommendation panel. Blue enough to be the obvious next thing, calm
    enough that it is not a payment prompt (§15). */
+/* The way out of a step that is not for this workshop. Quiet, under the panel,
+   never competing with the one thing the card is asking for. */
+.home-setup-skip {
+  align-self: flex-start; margin-top: 6px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: #2563eb;
+}
+.home-setup-skip:hover { text-decoration: underline; }
+
 .home-next-panel { background: rgba(37, 99, 235, 0.07); border-radius: 12px; padding: 12px 14px; }
 .home-next-panel.is-large { display: flex; flex-direction: column; gap: 4px; }
+/* On the square the button goes under the words, not beside them: side by side
+   leaves the step's own name about 90px, which truncates every one of them. */
+.home-next-panel.is-stacked { padding: 7px 10px; }
+.home-next-panel.is-stacked .home-next-body { flex-direction: column; align-items: flex-start; gap: 5px; }
+.home-next-panel.is-stacked .home-next-body strong { font-size: 12.5px; line-height: 1.2; }
+.home-next-panel.is-stacked .home-next-body p { font-size: 10.5px; margin-top: 2px; line-height: 1.25; }
+.home-next-panel.is-stacked .home-next-button { align-self: flex-start; padding: 4px 11px; font-size: 11px; }
+
+/* A 174px square holds the count, the bar, the step and the way past it — and
+   only just. The sheet's "Up next" label goes: a single panel under a progress
+   bar does not need to be told it is what comes next. */
+.home-setup.is-square { gap: 4px; }
+.home-setup.is-square .home-metric-label { font-size: 10.5px; }
+.home-setup.is-square .home-progress { margin: 0; }
+/* The card is a fixed square: pin the way out to the bottom so the space the
+   dropped blurb left shows as air under the panel, not as a card that stops
+   half way down. */
+.home-setup.is-square .home-setup-skip { margin-top: auto; font-size: 11.5px; }
 .home-next-body { display: flex; align-items: flex-start; gap: 12px; }
 .home-next-panel.is-large .home-next-body { flex-direction: column; align-items: stretch; gap: 10px; }
 .home-next-body strong { display: block; font-size: 14.5px; font-weight: 800; }

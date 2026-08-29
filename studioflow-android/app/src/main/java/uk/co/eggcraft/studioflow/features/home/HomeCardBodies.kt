@@ -114,10 +114,15 @@ fun HomeCardBody(
     period: HomeCardPeriod = HomeCardPeriod.Month,
     t: (String) -> String,
     onNewOrder: () -> Unit,
-    onOpenSection: (String) -> Unit
+    onOpenSection: (String) -> Unit,
+    /** Getting started only: the steps this member has waved off, and the way to
+     *  wave one off. */
+    setupSkipped: List<String> = emptyList(),
+    onSkipSetupStep: ((String) -> Unit)? = null
 ) {
     when (id) {
-        HomeCardId.GettingStarted -> HomeGettingStartedBody(size, state, inventory, t)
+        HomeCardId.GettingStarted ->
+            HomeGettingStartedBody(size, state, inventory, t, setupSkipped, onSkipSetupStep)
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
@@ -472,20 +477,24 @@ private fun HomeGettingStartedBody(
     size: HomeCardSize,
     state: StudioFlowUiState,
     inventory: StudioInventorySummary?,
-    t: (String) -> String
+    t: (String) -> String,
+    skipped: List<String> = emptyList(),
+    onSkip: ((String) -> Unit)? = null
 ) {
     val inventoryCount = (inventory?.uniqueCount ?: 0) + (inventory?.quantityCount ?: 0)
     val fromStore = state.orders.any {
         !it.customFields["Shopify Status"].isNullOrBlank() || !it.customFields["WooCommerce Status"].isNullOrBlank()
     }
-    val steps = listOf(
+    val allSteps = listOf(
         SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", true),
         SetupStep("customer", "Add your first customer", "Orders, notes and files all hang off a customer.", "Customers", "Add customer", state.customers.isNotEmpty()),
         SetupStep("order", "Create your first order", "The record everything else in NivaDesk attaches to.", "Orders", "Create order", state.orders.isNotEmpty()),
-        SetupStep("shop", "Connect your shop", "Bring Shopify or WooCommerce orders in automatically.", "Settings", "Connect shop", fromStore),
+        SetupStep("shop", "Connect your shop", "Import orders automatically.", "Settings", "Connect shop", fromStore),
         SetupStep("inventory", "Add an inventory item", "Track what you own, what is reserved and what is low.", "Inventory", "Add item", inventoryCount > 0),
         SetupStep("bank", "Connect your bank", "Read-only. Spending arrives and you categorise it.", "BankSpending", "Connect bank", state.bankTransactions.isNotEmpty())
     )
+    val steps = allSteps.filter { it.id !in skipped }
+    if (steps.isEmpty()) return
     val done = steps.filter { it.done }
     val next = steps.firstOrNull { !it.done }
     val todo = steps.filter { !it.done && it.id != next?.id }
@@ -505,13 +514,19 @@ private fun HomeGettingStartedBody(
         when (size) {
             HomeCardSize.OneByOne -> {
                 if (next != null) {
-                    HomeEyebrow(t("Next step"), strong = false)
+                    // The square spends itself on the one thing to do next and
+                    // the way past it, not on a list of what is still open —
+                    // that list is the wall §15 says never to put here.
                     HomeNextPanel(next, t, "compact")
+                    if (onSkip != null) {
+                        Text(
+                            t("Skip"), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
+                            color = HomeTone.accent,
+                            modifier = Modifier.clickable { onSkip(next.id) }
+                        )
+                    }
                 } else Text(t("All set — nice work."), fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // One remaining item at 1x1: the panel above it is the point, and a
-                // second row pushed the footer link out of the card.
-                todo.take(1).forEach { HomeCheckRow(t(it.label), "todo") }
             }
             HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Column(Modifier.weight(1f)) {
@@ -571,24 +586,39 @@ private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String)
         Modifier
             .fillMaxWidth()
             .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(
+                horizontal = if (style == "compact") 10.dp else 11.dp,
+                vertical = if (style == "compact") 7.dp else 9.dp
+            ),
+        verticalArrangement = Arrangement.spacedBy(if (style == "compact") 5.dp else 6.dp)
     ) {
         if (style == "large") Text(t("Recommended next"), fontSize = 11.sp,
             fontWeight = FontWeight.Bold, color = HomeTone.accent)
         if (style == "inline") Text(t("Up next"), fontSize = 11.sp,
             fontWeight = FontWeight.Bold, color = HomeTone.accent)
-        Text(t(step.label), fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold,
-            maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(t(step.blurb), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(t(step.label), fontSize = if (style == "compact") 12.5.sp else 13.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // The square gives up the line that explains why: measured, the step's
+        // own name plus its blurb runs past the bottom of a 174dp card in
+        // German. The page the button opens explains itself.
+        if (style != "compact") {
+            Text(t(step.blurb), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(
-            t(if (style == "inline") "Continue" else step.cta),
-            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+            // The square has no width for "Connect your shop" twice — the panel's
+            // heading already named the step, so the button just moves.
+            t(if (style == "large") step.cta else "Continue"),
+            fontSize = if (style == "compact") 11.sp else 12.sp,
+            fontWeight = FontWeight.Bold, color = Color.White,
             modifier = Modifier
                 .then(if (style == "large") Modifier.fillMaxWidth() else Modifier)
                 .background(HomeTone.accent, RoundedCornerShape(9.dp))
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(
+                    horizontal = if (style == "compact") 11.dp else 16.dp,
+                    vertical = if (style == "compact") 4.dp else 8.dp
+                )
         )
     }
 }

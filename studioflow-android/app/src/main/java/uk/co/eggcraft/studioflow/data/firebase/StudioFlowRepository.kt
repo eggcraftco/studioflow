@@ -2952,6 +2952,23 @@ class StudioFlowRepository(
         awaitClose { registration.remove() }
     }
 
+    /** The waved-off checklist steps, live from the same document. */
+    fun setupSkippedFlow(workspaceId: String, userId: String): Flow<List<String>> = callbackFlow {
+        if (workspaceId.isBlank() || userId.isBlank()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("personalInterfaceSettings").document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                @Suppress("UNCHECKED_CAST")
+                trySend((snapshot?.get("setupSkipped") as? List<String>) ?: emptyList())
+            }
+        awaitClose { registration.remove() }
+    }
+
     /**
      * Saved through the callable, never written straight to Firestore.
      *
@@ -2964,6 +2981,16 @@ class StudioFlowRepository(
     suspend fun saveHomeLayout(workspaceId: String, layoutJson: String) {
         functions.getHttpsCallable("savePersonalInterfaceSettings")
             .call(mapOf("companyId" to workspaceId, "settings" to mapOf("homeLayout" to layoutJson)))
+            .await()
+    }
+
+    /** Which Getting started steps this member has waved off. Same document and
+     *  the same route as the layout: a workshop with no online shop should be
+     *  able to stop being asked to connect one, without removing the step from a
+     *  colleague's card. Sent whole, not appended to. */
+    suspend fun saveSetupSkipped(workspaceId: String, skipped: List<String>) {
+        functions.getHttpsCallable("savePersonalInterfaceSettings")
+            .call(mapOf("companyId" to workspaceId, "settings" to mapOf("setupSkipped" to skipped)))
             .await()
     }
 

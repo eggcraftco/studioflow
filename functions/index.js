@@ -7498,6 +7498,29 @@ const HOME_CARD_PERIODS = new Set(["month", "year", "all"]);
  * over-long headings are dropped rather than written. Returns a JSON string, or
  * "" when there is nothing worth storing.
  */
+/**
+ * The Getting started checklist, and which of its steps a member has waved off.
+ *
+ * A workshop with no online shop should be able to stop being asked to connect
+ * one. Skipping is personal, like the Home layout it lives beside: one member
+ * deciding a step is not for them must not remove it from anyone else's card.
+ *
+ * The ids are the same six the four clients build the checklist from — keep
+ * this list in step with SETUP_STEPS on web, HomeSetupSteps on Apple and
+ * setupSteps on Android, or a skip will be accepted by the client and silently
+ * dropped here.
+ */
+const SETUP_STEP_IDS = new Set(["profile", "customer", "order", "shop", "inventory", "bank"]);
+
+function cleanSetupSkipped(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  for (const entry of raw.slice(0, 20)) {
+    if (typeof entry === "string" && SETUP_STEP_IDS.has(entry)) seen.add(entry);
+  }
+  return Array.from(seen);
+}
+
 function cleanHomeLayout(raw) {
   let parsed = raw;
   if (typeof raw === "string") {
@@ -7544,6 +7567,12 @@ exports.savePersonalInterfaceSettings = onCall({ region: "europe-west2" }, async
       updates.homeLayout = cleaned;
       updates.homeLayoutUpdatedAtMs = Date.now();
     }
+  }
+  // Which checklist steps this member has waved off. Sent whole, not appended
+  // to: the client already knows the full set and a merge of two devices'
+  // partial lists is not something either of them asked for.
+  if (Object.prototype.hasOwnProperty.call(incoming, "setupSkipped")) {
+    updates.setupSkipped = cleanSetupSkipped(incoming.setupSkipped);
   }
   const pdfKeys = ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping", "pdfShowAddress", "pdfShowShippingAddress"];
   if (pdfKeys.some((key) => Object.prototype.hasOwnProperty.call(incoming, key))) {

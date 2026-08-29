@@ -173,6 +173,14 @@ fun HomeScreen(
         }
     }
 
+    // Which checklist steps this member has waved off, live like the layout so a
+    // skip on the phone reaches the desktop.
+    var setupSkipped by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(workspaceId, userId) {
+        if (workspaceId.isBlank() || userId.isBlank()) return@LaunchedEffect
+        repository.setupSkippedFlow(workspaceId, userId).collect { setupSkipped = it }
+    }
+
     LaunchedEffect(workspaceId, reloadKey) {
         if (workspaceId.isBlank()) return@LaunchedEffect
         inventory = runCatching { repository.inventorySummary(workspaceId) }
@@ -206,6 +214,19 @@ fun HomeScreen(
                     layout = previous
                     saveFailed = true
                 }
+        }
+    }
+
+    // Shown at once, saved behind: a step you waved off should not sit there
+    // while a round trip finishes, and the listener corrects us if it fails.
+    fun skipSetupStep(stepId: String) {
+        if (setupSkipped.contains(stepId)) return
+        val previous = setupSkipped
+        val next = previous + stepId
+        setupSkipped = next
+        scope.launch {
+            runCatching { repository.saveSetupSkipped(workspaceId, next) }
+                .onFailure { setupSkipped = previous }
         }
     }
 
@@ -455,7 +476,9 @@ fun HomeScreen(
                             period = slot.placement.period,
                             t = t,
                             onNewOrder = onNewOrder,
-                            onOpenSection = onOpenSection
+                            onOpenSection = onOpenSection,
+                            setupSkipped = setupSkipped,
+                            onSkipSetupStep = { skipSetupStep(it) }
                         )
                     }
                 }

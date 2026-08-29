@@ -82,3 +82,41 @@ export async function saveHomeLayout(companyId: string, layout: HomeLayout): Pro
   const callable = httpsCallable(functions, "savePersonalInterfaceSettings");
   await callable({ settings: { homeLayout: JSON.stringify(layout) } });
 }
+
+/**
+ * Which Getting started steps this member has waved off.
+ *
+ * Same document as the layout, and for the same reason: a workshop with no
+ * online shop should be able to stop being asked to connect one, without
+ * removing the step from a colleague's card. Server-validated like everything
+ * else in this document — a direct write applies locally and is then quietly
+ * replaced by the server's unchanged copy.
+ */
+const SKIPPED_FIELD = "setupSkipped";
+
+function parseSkipped(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+export function subscribeSetupSkipped(
+  companyId: string,
+  onSkipped: (skipped: string[]) => void,
+): () => void {
+  const userId = auth.currentUser?.uid ?? "";
+  if (!companyId || !userId) {
+    onSkipped([]);
+    return () => {};
+  }
+  return onSnapshot(
+    homeLayoutRef(companyId, userId),
+    (snapshot) => onSkipped(parseSkipped(snapshot.exists() ? snapshot.data()?.[SKIPPED_FIELD] : undefined)),
+    () => onSkipped([]),
+  );
+}
+
+export async function saveSetupSkipped(companyId: string, skipped: string[]): Promise<void> {
+  const userId = auth.currentUser?.uid ?? "";
+  if (!companyId || !userId) return;
+  const callable = httpsCallable(functions, "savePersonalInterfaceSettings");
+  await callable({ settings: { setupSkipped: skipped } });
+}
