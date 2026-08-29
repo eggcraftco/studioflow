@@ -1218,7 +1218,9 @@ private fun OrderListCard(
                         }
                     }
                 }
-                .alpha(if (stateTone == OrderStateTone.Cancelled) 0.55f else 1f),
+                // Selection beats the cancelled fade: you cannot read what you
+                // selected through 55% of it.
+                .alpha(if (stateTone == OrderStateTone.Cancelled && !selected) 0.55f else 1f),
             shape = cardShape,
             color = cardTone,
             contentColor = MaterialTheme.colorScheme.onSurface,

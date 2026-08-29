@@ -74,6 +74,8 @@ import uk.co.eggcraft.studioflow.features.production.ProductionStageKind
 import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import java.text.SimpleDateFormat
+import uk.co.eggcraft.studioflow.features.dashboard.adjustedDashboardNetProfit
+import uk.co.eggcraft.studioflow.features.dashboard.dashboardCustomExpenseTotal
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -493,14 +495,22 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
         Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
+    // The Dashboard's rule, not the raw field: `netProfit` knows nothing about
+    // the workspace's extra spending, and it charges base cost even when the
+    // workspace has turned that off — so Home reported a different profit from
+    // the Dashboard for exactly the same orders.
+    val expenseTitles = state.workspaceSettings.financialExpenseItems
+    val showBaseCost = state.workspaceSettings.financialShowBaseCost
     val revenue = orders.sumOf { it.orderValue }
     val received = orders.sumOf { it.paidAmount }
     val outstanding = orders.sumOf { it.remainingAmount + it.customRemainingTotal }
-    val costs = orders.sumOf { it.watchPurchasePrice }
+    val costs = orders.sumOf {
+        (if (showBaseCost) it.watchPurchasePrice else 0.0) + dashboardCustomExpenseTotal(it, expenseTitles)
+    }
     val fees = orders.sumOf { it.paymentFee }
     val shipping = orders.sumOf { it.deliveryCost }
     val vat = orders.sumOf { it.taxAmount }
-    val profit = orders.sumOf { it.netProfit }
+    val profit = orders.sumOf { adjustedDashboardNetProfit(it, expenseTitles, showBaseCost) }
 
     when (size) {
         // The square distributes: the headline stays under the top line and the

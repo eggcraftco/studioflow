@@ -4,6 +4,12 @@ import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
 import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
+import {
+  adjustedDashboardNetProfit,
+  baseCostTotal,
+  customExpenseTotal,
+  orderSalesTotal,
+} from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney } from "@/lib/studioflow/money";
@@ -50,14 +56,18 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   if (orders.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
-  const revenue = orders.reduce((sum, o) => sum + o.paidAmount + o.remainingAmount, 0);
+  const revenue = orders.reduce((sum, o) => sum + orderSalesTotal(o), 0);
   const received = orders.reduce((sum, o) => sum + o.paidAmount, 0);
   const outstanding = orders.reduce((sum, o) => sum + o.remainingAmount, 0);
-  const costs = orders.reduce((sum, o) => sum + o.watchPurchasePrice, 0);
+  // The Dashboard's rule, not a second one: base cost only when the workspace
+  // counts it, plus its own extra expense lines, then fee, shipping and VAT.
+  // Home was leaving the extra spending out and reporting a higher profit than
+  // the Dashboard for the same orders.
+  const costs = orders.reduce((sum, o) => sum + baseCostTotal(o, data.settings) + customExpenseTotal(o, data.settings), 0);
   const fees = orders.reduce((sum, o) => sum + o.paymentFee, 0);
   const shipping = orders.reduce((sum, o) => sum + o.deliveryCost, 0);
   const vat = orders.reduce((sum, o) => sum + o.taxAmount, 0);
-  const profit = revenue - costs - fees - shipping - vat;
+  const profit = orders.reduce((sum, o) => sum + adjustedDashboardNetProfit(o, data.settings), 0);
 
   // 1x1: the one number, the two that qualify it, and how much of revenue the
   // costs eat — never the bank feed's transactions (§7).

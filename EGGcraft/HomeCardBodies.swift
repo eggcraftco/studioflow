@@ -567,6 +567,8 @@ struct HomeMoneyBody: View {
     let decimal: String
     var compact: Bool = false
     var period: HomeCardPeriod = .month
+    @AppStorage("financialExpenseItemsJSON") private var financialExpenseItemsJSON: String = ""
+    @AppStorage("financialShowBaseCost") private var financialShowBaseCost: Bool = true
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -585,11 +587,20 @@ struct HomeMoneyBody: View {
             let revenue = orders.reduce(0.0) { $0 + $1.salesTotal }
             let received = orders.reduce(0.0) { $0 + $1.paidAmount }
             let outstanding = orders.reduce(0.0) { $0 + $1.remainingAmount + $1.customRemainingTotal }
-            let costs = orders.reduce(0.0) { $0 + $1.watchPurchasePrice }
+            // The Dashboard's rule, not `netKar`: that one stops after the fee
+            // and the shipping and knows nothing about extra spending or VAT.
+            let costs = orders.reduce(0.0) {
+                $0 + OrderProfit.baseCostTotal(for: $1, showBaseCost: financialShowBaseCost)
+                   + OrderProfit.customExpenseTotal(for: $1, expenseItemsJSON: financialExpenseItemsJSON, currency: currency)
+            }
             let fees = orders.reduce(0.0) { $0 + $1.paymentFee }
             let shipping = orders.reduce(0.0) { $0 + $1.deliveryCost }
             let vat = orders.reduce(0.0) { $0 + $1.taxAmount }
-            let profit = orders.reduce(0.0) { $0 + $1.netKar }
+            let profit = orders.reduce(0.0) {
+                $0 + OrderProfit.adjustedNetProfit(for: $1, showBaseCost: financialShowBaseCost,
+                                                   expenseItemsJSON: financialExpenseItemsJSON,
+                                                   currency: currency)
+            }
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
 
             if size == .oneByOne {

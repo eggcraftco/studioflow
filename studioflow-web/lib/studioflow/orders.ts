@@ -351,6 +351,24 @@ export async function deleteOrderFromWeb(workspace: WorkspaceContext, orderId: s
   }
 }
 
+export type PurgeOrdersResult = { ok?: boolean; purged?: number; skipped?: string[]; message?: string };
+
+/** Empties the Trash now rather than in thirty days. Only ever reaches orders
+ *  that are already in it — the server refuses anything still live. */
+export async function purgeOrdersFromWeb(workspace: WorkspaceContext, orderIds: string[]) {
+  if (!canDeleteOrdersForRole(workspace.role)) {
+    throw new Error("Your workspace role cannot delete orders.");
+  }
+  return await withWebSyncStatus(async () => {
+    const callable = httpsCallable<Record<string, unknown>, PurgeOrdersResult>(functions, "purgeWebOrders");
+    const response = await callable({ companyId: workspace.id, orderIds });
+    if (response.data?.ok === false) {
+      throw new Error(response.data?.message || "Could not delete these orders.");
+    }
+    return response.data;
+  }, "Deleting orders permanently.");
+}
+
 export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: string) {
   if (!canDeleteOrdersForRole(workspace.role)) {
     throw new Error("Your workspace role cannot restore orders.");

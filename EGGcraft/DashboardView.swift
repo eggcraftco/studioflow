@@ -28,7 +28,9 @@ extension Double {
 
 enum ZamanFiltresi { case buHafta, buAy, buYil, tumZamanlar, ozelTarih }
 
-private struct DashboardFinancialItemDTO: Codable, Identifiable {
+// File-private no longer: OrderProfit reads the same headings so the toolbar
+// and Home can apply the Dashboard's own profit rule.
+struct DashboardFinancialItemDTO: Codable, Identifiable {
     var id = UUID()
     var title: String
 }
@@ -175,13 +177,10 @@ struct DashboardView: View {
         decodeFinancialItems(from: financialRemainingItemsJSON)
     }
 
+    // These four delegate to OrderProfit, so the toolbar and Home apply the
+    // Dashboard's own rules rather than approximating them.
     private func decodeFinancialItems(from json: String) -> [DashboardFinancialItemDTO] {
-        guard let data = json.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode([DashboardFinancialItemDTO].self, from: data) else { return [] }
-        return decoded.filter { item in
-            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !title.isEmpty && !isAutoFinancialPlaceholder(title)
-        }
+        OrderProfit.decodeFinancialItems(from: json)
     }
 
     // Per-order spending/remaining headings: each order keeps its own list in
@@ -464,7 +463,8 @@ struct DashboardView: View {
 
 
     private func customExpenseTotal(for siparis: Siparis) -> Double {
-        customFinancialAmount(for: siparis, prefix: "financialExpense::", items: orderFinancialItems(for: siparis, key: "orderExpenseItemsJSON", workspace: financialExpenseItems))
+        OrderProfit.customExpenseTotal(for: siparis, expenseItemsJSON: financialExpenseItemsJSON,
+                                       currency: seciliParaBirimi)
     }
 
     private func customPendingTotal(for siparis: Siparis) -> Double {
@@ -472,12 +472,13 @@ struct DashboardView: View {
     }
 
     private func baseCostTotal(for siparis: Siparis) -> Double {
-        financialShowBaseCost ? siparis.watchPurchasePrice : 0
+        OrderProfit.baseCostTotal(for: siparis, showBaseCost: financialShowBaseCost)
     }
 
     private func adjustedNetProfit(for siparis: Siparis) -> Double {
-        let salesTotal = siparis.salesTotal
-        return salesTotal - baseCostTotal(for: siparis) - customExpenseTotal(for: siparis) - siparis.paymentFee - siparis.deliveryCost - siparis.taxAmount
+        OrderProfit.adjustedNetProfit(for: siparis, showBaseCost: financialShowBaseCost,
+                                      expenseItemsJSON: financialExpenseItemsJSON,
+                                      currency: seciliParaBirimi)
     }
 
     private func dashboardChartAmount(for siparis: Siparis) -> Double {

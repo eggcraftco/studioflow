@@ -7791,8 +7791,23 @@ struct ContentView: View {
         return initials.isEmpty ? "?" : initials
     }
 
-    var buAyNetKar: Double { let cal = Calendar.current; let simdi = Date(); return workspaceVisibleOrders.filter { cal.isDate($0.paymentDate, equalTo: simdi, toGranularity: .month) }.reduce(0) { $0 + $1.netKar } }
-    var buYilNetKar: Double { let cal = Calendar.current; let simdi = Date(); return workspaceVisibleOrders.filter { cal.isDate($0.paymentDate, equalTo: simdi, toGranularity: .year) }.reduce(0) { $0 + $1.netKar } }
+    // The Dashboard's rule, not `netKar`: that one stops after the fee and the
+    // shipping and knows nothing about the workspace's extra spending or VAT,
+    // so the toolbar was reporting a bigger profit than the Dashboard did for
+    // exactly the same orders.
+    private func headerNetProfit(_ granularity: Calendar.Component) -> Double {
+        let cal = Calendar.current
+        let now = Date()
+        return workspaceVisibleOrders
+            .filter { cal.isDate($0.paymentDate, equalTo: now, toGranularity: granularity) }
+            .reduce(0) { $0 + OrderProfit.adjustedNetProfit(for: $1,
+                                                           showBaseCost: financialShowBaseCost,
+                                                           expenseItemsJSON: financialExpenseItemsJSON,
+                                                           currency: seciliParaBirimi) }
+    }
+
+    var buAyNetKar: Double { headerNetProfit(.month) }
+    var buYilNetKar: Double { headerNetProfit(.year) }
     
     var aramaSonuclari: [Siparis] {
         filteredAndSortedOrders(for: aktifSiparisFiltresi)
@@ -11677,8 +11692,14 @@ struct ContentView: View {
             selectedOrderIds.removeAll()
             lastSelectedOrderId = nil
             for siparis in silinecekler {
-                firebaseManager.deleteSiparis(siparis)
+                // An order already in the Trash cannot be sent there again: the
+                // soft delete was a no-op, which is why selecting a Trash full
+                // of orders and pressing Delete did nothing at all.
+                if !siparis.isDeleted { firebaseManager.deleteSiparis(siparis) }
             }
+            // One call for the whole Trash rather than one per order.
+            let purgeIDs = silinecekler.filter { $0.isDeleted }.compactMap { $0.id }
+            if !purgeIDs.isEmpty { firebaseManager.permanentlyDeleteSiparisler(purgeIDs) }
         }
     }
     

@@ -24647,6 +24647,35 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
   border-color: rgba(76, 195, 138, 0.35);
 }
 
+/* Selection has to beat the state tint. These carry the same weight as the
+   state colours above and are declared after them, so they win on order rather
+   than on !important — without this a done card kept its green and a cancelled
+   one kept its fade, and clicking either changed nothing the reader could see.
+   Cancelled also gets its opacity back: you cannot read what you selected
+   through 55% of it. */
+.order-list-card.selected {
+  background: rgba(0, 122, 255, 0.15);
+  border-color: rgba(0, 122, 255, 0.5);
+  box-shadow: none;
+  opacity: 1;
+}
+.order-list-card.multi-selected {
+  border-color: rgba(0, 122, 255, 0.55);
+  background: rgba(0, 122, 255, 0.08);
+  opacity: 1;
+}
+.order-list-card.multi-selected.selected { background: rgba(0, 122, 255, 0.18); }
+body[data-studio-theme="dark"] .order-list-card.selected {
+  background: rgba(10, 132, 255, 0.22);
+  border-color: rgba(10, 132, 255, 0.6);
+  opacity: 1;
+}
+body[data-studio-theme="dark"] .order-list-card.multi-selected {
+  background: rgba(10, 132, 255, 0.14);
+  border-color: rgba(10, 132, 255, 0.5);
+  opacity: 1;
+}
+
 /* ---- Decision 3B: color meanings — the chip on a colored card. ---- */
 .order-card-meaning-chip {
   position: absolute;

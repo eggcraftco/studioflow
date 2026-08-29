@@ -2438,7 +2438,23 @@ class FirebaseManager: ObservableObject {
     // Permanently remove a trashed order now (skips the 30-day grace).
     func permanentlyDeleteSiparis(_ siparis: Siparis) {
         guard let id = siparis.id else { return }
-        db.collection("siparisler").document(id).delete()
+        permanentlyDeleteSiparisler([id])
+    }
+
+    /// Through the server, because a plain delete leaves the order's
+    /// estimateRecords sitting in an orphaned subcollection under a document
+    /// that no longer exists — the same reason the scheduled purge is
+    /// recursive. The callable also refuses anything not already in the Trash.
+    func permanentlyDeleteSiparisler(_ ids: [String]) {
+        let clean = ids.filter { !$0.isEmpty }
+        guard !clean.isEmpty, !currentCompanyId.isEmpty else { return }
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("purgeWebOrders")
+            .call(["companyId": currentCompanyId, "orderIds": clean]) { _, error in
+                if let error {
+                    print("Permanent order delete failed: \(error.localizedDescription)")
+                }
+            }
     }
     
     func addMusteri(_ musteri: Musteri) {

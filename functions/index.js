@@ -13987,6 +13987,46 @@ exports.restoreWebOrder = onCall({ region: "europe-west2" }, async (request) => 
   return { ok: true, companyId, orderId, message: "Order restored." };
 });
 
+/**
+ * Empty the Trash, now rather than in thirty days. Takes a list because
+ * clearing a Trash one order at a time is not clearing it.
+ *
+ * The guard that matters: this only ever touches an order that is ALREADY in
+ * the Trash. A live order cannot be reached through here — deleting one is
+ * still deleteWebOrder, which moves it to the Trash and keeps it recoverable.
+ */
+exports.purgeWebOrders = onCall({ region: "europe-west2" }, async (request) => {
+  const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
+  if (!canDeleteOrder(role) || !uidCanAccessWorkspaceArea(companyData, uid, "orders")) {
+    throw new HttpsError("permission-denied", "Your workspace role cannot delete orders.");
+  }
+  const ids = Array.isArray(request.data?.orderIds)
+    ? request.data.orderIds.map((id) => String(id || "").trim()).filter(Boolean).slice(0, 200)
+    : [];
+  if (ids.length === 0) throw new HttpsError("invalid-argument", "orderIds is required.");
+
+  const db = admin.firestore();
+  let purged = 0;
+  const skipped = [];
+  for (const orderId of ids) {
+    const orderRef = db.collection("siparisler").doc(orderId);
+    const snap = await orderRef.get();
+    if (!snap.exists) { skipped.push(orderId); continue; }
+    const data = snap.data() || {};
+    if (orderCompanyId(data) !== companyId) {
+      throw new HttpsError("permission-denied", "An order does not belong to the active workspace.");
+    }
+    if (data.isDeleted !== true) { skipped.push(orderId); continue; }
+    // Recursive, like the scheduled purge: an order carries estimateRecords,
+    // and a plain delete would leave the customer's details in an orphaned
+    // subcollection under a document that no longer exists.
+    await db.recursiveDelete(orderRef);
+    purged += 1;
+  }
+  return { ok: true, companyId, purged, skipped, message: `Deleted ${purged} order(s) permanently.` };
+});
+
 const SWIFT_ORDER_FIELDS = [
   "paymentMethod",
   "customerName",
