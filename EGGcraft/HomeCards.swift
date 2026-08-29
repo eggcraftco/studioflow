@@ -40,6 +40,17 @@ enum HomeCardTone: String, CaseIterable, Codable {
     case standard = "default"
     case blue, green, amber, purple, rose
 
+    var label: String {
+        switch self {
+        case .standard: return "Default"
+        case .blue: return "Blue"
+        case .green: return "Green"
+        case .amber: return "Amber"
+        case .purple: return "Purple"
+        case .rose: return "Rose"
+        }
+    }
+
     var accent: Color {
         switch self {
         case .standard: return .secondary

@@ -1,8 +1,11 @@
 import Foundation
 import SwiftUI
 
-/// The eleven card bodies. Each one is its own struct — see the note in
-/// HomeView.swift about the SwiftUI stack guard on real hardware.
+/// The eleven card bodies, drawn from the reference sheet.
+///
+/// Each one is its own struct — deeply nested inline views in this app have
+/// overflowed the SwiftUI stack guard on real hardware while behaving perfectly
+/// in the simulator, and eleven cards with three variants each is that shape.
 ///
 /// A size is not a crop. 1×1 answers one question, 2×1 adds the breakdown that
 /// makes the number actionable, and 2×2 adds the list you would otherwise open
@@ -43,7 +46,7 @@ struct HomeCardBody: View {
         case .schedule:
             HomeScheduleBody(size: size, lang: lang)
         case .files:
-            HomeFilesBody(size: size, lang: lang)
+            HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal)
         case .notes:
             HomeNotesBody(size: size, lang: lang, data: data)
         }
@@ -53,9 +56,7 @@ struct HomeCardBody: View {
 // MARK: - Shared helpers
 
 func homeMoney(_ value: Double, currency: String, decimal: String) -> String {
-    let formatted = String(format: "%.2f", value)
-    let shown = decimal == "," ? formatted.replacingOccurrences(of: ".", with: ",") : formatted
-    return "\(currency)\(shown)"
+    "\(currency)\(formatFiyat(value, ondalik: decimal))"
 }
 
 /// Due date is the payment date plus the promised lead time — the same rule the
@@ -68,7 +69,30 @@ func homeLiveOrders(_ orders: [Siparis]) -> [Siparis] {
     orders.filter { !$0.isDeleted && !$0.isDelivered && $0.countsTowardBalance }
 }
 
+func homeStartOfToday() -> Date { Calendar.current.startOfDay(for: Date()) }
+
+func homeDayLabel(_ date: Date, lang: String) -> String {
+    let days = Calendar.current.dateComponents([.day], from: homeStartOfToday(),
+                                               to: Calendar.current.startOfDay(for: date)).day ?? 0
+    if days == 0 { return t("Today", lang: lang) }
+    if days == 1 { return t("Tomorrow", lang: lang) }
+    if days < 0 { return t("Overdue", lang: lang) }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+    formatter.dateFormat = "d MMM"
+    return formatter.string(from: date)
+}
+
 // MARK: - Getting started
+
+struct HomeSetupStep {
+    let id: String
+    let label: String
+    let blurb: String
+    let destination: String
+    let cta: String
+    let done: Bool
+}
 
 struct HomeGettingStartedBody: View {
     let size: HomeCardSize
@@ -76,67 +100,224 @@ struct HomeGettingStartedBody: View {
     @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
-    private var steps: [(String, Bool)] {
+    private var steps: [HomeSetupStep] {
         let inventoryCount = (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0)
-        let files = firebaseManager.siparisler.contains { !($0.clientFiles ?? []).isEmpty }
+        let hasFiles = firebaseManager.siparisler.contains { !($0.clientFiles ?? []).isEmpty }
+        let fromStore = firebaseManager.siparisler.contains {
+            !(($0.customFields?["Shopify Status"] ?? "").isEmpty) || !(($0.customFields?["WooCommerce Status"] ?? "").isEmpty)
+        }
         return [
-            ("Set up business profile", true),
-            ("Add your first customer", !firebaseManager.musteriler.isEmpty),
-            ("Create your first order", !firebaseManager.siparisler.isEmpty),
-            ("Add an inventory item", inventoryCount > 0),
-            ("Connect your bank", !firebaseManager.bankTransactions.isEmpty),
-            ("Upload your first file", files),
+            HomeSetupStep(id: "profile", label: "Set up business profile",
+                          blurb: "Name, currency and tax so every document reads right.",
+                          destination: "Settings", cta: "Open settings", done: true),
+            HomeSetupStep(id: "customer", label: "Add your first customer",
+                          blurb: "Orders, notes and files all hang off a customer.",
+                          destination: "Customers", cta: "Add customer", done: !firebaseManager.musteriler.isEmpty),
+            HomeSetupStep(id: "order", label: "Create your first order",
+                          blurb: "The record everything else in NivaDesk attaches to.",
+                          destination: "Orders", cta: "Create order", done: !firebaseManager.siparisler.isEmpty),
+            HomeSetupStep(id: "shop", label: "Connect your shop",
+                          blurb: "Bring Shopify or WooCommerce orders in automatically.",
+                          destination: "Settings", cta: "Connect shop", done: fromStore),
+            HomeSetupStep(id: "inventory", label: "Add an inventory item",
+                          blurb: "Track what you own, what is reserved and what is low.",
+                          destination: "Inventory", cta: "Add item", done: inventoryCount > 0),
+            HomeSetupStep(id: "bank", label: "Connect your bank",
+                          blurb: "Read-only. Spending arrives and you categorise it.",
+                          destination: "BankSpending", cta: "Connect bank", done: hasFiles || !firebaseManager.bankTransactions.isEmpty),
         ]
     }
 
     var body: some View {
-        let done = steps.filter { $0.1 }.count
-        VStack(alignment: .leading, spacing: 8) {
+        let all = steps
+        let done = all.filter { $0.done }
+        let next = all.first { !$0.done }
+        let todo = all.filter { !$0.done && $0.id != next?.id }
+
+        VStack(alignment: .leading, spacing: 9) {
+            // The count belongs at every size: the bar alone says "some" and the
+            // sheet always pairs it with how many of how many.
             Text(t("{done} of {total} complete", lang: lang)
-                .replacingOccurrences(of: "{done}", with: "\(done)")
-                .replacingOccurrences(of: "{total}", with: "\(steps.count)"))
+                .replacingOccurrences(of: "{done}", with: "\(done.count)")
+                .replacingOccurrences(of: "{total}", with: "\(all.count)"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.secondary)
-            ProgressView(value: Double(done), total: Double(steps.count))
-                .tint(.blue)
-            // Never blocking, never a payment prompt (§15).
-            if let next = steps.first(where: { !$0.1 }) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(t("Up next", lang: lang).uppercased())
-                        .font(.system(size: 9, weight: .heavy))
-                        .foregroundColor(.blue)
-                    Text(t(next.0, lang: lang))
-                        .font(.system(size: 14, weight: .bold))
+            HomeProgressBar(fraction: Double(done.count) / Double(all.count))
+
+            if size == .oneByOne {
+                if let step = next {
+                    HomeEyebrow(text: t("Next step", lang: lang), strong: false)
+                    HomeNextPanel(step: step, lang: lang, style: .compact)
+                } else {
+                    HomeCardNote(text: t("All set — nice work.", lang: lang))
                 }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.blue.opacity(0.08))
-                .cornerRadius(8)
-            } else {
-                HomeCardNote(text: t("All set — nice work.", lang: lang))
-            }
-            if size != .oneByOne {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(steps.prefix(size == .twoByTwo ? 6 : 3).enumerated()), id: \.offset) { _, step in
-                        HStack(spacing: 6) {
-                            Image(systemName: step.1 ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 10))
-                                .foregroundColor(step.1 ? .green : .secondary.opacity(0.5))
-                            Text(t(step.0, lang: lang))
-                                .font(.system(size: 11))
-                                .strikethrough(step.1, color: .secondary)
-                                .foregroundColor(step.1 ? .secondary : .primary)
-                                .lineLimit(1)
+                ForEach(todo.prefix(2), id: \.id) { step in
+                    HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
+                }
+            } else if size == .twoByOne {
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HomeEyebrow(text: t("Completed", lang: lang))
+                        ForEach(done.prefix(3), id: \.id) { step in
+                            HomeCheckRow(label: t(step.label, lang: lang), state: .done)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let step = next {
+                            HomeNextPanel(step: step, lang: lang, style: .inline)
+                        } else {
+                            HomeCardNote(text: t("All set — nice work.", lang: lang))
+                        }
+                        ForEach(todo.prefix(2), id: \.id) { step in
+                            HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    HomePanel {
+                        HomeEyebrow(text: t("Your checklist", lang: lang))
+                        ForEach(all, id: \.id) { step in
+                            HomeCheckRow(
+                                label: t(step.label, lang: lang),
+                                state: step.done ? .done : (step.id == next?.id ? .current : .todo)
+                            )
+                        }
+                    }
+                    if let step = next {
+                        HomeNextPanel(step: step, lang: lang, style: .large)
+                    } else {
+                        HomePanel { HomeCardNote(text: t("All set — nice work.", lang: lang)) }
+                    }
+                }
+                HStack(spacing: 10) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundColor(HomeTone.accent)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(HomeTone.accent.opacity(0.10)))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(t("Your setup adapts to you", lang: lang)).font(.system(size: 12.5, weight: .bold))
+                        Text(t("Steps change with your plan, permissions and workflow.", lang: lang))
+                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
             }
             Spacer(minLength: 0)
         }
     }
 }
 
+/// A filled green tick for done, a blue arrow for the step you are on, a hollow
+/// ring for the rest — the shape carries the state, not the colour alone (§20).
+struct HomeCheckRow: View {
+    enum State { case done, current, todo }
+    let label: String
+    let state: State
+
+    var body: some View {
+        HStack(spacing: 9) {
+            mark
+            Text(label)
+                .font(.system(size: 12, weight: state == .current ? .bold : .regular))
+                .foregroundColor(state == .done ? .secondary : (state == .current ? HomeTone.accent : .primary))
+                .strikethrough(state == .done, color: .secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, state == .current ? 8 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(state == .current ? HomeTone.accent.opacity(0.07) : .clear)
+        )
+    }
+
+    @ViewBuilder private var mark: some View {
+        switch state {
+        case .done:
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundColor(HomeTone.green)
+        case .current:
+            Image(systemName: "arrow.right.circle").font(.system(size: 15)).foregroundColor(HomeTone.accent)
+        case .todo:
+            Image(systemName: "circle").font(.system(size: 15)).foregroundColor(.secondary.opacity(0.5))
+        }
+    }
+}
+
+/// The recommendation. Blue enough to be the obvious next thing, calm enough
+/// that it is not a payment prompt (§15).
+struct HomeNextPanel: View {
+    enum Style { case compact, inline, large }
+    let step: HomeSetupStep
+    let lang: String
+    let style: Style
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if style == .large { eyebrow(t("Recommended next", lang: lang)) }
+            if style == .inline { eyebrow(t("Up next", lang: lang)) }
+            if style == .large {
+                body(vertical: true)
+            } else {
+                body(vertical: style == .compact)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.accent.opacity(0.07)))
+    }
+
+    private func eyebrow(_ text: String) -> some View {
+        Text(text).font(.system(size: 11, weight: .bold)).foregroundColor(HomeTone.accent)
+    }
+
+    @ViewBuilder private func body(vertical: Bool) -> some View {
+        if vertical {
+            VStack(alignment: .leading, spacing: 8) {
+                title
+                button
+            }
+        } else {
+            HStack(alignment: .top, spacing: 10) {
+                title
+                Spacer(minLength: 4)
+                button
+            }
+        }
+    }
+
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(t(step.label, lang: lang)).font(.system(size: 14, weight: .heavy)).lineLimit(1)
+            Text(t(step.blurb, lang: lang)).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+        }
+    }
+
+    private var button: some View {
+        Text(t(style == .inline ? "Continue" : step.cta, lang: lang))
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .frame(maxWidth: style == .large ? .infinity : nil)
+            .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
+    }
+}
+
 // MARK: - Quick actions
+
+struct HomeQuickAction {
+    let label: String
+    let destination: String
+    let symbol: String
+    let tone: Color
+    let group: String
+    let primary: Bool
+}
 
 struct HomeQuickActionsBody: View {
     let size: HomeCardSize
@@ -145,47 +326,156 @@ struct HomeQuickActionsBody: View {
     let onNewOrder: () -> Void
     let onOpen: (String) -> Void
 
-    private var actions: [(String, String, Bool)] {
-        // (label, destination, primary) — an action the role cannot perform is
-        // hidden and the grid closes up behind it (§6).
-        var rows: [(String, String, Bool)] = []
-        if access.orders { rows.append(("New order", "", true)) }
-        if access.customers { rows.append(("Add customer", "Customers", false)) }
-        if access.notes { rows.append(("Add note", "Notes", false)) }
-        if access.files { rows.append(("Upload file", "Files", false)) }
-        if access.orders { rows.append(("Add inventory item", "Inventory", false)) }
-        if access.bankFeed { rows.append(("Review spending", "BankSpending", false)) }
-        if access.bankFeed { rows.append(("Add receipt", "BankSpending", false)) }
-        rows.append(("AI reply", "Messages", false))
+    /// An action the role cannot perform is hidden and the grid closes up behind
+    /// it (§6).
+    private var actions: [HomeQuickAction] {
+        var rows: [HomeQuickAction] = []
+        if access.orders { rows.append(HomeQuickAction(label: "New order", destination: "", symbol: "cart.badge.plus", tone: HomeTone.accent, group: "Create", primary: true)) }
+        if access.customers { rows.append(HomeQuickAction(label: "Add customer", destination: "Customers", symbol: "person.badge.plus", tone: HomeTone.teal, group: "Create", primary: false)) }
+        if access.notes { rows.append(HomeQuickAction(label: "Add note", destination: "Notes", symbol: "square.and.pencil", tone: HomeTone.amber, group: "Create", primary: false)) }
+        if access.files { rows.append(HomeQuickAction(label: "Upload file", destination: "Files", symbol: "arrow.up.doc", tone: HomeTone.purple, group: "Capture", primary: false)) }
+        if access.orders { rows.append(HomeQuickAction(label: "Add inventory item", destination: "Inventory", symbol: "shippingbox", tone: HomeTone.purple, group: "Create", primary: false)) }
+        if access.bankFeed { rows.append(HomeQuickAction(label: "Scan receipt", destination: "BankSpending", symbol: "doc.viewfinder", tone: HomeTone.orange, group: "Capture", primary: false)) }
+        // NivaDesk has no manual expense form: spending arrives from the read-only
+        // bank feed and becomes an expense when it is categorised. Until one
+        // exists this lands on the review queue, where that actually happens.
+        if access.bankFeed { rows.append(HomeQuickAction(label: "Add expense", destination: "BankSpending", symbol: "creditcard", tone: HomeTone.accent, group: "Finance & communication", primary: false)) }
+        rows.append(HomeQuickAction(label: "Generate AI reply", destination: "Messages", symbol: "sparkles", tone: HomeTone.green, group: "Finance & communication", primary: false))
         return rows
     }
 
     var body: some View {
-        let limit = size == .oneByOne ? 4 : (size == .twoByOne ? 6 : 8)
-        let shown = Array(actions.prefix(limit))
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ForEach(Array(shown.enumerated()), id: \.offset) { _, action in
-                Button {
-                    if action.1.isEmpty { onNewOrder() } else { onOpen(action.1) }
-                } label: {
-                    Text(t(action.0, lang: lang))
-                        .font(.system(size: 11, weight: .bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(action.2 ? Color.blue : Color.primary.opacity(0.06))
-                        .foregroundColor(action.2 ? .white : .primary)
-                        .cornerRadius(8)
+        let rows = actions
+        if size == .oneByOne {
+            let shown = Array(rows.prefix(4))
+            VStack(spacing: 8) {
+                ForEach(0..<2, id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(0..<2, id: \.self) { column in
+                            let index = row * 2 + column
+                            if index < shown.count {
+                                HomeActionTile(action: shown[index], lang: lang) { fire(shown[index]) }
+                            } else {
+                                Color.clear
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
+            }
+        } else if size == .twoByOne {
+            let shown = Array(rows.prefix(6))
+            VStack(spacing: 8) {
+                ForEach(0..<3, id: \.self) { row in
+                    HStack(spacing: 8) {
+                        ForEach(0..<2, id: \.self) { column in
+                            let index = row * 2 + column
+                            if index < shown.count {
+                                HomeActionRow(action: shown[index], lang: lang) { fire(shown[index]) }
+                            } else {
+                                Color.clear
+                            }
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(["Create", "Capture", "Finance & communication"], id: \.self) { group in
+                    let inGroup = rows.filter { $0.group == group }
+                    if !inGroup.isEmpty {
+                        HomeEyebrow(text: t(group, lang: lang))
+                        ForEach(Array(stride(from: 0, to: inGroup.count, by: 2)), id: \.self) { start in
+                            HStack(spacing: 8) {
+                                HomeActionRow(action: inGroup[start], lang: lang) { fire(inGroup[start]) }
+                                if start + 1 < inGroup.count {
+                                    HomeActionRow(action: inGroup[start + 1], lang: lang) { fire(inGroup[start + 1]) }
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                        }
+                    }
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle").font(.system(size: 11))
+                    Text(t("Actions follow your permissions", lang: lang)).font(.system(size: 11))
+                }
+                .foregroundColor(.secondary)
+                Spacer(minLength: 0)
             }
         }
-        Spacer(minLength: 0)
+    }
+
+    private func fire(_ action: HomeQuickAction) {
+        if action.destination.isEmpty { onNewOrder() } else { onOpen(action.destination) }
+    }
+}
+
+struct HomeActionTile: View {
+    let action: HomeQuickAction
+    let lang: String
+    let tap: () -> Void
+    var body: some View {
+        Button(action: tap) {
+            VStack(spacing: 7) {
+                Image(systemName: action.symbol).font(.system(size: 25, weight: .regular))
+                Text(t(action.label, lang: lang))
+                    .font(.system(size: 11.5, weight: .bold))
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .foregroundColor(action.primary ? .white : action.tone)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12)
+                .fill(action.primary ? HomeTone.accent : action.tone.opacity(0.11)))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct HomeActionRow: View {
+    let action: HomeQuickAction
+    let lang: String
+    let tap: () -> Void
+    var body: some View {
+        Button(action: tap) {
+            HStack(spacing: 9) {
+                Image(systemName: action.symbol).font(.system(size: 15))
+                    .foregroundColor(action.primary ? .white : action.tone)
+                Text(t(action.label, lang: lang))
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundColor(action.primary ? .white : .primary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11).padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(action.primary ? HomeTone.accent : Color.clear)
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .stroke(action.primary ? Color.clear : Color.primary.opacity(0.10), lineWidth: 1))
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
 // MARK: - Recent activity
+
+/// Event type to colour. The title always names the event, so colour only
+/// speeds up scanning — it never carries the meaning on its own (§20).
+func homeActivityTone(_ type: String) -> Color {
+    let key = type.lowercased()
+    if key.contains("payment") { return HomeTone.green }
+    if key.contains("order") { return HomeTone.purple }
+    if key.contains("production") || key.contains("status") { return HomeTone.accent }
+    if key.contains("file") { return HomeTone.amber }
+    if key.contains("inventory") { return HomeTone.orange }
+    if key.contains("customer") { return HomeTone.teal }
+    if key.contains("schedule") { return HomeTone.accent }
+    return HomeTone.slate
+}
 
 struct HomeRecentActivityBody: View {
     let size: HomeCardSize
@@ -195,33 +485,65 @@ struct HomeRecentActivityBody: View {
     var body: some View {
         // Only what the signed-in user is a recipient of — activity never widens
         // what someone can see (§12).
-        let rows = firebaseManager.activityNotifications.prefix(size == .oneByOne ? 3 : (size == .twoByOne ? 4 : 8))
+        let limit = size == .oneByOne ? 3 : (size == .twoByOne ? 5 : 8)
+        let rows = Array(firebaseManager.activityNotifications.prefix(limit))
         if rows.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
+        } else if size == .twoByTwo {
+            let today = rows.filter { $0.createdAt >= homeStartOfToday() }
+            let earlier = rows.filter { $0.createdAt < homeStartOfToday() }
+            VStack(alignment: .leading, spacing: 6) {
+                if !today.isEmpty {
+                    HomeEyebrow(text: t("Today", lang: lang))
+                    ForEach(today, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true) }
+                }
+                if !earlier.isEmpty {
+                    HomeEyebrow(text: t("Earlier", lang: lang))
+                    ForEach(earlier, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true) }
+                }
+                Text(t("Only activity you have permission to view is shown", lang: lang))
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                Spacer(minLength: 0)
+            }
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(rows), id: \.id) { item in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HomeRow(title: item.title.isEmpty ? t("Update", lang: lang) : item.title,
-                                detail: homeRelative(item.createdAt, lang: lang))
-                        if size != .oneByOne, !item.message.isEmpty {
-                            Text(item.message)
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
+                ForEach(rows, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false) }
+                Spacer(minLength: 0)
             }
         }
-        Spacer(minLength: 0)
+    }
+}
+
+struct HomeActivityRow: View {
+    let item: StudioActivityNotification
+    let lang: String
+    let showActor: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().fill(homeActivityTone(item.type)).frame(width: 24, height: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title.isEmpty ? t("Update", lang: lang) : item.title)
+                    .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                if !item.message.isEmpty {
+                    Text(item.message).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 6)
+            if showActor, !item.senderName.isEmpty {
+                HomeChip(text: item.senderName, tone: HomeTone.slate)
+            }
+            Text(homeRelative(item.createdAt, lang: lang))
+                .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+        }
+        .padding(.vertical, 6)
     }
 }
 
 func homeRelative(_ date: Date, lang: String) -> String {
-    let minutes = max(0, Int(Date().timeIntervalSince(date) / 60))
-    if minutes < 60 { return "\(max(1, minutes)) \(t("min ago", lang: lang))" }
+    let minutes = max(1, Int(Date().timeIntervalSince(date) / 60))
+    if minutes < 60 { return "\(minutes) \(t("min ago", lang: lang))" }
+    if date >= homeStartOfToday() { return "\(minutes / 60)h" }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
     formatter.dateStyle = .short
@@ -247,40 +569,232 @@ struct HomeMoneyBody: View {
             let revenue = orders.reduce(0.0) { $0 + $1.salesTotal }
             let received = orders.reduce(0.0) { $0 + $1.paidAmount }
             let outstanding = orders.reduce(0.0) { $0 + $1.remainingAmount + $1.customRemainingTotal }
+            let costs = orders.reduce(0.0) { $0 + $1.watchPurchasePrice }
+            let fees = orders.reduce(0.0) { $0 + $1.paymentFee }
+            let shipping = orders.reduce(0.0) { $0 + $1.deliveryCost }
             let profit = orders.reduce(0.0) { $0 + $1.netKar }
-            let costs = revenue - profit
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text(homeMoney(profit, currency: currency, decimal: decimal))
-                        .font(.system(size: 22, weight: .heavy))
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    Text(t("Net profit", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("\(t("Outstanding", lang: lang)): \(homeMoney(outstanding, currency: currency, decimal: decimal))")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(outstanding > 0 ? .orange : .secondary)
-                } else {
-                    HStack(spacing: 10) {
-                        HomeStat(label: t("Revenue", lang: lang), value: homeMoney(revenue, currency: currency, decimal: decimal))
-                        HomeStat(label: t("Payments received", lang: lang), value: homeMoney(received, currency: currency, decimal: decimal))
-                        HomeStat(label: t("Outstanding", lang: lang), value: homeMoney(outstanding, currency: currency, decimal: decimal), tone: outstanding > 0 ? .orange : .primary)
-                        HomeStat(label: t("Net profit", lang: lang), value: homeMoney(profit, currency: currency, decimal: decimal), tone: profit >= 0 ? .green : .red)
+            let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
+
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("Net profit", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(money(profit))
+                        .font(.system(size: 25, weight: .heavy))
+                        .foregroundColor(profit >= 0 ? HomeTone.green : HomeTone.red)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    HomeSplitPair {
+                        HomeFigure(label: t("Revenue", lang: lang), value: money(revenue), tone: HomeTone.green)
+                    } right: {
+                        HomeFigure(label: t("Outstanding", lang: lang), value: money(outstanding), tone: HomeTone.accent)
                     }
-                    if size == .twoByTwo {
-                        Divider()
-                        Text(t("Cost breakdown", lang: lang))
-                            .font(.system(size: 10, weight: .heavy))
-                            .foregroundColor(.secondary)
-                        HomeRow(title: t("Costs", lang: lang), detail: homeMoney(costs, currency: currency, decimal: decimal))
-                        HomeRow(title: t("Platform fees", lang: lang), detail: homeMoney(orders.reduce(0.0) { $0 + $1.paymentFee }, currency: currency, decimal: decimal))
-                        HomeRow(title: t("Shipping", lang: lang), detail: homeMoney(orders.reduce(0.0) { $0 + $1.deliveryCost }, currency: currency, decimal: decimal))
-                    }
+                    Spacer(minLength: 0)
+                    HomeRatioBar(revenue: revenue, costs: costs, lang: lang, money: money)
                 }
-                Spacer(minLength: 0)
+            } else if size == .twoByOne {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        HomeMetricTile(label: t("Revenue", lang: lang), value: money(revenue), tone: HomeTone.green)
+                        HomeMetricTile(label: t("Payments received", lang: lang), value: money(received), tone: HomeTone.green)
+                        HomeMetricTile(label: t("Outstanding", lang: lang), value: money(outstanding), tone: HomeTone.accent)
+                        HomeMetricTile(label: t("Net profit", lang: lang), value: money(profit), tone: profit >= 0 ? HomeTone.green : HomeTone.red)
+                    }
+                    HomeWaterfall(revenue: revenue, profit: profit,
+                                  deductions: [(t("Costs", lang: lang), costs), (t("Platform fees", lang: lang), fees), (t("Shipping", lang: lang), shipping)],
+                                  lang: lang, money: money)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                let margin = revenue > 0 ? max(0, min(1, profit / revenue)) : 0
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        HomeMetricTile(label: t("Revenue", lang: lang), value: money(revenue), tone: HomeTone.green)
+                        HomeMetricTile(label: t("Payments received", lang: lang), value: money(received), tone: HomeTone.green)
+                        HomeMetricTile(label: t("Outstanding", lang: lang), value: money(outstanding), tone: HomeTone.accent)
+                        HomeMetricTile(label: t("Net profit", lang: lang), value: money(profit), tone: HomeTone.green)
+                    }
+                    HStack(alignment: .top, spacing: 12) {
+                        HomePanel {
+                            HomeEyebrow(text: t("Revenue & profit", lang: lang))
+                            HomeRevenueChart(orders: orders, lang: lang)
+                        }
+                        HomePanel {
+                            HomeEyebrow(text: t("Cost breakdown", lang: lang))
+                            HomeCostRow(colour: HomeTone.orange, label: t("Costs", lang: lang), value: money(costs))
+                            HomeCostRow(colour: HomeTone.purple, label: t("Platform fees", lang: lang), value: money(fees))
+                            HomeCostRow(colour: HomeTone.accent, label: t("Shipping", lang: lang), value: money(shipping))
+                        }
+                    }
+                    HStack(spacing: 12) {
+                        HomeEyebrow(text: t("Margin", lang: lang))
+                            .fixedSize()
+                        HomeProgressBar(fraction: margin)
+                        Text("\(Int(margin * 100))%").font(.system(size: 12, weight: .heavy))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                    Spacer(minLength: 0)
+                }
             }
         }
+    }
+}
+
+struct HomeRatioBar: View {
+    let revenue: Double
+    let costs: Double
+    let lang: String
+    let money: (Double) -> String
+    var body: some View {
+        let share = revenue > 0 ? max(0, min(1, costs / revenue)) : 0
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(t("Revenue", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                Spacer()
+                Text(t("Costs", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+            }
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    Rectangle().fill(HomeTone.accent).frame(width: proxy.size.width * (1 - share))
+                    Rectangle().fill(HomeTone.orange)
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 7)
+            HStack {
+                Text(money(revenue)).font(.system(size: 11, weight: .bold)).foregroundColor(HomeTone.green)
+                Spacer()
+                Text(money(costs)).font(.system(size: 11, weight: .bold)).foregroundColor(HomeTone.orange)
+            }
+        }
+    }
+}
+
+/// Revenue, minus what it costs, ending in profit — the same arithmetic the
+/// Dashboard shows, laid out so you can read where the money went.
+struct HomeWaterfall: View {
+    let revenue: Double
+    let profit: Double
+    let deductions: [(String, Double)]
+    let lang: String
+    let money: (Double) -> String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            cell(t("Revenue", lang: lang), money(revenue), HomeTone.green, minus: false)
+            ForEach(Array(deductions.enumerated()), id: \.offset) { _, entry in
+                Divider().frame(height: 30)
+                cell(entry.0, money(entry.1), HomeTone.orange, minus: true)
+            }
+            Divider().frame(height: 30)
+            cell(t("Net profit", lang: lang), money(profit), HomeTone.green, minus: false)
+        }
+        .padding(.top, 8)
+        .overlay(Rectangle().frame(height: 1).foregroundColor(.primary.opacity(0.08)), alignment: .top)
+    }
+
+    private func cell(_ label: String, _ value: String, _ tone: Color, minus: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                if minus {
+                    Text("−").font(.system(size: 10, weight: .bold)).foregroundColor(HomeTone.orange)
+                        .frame(width: 13, height: 13)
+                        .overlay(Circle().stroke(HomeTone.orange, lineWidth: 1.2))
+                }
+                Text(label).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+            }
+            Text(value).font(.system(size: 12.5, weight: .bold)).foregroundColor(tone)
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct HomeCostRow: View {
+    let colour: Color
+    let label: String
+    let value: String
+    var body: some View {
+        HStack(spacing: 9) {
+            Circle().fill(colour).frame(width: 18, height: 18)
+            Text(label).font(.system(size: 12)).lineLimit(1)
+            Spacer(minLength: 6)
+            Text(value).font(.system(size: 12, weight: .bold)).lineLimit(1)
+        }
+        .padding(.vertical, 5)
+    }
+}
+
+/// Revenue and profit over the last twelve weeks, drawn from the orders.
+struct HomeRevenueChart: View {
+    let orders: [Siparis]
+    let lang: String
+
+    var body: some View {
+        let weeks = 12
+        var revenue = Array(repeating: 0.0, count: weeks)
+        var profit = Array(repeating: 0.0, count: weeks)
+        let now = Date()
+        for order in orders {
+            let ago = Int(now.timeIntervalSince(order.paymentDate) / (7 * 24 * 3600))
+            guard ago >= 0, ago < weeks else { continue }
+            revenue[weeks - 1 - ago] += order.salesTotal
+            profit[weeks - 1 - ago] += order.netKar
+        }
+        let peak = max(1, revenue.max() ?? 1, profit.max() ?? 1)
+
+        return Group {
+            if revenue.allSatisfy({ $0 == 0 }) {
+                HomeCardNote(text: t("Not enough history yet.", lang: lang))
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 14) {
+                        key(HomeTone.accent, t("Revenue", lang: lang))
+                        key(HomeTone.green, t("Net profit", lang: lang))
+                    }
+                    GeometryReader { proxy in
+                        ZStack {
+                            area(revenue, peak: peak, size: proxy.size).fill(HomeTone.accent.opacity(0.12))
+                            area(profit, peak: peak, size: proxy.size).fill(HomeTone.green.opacity(0.14))
+                            line(revenue, peak: peak, size: proxy.size).stroke(HomeTone.accent, lineWidth: 1.6)
+                            line(profit, peak: peak, size: proxy.size).stroke(HomeTone.green, lineWidth: 1.6)
+                        }
+                    }
+                    .frame(minHeight: 54)
+                }
+            }
+        }
+    }
+
+    private func key(_ colour: Color, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Capsule().fill(colour).frame(width: 14, height: 2.5)
+            Text(label).font(.system(size: 11)).foregroundColor(.secondary)
+        }
+    }
+
+    private func points(_ values: [Double], peak: Double, size: CGSize) -> [CGPoint] {
+        values.enumerated().map { index, value in
+            CGPoint(x: size.width * CGFloat(index) / CGFloat(max(1, values.count - 1)),
+                    y: size.height - size.height * CGFloat(max(0, value) / peak))
+        }
+    }
+
+    private func line(_ values: [Double], peak: Double, size: CGSize) -> Path {
+        var path = Path()
+        let pts = points(values, peak: peak, size: size)
+        guard let first = pts.first else { return path }
+        path.move(to: first)
+        pts.dropFirst().forEach { path.addLine(to: $0) }
+        return path
+    }
+
+    private func area(_ values: [Double], peak: Double, size: CGSize) -> Path {
+        var path = line(values, peak: peak, size: size)
+        path.addLine(to: CGPoint(x: size.width, y: size.height))
+        path.addLine(to: CGPoint(x: 0, y: size.height))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -299,40 +813,190 @@ struct HomeBankingBody: View {
         if transactions.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
+            let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
+            let monthPrefix = String(homeISODate(Date()).prefix(7))
+            let thisMonth = transactions.filter { $0.bookingDate.hasPrefix(monthPrefix) }
+            let incoming = thisMonth.filter { $0.amount > 0 }.reduce(0.0) { $0 + $1.amount }
+            let spent = thisMonth.filter { $0.amount < 0 }.reduce(0.0) { $0 + abs($1.amount) }
             let toReview = transactions.filter { $0.category.trimmingCharacters(in: .whitespaces).isEmpty }.count
-            let missingReceipts = transactions.filter { !$0.hasReceipt && $0.amount < 0 }.count
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text("\(toReview)")
-                        .font(.system(size: 26, weight: .heavy))
-                        .foregroundColor(toReview > 0 ? .orange : .primary)
-                    Text(t("to review", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("\(missingReceipts) \(t("missing receipts", lang: lang))")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                } else {
+            let missing = transactions.filter { $0.amount < 0 && !$0.hasReceipt }.count
+
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 10) {
+                    HomeSplitPair {
+                        Text("\(toReview)").font(.system(size: 28, weight: .heavy))
+                            .foregroundColor(toReview > 0 ? HomeTone.orange : .primary)
+                        Text(t("to review", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    } right: {
+                        Text("\(missing)").font(.system(size: 28, weight: .heavy))
+                            .foregroundColor(missing > 0 ? HomeTone.orange : .primary)
+                        Text(t("missing receipts", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    HomeReadOnlyNote(lang: lang, short: true)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
-                        HomeStat(label: t("to review", lang: lang), value: "\(toReview)", tone: toReview > 0 ? .orange : .primary)
-                        HomeStat(label: t("missing receipts", lang: lang), value: "\(missingReceipts)", tone: missingReceipts > 0 ? .orange : .primary)
-                        HomeStat(label: t("Transactions", lang: lang), value: "\(transactions.count)")
+                        HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
+                        HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.orange)
+                        HomeMetricTile(label: t("to review", lang: lang), value: "\(toReview)", tone: toReview > 0 ? HomeTone.orange : HomeTone.accent)
+                        HomeMetricTile(label: t("missing receipts", lang: lang), value: "\(missing)", tone: missing > 0 ? HomeTone.orange : HomeTone.accent)
                     }
                     if size == .twoByTwo {
-                        Divider()
-                        ForEach(Array(transactions.prefix(4)), id: \.id) { transaction in
-                            HomeRow(title: transaction.counterparty.isEmpty ? transaction.description : transaction.counterparty,
-                                    detail: homeMoney(transaction.amount, currency: currency, decimal: decimal),
-                                    tone: transaction.amount < 0 ? .red : .green)
+                        HStack(alignment: .top, spacing: 12) {
+                            HomePanel {
+                                HomeEyebrow(text: t("Bank activity", lang: lang))
+                                HomeBankChart(transactions: transactions, lang: lang)
+                            }
+                            HomePanel {
+                                HomeEyebrow(text: t("Recent transactions", lang: lang))
+                                ForEach(transactions.prefix(3), id: \.id) { tx in
+                                    HStack(spacing: 9) {
+                                        Text(String((tx.counterparty.isEmpty ? tx.description : tx.counterparty).prefix(1)).uppercased())
+                                            .font(.system(size: 11, weight: .heavy))
+                                            .foregroundColor(HomeTone.accent)
+                                            .frame(width: 22, height: 22)
+                                            .background(Circle().fill(HomeTone.accent.opacity(0.14)))
+                                        Text(tx.counterparty.isEmpty ? tx.description : tx.counterparty)
+                                            .font(.system(size: 12)).lineLimit(1)
+                                        Spacer(minLength: 6)
+                                        Text((tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)))
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(tx.amount < 0 ? HomeTone.orange : HomeTone.green)
+                                            .lineLimit(1)
+                                    }
+                                    .padding(.vertical, 5)
+                                }
+                            }
                         }
+                        if missing > 0 {
+                            HStack(spacing: 11) {
+                                Text("!").font(.system(size: 15, weight: .black)).foregroundColor(.white)
+                                    .frame(width: 26, height: 26)
+                                    .background(Circle().fill(HomeTone.orange))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(t("{count} transactions need a receipt", lang: lang)
+                                        .replacingOccurrences(of: "{count}", with: "\(missing)"))
+                                        .font(.system(size: 12.5, weight: .bold))
+                                    Text(t("Read-only bank connection. NivaDesk never moves money.", lang: lang))
+                                        .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 9)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.orange.opacity(0.09)))
+                        }
+                    } else {
+                        HomeReadOnlyNote(lang: lang, short: false)
                     }
+                    Spacer(minLength: 0)
                 }
-                Text(t("Read-only bank connection. NivaDesk never moves money.", lang: lang))
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.75))
-                Spacer(minLength: 0)
             }
         }
+    }
+}
+
+/// The read-only promise is part of the card, not a footnote: this feed can
+/// never move money and the card should keep saying so (§7).
+struct HomeReadOnlyNote: View {
+    let lang: String
+    let short: Bool
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(t("Read-only", lang: lang))
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundColor(HomeTone.orange)
+                .padding(.horizontal, 8).padding(.vertical, 2)
+                .overlay(Capsule().stroke(HomeTone.orange, lineWidth: 1))
+            Text(t(short ? "NivaDesk never moves money." : "Read-only bank connection. NivaDesk never moves money.", lang: lang))
+                .font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
+        }
+    }
+}
+
+func homeISODate(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
+struct HomeBankChart: View {
+    let transactions: [StudioBankTransaction]
+    let lang: String
+
+    var body: some View {
+        let weeks = 12
+        var incoming = Array(repeating: 0.0, count: weeks)
+        var spent = Array(repeating: 0.0, count: weeks)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let now = Date()
+        for tx in transactions {
+            guard let date = formatter.date(from: tx.bookingDate) else { continue }
+            let ago = Int(now.timeIntervalSince(date) / (7 * 24 * 3600))
+            guard ago >= 0, ago < weeks else { continue }
+            if tx.amount >= 0 { incoming[weeks - 1 - ago] += tx.amount }
+            else { spent[weeks - 1 - ago] += abs(tx.amount) }
+        }
+        let peak = max(1, incoming.max() ?? 1, spent.max() ?? 1)
+
+        return Group {
+            if incoming.allSatisfy({ $0 == 0 }) && spent.allSatisfy({ $0 == 0 }) {
+                HomeCardNote(text: t("Not enough history yet.", lang: lang))
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 14) {
+                        HStack(spacing: 5) {
+                            Capsule().fill(HomeTone.green).frame(width: 14, height: 2.5)
+                            Text(t("Incoming", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                        HStack(spacing: 5) {
+                            Capsule().fill(HomeTone.orange).frame(width: 14, height: 2.5)
+                            Text(t("Spent", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                        }
+                    }
+                    GeometryReader { proxy in
+                        ZStack {
+                            HomeSeries(values: incoming, peak: peak, size: proxy.size, filled: true)
+                                .fill(HomeTone.green.opacity(0.14))
+                            HomeSeries(values: incoming, peak: peak, size: proxy.size, filled: false)
+                                .stroke(HomeTone.green, lineWidth: 1.6)
+                            HomeSeries(values: spent, peak: peak, size: proxy.size, filled: false)
+                                .stroke(HomeTone.orange, lineWidth: 1.6)
+                        }
+                    }
+                    .frame(minHeight: 54)
+                }
+            }
+        }
+    }
+}
+
+/// One series, as a line or as a filled area under it.
+struct HomeSeries: Shape {
+    let values: [Double]
+    let peak: Double
+    let size: CGSize
+    let filled: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard values.count > 1 else { return path }
+        let points = values.enumerated().map { index, value in
+            CGPoint(x: rect.width * CGFloat(index) / CGFloat(values.count - 1),
+                    y: rect.height - rect.height * CGFloat(max(0, value) / peak))
+        }
+        path.move(to: points[0])
+        points.dropFirst().forEach { path.addLine(to: $0) }
+        if filled {
+            path.addLine(to: CGPoint(x: rect.width, y: rect.height))
+            path.addLine(to: CGPoint(x: 0, y: rect.height))
+            path.closeSubpath()
+        }
+        return path
     }
 }
 
@@ -349,42 +1013,99 @@ struct HomeInventoryBody: View {
         if data.inventoryFailed {
             HomeCardNote(text: t("This could not be loaded.", lang: lang))
         } else if let summary = data.inventory {
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text(homeMoney(summary.totalValue, currency: currency, decimal: decimal))
-                        .font(.system(size: 22, weight: .heavy))
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    Text(t("total value", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    HStack(spacing: 10) {
-                        Text("\(summary.lowStockCount) \(t("low stock", lang: lang))")
-                            .foregroundColor(summary.lowStockCount > 0 ? .orange : .secondary)
-                        Text("\(summary.incomingCount) \(t("incoming", lang: lang))")
-                            .foregroundColor(.green)
+            let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("total value", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(money(summary.totalValue))
+                        .font(.system(size: 25, weight: .heavy))
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                    HomeSplitPair {
+                        HomeFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                   tone: summary.lowStockCount > 0 ? HomeTone.orange : .primary)
+                    } right: {
+                        HomeFigure(label: t("incoming", lang: lang), value: "\(summary.incomingCount)", tone: HomeTone.green)
                     }
-                    .font(.system(size: 11, weight: .bold))
-                } else {
+                    Spacer(minLength: 0)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
-                        HomeStat(label: t("total value", lang: lang), value: homeMoney(summary.totalValue, currency: currency, decimal: decimal))
-                        HomeStat(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)", tone: summary.lowStockCount > 0 ? .orange : .primary)
-                        HomeStat(label: t("Reserved", lang: lang), value: "\(summary.reservedCount)")
-                        HomeStat(label: t("incoming", lang: lang), value: "\(summary.incomingCount)", tone: .green)
+                        HomeMetricTile(label: t("total value", lang: lang), value: money(summary.totalValue), tone: HomeTone.accent)
+                        HomeMetricTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)", tone: HomeTone.accent, sub: money(summary.uniqueValue))
+                        HomeMetricTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)", tone: HomeTone.accent, sub: money(summary.quantityValue))
+                        HomeMetricTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                       tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent)
                     }
                     if size == .twoByTwo {
-                        Divider()
-                        // Unique and quantity are different things and stay apart (§8).
-                        HomeRow(title: t("Unique items", lang: lang), detail: "\(summary.uniqueCount)")
-                        HomeRow(title: t("Quantity stock", lang: lang), detail: "\(summary.quantityCount)")
-                        HomeRow(title: t("Customer owned", lang: lang), detail: "\(summary.customerOwnedCount)")
-                        HomeRow(title: t("Reserved", lang: lang), detail: homeMoney(summary.reservedValue, currency: currency, decimal: decimal))
+                        // Unique and quantity are different things and the split is
+                        // the point (§8).
+                        let total = summary.uniqueValue + summary.quantityValue
+                        let share = total > 0 ? summary.uniqueValue / total : 0
+                        HStack(alignment: .top, spacing: 12) {
+                            HomePanel {
+                                HomeEyebrow(text: t("Inventory value", lang: lang))
+                                HStack(spacing: 14) {
+                                    HomeDonut(share: share)
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HomeDonutKey(colour: HomeTone.accent, label: t("Unique items", lang: lang),
+                                                     value: money(summary.uniqueValue), percent: share)
+                                        HomeDonutKey(colour: HomeTone.accent.opacity(0.35), label: t("Quantity stock", lang: lang),
+                                                     value: money(summary.quantityValue), percent: 1 - share)
+                                    }
+                                }
+                            }
+                            HomePanel {
+                                HomeEyebrow(text: t("Stock status", lang: lang))
+                                HomeCostRow(colour: HomeTone.orange, label: t("Reserved", lang: lang), value: money(summary.reservedValue))
+                                HomeCostRow(colour: HomeTone.accent, label: t("incoming", lang: lang), value: money(summary.incomingValue))
+                                HomeCostRow(colour: HomeTone.red, label: t("low stock", lang: lang), value: "\(summary.lowStockCount)")
+                            }
+                        }
+                    } else {
+                        HomeCostRow(colour: HomeTone.orange, label: t("Reserved", lang: lang), value: money(summary.reservedValue))
+                        HomeCostRow(colour: HomeTone.accent, label: t("incoming", lang: lang), value: money(summary.incomingValue))
                     }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         } else {
             HomeCardNote(text: t("Loading…", lang: lang))
+        }
+    }
+}
+
+/// Two slices. Drawn with a trimmed stroke rather than Canvas — Canvas would
+/// not render this reliably on macOS here.
+struct HomeDonut: View {
+    let share: Double
+    var body: some View {
+        ZStack {
+            Circle().stroke(HomeTone.accent.opacity(0.30), lineWidth: 11)
+            Circle().trim(from: 0, to: max(0.001, min(1, share)))
+                .stroke(HomeTone.accent, style: StrokeStyle(lineWidth: 11, lineCap: .butt))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: 74, height: 74)
+    }
+}
+
+struct HomeDonutKey: View {
+    let colour: Color
+    let label: String
+    let value: String
+    let percent: Double
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 7) {
+                Circle().fill(colour).frame(width: 9, height: 9)
+                Text(label).font(.system(size: 11.5)).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(value).font(.system(size: 11.5, weight: .bold)).lineLimit(1)
+            }
+            Text(String(format: "%.1f%%", percent * 100))
+                .font(.system(size: 10.5)).foregroundColor(.secondary)
+                .padding(.leading, 16)
         }
     }
 }
@@ -401,43 +1122,127 @@ struct HomeCustomersBody: View {
         if customers.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
-            let orders = firebaseManager.siparisler.filter { !$0.isDeleted }
-            let activeNames = Set(homeLiveOrders(orders).map { $0.customerName.lowercased() })
-            let owing = orders
-                .filter { $0.countsTowardBalance && ($0.remainingAmount + $0.customRemainingTotal) > 0 }
+            let live = homeLiveOrders(firebaseManager.siparisler)
+            let activeNames = Set(live.map { $0.customerName.lowercased() })
+            let withActive = customers.filter { activeNames.contains($0.name.lowercased()) }.count
+            let monthStart = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date())) ?? Date()
+            let orderCounts = Dictionary(grouping: firebaseManager.siparisler.filter { !$0.isDeleted },
+                                         by: { $0.customerName.lowercased() }).mapValues { $0.count }
+            let returning = customers.filter { (orderCounts[$0.name.lowercased()] ?? 0) > 1 }.count
+            let newThisMonth = firebaseManager.siparisler
+                .filter { !$0.isDeleted && $0.paymentDate >= monthStart }
                 .map { $0.customerName.lowercased() }
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text("\(customers.count)")
-                        .font(.system(size: 26, weight: .heavy))
-                    Text(t("customers", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("\(activeNames.count) \(t("active orders", lang: lang))")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                } else {
-                    HStack(spacing: 10) {
-                        HomeStat(label: t("customers", lang: lang), value: "\(customers.count)")
-                        HomeStat(label: t("active orders", lang: lang), value: "\(activeNames.count)")
-                        HomeStat(label: t("Outstanding", lang: lang), value: "\(Set(owing).count)", tone: owing.isEmpty ? .primary : .orange)
+                .reduce(into: Set<String>()) { $0.insert($1) }
+                .filter { (orderCounts[$0] ?? 0) <= 1 }.count
+            let existing = max(0, customers.count - newThisMonth - returning)
+
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("customers", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("\(customers.count)").font(.system(size: 28, weight: .heavy))
+                    HomeSplitPair {
+                        HomeFigure(label: t("active orders", lang: lang), value: "\(withActive)", tone: HomeTone.green)
+                    } right: {
+                        HomeFigure(label: t("Latest", lang: lang), value: customers.first?.name ?? "—")
                     }
-                    if size == .twoByTwo {
-                        Divider()
-                        ForEach(Array(customers.prefix(4)), id: \.id) { customer in
-                            HomeRow(title: customer.name,
-                                    detail: activeNames.contains(customer.name.lowercased())
-                                        ? t("active orders", lang: lang) : "—")
-                        }
-                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        HomeMetricTile(label: t("Total customers", lang: lang), value: "\(customers.count)", tone: HomeTone.accent)
+                        HomeMetricTile(label: t("New this month", lang: lang), value: "\(newThisMonth)", tone: HomeTone.green)
+                        HomeMetricTile(label: t("Returning customers", lang: lang), value: "\(returning)", tone: HomeTone.purple)
+                        HomeMetricTile(label: t("Customers with active orders", lang: lang), value: "\(withActive)", tone: HomeTone.teal)
+                    }
+                    HomeMixBar(segments: [
+                        (t("New this month", lang: lang), newThisMonth, HomeTone.green),
+                        (t("Returning", lang: lang), returning, HomeTone.purple),
+                        (t("Existing", lang: lang), existing, HomeTone.teal),
+                    ])
+                    if size == .twoByTwo {
+                        HomePanel {
+                            HomeEyebrow(text: t("Recent customers", lang: lang))
+                            ForEach(customers.prefix(3), id: \.id) { customer in
+                                HStack(spacing: 9) {
+                                    Text(String(customer.name.prefix(1)).uppercased())
+                                        .font(.system(size: 11, weight: .heavy))
+                                        .foregroundColor(HomeTone.accent)
+                                        .frame(width: 22, height: 22)
+                                        .background(Circle().fill(HomeTone.accent.opacity(0.14)))
+                                    Text(customer.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                    Spacer(minLength: 6)
+                                    HomeChip(
+                                        text: activeNames.contains(customer.name.lowercased())
+                                            ? t("Active customer", lang: lang) : t("No open orders", lang: lang),
+                                        tone: activeNames.contains(customer.name.lowercased()) ? HomeTone.green : HomeTone.slate
+                                    )
+                                }
+                                .padding(.vertical, 5)
+                            }
+                        }
+                        // §11 and §19: a member sees only the customers their role
+                        // allows, and the card says so rather than looking like the
+                        // whole directory.
+                        Text(t("Only customers you have permission to view are shown", lang: lang))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+}
+
+/// One bar, three segments, and a key that names each one — the proportions are
+/// never carried by colour alone (§20).
+struct HomeMixBar: View {
+    let segments: [(String, Int, Color)]
+    var body: some View {
+        let total = max(1, segments.reduce(0) { $0 + $1.1 })
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { proxy in
+                HStack(spacing: 2) {
+                    ForEach(Array(segments.enumerated()), id: \.offset) { _, entry in
+                        Capsule().fill(entry.2)
+                            .frame(width: max(0, proxy.size.width * CGFloat(entry.1) / CGFloat(total)))
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .frame(height: 9)
+            HStack(spacing: 0) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { index, entry in
+                    if index > 0 { Divider().frame(height: 26) }
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Circle().fill(entry.2).frame(width: 9, height: 9)
+                            Text(entry.0).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                        }
+                        Text("\(entry.1)").font(.system(size: 15, weight: .heavy))
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
     }
 }
 
 // MARK: - Orders & production
+
+/// A stage's colour follows its kind, not its position — a workspace may define
+/// any number of lanes and an index-keyed palette runs out.
+func homeStageTone(_ kind: ProductionStageKind) -> Color {
+    switch kind {
+    case .ready: return HomeTone.green
+    case .active: return HomeTone.accent
+    case .blocked: return HomeTone.red
+    case .review: return HomeTone.purple
+    case .shipready: return HomeTone.green
+    case .done: return HomeTone.slate
+    }
+}
 
 struct HomeOrdersProductionBody: View {
     let size: HomeCardSize
@@ -462,61 +1267,99 @@ struct HomeOrdersProductionBody: View {
         if live.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
-            // The stage is never stored — it is derived from the order's own
-            // steps, by the one rule every screen shares.
+            // The stage is never stored — it is derived from the order's own steps,
+            // by the one rule every screen shares.
             let resolved = live.map { order -> (Siparis, ResolvedProductionStage) in
                 let blocker = order.productionBlocker.flatMap { ProductionBlocker(reason: $0.reason, note: $0.note ?? "") }
                 return (order, resolveProductionStage(
-                    order: order,
-                    stages: data.stages,
-                    steps: steps,
+                    order: order, stages: data.stages, steps: steps,
                     overrideId: order.productionStageOverride ?? "",
                     blocker: ProductionBlocker.reasons.contains(blocker?.reason ?? "") ? blocker : nil
                 ))
             }
-            let blockedIDs = Set(data.stages.filter { $0.kind == .blocked }.map { $0.id })
-            let blocked = resolved.filter { blockedIDs.contains($0.1.stageId) }.count
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text("\(live.count)")
-                        .font(.system(size: 26, weight: .heavy))
-                    Text(t("active orders", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("\(blocked) \(t("Blocked", lang: lang))")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(blocked > 0 ? .red : .secondary)
-                } else {
-                    // The stage distribution is the card — the KPI row above it
-                    // must not repeat the same numbers (§9).
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(data.stages.prefix(size == .twoByTwo ? 6 : 3), id: \.id) { stage in
-                            let count = resolved.filter { $0.1.stageId == stage.id }.count
-                            HomeRow(title: stage.title, detail: "\(count)",
-                                    tone: stage.kind == .blocked && count > 0 ? .red : .secondary)
-                        }
+            let late = live.filter { order in
+                guard let due = homeDueDate(order) else { return false }
+                return due < Date()
+            }
+            let shipReadyIDs = Set(data.stages.filter { $0.kind == .shipready }.map { $0.id })
+
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("active orders", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("\(live.count)").font(.system(size: 28, weight: .heavy)).foregroundColor(HomeTone.accent)
+                    HomeSplitPair {
+                        HomeFigure(label: t("Overdue", lang: lang), value: "\(late.count)",
+                                   tone: late.isEmpty ? .primary : HomeTone.orange)
+                    } right: {
+                        HomeFigure(label: t("Ready to ship", lang: lang),
+                                   value: "\(resolved.filter { shipReadyIDs.contains($0.1.stageId) }.count)",
+                                   tone: HomeTone.green)
                     }
-                    if size == .twoByTwo {
-                        Divider()
-                        Text(t("At risk", lang: lang))
-                            .font(.system(size: 10, weight: .heavy))
-                            .foregroundColor(.secondary)
-                        let late = resolved
-                            .filter { entry in
-                                guard let due = homeDueDate(entry.0) else { return false }
-                                return due < Date()
-                            }
-                            .prefix(3)
-                        if late.isEmpty {
-                            HomeCardNote(text: t("All set — nice work.", lang: lang))
-                        } else {
-                            ForEach(Array(late), id: \.0.id) { entry in
-                                HomeRow(title: entry.0.customerName, detail: entry.1.currentStep, tone: .red)
-                            }
-                        }
-                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    if size == .twoByTwo {
+                        HStack(spacing: 10) {
+                            HomeMetricTile(label: t("active orders", lang: lang), value: "\(live.count)", tone: HomeTone.accent)
+                            HomeMetricTile(label: t("Overdue", lang: lang), value: "\(late.count)",
+                                           tone: late.isEmpty ? HomeTone.accent : HomeTone.orange)
+                        }
+                    }
+                    HomeEyebrow(text: t("Production flow", lang: lang))
+                    HomeStageFlow(stages: data.stages, resolved: resolved, lang: lang)
+                    if size == .twoByTwo {
+                        HomePanel {
+                            HomeEyebrow(text: t("Priority orders", lang: lang))
+                            ForEach(Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(3)), id: \.id) { order in
+                                HStack(spacing: 8) {
+                                    Text(order.customerName.isEmpty ? order.designName : order.customerName)
+                                        .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                    Spacer(minLength: 6)
+                                    if let due = homeDueDate(order), due < Date() {
+                                        let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
+                                        HomeChip(text: days > 0
+                                            ? t("{days}d late", lang: lang).replacingOccurrences(of: "{days}", with: "\(days)")
+                                            : t("Overdue", lang: lang), tone: HomeTone.red)
+                                    }
+                                }
+                                .padding(.vertical, 5)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+}
+
+/// A node per stage with a rule between them, so it reads as a sequence rather
+/// than a row of unrelated counters.
+struct HomeStageFlow: View {
+    let stages: [ProductionStage]
+    let resolved: [(Siparis, ResolvedProductionStage)]
+    let lang: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
+                let count = resolved.filter { $0.1.stageId == stage.id }.count
+                let tone = homeStageTone(stage.kind)
+                VStack(spacing: 4) {
+                    ZStack {
+                        if index > 0 {
+                            Rectangle().fill(Color.primary.opacity(0.10)).frame(height: 1)
+                                .offset(x: -22)
+                        }
+                        Circle().fill(tone.opacity(0.16)).frame(width: 26, height: 26)
+                    }
+                    Text(t(stage.title, lang: lang))
+                        .font(.system(size: 10.5)).foregroundColor(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Text("\(count)").font(.system(size: 16, weight: .heavy)).foregroundColor(tone)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -537,30 +1380,152 @@ struct HomeScheduleBody: View {
                 return (order, due)
             }
             .sorted { $0.1 < $1.1 }
+
         if upcoming.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
-        } else {
-            let limit = size == .oneByOne ? 3 : (size == .twoByOne ? 4 : 7)
+        } else if size == .oneByOne {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(upcoming.prefix(limit)), id: \.0.id) { entry in
-                    HomeRow(title: entry.0.customerName,
-                            detail: homeDueLabel(entry.1, lang: lang),
-                            tone: entry.1 < Date() ? .red : .secondary)
+                ForEach(Array(upcoming.prefix(3)), id: \.0.id) { entry in
+                    HomeRow(title: entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName,
+                            detail: homeDayLabel(entry.1, lang: lang),
+                            tone: entry.1 < homeStartOfToday() ? HomeTone.red : .secondary)
                 }
+                Spacer(minLength: 0)
+            }
+        } else {
+            let week = homeWeekDays()
+            VStack(alignment: .leading, spacing: 10) {
+                if size == .twoByOne {
+                    HomeWeekStrip(days: week, dues: upcoming.map { $0.1 }, lang: lang)
+                } else {
+                    HomeEyebrow(text: t("Weekly timeline", lang: lang))
+                    HomeTimeline(week: week, entries: Array(upcoming.prefix(5)), lang: lang)
+                    HomeEyebrow(text: t("Upcoming deadlines", lang: lang))
+                }
+                HomeDeadlineRow(entries: Array(upcoming.prefix(3)), lang: lang)
                 Spacer(minLength: 0)
             }
         }
     }
 }
 
-func homeDueLabel(_ date: Date, lang: String) -> String {
-    let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()),
-                                               to: Calendar.current.startOfDay(for: date)).day ?? 0
-    if days == 0 { return t("Today", lang: lang) }
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
-    formatter.dateFormat = "d MMM"
-    return formatter.string(from: date)
+/// The visible week, Monday first, so the strip and the timeline agree.
+func homeWeekDays() -> [Date] {
+    let today = homeStartOfToday()
+    let weekday = Calendar.current.component(.weekday, from: today)
+    let offset = -((weekday + 5) % 7)
+    let start = Calendar.current.date(byAdding: .day, value: offset, to: today) ?? today
+    return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
+}
+
+struct HomeWeekStrip: View {
+    let days: [Date]
+    let dues: [Date]
+    let lang: String
+    var body: some View {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+        return HStack(spacing: 0) {
+            ForEach(days, id: \.self) { day in
+                let count = dues.filter { Calendar.current.isDate($0, inSameDayAs: day) }.count
+                let isToday = Calendar.current.isDateInToday(day)
+                VStack(spacing: 1) {
+                    Text(formatter.shortWeekdaySymbols[Calendar.current.component(.weekday, from: day) - 1])
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                    Text("\(Calendar.current.component(.day, from: day))")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(count > 0 ? "\(count)" : " ")
+                        .font(.system(size: 10.5, weight: count > 0 ? .heavy : .regular))
+                        .foregroundColor(count > 0 ? HomeTone.accent : .clear)
+                }
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .background(RoundedRectangle(cornerRadius: 9)
+                    .fill(isToday ? HomeTone.accent.opacity(0.09) : .clear))
+            }
+        }
+    }
+}
+
+/// A read-only bar per order across the week. Read-only on purpose: dragging a
+/// date here would fight the gesture that moves the card itself (§10).
+struct HomeTimeline: View {
+    let week: [Date]
+    let entries: [(Siparis, Date)]
+    let lang: String
+
+    private let palette: [Color] = [HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal]
+
+    var body: some View {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+        formatter.dateFormat = "EEE d"
+        let start = week.first ?? Date()
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: week.last ?? Date()) ?? Date()
+        let span = end.timeIntervalSince(start)
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 86)
+                ForEach(week, id: \.self) { day in
+                    Text(formatter.string(from: day))
+                        .font(.system(size: 9.5))
+                        .foregroundColor(Calendar.current.isDateInToday(day) ? HomeTone.accent : .secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            ForEach(Array(entries.enumerated()), id: \.element.0.id) { index, entry in
+                HStack(spacing: 8) {
+                    Text(entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName)
+                        .font(.system(size: 11)).lineLimit(1)
+                        .frame(width: 86, alignment: .leading)
+                    GeometryReader { proxy in
+                        let from = max(0, min(1, entry.0.paymentDate.timeIntervalSince(start) / span))
+                        let to = max(0, min(1, entry.1.timeIntervalSince(start) / span))
+                        let overdue = entry.1 < homeStartOfToday()
+                        let tone = overdue ? HomeTone.red : palette[index % palette.count]
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(tone.opacity(0.18))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(tone, lineWidth: 1))
+                            .frame(width: max(8, proxy.size.width * CGFloat(abs(to - from))))
+                            .offset(x: proxy.size.width * CGFloat(min(from, to)))
+                    }
+                    .frame(height: 16)
+                }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+}
+
+struct HomeDeadlineRow: View {
+    let entries: [(Siparis, Date)]
+    let lang: String
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.0.id) { index, entry in
+                if index > 0 { Divider().frame(height: 30) }
+                let overdue = entry.1 < homeStartOfToday()
+                let soon = Calendar.current.isDateInTomorrow(entry.1)
+                let tone = overdue ? HomeTone.red : (soon ? HomeTone.accent : HomeTone.green)
+                HStack(spacing: 8) {
+                    Circle().fill(tone.opacity(0.16)).frame(width: 24, height: 24)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(homeDayLabel(entry.1, lang: lang))
+                            .font(.system(size: 11.5, weight: .bold)).foregroundColor(tone)
+                        Text(entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName)
+                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.top, 8)
+        .overlay(Rectangle().frame(height: 1).foregroundColor(.primary.opacity(0.08)), alignment: .top)
+    }
 }
 
 // MARK: - Files
@@ -568,35 +1533,75 @@ func homeDueLabel(_ date: Date, lang: String) -> String {
 struct HomeFilesBody: View {
     let size: HomeCardSize
     let lang: String
+    let currency: String
+    let decimal: String
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
         // One file, linked to as many records as it belongs to — the card counts
-        // files, not copies (§14).
+        // files, never copies (§14).
         let files = firebaseManager.siparisler
             .filter { !$0.isDeleted }
             .flatMap { order in (order.clientFiles ?? []).map { (order, $0) } }
         if files.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if size == .oneByOne {
-                    Text("\(files.count)")
-                        .font(.system(size: 26, weight: .heavy))
-                    Text(t("File library", lang: lang))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(files.prefix(size == .twoByTwo ? 7 : 4).enumerated()), id: \.offset) { _, entry in
-                            HomeRow(title: entry.1.fileName, detail: entry.0.customerName)
+            let used = files.reduce(0.0) { $0 + Double($1.1.fileSize) }
+            if size == .oneByOne {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(t("Total files", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("\(files.count)").font(.system(size: 28, weight: .heavy)).foregroundColor(HomeTone.accent)
+                    HomeSplitPair {
+                        HomeFigure(label: t("Storage", lang: lang), value: homeFileSize(used))
+                    } right: {
+                        HomeFigure(label: t("File library", lang: lang), value: "\(files.count)")
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        HomeMetricTile(label: t("Total files", lang: lang), value: "\(files.count)", tone: HomeTone.accent)
+                        HomeMetricTile(label: t("Storage", lang: lang), value: homeFileSize(used), tone: HomeTone.green)
+                    }
+                    HomePanel {
+                        HomeEyebrow(text: t("Recent files", lang: lang))
+                        ForEach(Array(files.prefix(size == .twoByTwo ? 5 : 3).enumerated()), id: \.offset) { _, entry in
+                            HStack(spacing: 9) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(homeFileTone(entry.1.fileName).opacity(0.16))
+                                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(homeFileTone(entry.1.fileName).opacity(0.5), lineWidth: 1))
+                                    .frame(width: 17, height: 21)
+                                Text(entry.1.fileName).font(.system(size: 12)).lineLimit(1)
+                                Spacer(minLength: 6)
+                                HomeChip(text: entry.0.customerName.isEmpty ? t("Order", lang: lang) : entry.0.customerName)
+                            }
+                            .padding(.vertical, 5)
                         }
                     }
+                    if size == .twoByTwo {
+                        Text(t("One file, multiple links — no duplicates.", lang: lang))
+                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
         }
     }
+}
+
+func homeFileSize(_ bytes: Double) -> String {
+    if bytes >= 1e9 { return String(format: "%.1f GB", bytes / 1e9) }
+    if bytes >= 1e6 { return String(format: "%.1f MB", bytes / 1e6) }
+    if bytes >= 1e3 { return "\(Int(bytes / 1e3)) KB" }
+    return "\(Int(bytes)) B"
+}
+
+func homeFileTone(_ name: String) -> Color {
+    let lower = name.lowercased()
+    if lower.hasSuffix(".pdf") { return HomeTone.red }
+    if lower.hasSuffix(".png") || lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg") || lower.hasSuffix(".heic") { return HomeTone.green }
+    return HomeTone.slate
 }
 
 // MARK: - Notes
@@ -608,23 +1613,83 @@ struct HomeNotesBody: View {
 
     var body: some View {
         // Notes only. Not files, not AI replies (§13). Pinned first.
-        let notes = data.notes.sorted { first, second in
-            if first.isPinned != second.isPinned { return first.isPinned }
-            return first.updatedAt > second.updatedAt
-        }
-        if notes.isEmpty {
+        let live = data.notes.filter { !$0.isDeleted && !$0.isArchived }
+        if live.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
-            let limit = size == .oneByOne ? 3 : (size == .twoByOne ? 4 : 7)
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(notes.prefix(limit)), id: \.id) { note in
-                    HomeRow(title: note.title.isEmpty
-                                ? String(note.text.prefix(40))
-                                : note.title,
-                            detail: note.isPinned ? "📌" : (note.linkedOrderLabel.isEmpty ? "" : note.linkedOrderLabel))
+            let pinned = live.filter { $0.isPinned }
+            let recent = live.filter { !$0.isPinned }.sorted { $0.updatedAt > $1.updatedAt }
+            if size == .twoByTwo {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !pinned.isEmpty {
+                        HomeEyebrow(text: t("Pinned", lang: lang))
+                        HomeNoteGrid(notes: Array(pinned.prefix(2)), lang: lang, columns: 2)
+                    }
+                    HomeEyebrow(text: t("Recent", lang: lang))
+                    HomeNoteGrid(notes: Array(recent.prefix(pinned.isEmpty ? 6 : 4)), lang: lang, columns: 2)
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
+            } else {
+                let shown = Array((pinned + recent).prefix(size == .oneByOne ? 2 : 3))
+                HomeNoteGrid(notes: shown, lang: lang, columns: size == .oneByOne ? 1 : 3)
             }
         }
+    }
+}
+
+struct HomeNoteGrid: View {
+    let notes: [StudioKeepNote]
+    let lang: String
+    let columns: Int
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: columns), spacing: 9) {
+            ForEach(notes, id: \.id) { note in
+                HomeNoteTile(note: note, lang: lang)
+            }
+        }
+    }
+}
+
+/// A note keeps its own colour — that is the note's, not the card's.
+struct HomeNoteTile: View {
+    let note: StudioKeepNote
+    let lang: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
+                .font(.system(size: 12.5, weight: .heavy)).lineLimit(1)
+            if !note.text.isEmpty {
+                Text(note.text).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 6) {
+                if !note.linkedOrderLabel.isEmpty {
+                    HomeChip(text: note.linkedOrderLabel, tone: HomeTone.slate)
+                } else if !note.linkedCustomerName.isEmpty {
+                    HomeChip(text: note.linkedCustomerName, tone: HomeTone.slate)
+                }
+                if let reminder = note.reminderDate {
+                    Text(homeDayLabel(reminder, lang: lang))
+                        .font(.system(size: 10.5, weight: .bold))
+                        .foregroundColor(reminder < homeStartOfToday() ? HomeTone.red : HomeTone.green)
+                }
+            }
+        }
+        .padding(.horizontal, 11).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(homeNoteColour(note.colorName)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+}
+
+func homeNoteColour(_ name: String) -> Color {
+    switch name.lowercased() {
+    case "yellow": return Color(red: 0.996, green: 0.969, blue: 0.878)
+    case "blue": return Color(red: 0.898, green: 0.941, blue: 0.992)
+    case "green": return Color(red: 0.906, green: 0.965, blue: 0.925)
+    case "red": return Color(red: 0.992, green: 0.918, blue: 0.918)
+    case "purple": return Color(red: 0.945, green: 0.925, blue: 0.992)
+    case "orange": return Color(red: 0.992, green: 0.933, blue: 0.878)
+    default: return Color.primary.opacity(0.03)
     }
 }
