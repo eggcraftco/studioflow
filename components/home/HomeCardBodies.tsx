@@ -165,7 +165,11 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
 /* ------------------------------------------------------ Orders/production */
 
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
-  const open = data.orders.filter((order) => !order.isDelivered);
+  // scheduleOrders, not orders: the lighter recent-orders shape leaves out
+  // productionBlocker and productionStageOverride, so a blocked order would miss
+  // the Blocked lane and one the user dragged somewhere would drift back to the
+  // derived lane — Home and the Production board disagreeing about the same job.
+  const open = data.scheduleOrders.filter((order) => !order.isDelivered);
   // The stage is never stored: it is derived from the order's own steps against
   // the workspace's own stages, by the same rule the Production screen uses.
   // Matching order.status against a hard-coded list was a second, incompatible
