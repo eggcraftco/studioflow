@@ -232,6 +232,8 @@ enum HomeTone {
     static let teal = Color(red: 0.08, green: 0.72, blue: 0.65)
     static let amber = Color(red: 0.96, green: 0.62, blue: 0.04)
     static let slate = Color(red: 0.39, green: 0.45, blue: 0.55)
+    /// The stock headline, the one figure the sheet colours on that card.
+    static let indigo = Color(red: 0.26, green: 0.22, blue: 0.79)
 }
 
 /// Six dots in two columns, as the sheet draws it. A braille glyph renders at a

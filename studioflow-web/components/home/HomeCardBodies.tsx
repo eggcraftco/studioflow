@@ -471,14 +471,38 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
 
   if (size === "1x1") {
+    // The sheet reads: what the stock is worth, then the three counts that say
+    // whether it needs attention, then the mix as one bar. Reserved is the third
+    // — stock that is spoken for is not stock you can sell.
+    const items = summary.uniqueCount + summary.quantityCount;
+    const healthy = Math.max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount);
+    const share = (value: number) => (items > 0 ? value / items : 0);
     return (
-      <div className="home-money">
+      <div className="home-money is-stock">
         <p className="home-metric-label">{t("total value")}</p>
-        <strong className="home-metric-value">{money(summary.totalValue)}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("low stock")}</em><b className={summary.lowStockCount > 0 ? "is-warning" : ""}>{summary.lowStockCount}</b></span>
-          <span><em>{t("incoming")}</em><b className="is-positive">{summary.incomingCount}</b></span>
+        <strong className="home-metric-value is-info">{money(summary.totalValue)}</strong>
+        <div className="home-figure-row is-ruled">
+          <span>
+            <em>{t("low stock")}</em>
+            <b className={summary.lowStockCount > 0 ? "is-negative" : ""}>{summary.lowStockCount}</b>
+          </span>
+          <span>
+            <em>{t("incoming")}</em>
+            <b className={summary.incomingCount > 0 ? "is-warning" : ""}>{summary.incomingCount}</b>
+          </span>
+          <span>
+            <em>{t("Reserved")}</em>
+            <b className={summary.reservedCount > 0 ? "is-warning" : ""}>{summary.reservedCount}</b>
+          </span>
         </div>
+        {items > 0 ? (
+          <span className="home-mix-bar" aria-hidden="true">
+            <i className="tone-green" style={{ flex: `${share(healthy)} 1 0` }} />
+            <i className="tone-orange" style={{ flex: `${share(summary.incomingCount)} 1 0` }} />
+            <i className="tone-red" style={{ flex: `${share(summary.lowStockCount)} 1 0` }} />
+            <i className="tone-slate" style={{ flex: `${share(summary.reservedCount)} 1 0` }} />
+          </span>
+        ) : null}
       </div>
     );
   }

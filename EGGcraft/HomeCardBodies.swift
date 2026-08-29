@@ -1374,14 +1374,51 @@ struct HomeBankFigure: View {
     let label: String
     let value: String
     var tone: Color = .primary
+    /// Three figures on a phone square give each label about 45pt, so there the
+    /// name wraps rather than truncates and the box is tighter all round.
+    var compact: Bool = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(1)
-            Text(value).font(.system(size: 19, weight: .heavy)).foregroundColor(tone)
+            Text(label)
+                .font(.system(size: compact ? 9.5 : 11.5)).foregroundColor(.secondary)
+                .lineLimit(compact ? 2 : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: compact ? 22 : nil, alignment: .top)
+            Text(value).font(.system(size: compact ? 15 : 19, weight: .heavy)).foregroundColor(tone)
                 .lineLimit(1).minimumScaleFactor(0.55)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, compact ? 6 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension String {
+    /// The sheet capitalises this card's label. Done here rather than as a
+    /// second dictionary entry beside "total value" — a no-op in the scripts
+    /// that have no case, correct in the ones that do.
+    var homeCapitalisedFirst: String {
+        guard let first = first else { return self }
+        return String(first).uppercased() + dropFirst()
+    }
+}
+
+/// The stock mix as one bar — no legend, because the three figures above it are
+/// the legend.
+struct HomeStockBar: View {
+    let segments: [(Int, Color)]
+    var height: CGFloat = 7
+    var body: some View {
+        let total = max(1, segments.reduce(0) { $0 + $1.0 })
+        GeometryReader { proxy in
+            HStack(spacing: 2) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, entry in
+                    Capsule().fill(entry.1)
+                        .frame(width: max(0, proxy.size.width * CGFloat(entry.0) / CGFloat(total)))
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: height)
     }
 }
 
@@ -1566,17 +1603,38 @@ struct HomeInventoryBody: View {
         } else if let summary = data.inventory {
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
             if size == .oneByOne {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(t("total value", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
+                // The sheet reads: what the stock is worth, then the three counts
+                // that say whether it needs attention, then the mix as one bar.
+                // Reserved is the third — stock that is spoken for is not stock
+                // you can sell.
+                let items = summary.uniqueCount + summary.quantityCount
+                let healthy = max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount)
+                VStack(alignment: .leading, spacing: compact ? 2 : 8) {
+                    Text(t("total value", lang: lang).homeCapitalisedFirst)
+                        .font(.system(size: compact ? 10.5 : 13)).foregroundColor(.secondary)
                     Text(money(summary.totalValue))
-                        .font(.system(size: compact ? 25 : 33, weight: .heavy))
+                        .font(.system(size: compact ? 20 : 33, weight: .heavy))
+                        .foregroundColor(HomeTone.indigo)
                         .lineLimit(1).minimumScaleFactor(0.5)
                     Spacer(minLength: 0)
-                    HomeSplitPair {
-                        HomeFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
-                                   tone: summary.lowStockCount > 0 ? HomeTone.orange : .primary)
-                    } right: {
-                        HomeFigure(label: t("incoming", lang: lang), value: "\(summary.incomingCount)", tone: HomeTone.green)
+                    Divider()
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                       tone: summary.lowStockCount > 0 ? HomeTone.red : .primary, compact: compact)
+                        Divider().frame(height: compact ? 30 : 34)
+                        HomeBankFigure(label: t("incoming", lang: lang), value: "\(summary.incomingCount)",
+                                       tone: summary.incomingCount > 0 ? HomeTone.orange : .primary, compact: compact)
+                        Divider().frame(height: compact ? 30 : 34)
+                        HomeBankFigure(label: t("Reserved", lang: lang), value: "\(summary.reservedCount)",
+                                       tone: summary.reservedCount > 0 ? HomeTone.orange : .primary, compact: compact)
+                    }
+                    if items > 0 {
+                        HomeStockBar(segments: [
+                            (healthy, HomeTone.green),
+                            (summary.incomingCount, HomeTone.orange),
+                            (summary.lowStockCount, HomeTone.red),
+                            (summary.reservedCount, HomeTone.slate)
+                        ], height: compact ? 6 : 9)
                     }
                 }
             } else {

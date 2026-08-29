@@ -1155,6 +1155,53 @@ private fun CostDivider() {
         .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
 }
 
+/** Three figures on a phone square give each label about 45dp, so there the name
+ *  wraps rather than truncates and the box is tighter all round. */
+@Composable
+private fun StockFigure(label: String, value: String, tone: Color, compact: Boolean, modifier: Modifier) {
+    Column(modifier.padding(horizontal = if (compact) 6.dp else 10.dp)) {
+        Text(label, fontSize = if (compact) 9.5.sp else 11.sp,
+            maxLines = if (compact) 2 else 1, overflow = TextOverflow.Ellipsis,
+            lineHeight = if (compact) 11.sp else 13.sp,
+            modifier = if (compact) Modifier.height(22.dp) else Modifier,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = if (compact) 15.sp else 18.sp, fontWeight = FontWeight.ExtraBold,
+            color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun StockDivider(compact: Boolean) {
+    Box(
+        Modifier.width(1.dp).height(if (compact) 30.dp else 34.dp)
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+    )
+}
+
+/** The stock mix as one bar — no legend, because the three figures above it are
+ *  the legend. */
+@Composable
+private fun StockBar(segments: List<Pair<Int, Color>>, height: androidx.compose.ui.unit.Dp) {
+    val total = segments.sumOf { it.first }.coerceAtLeast(1)
+    Row(Modifier.fillMaxWidth().height(height), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        segments.forEach { (count, colour) ->
+            if (count > 0) {
+                Box(
+                    Modifier.weight(count.toFloat() / total)
+                        .fillMaxHeight()
+                        .background(colour, RoundedCornerShape(999.dp))
+                )
+            }
+        }
+    }
+}
+
+/** The sheet capitalises this card's label. Done here rather than as a second
+ *  dictionary entry beside "total value" — a no-op in the scripts that have no
+ *  case, correct in the ones that do. */
+private fun String.homeCapitalisedFirst(): String =
+    replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+
 /** One of the three figures across the top of the 2x1 Banking card. */
 @Composable
 private fun BankFigure(label: String, value: String, tone: Color, modifier: Modifier) {
@@ -1293,16 +1340,44 @@ private fun HomeInventoryBody(
     if (size == HomeCardSize.OneByOne) {
         Column(Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
-            Text(t("total value"), fontSize = if (compact) 11.sp else 13.sp,
+            // The sheet reads: what the stock is worth, then the three counts
+            // that say whether it needs attention, then the mix as one bar.
+            // Reserved is the third — stock that is spoken for is not stock you
+            // can sell.
+            val items = summary.uniqueCount + summary.quantityCount
+            val healthy = (items - summary.lowStockCount - summary.incomingCount - summary.reservedCount)
+                .coerceAtLeast(0)
+            Text(t("total value").homeCapitalisedFirst(), fontSize = if (compact) 10.5.sp else 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(money(summary.totalValue, state), fontSize = if (compact) 24.sp else 32.sp,
-                fontWeight = FontWeight.ExtraBold,
+            Text(money(summary.totalValue, state), fontSize = if (compact) 20.sp else 32.sp,
+                fontWeight = FontWeight.ExtraBold, color = HomeTone.indigo,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
-            HomeSplitPair(
-                t("low stock"), "${summary.lowStockCount}", if (summary.lowStockCount > 0) HomeTone.orange else Color.Unspecified,
-                t("incoming"), "${summary.incomingCount}", HomeTone.green
-            )
+            HomeDivider()
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                StockFigure(t("low stock"), "${summary.lowStockCount}",
+                    if (summary.lowStockCount > 0) HomeTone.red else Color.Unspecified,
+                    compact, Modifier.weight(1f))
+                StockDivider(compact)
+                StockFigure(t("incoming"), "${summary.incomingCount}",
+                    if (summary.incomingCount > 0) HomeTone.orange else Color.Unspecified,
+                    compact, Modifier.weight(1f))
+                StockDivider(compact)
+                StockFigure(t("Reserved"), "${summary.reservedCount}",
+                    if (summary.reservedCount > 0) HomeTone.orange else Color.Unspecified,
+                    compact, Modifier.weight(1f))
+            }
+            if (items > 0) {
+                StockBar(
+                    listOf(
+                        healthy to HomeTone.green,
+                        summary.incomingCount to HomeTone.orange,
+                        summary.lowStockCount to HomeTone.red,
+                        summary.reservedCount to HomeTone.slate
+                    ),
+                    if (compact) 6.dp else 9.dp
+                )
+            }
         }
         return
     }

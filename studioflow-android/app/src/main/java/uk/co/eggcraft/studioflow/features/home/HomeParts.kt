@@ -55,6 +55,8 @@ object HomeTone {
     val teal = Color(0xFF0F766E)
     val amber = Color(0xFFD97706)
     val slate = Color(0xFF475569)
+    /** The stock headline, the one figure the sheet colours on that card. */
+    val indigo = Color(0xFF4338CA)
 }
 
 /** Six dots in two columns — a braille glyph renders at a different weight in

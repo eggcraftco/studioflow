@@ -27522,7 +27522,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-count.tone-red b, .home-count.tone-red .home-count-icon { color: #dc2626; }
 .home-count.tone-slate b, .home-count.tone-slate .home-count-icon { color: #64748b; }
 
-.home-mix-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
+/* flex: 0 0 auto, or a full column shrinks it to nothing instead of overflowing
+   — which reads as "the bar was never drawn" rather than "it did not fit". */
+.home-mix-bar { display: flex; flex: 0 0 auto; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
 .home-mix-bar i { display: block; border-radius: 999px; }
 .home-mix-bar i.tone-new { background: #16a34a; }
 .home-mix-bar i.tone-returning { background: #7c3aed; }
@@ -27533,6 +27535,7 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-mix-bar i.tone-red { background: #dc2626; }
 .home-mix-bar i.tone-purple { background: #7c3aed; }
 .home-mix-bar i.tone-slate { background: #94a3b8; }
+.home-mix-bar i.tone-orange { background: #f59e0b; }
 .home-mix-key { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-mix-key li { display: flex; flex-direction: column; gap: 1px; padding: 0 10px; min-width: 0; }
 .home-mix-key li + li { border-left: 1px solid var(--border); }
@@ -27592,6 +27595,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-figure-row b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .home-figure-row b.is-negative { color: #dc2626; }
 .home-figure-row b.is-warning { color: #ea580c; }
+/* The square version: a rule above the counts, the way the sheet separates the
+   headline figure from the three that qualify it, and the bar on the floor. */
+.home-money.is-stock { gap: 4px; }
+.home-money.is-stock .home-metric-value { color: #4338ca; }
+/* The sheet capitalises this label. Done here rather than as a second
+   dictionary entry beside "total value" — ::first-letter is a no-op in the
+   scripts that have no case, and correct in the ones that do. */
+.home-money.is-stock .home-metric-label::first-letter { text-transform: uppercase; }
+.home-figure-row.is-ruled { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.home-figure-row.is-ruled > span { align-items: flex-start; text-align: left; }
+.home-money.is-stock .home-mix-bar { margin-top: 12px; }
 
 .home-bank-split {
   display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px;
@@ -28099,9 +28113,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-card.is-square .home-card-foot { display: none; }
   .home-card.is-square .home-card-body { padding-bottom: 14px; }
   .home-card.is-square { cursor: pointer; }
-  .home-card.is-square .home-card-badge { width: 32px; height: 32px; }
-  .home-card.is-square .home-card-badge svg { width: 16px; height: 16px; }
-  .home-card.is-square .home-card-title { font-size: 14px; }
+  /* gap applies between every flex item, including the ones that are empty, so
+     an unused header slot was costing the heading 8px of a 120px header. */
+  .home-card-head-slot:empty { display: none; }
+  .home-card.is-square .home-card-head { gap: 8px; padding-left: 14px; padding-right: 14px; }
+  .home-card.is-square .home-card-badge { width: 28px; height: 28px; }
+  .home-card.is-square .home-card-badge svg { width: 15px; height: 15px; }
+  .home-card.is-square .home-card-title { font-size: 13.5px; }
+  /* Customising puts the grip and the menu back on a header that is one phone
+     column wide. The badge is decoration and the heading is the card's name, so
+     the badge is what stands down. */
+  .home-screen.is-customising .home-card.is-square .home-card-badge { display: none; }
   /* Half a phone turns the chart into a spike and truncates every cost, so the
      panels take the full width and stack. */
   .home-money-panels { grid-template-columns: minmax(0, 1fr); }
@@ -28151,6 +28173,23 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   /* The phone header has no width for a second thing on the title's line, so
      the note goes back under it. */
   .home-card-titles.is-inline { flex-direction: column; align-items: flex-start; gap: 0; }
+
+  /* Three ruled figures on a 170px square give each label about 45px. The
+     sheet draws this card far larger than a phone ever renders it, so the
+     labels wrap rather than truncate and everything else gives up a little
+     height to pay for it. */
+  .home-money.is-stock { gap: 2px; }
+  .home-money.is-stock .home-metric-label { font-size: 10.5px; }
+  .home-money.is-stock .home-metric-value { font-size: 20px; }
+  .home-figure-row.is-ruled { padding-top: 6px; }
+  .home-figure-row.is-ruled > span { padding: 0 6px; }
+  .home-figure-row.is-ruled em {
+    font-size: 9.5px; line-height: 1.15; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 22px;
+  }
+  .home-figure-row.is-ruled b { font-size: 15px; }
+  .home-money.is-stock .home-mix-bar { margin-top: 6px; height: 6px; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
