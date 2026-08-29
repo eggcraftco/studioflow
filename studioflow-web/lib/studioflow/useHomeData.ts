@@ -14,6 +14,7 @@ import {
   type ProductionStage,
 } from "@/lib/studioflow/production";
 import { loadWorkspaceBlockHeadings, type HeadingItem } from "@/lib/studioflow/blockHeadings";
+import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
@@ -71,6 +72,7 @@ export type HomeData = {
   activity: StudioActivityNotification[];
   productionStages: ProductionStage[];
   productionSteps: HeadingItem[];
+  notes: StudioKeepNote[];
   bankLastSync: Date | null;
   lastLoadedAtMs: number;
   offline: boolean;
@@ -98,6 +100,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
   const [activity, setActivity] = useState<StudioActivityNotification[]>([]);
   const [productionStages, setProductionStages] = useState<ProductionStage[]>(DEFAULT_PRODUCTION_STAGES);
   const [productionSteps, setProductionSteps] = useState<HeadingItem[]>([]);
+  const [notes, setNotes] = useState<StudioKeepNote[]>([]);
   const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
   const [lastLoadedAtMs, setLastLoadedAtMs] = useState(0);
   const [offline, setOffline] = useState(false);
@@ -267,6 +270,13 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     return listenToActivityNotifications(workspace, uid, email, setActivity);
   }, [workspace, uid, email]);
 
+  // §13: the Notes card is for notes — the ones in the Notes app, not the free
+  // text typed on an order. Live, and per-user by path.
+  useEffect(() => {
+    if (!workspaceId || !uid) return;
+    return listenToKeepNotes(workspaceId, uid, setNotes);
+  }, [workspaceId, uid]);
+
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   return useMemo(
@@ -283,6 +293,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       activity,
       productionStages,
       productionSteps,
+      notes,
       bankLastSync,
       lastLoadedAtMs,
       offline,
@@ -290,7 +301,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, files, bankTransactions, activity, productionStages, productionSteps,
+      inventory, files, bankTransactions, activity, productionStages, productionSteps, notes,
       bankLastSync, lastLoadedAtMs, offline, reload,
     ],
   );

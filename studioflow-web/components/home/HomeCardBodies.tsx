@@ -448,73 +448,98 @@ function Donut({ share }: { share: number }) {
 
 /* ------------------------------------------------------ Orders/production */
 
+/** A stage's colour follows its kind, not its position — a workspace may define
+ *  any number of lanes and an index-keyed palette runs out. */
+const STAGE_TONE: Record<string, string> = {
+  ready: "green", active: "blue", blocked: "red", review: "purple", shipready: "green", done: "slate",
+};
+
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
-  // scheduleOrders, not orders: the lighter recent-orders shape leaves out
-  // productionBlocker and productionStageOverride, so a blocked order would miss
-  // the Blocked lane and one the user dragged somewhere would drift back to the
-  // derived lane — Home and the Production board disagreeing about the same job.
   const open = data.scheduleOrders.filter((order) => !order.isDelivered);
-  // The stage is never stored: it is derived from the order's own steps against
-  // the workspace's own stages, by the same rule the Production screen uses.
-  // Matching order.status against a hard-coded list was a second, incompatible
-  // definition, and it read zero for every stage.
+  if (open.length === 0) return null;
+
+  // The stage is derived from the order's own steps against the workspace's own
+  // stages — the same rule the Production screen applies, never a second one.
   const resolved = open.map((order) => ({
     order,
     stageId: resolveProductionStage(order, data.productionStages, data.productionSteps).stageId,
   }));
   const byStage = data.productionStages.map((stage) => ({
-    stage: stage.title,
+    id: stage.id,
+    title: stage.title,
     kind: stage.kind,
     count: resolved.filter((entry) => entry.stageId === stage.id).length,
   }));
   const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
-  const overdue = late.length;
 
   if (size === "1x1") {
     return (
-      <div className="home-orders">
-        <strong className="home-metric-value">{open.length}</strong>
+      <div className="home-money">
         <p className="home-metric-label">{t("active orders")}</p>
-        {overdue > 0 ? <p className="home-count-line is-warning"><strong>{overdue}</strong> {t("Overdue")}</p> : null}
+        <strong className="home-metric-value is-info">{open.length}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("Overdue")}</em><b className={late.length > 0 ? "is-warning" : ""}>{late.length}</b></span>
+          <span><em>{t("Ready to ship")}</em><b className="is-positive">
+            {byStage.filter((s) => s.kind === "shipready").reduce((sum, s) => sum + s.count, 0)}
+          </b></span>
+        </div>
       </div>
     );
   }
 
+  const flow = (
+    <ol className="home-flow">
+      {byStage.map((stage) => (
+        <li key={stage.id}>
+          <span className={`home-flow-node tone-${STAGE_TONE[stage.kind] ?? "slate"}`} aria-hidden="true" />
+          <em>{t(stage.title)}</em>
+          <b className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{stage.count}</b>
+        </li>
+      ))}
+    </ol>
+  );
+
+  if (size === "2x1") {
+    return <div className="home-money is-wide"><p className="home-eyebrow is-strong">{t("Production flow")}</p>{flow}</div>;
+  }
+
+  const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);
   return (
-    <div className="home-flow">
-      {/* The KPI row and the flow must not say the same thing twice (§9), so the
-          stage counts ARE the content here rather than a repeat above it. */}
-      <ol className="home-flow-row">
-        {byStage.map((entry, index) => (
-          <li key={`${entry.stage}-${index}`}>
-            {/* Keyed to the stage's kind, not its position: a workspace may define
-                any number of stages, and an index-coloured dot runs out. */}
-            <span className={`home-flow-dot kind-${entry.kind}`} aria-hidden="true" />
-            <span className="home-flow-name">{t(entry.stage)}</span>
-            <strong>{entry.count}</strong>
-          </li>
-        ))}
-      </ol>
-      {size === "2x2" ? (
-        <>
-          <p className="home-section-label">{t("At risk")}</p>
-          {/* A bigger card has to earn its space. When nothing is late it says so
-              rather than leaving the extra height blank, which reads as broken. */}
-          {late.length === 0 ? (
-            <p className="home-card-note">{t("All set — nice work.")}</p>
-          ) : null}
-        <ul className="home-list">
-          {late.map((order) => (
+    <div className="home-money is-large">
+      <div className="home-tile-row is-pair">
+        <MoneyTile label={t("active orders")} value={String(open.length)} tone="blue" />
+        <MoneyTile label={t("Overdue")} value={String(late.length)} tone={late.length > 0 ? "orange" : "blue"} />
+      </div>
+      <div className="home-panel">
+        <p className="home-eyebrow is-strong">{t("Production flow")}</p>
+        {flow}
+      </div>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Priority orders")}</p>
+        <ul className="home-record-list">
+          {priority.map((order) => {
+            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
+            const days = order.dueDate
+              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
+              : 0;
+            const stage = byStage.find((entry) =>
+              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
+            return (
               <li key={order.id}>
                 <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                  {order.designName || order.watchRef || order.customerName}
+                  {order.customerName || order.designName || order.watchRef}
                 </Link>
-                <span className="is-warning">{t("Overdue")}</span>
+                {stage ? <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span> : null}
+                {overdue ? (
+                  <span className="home-chip is-late">
+                    {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
+                  </span>
+                ) : null}
               </li>
-            ))}
+            );
+          })}
         </ul>
-        </>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -522,33 +547,133 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 /* --------------------------------------------------------------- Schedule */
 
 export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
-  const upcoming = data.scheduleOrders
-    .filter((order) => order.dueDate && !order.isDelivered)
-    .sort((a, b) => (a.dueDate!.getTime() - b.dueDate!.getTime()))
-    .slice(0, size === "2x2" ? 8 : 4);
+  // Dates and deadlines only — never production status again (§10).
+  const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
+  if (open.length === 0) return null;
+  const upcoming = [...open].sort((a, b) => (a.dueDate!.getTime()) - (b.dueDate!.getTime()));
 
-  if (upcoming.length === 0) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayLabel = (date: Date) => {
+    const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - today.getTime()) / 86400000);
+    if (days === 0) return t("Today");
+    if (days === 1) return t("Tomorrow");
+    if (days < 0) return t("Overdue");
+    return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  };
+
+  if (size === "1x1") {
+    return (
+      <ul className="home-record-list">
+        {upcoming.slice(0, 3).map((order) => (
+          <li key={order.id}>
+            <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+              {order.customerName || order.designName}
+            </Link>
+            <span className={order.dueDate! < today ? "home-chip is-late" : "home-chip is-muted"}>
+              {dayLabel(order.dueDate!)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  // The visible week, Monday first, so the timeline and the day strip agree.
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    return date;
+  });
+
+  const deadlines = (
+    <ul className="home-deadline-row">
+      {upcoming.slice(0, 3).map((order) => {
+        const overdue = order.dueDate! < today;
+        const tone = overdue ? "red" : dayLabel(order.dueDate!) === t("Tomorrow") ? "blue" : "green";
+        return (
+          <li key={order.id}>
+            <span className={`home-deadline-dot tone-${tone}`} aria-hidden="true" />
+            <span>
+              <em className={`tone-${tone}`}>{dayLabel(order.dueDate!)}</em>
+              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                {order.customerName || order.designName}
+              </Link>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        <ol className="home-week-strip">
+          {days.map((date) => {
+            const count = open.filter((order) => order.dueDate!.toDateString() === date.toDateString()).length;
+            const isToday = date.getTime() === today.getTime();
+            return (
+              <li key={date.toISOString()} className={isToday ? "is-today" : ""}>
+                <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+                <b>{date.getDate()}</b>
+                <i className={count > 0 ? "has-work" : ""}>{count > 0 ? count : ""}</i>
+              </li>
+            );
+          })}
+        </ol>
+        {deadlines}
+      </div>
+    );
+  }
+
+  // A read-only bar per order across the week. Read-only on purpose: dragging a
+  // date here would fight the gesture that moves the card itself (§10).
+  const weekEnd = new Date(days[6]);
+  weekEnd.setHours(23, 59, 59, 999);
+  const bars = upcoming
+    .filter((order) => order.dueDate! >= weekStart && (order.paymentDate ?? order.dueDate!) <= weekEnd)
+    .slice(0, 5);
+  const span = weekEnd.getTime() - weekStart.getTime();
+  const pct = (date: Date) =>
+    Math.max(0, Math.min(100, ((date.getTime() - weekStart.getTime()) / span) * 100));
 
   return (
-    <div className="home-schedule">
-      {/* Read-only on Home (§10): the card itself is draggable, and a timeline
-          bar you can also drag would fight the card for the same gesture. */}
-      <ul className="home-list">
-        {upcoming.map((order) => {
-          const due = order.dueDate!;
-          const late = due.getTime() < Date.now();
-          return (
-            <li key={order.id}>
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                {order.designName || order.watchRef || order.customerName}
-              </Link>
-              <span className={late ? "is-warning" : ""}>
-                {due.toLocaleDateString(undefined, { day: "numeric", month: "short" })}
-              </span>
+    <div className="home-money is-large">
+      <p className="home-eyebrow is-strong">{t("Weekly timeline")}</p>
+      <div className="home-timeline">
+        <ol className="home-timeline-head">
+          {days.map((date) => (
+            <li key={date.toISOString()} className={date.getTime() === today.getTime() ? "is-today" : ""}>
+              {date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ol>
+        <ul className="home-timeline-rows">
+          {bars.map((order, index) => {
+            const from = pct(order.paymentDate ?? weekStart);
+            const to = pct(order.dueDate!);
+            const overdue = order.dueDate! < today;
+            return (
+              <li key={order.id}>
+                <span className="home-timeline-name">{order.customerName || order.designName}</span>
+                <span className="home-timeline-track">
+                  <i
+                    className={overdue ? "tone-red" : `tone-${["blue", "green", "purple", "amber", "teal"][index % 5]}`}
+                    style={{ left: `${Math.min(from, to)}%`, width: `${Math.max(4, Math.abs(to - from))}%` }}
+                  >
+                    {overdue ? t("Overdue") : ""}
+                  </i>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <p className="home-eyebrow is-strong">{t("Upcoming deadlines")}</p>
+      {deadlines}
     </div>
   );
 }
@@ -665,92 +790,232 @@ function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; ton
 
 /* -------------------------------------------------------- Recent activity */
 
-export function RecentActivityCardBody({ size, data, t }: CardBodyProps) {
-  // The workspace's own notification stream, not a second list of orders sorted
-  // by date — that was the Orders card again under a different heading, which is
-  // exactly what §5 says this card must not be.
-  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
-
-  if (rows.length === 0) return null;
-
-  return (
-    <ul className="home-list home-activity">
-      {rows.map((item) => {
-        const line = (
-          <>
-            <span className="home-activity-title">{item.title || t("Update")}</span>
-            {size !== "1x1" && item.message ? (
-              <span className="home-activity-message">{item.message}</span>
-            ) : null}
-          </>
-        );
-        return (
-          <li key={item.id}>
-            {item.orderId ? (
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(item.orderId)}`}>{line}</Link>
-            ) : (
-              <span>{line}</span>
-            )}
-            <span className="home-activity-status">{homeRelative(item.createdAtMillis, t)}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
+/** Event type to colour. The title always names the event, so colour only
+ *  speeds up scanning — it never carries the meaning on its own (§20). */
+function activityTone(type: string) {
+  const key = type.toLowerCase();
+  if (key.includes("payment")) return "green";
+  if (key.includes("order")) return "purple";
+  if (key.includes("production") || key.includes("status")) return "blue";
+  if (key.includes("file")) return "amber";
+  if (key.includes("inventory")) return "orange";
+  if (key.includes("customer")) return "teal";
+  if (key.includes("schedule")) return "blue";
+  return "slate";
 }
 
-/** "12 min ago" while it is fresh, then a plain date. */
-function homeRelative(millis: number, t: (text: string) => string) {
-  if (!millis) return "";
-  const minutes = Math.max(1, Math.round((Date.now() - millis) / 60000));
-  if (minutes < 60) return `${minutes} ${t("min ago")}`;
-  return new Date(millis).toLocaleDateString();
+export function RecentActivityCardBody({ size, data, t }: CardBodyProps) {
+  // The workspace's own stream, already filtered to what this user is a
+  // recipient of — activity never widens what someone can see (§12).
+  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
+  if (rows.length === 0) return null;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfToday.getDate() - 1);
+
+  const relative = (millis: number) => {
+    if (!millis) return "";
+    const minutes = Math.max(1, Math.round((Date.now() - millis) / 60000));
+    if (minutes < 60) return `${minutes} ${t("min ago")}`;
+    if (millis >= startOfToday.getTime()) return `${Math.round(minutes / 60)}h`;
+    if (millis >= startOfYesterday.getTime()) return t("Yesterday");
+    return new Date(millis).toLocaleDateString();
+  };
+
+  const row = (item: (typeof rows)[number]) => (
+    <li key={item.id}>
+      <span className={`home-activity-mark tone-${activityTone(item.type)}`} aria-hidden="true" />
+      <span className="home-activity-text">
+        <strong>{item.title || t("Update")}</strong>
+        {size !== "1x1" && item.message ? <em>{item.message}</em> : null}
+      </span>
+      {size === "2x2" && item.senderName ? <span className="home-chip is-muted">{item.senderName}</span> : null}
+      <span className="home-activity-when">{relative(item.createdAtMillis)}</span>
+    </li>
+  );
+
+  if (size !== "2x2") {
+    return <ul className="home-activity-list">{rows.map(row)}</ul>;
+  }
+
+  const today = rows.filter((item) => item.createdAtMillis >= startOfToday.getTime());
+  const earlier = rows.filter((item) => item.createdAtMillis < startOfToday.getTime());
+  return (
+    <div className="home-money is-large">
+      {today.length > 0 ? (
+        <>
+          <p className="home-eyebrow is-strong">{t("Today")}</p>
+          <ul className="home-activity-list">{today.map(row)}</ul>
+        </>
+      ) : null}
+      {earlier.length > 0 ? (
+        <>
+          <p className="home-eyebrow is-strong">{t("Earlier")}</p>
+          <ul className="home-activity-list">{earlier.map(row)}</ul>
+        </>
+      ) : null}
+      <p className="home-action-note">{t("Only activity you have permission to view is shown")}</p>
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ Files */
 
+function fileKind(name: string, contentType: string): "pdf" | "image" | "doc" {
+  if (contentType.startsWith("image/") || /\.(png|jpe?g|gif|webp|heic)$/i.test(name)) return "image";
+  if (contentType === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+  return "doc";
+}
+
+function humanSize(bytes: number) {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} KB`;
+  return `${bytes} B`;
+}
+
 export function FilesCardBody({ size, data, t }: CardBodyProps) {
-  const rows = data.files.slice(0, size === "1x1" ? 3 : size === "2x1" ? 4 : 8);
-  if (rows.length === 0) return null;
+  const files = data.files;
+  if (files.length === 0) return null;
+
+  // One file, linked to as many records as it belongs to — the card counts
+  // files, never copies (§14).
+  const unlinked = files.filter((file) => !file.orderId);
+  const used = files.reduce((sum, file) => sum + (file.fileSize || 0), 0);
+
+  const row = (file: (typeof files)[number]) => (
+    <li key={file.fileId || file.id}>
+      <span className={`home-file-mark is-${fileKind(file.fileName, file.contentType)}`} aria-hidden="true" />
+      <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
+        {file.fileName}
+      </Link>
+      {file.orderId ? (
+        <span className="home-chip is-source">{file.designName || file.customerName || t("Order")}</span>
+      ) : (
+        <span className="home-chip is-muted">{t("Unlinked")}</span>
+      )}
+    </li>
+  );
+
+  if (size === "1x1") {
+    return (
+      <div className="home-money">
+        <p className="home-metric-label">{t("Total files")}</p>
+        <strong className="home-metric-value is-info">{files.length}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("Storage")}</em><b className="is-plain">{humanSize(used)}</b></span>
+          <span><em>{t("Unlinked")}</em><b className={unlinked.length > 0 ? "is-warning" : ""}>{unlinked.length}</b></span>
+        </div>
+      </div>
+    );
+  }
+
+  const tiles = (
+    <div className="home-tile-row is-triple">
+      <MoneyTile label={t("Total files")} value={String(files.length)} tone="blue" />
+      <MoneyTile label={t("Storage")} value={humanSize(used)} tone="green" />
+      <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
+    </div>
+  );
+
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        {tiles}
+        <ul className="home-record-list">{files.slice(0, 3).map(row)}</ul>
+      </div>
+    );
+  }
 
   return (
-    <ul className="home-list home-files">
-      {rows.map((file) => (
-        <li key={file.fileId || file.id}>
-          <Link href="/files">{file.fileName}</Link>
-          {/* One file, many relationships (§14) — the chips are the links, not
-              copies of the file. */}
-          {file.orderId ? (
-            <span className="home-chip">{file.designName || file.customerName || t("Order")}</span>
+    <div className="home-money is-large">
+      {tiles}
+      <div className="home-money-panels">
+        <div className="home-panel is-flush">
+          <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+          <ul className="home-record-list">{files.slice(0, 5).map(row)}</ul>
+        </div>
+        <div className="home-panel is-flush">
+          <p className="home-eyebrow is-strong">{t("Needs linking")}</p>
+          {unlinked.length === 0 ? (
+            <p className="home-card-note">{t("All set — nice work.")}</p>
           ) : (
-            <span className="home-chip is-muted">{t("Unlinked")}</span>
+            <>
+              <p className="home-card-note">
+                {t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}
+              </p>
+              <ul className="home-record-list">{unlinked.slice(0, 3).map(row)}</ul>
+            </>
           )}
-        </li>
-      ))}
-    </ul>
+        </div>
+      </div>
+      <p className="home-action-note">{t("One file, multiple links — no duplicates.")}</p>
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ Notes */
 
 export function NotesCardBody({ size, data, t }: CardBodyProps) {
-  const rows = data.orders
-    .filter((order) => (order.notes || "").trim())
-    .slice(0, size === "1x1" ? 2 : size === "2x1" ? 3 : 6);
+  // Notes only — not files, not AI replies (§13). Pinned first, then recent.
+  const live = data.notes.filter((note) => !note.isDeleted && !note.isArchived);
+  if (live.length === 0) return null;
+  const pinned = live.filter((note) => note.isPinned);
+  const recent = live
+    .filter((note) => !note.isPinned)
+    .sort((a, b) => (b.updatedAtMillis ?? 0) - (a.updatedAtMillis ?? 0));
 
-  if (rows.length === 0) return null;
+  const limit = size === "1x1" ? 2 : size === "2x1" ? 3 : 6;
+  const shown = [...pinned, ...recent].slice(0, limit);
+
+  if (size !== "2x2") {
+    return (
+      <div className="home-note-grid" data-size={size}>
+        {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+      </div>
+    );
+  }
 
   return (
-    <div className="home-notes">
-      {rows.map((order) => (
-        <article key={order.id} className="home-note">
-          <p>{order.notes.slice(0, 140)}</p>
-          <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`} className="home-chip">
-            {order.designName || order.watchRef || order.customerName}
-          </Link>
-        </article>
-      ))}
+    <div className="home-notes-large">
+      {pinned.length > 0 ? (
+        <>
+          <p className="home-eyebrow is-strong">{t("Pinned")}</p>
+          <div className="home-note-grid">
+            {pinned.slice(0, 2).map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+          </div>
+        </>
+      ) : null}
+      <p className="home-eyebrow is-strong">{t("Recent")}</p>
+      <div className="home-note-grid">
+        {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+      </div>
     </div>
+  );
+}
+
+/** A note keeps its own colour — that is the note's, not the card's. */
+function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
+  const chip = note.linkedOrderLabel || note.linkedCustomerName;
+  const reminder = note.reminderDateMillis ? new Date(note.reminderDateMillis) : null;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const days = reminder ? Math.round((reminder.getTime() - startOfDay.getTime()) / 86400000) : null;
+  return (
+    <Link className={`home-note tone-${note.colorName || "default"}`} href={`/notes?note=${encodeURIComponent(note.id)}`}>
+      <strong>{note.title || t("Untitled note")}</strong>
+      {note.text ? <p>{note.text}</p> : null}
+      <span className="home-note-foot">
+        {chip ? <span className="home-chip is-muted">{chip}</span> : null}
+        {days !== null ? (
+          <em className={days <= 0 ? "is-due" : days === 1 ? "is-soon" : ""}>
+            {days === 0 ? t("Today") : days === 1 ? t("Tomorrow") : reminder?.toLocaleDateString()}
+          </em>
+        ) : null}
+      </span>
+    </Link>
   );
 }
 
