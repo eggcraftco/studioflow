@@ -2524,14 +2524,31 @@ struct HomeFilesBody: View {
             let used = files.reduce(0.0) { $0 + Double($1.1.fileSize) }
             if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Total files", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
-                    Text("\(files.count)").font(.system(size: compact ? 28 : 36, weight: .heavy)).foregroundColor(HomeTone.accent)
-                    Spacer(minLength: 0)
-                    HomeSplitPair {
-                        HomeFigure(label: t("Storage", lang: lang), value: homeFileSize(used))
-                    } right: {
-                        HomeFigure(label: t("File library", lang: lang), value: "\(files.count)")
+                    // The square asks the same question as the wide card — how
+                    // full is this workspace, and what landed recently. "File
+                    // library" was the file count again under a second name.
+                    let limitBytes = Double(auth.effectiveStorageLimitMB) * 1024 * 1024
+                    let pct = limitBytes > 0 ? min(100, Int((used / limitBytes) * 100)) : 0
+                    if limitBytes > 0 {
+                        VStack(alignment: .leading, spacing: compact ? 3 : 5) {
+                            HStack {
+                                Text("\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))")
+                                    .font(.system(size: compact ? 10.5 : 12.5)).foregroundColor(.secondary)
+                                    .lineLimit(1).minimumScaleFactor(0.7)
+                                Spacer(minLength: 4)
+                                Text("\(pct)%")
+                                    .font(.system(size: compact ? 10.5 : 12.5, weight: .heavy))
+                                    .foregroundColor(pct >= 90 ? HomeTone.red : HomeTone.accent)
+                            }
+                            HomeProgressBar(fraction: Double(pct) / 100, tint: pct >= 90 ? HomeTone.red : HomeTone.accent)
+                        }
                     }
+                    if !compact { HomeEyebrow(text: t("Recent", lang: lang)) }
+                    ForEach(Array(files.prefix(2).enumerated()), id: \.offset) { _, entry in
+                        HomeFileRow(file: entry.1, order: entry.0, lang: lang,
+                                    compact: compact, stacked: true)
+                    }
+                    Spacer(minLength: 0)
                 }
             } else if size == .twoByOne {
                 // The sheet leads with how full the workspace is, not how many
@@ -2688,6 +2705,9 @@ struct HomeFileRow: View {
     let order: Siparis
     let lang: String
     var compact: Bool = false
+    /// On a square the name and the chip cannot share a line — 162pt leaves the
+    /// name about 55pt beside a chip, which is not a filename any more.
+    var stacked: Bool = false
     var body: some View {
         let tone = homeFileTone(file.fileName)
         let ext = String((file.fileName.split(separator: ".").last ?? "").prefix(4)).uppercased()
@@ -2696,15 +2716,27 @@ struct HomeFileRow: View {
                 .font(.system(size: compact ? 6.5 : 8, weight: .heavy)).foregroundColor(tone)
                 .frame(width: compact ? 20 : 28, height: compact ? 20 : 28)
                 .background(RoundedRectangle(cornerRadius: compact ? 5 : 7).fill(tone.opacity(0.14)))
-            Text(file.fileName)
-                .font(.system(size: compact ? 10.5 : 12.5, weight: .semibold)).lineLimit(1)
+            if stacked {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(file.fileName)
+                        .font(.system(size: compact ? 9.5 : 12, weight: .semibold)).lineLimit(1)
+                    if !order.customerName.isEmpty || !order.designName.isEmpty {
+                        HomeChip(text: order.designName.isEmpty ? order.customerName : order.designName,
+                                 tone: HomeTone.accent)
+                    }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if !order.customerName.isEmpty || !order.designName.isEmpty {
-                HomeChip(text: order.designName.isEmpty ? order.customerName : order.designName,
-                         tone: HomeTone.accent)
+            } else {
+                Text(file.fileName)
+                    .font(.system(size: compact ? 10.5 : 12.5, weight: .semibold)).lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !order.customerName.isEmpty || !order.designName.isEmpty {
+                    HomeChip(text: order.designName.isEmpty ? order.customerName : order.designName,
+                             tone: HomeTone.accent)
+                }
+                Text(homeAgoLabel(file.uploadedAt, lang: lang))
+                    .font(.system(size: compact ? 9.5 : 11.5)).foregroundColor(.secondary).lineLimit(1)
             }
-            Text(homeAgoLabel(file.uploadedAt, lang: lang))
-                .font(.system(size: compact ? 9.5 : 11.5)).foregroundColor(.secondary).lineLimit(1)
         }
         .padding(.vertical, compact ? 2 : 5)
     }

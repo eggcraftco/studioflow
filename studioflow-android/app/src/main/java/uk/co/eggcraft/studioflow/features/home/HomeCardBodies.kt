@@ -2129,42 +2129,46 @@ private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, compact:
         return
     }
     val used = files.sumOf { it.second.fileSize }
+    val limitBytes = (state.workspace?.effectiveStorageLimitMB ?: 0L) * 1024 * 1024
+    val pct = if (limitBytes > 0) ((used.toDouble() / limitBytes) * 100).toInt().coerceAtMost(100) else 0
+
+    @Composable
+    fun quota() {
+        if (limitBytes <= 0) return
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 5.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${fileSize(used.toDouble())} ${t("of")} ${fileSize(limitBytes.toDouble())}",
+                    fontSize = if (compact) 10.5.sp else 12.5.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.weight(1f))
+                Text("$pct%", fontSize = if (compact) 10.5.sp else 12.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (pct >= 90) HomeTone.red else HomeTone.accent)
+            }
+            HomeProgressBar(pct / 100f, tint = if (pct >= 90) HomeTone.red else HomeTone.accent)
+        }
+    }
+
     if (size == HomeCardSize.OneByOne) {
+        // The square asks the same question as the wide card — how full is this
+        // workspace, and what landed recently. "File library" was the file count
+        // again under a second name.
         Column(Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
-            Text(t("Total files"), fontSize = if (compact) 11.sp else 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${files.size}", fontSize = if (compact) 26.sp else 34.sp,
-                fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+            verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
+            quota()
+            if (!compact) HomeEyebrow(t("Recent"))
+            files.take(2).forEach { (order, file) -> FileRow(file, order, t, compact, stacked = true) }
             Spacer(Modifier.weight(1f))
-            HomeSplitPair(
-                t("Storage"), fileSize(used.toDouble()),
-                rightLabel = t("File library"), rightValue = "${files.size}"
-            )
         }
         return
     }
     if (size == HomeCardSize.TwoByOne) {
         // The sheet leads with how full the workspace is, not how many bytes it
         // holds: a size on its own says nothing without the plan's ceiling.
-        val limitBytes = (state.workspace?.effectiveStorageLimitMB ?: 0L) * 1024 * 1024
-        val pct = if (limitBytes > 0) ((used.toDouble() / limitBytes) * 100).toInt().coerceAtMost(100) else 0
         Column(Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 9.dp)) {
-            if (limitBytes > 0) {
-                Column(verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 5.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${fileSize(used.toDouble())} ${t("of")} ${fileSize(limitBytes.toDouble())}",
-                            fontSize = if (compact) 10.5.sp else 12.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.weight(1f))
-                        Text("$pct%", fontSize = if (compact) 10.5.sp else 12.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (pct >= 90) HomeTone.red else HomeTone.accent)
-                    }
-                    HomeProgressBar(pct / 100f, tint = if (pct >= 90) HomeTone.red else HomeTone.accent)
-                }
-            }
+            quota()
             // The eyebrow goes first on a phone — the card is called Files and
             // the rows are plainly the recent ones, so it was the line carrying
             // the least.
@@ -2335,7 +2339,12 @@ private fun NoteTile(note: StudioKeepNote, t: (String) -> String, compact: Boole
 /** The sheet's file row: what kind it is, its name, what it is attached to, and
  *  when it arrived — the last is what a person actually asks about an upload. */
 @Composable
-private fun FileRow(file: StudioClientFile, order: StudioOrder, t: (String) -> String, compact: Boolean) {
+private fun FileRow(
+    file: StudioClientFile, order: StudioOrder, t: (String) -> String, compact: Boolean,
+    /** On a square the name and the chip cannot share a line — 162dp leaves the
+     *  name about 55dp beside a chip, which is not a filename any more. */
+    stacked: Boolean = false
+) {
     val tone = fileTone(file.fileName)
     val ext = file.fileName.substringAfterLast('.', "").take(4).uppercase()
     Row(
@@ -2351,13 +2360,21 @@ private fun FileRow(file: StudioClientFile, order: StudioOrder, t: (String) -> S
         ) {
             Text(ext, fontSize = if (compact) 6.5.sp else 8.sp, fontWeight = FontWeight.ExtraBold, color = tone)
         }
-        Text(file.fileName, fontSize = if (compact) 10.5.sp else 12.5.sp,
-            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f))
         val link = order.designName.ifEmpty { order.customerName }
-        if (link.isNotEmpty()) HomeChip(link, HomeTone.accent)
-        Text(agoLabel(file.uploadedAt, t), fontSize = if (compact) 9.5.sp else 11.5.sp,
-            maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (stacked) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(file.fileName, fontSize = if (compact) 9.5.sp else 12.sp,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (link.isNotEmpty()) HomeChip(link, HomeTone.accent)
+            }
+        } else {
+            Text(file.fileName, fontSize = if (compact) 10.5.sp else 12.5.sp,
+                fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+            if (link.isNotEmpty()) HomeChip(link, HomeTone.accent)
+            Text(agoLabel(file.uploadedAt, t), fontSize = if (compact) 9.5.sp else 11.5.sp,
+                maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

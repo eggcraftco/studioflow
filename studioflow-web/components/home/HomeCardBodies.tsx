@@ -1217,15 +1217,29 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     </li>
   );
 
+  const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
+  const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
+  const quota = limitBytes > 0 ? (
+    <div className="home-quota">
+      <span className="home-quota-line">
+        <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
+        <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
+      </span>
+      <span className="home-quota-bar" aria-hidden="true">
+        <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
+      </span>
+    </div>
+  ) : null;
+
   if (size === "1x1") {
+    // The square asks the same question as the wide card — how full is this
+    // workspace, and what landed recently. "File library" was the file count
+    // again under a second name.
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("Total files")}</p>
-        <strong className="home-metric-value is-info">{files.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("Storage")}</em><b className="is-plain">{humanSize(used)}</b></span>
-          <span><em>{t("Unlinked")}</em><b className={unlinked.length > 0 ? "is-warning" : ""}>{unlinked.length}</b></span>
-        </div>
+      <div className="home-money is-files">
+        {quota}
+        <p className="home-eyebrow is-strong">{t("Recent")}</p>
+        <ul className="home-file-list">{files.slice(0, 2).map(fileRow)}</ul>
       </div>
     );
   }
@@ -1239,23 +1253,9 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   );
 
   if (size === "2x1") {
-    // The sheet leads with how full the workspace is, not how many bytes it
-    // holds: a size on its own says nothing without the plan's ceiling.
-    const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
-    const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
     return (
       <div className="home-money is-wide is-files">
-        {limitBytes > 0 ? (
-          <div className="home-quota">
-            <span className="home-quota-line">
-              <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
-              <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
-            </span>
-            <span className="home-quota-bar" aria-hidden="true">
-              <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
-            </span>
-          </div>
-        ) : null}
+        {quota}
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
         <ul className="home-file-list">{files.slice(0, 3).map(fileRow)}</ul>
       </div>

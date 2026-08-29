@@ -28463,7 +28463,25 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   /* The files 2x1 has 104px of body against 163px of content. The eyebrow goes
      first — the card is called Files and the rows are plainly the recent ones,
      so it was the line carrying the least. Everything else just tightens. */
+  /* The eyebrow goes at both phone sizes: the card is called Files and the
+     rows are plainly the recent ones, so it is the line carrying the least —
+     and at 162px it costs a row. */
   .home-money.is-files > .home-eyebrow { display: none; }
+  /* On the square the name and the chip cannot share a line — 162px leaves the
+     name about 55px beside a chip, which is not a filename any more. The chip
+     goes under it and both stay readable. */
+  .home-card-1x1 .home-file-list a {
+    grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: auto auto;
+    row-gap: 0; padding: 2px 0; gap: 6px;
+  }
+  /* 107px of name column against a 22-character filename: it ellipsises either
+     way, so the type comes down to show as much of it as possible. The
+     extension is already the icon, so the tail is not the part that matters. */
+  .home-card-1x1 .home-file-list strong { font-size: 9.5px; }
+  .home-card-1x1 .home-file-icon { width: 18px; height: 18px; font-size: 6px; }
+  .home-card-1x1 .home-file-list .home-file-icon { grid-row: 1 / span 2; align-self: center; }
+  .home-card-1x1 .home-file-list em { display: none; }
+  .home-card-1x1 .home-money.is-files .home-chip { justify-self: start; }
   .home-money.is-files { gap: 5px; }
   .home-quota { gap: 3px; }
   .home-quota-line em, .home-quota-line b { font-size: 10.5px; }
