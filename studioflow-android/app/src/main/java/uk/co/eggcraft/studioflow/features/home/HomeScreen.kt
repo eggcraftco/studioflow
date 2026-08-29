@@ -481,24 +481,23 @@ fun HomeCardShell(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 6.dp),
+                    .padding(start = 14.dp, end = 2.dp, top = 12.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
+                if (customising) {
+                    HomeGripDots()
+                    Spacer(Modifier.width(9.dp))
+                }
+                HomeBadge(
                     definition.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(15.dp).padding(end = 0.dp),
-                    tint = if (placement.tone == HomeCardTone.Standard)
-                        MaterialTheme.colorScheme.onSurfaceVariant else homeToneColor(placement.tone)
+                    if (placement.tone == HomeCardTone.Standard) HomeTone.accent else homeToneColor(placement.tone)
                 )
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
                     placement.heading.ifEmpty { t(definition.title) },
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    fontSize = 14.5.sp, fontWeight = FontWeight.ExtraBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                    color = if (placement.tone == HomeCardTone.Standard)
-                        MaterialTheme.colorScheme.onSurface else homeToneColor(placement.tone)
+                    modifier = Modifier.weight(1f)
                 )
                 Box {
                     // §17 asks for at least 44dp of touch target; the glyph stays small.
@@ -546,7 +545,7 @@ fun HomeCardShell(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
+                    .padding(horizontal = 14.dp)
             ) { content() }
             Row(
                 Modifier
@@ -606,5 +605,3 @@ fun HomeProgress(fraction: Float) {
     )
 }
 
-fun homeDueDate(paymentDate: Date, deliveryTime: Int): Date =
-    Date(paymentDate.time + deliveryTime.coerceAtLeast(0) * 24L * 60L * 60L * 1000L)

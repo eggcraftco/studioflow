@@ -1,31 +1,49 @@
 package uk.co.eggcraft.studioflow.features.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Note
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.PersonAddAlt
+import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
+import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
 import uk.co.eggcraft.studioflow.features.production.ProductionStage
-import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.production.ProductionStageKind
+import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -33,7 +51,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * The eleven card bodies.
+ * The eleven card bodies, drawn from the reference sheet.
  *
  * A size is not a crop. 1x1 answers one question, 2x1 adds the breakdown that
  * makes the number actionable, and 2x2 adds the list you would otherwise open
@@ -79,24 +97,38 @@ private fun money(value: Double, state: StudioFlowUiState): String {
 private fun liveOrders(state: StudioFlowUiState): List<StudioOrder> =
     state.orders.filter { !it.isDeleted && !it.isDelivered && it.countsTowardBalance }
 
-private fun relativeLabel(date: Date?, t: (String) -> String): String {
+fun homeDueDate(paymentDate: Date, deliveryTime: Int): Date =
+    Date(paymentDate.time + deliveryTime.coerceAtLeast(0) * 24L * 60L * 60L * 1000L)
+
+private fun startOfToday(): Date = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+}.time
+
+private fun dayLabel(date: Date, t: (String) -> String): String {
+    val days = (date.time - startOfToday().time) / 86_400_000L
+    return when {
+        days == 0L -> t("Today")
+        days == 1L -> t("Tomorrow")
+        days < 0L -> t("Overdue")
+        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(date)
+    }
+}
+
+private fun relative(date: Date?, t: (String) -> String): String {
     if (date == null) return ""
-    val minutes = ((Date().time - date.time) / 60000L).coerceAtLeast(0L)
-    if (minutes < 60) return "${minutes.coerceAtLeast(1)} ${t("min ago")}"
+    val minutes = ((Date().time - date.time) / 60_000L).coerceAtLeast(1L)
+    if (minutes < 60) return "$minutes ${t("min ago")}"
+    if (date >= startOfToday()) return "${minutes / 60}h"
     return SimpleDateFormat("d MMM", Locale.getDefault()).format(date)
 }
 
-private fun dueLabel(date: Date, t: (String) -> String): String {
-    val today = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-    }.time
-    val days = (date.time - today.time) / (24L * 60L * 60L * 1000L)
-    if (days == 0L) return t("Today")
-    return SimpleDateFormat("d MMM", Locale.getDefault()).format(date)
-}
+// ------------------------------------------------------------ Getting started
 
-// ---------------------------------------------------------- Getting started
+private data class SetupStep(
+    val id: String, val label: String, val blurb: String,
+    val destination: String, val cta: String, val done: Boolean
+)
 
 @Composable
 private fun HomeGettingStartedBody(
@@ -106,56 +138,128 @@ private fun HomeGettingStartedBody(
     t: (String) -> String
 ) {
     val inventoryCount = (inventory?.uniqueCount ?: 0) + (inventory?.quantityCount ?: 0)
+    val fromStore = state.orders.any {
+        !it.customFields["Shopify Status"].isNullOrBlank() || !it.customFields["WooCommerce Status"].isNullOrBlank()
+    }
     val steps = listOf(
-        "Set up business profile" to true,
-        "Add your first customer" to state.customers.isNotEmpty(),
-        "Create your first order" to state.orders.isNotEmpty(),
-        "Add an inventory item" to (inventoryCount > 0),
-        "Connect your bank" to state.bankTransactions.isNotEmpty(),
-        "Upload your first file" to state.orders.any { it.clientFiles.isNotEmpty() }
+        SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", true),
+        SetupStep("customer", "Add your first customer", "Orders, notes and files all hang off a customer.", "Customers", "Add customer", state.customers.isNotEmpty()),
+        SetupStep("order", "Create your first order", "The record everything else in NivaDesk attaches to.", "Orders", "Create order", state.orders.isNotEmpty()),
+        SetupStep("shop", "Connect your shop", "Bring Shopify or WooCommerce orders in automatically.", "Settings", "Connect shop", fromStore),
+        SetupStep("inventory", "Add an inventory item", "Track what you own, what is reserved and what is low.", "Inventory", "Add item", inventoryCount > 0),
+        SetupStep("bank", "Connect your bank", "Read-only. Spending arrives and you categorise it.", "BankSpending", "Connect bank", state.bankTransactions.isNotEmpty())
     )
-    val done = steps.count { it.second }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val done = steps.filter { it.done }
+    val next = steps.firstOrNull { !it.done }
+    val todo = steps.filter { !it.done && it.id != next?.id }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The count belongs at every size: the bar alone says "some", and the
+        // sheet always pairs it with how many of how many.
         Text(
             t("{done} of {total} complete")
-                .replace("{done}", done.toString())
+                .replace("{done}", done.size.toString())
                 .replace("{total}", steps.size.toString()),
-            fontSize = 10.sp, fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        HomeProgress(done.toFloat() / steps.size)
-        // Never blocking, never a payment prompt (§15).
-        val next = steps.firstOrNull { !it.second }
-        if (next != null) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x142563EB), RoundedCornerShape(8.dp))
-                    .padding(8.dp)
-            ) {
-                Text(t("Up next").uppercase(), fontSize = 8.sp,
-                    fontWeight = FontWeight.ExtraBold, color = Color(0xFF2563EB))
-                Text(t(next.first), fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+        HomeProgressBar(done.size.toFloat() / steps.size)
+
+        when (size) {
+            HomeCardSize.OneByOne -> {
+                if (next != null) {
+                    HomeEyebrow(t("Next step"), strong = false)
+                    HomeNextPanel(next, t, "compact")
+                } else Text(t("All set — nice work."), fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                todo.take(2).forEach { HomeCheckRow(t(it.label), "todo") }
             }
-        } else {
-            HomeCardNote(t("All set — nice work."))
-        }
-        if (size != HomeCardSize.OneByOne) {
-            steps.take(if (size == HomeCardSize.TwoByTwo) 6 else 3).forEach { step ->
-                Text(
-                    (if (step.second) "✓ " else "○ ") + t(step.first),
-                    fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    textDecoration = if (step.second) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if (step.second) MaterialTheme.colorScheme.onSurfaceVariant
-                    else MaterialTheme.colorScheme.onSurface
-                )
+            HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.weight(1f)) {
+                    HomeEyebrow(t("Completed"))
+                    done.take(3).forEach { HomeCheckRow(t(it.label), "done") }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (next != null) HomeNextPanel(next, t, "inline")
+                    todo.take(2).forEach { HomeCheckRow(t(it.label), "todo") }
+                }
+            }
+            HomeCardSize.TwoByTwo -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        HomePanel {
+                            HomeEyebrow(t("Your checklist"))
+                            steps.forEach {
+                                HomeCheckRow(t(it.label),
+                                    if (it.done) "done" else if (it.id == next?.id) "current" else "todo")
+                            }
+                        }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        if (next != null) HomeNextPanel(next, t, "large")
+                        else HomePanel { Text(t("All set — nice work."), fontSize = 12.sp) }
+                    }
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(Modifier.size(30.dp).background(HomeTone.accent.copy(alpha = 0.10f), CircleShape),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Lightbulb, null, Modifier.size(16.dp), HomeTone.accent)
+                    }
+                    Column {
+                        Text(t("Your setup adapts to you"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(t("Steps change with your plan, permissions and workflow."),
+                            fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
     }
 }
 
-// ------------------------------------------------------------ Quick actions
+/** The recommendation — blue enough to be the obvious next thing, calm enough
+ *  that it is not a payment prompt (§15). */
+@Composable
+private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (style == "large") Text(t("Recommended next"), fontSize = 11.sp,
+            fontWeight = FontWeight.Bold, color = HomeTone.accent)
+        if (style == "inline") Text(t("Up next"), fontSize = 11.sp,
+            fontWeight = FontWeight.Bold, color = HomeTone.accent)
+        Text(t(step.label), fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(t(step.blurb), fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            t(if (style == "inline") "Continue" else step.cta),
+            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
+            modifier = Modifier
+                .then(if (style == "large") Modifier.fillMaxWidth() else Modifier)
+                .background(HomeTone.accent, RoundedCornerShape(9.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+// ------------------------------------------------------------- Quick actions
+
+private data class QuickAction(
+    val label: String, val destination: String, val icon: ImageVector,
+    val tone: Color, val group: String, val primary: Boolean = false
+)
 
 @Composable
 private fun HomeQuickActionsBody(
@@ -165,320 +269,698 @@ private fun HomeQuickActionsBody(
     onNewOrder: () -> Unit,
     onOpenSection: (String) -> Unit
 ) {
-    // An action the role cannot perform is hidden and the grid closes up
-    // behind it (§6).
+    // An action the role cannot perform is hidden and the grid closes up behind
+    // it (§6).
     val actions = buildList {
-        if (access.orders) add(Triple("New order", "", true))
-        if (access.customers) add(Triple("Add customer", "Customers", false))
-        if (access.notes) add(Triple("Add note", "Notes", false))
-        if (access.files) add(Triple("Upload file", "Files", false))
-        if (access.orders) add(Triple("Add inventory item", "Inventory", false))
-        if (access.bankFeed) add(Triple("Review spending", "BankSpending", false))
-        if (access.bankFeed) add(Triple("Add receipt", "BankSpending", false))
-        add(Triple("AI reply", "Messages", false))
+        if (access.orders) add(QuickAction("New order", "", Icons.Filled.AddShoppingCart, HomeTone.accent, "Create", true))
+        if (access.customers) add(QuickAction("Add customer", "Customers", Icons.Filled.PersonAddAlt, HomeTone.teal, "Create"))
+        if (access.notes) add(QuickAction("Add note", "Notes", Icons.AutoMirrored.Filled.Note, HomeTone.amber, "Create"))
+        if (access.files) add(QuickAction("Upload file", "Files", Icons.Filled.UploadFile, HomeTone.purple, "Capture"))
+        if (access.orders) add(QuickAction("Add inventory item", "Inventory", Icons.Filled.Inventory2, HomeTone.purple, "Create"))
+        if (access.bankFeed) add(QuickAction("Scan receipt", "BankSpending", Icons.Filled.DocumentScanner, HomeTone.orange, "Capture"))
+        // NivaDesk has no manual expense form: spending arrives from the read-only
+        // bank feed and becomes an expense when it is categorised. Until one
+        // exists this lands on the review queue, where that actually happens.
+        if (access.bankFeed) add(QuickAction("Add expense", "BankSpending", Icons.Filled.CreditCard, HomeTone.accent, "Finance & communication"))
+        add(QuickAction("Generate AI reply", "Messages", Icons.Filled.AutoAwesome, HomeTone.green, "Finance & communication"))
     }
-    val limit = when (size) {
-        HomeCardSize.OneByOne -> 4
-        HomeCardSize.TwoByOne -> 6
-        HomeCardSize.TwoByTwo -> 8
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        actions.take(limit).chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                pair.forEach { action ->
-                    Text(
-                        t(action.first),
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        color = if (action.third) Color.White else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(
-                                if (action.third) Color(0xFF2563EB)
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(8.dp)
-                            )
-                            .clickable {
-                                if (action.second.isEmpty()) onNewOrder() else onOpenSection(action.second)
-                            }
-                            .padding(vertical = 8.dp)
-                    )
+    val fire: (QuickAction) -> Unit = { if (it.destination.isEmpty()) onNewOrder() else onOpenSection(it.destination) }
+
+    when (size) {
+        HomeCardSize.OneByOne -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            actions.take(4).chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { ActionTile(it, t, Modifier.weight(1f)) { fire(it) } }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
                 }
-                if (pair.size == 1) Column(Modifier.weight(1f)) {}
             }
         }
+        HomeCardSize.TwoByOne -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            actions.take(6).chunked(2).forEach { pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pair.forEach { ActionRow(it, t, Modifier.weight(1f)) { fire(it) } }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+        HomeCardSize.TwoByTwo -> Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            listOf("Create", "Capture", "Finance & communication").forEach { group ->
+                val rows = actions.filter { it.group == group }
+                if (rows.isNotEmpty()) {
+                    HomeEyebrow(t(group))
+                    rows.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { ActionRow(it, t, Modifier.weight(1f)) { fire(it) } }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Filled.Info, null, Modifier.size(12.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Actions follow your permissions"), fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionTile(action: QuickAction, t: (String) -> String, modifier: Modifier, tap: () -> Unit) {
+    Column(
+        modifier
+            .background(
+                if (action.primary) HomeTone.accent else action.tone.copy(alpha = 0.11f),
+                RoundedCornerShape(12.dp)
+            )
+            .clickable { tap() }
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Icon(action.icon, null, Modifier.size(25.dp), if (action.primary) Color.White else action.tone)
+        Text(t(action.label), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (action.primary) Color.White else action.tone)
+    }
+}
+
+@Composable
+private fun ActionRow(action: QuickAction, t: (String) -> String, modifier: Modifier, tap: () -> Unit) {
+    Row(
+        modifier
+            .background(if (action.primary) HomeTone.accent else Color.Transparent, RoundedCornerShape(12.dp))
+            .border(
+                1.dp,
+                if (action.primary) Color.Transparent else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                RoundedCornerShape(12.dp)
+            )
+            .clickable { tap() }
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Icon(action.icon, null, Modifier.size(16.dp), if (action.primary) Color.White else action.tone)
+        Text(t(action.label), fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (action.primary) Color.White else MaterialTheme.colorScheme.onSurface)
     }
 }
 
 // ----------------------------------------------------------- Recent activity
 
+/** Event type to colour. The title always names the event, so colour only
+ *  speeds up scanning — it never carries the meaning on its own (§20). */
+private fun activityTone(type: String): Color {
+    val key = type.lowercase()
+    return when {
+        key.contains("payment") -> HomeTone.green
+        key.contains("order") -> HomeTone.purple
+        key.contains("production") || key.contains("status") -> HomeTone.accent
+        key.contains("file") -> HomeTone.amber
+        key.contains("inventory") -> HomeTone.orange
+        key.contains("customer") -> HomeTone.teal
+        key.contains("schedule") -> HomeTone.accent
+        else -> HomeTone.slate
+    }
+}
+
 @Composable
 private fun HomeRecentActivityBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
     // Only what the signed-in user is a recipient of — activity never widens
     // what someone can see (§12).
-    val rows = state.activityNotifications.take(
-        when (size) {
-            HomeCardSize.OneByOne -> 3
-            HomeCardSize.TwoByOne -> 4
-            HomeCardSize.TwoByTwo -> 8
-        }
-    )
+    val limit = when (size) {
+        HomeCardSize.OneByOne -> 3; HomeCardSize.TwoByOne -> 5; HomeCardSize.TwoByTwo -> 8
+    }
+    val rows = state.activityNotifications.take(limit)
     if (rows.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
-    } else {
-        Column {
-            rows.forEach { item ->
-                HomeRow(item.title.ifEmpty { t("Update") }, relativeLabel(item.createdAt, t))
-                if (size != HomeCardSize.OneByOne && item.message.isNotBlank()) {
-                    Text(item.message, fontSize = 9.sp, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    if (size == HomeCardSize.TwoByTwo) {
+        val today = rows.filter { (it.createdAt ?: Date(0)) >= startOfToday() }
+        val earlier = rows.filter { (it.createdAt ?: Date(0)) < startOfToday() }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (today.isNotEmpty()) {
+                HomeEyebrow(t("Today"))
+                today.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true) }
             }
+            if (earlier.isNotEmpty()) {
+                HomeEyebrow(t("Earlier"))
+                earlier.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true) }
+            }
+            Text(t("Only activity you have permission to view is shown"), fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    } else {
+        Column { rows.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, false) } }
     }
 }
 
-// -------------------------------------------------------------------- Money
+@Composable
+private fun ActivityRow(
+    type: String, title: String, message: String, actor: String,
+    createdAt: Date?, t: (String) -> String, showActor: Boolean
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(Modifier.size(24.dp).background(activityTone(type), CircleShape))
+        Column(Modifier.weight(1f)) {
+            Text(title.ifEmpty { t("Update") }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (message.isNotEmpty()) {
+                Text(message, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (showActor && actor.isNotEmpty()) HomeChip(actor, HomeTone.slate)
+        Text(relative(createdAt, t), fontSize = 10.5.sp, maxLines = 1,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// --------------------------------------------------------------------- Money
 
 @Composable
 private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
     // The commercial result, never the bank feed's transaction list (§7).
     val orders = state.orders.filter { !it.isDeleted && it.countsTowardBalance }
     if (orders.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val revenue = orders.sumOf { it.orderValue }
     val received = orders.sumOf { it.paidAmount }
     val outstanding = orders.sumOf { it.remainingAmount + it.customRemainingTotal }
+    val costs = orders.sumOf { it.watchPurchasePrice }
+    val fees = orders.sumOf { it.paymentFee }
+    val shipping = orders.sumOf { it.deliveryCost }
     val profit = orders.sumOf { it.netProfit }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (size == HomeCardSize.OneByOne) {
-            Text(money(profit, state), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(t("Net profit"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${t("Outstanding")}: ${money(outstanding, state)}",
-                fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                color = if (outstanding > 0) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HomeStat(t("Revenue"), money(revenue, state))
-                HomeStat(t("Payments received"), money(received, state))
-                HomeStat(t("Outstanding"), money(outstanding, state),
-                    if (outstanding > 0) Color(0xFFB45309) else Color.Unspecified)
-                HomeStat(t("Net profit"), money(profit, state),
-                    if (profit >= 0) Color(0xFF16A34A) else Color(0xFFDC2626))
+
+    when (size) {
+        HomeCardSize.OneByOne -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("Net profit"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(money(profit, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = if (profit >= 0) HomeTone.green else HomeTone.red)
+            HomeSplitPair(
+                t("Revenue"), money(revenue, state), HomeTone.green,
+                t("Outstanding"), money(outstanding, state), HomeTone.accent
+            )
+        }
+        HomeCardSize.TwoByOne -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HomeMetricTile(t("Revenue"), money(revenue, state), HomeTone.green, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Payments received"), money(received, state), HomeTone.green, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Outstanding"), money(outstanding, state), HomeTone.accent, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Net profit"), money(profit, state), if (profit >= 0) HomeTone.green else HomeTone.red, modifier = Modifier.weight(1f))
             }
-            if (size == HomeCardSize.TwoByTwo) {
-                HorizontalDivider()
-                Text(t("Cost breakdown"), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                HomeRow(t("Costs"), money(revenue - profit, state))
-                HomeRow(t("Platform fees"), money(orders.sumOf { it.paymentFee }, state))
-                HomeRow(t("Shipping"), money(orders.sumOf { it.deliveryCost }, state))
+            HomeDivider()
+            Row {
+                listOf(
+                    Triple(t("Costs"), costs, true),
+                    Triple(t("Platform fees"), fees, true),
+                    Triple(t("Shipping"), shipping, true)
+                ).forEach { (label, value, minus) ->
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text((if (minus) "− " else "") + label, fontSize = 10.5.sp, maxLines = 1,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(money(value, state), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                            color = HomeTone.orange, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        HomeCardSize.TwoByTwo -> {
+            val margin = if (revenue > 0) (profit / revenue).toFloat() else 0f
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeMetricTile(t("Revenue"), money(revenue, state), HomeTone.green, modifier = Modifier.weight(1f))
+                    HomeMetricTile(t("Payments received"), money(received, state), HomeTone.green, modifier = Modifier.weight(1f))
+                    HomeMetricTile(t("Outstanding"), money(outstanding, state), HomeTone.accent, modifier = Modifier.weight(1f))
+                    HomeMetricTile(t("Net profit"), money(profit, state), HomeTone.green, modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.weight(1f)) {
+                        HomePanel {
+                            HomeEyebrow(t("Revenue & profit"))
+                            RevenueChart(orders, t)
+                        }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        HomePanel {
+                            HomeEyebrow(t("Cost breakdown"))
+                            HomeCostRow(HomeTone.orange, t("Costs"), money(costs, state))
+                            HomeCostRow(HomeTone.purple, t("Platform fees"), money(fees, state))
+                            HomeCostRow(HomeTone.accent, t("Shipping"), money(shipping, state))
+                        }
+                    }
+                }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HomeEyebrow(t("Margin"))
+                    Box(Modifier.weight(1f)) { HomeProgressBar(margin) }
+                    Text("${(margin * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                }
             }
         }
     }
 }
 
-// ------------------------------------------------------------------ Banking
+/** Revenue and profit over the last twelve weeks, from the orders themselves. */
+@Composable
+private fun RevenueChart(orders: List<StudioOrder>, t: (String) -> String) {
+    val weeks = 12
+    val revenue = DoubleArray(weeks)
+    val profit = DoubleArray(weeks)
+    val now = Date().time
+    orders.forEach { order ->
+        val ago = ((now - order.paymentDate.time) / (7L * 24 * 3600 * 1000)).toInt()
+        if (ago in 0 until weeks) {
+            revenue[weeks - 1 - ago] += order.orderValue
+            profit[weeks - 1 - ago] += order.netProfit
+        }
+    }
+    if (revenue.all { it == 0.0 }) {
+        Text(t("Not enough history yet."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ChartKey(HomeTone.accent, t("Revenue"))
+            ChartKey(HomeTone.green, t("Net profit"))
+        }
+        HomeSeriesChart(
+            listOf(revenue.toList() to HomeTone.accent, profit.toList() to HomeTone.green),
+            fillFirst = true
+        )
+    }
+}
+
+@Composable
+private fun ChartKey(colour: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Box(Modifier.width(14.dp).height(2.5.dp).background(colour, RoundedCornerShape(2.dp)))
+        Text(label, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ------------------------------------------------------------------- Banking
 
 @Composable
 private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
     // How the bank work is going — never a second copy of Money's totals (§7).
     val transactions = state.bankTransactions
     if (transactions.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
+    val monthPrefix = SimpleDateFormat("yyyy-MM", Locale.UK).format(Date())
+    val thisMonth = transactions.filter { it.bookingDate.startsWith(monthPrefix) }
+    val incoming = thisMonth.filter { it.amount > 0 }.sumOf { it.amount }
+    val spent = thisMonth.filter { it.amount < 0 }.sumOf { -it.amount }
     val toReview = transactions.count { it.category.isBlank() }
-    val missingReceipts = transactions.count { !it.hasReceipt && it.amount < 0 }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (size == HomeCardSize.OneByOne) {
-            Text("$toReview", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
-                color = if (toReview > 0) Color(0xFFB45309) else MaterialTheme.colorScheme.onSurface)
-            Text(t("to review"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$missingReceipts ${t("missing receipts")}", fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HomeStat(t("to review"), "$toReview",
-                    if (toReview > 0) Color(0xFFB45309) else Color.Unspecified)
-                HomeStat(t("missing receipts"), "$missingReceipts",
-                    if (missingReceipts > 0) Color(0xFFB45309) else Color.Unspecified)
-                HomeStat(t("Transactions"), "${transactions.size}")
-            }
-            if (size == HomeCardSize.TwoByTwo) {
-                HorizontalDivider()
-                transactions.take(4).forEach { transaction ->
-                    HomeRow(
-                        transaction.counterparty.ifEmpty { transaction.description },
-                        money(transaction.amount, state),
-                        if (transaction.amount < 0) Color(0xFFDC2626) else Color(0xFF16A34A)
-                    )
+    val missing = transactions.count { it.amount < 0 && !it.hasReceipt }
+
+    if (size == HomeCardSize.OneByOne) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            HomeSplitPair(
+                t("to review"), "$toReview", if (toReview > 0) HomeTone.orange else Color.Unspecified,
+                t("missing receipts"), "$missing", if (missing > 0) HomeTone.orange else Color.Unspecified
+            )
+            ReadOnlyNote(t, short = true)
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("to review"), "$toReview", if (toReview > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("missing receipts"), "$missing", if (missing > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+        }
+        if (size == HomeCardSize.TwoByTwo) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) {
+                    HomePanel {
+                        HomeEyebrow(t("Bank activity"))
+                        BankChart(state, t)
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    HomePanel {
+                        HomeEyebrow(t("Recent transactions"))
+                        transactions.take(3).forEach { tx ->
+                            val name = tx.counterparty.ifEmpty { tx.description }
+                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Box(Modifier.size(22.dp).background(HomeTone.accent.copy(alpha = 0.14f), CircleShape),
+                                    contentAlignment = Alignment.Center) {
+                                    Text(name.take(1).uppercase(), fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+                                }
+                                Text(name, fontSize = 12.sp, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                                    color = if (tx.amount < 0) HomeTone.orange else HomeTone.green)
+                            }
+                        }
+                    }
                 }
             }
+            if (missing > 0) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(HomeTone.orange.copy(alpha = 0.09f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(Modifier.size(26.dp).background(HomeTone.orange, CircleShape),
+                        contentAlignment = Alignment.Center) {
+                        Text("!", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
+                    }
+                    Column {
+                        Text(t("{count} transactions need a receipt").replace("{count}", "$missing"),
+                            fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(t("Read-only bank connection. NivaDesk never moves money."),
+                            fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        } else {
+            ReadOnlyNote(t, short = false)
         }
-        Text(t("Read-only bank connection. NivaDesk never moves money."),
-            fontSize = 8.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-// ---------------------------------------------------------------- Inventory
+/** The read-only promise is part of the card, not a footnote: this feed can
+ *  never move money and the card should keep saying so (§7). */
+@Composable
+private fun ReadOnlyNote(t: (String) -> String, short: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Text(
+            t("Read-only"), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.orange,
+            modifier = Modifier
+                .border(1.dp, HomeTone.orange, RoundedCornerShape(999.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+        Text(
+            t(if (short) "NivaDesk never moves money." else "Read-only bank connection. NivaDesk never moves money."),
+            fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun BankChart(state: StudioFlowUiState, t: (String) -> String) {
+    val weeks = 12
+    val incoming = DoubleArray(weeks)
+    val spent = DoubleArray(weeks)
+    val parser = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
+    val now = Date().time
+    state.bankTransactions.forEach { tx ->
+        val date = runCatching { parser.parse(tx.bookingDate) }.getOrNull() ?: return@forEach
+        val ago = ((now - date.time) / (7L * 24 * 3600 * 1000)).toInt()
+        if (ago in 0 until weeks) {
+            if (tx.amount >= 0) incoming[weeks - 1 - ago] += tx.amount
+            else spent[weeks - 1 - ago] += -tx.amount
+        }
+    }
+    if (incoming.all { it == 0.0 } && spent.all { it == 0.0 }) {
+        Text(t("Not enough history yet."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ChartKey(HomeTone.green, t("Incoming"))
+            ChartKey(HomeTone.orange, t("Spent"))
+        }
+        HomeSeriesChart(
+            listOf(incoming.toList() to HomeTone.green, spent.toList() to HomeTone.orange),
+            fillFirst = true
+        )
+    }
+}
+
+// ----------------------------------------------------------------- Inventory
 
 @Composable
 private fun HomeInventoryBody(
-    size: HomeCardSize,
-    state: StudioFlowUiState,
-    inventory: StudioInventorySummary?,
-    inventoryFailed: Boolean,
-    t: (String) -> String
+    size: HomeCardSize, state: StudioFlowUiState,
+    inventory: StudioInventorySummary?, inventoryFailed: Boolean, t: (String) -> String
 ) {
     if (inventoryFailed) {
-        HomeCardNote(t("This could not be loaded."))
+        Text(t("This could not be loaded."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val summary = inventory ?: run {
-        HomeCardNote(t("Loading…"))
+        Text(t("Loading…"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return
+    }
+    if (size == HomeCardSize.OneByOne) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("total value"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(money(summary.totalValue, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            HomeSplitPair(
+                t("low stock"), "${summary.lowStockCount}", if (summary.lowStockCount > 0) HomeTone.orange else Color.Unspecified,
+                t("incoming"), "${summary.incomingCount}", HomeTone.green
+            )
+        }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (size == HomeCardSize.OneByOne) {
-            Text(money(summary.totalValue, state), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(t("total value"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${summary.lowStockCount} ${t("low stock")}", fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (summary.lowStockCount > 0) Color(0xFFB45309)
-                    else MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${summary.incomingCount} ${t("incoming")}", fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeMetricTile(t("total value"), money(summary.totalValue, state), HomeTone.accent, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent, money(summary.uniqueValue, state), Modifier.weight(1f))
+            HomeMetricTile(t("Quantity stock"), "${summary.quantityCount}", HomeTone.accent, money(summary.quantityValue, state), Modifier.weight(1f))
+            HomeMetricTile(t("low stock"), "${summary.lowStockCount}",
+                if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+        }
+        if (size == HomeCardSize.TwoByTwo) {
+            // Unique and quantity are different things and the split is the point (§8).
+            val total = summary.uniqueValue + summary.quantityValue
+            val share = if (total > 0) (summary.uniqueValue / total).toFloat() else 0f
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) {
+                    HomePanel {
+                        HomeEyebrow(t("Inventory value"))
+                        Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            HomeDonut(share)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                DonutKey(HomeTone.accent, t("Unique items"), money(summary.uniqueValue, state), share)
+                                DonutKey(HomeTone.accent.copy(alpha = 0.35f), t("Quantity stock"),
+                                    money(summary.quantityValue, state), 1f - share)
+                            }
+                        }
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    HomePanel {
+                        HomeEyebrow(t("Stock status"))
+                        HomeCostRow(HomeTone.orange, t("Reserved"), money(summary.reservedValue, state))
+                        HomeCostRow(HomeTone.accent, t("incoming"), money(summary.incomingValue, state))
+                        HomeCostRow(HomeTone.red, t("low stock"), "${summary.lowStockCount}")
+                    }
+                }
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HomeStat(t("total value"), money(summary.totalValue, state))
-                HomeStat(t("low stock"), "${summary.lowStockCount}",
-                    if (summary.lowStockCount > 0) Color(0xFFB45309) else Color.Unspecified)
-                HomeStat(t("Reserved"), "${summary.reservedCount}")
-                HomeStat(t("incoming"), "${summary.incomingCount}", Color(0xFF16A34A))
-            }
-            if (size == HomeCardSize.TwoByTwo) {
-                HorizontalDivider()
-                // Unique and quantity are different things and stay apart (§8).
-                HomeRow(t("Unique items"), "${summary.uniqueCount}")
-                HomeRow(t("Quantity stock"), "${summary.quantityCount}")
-                HomeRow(t("Customer owned"), "${summary.customerOwnedCount}")
-                HomeRow(t("Reserved"), money(summary.reservedValue, state))
-            }
+            HomeCostRow(HomeTone.orange, t("Reserved"), money(summary.reservedValue, state))
+            HomeCostRow(HomeTone.accent, t("incoming"), money(summary.incomingValue, state))
         }
     }
 }
 
-// ---------------------------------------------------------------- Customers
+@Composable
+private fun DonutKey(colour: Color, label: String, value: String, percent: Float) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Box(Modifier.size(9.dp).background(colour, CircleShape))
+            Text(label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+        Text(String.format(Locale.UK, "%.1f%%", percent * 100), fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+// ----------------------------------------------------------------- Customers
 
 @Composable
 private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
     val customers = state.customers
     if (customers.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val activeNames = liveOrders(state).map { it.customerName.lowercase() }.toSet()
-    val owing = state.orders
-        .filter { !it.isDeleted && it.countsTowardBalance && (it.remainingAmount + it.customRemainingTotal) > 0 }
-        .map { it.customerName.lowercase() }
-        .toSet()
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (size == HomeCardSize.OneByOne) {
-            Text("${customers.size}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-            Text(t("customers"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${activeNames.size} ${t("active orders")}", fontSize = 10.sp,
-                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HomeStat(t("customers"), "${customers.size}")
-                HomeStat(t("active orders"), "${activeNames.size}")
-                HomeStat(t("Outstanding"), "${owing.size}",
-                    if (owing.isEmpty()) Color.Unspecified else Color(0xFFB45309))
-            }
-            if (size == HomeCardSize.TwoByTwo) {
-                HorizontalDivider()
-                customers.take(4).forEach { customer ->
-                    HomeRow(
-                        customer.name,
-                        if (activeNames.contains(customer.name.lowercase())) t("active orders") else "—"
-                    )
+    val withActive = customers.count { activeNames.contains(it.name.lowercase()) }
+    val orderCounts = state.orders.filter { !it.isDeleted }.groupingBy { it.customerName.lowercase() }.eachCount()
+    val returning = customers.count { (orderCounts[it.name.lowercase()] ?: 0) > 1 }
+    val monthStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }.time
+    val newThisMonth = state.orders
+        .filter { !it.isDeleted && it.paymentDate >= monthStart }
+        .map { it.customerName.lowercase() }.toSet()
+        .count { (orderCounts[it] ?: 0) <= 1 }
+    val existing = (customers.size - newThisMonth - returning).coerceAtLeast(0)
+
+    if (size == HomeCardSize.OneByOne) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("customers"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${customers.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+            HomeSplitPair(
+                t("active orders"), "$withActive", HomeTone.green,
+                t("Latest"), customers.firstOrNull()?.name ?: "—"
+            )
+        }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeMetricTile(t("Total customers"), "${customers.size}", HomeTone.accent, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("New this month"), "$newThisMonth", HomeTone.green, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Returning customers"), "$returning", HomeTone.purple, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Customers with active orders"), "$withActive", HomeTone.teal, modifier = Modifier.weight(1f))
+        }
+        HomeMixBar(listOf(
+            Triple(t("New this month"), newThisMonth, HomeTone.green),
+            Triple(t("Returning"), returning, HomeTone.purple),
+            Triple(t("Existing"), existing, HomeTone.teal)
+        ))
+        if (size == HomeCardSize.TwoByTwo) {
+            HomePanel {
+                HomeEyebrow(t("Recent customers"))
+                customers.take(3).forEach { customer ->
+                    val active = activeNames.contains(customer.name.lowercase())
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Box(Modifier.size(22.dp).background(HomeTone.accent.copy(alpha = 0.14f), CircleShape),
+                            contentAlignment = Alignment.Center) {
+                            Text(customer.name.take(1).uppercase(), fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+                        }
+                        Text(customer.name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        HomeChip(if (active) t("Active customer") else t("No open orders"),
+                            if (active) HomeTone.green else HomeTone.slate)
+                    }
                 }
             }
+            // §11 and §19: a member sees only the customers their role allows, and
+            // the card says so rather than looking like the whole directory.
+            Text(t("Only customers you have permission to view are shown"), fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 // -------------------------------------------------------- Orders & production
 
+/** A stage's colour follows its kind, not its position — a workspace may define
+ *  any number of lanes and an index-keyed palette runs out. */
+private fun stageTone(kind: ProductionStageKind): Color = when (kind) {
+    ProductionStageKind.Ready -> HomeTone.green
+    ProductionStageKind.Active -> HomeTone.accent
+    ProductionStageKind.Blocked -> HomeTone.red
+    ProductionStageKind.Review -> HomeTone.purple
+    ProductionStageKind.ShipReady -> HomeTone.green
+    ProductionStageKind.Done -> HomeTone.slate
+}
+
 @Composable
 private fun HomeOrdersProductionBody(
-    size: HomeCardSize,
-    state: StudioFlowUiState,
-    stages: List<ProductionStage>,
-    t: (String) -> String
+    size: HomeCardSize, state: StudioFlowUiState,
+    stages: List<ProductionStage>, t: (String) -> String
 ) {
     val live = liveOrders(state)
     if (live.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    // The stage is never stored — it is derived from the order's own steps, by
-    // the one rule every screen shares.
+    // The stage is derived from the order's own steps against the workspace's own
+    // stages — the same rule the Production screen applies, never a second one.
     val steps = state.workspaceSettings.customSteps
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
+        .map { it.trim() }.filter { it.isNotEmpty() }
         .map { it.lowercase() to it }
         .ifEmpty { listOf("design" to "Design", "painting" to "Painting") }
     val resolved = live.map { it to resolveProductionStage(it, stages, steps) }
-    val blockedIds = stages.filter { it.kind == ProductionStageKind.Blocked }.map { it.id }.toSet()
-    val blocked = resolved.count { it.second.stageId in blockedIds }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (size == HomeCardSize.OneByOne) {
-            Text("${live.size}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-            Text(t("active orders"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("$blocked ${t("Blocked")}", fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                color = if (blocked > 0) Color(0xFFDC2626) else MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            // The stage distribution is the card — the KPI row above it must not
-            // repeat the same numbers (§9).
-            stages.take(if (size == HomeCardSize.TwoByTwo) 6 else 3).forEach { stage ->
-                val count = resolved.count { it.second.stageId == stage.id }
-                HomeRow(stage.title, "$count",
-                    if (stage.kind == ProductionStageKind.Blocked && count > 0) Color(0xFFDC2626)
-                    else Color.Unspecified)
+    val late = live.filter { homeDueDate(it.paymentDate, it.deliveryTime).before(Date()) }
+    val shipReadyIds = stages.filter { it.kind == ProductionStageKind.ShipReady }.map { it.id }.toSet()
+
+    if (size == HomeCardSize.OneByOne) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("active orders"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${live.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+            HomeSplitPair(
+                t("Overdue"), "${late.size}", if (late.isEmpty()) Color.Unspecified else HomeTone.orange,
+                t("Ready to ship"), "${resolved.count { it.second.stageId in shipReadyIds }}", HomeTone.green
+            )
+        }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (size == HomeCardSize.TwoByTwo) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HomeMetricTile(t("active orders"), "${live.size}", HomeTone.accent, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Overdue"), "${late.size}",
+                    if (late.isEmpty()) HomeTone.accent else HomeTone.orange, modifier = Modifier.weight(1f))
             }
-            if (size == HomeCardSize.TwoByTwo) {
-                HorizontalDivider()
-                Text(t("At risk"), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val late = resolved.filter {
-                    homeDueDate(it.first.paymentDate, it.first.deliveryTime).before(Date())
-                }.take(3)
-                if (late.isEmpty()) {
-                    HomeCardNote(t("All set — nice work."))
-                } else {
-                    late.forEach { HomeRow(it.first.customerName, it.second.currentStep, Color(0xFFDC2626)) }
+        }
+        HomeEyebrow(t("Production flow"))
+        Row(Modifier.fillMaxWidth()) {
+            stages.forEach { stage ->
+                val count = resolved.count { it.second.stageId == stage.id }
+                val tone = stageTone(stage.kind)
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.size(26.dp).background(tone.copy(alpha = 0.16f), CircleShape))
+                    Text(t(stage.title), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$count", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = tone)
+                }
+            }
+        }
+        if (size == HomeCardSize.TwoByTwo) {
+            HomePanel {
+                HomeEyebrow(t("Priority orders"))
+                (late + live.filterNot { o -> late.any { it.id == o.id } }).take(3).forEach { order ->
+                    val due = homeDueDate(order.paymentDate, order.deliveryTime)
+                    val overdue = due.before(Date())
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        if (overdue) {
+                            val days = ((Date().time - due.time) / 86_400_000L).toInt()
+                            HomeChip(if (days > 0) t("{days}d late").replace("{days}", "$days") else t("Overdue"),
+                                HomeTone.red)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-// ----------------------------------------------------------------- Schedule
+// ------------------------------------------------------------------ Schedule
 
 @Composable
 private fun HomeScheduleBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
@@ -487,77 +969,275 @@ private fun HomeScheduleBody(size: HomeCardSize, state: StudioFlowUiState, t: (S
         .map { it to homeDueDate(it.paymentDate, it.deliveryTime) }
         .sortedBy { it.second }
     if (upcoming.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
-        return
-    }
-    val limit = when (size) {
-        HomeCardSize.OneByOne -> 3
-        HomeCardSize.TwoByOne -> 4
-        HomeCardSize.TwoByTwo -> 7
-    }
-    Column {
-        upcoming.take(limit).forEach { entry ->
-            HomeRow(
-                entry.first.customerName,
-                dueLabel(entry.second, t),
-                if (entry.second.before(Date())) Color(0xFFDC2626) else Color.Unspecified
-            )
-        }
-    }
-}
-
-// -------------------------------------------------------------------- Files
-
-@Composable
-private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
-    // One file, linked to as many records as it belongs to — the card counts
-    // files, not copies (§14).
-    val files = state.orders
-        .filter { !it.isDeleted }
-        .flatMap { order -> order.clientFiles.map { order to it } }
-    if (files.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     if (size == HomeCardSize.OneByOne) {
         Column {
-            Text("${files.size}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-            Text(t("File library"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            upcoming.take(3).forEach { (order, due) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(dayLabel(due, t), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                        color = if (due.before(startOfToday())) HomeTone.red
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
-    } else {
-        Column {
-            files.take(if (size == HomeCardSize.TwoByTwo) 7 else 4).forEach { entry ->
-                HomeRow(entry.second.fileName, entry.first.customerName)
+        return
+    }
+    val week = weekDays()
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (size == HomeCardSize.TwoByOne) {
+            Row(Modifier.fillMaxWidth()) {
+                week.forEach { day ->
+                    val count = upcoming.count { sameDay(it.second, day) }
+                    val isToday = sameDay(day, Date())
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .background(if (isToday) HomeTone.accent.copy(alpha = 0.09f) else Color.Transparent,
+                                RoundedCornerShape(9.dp))
+                            .padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(SimpleDateFormat("EEE", Locale.getDefault()).format(day), fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(SimpleDateFormat("d", Locale.getDefault()).format(day),
+                            fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(if (count > 0) "$count" else " ", fontSize = 10.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (count > 0) HomeTone.accent else Color.Transparent)
+                    }
+                }
+            }
+        } else {
+            HomeEyebrow(t("Weekly timeline"))
+            // The bars are read-only on purpose: dragging a date here would fight
+            // the gesture that moves the card itself (§10).
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row {
+                    Spacer(Modifier.width(80.dp))
+                    week.forEach { day ->
+                        Text(SimpleDateFormat("EEE d", Locale.getDefault()).format(day),
+                            fontSize = 9.sp, modifier = Modifier.weight(1f),
+                            color = if (sameDay(day, Date())) HomeTone.accent
+                            else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                val start = week.first().time
+                val span = (week.last().time + 86_400_000L - start).toFloat()
+                val palette = listOf(HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal)
+                upcoming.take(5).forEachIndexed { index, (order, due) ->
+                    val from = ((order.paymentDate.time - start) / span).coerceIn(0f, 1f)
+                    val to = ((due.time - start) / span).coerceIn(0f, 1f)
+                    val overdue = due.before(startOfToday())
+                    val tone = if (overdue) HomeTone.red else palette[index % palette.size]
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(80.dp))
+                        Row(Modifier.weight(1f).height(16.dp)) {
+                            if (minOf(from, to) > 0f) Spacer(Modifier.weight(minOf(from, to)))
+                            Box(
+                                Modifier
+                                    .weight(maxOf(0.04f, kotlin.math.abs(to - from)))
+                                    .height(16.dp)
+                                    .background(tone.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, tone, RoundedCornerShape(6.dp))
+                            )
+                            val rest = 1f - maxOf(from, to)
+                            if (rest > 0f) Spacer(Modifier.weight(rest))
+                        }
+                    }
+                }
+            }
+            HomeEyebrow(t("Upcoming deadlines"))
+        }
+        Row {
+            upcoming.take(3).forEachIndexed { index, (order, due) ->
+                if (index > 0) {
+                    Box(Modifier.width(1.dp).height(30.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                }
+                val overdue = due.before(startOfToday())
+                val tone = if (overdue) HomeTone.red else HomeTone.green
+                Row(Modifier.weight(1f).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(24.dp).background(tone.copy(alpha = 0.16f), CircleShape))
+                    Column {
+                        Text(dayLabel(due, t), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = tone)
+                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
     }
 }
 
-// -------------------------------------------------------------------- Notes
+/** The visible week, Monday first, so the strip and the timeline agree. */
+private fun weekDays(): List<Date> {
+    val calendar = Calendar.getInstance().apply {
+        time = startOfToday()
+        val weekday = get(Calendar.DAY_OF_WEEK)
+        add(Calendar.DAY_OF_YEAR, -((weekday + 5) % 7))
+    }
+    return (0 until 7).map {
+        val day = calendar.time
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        day
+    }
+}
+
+private fun sameDay(a: Date, b: Date): Boolean {
+    val fa = SimpleDateFormat("yyyyMMdd", Locale.UK)
+    return fa.format(a) == fa.format(b)
+}
+
+// --------------------------------------------------------------------- Files
+
+@Composable
+private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+    // One file, linked to as many records as it belongs to — the card counts
+    // files, never copies (§14).
+    val files = state.orders.filter { !it.isDeleted }.flatMap { order -> order.clientFiles.map { order to it } }
+    if (files.isEmpty()) {
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val used = files.sumOf { it.second.fileSize }
+    if (size == HomeCardSize.OneByOne) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(t("Total files"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${files.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+            HomeSplitPair(
+                t("Storage"), fileSize(used.toDouble()),
+                rightLabel = t("File library"), rightValue = "${files.size}"
+            )
+        }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HomeMetricTile(t("Total files"), "${files.size}", HomeTone.accent, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Storage"), fileSize(used.toDouble()), HomeTone.green, modifier = Modifier.weight(1f))
+        }
+        HomePanel {
+            HomeEyebrow(t("Recent files"))
+            files.take(if (size == HomeCardSize.TwoByTwo) 5 else 3).forEach { (order, file) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Box(
+                        Modifier
+                            .size(width = 17.dp, height = 21.dp)
+                            .background(fileTone(file.fileName).copy(alpha = 0.16f), RoundedCornerShape(3.dp))
+                            .border(1.dp, fileTone(file.fileName).copy(alpha = 0.5f), RoundedCornerShape(3.dp))
+                    )
+                    Text(file.fileName, fontSize = 12.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    HomeChip(order.customerName.ifEmpty { t("Order") })
+                }
+            }
+        }
+        if (size == HomeCardSize.TwoByTwo) {
+            Text(t("One file, multiple links — no duplicates."), fontSize = 10.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun fileSize(bytes: Double): String = when {
+    bytes >= 1e9 -> String.format(Locale.UK, "%.1f GB", bytes / 1e9)
+    bytes >= 1e6 -> String.format(Locale.UK, "%.1f MB", bytes / 1e6)
+    bytes >= 1e3 -> "${(bytes / 1e3).toInt()} KB"
+    else -> "${bytes.toInt()} B"
+}
+
+private fun fileTone(name: String): Color {
+    val lower = name.lowercase()
+    return when {
+        lower.endsWith(".pdf") -> HomeTone.red
+        lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".heic") -> HomeTone.green
+        else -> HomeTone.slate
+    }
+}
+
+// --------------------------------------------------------------------- Notes
 
 @Composable
 private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
     // Notes only. Not files, not AI replies (§13). Pinned first.
-    val notes = state.keepNotes
-        .filter { !it.isDeleted && !it.isArchived }
-        .sortedWith(compareByDescending<uk.co.eggcraft.studioflow.data.model.StudioKeepNote> { it.isPinned }
-            .thenByDescending { it.updatedAt?.time ?: 0L })
-    if (notes.isEmpty()) {
-        HomeCardNote(t("Nothing here yet."))
+    val live = state.keepNotes.filter { !it.isDeleted && !it.isArchived }
+    if (live.isEmpty()) {
+        Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val limit = when (size) {
-        HomeCardSize.OneByOne -> 3
-        HomeCardSize.TwoByOne -> 4
-        HomeCardSize.TwoByTwo -> 7
+    val pinned = live.filter { it.isPinned }
+    val recent = live.filterNot { it.isPinned }.sortedByDescending { it.updatedAt?.time ?: 0L }
+    if (size == HomeCardSize.TwoByTwo) {
+        Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            if (pinned.isNotEmpty()) {
+                HomeEyebrow(t("Pinned"))
+                NoteGrid(pinned.take(2), t)
+            }
+            HomeEyebrow(t("Recent"))
+            NoteGrid(recent.take(if (pinned.isEmpty()) 4 else 2), t)
+        }
+    } else {
+        NoteGrid((pinned + recent).take(if (size == HomeCardSize.OneByOne) 2 else 2), t)
     }
-    Column {
-        notes.take(limit).forEach { note ->
-            HomeRow(
-                note.title.ifEmpty { note.text.take(40) },
-                if (note.isPinned) "📌" else note.linkedOrderLabel
-            )
+}
+
+@Composable
+private fun NoteGrid(notes: List<StudioKeepNote>, t: (String) -> String) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        notes.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEach { NoteTile(it, t, Modifier.weight(1f)) }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
     }
+}
+
+/** A note keeps its own colour — that is the note's, not the card's. */
+@Composable
+private fun NoteTile(note: StudioKeepNote, t: (String) -> String, modifier: Modifier) {
+    Column(
+        modifier
+            .background(noteColour(note.colorName), RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(note.title.ifEmpty { t("Untitled note") }, fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (note.text.isNotEmpty()) {
+            Text(note.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (note.linkedOrderLabel.isNotEmpty()) HomeChip(note.linkedOrderLabel, HomeTone.slate)
+    }
+}
+
+private fun noteColour(name: String): Color = when (name.lowercase()) {
+    "yellow" -> Color(0xFFFEF7E0)
+    "blue" -> Color(0xFFE5F0FD)
+    "green" -> Color(0xFFE7F6EC)
+    "red" -> Color(0xFFFDEAEA)
+    "purple" -> Color(0xFFF1ECFD)
+    "orange" -> Color(0xFFFDEEE0)
+    else -> Color.Transparent
 }
