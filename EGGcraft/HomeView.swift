@@ -166,10 +166,15 @@ struct HomeView: View {
             .padding(22)
         }
         .background(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.97))
-        .task {
+        // Keyed on the workspace id, not run once on appear: on a cold launch this
+        // view can render before the id is known, and a one-shot .task would then
+        // leave Home permanently empty with nothing to retry it.
+        .task(id: firebaseManager.currentCompanyId) {
             data.startMonitoring()
-            store.start(companyId: firebaseManager.currentCompanyId)
-            await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId)
+            let companyId = firebaseManager.currentCompanyId
+            guard !companyId.isEmpty else { return }
+            store.start(companyId: companyId)
+            await data.load(manager: firebaseManager, companyId: companyId)
         }
         .onDisappear { data.stop() }
         .alert(t("Edit heading", lang: seciliDil), isPresented: Binding(

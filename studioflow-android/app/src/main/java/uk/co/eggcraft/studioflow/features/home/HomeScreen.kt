@@ -429,6 +429,14 @@ fun HomeCardShell(
                     .padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    definition.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp).padding(end = 0.dp),
+                    tint = if (placement.tone == HomeCardTone.Standard)
+                        MaterialTheme.colorScheme.onSurfaceVariant else homeToneColor(placement.tone)
+                )
+                Spacer(Modifier.width(7.dp))
                 Text(
                     placement.heading.ifEmpty { t(definition.title) },
                     fontSize = 13.sp, fontWeight = FontWeight.Bold,

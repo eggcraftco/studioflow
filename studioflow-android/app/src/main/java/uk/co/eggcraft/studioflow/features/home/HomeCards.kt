@@ -1,5 +1,18 @@
 package uk.co.eggcraft.studioflow.features.home
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Note
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.People
+import androidx.compose.ui.graphics.vector.ImageVector
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -77,6 +90,7 @@ data class HomeCardDefinition(
     val id: HomeCardId,
     /** English title. Runs through studioT() at render, and the owner may rename it. */
     val title: String,
+    val icon: ImageVector,
     val sizes: List<HomeCardSize>,
     val defaultSize: HomeCardSize,
     val access: HomeCardAccess,
@@ -95,29 +109,29 @@ object HomeCards {
      * each card starts.
      */
     val all: List<HomeCardDefinition> = listOf(
-        HomeCardDefinition(HomeCardId.GettingStarted, "Getting started", everySize, HomeCardSize.TwoByOne,
+        HomeCardDefinition(HomeCardId.GettingStarted, "Getting started", Icons.Filled.Checklist, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Always, false, "Settings", "View checklist"),
-        HomeCardDefinition(HomeCardId.QuickActions, "Quick actions", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.QuickActions, "Quick actions", Icons.Filled.Bolt, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Always, false, "Orders", "Open Orders"),
-        HomeCardDefinition(HomeCardId.RecentActivity, "Recent activity", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.RecentActivity, "Recent activity", Icons.Filled.History, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Always, false, "Orders", "View all activity"),
-        HomeCardDefinition(HomeCardId.Money, "Money", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.Money, "Money", Icons.Filled.Payments, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Dashboard, true, "Dashboard", "Open Dashboard"),
-        HomeCardDefinition(HomeCardId.Banking, "Banking", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.Banking, "Banking", Icons.Filled.AccountBalance, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.BankFeed, true, "BankSpending", "Go to banking"),
-        HomeCardDefinition(HomeCardId.Inventory, "Inventory", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.Inventory, "Inventory", Icons.Filled.Inventory2, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Orders, false, "Inventory", "View inventory"),
-        HomeCardDefinition(HomeCardId.Customers, "Customers", everySize, HomeCardSize.OneByOne,
+        HomeCardDefinition(HomeCardId.Customers, "Customers", Icons.Filled.People, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Customers, false, "Customers", "View customers"),
-        HomeCardDefinition(HomeCardId.OrdersProduction, "Orders & production", everySize, HomeCardSize.TwoByOne,
+        HomeCardDefinition(HomeCardId.OrdersProduction, "Orders & production", Icons.Filled.Handyman, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Orders, false, "Production", "View all orders"),
-        HomeCardDefinition(HomeCardId.Schedule, "Schedule", everySize, HomeCardSize.TwoByOne,
+        HomeCardDefinition(HomeCardId.Schedule, "Schedule", Icons.Filled.CalendarMonth, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Schedule, false, "Schedule", "Open Schedule"),
         // Not "Files": that key is the navigation item and reads as "choose from
         // files" in several languages. This card is the library itself.
-        HomeCardDefinition(HomeCardId.Files, "File library", everySize, HomeCardSize.TwoByOne,
+        HomeCardDefinition(HomeCardId.Files, "File library", Icons.Filled.Folder, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Files, false, "Files", "View all files"),
-        HomeCardDefinition(HomeCardId.Notes, "Notes", everySize, HomeCardSize.TwoByOne,
+        HomeCardDefinition(HomeCardId.Notes, "Notes", Icons.AutoMirrored.Filled.Note, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Notes, false, "Notes", "View all notes")
     )
 
