@@ -788,6 +788,105 @@ struct HomeWaterfall: View {
 
 /// A tile sized for a square phone card: one line of label over one of figure,
 /// with a small mark beside them. The desktop tile is twice this tall.
+/// The orders that need a decision, as the sheet draws them: the order's own
+/// preview, who it is for, what it is, how late it is and where it stands.
+struct HomeOrderRows: View {
+    let orders: [Siparis]
+    let stages: [ProductionStage]
+    let resolved: [(Siparis, ResolvedProductionStage)]
+    let lang: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+            ForEach(orders, id: \.id) { order in
+                let entry = resolved.first { $0.0.id == order.id }
+                let stage = stages.first { $0.id == entry?.1.stageId }
+                let due = homeDueDate(order)
+                let overdue = (due ?? .distantFuture) < Date()
+                HStack(spacing: 12) {
+                    HomeOrderThumb(link: order.designLink,
+                                   initial: order.customerName.isEmpty ? order.designName : order.customerName)
+                    Text(order.customerName.isEmpty ? order.designName : order.customerName)
+                        .font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(order.designName)
+                        .font(.system(size: 13)).foregroundColor(.secondary).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if overdue, let due {
+                        let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
+                        HomeChip(text: days > 0
+                            ? t("{days}d late", lang: lang).replacingOccurrences(of: "{days}", with: "\(days)")
+                            : t("Overdue", lang: lang), tone: HomeTone.red)
+                    }
+                    if let stage {
+                        HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.5))
+                }
+                .padding(.vertical, 5)
+                if order.id != orders.last?.id { Divider() }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// One production stage as a figure: a coloured dot, the workspace's own name
+/// for the stage, and the count under it. Two lines' worth of name whether it
+/// needs them or not, so every figure's number sits on the same line.
+struct HomeLaneFigure: View {
+    let title: String
+    let count: Int
+    let tone: Color
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 7) {
+                Circle().fill(tone).frame(width: 8, height: 8).padding(.top, 4)
+                Text(title)
+                    .font(.system(size: 12.5)).foregroundColor(.secondary)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(height: 32, alignment: .top)
+            Text("\(count)")
+                .font(.system(size: 25, weight: .heavy)).foregroundColor(tone)
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+    }
+}
+
+/// The order's own preview if it has one, its initial if it does not — a blank
+/// square beside a name reads as a failed image rather than "no picture yet".
+struct HomeOrderThumb: View {
+    let link: String
+    let initial: String
+    var body: some View {
+        RoundedRectangle(cornerRadius: 9)
+            .fill(Color.primary.opacity(0.07))
+            .frame(width: 40, height: 40)
+            .overlay(
+                Group {
+                    if let url = URL(string: link), !link.isEmpty {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Color.clear
+                        }
+                    } else {
+                        Text(initial.prefix(1).uppercased())
+                            .font(.system(size: 15, weight: .heavy))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+}
+
 struct HomeSlimTile: View {
     let label: String
     let value: String
@@ -1846,6 +1945,38 @@ struct HomeOrdersProductionBody: View {
                         .padding(.vertical, 6)
                     }
                     Spacer(minLength: 0)
+                }
+            } else if size == .twoByOne {
+                // The sheet's wide card: the stages as figures ruled apart, then
+                // the orders that actually need a decision. Done is left out —
+                // finished work is not a bottleneck, and its lane only narrowed
+                // the five that are.
+                let lanes = data.stages.filter { $0.kind != .done }
+                let priority = (late + live.filter { o in !late.contains { $0.id == o.id } }).prefix(3)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 0) {
+                        ForEach(Array(lanes.enumerated()), id: \.offset) { index, stage in
+                            if index > 0 { Divider().frame(height: 46) }
+                            HomeLaneFigure(
+                                title: t(stage.title, lang: lang),
+                                count: resolved.filter { $0.1.stageId == stage.id }.count,
+                                tone: homeStageTone(stage.kind)
+                            )
+                        }
+                    }
+                    // How many orders fit is the card's business, not a guess: a
+                    // 2×1 is two squares wide by ONE tall, and that one square is
+                    // as short as 185pt in a half-width window. The lanes are the
+                    // card's job; the list gives up rows until it fits.
+                    ViewThatFits(in: .vertical) {
+                        HomeOrderRows(orders: Array(priority), stages: data.stages,
+                                      resolved: resolved, lang: lang)
+                        HomeOrderRows(orders: Array(priority.prefix(2)), stages: data.stages,
+                                      resolved: resolved, lang: lang)
+                        HomeOrderRows(orders: Array(priority.prefix(1)), stages: data.stages,
+                                      resolved: resolved, lang: lang)
+                        Spacer(minLength: 0)
+                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: compact ? 7 : 10) {

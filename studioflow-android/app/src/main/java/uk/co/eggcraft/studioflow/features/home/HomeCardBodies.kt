@@ -36,7 +36,12 @@ import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
@@ -1022,6 +1027,46 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
 
 /** A tile sized for a square phone card: one line of label over one of figure,
  *  with a small mark beside them. The desktop tile is twice this tall. */
+/** The lane row's own height, and one order row's — the 2x1 measures its list
+ *  against these rather than discovering it does not fit after it has drawn. */
+private const val LANES_HEIGHT = 63f
+private const val ORDER_ROW_HEIGHT = 51f
+
+/** One production stage as a figure: a coloured dot, the workspace's own name
+ *  for the stage, and the count under it. Two lines' worth of name whether it
+ *  needs them or not, so every figure's number sits on the same line. */
+@Composable
+private fun LaneFigure(title: String, count: Int, tone: Color, modifier: Modifier) {
+    Column(modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.height(32.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Box(Modifier.padding(top = 4.dp).size(8.dp).background(tone, CircleShape))
+            Text(title, fontSize = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("$count", fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, color = tone, maxLines = 1)
+    }
+}
+
+/** The order's own preview if it has one, its initial if it does not — a blank
+ *  square beside a name reads as a failed image rather than "no picture yet". */
+@Composable
+private fun OrderThumb(link: String, name: String) {
+    Box(
+        Modifier.size(40.dp)
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), RoundedCornerShape(9.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (link.isNotBlank()) {
+            AsyncImage(model = link, contentDescription = null,
+                modifier = Modifier.matchParentSize().clip(RoundedCornerShape(9.dp)),
+                contentScale = ContentScale.Crop)
+        } else {
+            Text(name.take(1).uppercase(), fontSize = 15.sp, fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+        }
+    }
+}
+
 @Composable
 private fun SlimTile(label: String, value: String, tone: Color, icon: ImageVector, modifier: Modifier) {
     Row(
@@ -1534,6 +1579,62 @@ private fun HomeOrdersProductionBody(
                     if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
                 }
             }
+        }
+        return
+    }
+
+    if (size == HomeCardSize.TwoByOne) {
+        // The sheet's wide card: the stages as figures ruled apart, then the
+        // orders that actually need a decision. Done is left out — finished work
+        // is not a bottleneck, and its lane only narrowed the five that are.
+        val lanes = stages.filter { it.kind != ProductionStageKind.Done }
+        val priority = (late + live.filterNot { o -> late.any { it.id == o.id } }).take(3)
+        // How many orders fit is the card's business, not a guess: a 2x1 is two
+        // squares wide by ONE tall, and that one square is as short as 185dp in a
+        // half-width window. The lanes are the card's job; the list gives up rows
+        // until it fits.
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val roomForRows = ((maxHeight.value - LANES_HEIGHT - 12f) / ORDER_ROW_HEIGHT).toInt()
+        val shown = priority.take(roomForRows.coerceIn(0, 3))
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                lanes.forEachIndexed { index, stage ->
+                    if (index > 0) {
+                        Box(Modifier.width(1.dp).height(46.dp)
+                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                    }
+                    LaneFigure(t(stage.title), resolved.count { it.second.stageId == stage.id },
+                        stageTone(stage.kind), Modifier.weight(1f))
+                }
+            }
+            if (shown.isNotEmpty()) HomeDivider()
+            shown.forEachIndexed { index, order ->
+                val stage = stages.firstOrNull { st -> st.id == resolved.first { it.first.id == order.id }.second.stageId }
+                val due = homeDueDate(order.paymentDate, order.deliveryTime)
+                val overdue = due.before(Date())
+                val name = order.customerName.ifEmpty { order.designName }
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OrderThumb(order.designLink, name)
+                    Text(name, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(order.designName, fontSize = 13.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (overdue) {
+                        val days = ((Date().time - due.time) / 86_400_000L).toInt()
+                        HomeChip(if (days > 0) t("{days}d late").replace("{days}", "$days") else t("Overdue"),
+                            HomeTone.red)
+                    }
+                    if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(16.dp),
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                }
+                if (index < shown.lastIndex) HomeDivider()
+            }
+            Spacer(Modifier.weight(1f))
+        }
         }
         return
     }

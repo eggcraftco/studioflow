@@ -634,7 +634,60 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   );
 
   if (size === "2x1") {
-    return <div className="home-money is-wide"><p className="home-eyebrow is-strong">{t("Production flow")}</p>{flow}</div>;
+    // The sheet's wide card: the stages as figures across the top, then the
+    // orders that actually need a decision. Done is left out — finished work is
+    // not a bottleneck, and its lane only narrowed the five that are.
+    const lanes = byStage.filter((stage) => stage.kind !== "done");
+    const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);
+    return (
+      <div className="home-money is-wide">
+        <ol className="home-lane-row">
+          {lanes.map((stage) => (
+            <li key={stage.id} className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>
+              <span className="home-lane-head">
+                <i className="home-lane-dot" aria-hidden="true" />
+                <em>{t(stage.title)}</em>
+              </span>
+              <b>{stage.count}</b>
+            </li>
+          ))}
+        </ol>
+        <ul className="home-order-list">
+          {priority.map((order) => {
+            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
+            const days = order.dueDate
+              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
+              : 0;
+            const stage = byStage.find((entry) =>
+              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
+            const name = order.customerName || order.designName || order.watchRef;
+            return (
+              <li key={order.id}>
+                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                  {order.previewImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
+                  )}
+                  <strong>{name}</strong>
+                  <span className="home-order-design">{order.designName}</span>
+                  {overdue ? (
+                    <span className="home-chip is-late">
+                      {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
+                    </span>
+                  ) : <span />}
+                  {stage ? (
+                    <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
+                  ) : <span />}
+                  <span className="home-order-chevron" aria-hidden="true">›</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   }
 
   const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);

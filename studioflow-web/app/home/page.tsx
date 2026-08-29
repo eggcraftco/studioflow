@@ -295,6 +295,15 @@ export default function HomePage() {
               customising={customising}
               t={t}
               state={cardState(placement.id, isEmpty(placement.id))}
+              subtitle={
+                // The wide orders card leads with how many are live, beside its
+                // heading, exactly as the sheet reads it.
+                placement.id === "ordersProduction" && placement.size !== "1x1"
+                  ? t("{count} active").replace("{count}",
+                      String(data.scheduleOrders.filter((order) => !order.isDelivered).length))
+                  : undefined
+              }
+              subtitleInline={placement.id === "ordersProduction"}
               headerSlot={
                 placement.id === "banking" && data.bankTransactions.length > 0 ? (
                   // The promise sits beside the title, not in a footnote: this

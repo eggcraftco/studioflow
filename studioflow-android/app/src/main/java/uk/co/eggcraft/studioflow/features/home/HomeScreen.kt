@@ -360,13 +360,15 @@ fun HomeScreen(
                         customising = customising,
                         compact = compact,
                         t = t,
-                        // The sheet names the load under the title on the wide
-                        // phone card.
-                        subtitle = if (definition.id == HomeCardId.OrdersProduction && compact &&
+                        // The sheet names the load beside the title on the wide
+                        // card, and under it on the phone, which has no width to
+                        // spare for a second thing on that line.
+                        subtitle = if (definition.id == HomeCardId.OrdersProduction &&
                             slot.placement.size == HomeCardSize.TwoByOne)
                             t("{count} active").replace("{count}",
                                 "${state.orders.count { !it.isDeleted && !it.isDelivered && it.countsTowardBalance }}")
                         else "",
+                        subtitleInline = !compact,
                         headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
                             t("Read-only") else "",
                         // The sheet puts the feed's freshness on the right of the
@@ -498,6 +500,8 @@ fun HomeCardShell(
     t: (String) -> String,
     /** A short line under the title — the load this card is reporting on. */
     subtitle: String = "",
+    /** Beside the title rather than under it — the wide card has the width. */
+    subtitleInline: Boolean = false,
     headerPill: String = "",
     /** A quiet line on the right of the header — how fresh the feed is. */
     headerNote: String = "",
@@ -543,12 +547,21 @@ fun HomeCardShell(
                 )
                 Spacer(Modifier.width(if (compact) 8.dp else 10.dp))
                 Column {
-                    Text(
-                        placement.heading.ifEmpty { t(definition.title) },
-                        fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                    if (subtitle.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Text(
+                            placement.heading.ifEmpty { t(definition.title) },
+                            fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        if (subtitle.isNotEmpty() && subtitleInline) {
+                            Text(subtitle, fontSize = 12.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(bottom = 1.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (subtitle.isNotEmpty() && !subtitleInline) {
                         Text(subtitle, fontSize = 10.5.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -72,6 +72,7 @@ export function HomeCardShell({
   t,
   headerSlot,
   subtitle,
+  subtitleInline,
   children,
   onMove,
   onResize,
@@ -90,6 +91,8 @@ export function HomeCardShell({
   headerSlot?: ReactNode;
   /** Small line under the title — "3 of 6 complete", a date range. */
   subtitle?: string;
+  /** Beside the title rather than under it — "10 active" on the wide cards. */
+  subtitleInline?: boolean;
   children: ReactNode;
   onMove: (direction: -1 | 1) => void;
   onResize: (size: HomeCardSize) => void;
@@ -219,7 +222,7 @@ export function HomeCardShell({
             aria-label={t("Edit heading")}
           />
         ) : (
-          <span className="home-card-titles">
+          <span className={`home-card-titles${subtitleInline ? " is-inline" : ""}`}>
             <h2 className="home-card-title">{heading}</h2>
             {subtitle ? <span className="home-card-subtitle">{subtitle}</span> : null}
           </span>

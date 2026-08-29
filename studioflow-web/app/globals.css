@@ -27170,11 +27170,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
      against a much wider column is what made the desktop cards read as squat
      letterboxes. Rows still grow rather than let a card paint over its
      neighbour. */
-  grid-auto-rows: minmax(var(--home-unit, 236px), auto);
+  /* Fixed, not minmax(...,auto): a row that grows for one tall card takes every
+     card beside it with it, and they stop being squares. The native grids clip
+     at the cell for exactly this reason, and web has to agree with them. */
+  grid-auto-rows: var(--home-unit, 236px);
 }
 
 .home-card {
-  display: flex; flex-direction: column; min-width: 0;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  /* Width-only containment, so a body can ask how wide its card is without the
+     card's height starting to depend on its contents. */
+  container-type: inline-size;
   border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
   box-shadow: 0 10px 30px rgba(23, 25, 35, 0.05);
   /* Deliberately NOT overflow:hidden. The card menu is positioned against this
@@ -27222,6 +27228,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 
 .home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+/* "10 active" belongs beside the heading, not under it — the wide card has the
+   width and the sheet reads it as one line. */
+.home-card-titles.is-inline { flex-direction: row; align-items: baseline; gap: 9px; }
+.home-card-titles.is-inline .home-card-subtitle { flex: 0 0 auto; }
 .home-card-title {
   margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -27909,6 +27919,63 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .home-chip.is-muted { background: rgba(120, 120, 140, 0.14); color: inherit; opacity: 0.7; }
 
+/* The wide orders card: the stages as figures ruled apart, then the orders that
+   need a decision. A row of names with a number under each reads faster than a
+   line of circles, which is what the sheet draws. */
+.home-lane-row { list-style: none; margin: 0; padding: 0; display: flex; }
+.home-lane-row li {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  padding: 0 12px; border-left: 1px solid var(--border);
+}
+.home-lane-row li:first-child { border-left: 0; padding-left: 0; }
+/* Two lines' worth whether the name needs them or not, so every figure below
+   sits on the same line — a wrapped name must not drop its own number. */
+.home-lane-head { display: flex; align-items: flex-start; gap: 7px; min-width: 0; min-height: 30px; }
+.home-lane-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; background: currentColor; margin-top: 4px; }
+.home-lane-row em {
+  font-style: normal; font-size: 12.5px; color: var(--foreground); opacity: 0.75;
+  /* Stage names are the workspace's own words — "Waiting / Blocked" is longer
+     than the sheet's "Waiting" and must wrap rather than lose its second half. */
+  line-height: 1.2; min-width: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-lane-row b { font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-lane-row li.tone-green { color: #16a34a; }
+.home-lane-row li.tone-blue { color: #2563eb; }
+.home-lane-row li.tone-red { color: #dc2626; }
+.home-lane-row li.tone-purple { color: #7c3aed; }
+.home-lane-row li.tone-slate { color: #64748b; }
+.home-lane-row b { color: currentColor; }
+
+.home-order-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0;
+  /* The rule the sheet draws between the figures and the orders. */
+  border-top: 1px solid var(--border); padding-top: 2px;
+}
+.home-order-list li + li { border-top: 1px solid var(--border); }
+.home-order-list a {
+  display: grid; align-items: center; gap: 12px; padding: 8px 0; min-width: 0;
+  grid-template-columns: 40px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px;
+  color: inherit; text-decoration: none;
+}
+.home-order-list a:hover strong { text-decoration: underline; }
+.home-order-thumb { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; background: var(--surface-muted, rgba(120,130,150,0.12)); }
+.home-order-thumb.is-blank {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px; opacity: 0.45; text-transform: uppercase;
+}
+.home-order-list strong { font-size: 13.5px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-order-design { font-size: 13px; opacity: 0.62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-order-chevron { opacity: 0.35; font-size: 17px; line-height: 1; }
+/* How many orders fit is the card's business, not a guess: a 2x1 is two squares
+   wide by ONE tall, and that one square is as short as 185px in a half-width
+   window. The lanes are the card's job; the list gives up rows until it fits.
+   The card's width gives its height away — a 2x1 is 2*unit + gap across, and
+   the row is the unit. */
+@container (max-width: 685px) { .home-order-list li:nth-child(n + 3) { display: none; } }
+@container (max-width: 573px) { .home-order-list li:nth-child(n + 2) { display: none; } }
+@container (max-width: 461px) { .home-order-list { display: none; } }
+
 .home-flow-row { list-style: none; margin: 6px 0 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .home-flow-row li { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1 1 90px; }
 .home-flow-row strong { margin-left: auto; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -28030,6 +28097,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   /* Only the production card stacks three blocks; the rest of the 2x2s were
      already reviewed at three rows and must keep them. */
   .home-card-2x2 .home-money.is-production .home-record-list li:nth-child(n + 3) { display: none; }
+
+  /* The phone header has no width for a second thing on the title's line, so
+     the note goes back under it. */
+  .home-card-titles.is-inline { flex-direction: column; align-items: flex-start; gap: 0; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }

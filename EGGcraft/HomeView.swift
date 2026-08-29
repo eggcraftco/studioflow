@@ -412,11 +412,14 @@ struct HomeView: View {
                 customising: customising,
                 compact: isCompact,
                 lang: seciliDil,
-                // The sheet names the load under the title on the wide phone card.
-                subtitle: definition.id == .ordersProduction && isCompact && placement.size == .twoByOne
+                // The sheet names the load beside the title on the wide card, and
+                // under it on the phone, which has no width to spare for a second
+                // thing on that line.
+                subtitle: definition.id == .ordersProduction && placement.size == .twoByOne
                     ? t("{count} active", lang: seciliDil)
                         .replacingOccurrences(of: "{count}", with: "\(homeLiveOrders(firebaseManager.siparisler).count)")
                     : "",
+                subtitleInline: !isCompact,
                 headerPill: definition.id == .banking && !firebaseManager.bankTransactions.isEmpty
                     ? t("Read-only", lang: seciliDil) : "",
                 // The sheet puts the feed's freshness on the right of the header

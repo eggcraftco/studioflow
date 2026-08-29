@@ -14,6 +14,9 @@ struct HomeCardShell<CardBody: View>: View {
     let lang: String
     /// A short line under the title — "3 of 6 complete", a date range.
     var subtitle: String = ""
+    /// Beside the title rather than under it — "10 active" on the wide card,
+    /// which has the width for one line where the phone does not.
+    var subtitleInline: Bool = false
     /// A small mark beside the title — Banking's read-only promise.
     var headerPill: String = ""
     /// A quiet line on the right of the header — how fresh the feed is.
@@ -81,6 +84,13 @@ struct HomeCardShell<CardBody: View>: View {
                 // While customising, a phone header carries the grip and the ⋯ as
                 // well; the pill is a label you read, not something you move, so
                 // it stands down and gives the title its width back.
+                if subtitleInline && !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
                 if !headerPill.isEmpty && !(compact && customising) {
                     // fixedSize, or a narrow card wraps the pill one letter per
                     // line — which is exactly what it did on a phone.
@@ -97,7 +107,7 @@ struct HomeCardShell<CardBody: View>: View {
                         .layoutPriority(0)
                 }
                 }
-                if !subtitle.isEmpty {
+                if !subtitle.isEmpty && !subtitleInline {
                     Text(subtitle)
                         .font(.system(size: 11.5))
                         .foregroundColor(.secondary)
