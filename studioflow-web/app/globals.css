@@ -27171,34 +27171,43 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-card.is-drop-target { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16); }
 
 .home-card-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 12px 8px; min-width: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 20px 0;
 }
+/* The grip is a real 2x3 dot matrix. A braille glyph renders at a different
+   weight in every font, which made the same card look different per platform. */
+.home-grip-dots {
+  display: grid; grid-template-columns: repeat(2, 3px); gap: 3px;
+  width: 9px;
+}
+.home-grip-dots i { display: block; width: 3px; height: 3px; border-radius: 999px; background: currentColor; }
 .home-card-grip {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border: 0; background: transparent; cursor: grab;
-  opacity: 0.35; font-size: 15px; border-radius: 7px; flex: 0 0 auto;
+  border: 0; background: none; padding: 4px 2px; cursor: grab;
+  color: rgba(100, 116, 139, 0.75); display: inline-flex; align-items: center;
+  flex: 0 0 auto; border-radius: 6px;
 }
-.home-card-grip:hover, .home-card-grip:focus-visible { opacity: 0.9; background: rgba(120, 120, 140, 0.12); }
 .home-card-grip:active { cursor: grabbing; }
-.home-card-icon { display: inline-flex; width: 20px; height: 20px; opacity: 0.75; flex: 0 0 auto; }
-.home-card-icon svg { width: 100%; height: 100%; }
-/* Two of the card glyphs are drawn as a currentColor disc with the shape cut out
-   of it. The cutout is white by default, and the only dark-mode override lives
-   inside .order-detail-card — so on a dark Home the disc turned near-white and
-   swallowed its own glyph. Cut it out in the card's surface colour instead. */
-body[data-studio-theme="dark"] .home-card-icon { --card-title-icon-cutout: #16181c; }
-@media (prefers-color-scheme: dark) {
-  body:not([data-studio-theme="light"]) .home-card-icon { --card-title-icon-cutout: #16181c; }
+.home-card-grip:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+/* A ringed badge gives every card the same anchor at the same size, whatever
+   glyph it carries. Tone recolours the ring and glyph together. */
+.home-card-badge {
+  width: 38px; height: 38px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; border: 2px solid currentColor; color: #2563eb;
+  --card-title-icon-cutout: var(--surface, #fff);
 }
+.home-card-badge svg { width: 19px; height: 19px; }
+
+.home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .home-card-title {
-  margin: 0; font-size: 14px; font-weight: 780; min-width: 0;
+  margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.home-card-subtitle { font-size: 12.5px; opacity: 0.6; margin-top: 1px; }
 .home-card-heading-input {
-  font-size: 14px; font-weight: 780; min-width: 0; flex: 1 1 auto;
-  border: 1px solid #2563eb; border-radius: 7px; padding: 3px 7px;
-  background: var(--surface); color: inherit;
+  flex: 1 1 auto; min-width: 0; font-size: 17px; font-weight: 800;
+  border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: var(--surface);
 }
 .home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 .home-card-menu-wrap { position: relative; flex: 0 0 auto; }
@@ -27257,6 +27266,140 @@ body[data-studio-theme="dark"] .home-card-icon { --card-title-icon-cutout: #1618
 .home-card-link:hover { text-decoration: underline; }
 .home-card-stale { opacity: 0.55; font-size: 11.5px; }
 .home-card-note { margin: 8px 0 0; font-size: 11px; opacity: 0.55; line-height: 1.45; }
+/* ---- Quick actions --------------------------------------------------- */
+/* Each action carries its own colour. It is decoration only: the label always
+   says what the tile does, so the card still reads with colour removed (§20). */
+.home-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.home-action-grid.is-tiles { height: 100%; grid-template-rows: 1fr 1fr; }
+
+.home-action-tile,
+.home-action-row {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  color: inherit; cursor: pointer; font: inherit; text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.home-action-tile {
+  flex-direction: column; justify-content: center; gap: 8px;
+  padding: 10px 8px; border-color: transparent;
+}
+.home-action-row { padding: 11px 12px; }
+.home-action-tile:hover, .home-action-row:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(23, 25, 35, 0.08); }
+.home-action-tile:focus-visible, .home-action-row:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+.home-action-glyph { display: inline-flex; flex: 0 0 auto; }
+.home-action-tile .home-action-glyph svg { width: 34px; height: 34px; }
+.home-action-row .home-action-glyph svg { width: 22px; height: 22px; }
+.home-action-label {
+  font-size: 12.5px; font-weight: 700; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-action-tile .home-action-label { font-size: 12px; }
+
+/* Tinted tile = soft background + saturated glyph; row = white with the glyph
+   coloured, which is how the reference separates the two densities. */
+.home-action-tile.tone-teal   { background: rgba(13, 148, 136, 0.10); color: #0f766e; }
+.home-action-tile.tone-amber  { background: rgba(245, 158, 11, 0.14); color: #c2620a; }
+.home-action-tile.tone-violet { background: rgba(124, 58, 237, 0.10); color: #6d28d9; }
+.home-action-tile.tone-purple { background: rgba(147, 51, 234, 0.10); color: #7e22ce; }
+.home-action-tile.tone-orange { background: rgba(234, 88, 12, 0.12); color: #c2410c; }
+.home-action-tile.tone-indigo { background: rgba(79, 70, 229, 0.10); color: #4338ca; }
+.home-action-tile.tone-green  { background: rgba(22, 163, 74, 0.11); color: #15803d; }
+.home-action-tile.tone-blue   { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+
+.home-action-row.tone-teal   .home-action-glyph { color: #0f766e; }
+.home-action-row.tone-amber  .home-action-glyph { color: #d97706; }
+.home-action-row.tone-violet .home-action-glyph { color: #6d28d9; }
+.home-action-row.tone-purple .home-action-glyph { color: #9333ea; }
+.home-action-row.tone-orange .home-action-glyph { color: #ea580c; }
+.home-action-row.tone-indigo .home-action-glyph { color: #4f46e5; }
+.home-action-row.tone-green  .home-action-glyph { color: #16a34a; }
+.home-action-row.tone-blue   .home-action-glyph { color: #2563eb; }
+
+/* New order is the one filled tile — it is the action the screen exists to make
+   one click away, and the reference gives it the only solid fill. */
+.home-action-tile.is-primary,
+.home-action-row.is-primary {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.home-action-row.is-primary .home-action-glyph { color: #fff; }
+.home-action-tile.is-primary:hover, .home-action-row.is-primary:hover { background: #1d4ed8; }
+
+.home-action-groups { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.home-action-group + .home-action-group { border-top: 1px solid var(--border); padding-top: 10px; }
+.home-action-group .home-action-grid { margin-top: 6px; }
+.home-action-note {
+  margin: auto 0 0; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 11.5px; opacity: 0.6; display: flex; align-items: center; gap: 6px;
+}
+
+/* ---- Getting started ------------------------------------------------- */
+.home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.home-setup-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
+.home-setup.is-large .home-setup-columns { gap: 14px; }
+.home-setup-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+
+.home-eyebrow { margin: 2px 0 0; font-size: 11.5px; opacity: 0.6; }
+.home-eyebrow.is-strong { font-weight: 800; opacity: 0.9; font-size: 13px; }
+.home-eyebrow.is-accent { color: #2563eb; font-weight: 700; opacity: 1; margin-bottom: 4px; }
+
+.home-progress { height: 6px; border-radius: 999px; background: rgba(120, 130, 150, 0.18); overflow: hidden; }
+.home-progress > span { display: block; height: 100%; border-radius: 999px; background: #2563eb; }
+
+/* The checklist: a filled green tick for done, a blue arrow for the step you
+   are on, a hollow ring for the rest. Never colour alone — the ring shape and
+   the strikethrough carry the same information (§20). */
+.home-check-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.home-check-list li {
+  display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 12.5px;
+  border-bottom: 1px solid var(--border); min-width: 0;
+}
+.home-check-list li:last-child { border-bottom: 0; }
+.home-check-list.is-full li { padding: 8px 0; }
+.home-check-list li.is-current {
+  color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.07);
+  border-radius: 8px; padding-left: 8px; padding-right: 8px; border-bottom-color: transparent;
+}
+.home-check { width: 17px; height: 17px; border-radius: 999px; flex: 0 0 auto; position: relative; }
+.home-check.is-done { background: #16a34a; }
+.home-check.is-done::after {
+  content: ""; position: absolute; left: 5px; top: 4px; width: 4px; height: 8px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(42deg);
+}
+.home-check.is-todo { border: 1.5px solid rgba(120, 130, 150, 0.45); }
+.home-check.is-current { border: 1.5px solid #2563eb; }
+.home-check.is-current::after {
+  content: ""; position: absolute; left: 4.5px; top: 5.5px; width: 5px; height: 5px;
+  border: solid #2563eb; border-width: 2px 2px 0 0; transform: rotate(45deg);
+}
+
+/* The recommendation panel. Blue enough to be the obvious next thing, calm
+   enough that it is not a payment prompt (§15). */
+.home-next-panel { background: rgba(37, 99, 235, 0.07); border-radius: 12px; padding: 12px 14px; }
+.home-next-panel.is-large { display: flex; flex-direction: column; gap: 4px; }
+.home-next-body { display: flex; align-items: flex-start; gap: 12px; }
+.home-next-panel.is-large .home-next-body { flex-direction: column; align-items: stretch; gap: 10px; }
+.home-next-body strong { display: block; font-size: 14.5px; font-weight: 800; }
+.home-next-body p { margin: 3px 0 0; font-size: 12px; opacity: 0.7; line-height: 1.4; }
+.home-next-button {
+  flex: 0 0 auto; align-self: center; text-decoration: none; white-space: nowrap;
+  background: #2563eb; color: #fff; font-size: 12.5px; font-weight: 700;
+  padding: 8px 16px; border-radius: 9px;
+}
+.home-next-panel.is-large .home-next-button { align-self: stretch; text-align: center; }
+.home-next-button:hover { background: #1d4ed8; }
+
+.home-tip {
+  display: flex; align-items: center; gap: 10px; margin-top: auto;
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px;
+}
+.home-tip-icon {
+  width: 30px; height: 30px; flex: 0 0 auto; border-radius: 999px;
+  background: rgba(37, 99, 235, 0.10); display: inline-flex; align-items: center; justify-content: center;
+}
+.home-tip strong { display: block; font-size: 12.5px; font-weight: 800; }
+.home-tip em { display: block; font-style: normal; font-size: 11.5px; opacity: 0.65; }
+
 .home-section-label { margin: 10px 0 2px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; }
 
 /* States (§18) — each keeps the card's size rather than collapsing it. */

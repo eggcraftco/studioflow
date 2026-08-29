@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
+import { HomeActionIcon, type HomeActionIconName } from "@/components/home/HomeActionIcons";
 import type { HomeCardSize } from "@/lib/studioflow/homeCards";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
@@ -405,81 +406,256 @@ export function NotesCardBody({ size, data, t }: CardBodyProps) {
 
 /* ---------------------------------------------------------- Quick actions */
 
-const QUICK_ACTIONS: { id: QuickActionId; label: string; primary?: boolean }[] = [
-  { id: "order", label: "New order", primary: true },
-  { id: "customer", label: "Add customer" },
-  { id: "note", label: "Add note" },
-  { id: "file", label: "Upload file" },
-  { id: "inventory", label: "Add inventory item" },
-  // Not "Add expense": NivaDesk has no manual expense form, and it should not
-  // pretend to. Spending arrives from the read-only bank feed (§7) and becomes
-  // an expense when it is categorised — so the action is the review queue.
-  { id: "reviewSpending", label: "Review spending" },
-  { id: "receipt", label: "Add receipt" },
-  { id: "aiReply", label: "AI reply" },
+/**
+ * The action set, grouped as the reference groups it. Colour is per action and
+ * is decoration, never meaning — the label says what the tile does (§20).
+ */
+const QUICK_ACTIONS: {
+  id: QuickActionId; label: string; group: "create" | "capture" | "finance";
+  icon: HomeActionIconName; tone: string; primary?: boolean;
+}[] = [
+  { id: "order", label: "New order", group: "create", icon: "newOrder", tone: "blue", primary: true },
+  { id: "customer", label: "Add customer", group: "create", icon: "addCustomer", tone: "teal" },
+  { id: "note", label: "Add note", group: "create", icon: "addNote", tone: "amber" },
+  { id: "file", label: "Upload file", group: "capture", icon: "uploadFile", tone: "violet" },
+  { id: "inventory", label: "Add inventory item", group: "create", icon: "addInventory", tone: "purple" },
+  { id: "receipt", label: "Scan receipt", group: "capture", icon: "scanReceipt", tone: "orange" },
+  // NivaDesk has no manual expense form yet: spending arrives from the read-only
+  // bank feed and becomes an expense when it is categorised. Until one exists
+  // this lands on the review queue, which is where that actually happens.
+  { id: "reviewSpending", label: "Add expense", group: "finance", icon: "addExpense", tone: "indigo" },
+  { id: "aiReply", label: "Generate AI reply", group: "finance", icon: "aiReply", tone: "green" },
+];
+
+const QUICK_ACTION_GROUPS: { id: "create" | "capture" | "finance"; label: string }[] = [
+  { id: "create", label: "Create" },
+  { id: "capture", label: "Capture" },
+  { id: "finance", label: "Finance & communication" },
 ];
 
 export function QuickActionsCardBody({ size, t, onQuickAction }: CardBodyProps) {
-  // Four, six or eight by size (§6). A permission-less action is simply absent
-  // and the grid closes up rather than leaving a hole.
-  const limit = size === "1x1" ? 4 : size === "2x1" ? 6 : 8;
+  // 1x1: four large tinted tiles, icon over label.
+  if (size === "1x1") {
+    return (
+      <div className="home-action-grid is-tiles">
+        {QUICK_ACTIONS.slice(0, 4).map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            className={`home-action-tile tone-${action.tone}${action.primary ? " is-primary" : ""}`}
+            onClick={() => onQuickAction?.(action.id)}
+          >
+            <span className="home-action-glyph"><HomeActionIcon name={action.icon} /></span>
+            <span className="home-action-label">{t(action.label)}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // 2x1: six compact rows, icon beside label.
+  if (size === "2x1") {
+    return (
+      <div className="home-action-grid is-rows">
+        {QUICK_ACTIONS.slice(0, 6).map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            className={`home-action-row tone-${action.tone}${action.primary ? " is-primary" : ""}`}
+            onClick={() => onQuickAction?.(action.id)}
+          >
+            <span className="home-action-glyph"><HomeActionIcon name={action.icon} /></span>
+            <span className="home-action-label">{t(action.label)}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  // 2x2: every action, grouped, with the permissions note the reference carries.
   return (
-    <div className="home-quick-grid">
-      {QUICK_ACTIONS.slice(0, limit).map((action) => (
-        <button
-          key={action.id}
-          type="button"
-          className={`home-quick-action${action.primary ? " is-primary" : ""}`}
-          onClick={() => onQuickAction?.(action.id)}
-        >
-          {t(action.label)}
-        </button>
-      ))}
+    <div className="home-action-groups">
+      {QUICK_ACTION_GROUPS.map((group) => {
+        const rows = QUICK_ACTIONS.filter((action) => action.group === group.id);
+        if (rows.length === 0) return null;
+        return (
+          <div key={group.id} className="home-action-group">
+            <p className="home-eyebrow is-strong">{t(group.label)}</p>
+            <div className="home-action-grid is-rows">
+              {rows.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={`home-action-row tone-${action.tone}${action.primary ? " is-primary" : ""}`}
+                  onClick={() => onQuickAction?.(action.id)}
+                >
+                  <span className="home-action-glyph"><HomeActionIcon name={action.icon} /></span>
+                  <span className="home-action-label">{t(action.label)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      <p className="home-action-note">
+        <span aria-hidden="true">ⓘ</span> {t("Actions follow your permissions")}
+      </p>
     </div>
   );
 }
 
 /* --------------------------------------------------------- Getting started */
 
+/** Where each setup step sends the user, and the sentence that explains it. */
+const SETUP_STEPS = [
+  { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
+  { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
+  { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
+  { id: "shop", label: "Connect your shop", blurb: "Bring Shopify or WooCommerce orders in automatically.", href: "/settings?section=integrations", cta: "Connect shop" },
+  { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
+  { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
+] as const;
+
 export function GettingStartedCardBody({ size, data, t }: CardBodyProps) {
-  const steps = [
-    { id: "profile", label: "Set up business profile", done: true },
-    { id: "customer", label: "Add your first customer", done: data.customers.length > 0 },
-    { id: "order", label: "Create your first order", done: data.orders.length > 0 },
-    { id: "inventory", label: "Add an inventory item", done: (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0 },
-    { id: "bank", label: "Connect your bank", done: data.bankTransactions.length > 0 },
-    { id: "files", label: "Upload your first file", done: data.files.length > 0 },
-  ];
+  const steps = SETUP_STEPS.map((step) => ({
+    ...step,
+    done:
+      step.id === "profile" ? true :
+      step.id === "customer" ? data.customers.length > 0 :
+      step.id === "order" ? data.orders.length > 0 :
+      // A store order carries the shop's own status field; that is the only
+      // signal on the order itself that it did not come from this app.
+      step.id === "shop" ? data.orders.some((order) =>
+        Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])) :
+      step.id === "inventory" ? (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0 :
+      data.bankTransactions.length > 0,
+  }));
   const complete = steps.filter((step) => step.done).length;
   const next = steps.find((step) => !step.done);
+  const done = steps.filter((step) => step.done);
+  const todo = steps.filter((step) => !step.done && step.id !== next?.id);
 
-  return (
-    <div className="home-getting-started">
-      <p className="home-metric-label">
-        {t("{done} of {total} complete").replace("{done}", String(complete)).replace("{total}", String(steps.length))}
-      </p>
-      <div className="home-progress" role="progressbar" aria-valuenow={complete} aria-valuemin={0} aria-valuemax={steps.length}>
-        <span style={{ width: `${(complete / steps.length) * 100}%` }} />
-      </div>
-      {/* Never blocking, never a payment prompt (§15). */}
-      {next ? (
-        <div className="home-next-step">
-          <span className="home-next-label">{t("Up next")}</span>
-          <strong>{t(next.label)}</strong>
-        </div>
-      ) : (
-        <p className="home-card-note">{t("All set — nice work.")}</p>
-      )}
-      {size !== "1x1" ? (
+  // 1x1 has no room for the completed list, so it leads with the next step and
+  // shows what is still open underneath.
+  if (size === "1x1") {
+    return (
+      <div className="home-setup">
+        <HomeProgress complete={complete} total={steps.length} t={t} />
+        {next ? (
+          <>
+            <p className="home-eyebrow">{t("Next step")}</p>
+            <NextStepPanel step={next} t={t} compact />
+          </>
+        ) : (
+          <p className="home-card-note">{t("All set — nice work.")}</p>
+        )}
         <ul className="home-check-list">
-          {steps.slice(0, size === "2x2" ? 6 : 4).map((step) => (
-            <li key={step.id} className={step.done ? "is-done" : ""}>
-              <span aria-hidden="true">{step.done ? "✓" : "○"}</span>
-              {t(step.label)}
-            </li>
+          {todo.slice(0, 2).map((step) => (
+            <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
           ))}
         </ul>
-      ) : null}
+      </div>
+    );
+  }
+
+  // 2x1: what is done on the left, what is next on the right (§15 — never a
+  // blocking wall, always one obvious continue).
+  if (size === "2x1") {
+    return (
+      <div className="home-setup is-split">
+        <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
+        <div className="home-setup-columns">
+          <div>
+            <p className="home-eyebrow is-strong">{t("Completed")}</p>
+            <ul className="home-check-list">
+              {done.slice(0, 3).map((step) => (
+                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            {next ? <NextStepPanel step={next} t={t} inline /> : <p className="home-card-note">{t("All set — nice work.")}</p>}
+            <ul className="home-check-list">
+              {todo.slice(0, 2).map((step) => (
+                <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2x2: the whole checklist with the current step called out, beside the
+  // recommendation, and a note that the list adapts to the workspace.
+  return (
+    <div className="home-setup is-large">
+      <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
+      <div className="home-setup-columns">
+        <div className="home-setup-panel">
+          <p className="home-eyebrow is-strong">{t("Your checklist")}</p>
+          <ul className="home-check-list is-full">
+            {steps.map((step) => (
+              <li key={step.id} className={step.id === next?.id ? "is-current" : ""}>
+                <span
+                  className={step.done ? "home-check is-done" : step.id === next?.id ? "home-check is-current" : "home-check is-todo"}
+                  aria-hidden="true"
+                />
+                {t(step.label)}
+              </li>
+            ))}
+          </ul>
+        </div>
+        {next ? <NextStepPanel step={next} t={t} large /> : (
+          <div className="home-next-panel"><p className="home-card-note">{t("All set — nice work.")}</p></div>
+        )}
+      </div>
+      <div className="home-tip">
+        <span className="home-tip-icon" aria-hidden="true">💡</span>
+        <span>
+          <strong>{t("Your setup adapts to you")}</strong>
+          <em>{t("Steps change with your plan, permissions and workflow.")}</em>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HomeProgress({ complete, total, t, hideLabel }: { complete: number; total: number; t: (text: string) => string; hideLabel?: boolean }) {
+  return (
+    <>
+      {hideLabel ? null : (
+        <p className="home-metric-label">
+          {t("{done} of {total} complete").replace("{done}", String(complete)).replace("{total}", String(total))}
+        </p>
+      )}
+      <div className="home-progress" role="progressbar" aria-valuenow={complete} aria-valuemin={0} aria-valuemax={total}>
+        <span style={{ width: `${(complete / total) * 100}%` }} />
+      </div>
+    </>
+  );
+}
+
+function NextStepPanel({
+  step, t, compact, inline, large,
+}: {
+  step: { label: string; blurb: string; href: string; cta: string };
+  t: (text: string) => string;
+  compact?: boolean; inline?: boolean; large?: boolean;
+}) {
+  return (
+    <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}`}>
+      {large ? <p className="home-eyebrow is-accent">{t("Recommended next")}</p> : null}
+      {inline ? <p className="home-eyebrow is-accent">{t("Up next")}</p> : null}
+      <div className="home-next-body">
+        <div>
+          <strong>{t(step.label)}</strong>
+          <p>{t(step.blurb)}</p>
+        </div>
+        <Link className="home-next-button" href={step.href}>
+          {t(inline ? "Continue" : step.cta)}
+        </Link>
+      </div>
     </div>
   );
 }
