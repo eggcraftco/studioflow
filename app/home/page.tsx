@@ -224,7 +224,7 @@ export default function HomePage() {
       case "recentActivity": return data.activity.length === 0;
       case "customers": return data.customers.length === 0;
       case "files": return data.files.length === 0;
-      case "notes": return data.orders.every((order) => !(order.notes || "").trim());
+      case "notes": return data.notes.filter((note) => !note.isDeleted && !note.isArchived).length === 0;
       default: return false;
     }
   }
