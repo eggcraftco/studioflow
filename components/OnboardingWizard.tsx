@@ -71,7 +71,7 @@ const TIME_ZONES = [
   "America/Toronto", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC",
 ];
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 export function OnboardingWizard({
   t,
