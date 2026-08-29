@@ -1,1 +1,0 @@
-Gestione ordini per artigiani, riparatori e studi: flusso, profitto, file, team.

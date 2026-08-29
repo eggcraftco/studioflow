@@ -1,1 +1,0 @@
-watch repair,jeweller,tailor,studio,workshop,order,workflow,crm,invoice,profit,clients,tasks

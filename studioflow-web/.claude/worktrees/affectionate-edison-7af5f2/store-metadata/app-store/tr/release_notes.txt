@@ -1,5 +1,0 @@
-• Shopify entegrasyonu: Shopify mağazanızdaki siparişler artık NivaDesk'e otomatik akar.
-• Widget'lar: yenilenen ana ekran widget'ları ve yeni Notlar widget'ı.
-• Hızlı not: uygulama simgesine basılı tutarak yeni not başlatın.
-• Uygulama ilk açılışta cihaz dilinizde açılır (12 dil).
-• Hata düzeltmeleri ve performans iyileştirmeleri.

@@ -1,1 +1,0 @@
-relojero,joyero,sastre,taller,estudio,pedidos,encargos,crm,factura,beneficio,clientes,tareas

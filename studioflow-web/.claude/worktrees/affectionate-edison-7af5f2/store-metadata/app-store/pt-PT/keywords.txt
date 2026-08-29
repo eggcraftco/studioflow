@@ -1,1 +1,0 @@
-relojoeiro,joalheiro,alfaiate,estúdio,oficina,encomenda,fluxo,crm,fatura,lucro,clientes,tarefas
