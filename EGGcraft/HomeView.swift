@@ -176,13 +176,26 @@ struct HomeView: View {
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isCompact: Bool { sizeClass == .compact }
     // Two columns on a phone, so a pair of 1×1 cards sits side by side instead
     // of each one eating a whole screen. A 2×1 or 2×2 still fills the width —
     // it is drawn for two columns and there are exactly two.
     private var columnCount: Int { sizeClass == .compact ? 2 : 3 }
     #else
     private var columnCount: Int { 4 }
+    private var isCompact: Bool { false }
     #endif
+
+    /// The phone's square row, from the screen width rather than the grid's — the
+    /// grid has not measured itself yet when the ScrollView asks for a height.
+    private var compactRowEstimate: CGFloat {
+        #if os(iOS)
+        let width = UIScreen.main.bounds.width - 44
+        return (width - HomeGridMetrics.gap) / 2
+        #else
+        return HomeGridMetrics.rowHeight
+        #endif
+    }
 
     private var visible: [HomeCardPlacement] {
         store.layout.cards.filter { placement in
@@ -309,10 +322,13 @@ struct HomeView: View {
         GeometryReader { proxy in
             let spacing = HomeGridMetrics.gap
             let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+            // On a phone the row IS the column width, so a 1×1 comes out square.
+            let row = isCompact ? unit : HomeGridMetrics.rowHeight
             HomeGrid(
                 placements: visible,
                 columnCount: columnCount,
                 unit: unit,
+                rowHeight: row,
                 spacing: spacing,
                 content: { placement, width, height in
                     cardView(placement)
@@ -358,8 +374,11 @@ struct HomeView: View {
     /// The grid lives inside a ScrollView, so it has to state its own height.
     private var gridHeight: CGFloat {
         let rows = HomeGridLayout.rowCount(visible, columnCount: columnCount)
-        return CGFloat(rows) * HomeGridMetrics.rowHeight
-            + CGFloat(max(0, rows - 1)) * HomeGridMetrics.gap
+        // Only the phone's row is derived from the width; the reader sees the
+        // real height once the grid lays out, and this keeps the ScrollView from
+        // clipping in the meantime.
+        let row = isCompact ? compactRowEstimate : HomeGridMetrics.rowHeight
+        return CGFloat(rows) * row + CGFloat(max(0, rows - 1)) * HomeGridMetrics.gap
     }
 
     @ViewBuilder
@@ -369,6 +388,7 @@ struct HomeView: View {
                 definition: definition,
                 placement: placement,
                 customising: customising,
+                compact: isCompact,
                 lang: seciliDil,
                 headerPill: definition.id == .banking && !firebaseManager.bankTransactions.isEmpty
                     ? t("Read-only", lang: seciliDil) : "",
@@ -492,6 +512,8 @@ struct HomeGrid<Content: View>: View {
     let placements: [HomeCardPlacement]
     let columnCount: Int
     let unit: CGFloat
+    /// One row's height. The phone passes its column width so a 1×1 is square.
+    let rowHeight: CGFloat
     let spacing: CGFloat
     @ViewBuilder let content: (HomeCardPlacement, CGFloat, CGFloat) -> Content
 
@@ -501,11 +523,11 @@ struct HomeGrid<Content: View>: View {
                 let (placement, row, column) = entry
                 let width = min(placement.size.columns, columnCount)
                 let cardWidth = unit * CGFloat(width) + spacing * CGFloat(width - 1)
-                let cardHeight = HomeGridMetrics.rowHeight * CGFloat(placement.size.rows)
+                let cardHeight = rowHeight * CGFloat(placement.size.rows)
                     + spacing * CGFloat(placement.size.rows - 1)
                 content(placement, cardWidth, cardHeight)
                     .offset(x: (unit + spacing) * CGFloat(column),
-                            y: (HomeGridMetrics.rowHeight + spacing) * CGFloat(row))
+                            y: (rowHeight + spacing) * CGFloat(row))
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

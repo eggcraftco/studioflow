@@ -2,6 +2,7 @@
 
 import { Component, useEffect, useRef, useState, type ReactNode, useLayoutEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
   HOME_CARD_SIZES,
@@ -141,6 +142,7 @@ export function HomeCardShell({
     setMenuAbove(rect.bottom + estimatedHeight > window.innerHeight && rect.top > estimatedHeight);
   }, [menuOpen]);
 
+  const router = useRouter();
   const heading = placement.heading?.trim() || t(definition.title);
 
   return (
@@ -148,11 +150,24 @@ export function HomeCardShell({
       className={[
         "home-card",
         `home-card-${placement.size}`,
+        // A 1x1 becomes a square tap target on a phone; the media query decides
+        // whether the class does anything.
+        placement.size === "1x1" ? "is-square" : "",
         placement.tone ? `home-tone-${placement.tone}` : "",
         customising ? "is-customising" : "",
         dragHandlers.dragging ? "is-dragging" : "",
         dragHandlers.dropTarget ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
+      onClick={(event) => {
+        // Only when the phone layout has hidden the footer link: the card then
+        // stands in for it. A click on something that is already interactive —
+        // a row link, the menu, an action tile — is left alone.
+        if (placement.size !== "1x1" || customising) return;
+        const target = event.target as HTMLElement;
+        if (target.closest("a, button, input")) return;
+        if (!window.matchMedia("(max-width: 640px)").matches) return;
+        router.push(definition.href);
+      }}
       style={{
         gridColumn: `span ${homeCardColumns(placement.size)}`,
         gridRow: `span ${homeCardRows(placement.size)}`,

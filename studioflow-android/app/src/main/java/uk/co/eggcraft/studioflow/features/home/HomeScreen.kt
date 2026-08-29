@@ -277,16 +277,19 @@ fun HomeScreen(
             // the width — it is drawn for two columns and there are exactly two.
             val columnCount = if (availableDp >= 840) 3 else 2
             val unit = (availableDp - CARD_GAP * (columnCount - 1)) / columnCount
+            // On a phone the row IS the column width, so a 1x1 comes out square.
+            val compact = availableDp < 600
+            val rowHeight = if (compact) unit else CARD_UNIT_HEIGHT
             val rows = HomeGridLayout.rowCount(visible, columnCount)
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height((rows * CARD_UNIT_HEIGHT + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
+                    .height((rows * rowHeight + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
             ) {
             HomeGridLayout.slots(visible, columnCount).forEach { slot ->
                 val width = minOf(slot.placement.size.columns, columnCount)
                 val cardWidth = unit * width + CARD_GAP * (width - 1)
-                val cardHeight = CARD_UNIT_HEIGHT * slot.placement.size.rows +
+                val cardHeight = rowHeight * slot.placement.size.rows +
                     CARD_GAP * (slot.placement.size.rows - 1)
                 val definition = HomeCards.definition(slot.placement.id) ?: return@forEach
                 val isDragging = draggingId == slot.placement.id
@@ -295,7 +298,7 @@ fun HomeScreen(
                         .offset(
                             x = ((unit + CARD_GAP) * slot.column).dp +
                                 (if (isDragging) with(density) { dragOffset.x.toDp() } else 0.dp),
-                            y = ((CARD_UNIT_HEIGHT + CARD_GAP) * slot.row).dp +
+                            y = ((rowHeight + CARD_GAP) * slot.row).dp +
                                 (if (isDragging) with(density) { dragOffset.y.toDp() } else 0.dp)
                         )
                         .zIndex(if (isDragging) 1f else 0f)
@@ -345,6 +348,7 @@ fun HomeScreen(
                         definition = definition,
                         placement = slot.placement,
                         customising = customising,
+                        compact = compact,
                         t = t,
                         headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
                             t("Read-only") else "",
@@ -464,6 +468,9 @@ fun HomeCardShell(
     definition: HomeCardDefinition,
     placement: HomeCardPlacement,
     customising: Boolean,
+    /** Phone layout: tighter header, no footer link on a 1x1, and the whole card
+     *  is the tap target instead. */
+    compact: Boolean = false,
     t: (String) -> String,
     headerPill: String = "",
     onOpen: () -> Unit,
@@ -476,8 +483,13 @@ fun HomeCardShell(
     content: @Composable () -> Unit
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // A square phone card has no room for a footer link, and it does not need
+    // one: the card itself opens the screen it summarises.
+    val hidesFooter = compact && placement.size == HomeCardSize.OneByOne
     Card(
-        Modifier.fillMaxSize(),
+        Modifier
+            .fillMaxSize()
+            .then(if (hidesFooter && !customising) Modifier.clickable { onOpen() } else Modifier),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = if (customising) 4.dp else 1.dp)
@@ -496,12 +508,13 @@ fun HomeCardShell(
                 HomeBadge(
                     definition.icon,
                     if (placement.tone == HomeCardTone.Standard) HomeTone.accent else homeToneColor(placement.tone),
-                    definition.filledBadge
+                    definition.filledBadge,
+                    size = if (compact) 30.dp else 38.dp
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(if (compact) 8.dp else 10.dp))
                 Text(
                     placement.heading.ifEmpty { t(definition.title) },
-                    fontSize = 14.5.sp, fontWeight = FontWeight.ExtraBold,
+                    fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 if (headerPill.isNotEmpty()) {
@@ -516,9 +529,12 @@ fun HomeCardShell(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Box {
+                // On a phone the ⋯ costs a quarter of the card's width. It appears
+                // while customising, which is when it is wanted; the rest of the
+                // time the card is a tap target.
+                Box(Modifier.then(if (compact && !customising) Modifier.size(0.dp) else Modifier)) {
                     // §17 asks for at least 44dp of touch target; the glyph stays small.
-                    Box(
+                    if (!compact || customising) Box(
                         Modifier
                             .size(44.dp)
                             .clickable { menuOpen = true },
@@ -562,17 +578,20 @@ fun HomeCardShell(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp)
+                    .padding(horizontal = if (compact) 13.dp else 14.dp)
+                    .padding(bottom = if (hidesFooter) 12.dp else 0.dp)
             ) { content() }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen() }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Text("${t(definition.linkLabel)} →", fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold, color = Color(0xFF2563EB))
+            if (!hidesFooter) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpen() }
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text("${t(definition.linkLabel)} →", fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold, color = Color(0xFF2563EB))
+                }
             }
         }
     }

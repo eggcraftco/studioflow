@@ -8,6 +8,9 @@ struct HomeCardShell<CardBody: View>: View {
     let definition: HomeCardDefinition
     let placement: HomeCardPlacement
     let customising: Bool
+    /// Phone layout: tighter header, no footer link on a 1×1, and the whole card
+    /// is the tap target instead.
+    var compact: Bool = false
     let lang: String
     /// A short line under the title — "3 of 6 complete", a date range.
     var subtitle: String = ""
@@ -28,15 +31,19 @@ struct HomeCardShell<CardBody: View>: View {
         placement.heading.isEmpty ? t(definition.title, lang: lang) : placement.heading
     }
     private var surface: Color { colorScheme == .dark ? Color(white: 0.13) : .white }
+    /// A square phone card has no room for a footer link, and it does not need
+    /// one: the card itself opens the screen it summarises.
+    private var hidesFooter: Bool { compact && placement.size == .oneByOne }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, compact ? 13 : 16)
                 .padding(.top, 4)
-            footer
+                .padding(.bottom, hidesFooter ? 12 : 0)
+            if !hidesFooter { footer }
         }
         .background(surface)
         .overlay(
@@ -46,17 +53,22 @@ struct HomeCardShell<CardBody: View>: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .opacity(customising ? 0.94 : 1)
+        .contentShape(Rectangle())
+        .onTapGesture { if hidesFooter && !customising { onOpen() } }
     }
 
     private var header: some View {
         HStack(spacing: 11) {
             if customising { HomeGripDots() }
-            HomeBadge(symbol: definition.icon, tone: placement.tone, filled: definition.filledBadge)
+            HomeBadge(symbol: definition.icon, tone: placement.tone,
+                      filled: definition.filledBadge, size: compact ? 30 : 38)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 7) {
                 Text(heading)
-                    .font(.system(size: 15.5, weight: .heavy))
+                    .font(.system(size: compact ? 14 : 15.5, weight: .heavy))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .layoutPriority(1)
                 if !headerPill.isEmpty {
                     Text(headerPill)
                         .font(.system(size: 10, weight: .heavy))
@@ -73,10 +85,13 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
-            menu
+            // On a phone the ⋯ costs a quarter of the card's width. It appears
+            // while customising, which is when it is wanted; the rest of the time
+            // the card is a tap target.
+            if !compact || customising { menu }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.horizontal, compact ? 13 : 16)
+        .padding(.top, compact ? 12 : 14)
         .padding(.bottom, 6)
     }
 
@@ -172,12 +187,13 @@ struct HomeBadge: View {
     let symbol: String
     var tone: HomeCardTone = .standard
     var filled: Bool = false
+    var size: CGFloat = 38
     private var colour: Color { tone == .standard ? HomeTone.accent : tone.accent }
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: size * 0.42, weight: .semibold))
             .foregroundColor(filled ? .white : colour)
-            .frame(width: 38, height: 38)
+            .frame(width: size, height: size)
             .background(Circle().fill(filled ? colour : .clear))
             .overlay(Circle().stroke(colour, lineWidth: filled ? 0 : 2))
     }

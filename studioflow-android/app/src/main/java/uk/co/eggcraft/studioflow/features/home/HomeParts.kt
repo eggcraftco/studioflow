@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -72,15 +73,15 @@ fun HomeGripDots(modifier: Modifier = Modifier) {
 
 /** A ringed badge gives every card the same anchor whatever glyph it carries. */
 @Composable
-fun HomeBadge(icon: ImageVector, tone: Color = HomeTone.accent, filled: Boolean = false) {
+fun HomeBadge(icon: ImageVector, tone: Color = HomeTone.accent, filled: Boolean = false, size: Dp = 38.dp) {
     Box(
         Modifier
-            .size(38.dp)
+            .size(size)
             .then(if (filled) Modifier.background(tone, CircleShape) else Modifier.border(2.dp, tone, CircleShape)),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = if (filled) Color.White else tone,
-            modifier = Modifier.size(17.dp))
+            modifier = Modifier.size(size * 0.45f))
     }
 }
 
