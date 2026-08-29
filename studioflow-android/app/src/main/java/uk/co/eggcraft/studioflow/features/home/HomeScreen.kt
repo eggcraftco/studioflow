@@ -2,6 +2,9 @@ package uk.co.eggcraft.studioflow.features.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -381,6 +384,9 @@ fun HomeScreen(
                         onResize = { size -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(size = size) else it
                         })) },
+                        onPeriod = { period -> commit(layout.copy(cards = layout.cards.map {
+                            if (it.id == slot.placement.id) it.copy(period = period) else it
+                        })) },
                         onTone = { tone -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(tone = tone) else it
                         })) },
@@ -413,6 +419,7 @@ fun HomeScreen(
                             inventoryFailed = inventoryFailed,
                             stages = stages,
                             compact = compact,
+                            period = slot.placement.period,
                             t = t,
                             onNewOrder = onNewOrder,
                             onOpenSection = onOpenSection
@@ -507,6 +514,7 @@ fun HomeCardShell(
     headerNote: String = "",
     onOpen: () -> Unit,
     onResize: (HomeCardSize) -> Unit,
+    onPeriod: (HomeCardPeriod) -> Unit,
     onTone: (HomeCardTone) -> Unit,
     onRename: () -> Unit,
     onHide: () -> Unit,
@@ -565,6 +573,47 @@ fun HomeCardShell(
                         Text(subtitle, fontSize = 10.5.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                // The range the card's totals cover. It sits in the header
+                // because a figure without its period is not an answer — §4 puts
+                // the filter here, beside the heading, not in a footnote.
+                if (definition.periods) {
+                    Spacer(Modifier.weight(1f))
+                    var periodOpen by remember { mutableStateOf(false) }
+                    Box {
+                        Row(
+                            Modifier
+                                .then(
+                                    // A 1x1 header has one column's width for five
+                                    // things: the range keeps its words, not its box.
+                                    if (placement.size == HomeCardSize.OneByOne) Modifier
+                                    else Modifier.border(1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                                        RoundedCornerShape(9.dp))
+                                )
+                                .clickable { periodOpen = true }
+                                .padding(horizontal = if (compact) 5.dp else 9.dp,
+                                    vertical = if (compact) 3.dp else 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(t(placement.period.label),
+                                fontSize = if (compact) 11.sp else 12.5.sp,
+                                fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Icon(Icons.Filled.KeyboardArrowDown, t("Date range"), Modifier.size(14.dp))
+                        }
+                        DropdownMenu(periodOpen, onDismissRequest = { periodOpen = false }) {
+                            HomeCardPeriod.entries.forEach { period ->
+                                DropdownMenuItem(
+                                    text = { Text(t(period.label)) },
+                                    leadingIcon = if (period == placement.period) {
+                                        { Icon(Icons.Filled.CheckCircle, null, Modifier.size(16.dp)) }
+                                    } else null,
+                                    onClick = { onPeriod(period); periodOpen = false }
+                                )
+                            }
+                        }
                     }
                 }
                 // While customising, a phone header carries the grip and the ⋯ as

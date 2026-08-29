@@ -7486,6 +7486,9 @@ const HOME_CARD_SIZES_BY_ID = {
   notes: ["1x1", "2x1", "2x2"]
 };
 const HOME_CARD_TONES = new Set(["blue", "green", "amber", "purple", "rose"]);
+// How far back a card counts. Kept here as well as in the clients, because a
+// field this function does not know about is a field it silently drops.
+const HOME_CARD_PERIODS = new Set(["month", "year", "all"]);
 
 /**
  * Validates a Home layout before it is stored.
@@ -7514,6 +7517,7 @@ function cleanHomeLayout(raw) {
     const heading = typeof entry.heading === "string" ? entry.heading.trim().slice(0, 40) : "";
     if (heading) card.heading = heading;
     if (HOME_CARD_TONES.has(entry.tone)) card.tone = entry.tone;
+    if (HOME_CARD_PERIODS.has(entry.period)) card.period = entry.period;
     cards.push(card);
   }
   const hidden = (Array.isArray(parsed.hidden) ? parsed.hidden : [])

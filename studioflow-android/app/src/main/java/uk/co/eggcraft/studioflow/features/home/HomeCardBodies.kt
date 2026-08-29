@@ -96,6 +96,8 @@ fun HomeCardBody(
     stages: List<ProductionStage>,
     /** Phone layout: the wide cards stack their figures instead of lining them up. */
     compact: Boolean = false,
+    /** The range the card's totals cover; only the money cards read it. */
+    period: HomeCardPeriod = HomeCardPeriod.Month,
     t: (String) -> String,
     onNewOrder: () -> Unit,
     onOpenSection: (String) -> Unit
@@ -104,7 +106,7 @@ fun HomeCardBody(
         HomeCardId.GettingStarted -> HomeGettingStartedBody(size, state, inventory, t)
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
-        HomeCardId.Money -> HomeMoneyBody(size, state, compact, t)
+        HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
         HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, compact, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, compact, t)
@@ -477,9 +479,16 @@ private fun ActivityRow(
 // --------------------------------------------------------------------- Money
 
 @Composable
-private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
-    // The commercial result, never the bank feed's transaction list (§7).
-    val orders = state.orders.filter { !it.isDeleted && it.countsTowardBalance }
+private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean,
+                          period: HomeCardPeriod, t: (String) -> String) {
+    // The commercial result, never the bank feed's transaction list (§7). The
+    // header says which window these totals cover, so they have to actually
+    // cover it — same rule the Dashboard applies, against the payment date.
+    val window = homePeriodRange(period)
+    val orders = state.orders.filter {
+        !it.isDeleted && it.countsTowardBalance &&
+            !it.paymentDate.before(window.first) && !it.paymentDate.after(window.second)
+    }
     if (orders.isEmpty()) {
         Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
@@ -1027,6 +1036,29 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
 
 /** A tile sized for a square phone card: one line of label over one of figure,
  *  with a small mark beside them. The desktop tile is twice this tall. */
+/**
+ * The window a period covers. Same rule the Dashboard applies — from the start
+ * of the month or the year to the end of today — because two definitions of
+ * "this month" is one too many.
+ */
+private fun homePeriodRange(period: HomeCardPeriod): Pair<Date, Date> {
+    val end = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59)
+        set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
+    }.time
+    val start = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        set(Calendar.DAY_OF_MONTH, 1)
+        when (period) {
+            HomeCardPeriod.Month -> Unit
+            HomeCardPeriod.Year -> set(Calendar.MONTH, Calendar.JANUARY)
+            HomeCardPeriod.All -> timeInMillis = 0L
+        }
+    }.time
+    return start to end
+}
+
 /** The lane row's own height, and one order row's — the 2x1 measures its list
  *  against these rather than discovering it does not fit after it has drawn. */
 private const val LANES_HEIGHT = 63f

@@ -27242,6 +27242,27 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: var(--surface);
 }
 .home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+/* The range the card's totals cover. A native select, so it opens the way the
+   platform expects and stays reachable by keyboard; the chevron is drawn on the
+   wrapper because a select cannot be styled reliably across engines. */
+.home-period { margin-left: auto; position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; }
+.home-period select {
+  appearance: none; -webkit-appearance: none;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: inherit;
+  background: transparent; border: 1px solid var(--border); border-radius: 9px;
+  padding: 5px 26px 5px 10px; cursor: pointer; max-width: 130px;
+}
+.home-period select:hover { border-color: rgba(37, 99, 235, 0.45); }
+.home-period select:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.home-period::after {
+  content: ""; position: absolute; right: 10px; width: 7px; height: 7px;
+  border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px); opacity: 0.5; pointer-events: none;
+}
+/* A 1x1 header has one column's width for five things — the range keeps its
+   words but gives up its box. */
+.home-card-1x1 .home-period select { border-color: transparent; padding: 3px 22px 3px 4px; font-size: 11.5px; }
+.home-card-1x1 .home-period::after { right: 6px; width: 6px; height: 6px; }
 .home-card-menu-wrap { position: relative; flex: 0 0 auto; }
 .home-card-menu-button {
   width: 30px; height: 30px; border: 0; background: transparent; cursor: pointer;

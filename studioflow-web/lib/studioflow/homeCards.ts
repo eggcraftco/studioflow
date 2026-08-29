@@ -61,6 +61,8 @@ export type HomeCardDefinition = {
   access?: WorkspaceMemberAccessKey;
   /** Owner-only cards: money and banking are workspace finances. */
   financeOnly?: boolean;
+  /** The card reports a total, so its header offers the range that total covers. */
+  periods?: boolean;
   /** Where the card's single footer link goes. Deep links, filters pre-applied. */
   href: string;
   /** The footer link's English label. */
@@ -107,6 +109,7 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     defaultSize: "1x1",
     access: "dashboard",
     financeOnly: true,
+    periods: true,
     href: "/dashboard",
     linkLabel: "Open Dashboard",
   },
@@ -192,12 +195,41 @@ export function homeCardById(id: HomeCardId) {
 /** A card's colour theme. Colour never carries meaning on its own (§20). */
 export type HomeCardTone = "default" | "blue" | "green" | "amber" | "purple" | "rose";
 
+/**
+ * How far back a card counts. Only the cards that report money offer it — the
+ * sheet puts the control in their header, because "£27,858.06" means nothing
+ * until you know whether that is this month or since the workspace opened.
+ */
+export const HOME_CARD_PERIODS = ["month", "year", "all"] as const;
+export type HomeCardPeriod = (typeof HOME_CARD_PERIODS)[number];
+
+export const HOME_PERIOD_LABELS: Record<HomeCardPeriod, string> = {
+  month: "This month",
+  year: "This year",
+  all: "All time",
+};
+
+/**
+ * The window a period covers. Same rule the Dashboard applies — from the start
+ * of the month or the year to the end of today, against the order's payment
+ * date — because two definitions of "this month" is one too many.
+ */
+export function homePeriodRange(period: HomeCardPeriod): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  if (period === "month") return { start: new Date(now.getFullYear(), now.getMonth(), 1), end };
+  if (period === "year") return { start: new Date(now.getFullYear(), 0, 1), end };
+  return { start: new Date(0), end };
+}
+
 export type HomeCardPlacement = {
   id: HomeCardId;
   size: HomeCardSize;
   /** Owner's own wording for the heading; empty means the registry title. */
   heading?: string;
   tone?: HomeCardTone;
+  /** Only meaningful on a card whose definition sets `periods`. */
+  period?: HomeCardPeriod;
 };
 
 /**
@@ -275,6 +307,9 @@ export function normaliseHomeLayout(raw: unknown): HomeLayout {
         ? (entry as HomeCardPlacement).heading!.slice(0, 40)
         : undefined,
       tone: (entry as HomeCardPlacement).tone,
+      period: HOME_CARD_PERIODS.includes((entry as HomeCardPlacement).period as HomeCardPeriod)
+        ? (entry as HomeCardPlacement).period
+        : undefined,
     });
   }
 
@@ -373,6 +408,13 @@ export function setHomeCardHeading(layout: HomeLayout, id: HomeCardId, heading: 
     cards: layout.cards.map((card) =>
       card.id === id ? { ...card, heading: clean || undefined } : card,
     ),
+  };
+}
+
+export function setHomeCardPeriod(layout: HomeLayout, id: HomeCardId, period: HomeCardPeriod): HomeLayout {
+  return {
+    ...layout,
+    cards: layout.cards.map((card) => (card.id === id ? { ...card, period } : card)),
   };
 }
 

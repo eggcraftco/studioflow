@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
-import type { HomeCardSize } from "@/lib/studioflow/homeCards";
+import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney } from "@/lib/studioflow/money";
@@ -20,6 +20,8 @@ import { formatStudioMoney } from "@/lib/studioflow/money";
 
 export type CardBodyProps = {
   size: HomeCardSize;
+  /** The range the card's totals cover; only the money cards read it. */
+  period: HomeCardPeriod;
   data: HomeData;
   t: (text: string) => string;
   moneySettings: StudioMoneySettings;
@@ -38,8 +40,13 @@ function cash(value: number, hide: boolean, settings: StudioMoneySettings) {
 
 /* ------------------------------------------------------------------ Money */
 
-export function MoneyCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
-  const orders = data.financeOrders.filter((order) => order.countsTowardBalance !== false);
+export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+  // The header says which window these totals cover, so they have to actually
+  // cover it — same rule the Dashboard applies, against the payment date.
+  const { start, end } = homePeriodRange(period);
+  const orders = data.financeOrders.filter((order) =>
+    order.countsTowardBalance !== false &&
+    order.paymentDate !== null && order.paymentDate >= start && order.paymentDate <= end);
   if (orders.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);

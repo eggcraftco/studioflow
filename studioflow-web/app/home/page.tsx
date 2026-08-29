@@ -38,10 +38,13 @@ import {
   resetHomeCard,
   resizeHomeCard,
   setHomeCardHeading,
+  homePeriodRange,
+  setHomeCardPeriod,
   setHomeCardTone,
   showHomeCard,
   visibleHomeCards,
   type HomeCardId,
+  type HomeCardPeriod,
   type HomeCardSize,
   type HomeCardTone,
   type HomeLayout,
@@ -213,9 +216,9 @@ export default function HomePage() {
     return { kind: "ready" };
   }
 
-  function renderBody(id: HomeCardId, size: HomeCardSize) {
+  function renderBody(id: HomeCardId, size: HomeCardSize, period: HomeCardPeriod) {
     const props: CardBodyProps = {
-      size, data, t, moneySettings, hideNumbers, onQuickAction: handleQuickAction,
+      size, period, data, t, moneySettings, hideNumbers, onQuickAction: handleQuickAction,
     };
     switch (id) {
       case "money": return <MoneyCardBody {...props} />;
@@ -233,9 +236,16 @@ export default function HomePage() {
     }
   }
 
-  function isEmpty(id: HomeCardId) {
+  function isEmpty(id: HomeCardId, period: HomeCardPeriod) {
     switch (id) {
-      case "money": return data.financeOrders.length === 0;
+      // Against the period the header is showing, not the whole history: with
+      // orders on file but none this month the body has nothing to draw, and a
+      // card that renders blank is worse than one that says so.
+      case "money": {
+        const { start, end } = homePeriodRange(period);
+        return data.financeOrders.filter((order) =>
+          order.paymentDate !== null && order.paymentDate >= start && order.paymentDate <= end).length === 0;
+      }
       case "banking": return data.bankTransactions.length === 0;
       case "inventory": return !data.inventory;
       // Both read scheduleOrders, so the empty test must ask that list, not the
@@ -294,7 +304,7 @@ export default function HomePage() {
               placement={placement}
               customising={customising}
               t={t}
-              state={cardState(placement.id, isEmpty(placement.id))}
+              state={cardState(placement.id, isEmpty(placement.id, placement.period ?? "month"))}
               subtitle={
                 // The wide orders card leads with how many are live, beside its
                 // heading, exactly as the sheet reads it.
@@ -317,6 +327,7 @@ export default function HomePage() {
               onReset={() => void commit(resetHomeCard(layout, placement.id))}
               onTone={(tone: HomeCardTone) => void commit(setHomeCardTone(layout, placement.id, tone))}
               onHeading={(heading) => void commit(setHomeCardHeading(layout, placement.id, heading))}
+              onPeriod={(period) => void commit(setHomeCardPeriod(layout, placement.id, period))}
               dragHandlers={{
                 dragging: dragIndex === index,
                 dropTarget: dropIndex === index && dragIndex !== index,
@@ -337,7 +348,7 @@ export default function HomePage() {
                 },
               }}
             >
-              {renderBody(placement.id, placement.size)}
+              {renderBody(placement.id, placement.size, placement.period ?? "month")}
             </HomeCardShell>
           ))}
         </div>

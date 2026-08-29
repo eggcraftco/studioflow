@@ -90,18 +90,23 @@ final class HomeLayoutStore: ObservableObject {
 
     func resize(_ id: HomeCardID, to size: HomeCardSize) {
         guard let definition = HomeCards.definition(id), definition.sizes.contains(size) else { return }
-        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: size, heading: $0.heading, tone: $0.tone) : $0 },
+        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: size, heading: $0.heading, tone: $0.tone, period: $0.period) : $0 },
+                          hidden: layout.hidden))
+    }
+
+    func setPeriod(_ id: HomeCardID, period: HomeCardPeriod) {
+        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: $0.size, heading: $0.heading, tone: $0.tone, period: period) : $0 },
                           hidden: layout.hidden))
     }
 
     func setTone(_ id: HomeCardID, tone: HomeCardTone) {
-        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: $0.size, heading: $0.heading, tone: tone) : $0 },
+        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: $0.size, heading: $0.heading, tone: tone, period: $0.period) : $0 },
                           hidden: layout.hidden))
     }
 
     func setHeading(_ id: HomeCardID, heading: String) {
         let clean = String(heading.trimmingCharacters(in: .whitespacesAndNewlines).prefix(40))
-        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: $0.size, heading: clean, tone: $0.tone) : $0 },
+        commit(HomeLayout(cards: layout.cards.map { $0.id == id ? HomeCardPlacement(id: $0.id, size: $0.size, heading: clean, tone: $0.tone, period: $0.period) : $0 },
                           hidden: layout.hidden))
     }
 

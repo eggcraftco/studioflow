@@ -23,6 +23,7 @@ struct HomeCardShell<CardBody: View>: View {
     var headerNote: String = ""
     let onOpen: () -> Void
     let onResize: (HomeCardSize) -> Void
+    let onPeriod: (HomeCardPeriod) -> Void
     let onTone: (HomeCardTone) -> Void
     let onRename: () -> Void
     let onHide: () -> Void
@@ -115,6 +116,38 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
+            // The range the card's totals cover. It sits in the header because a
+            // figure without its period is not an answer — §4 puts the filter
+            // here, beside the heading, not in a footnote.
+            if definition.periods {
+                Menu {
+                    ForEach(HomeCardPeriod.allCases, id: \.self) { period in
+                        Button { onPeriod(period) } label: {
+                            if period == placement.period { Label(t(period.label, lang: lang), systemImage: "checkmark") }
+                            else { Text(t(period.label, lang: lang)) }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(t(placement.period.label, lang: lang))
+                            .font(.system(size: compact ? 11 : 12.5, weight: .semibold))
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, compact ? 5 : 10).padding(.vertical, compact ? 3 : 5)
+                    // A 1×1 header has one column's width for five things: the
+                    // range keeps its words but gives up its box.
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9)
+                            .stroke(Color.primary.opacity(placement.size == .oneByOne ? 0 : 0.12), lineWidth: 1)
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(t("Date range", lang: lang))
+            }
             if !headerNote.isEmpty && !(compact && customising) {
                 Text(headerNote)
                     .font(.system(size: 10.5))

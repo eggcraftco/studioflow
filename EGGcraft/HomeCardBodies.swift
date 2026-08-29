@@ -20,6 +20,8 @@ struct HomeCardBody: View {
     let stepsJSON: String
     /// Phone layout: the wide cards stack their figures instead of lining them up.
     var compact: Bool = false
+    /// The range the card's totals cover; only the money cards read it.
+    var period: HomeCardPeriod = .month
     let access: HomeAccess
     @ObservedObject var data: HomeData
     let onNewOrder: () -> Void
@@ -36,7 +38,8 @@ struct HomeCardBody: View {
         case .recentActivity:
             HomeRecentActivityBody(size: size, lang: lang)
         case .money:
-            HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
+            HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal,
+                          compact: compact, period: period)
         case .banking:
             HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .inventory:
@@ -563,11 +566,19 @@ struct HomeMoneyBody: View {
     let currency: String
     let decimal: String
     var compact: Bool = false
+    var period: HomeCardPeriod = .month
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
         // The commercial result, never the bank feed's transaction list (§7).
-        let orders = firebaseManager.siparisler.filter { !$0.isDeleted && $0.countsTowardBalance }
+        // The header says which window these totals cover, so they have to
+        // actually cover it — same rule the Dashboard applies, against the
+        // payment date.
+        let window = period.range
+        let orders = firebaseManager.siparisler.filter {
+            !$0.isDeleted && $0.countsTowardBalance
+                && $0.paymentDate >= window.start && $0.paymentDate <= window.end
+        }
         if orders.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {

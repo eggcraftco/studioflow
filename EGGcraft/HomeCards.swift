@@ -82,6 +82,8 @@ struct HomeCardDefinition {
     let access: HomeCardAccess
     /// Owner-only cards: money and banking are workspace finances.
     let financeOnly: Bool
+    /// The card reports a total, so its header offers the range that total covers.
+    var periods: Bool = false
     /// The tab this card's single footer link opens.
     let destination: String
     let linkLabel: String
@@ -102,7 +104,8 @@ enum HomeCards {
                            financeOnly: false, destination: "Orders", linkLabel: "View all activity"),
         HomeCardDefinition(id: .money, title: "Money", icon: "sterlingsign.circle.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .dashboard,
-                           financeOnly: true, destination: "Dashboard", linkLabel: "Open Dashboard"),
+                           financeOnly: true, periods: true,
+                           destination: "Dashboard", linkLabel: "Open Dashboard"),
         HomeCardDefinition(id: .banking, title: "Banking", icon: "building.columns.fill", filledBadge: true,
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .bankFeed,
                            financeOnly: true, destination: "BankSpending", linkLabel: "Go to banking"),
@@ -133,17 +136,53 @@ enum HomeCards {
     }
 }
 
+/// How far back a card counts. Only the cards that report a total offer it — a
+/// figure without its period is not an answer.
+enum HomeCardPeriod: String, Codable, CaseIterable {
+    case month, year, all
+
+    var label: String {
+        switch self {
+        case .month: return "This month"
+        case .year: return "This year"
+        case .all: return "All time"
+        }
+    }
+
+    /// The window this period covers. Same rule the Dashboard applies — from the
+    /// start of the month or the year to the end of today — because two
+    /// definitions of "this month" is one too many.
+    var range: (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let now = Date()
+        let end = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: now) ?? now
+        switch self {
+        case .month:
+            let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+            return (start, end)
+        case .year:
+            let start = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+            return (start, end)
+        case .all:
+            return (Date(timeIntervalSince1970: 0), end)
+        }
+    }
+}
+
 struct HomeCardPlacement: Codable, Equatable, Identifiable {
     var id: HomeCardID
     var size: HomeCardSize
     /// Owner's own wording for the heading; empty means the registry title.
     var heading: String = ""
     var tone: HomeCardTone = .standard
+    /// Only meaningful on a card whose definition sets `periods`.
+    var period: HomeCardPeriod = .month
 
-    enum CodingKeys: String, CodingKey { case id, size, heading, tone }
+    enum CodingKeys: String, CodingKey { case id, size, heading, tone, period }
 
-    init(id: HomeCardID, size: HomeCardSize, heading: String = "", tone: HomeCardTone = .standard) {
-        self.id = id; self.size = size; self.heading = heading; self.tone = tone
+    init(id: HomeCardID, size: HomeCardSize, heading: String = "",
+         tone: HomeCardTone = .standard, period: HomeCardPeriod = .month) {
+        self.id = id; self.size = size; self.heading = heading; self.tone = tone; self.period = period
     }
 
     init(from decoder: Decoder) throws {
@@ -152,6 +191,7 @@ struct HomeCardPlacement: Codable, Equatable, Identifiable {
         size = (try? c.decode(HomeCardSize.self, forKey: .size)) ?? .oneByOne
         heading = (try? c.decode(String.self, forKey: .heading)) ?? ""
         tone = (try? c.decode(HomeCardTone.self, forKey: .tone)) ?? .standard
+        period = (try? c.decode(HomeCardPeriod.self, forKey: .period)) ?? .month
     }
 }
 

@@ -101,7 +101,10 @@ data class HomeCardDefinition(
     val linkLabel: String,
     /** Banking uses the solid badge the reference gives it; everything else the
      *  ring. Last in the list so every positional entry above stays valid. */
-    val filledBadge: Boolean = false
+    val filledBadge: Boolean = false,
+    /** The card reports a total, so its header offers the range that total
+     *  covers. Also last, for the same reason. */
+    val periods: Boolean = false
 )
 
 object HomeCards {
@@ -119,7 +122,7 @@ object HomeCards {
         HomeCardDefinition(HomeCardId.RecentActivity, "Recent activity", Icons.Filled.History, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Always, false, "Orders", "View all activity"),
         HomeCardDefinition(HomeCardId.Money, "Money", Icons.Filled.Payments, everySize, HomeCardSize.OneByOne,
-            HomeCardAccess.Dashboard, true, "Dashboard", "Open Dashboard"),
+            HomeCardAccess.Dashboard, true, "Dashboard", "Open Dashboard", periods = true),
         HomeCardDefinition(HomeCardId.Banking, "Banking", Icons.Filled.AccountBalance, filledBadge = true,
             sizes = everySize, defaultSize = HomeCardSize.OneByOne, access = HomeCardAccess.BankFeed,
             financeOnly = true, destination = "BankSpending", linkLabel = "Go to banking"),
@@ -142,12 +145,29 @@ object HomeCards {
     fun definition(id: HomeCardId): HomeCardDefinition? = all.firstOrNull { it.id == id }
 }
 
+/**
+ * How far back a card counts. Only the cards that report a total offer it — a
+ * figure without its period is not an answer.
+ */
+enum class HomeCardPeriod(val key: String, val label: String) {
+    Month("month", "This month"),
+    Year("year", "This year"),
+    All("all", "All time");
+
+    companion object {
+        fun fromKey(key: String?): HomeCardPeriod = entries.firstOrNull { it.key == key } ?: Month
+    }
+}
+
 data class HomeCardPlacement(
     val id: HomeCardId,
     val size: HomeCardSize,
     /** Owner's own wording for the heading; empty means the registry title. */
     val heading: String = "",
-    val tone: HomeCardTone = HomeCardTone.Standard
+    val tone: HomeCardTone = HomeCardTone.Standard,
+    /** Only meaningful on a card whose definition sets `periods`. Last in the
+     *  list so every positional entry above stays valid. */
+    val period: HomeCardPeriod = HomeCardPeriod.Month
 )
 
 /**
@@ -197,6 +217,7 @@ data class HomeLayout(
                 put("size", card.size.key)
                 if (card.heading.isNotEmpty()) put("heading", card.heading)
                 if (card.tone != HomeCardTone.Standard) put("tone", card.tone.key)
+                if (card.period != HomeCardPeriod.Month) put("period", card.period.key)
             })
         }
         val hiddenArray = JSONArray()
@@ -244,7 +265,8 @@ data class HomeLayout(
                         size = HomeCardSize.fromKey(entry.optString("size"))
                             ?: HomeCards.definition(id)?.defaultSize ?: HomeCardSize.OneByOne,
                         heading = entry.optString("heading", ""),
-                        tone = HomeCardTone.fromKey(entry.optString("tone", "default"))
+                        tone = HomeCardTone.fromKey(entry.optString("tone", "default")),
+                        period = HomeCardPeriod.fromKey(entry.optString("period", "month"))
                     )
                 }
                 val hidden = mutableListOf<HomeCardId>()
