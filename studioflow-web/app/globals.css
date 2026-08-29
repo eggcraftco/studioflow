@@ -27119,7 +27119,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .shell-container:has(> * > .home-screen),
 .shell-container:has(.home-screen) { max-width: none; }
 
-.home-screen { display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px; }
+/* The row is the column width, so the only way to keep a 1x1 a *small* square
+   is to stop the column growing with the window: four columns in 1000px is a
+   238px square — the height the cards always had, now with a width to match
+   instead of a letterbox twice as wide. */
+.home-screen {
+  display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px;
+  width: 100%; max-width: 1016px; margin-inline: auto;
+}
 
 .home-header {
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -27952,8 +27959,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .is-info { color: #2563eb; }
 
 /* Responsive (§17): four, three, two, one — never a shrunken desktop card. */
-@media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 1000px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* No column-dropping on the way down any more. The row is the column width, so
+   fewer columns means BIGGER cards — the opposite of what a narrower window
+   wants. Four columns hold from the phone breakpoint up, and the cards simply
+   scale between about 145px and the capped 238px. */
 @media (max-width: 640px) {
   /* Two columns on a phone, so a pair of 1x1 cards sits side by side instead of
      each one eating a whole screen. A 2x1 or 2x2 still takes the full width —

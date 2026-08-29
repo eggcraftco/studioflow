@@ -182,7 +182,7 @@ struct HomeView: View {
     // Two columns on a phone, so a pair of 1×1 cards sits side by side instead
     // of each one eating a whole screen. A 2×1 or 2×2 still fills the width —
     // it is drawn for two columns and there are exactly two.
-    private var columnCount: Int { sizeClass == .compact ? 2 : 3 }
+    private var columnCount: Int { sizeClass == .compact ? 2 : 4 }
     #else
     private var columnCount: Int { 4 }
     private var isCompact: Bool { false }
@@ -193,11 +193,11 @@ struct HomeView: View {
     /// it has, `measuredUnit` takes over.
     private var rowEstimate: CGFloat {
         #if os(iOS)
-        let width = UIScreen.main.bounds.width - 44
+        let width = min(UIScreen.main.bounds.width - 44, HomeGridMetrics.maxWidth)
         #else
         // No AppKit here: the grid measures itself a frame later anyway, and
         // this only has to keep the ScrollView from clipping until it does.
-        let width: CGFloat = 1200
+        let width: CGFloat = HomeGridMetrics.maxWidth
         #endif
         let columns = CGFloat(columnCount)
         return max(160, (width - HomeGridMetrics.gap * (columns - 1)) / columns)
@@ -334,7 +334,8 @@ struct HomeView: View {
     private var grid: some View {
         GeometryReader { proxy in
             let spacing = HomeGridMetrics.gap
-            let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+            let available = min(proxy.size.width, HomeGridMetrics.maxWidth)
+            let unit = (available - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
             // The row IS the column width at every size, so a 1×1 is a square,
             // a 2×1 is two squares wide and a 2×2 is four squares merged — §2.
             // A fixed row against a much wider column is what made the desktop
@@ -384,7 +385,10 @@ struct HomeView: View {
                 }
             )
             .onAppear { measuredUnit = unit }
-            .onChange(of: proxy.size.width) { _ in measuredUnit = unit }
+            .onChange(of: proxy.size.width) { width in
+                measuredUnit = (min(width, HomeGridMetrics.maxWidth)
+                                - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+            }
         }
         .frame(height: gridHeight)
     }
@@ -486,6 +490,11 @@ private extension View {
 enum HomeGridMetrics {
     static let rowHeight: CGFloat = 236
     static let gap: CGFloat = 16
+    /// The row is the column width, so the only way to keep a 1×1 a *small*
+    /// square is to stop the column growing with the window. Four columns in
+    /// 1000pt is a 238pt square — the height the cards always had, now with a
+    /// width to match instead of a letterbox twice as wide.
+    static let maxWidth: CGFloat = 1000
 }
 
 // MARK: - Grid

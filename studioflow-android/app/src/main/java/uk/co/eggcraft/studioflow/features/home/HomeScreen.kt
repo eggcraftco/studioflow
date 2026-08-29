@@ -101,6 +101,8 @@ data class HomeAccess(
 // offsets, so the row has to be the height the tallest card actually needs — a
 // row shorter than its content does not shrink the card, it clips it.
 private const val CARD_GAP = 16
+/** Four columns in 1000dp is a 238dp square — the height the cards always had. */
+private const val CARD_GRID_MAX_WIDTH = 1000
 
 @Composable
 fun HomeScreen(
@@ -270,11 +272,17 @@ fun HomeScreen(
         // content on a tablet, and a grid sized from the raw screen width would
         // then run off the edge.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val availableDp = maxWidth.value.toInt()
+            val outerDp = maxWidth.value.toInt()
+            // The row is the column width, so the only way to keep a 1x1 a
+            // *small* square is to stop the column growing with the window.
+            val availableDp = minOf(outerDp, CARD_GRID_MAX_WIDTH)
             // Two columns on a phone, so a pair of 1x1 cards sits side by side
             // instead of each one eating a whole screen. A 2x1 or 2x2 still fills
             // the width — it is drawn for two columns and there are exactly two.
-            val columnCount = if (availableDp >= 840) 3 else 2
+            // Now the row is the column width, dropping a column makes every card
+            // BIGGER, which is the opposite of what a narrower window wants.
+            // Four columns everywhere but the phone; the cap handles the top end.
+            val columnCount = if (outerDp < 600) 2 else 4
             val unit = (availableDp - CARD_GAP * (columnCount - 1)) / columnCount
             // The row IS the column width at every size, so a 1x1 is a square, a
             // 2x1 is two squares wide and a 2x2 is four squares merged (§2). A

@@ -64,29 +64,37 @@ struct HomeCardShell<CardBody: View>: View {
     private var header: some View {
         HStack(spacing: 11) {
             if customising { HomeGripDots() }
+            // A 1×1 is a small square now, so it gets the small badge too — the
+            // desktop one ate the width the title needed.
             HomeBadge(symbol: definition.icon, tone: placement.tone,
-                      filled: definition.filledBadge, size: compact ? 30 : 38)
+                      filled: definition.filledBadge,
+                      size: (compact || placement.size == .oneByOne) ? 30 : 38)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 7) {
                 Text(heading)
                     .font(.system(size: compact ? 14 : 15.5, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                    .layoutPriority(1)
+                    // Above the pill: a card whose title reads "Ba…" has stopped
+                    // saying which card it is, and the pill is the smaller loss.
+                    .layoutPriority(2)
                 // While customising, a phone header carries the grip and the ⋯ as
                 // well; the pill is a label you read, not something you move, so
                 // it stands down and gives the title its width back.
                 if !headerPill.isEmpty && !(compact && customising) {
                     // fixedSize, or a narrow card wraps the pill one letter per
                     // line — which is exactly what it did on a phone.
+                    // lineLimit(1) is what stops the one-letter-per-line wrap a
+                    // narrow card used to produce; fixedSize also refused to give
+                    // the title any width back, so it is gone.
                     Text(headerPill)
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundColor(HomeTone.orange)
                         .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, compact ? 6 : 8).padding(.vertical, 2)
                         .background(Capsule().fill(HomeTone.orange.opacity(0.16)))
-                        .layoutPriority(1)
+                        .layoutPriority(0)
                 }
                 }
                 if !subtitle.isEmpty {
