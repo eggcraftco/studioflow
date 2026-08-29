@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { resolveProductionStage } from "@/lib/studioflow/production";
 import type { HomeCardSize } from "@/lib/studioflow/homeCards";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
@@ -163,13 +164,20 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
 
 /* ------------------------------------------------------ Orders/production */
 
-const FLOW_STAGES = ["Ready", "In production", "Waiting", "Quality check", "Ready to ship"];
-
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   const open = data.orders.filter((order) => !order.isDelivered);
-  const byStage = FLOW_STAGES.map((stage) => ({
-    stage,
-    count: open.filter((order) => (order.status || "").toLowerCase() === stage.toLowerCase()).length,
+  // The stage is never stored: it is derived from the order's own steps against
+  // the workspace's own stages, by the same rule the Production screen uses.
+  // Matching order.status against a hard-coded list was a second, incompatible
+  // definition, and it read zero for every stage.
+  const resolved = open.map((order) => ({
+    order,
+    stageId: resolveProductionStage(order, data.productionStages, data.productionSteps).stageId,
+  }));
+  const byStage = data.productionStages.map((stage) => ({
+    stage: stage.title,
+    kind: stage.kind,
+    count: resolved.filter((entry) => entry.stageId === stage.id).length,
   }));
   const overdue = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now()).length;
 
@@ -189,8 +197,10 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
           stage counts ARE the content here rather than a repeat above it. */}
       <ol className="home-flow-row">
         {byStage.map((entry, index) => (
-          <li key={entry.stage}>
-            <span className={`home-flow-dot stage-${index}`} aria-hidden="true" />
+          <li key={`${entry.stage}-${index}`}>
+            {/* Keyed to the stage's kind, not its position: a workspace may define
+                any number of stages, and an index-coloured dot runs out. */}
+            <span className={`home-flow-dot kind-${entry.kind}`} aria-hidden="true" />
             <span className="home-flow-name">{t(entry.stage)}</span>
             <strong>{entry.count}</strong>
           </li>

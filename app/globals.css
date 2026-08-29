@@ -27315,11 +27315,13 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-flow-row strong { margin-left: auto; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .home-flow-name { opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-flow-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
-.home-flow-dot.stage-0 { background: #22c55e; }
-.home-flow-dot.stage-1 { background: #2563eb; }
-.home-flow-dot.stage-2 { background: #f59e0b; }
-.home-flow-dot.stage-3 { background: #a855f7; }
-.home-flow-dot.stage-4 { background: #16a34a; }
+.home-flow-dot { background: #94a3b8; }
+.home-flow-dot.kind-ready { background: #22c55e; }
+.home-flow-dot.kind-active { background: #2563eb; }
+.home-flow-dot.kind-blocked { background: #ef4444; }
+.home-flow-dot.kind-review { background: #a855f7; }
+.home-flow-dot.kind-shipready { background: #16a34a; }
+.home-flow-dot.kind-done { background: #64748b; }
 
 .home-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 4px; }
 .home-quick-action {
