@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Network
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.awaitCancellation
@@ -185,17 +185,8 @@ fun HomeScreen(
         layout.cards.none { it.id == definition.id } && access.allows(definition)
     }
 
-    val configuration = LocalConfiguration.current
     // §17: phone is a single column of full-width cards; tablets get two, wide
     // tablets three. A shrunken desktop grid is explicitly not wanted.
-    val columnCount = when {
-        configuration.screenWidthDp >= 840 -> 3
-        configuration.screenWidthDp >= 600 -> 2
-        else -> 1
-    }
-    val gridWidth = configuration.screenWidthDp - 32
-    val unit = (gridWidth - CARD_GAP * (columnCount - 1)) / columnCount
-    val rows = HomeGridLayout.rowCount(visible, columnCount)
 
     Column(
         modifier = modifier
@@ -261,11 +252,23 @@ fun HomeScreen(
             }
         }
 
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height((rows * CARD_UNIT_HEIGHT + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
-        ) {
+        // Measured, not assumed: the shell may put a navigation rail beside this
+        // content on a tablet, and a grid sized from the raw screen width would
+        // then run off the edge.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val availableDp = maxWidth.value.toInt()
+            val columnCount = when {
+                availableDp >= 840 -> 3
+                availableDp >= 600 -> 2
+                else -> 1
+            }
+            val unit = (availableDp - CARD_GAP * (columnCount - 1)) / columnCount
+            val rows = HomeGridLayout.rowCount(visible, columnCount)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height((rows * CARD_UNIT_HEIGHT + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
+            ) {
             HomeGridLayout.slots(visible, columnCount).forEach { slot ->
                 val width = minOf(slot.placement.size.columns, columnCount)
                 val cardWidth = unit * width + CARD_GAP * (width - 1)
@@ -327,6 +330,7 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
             }
         }
 
