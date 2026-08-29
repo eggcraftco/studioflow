@@ -144,12 +144,13 @@ export function MoneyCardBody({ size, data, t, moneySettings, hideNumbers }: Car
   );
 }
 
-function MoneyTile({ label, value, tone }: { label: string; value: string; tone: "green" | "blue" | "orange" }) {
+function MoneyTile({ label, value, tone, sub }: { label: string; value: string; tone: "green" | "blue" | "orange"; sub?: string }) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
       <span className="home-money-tile-dot" aria-hidden="true" />
       <em>{label}</em>
       <b>{value}</b>
+      {sub ? <i>{sub}</i> : null}
     </div>
   );
 }
@@ -342,37 +343,106 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
 export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
   const summary = data.inventory;
   if (!summary) return null;
+  const money = (value: number) => cash(value, hideNumbers, moneySettings);
 
   if (size === "1x1") {
     return (
-      <div className="home-inventory">
-        <strong className="home-metric-value">{cash(summary.totalValue, hideNumbers, moneySettings)}</strong>
+      <div className="home-money">
         <p className="home-metric-label">{t("total value")}</p>
-        <div className="home-metric-split">
-          <span className="is-warning"><em>{summary.lowStockCount}</em>{t("low stock")}</span>
-          <span className="is-positive"><em>{summary.incomingCount}</em>{t("incoming")}</span>
+        <strong className="home-metric-value">{money(summary.totalValue)}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("low stock")}</em><b className={summary.lowStockCount > 0 ? "is-warning" : ""}>{summary.lowStockCount}</b></span>
+          <span><em>{t("incoming")}</em><b className="is-positive">{summary.incomingCount}</b></span>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="home-inventory-wide">
-      <div className="home-stat-row">
-        <Stat label={t("total value")} value={cash(summary.totalValue, hideNumbers, moneySettings)} />
-        <Stat label={t("low stock")} value={String(summary.lowStockCount)} tone="warning" />
-        <Stat label={t("Reserved")} value={String(summary.reservedCount)} tone="info" />
-        <Stat label={t("incoming")} value={String(summary.incomingCount)} tone="positive" />
-      </div>
-      {size === "2x2" ? (
-        <div className="home-breakdown">
-          {/* Unique and quantity are different things and must stay apart (§8). */}
-          <BreakdownRow label={t("Unique items")} value={String(summary.uniqueCount)} />
-          <BreakdownRow label={t("Quantity stock")} value={String(summary.quantityCount)} />
-          <BreakdownRow label={t("Customer owned")} value={String(summary.customerOwnedCount)} />
-        </div>
-      ) : null}
+  const tiles = (
+    <div className="home-tile-row">
+      <MoneyTile label={t("total value")} value={money(summary.totalValue)} tone="blue" />
+      <MoneyTile label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
+      <MoneyTile label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
+      <MoneyTile label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "orange" : "blue"} />
     </div>
+  );
+
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        {tiles}
+        <ul className="home-cost-list is-compact">
+          <li><span className="home-cost-dot tone-0" aria-hidden="true" /><em>{t("Reserved")}</em><b>{money(summary.reservedValue)}</b></li>
+          <li><span className="home-cost-dot tone-2" aria-hidden="true" /><em>{t("incoming")}</em><b>{money(summary.incomingValue)}</b></li>
+          <li><span className="home-cost-dot tone-3" aria-hidden="true" /><em>{t("Customer owned")}</em><b>{summary.customerOwnedCount}</b></li>
+        </ul>
+      </div>
+    );
+  }
+
+  // Unique and quantity are different things and the split is the point (§8).
+  const total = summary.uniqueValue + summary.quantityValue;
+  const uniqueShare = total > 0 ? (summary.uniqueValue / total) * 100 : 0;
+  return (
+    <div className="home-money is-large">
+      {tiles}
+      <div className="home-money-panels">
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Inventory value")}</p>
+          <div className="home-donut-row">
+            <Donut share={uniqueShare} />
+            <ul className="home-donut-key">
+              <li>
+                <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
+                <em>{t("Unique items")}</em><b>{money(summary.uniqueValue)}</b>
+                <i>{uniqueShare.toFixed(1)}%</i>
+              </li>
+              <li>
+                <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
+                <em>{t("Quantity stock")}</em><b>{money(summary.quantityValue)}</b>
+                <i>{(100 - uniqueShare).toFixed(1)}%</i>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div className="home-panel">
+          <p className="home-eyebrow is-strong">{t("Stock status")}</p>
+          <ul className="home-cost-list">
+            <li>
+              <span className="home-cost-dot tone-0" aria-hidden="true" />
+              <em>{t("Reserved")}<i>{summary.reservedCount} {t("items")}</i></em>
+              <b>{money(summary.reservedValue)}</b>
+            </li>
+            <li>
+              <span className="home-cost-dot tone-2" aria-hidden="true" />
+              <em>{t("incoming")}<i>{summary.incomingCount} {t("items")}</i></em>
+              <b>{money(summary.incomingValue)}</b>
+            </li>
+            <li>
+              <span className="home-cost-dot tone-low" aria-hidden="true" />
+              <em>{t("low stock")}<i>{summary.lowStockCount} {t("items")}</i></em>
+              <b />
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Two slices, drawn with one stroke-dasharray. */
+function Donut({ share }: { share: number }) {
+  const radius = 15.9155;
+  return (
+    <svg className="home-donut" viewBox="0 0 42 42" role="img" aria-hidden="true">
+      <circle className="home-donut-track" cx="21" cy="21" r={radius} />
+      <circle
+        className="home-donut-value"
+        cx="21" cy="21" r={radius}
+        strokeDasharray={`${share} ${100 - share}`}
+        strokeDashoffset="25"
+      />
+    </svg>
   );
 }
 
@@ -485,43 +555,110 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
 
 /* -------------------------------------------------------------- Customers */
 
-export function CustomersCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
-  const total = data.customers.length;
-  const monthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const active = data.customers.filter((customer) =>
-    customer.orders.some((order) => order.paymentDate && order.paymentDate.getTime() > monthAgo),
-  ).length;
-  const owing = data.customers.filter((customer) => customer.totalOutstanding > 0);
+export function CustomersCardBody({ size, data, t }: CardBodyProps) {
+  const customers = data.customers;
+  if (customers.length === 0) return null;
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const isNew = (customer: (typeof customers)[number]) =>
+    Boolean(customer.lastContactDate && customer.lastContactDate >= monthStart && (customer.orderCount ?? 0) <= 1);
+  const newThisMonth = customers.filter(isNew).length;
+  const returning = customers.filter((customer) => (customer.orderCount ?? 0) > 1).length;
+  const existing = Math.max(0, customers.length - newThisMonth - returning);
+  const activeNames = new Set(
+    data.scheduleOrders.filter((order) => !order.isDelivered).map((order) => order.customerName.toLowerCase()),
+  );
+  const withActive = customers.filter((customer) => activeNames.has(customer.name.toLowerCase())).length;
 
   if (size === "1x1") {
+    const latest = customers[0];
     return (
-      <div className="home-customers">
-        <strong className="home-metric-value">{total}</strong>
+      <div className="home-money">
         <p className="home-metric-label">{t("customers")}</p>
-        <div className="home-metric-split">
-          <span className="is-positive"><em>{active}</em>{t("active")}</span>
+        <strong className="home-metric-value">{customers.length}</strong>
+        <div className="home-split-pair">
+          <span><em>{t("active orders")}</em><b className="is-positive">{withActive}</b></span>
+          {latest ? <span><em>{t("Latest")}</em><b className="is-plain">{latest.name}</b></span> : null}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="home-customers-wide">
-      <div className="home-stat-row">
-        <Stat label={t("customers")} value={String(total)} />
-        <Stat label={t("active")} value={String(active)} tone="positive" />
-        <Stat label={t("Outstanding")} value={String(owing.length)} tone="warning" />
+  const tiles = (
+    <div className="home-tile-row">
+      <MoneyTile label={t("Total customers")} value={String(customers.length)} tone="blue" />
+      <MoneyTile label={t("New this month")} value={String(newThisMonth)} tone="green" />
+      <MoneyTile label={t("Returning customers")} value={String(returning)} tone="blue" />
+      <MoneyTile label={t("Customers with active orders")} value={String(withActive)} tone="green" />
+    </div>
+  );
+
+  const mix = [
+    { key: "New this month", count: newThisMonth, tone: "new" },
+    { key: "Returning", count: returning, tone: "returning" },
+    { key: "Existing", count: existing, tone: "existing" },
+  ];
+  const mixTotal = Math.max(1, newThisMonth + returning + existing);
+
+  if (size === "2x1") {
+    return (
+      <div className="home-money is-wide">
+        {tiles}
+        <CustomerMix mix={mix} total={mixTotal} t={t} />
       </div>
-      {size === "2x2" ? (
-        <ul className="home-list">
-          {owing.slice(0, 5).map((customer) => (
+    );
+  }
+
+  return (
+    <div className="home-money is-large">
+      {tiles}
+      <div className="home-panel">
+        <p className="home-eyebrow is-strong">{t("Customer mix")}</p>
+        <CustomerMix mix={mix} total={mixTotal} t={t} />
+      </div>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Recent customers")}</p>
+        <ul className="home-record-list">
+          {customers.slice(0, 3).map((customer) => (
             <li key={customer.id}>
-              <Link href={`/customers?customerName=${encodeURIComponent(customer.name)}`}>{customer.name}</Link>
-              <strong className="is-warning">{cash(customer.totalOutstanding, hideNumbers, moneySettings)}</strong>
+              <span className="home-avatar" aria-hidden="true">{customer.name.slice(0, 1).toUpperCase()}</span>
+              <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>{customer.name}</Link>
+              <span className={`home-chip is-source${customer.source && customer.source !== "manual" ? " is-store" : ""}`}>
+                {customer.source && customer.source !== "manual" ? customer.source : t("Direct")}
+              </span>
+              <span className={activeNames.has(customer.name.toLowerCase()) ? "home-chip is-active" : "home-chip is-muted"}>
+                {activeNames.has(customer.name.toLowerCase()) ? t("Active customer") : t("No open orders")}
+              </span>
             </li>
           ))}
         </ul>
-      ) : null}
+      </div>
+      {/* §11 and §19: a member only ever sees the customers their role allows,
+          and the card says so rather than looking like the whole list. */}
+      <p className="home-action-note">{t("Only customers you have permission to view are shown")}</p>
+    </div>
+  );
+}
+
+function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; tone: string }[]; total: number; t: (text: string) => string }) {
+  return (
+    <div className="home-mix">
+      <span className="home-mix-bar" aria-hidden="true">
+        {mix.map((entry) => (
+          <i key={entry.key} className={`tone-${entry.tone}`} style={{ width: `${(entry.count / total) * 100}%` }} />
+        ))}
+      </span>
+      <ul className="home-mix-key">
+        {mix.map((entry) => (
+          <li key={entry.key}>
+            <span className={`home-cost-dot is-small tone-${entry.tone}`} aria-hidden="true" />
+            <em>{t(entry.key)}</em>
+            <b>{entry.count}</b>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
