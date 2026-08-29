@@ -1855,6 +1855,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         ) : (
           <OnboardingWizard
             t={t}
+            language={language}
             saving={onboardingSaving}
             error={onboardingError}
             onFinish={(answers) => void completeOnboardingWizard(answers)}

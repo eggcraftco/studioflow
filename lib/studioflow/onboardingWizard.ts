@@ -62,12 +62,15 @@ export function recommendedTrialPlan(answers: Pick<OnboardingAnswers, "teamSize"
 export const ONBOARDING_TRIAL_PLANS: {
   id: OnboardingTrialPlan;
   title: string;
-  priceKey: string;
+  /** Amount only. The period is translated and joined at render, because
+   *  STRIPE_LIST_PRICE_LABELS spells it "£9 / month" in English and this screen
+   *  is read in twelve languages. */
+  amount: string;
   summary: string;
 }[] = [
-  { id: "lifetime_lite", title: "NivaDesk Starter", priceKey: "lite_monthly", summary: "One person, the essentials." },
-  { id: "pro_monthly", title: "NivaDesk Pro", priceKey: "pro_monthly", summary: "One studio, everything in it." },
-  { id: "team_monthly", title: "NivaDesk Team", priceKey: "team_monthly", summary: "Shared work, roles and permissions." }
+  { id: "lifetime_lite", title: "NivaDesk Starter", amount: "£9", summary: "One person, the essentials." },
+  { id: "pro_monthly", title: "NivaDesk Pro", amount: "£19", summary: "One studio, everything in it." },
+  { id: "team_monthly", title: "NivaDesk Team", amount: "£49", summary: "Shared work, roles and permissions." }
 ];
 
 export const ONBOARDING_WORK_KINDS: { id: OnboardingWorkKind; label: string }[] = [
