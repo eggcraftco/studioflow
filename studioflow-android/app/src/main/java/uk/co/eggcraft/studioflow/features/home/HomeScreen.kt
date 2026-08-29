@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.features.production.ProductionStage
 import uk.co.eggcraft.studioflow.features.production.defaultProductionStages
@@ -135,6 +136,9 @@ fun HomeScreen(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var renameText by remember { mutableStateOf("") }
     var inventory by remember { mutableStateOf<StudioInventorySummary?>(null) }
+    // Only the 2x2 stock card names individual items, and the list behind it is
+    // a 500-row callable — so nobody else pays for it.
+    var inventoryItems by remember { mutableStateOf<List<StudioInventoryItem>>(emptyList()) }
     var inventoryFailed by remember { mutableStateOf(false) }
     var loadedAtMillis by remember { mutableStateOf(0L) }
     var reloadKey by remember { mutableStateOf(0) }
@@ -171,6 +175,11 @@ fun HomeScreen(
         inventory = runCatching { repository.inventorySummary(workspaceId) }
             .onFailure { inventoryFailed = true }
             .getOrNull()
+        // A failure here must not take the summary with it: the card keeps its
+        // figures and simply lists nothing.
+        if (layout.cards.any { it.id == HomeCardId.Inventory && it.size == HomeCardSize.TwoByTwo }) {
+            inventoryItems = runCatching { repository.inventoryItems(workspaceId) }.getOrDefault(emptyList())
+        }
         runCatching { repository.productionStages(workspaceId) }
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
@@ -420,6 +429,7 @@ fun HomeScreen(
                             state = state,
                             access = access,
                             inventory = inventory,
+                            inventoryItems = inventoryItems,
                             inventoryFailed = inventoryFailed,
                             stages = stages,
                             compact = compact,

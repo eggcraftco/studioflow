@@ -1712,55 +1712,46 @@ struct HomeInventoryBody: View {
                     }
                 }
             } else {
-                VStack(alignment: .leading, spacing: compact ? 7 : 10) {
-                    HStack(spacing: compact ? 6 : 10) {
-                        if compact {
-                            // Four tall tiles do not fit a phone row: the card
-                            // grew past its own height and lost its heading off
-                            // the top and a cost row off the bottom.
-                            HomeSlimTile(label: t("total value", lang: lang), value: money(summary.totalValue),
-                                         tone: HomeTone.accent, symbol: "shippingbox")
-                            HomeSlimTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
-                                         tone: HomeTone.accent, symbol: "square.stack.3d.up")
-                            HomeSlimTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
-                                         tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent,
-                                         symbol: "exclamationmark.triangle")
-                        } else {
-                            HomeMetricTile(label: t("total value", lang: lang), value: money(summary.totalValue), tone: HomeTone.accent)
-                            HomeMetricTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)", tone: HomeTone.accent, sub: money(summary.uniqueValue))
-                            HomeMetricTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)", tone: HomeTone.accent, sub: money(summary.quantityValue))
-                            HomeMetricTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
-                                           tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent)
+                // The sheet's big card: the four figures, then how the value
+                // splits, then what actually needs a decision — worst first,
+                // because a card that only counts problems cannot be acted on.
+                let total = summary.uniqueValue + summary.quantityValue
+                let share = total > 0 ? summary.uniqueValue / total : 0
+                VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+                    HStack(spacing: compact ? 5 : 10) {
+                        HomeStockTile(label: t("total value", lang: lang), value: money(summary.totalValue),
+                                      tone: HomeTone.indigo, compact: compact)
+                        HomeStockTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
+                                      tone: HomeTone.accent, compact: compact, sub: money(summary.uniqueValue))
+                        HomeStockTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)",
+                                      tone: HomeTone.accent, compact: compact, sub: money(summary.quantityValue))
+                        HomeStockTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                      tone: summary.lowStockCount > 0 ? HomeTone.red : HomeTone.accent,
+                                      compact: compact)
+                    }
+                    HomePanel(compact: compact) {
+                        HStack(spacing: compact ? 10 : 16) {
+                            HomeDonut(share: share)
+                                .frame(width: compact ? 46 : 74, height: compact ? 46 : 74)
+                            HomeBankFigure(label: t("Unique items", lang: lang),
+                                           value: money(summary.uniqueValue), compact: compact)
+                            Divider().frame(height: compact ? 26 : 32)
+                            HomeBankFigure(label: t("Quantity stock", lang: lang),
+                                           value: money(summary.quantityValue), compact: compact)
                         }
                     }
-                    if size == .twoByTwo {
-                        // Unique and quantity are different things and the split is
-                        // the point (§8).
-                        let total = summary.uniqueValue + summary.quantityValue
-                        let share = total > 0 ? summary.uniqueValue / total : 0
-                        HStack(alignment: .top, spacing: 12) {
-                            HomePanel {
-                                HomeEyebrow(text: t("Inventory value", lang: lang))
-                                HStack(spacing: 14) {
-                                    HomeDonut(share: share)
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HomeDonutKey(colour: HomeTone.accent, label: t("Unique items", lang: lang),
-                                                     value: money(summary.uniqueValue), percent: share)
-                                        HomeDonutKey(colour: HomeTone.accent.opacity(0.35), label: t("Quantity stock", lang: lang),
-                                                     value: money(summary.quantityValue), percent: 1 - share)
-                                    }
-                                }
-                            }
-                            HomePanel {
-                                HomeEyebrow(text: t("Stock status", lang: lang))
-                                HomeCostRow(colour: HomeTone.orange, label: t("Reserved", lang: lang), value: money(summary.reservedValue))
-                                HomeCostRow(colour: HomeTone.accent, label: t("incoming", lang: lang), value: money(summary.incomingValue))
-                                HomeCostRow(colour: HomeTone.red, label: t("low stock", lang: lang), value: "\(summary.lowStockCount)")
+                    HomePanel(compact: compact) {
+                        HomeEyebrow(text: t("Needs attention", lang: lang))
+                        let attention = homeStockAttention(data.inventoryItems)
+                        if attention.isEmpty {
+                            HomeCardNote(text: t("Nothing here yet.", lang: lang))
+                        } else {
+                            ForEach(attention, id: \.item.id) { entry in
+                                HomeAttentionRow(item: entry.item, kind: entry.kind,
+                                                 lang: lang, compact: compact)
+                                if entry.item.id != attention.last?.item.id { Divider() }
                             }
                         }
-                    } else {
-                        HomeCostRow(colour: HomeTone.orange, label: t("Reserved", lang: lang), value: money(summary.reservedValue))
-                        HomeCostRow(colour: HomeTone.accent, label: t("incoming", lang: lang), value: money(summary.incomingValue))
                     }
                     Spacer(minLength: 0)
                 }
@@ -1768,6 +1759,88 @@ struct HomeInventoryBody: View {
         } else {
             HomeCardNote(text: t("Loading…", lang: lang))
         }
+    }
+}
+
+/// One of the four figures across the top of the stock card: the name above the
+/// number, because side by side in a phone tile the name collapses to "t…".
+struct HomeStockTile: View {
+    let label: String
+    let value: String
+    var tone: Color = .primary
+    var compact: Bool = false
+    var sub: String = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.system(size: compact ? 8.5 : 11)).foregroundColor(.secondary)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                .frame(height: compact ? 20 : nil, alignment: .top)
+            Text(value)
+                .font(.system(size: compact ? 12 : 17, weight: .heavy)).foregroundColor(tone)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            if !sub.isEmpty && !compact {
+                Text(sub).font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, compact ? 5 : 10).padding(.vertical, compact ? 6 : 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+}
+
+/// Worst first: nothing on the shelf, then spoken for, then still on its way.
+enum HomeStockAttention {
+    case low, reserved, incoming
+    var label: String {
+        switch self {
+        case .low: return "Low stock"
+        case .reserved: return "Reserved"
+        case .incoming: return "Incoming"
+        }
+    }
+    var tone: Color { self == .low ? HomeTone.red : HomeTone.orange }
+    var rank: Int {
+        switch self {
+        case .low: return 0
+        case .reserved: return 1
+        case .incoming: return 2
+        }
+    }
+}
+
+/// What actually needs a decision: the thing, what is wrong with it, and where
+/// it is. The counts above say how many; this says which.
+func homeStockAttention(_ items: [InventoryItem]) -> [(item: InventoryItem, kind: HomeStockAttention)] {
+    items.compactMap { item -> (item: InventoryItem, kind: HomeStockAttention)? in
+        if item.lowStockAt > 0 && item.onHand <= item.lowStockAt { return (item, .low) }
+        if item.reserved > 0 { return (item, .reserved) }
+        if item.incoming > 0 { return (item, .incoming) }
+        return nil
+    }
+    .sorted { $0.kind.rank < $1.kind.rank }
+    .prefix(3)
+    .map { $0 }
+}
+
+struct HomeAttentionRow: View {
+    let item: InventoryItem
+    let kind: HomeStockAttention
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        HStack(spacing: compact ? 7 : 10) {
+            HomeOrderThumb(link: item.photos.first ?? "", initial: item.name)
+                .frame(width: compact ? 22 : 28, height: compact ? 22 : 28)
+            Text(item.name)
+                .font(.system(size: compact ? 11 : 12.5, weight: .semibold)).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HomeChip(text: t(kind.label, lang: lang), tone: kind.tone)
+            Text(item.location.isEmpty ? "—" : item.location)
+                .font(.system(size: compact ? 10 : 11.5)).foregroundColor(.secondary)
+                .lineLimit(1).frame(maxWidth: compact ? 58 : 84, alignment: .trailing)
+        }
+        .padding(.vertical, compact ? 2 : 5)
     }
 }
 

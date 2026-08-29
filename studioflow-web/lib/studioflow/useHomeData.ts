@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { getInventorySummary, type InventorySummary } from "@/lib/studioflow/inventory";
+import {
+  getInventorySummary,
+  listInventoryItems,
+  type InventoryItem,
+  type InventorySummary,
+} from "@/lib/studioflow/inventory";
 import {
   listenToActivityNotifications,
   type StudioActivityNotification,
@@ -77,6 +82,8 @@ export type HomeData = {
   scheduleOrders: ScheduleOrderItem[];
   customers: CustomerDirectoryItem[];
   inventory: InventorySummary | null;
+  /** Only populated when a 2x2 stock card asked for it. */
+  inventoryItems: InventoryItem[];
   files: ClientFileListItem[];
   bankTransactions: HomeBankTx[];
   activity: StudioActivityNotification[];
@@ -105,7 +112,14 @@ const EMPTY_STATUS: Record<HomeDomain, HomeDomainStatus> = {
   bank: "loading",
 };
 
-export function useHomeData(workspace: WorkspaceContext | null, uid: string, email = ""): HomeData {
+export function useHomeData(
+  workspace: WorkspaceContext | null,
+  uid: string,
+  email = "",
+  /** The item list is a 500-row callable, and only the 2x2 stock card shows
+   *  individual items. Nobody else pays for it. */
+  wantsInventoryItems = false,
+): HomeData {
   const [status, setStatus] = useState<Record<HomeDomain, HomeDomainStatus>>(EMPTY_STATUS);
   const [counts, setCounts] = useState<DashboardCounts | null>(null);
   const [financeOrders, setFinanceOrders] = useState<DashboardFinanceOrder[]>([]);
@@ -113,6 +127,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
   // finance settings — whether base cost counts, which extra expense lines
   // exist. Without them Home would be quietly reporting a different profit.
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [scheduleOrders, setScheduleOrders] = useState<ScheduleOrderItem[]>([]);
   const [customers, setCustomers] = useState<CustomerDirectoryItem[]>([]);
@@ -220,6 +235,17 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
         if (cancelled.current) return;
         setInventory(response.summary ?? null);
         setDomain("inventory", "ready");
+        // Only the 2x2 card names individual items, and this is the expensive
+        // half of the two calls — a failure here must not take the summary with
+        // it, so the card keeps its figures and simply lists nothing.
+        if (wantsInventoryItems) {
+          try {
+            const listed = await listInventoryItems(workspace);
+            if (!cancelled.current) setInventoryItems(listed.items ?? []);
+          } catch {
+            if (!cancelled.current) setInventoryItems([]);
+          }
+        }
       } catch {
         if (!cancelled.current) setDomain("inventory", "error");
       }
@@ -242,7 +268,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     })();
 
     return () => { cancelled.current = true; };
-  }, [workspaceId, workspace, uid, reloadKey, setDomain]);
+  }, [workspaceId, workspace, uid, reloadKey, setDomain, wantsInventoryItems]);
 
   // Bank is live rather than fetched: the review queue is the whole point of the
   // card, and a stale count is the one number nobody should act on. Rules deny
@@ -369,6 +395,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       scheduleOrders,
       customers,
       inventory,
+      inventoryItems,
       files,
       bankTransactions,
       activity,
@@ -384,7 +411,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, files, bankTransactions, activity, productionStages, productionSteps, notes,
+      inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
       bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],
   );

@@ -11,6 +11,7 @@ import {
   orderSalesTotal,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
+import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney } from "@/lib/studioflow/money";
 
@@ -568,48 +569,68 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   // Unique and quantity are different things and the split is the point (§8).
   const total = summary.uniqueValue + summary.quantityValue;
   const uniqueShare = total > 0 ? (summary.uniqueValue / total) * 100 : 0;
+  // What actually needs a decision, worst first: nothing on the shelf, then
+  // spoken for, then still on its way. The counts above say how many; this says
+  // which — a card that only counts problems cannot be acted on.
+  const attention = data.inventoryItems
+    .map((item) => {
+      const onHand = item.quantity?.onHand ?? 0;
+      const reserved = item.quantity?.reserved ?? 0;
+      const incoming = item.quantity?.incoming ?? 0;
+      const low = item.lowStockAt > 0 && onHand <= item.lowStockAt;
+      if (low) return { item, kind: "low" as const, rank: 0 };
+      if (reserved > 0) return { item, kind: "reserved" as const, rank: 1 };
+      if (incoming > 0) return { item, kind: "incoming" as const, rank: 2 };
+      return null;
+    })
+    .filter((entry): entry is { item: InventoryItem; kind: "low" | "reserved" | "incoming"; rank: number } => entry !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 3);
+  const kindLabel = { low: t("Low stock"), reserved: t("Reserved"), incoming: t("Incoming") };
   return (
-    <div className="home-money is-large">
-      {tiles}
-      <div className="home-money-panels">
-        <div className="home-panel">
-          <p className="home-eyebrow is-strong">{t("Inventory value")}</p>
-          <div className="home-donut-row">
-            <Donut share={uniqueShare} />
-            <ul className="home-donut-key">
-              <li>
-                <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
-                <em>{t("Unique items")}</em><b>{money(summary.uniqueValue)}</b>
-                <i>{uniqueShare.toFixed(1)}%</i>
+    <div className="home-money is-large is-stock">
+      <div className="home-tile-row">
+        <MoneyTile label={t("total value")} value={money(summary.totalValue)} tone="blue" />
+        <MoneyTile label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
+        <MoneyTile label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
+        <MoneyTile label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
+      </div>
+      <div className="home-panel home-donut-panel">
+        <Donut share={uniqueShare} />
+        <ul className="home-donut-key">
+          <li>
+            <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
+            <em>{t("Unique items")}</em>
+            <b>{money(summary.uniqueValue)}</b>
+          </li>
+          <li>
+            <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
+            <em>{t("Quantity stock")}</em>
+            <b>{money(summary.quantityValue)}</b>
+          </li>
+        </ul>
+      </div>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Needs attention")}</p>
+        {attention.length === 0 ? (
+          <p className="home-card-note">{t("Nothing here yet.")}</p>
+        ) : (
+          <ul className="home-attention-list">
+            {attention.map(({ item, kind }) => (
+              <li key={item.id}>
+                {item.photos?.[0] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="home-attention-thumb" src={item.photos[0]} alt="" loading="lazy" />
+                ) : (
+                  <span className="home-attention-thumb is-blank" aria-hidden="true">{item.name.slice(0, 1)}</span>
+                )}
+                <strong>{item.name}</strong>
+                <span className={`home-attention-chip is-${kind}`}>{kindLabel[kind]}</span>
+                <span className="home-attention-where">{item.location || "—"}</span>
               </li>
-              <li>
-                <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
-                <em>{t("Quantity stock")}</em><b>{money(summary.quantityValue)}</b>
-                <i>{(100 - uniqueShare).toFixed(1)}%</i>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div className="home-panel">
-          <p className="home-eyebrow is-strong">{t("Stock status")}</p>
-          <ul className="home-cost-list">
-            <li>
-              <span className="home-cost-dot tone-0" aria-hidden="true" />
-              <em>{t("Reserved")}<i>{summary.reservedCount} {t("items")}</i></em>
-              <b>{money(summary.reservedValue)}</b>
-            </li>
-            <li>
-              <span className="home-cost-dot tone-2" aria-hidden="true" />
-              <em>{t("incoming")}<i>{summary.incomingCount} {t("items")}</i></em>
-              <b>{money(summary.incomingValue)}</b>
-            </li>
-            <li>
-              <span className="home-cost-dot tone-low" aria-hidden="true" />
-              <em>{t("low stock")}<i>{summary.lowStockCount} {t("items")}</i></em>
-              <b />
-            </li>
+            ))}
           </ul>
-        </div>
+        )}
       </div>
     </div>
   );

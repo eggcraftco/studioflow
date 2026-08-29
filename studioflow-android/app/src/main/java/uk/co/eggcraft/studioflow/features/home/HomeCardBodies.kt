@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uk.co.eggcraft.studioflow.data.model.bankDetectRecurring
+import uk.co.eggcraft.studioflow.data.model.StudioInventoryItem
 import uk.co.eggcraft.studioflow.data.model.StudioInventorySummary
 import uk.co.eggcraft.studioflow.data.model.StudioKeepNote
 import uk.co.eggcraft.studioflow.data.model.StudioOrder
@@ -96,6 +97,8 @@ fun HomeCardBody(
     access: HomeAccess,
     inventory: StudioInventorySummary?,
     inventoryFailed: Boolean,
+    /** Only populated when a 2x2 stock card asked for it. */
+    inventoryItems: List<StudioInventoryItem> = emptyList(),
     stages: List<ProductionStage>,
     /** Phone layout: the wide cards stack their figures instead of lining them up. */
     compact: Boolean = false,
@@ -111,7 +114,7 @@ fun HomeCardBody(
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
-        HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, compact, t)
+        HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, inventoryItems, compact, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, compact, t)
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
@@ -1364,7 +1367,8 @@ private fun BankChart(state: StudioFlowUiState, t: (String) -> String, compact: 
 @Composable
 private fun HomeInventoryBody(
     size: HomeCardSize, state: StudioFlowUiState,
-    inventory: StudioInventorySummary?, inventoryFailed: Boolean, compact: Boolean, t: (String) -> String
+    inventory: StudioInventorySummary?, inventoryFailed: Boolean,
+    inventoryItems: List<StudioInventoryItem>, compact: Boolean, t: (String) -> String
 ) {
     if (inventoryFailed) {
         Text(t("This could not be loaded."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1452,59 +1456,114 @@ private fun HomeInventoryBody(
         return
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)) {
-            if (compact) {
-                // Four tall tiles do not fit a phone row: the card grew past its
-                // own height and lost its heading off the top and a cost row off
-                // the bottom.
-                SlimTile(t("total value"), money(summary.totalValue, state), HomeTone.accent,
-                    Icons.Filled.Inventory2, Modifier.weight(1f))
-                SlimTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent,
-                    Icons.Filled.Layers, Modifier.weight(1f))
-                SlimTile(t("low stock"), "${summary.lowStockCount}",
-                    if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent,
-                    Icons.Filled.Warning, Modifier.weight(1f))
+    // The sheet's big card: the four figures, then how the value splits, then
+    // what actually needs a decision — worst first, because a card that only
+    // counts problems cannot be acted on.
+    val total = summary.uniqueValue + summary.quantityValue
+    val share = if (total > 0) (summary.uniqueValue / total).toFloat() else 0f
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 10.dp)) {
+            StockTile(t("total value"), money(summary.totalValue, state), HomeTone.indigo,
+                compact, Modifier.weight(1f))
+            StockTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent,
+                compact, Modifier.weight(1f), sub = money(summary.uniqueValue, state))
+            StockTile(t("Quantity stock"), "${summary.quantityCount}", HomeTone.accent,
+                compact, Modifier.weight(1f), sub = money(summary.quantityValue, state))
+            StockTile(t("low stock"), "${summary.lowStockCount}",
+                if (summary.lowStockCount > 0) HomeTone.red else HomeTone.accent,
+                compact, Modifier.weight(1f))
+        }
+        HomePanel(compact = compact) {
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 16.dp)) {
+                HomeDonut(share, diameter = if (compact) 46.dp else 74.dp)
+                StockFigure(t("Unique items"), money(summary.uniqueValue, state), Color.Unspecified,
+                    compact, Modifier.weight(1f))
+                StockDivider(compact)
+                StockFigure(t("Quantity stock"), money(summary.quantityValue, state), Color.Unspecified,
+                    compact, Modifier.weight(1f))
+            }
+        }
+        HomePanel(compact = compact) {
+            HomeEyebrow(t("Needs attention"))
+            val attention = stockAttention(inventoryItems)
+            if (attention.isEmpty()) {
+                Text(t("Nothing here yet."), fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                HomeMetricTile(t("total value"), money(summary.totalValue, state), HomeTone.accent, modifier = Modifier.weight(1f))
-                HomeMetricTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent, money(summary.uniqueValue, state), Modifier.weight(1f))
-                HomeMetricTile(t("Quantity stock"), "${summary.quantityCount}", HomeTone.accent, money(summary.quantityValue, state), Modifier.weight(1f))
-                HomeMetricTile(t("low stock"), "${summary.lowStockCount}",
-                    if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
-            }
-        }
-        if (size == HomeCardSize.TwoByTwo) {
-            // Unique and quantity are different things and the split is the point (§8).
-            val total = summary.uniqueValue + summary.quantityValue
-            val share = if (total > 0) (summary.uniqueValue / total).toFloat() else 0f
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f)) {
-                    HomePanel {
-                        HomeEyebrow(t("Inventory value"))
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            HomeDonut(share)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                DonutKey(HomeTone.accent, t("Unique items"), money(summary.uniqueValue, state), share)
-                                DonutKey(HomeTone.accent.copy(alpha = 0.35f), t("Quantity stock"),
-                                    money(summary.quantityValue, state), 1f - share)
-                            }
-                        }
-                    }
-                }
-                Box(Modifier.weight(1f)) {
-                    HomePanel {
-                        HomeEyebrow(t("Stock status"))
-                        HomeCostRow(HomeTone.orange, t("Reserved"), money(summary.reservedValue, state))
-                        HomeCostRow(HomeTone.accent, t("incoming"), money(summary.incomingValue, state))
-                        HomeCostRow(HomeTone.red, t("low stock"), "${summary.lowStockCount}")
-                    }
+                attention.forEachIndexed { index, entry ->
+                    AttentionRow(entry.first, entry.second, t, compact)
+                    if (index < attention.lastIndex) HomeDivider()
                 }
             }
-        } else {
-            HomeCostRow(HomeTone.orange, t("Reserved"), money(summary.reservedValue, state))
-            HomeCostRow(HomeTone.accent, t("incoming"), money(summary.incomingValue, state))
         }
+        Spacer(Modifier.weight(1f))
+    }
+}
+
+/** One of the four figures across the top of the stock card: the name above the
+ *  number, because side by side in a phone tile the name collapses to "t…". */
+@Composable
+private fun StockTile(
+    label: String, value: String, tone: Color, compact: Boolean,
+    modifier: Modifier, sub: String = ""
+) {
+    Column(
+        modifier
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                RoundedCornerShape(if (compact) 9.dp else 12.dp))
+            .padding(horizontal = if (compact) 5.dp else 10.dp, vertical = if (compact) 6.dp else 9.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Text(label, fontSize = if (compact) 8.5.sp else 11.sp, maxLines = 2,
+            overflow = TextOverflow.Ellipsis, lineHeight = if (compact) 10.sp else 13.sp,
+            modifier = if (compact) Modifier.height(20.dp) else Modifier,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = if (compact) 12.sp else 17.sp, fontWeight = FontWeight.ExtraBold,
+            color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (sub.isNotEmpty() && !compact) {
+            Text(sub, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Worst first: nothing on the shelf, then spoken for, then still on its way.
+ *  The counts above say how many; this says which. */
+private fun stockAttention(items: List<StudioInventoryItem>): List<Pair<StudioInventoryItem, String>> =
+    items.mapNotNull { item ->
+        when {
+            item.lowStockAt > 0 && item.onHand <= item.lowStockAt -> item to "low"
+            item.reserved > 0 -> item to "reserved"
+            item.incoming > 0 -> item to "incoming"
+            else -> null
+        }
+    }.sortedBy { listOf("low", "reserved", "incoming").indexOf(it.second) }.take(3)
+
+@Composable
+private fun AttentionRow(
+    item: StudioInventoryItem, kind: String, t: (String) -> String, compact: Boolean
+) {
+    val label = when (kind) {
+        "low" -> t("Low stock")
+        "reserved" -> t("Reserved")
+        else -> t("Incoming")
+    }
+    val tone = if (kind == "low") HomeTone.red else HomeTone.orange
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = if (compact) 2.dp else 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
+    ) {
+        Box(Modifier.size(if (compact) 22.dp else 28.dp)) {
+            OrderThumb(item.photos.firstOrNull().orEmpty(), item.name)
+        }
+        Text(item.name, fontSize = if (compact) 11.sp else 12.5.sp, fontWeight = FontWeight.SemiBold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        HomeChip(label, tone)
+        Text(item.location.ifEmpty { "—" }, fontSize = if (compact) 10.sp else 11.5.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

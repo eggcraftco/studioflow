@@ -284,8 +284,10 @@ fun HomeSeriesChart(
 
 /** Two slices, drawn as an arc rather than a component so the ring stays thin. */
 @Composable
-fun HomeDonut(share: Float, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(74.dp)) {
+// `diameter`, not `size`: inside the Canvas scope `size` is the drawing area,
+// and shadowing it silently broke the arc maths.
+fun HomeDonut(share: Float, modifier: Modifier = Modifier, diameter: androidx.compose.ui.unit.Dp = 74.dp) {
+    Canvas(modifier.size(diameter)) {
         val stroke = Stroke(width = 11.dp.toPx())
         val inset = stroke.width / 2
         drawArc(

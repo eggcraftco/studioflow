@@ -51,6 +51,9 @@ struct HomeAccess {
 final class HomeData: ObservableObject {
     @Published var inventory: InventorySummary?
     @Published var inventoryFailed = false
+    /// Only the 2×2 stock card names individual items, and the list behind it is
+    /// a 500-row callable — so nobody else pays for it.
+    @Published var inventoryItems: [InventoryItem] = []
     @Published var notes: [StudioKeepNote] = []
     @Published var stages: [ProductionStage] = defaultProductionStages
     @Published var loadedAt: Date?
@@ -83,12 +86,17 @@ final class HomeData: ObservableObject {
         pathMonitor.start(queue: DispatchQueue(label: "home.path"))
     }
 
-    func load(manager: FirebaseManager, companyId: String) async {
+    func load(manager: FirebaseManager, companyId: String, wantsInventoryItems: Bool = false) async {
         async let summary = try? manager.loadInventorySummary()
         async let loadedStages = manager.loadProductionStages()
         let (nextSummary, nextStages) = await (summary, loadedStages)
         inventory = nextSummary
         inventoryFailed = nextSummary == nil
+        // A failure here must not take the summary with it: the card keeps its
+        // figures and simply lists nothing.
+        if wantsInventoryItems {
+            inventoryItems = (try? await manager.loadInventoryItems()) ?? []
+        }
         if !nextStages.isEmpty { stages = nextStages }
         loadedAt = Date()
         listenNotes(companyId: companyId)
@@ -242,7 +250,8 @@ struct HomeView: View {
             if access.bankFeed {
                 firebaseManager.startBankFeedRealtime(companyId: companyId, isOwner: true)
             }
-            await data.load(manager: firebaseManager, companyId: companyId)
+            await data.load(manager: firebaseManager, companyId: companyId,
+                            wantsInventoryItems: wantsInventoryItems)
         }
         .onDisappear { data.stop() }
         .alert(t("Edit heading", lang: seciliDil), isPresented: Binding(
@@ -273,7 +282,8 @@ struct HomeView: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 8) {
                 Button {
-                    Task { await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId) }
+                    Task { await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId,
+                                          wantsInventoryItems: wantsInventoryItems) }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
@@ -391,6 +401,10 @@ struct HomeView: View {
             }
         }
         .frame(height: gridHeight)
+    }
+
+    private var wantsInventoryItems: Bool {
+        visible.contains { $0.id == .inventory && $0.size == .twoByTwo }
     }
 
     /// The grid lives inside a ScrollView, so it has to state its own height.

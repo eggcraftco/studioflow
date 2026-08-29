@@ -126,6 +126,9 @@ struct InventoryItem: Identifiable, Equatable {
     var notes: String
     var onHand: Double
     var reserved: Double
+    /// Ordered but not arrived. The server has always sent it; only web was
+    /// reading it, so a Home list built here would have disagreed with web's.
+    var incoming: Double
     var unit: String
     var lowStockAt: Double
     var purchasePrice: Double
@@ -165,6 +168,7 @@ struct InventoryItem: Identifiable, Equatable {
         let quantity = raw["quantity"] as? [String: Any] ?? [:]
         onHand = (quantity["onHand"] as? NSNumber)?.doubleValue ?? 0
         reserved = (quantity["reserved"] as? NSNumber)?.doubleValue ?? 0
+        incoming = (quantity["incoming"] as? NSNumber)?.doubleValue ?? 0
         unit = quantity["unit"] as? String ?? ""
         lowStockAt = (raw["lowStockAt"] as? NSNumber)?.doubleValue ?? 0
         purchasePrice = (raw["purchasePrice"] as? NSNumber)?.doubleValue ?? 0

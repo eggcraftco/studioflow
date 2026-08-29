@@ -112,6 +112,9 @@ data class StudioInventoryItem(
     val tags: List<String>,
     val onHand: Double,
     val reserved: Double,
+    /** Ordered but not arrived. The server has always sent it; only web was
+     *  reading it, so a Home list built here would have disagreed with web's. */
+    val incoming: Double = 0.0,
     val unit: String,
     val lowStockAt: Double,
     val purchasePrice: Double,
@@ -217,6 +220,7 @@ data class StudioInventoryItem(
                 tags = (raw["tags"] as? List<*> ?: emptyList<Any?>()).mapNotNull { it as? String },
                 onHand = (quantity["onHand"] as? Number)?.toDouble() ?: 0.0,
                 reserved = (quantity["reserved"] as? Number)?.toDouble() ?: 0.0,
+                incoming = (quantity["incoming"] as? Number)?.toDouble() ?: 0.0,
                 unit = quantity["unit"] as? String ?: "",
                 lowStockAt = (raw["lowStockAt"] as? Number)?.toDouble() ?: 0.0,
                 purchasePrice = (raw["purchasePrice"] as? Number)?.toDouble() ?: 0.0,

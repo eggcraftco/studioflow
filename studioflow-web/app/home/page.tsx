@@ -137,7 +137,14 @@ export default function HomePage() {
     });
   }, [workspace?.id]);
 
-  const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "");
+  // The 2x2 stock card is the only one that names individual items, and the
+  // list behind it is a 500-row callable — so it is only fetched when that card
+  // is actually on the layout at that size.
+  const wantsInventoryItems = useMemo(
+    () => layout.cards.some((card) => card.id === "inventory" && card.size === "2x2"),
+    [layout],
+  );
+  const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "", wantsInventoryItems);
 
   /**
    * Optimistic layout (§19): the grid moves under the hand immediately and the
