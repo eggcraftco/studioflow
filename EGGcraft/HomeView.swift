@@ -324,13 +324,11 @@ struct HomeView: View {
             let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
             // On a phone the row IS the column width, so a 1×1 comes out square.
             let row = isCompact ? unit : HomeGridMetrics.rowHeight
-            let span = homeRowSpan
             HomeGrid(
                 placements: visible,
                 columnCount: columnCount,
                 unit: unit,
                 rowHeight: row,
-                rowSpan: span,
                 spacing: spacing,
                 content: { placement, width, height in
                     cardView(placement)
@@ -374,17 +372,8 @@ struct HomeView: View {
     }
 
     /// The grid lives inside a ScrollView, so it has to state its own height.
-    /// A phone's 2×2 takes three of its square rows: the row height that makes a
-    /// 1×1 square leaves a 2×2 shorter than the chart and lists it carries.
-    private var homeRowSpan: (HomeCardPlacement) -> Int {
-        let compact = isCompact
-        return { placement in
-            compact && placement.size == .twoByTwo ? 3 : placement.size.rows
-        }
-    }
-
     private var gridHeight: CGFloat {
-        let rows = HomeGridLayout.rowCount(visible, columnCount: columnCount, rowSpan: homeRowSpan)
+        let rows = HomeGridLayout.rowCount(visible, columnCount: columnCount)
         // Only the phone's row is derived from the width; the reader sees the
         // real height once the grid lays out, and this keeps the ScrollView from
         // clipping in the meantime.
@@ -528,19 +517,16 @@ struct HomeGrid<Content: View>: View {
     let unit: CGFloat
     /// One row's height. The phone passes its column width so a 1×1 is square.
     let rowHeight: CGFloat
-    /// How many rows a card occupies. The phone gives a 2×2 three, because a
-    /// square row that makes 1×1 right leaves 2×2 shorter than its own content.
-    let rowSpan: (HomeCardPlacement) -> Int
     let spacing: CGFloat
     @ViewBuilder let content: (HomeCardPlacement, CGFloat, CGFloat) -> Content
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            ForEach(HomeGridLayout.slots(placements, columnCount: columnCount, rowSpan: rowSpan), id: \.0.id) { entry in
+            ForEach(HomeGridLayout.slots(placements, columnCount: columnCount), id: \.0.id) { entry in
                 let (placement, row, column) = entry
                 let width = min(placement.size.columns, columnCount)
                 let cardWidth = unit * CGFloat(width) + spacing * CGFloat(width - 1)
-                let span = rowSpan(placement)
+                let span = placement.size.rows
                 let cardHeight = rowHeight * CGFloat(span) + spacing * CGFloat(span - 1)
                 content(placement, cardWidth, cardHeight)
                     .offset(x: (unit + spacing) * CGFloat(column),

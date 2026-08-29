@@ -640,40 +640,44 @@ struct HomeMoneyBody: View {
                 // On a phone the two panels cannot sit side by side — half a phone
                 // turns the chart into a spike and truncates every cost. They each
                 // take the full width, and the tiles pair up so their figures read.
-                VStack(alignment: .leading, spacing: 10) {
+                // The card is a square, so the content fits the square: the fixed
+                // pieces are slim and the chart is the flexible one, absorbing
+                // whatever height is left instead of pushing the rest out.
+                VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        HomeMetricTile(label: t("Revenue", lang: lang), value: money(revenue),
-                                       tone: HomeTone.green, symbol: "chart.line.uptrend.xyaxis")
-                        HomeMetricTile(label: t("Received", lang: lang), value: money(received),
-                                       tone: HomeTone.green, symbol: "checkmark.circle")
+                        HomeSlimTile(label: t("Revenue", lang: lang), value: money(revenue),
+                                     tone: HomeTone.green, symbol: "chart.line.uptrend.xyaxis")
+                        HomeSlimTile(label: t("Received", lang: lang), value: money(received),
+                                     tone: HomeTone.green, symbol: "checkmark.circle")
                     }
                     HStack(spacing: 8) {
-                        HomeMetricTile(label: t("Outstanding", lang: lang), value: money(outstanding),
-                                       tone: HomeTone.accent, symbol: "clock")
-                        HomeMetricTile(label: t("Net profit", lang: lang), value: money(profit),
-                                       tone: HomeTone.green, symbol: "chart.pie")
+                        HomeSlimTile(label: t("Outstanding", lang: lang), value: money(outstanding),
+                                     tone: HomeTone.accent, symbol: "clock")
+                        HomeSlimTile(label: t("Net profit", lang: lang), value: money(profit),
+                                     tone: HomeTone.green, symbol: "chart.pie")
                     }
-                    HomePanel {
+                    VStack(alignment: .leading, spacing: 3) {
                         HomeEyebrow(text: t("Revenue & profit", lang: lang))
                         HomeRevenueChart(orders: orders, lang: lang)
                     }
-                    HomePanel {
-                        HomeEyebrow(text: t("Costs", lang: lang))
-                        HStack(spacing: 0) {
-                            HomeCostCell(colour: HomeTone.orange, symbol: "bag.fill",
-                                         label: t("Costs", lang: lang), value: money(costs))
-                            Divider().frame(height: 32)
-                            HomeCostCell(colour: HomeTone.purple, symbol: "percent",
-                                         label: t("Fees", lang: lang), value: money(fees))
-                            Divider().frame(height: 32)
-                            HomeCostCell(colour: HomeTone.amber, symbol: "function",
-                                         label: t("VAT", lang: lang), value: money(vat))
-                            Divider().frame(height: 32)
-                            HomeCostCell(colour: HomeTone.accent, symbol: "shippingbox.fill",
-                                         label: t("Shipping", lang: lang), value: money(shipping))
-                        }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                    HStack(spacing: 0) {
+                        HomeCostCell(colour: HomeTone.orange, symbol: "bag.fill",
+                                     label: t("Costs", lang: lang), value: money(costs))
+                        Divider().frame(height: 24)
+                        HomeCostCell(colour: HomeTone.purple, symbol: "percent",
+                                     label: t("Fees", lang: lang), value: money(fees))
+                        Divider().frame(height: 24)
+                        HomeCostCell(colour: HomeTone.amber, symbol: "function",
+                                     label: t("VAT", lang: lang), value: money(vat))
+                        Divider().frame(height: 24)
+                        HomeCostCell(colour: HomeTone.accent, symbol: "shippingbox.fill",
+                                     label: t("Shipping", lang: lang), value: money(shipping))
                     }
-                    Spacer(minLength: 0)
+                    .padding(.horizontal, 4).padding(.vertical, 6)
+                    .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
                 }
             } else {
                 let margin = revenue > 0 ? max(0, min(1, profit / revenue)) : 0
@@ -782,6 +786,33 @@ struct HomeWaterfall: View {
     }
 }
 
+/// A tile sized for a square phone card: one line of label over one of figure,
+/// with a small mark beside them. The desktop tile is twice this tall.
+struct HomeSlimTile: View {
+    let label: String
+    let value: String
+    let tone: Color
+    let symbol: String
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(tone)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(tone.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(label).font(.system(size: 9.5)).foregroundColor(.secondary).lineLimit(1)
+                Text(value).font(.system(size: 12.5, weight: .heavy)).foregroundColor(tone)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+}
+
 /// One of the four costs across the bottom of the phone 2×2: a filled disc with
 /// its mark, the label above the figure.
 struct HomeCostCell: View {
@@ -792,17 +823,17 @@ struct HomeCostCell: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundColor(.white)
-                .frame(width: 26, height: 26)
+                .frame(width: 21, height: 21)
                 .background(Circle().fill(colour))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
-                Text(value).font(.system(size: 11.5, weight: .bold))
-                    .lineLimit(1).minimumScaleFactor(0.6)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(label).font(.system(size: 9)).foregroundColor(.secondary).lineLimit(1)
+                Text(value).font(.system(size: 10.5, weight: .bold))
+                    .lineLimit(1).minimumScaleFactor(0.55)
             }
         }
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

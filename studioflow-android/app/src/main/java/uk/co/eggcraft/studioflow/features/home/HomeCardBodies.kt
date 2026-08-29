@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -551,34 +552,47 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
             // On a phone the two panels cannot sit side by side — half a phone
             // turns the chart into a spike and truncates every cost. They each
             // take the full width, and the tiles pair up so their figures read.
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HomeMetricTile(t("Revenue"), money(revenue, state), HomeTone.green,
-                        modifier = Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.TrendingUp)
-                    HomeMetricTile(t("Received"), money(received, state), HomeTone.green,
-                        modifier = Modifier.weight(1f), icon = Icons.Filled.CheckCircle)
+            // The card is a square, so the content fits the square: the fixed
+            // pieces are slim and the chart is the flexible one, absorbing
+            // whatever height is left instead of pushing the rest out.
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    SlimTile(t("Revenue"), money(revenue, state), HomeTone.green,
+                        Icons.AutoMirrored.Filled.TrendingUp, Modifier.weight(1f))
+                    SlimTile(t("Received"), money(received, state), HomeTone.green,
+                        Icons.Filled.CheckCircle, Modifier.weight(1f))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HomeMetricTile(t("Outstanding"), money(outstanding, state), HomeTone.accent,
-                        modifier = Modifier.weight(1f), icon = Icons.Filled.Schedule)
-                    HomeMetricTile(t("Net profit"), money(profit, state), HomeTone.green,
-                        modifier = Modifier.weight(1f), icon = Icons.Filled.PieChart)
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    SlimTile(t("Outstanding"), money(outstanding, state), HomeTone.accent,
+                        Icons.Filled.Schedule, Modifier.weight(1f))
+                    SlimTile(t("Net profit"), money(profit, state), HomeTone.green,
+                        Icons.Filled.PieChart, Modifier.weight(1f))
                 }
-                HomePanel {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
+                        .padding(horizontal = 9.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     HomeEyebrow(t("Revenue & profit"))
                     RevenueChart(orders, t)
                 }
-                HomePanel {
-                    HomeEyebrow(t("Costs"))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CostCell(HomeTone.orange, Icons.Filled.ShoppingBag, t("Costs"), money(costs, state), Modifier.weight(1f))
-                        CostDivider()
-                        CostCell(HomeTone.purple, Icons.Filled.Percent, t("Fees"), money(fees, state), Modifier.weight(1f))
-                        CostDivider()
-                        CostCell(HomeTone.amber, Icons.Filled.Calculate, t("VAT"), money(vat, state), Modifier.weight(1f))
-                        CostDivider()
-                        CostCell(HomeTone.accent, Icons.Filled.LocalShipping, t("Shipping"), money(shipping, state), Modifier.weight(1f))
-                    }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
+                        .padding(horizontal = 3.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CostCell(HomeTone.orange, Icons.Filled.ShoppingBag, t("Costs"), money(costs, state), Modifier.weight(1f))
+                    CostDivider()
+                    CostCell(HomeTone.purple, Icons.Filled.Percent, t("Fees"), money(fees, state), Modifier.weight(1f))
+                    CostDivider()
+                    CostCell(HomeTone.amber, Icons.Filled.Calculate, t("VAT"), money(vat, state), Modifier.weight(1f))
+                    CostDivider()
+                    CostCell(HomeTone.accent, Icons.Filled.LocalShipping, t("Shipping"), money(shipping, state), Modifier.weight(1f))
                 }
             }
         } else {
@@ -825,19 +839,43 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
     }
 }
 
+/** A tile sized for a square phone card: one line of label over one of figure,
+ *  with a small mark beside them. The desktop tile is twice this tall. */
+@Composable
+private fun SlimTile(label: String, value: String, tone: Color, icon: ImageVector, modifier: Modifier) {
+    Row(
+        modifier
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(Modifier.size(20.dp).background(tone.copy(alpha = 0.14f), CircleShape),
+            contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(11.dp), tone)
+        }
+        Column {
+            Text(label, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = tone,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 /** One of the four costs across the bottom of the phone 2x2: a filled disc with
  *  its mark, the label above the figure. */
 @Composable
 private fun CostCell(colour: Color, icon: ImageVector, label: String, value: String, modifier: Modifier) {
     Row(modifier.padding(horizontal = 5.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        Box(Modifier.size(26.dp).background(colour, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, null, Modifier.size(13.dp), Color.White)
+        Box(Modifier.size(21.dp).background(colour, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(11.dp), Color.White)
         }
         Column {
-            Text(label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            Text(label, fontSize = 8.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            Text(value, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
         }
     }
