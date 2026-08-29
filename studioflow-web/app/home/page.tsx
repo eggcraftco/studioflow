@@ -217,8 +217,10 @@ export default function HomePage() {
       case "money": return data.financeOrders.length === 0;
       case "banking": return data.bankTransactions.length === 0;
       case "inventory": return !data.inventory;
+      // Both read scheduleOrders, so the empty test must ask that list, not the
+      // lighter one — otherwise a card renders empty while its own data is there.
       case "ordersProduction":
-      case "schedule": return data.orders.length === 0;
+      case "schedule": return data.scheduleOrders.length === 0;
       case "recentActivity": return data.activity.length === 0;
       case "customers": return data.customers.length === 0;
       case "files": return data.files.length === 0;
