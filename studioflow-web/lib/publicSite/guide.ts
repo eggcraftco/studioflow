@@ -852,12 +852,13 @@ const TREE_EN: GuideNode[] = [
         id: "set-woocommerce",
         title: "Store & website integrations",
         blocks: [
-          { kind: "para", text: "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
+          { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
-            "WooCommerce: create one webhook (Order created) and paste the delivery URL.",
+            "WooCommerce: open its card, press Set up, then create one webhook (Order created) in WooCommerce and paste the delivery URL.",
             "WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.",
             "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
-            "Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
+            "Other platforms: Wix, Squarespace, Etsy, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
+            "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
           ] }
         ]
       },
@@ -1785,12 +1786,13 @@ const TREE_TR: GuideNode[] = [
         id: "set-woocommerce",
         title: "Mağaza ve web sitesi entegrasyonları",
         blocks: [
-          { kind: "para", text: "Online mağazanı bağla; canlı web sitesi siparişleri NivaDesk'e otomatik aksın. Her entegrasyon ekranı, platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'ini gösterir; yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
+          { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
-            "WooCommerce: bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
+            "WooCommerce: kartını aç, Set up'a bas, sonra WooCommerce'te bir webhook (Order created) oluşturup delivery URL'ini yapıştır.",
             "WooCommerce imza denetimi (isteğe bağlı, önerilir): WooCommerce webhook'unda bir Secret belirle, aynısını entegrasyon ekranındaki Signature check kartına yapıştır; NivaDesk her teslimatın imzasını doğrular — yanlış imza geçerli URL ile bile reddedilir.",
             "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
-            "Diğer platformlar: Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
+            "Diğer platformlar: Wix, Squarespace, Etsy, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
+            "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
           ] }
         ]
       },

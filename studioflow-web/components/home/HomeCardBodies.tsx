@@ -1594,7 +1594,7 @@ const SETUP_STEPS = [
   { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
   { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
   { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
-  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically.", href: "/settings?section=integrations", cta: "Connect shop" },
+  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically.", href: "/settings?section=integrations&category=commerce&intent=connect-shop", cta: "Connect shop" },
   { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
   { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
 ] as const;

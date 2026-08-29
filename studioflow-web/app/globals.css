@@ -28699,3 +28699,92 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-card, .home-card.is-dragging { transition: none; transform: none; }
   .home-card-skeleton span { animation: none; }
 }
+
+/* ---- Integrations hub -------------------------------------------------- */
+/* One screen for everything NivaDesk connects to. Cards, not menu entries:
+   the menu used to grow by one every time a provider did. */
+.integrations-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.integrations-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.integrations-crumb button { background: none; border: 0; padding: 0; cursor: pointer; color: #2563eb; font: inherit; font-weight: 600; }
+.integrations-crumb button:hover { text-decoration: underline; }
+.integrations-crumb span { opacity: 0.45; }
+
+/* The Getting started card sent them here; the way back has to be visible. */
+.integrations-intent {
+  display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;
+  background: rgba(37, 99, 235, 0.07); border-radius: 14px; padding: 14px 18px;
+}
+.integrations-intent > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+.integrations-intent em { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; color: #1d4ed8; background: rgba(37, 99, 235, 0.12); padding: 2px 8px; border-radius: 999px; }
+.integrations-intent strong { display: block; font-size: 16px; font-weight: 800; margin-top: 4px; }
+.integrations-intent small { display: block; font-size: 12.5px; opacity: 0.7; margin-top: 2px; }
+.integrations-intent-back { flex: 0 0 auto; color: #2563eb; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.integrations-intent-mark {
+  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 12px; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: #2563eb;
+}
+.integrations-intent-mark svg { width: 24px; height: 24px; }
+
+.integrations-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.integrations-search { flex: 1 1 240px; min-width: 0; }
+.integrations-search input {
+  width: 100%; padding: 9px 13px; border-radius: 10px;
+  border: 1px solid var(--border); background: transparent; color: inherit; font-size: 13.5px;
+}
+.integrations-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.integrations-chips button {
+  border: 1px solid var(--border); background: transparent; color: inherit;
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.integrations-chips button.is-active { background: rgba(37, 99, 235, 0.10); border-color: transparent; color: #1d4ed8; }
+.integrations-count { margin: 0 0 0 auto; font-size: 13px; display: flex; gap: 12px; align-items: center; }
+.integrations-count em { font-style: normal; color: #15803d; font-weight: 600; }
+.integrations-count b { color: #c2410c; font-weight: 600; }
+
+.integrations-group { margin: 0 0 12px; font-size: 15px; font-weight: 800; }
+.integrations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+
+.integration-card {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+}
+/* The link that sent them here says "connect a shop"; the two cards that can
+   answer that are the ones to look at first. */
+.integration-card.is-highlighted { border-color: rgba(37, 99, 235, 0.5); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10); }
+.integration-card-head { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.integration-card-head > div { min-width: 0; }
+.integration-card-head strong { display: block; font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration-logo {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 11px;
+  border: 1px solid var(--border); background: #fff;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.integration-logo img { width: 28px; height: 28px; object-fit: contain; }
+.integration-logo b { font-size: 16px; font-weight: 800; color: #475569; }
+
+.integration-state {
+  display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+}
+.integration-state.is-connected { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.integration-state.is-attention { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+.integration-state.is-available { background: rgba(100, 116, 139, 0.14); color: #475569; }
+.integration-state.is-webhook { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
+.integration-state.is-planned { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+
+.integration-detail { margin: 0; font-size: 12.5px; font-weight: 600; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration-blurb { margin: 0; font-size: 12.5px; opacity: 0.7; line-height: 1.4; }
+.integration-caps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.integration-caps li {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 7px;
+  border: 1px solid var(--border); opacity: 0.75;
+}
+.integration-card .secondary-button { margin-top: auto; width: 100%; text-align: center; }
+/* A card with nothing under its name still holds its place in the row. */
+.integration-card.is-planned { opacity: 0.72; }
+
+@media (max-width: 640px) {
+  .integrations-count { margin-left: 0; }
+  .integrations-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
