@@ -97,8 +97,11 @@ data class HomeAccess(
     }
 }
 
-private const val CARD_UNIT_HEIGHT = 190
-private const val CARD_GAP = 12
+// One row's height and the gutter between cards. The grid places cards at fixed
+// offsets, so the row has to be the height the tallest card actually needs — a
+// row shorter than its content does not shrink the card, it clips it.
+private const val CARD_UNIT_HEIGHT = 236
+private const val CARD_GAP = 16
 
 @Composable
 fun HomeScreen(

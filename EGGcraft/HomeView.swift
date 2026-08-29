@@ -269,7 +269,7 @@ struct HomeView: View {
 
     private var grid: some View {
         GeometryReader { proxy in
-            let spacing: CGFloat = 14
+            let spacing = HomeGridMetrics.gap
             let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
             HomeGrid(
                 placements: visible,
@@ -279,6 +279,11 @@ struct HomeView: View {
                 content: { placement, width, height in
                     cardView(placement)
                         .frame(width: width, height: height)
+                        // Clip at the cell, not inside the shell. .frame() fixes the
+                        // layout size but a shell whose content is taller still DRAWS
+                        // at its natural height — which is how a card ended up painted
+                        // over the one below it with no gap between them.
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                         .opacity(draggingID == placement.id ? 0.5 : 1)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
@@ -315,7 +320,8 @@ struct HomeView: View {
     /// The grid lives inside a ScrollView, so it has to state its own height.
     private var gridHeight: CGFloat {
         let rows = HomeGridLayout.rowCount(visible, columnCount: columnCount)
-        return CGFloat(rows) * 190 + CGFloat(max(0, rows - 1)) * 14
+        return CGFloat(rows) * HomeGridMetrics.rowHeight
+            + CGFloat(max(0, rows - 1)) * HomeGridMetrics.gap
     }
 
     @ViewBuilder
@@ -382,6 +388,17 @@ private extension View {
     }
 }
 
+
+/// One row's height and the gutter between cards.
+///
+/// The grid places cards at fixed offsets, so the row height has to be the one
+/// the tallest card actually needs — a row shorter than its content does not
+/// shrink the card, it lets the card paint over its neighbour.
+enum HomeGridMetrics {
+    static let rowHeight: CGFloat = 236
+    static let gap: CGFloat = 16
+}
+
 // MARK: - Grid
 
 
@@ -444,9 +461,11 @@ struct HomeGrid<Content: View>: View {
                 let (placement, row, column) = entry
                 let width = min(placement.size.columns, columnCount)
                 let cardWidth = unit * CGFloat(width) + spacing * CGFloat(width - 1)
-                let cardHeight = 190 * CGFloat(placement.size.rows) + spacing * CGFloat(placement.size.rows - 1)
+                let cardHeight = HomeGridMetrics.rowHeight * CGFloat(placement.size.rows)
+                    + spacing * CGFloat(placement.size.rows - 1)
                 content(placement, cardWidth, cardHeight)
-                    .offset(x: (unit + spacing) * CGFloat(column), y: (190 + spacing) * CGFloat(row))
+                    .offset(x: (unit + spacing) * CGFloat(column),
+                            y: (HomeGridMetrics.rowHeight + spacing) * CGFloat(row))
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

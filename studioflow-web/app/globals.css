@@ -27154,9 +27154,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 
 .home-grid {
-  display: grid; gap: 14px;
+  display: grid; gap: 16px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: minmax(190px, auto);
+  /* Rows grow, so a card can never paint over its neighbour here. The minimum
+     matches the fixed row the native grids use, so the same layout reads the
+     same on all four platforms. */
+  grid-auto-rows: minmax(236px, auto);
 }
 
 .home-card {

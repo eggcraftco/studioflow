@@ -151,7 +151,9 @@ struct HomeGettingStartedBody: View {
                 } else {
                     HomeCardNote(text: t("All set — nice work.", lang: lang))
                 }
-                ForEach(todo.prefix(2), id: \.id) { step in
+                // One remaining item at 1x1: the panel above it is the point, and a
+                // second row pushed the footer link out of the card.
+                ForEach(todo.prefix(1), id: \.id) { step in
                     HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
                 }
             } else if size == .twoByOne {

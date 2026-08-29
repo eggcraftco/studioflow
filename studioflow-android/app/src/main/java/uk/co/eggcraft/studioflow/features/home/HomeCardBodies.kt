@@ -172,7 +172,9 @@ private fun HomeGettingStartedBody(
                     HomeNextPanel(next, t, "compact")
                 } else Text(t("All set — nice work."), fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                todo.take(2).forEach { HomeCheckRow(t(it.label), "todo") }
+                // One remaining item at 1x1: the panel above it is the point, and a
+                // second row pushed the footer link out of the card.
+                todo.take(1).forEach { HomeCheckRow(t(it.label), "todo") }
             }
             HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Column(Modifier.weight(1f)) {
