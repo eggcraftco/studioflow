@@ -1,0 +1,373 @@
+import Combine
+import Foundation
+import FirebaseAuth
+import FirebaseFirestore
+import SwiftUI
+
+/// Home: the screen that answers what needs attention, what is next, and where
+/// to go for the detail. It reports and hands off; it never becomes a second,
+/// smaller copy of Orders, Banking, Inventory, Schedule or Files.
+///
+/// Every card body below is its own `struct` on purpose. Deeply nested inline
+/// views in this app have overflowed the SwiftUI stack guard on real hardware
+/// while behaving perfectly in the simulator, and a grid of eleven cards each
+/// with three size variants is exactly the shape that trips it.
+
+struct HomeAccess {
+    var orders = true
+    var dashboard = true
+    var bankFeed = true
+    var customers = true
+    var schedule = true
+    var files = true
+    var notes = true
+    var isOwner = true
+
+    func allows(_ card: HomeCardDefinition) -> Bool {
+        if card.financeOnly && !isOwner && !(card.access == .dashboard ? dashboard : bankFeed) { return false }
+        switch card.access {
+        case .always: return true
+        case .orders: return orders
+        case .dashboard: return dashboard
+        case .bankFeed: return bankFeed
+        case .customers: return customers
+        case .schedule: return schedule
+        case .files: return files
+        case .notes: return notes
+        }
+    }
+}
+
+// MARK: - Shared data
+
+/// One read for the whole screen, sliced per card. Orders alone feed Money,
+/// Orders & production, Schedule, Recent activity and Notes — five queries for
+/// one collection would be five times the cost for exactly the same rows.
+@MainActor
+final class HomeData: ObservableObject {
+    @Published var inventory: InventorySummary?
+    @Published var inventoryFailed = false
+    @Published var notes: [StudioKeepNote] = []
+    @Published var stages: [ProductionStage] = defaultProductionStages
+    @Published var loadedAt: Date?
+
+    private var notesListener: ListenerRegistration?
+    private var notesKey = ""
+
+    func load(manager: FirebaseManager, companyId: String) async {
+        async let summary = try? manager.loadInventorySummary()
+        async let loadedStages = manager.loadProductionStages()
+        let (nextSummary, nextStages) = await (summary, loadedStages)
+        inventory = nextSummary
+        inventoryFailed = nextSummary == nil
+        if !nextStages.isEmpty { stages = nextStages }
+        loadedAt = Date()
+        listenNotes(companyId: companyId)
+    }
+
+    private func listenNotes(companyId: String) {
+        guard let uid = Auth.auth().currentUser?.uid, !uid.isEmpty, !companyId.isEmpty else { return }
+        let key = "\(companyId)|\(uid)"
+        if notesKey == key, notesListener != nil { return }
+        notesListener?.remove()
+        notesKey = key
+        notesListener = Firestore.firestore()
+            .collection("companies").document(companyId)
+            .collection("personal_notes").document(uid)
+            .collection("notes")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self, error == nil, let documents = snapshot?.documents else { return }
+                let parsed = documents.map { StudioKeepNote(document: $0) }
+                    .filter { !$0.isDeleted && !$0.isArchived }
+                Task { @MainActor in self.notes = parsed }
+            }
+    }
+
+    func stop() {
+        notesListener?.remove()
+        notesListener = nil
+        notesKey = ""
+    }
+}
+
+// MARK: - Screen
+
+struct HomeView: View {
+    let access: HomeAccess
+    /// Opening a card's detail is the host's job — Home only says where to go.
+    let onOpen: (String) -> Void
+    let onNewOrder: () -> Void
+
+    @EnvironmentObject var firebaseManager: FirebaseManager
+    @StateObject private var store = HomeLayoutStore()
+    @StateObject private var data = HomeData()
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
+    @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
+    @AppStorage("seciliOndalik") private var seciliOndalik: String = "."
+    @AppStorage("customStepsJSON") private var customStepsJSON: String = ""
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var customising = false
+    @State private var renaming: HomeCardID?
+    @State private var renameText = ""
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var columnCount: Int { sizeClass == .compact ? 2 : 3 }
+    #else
+    private var columnCount: Int { 4 }
+    #endif
+
+    private var visible: [HomeCardPlacement] {
+        store.layout.cards.filter { placement in
+            guard let definition = HomeCards.definition(placement.id) else { return false }
+            return access.allows(definition)
+        }
+    }
+
+    private var gallery: [HomeCardDefinition] {
+        let placed = Set(store.layout.cards.map { $0.id })
+        return HomeCards.all.filter { !placed.contains($0.id) && access.allows($0) }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                if store.saveFailed { saveErrorBanner }
+                if customising { customiseBar }
+                grid
+                if customising && !gallery.isEmpty { galleryRow }
+            }
+            .padding(22)
+        }
+        .background(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.97))
+        .task {
+            store.start(companyId: firebaseManager.currentCompanyId)
+            await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId)
+        }
+        .onDisappear { data.stop() }
+        .alert(t("Edit heading", lang: seciliDil), isPresented: Binding(
+            get: { renaming != nil },
+            set: { if !$0 { renaming = nil } }
+        )) {
+            TextField(t("Card heading", lang: seciliDil), text: $renameText)
+            Button(t("Save", lang: seciliDil)) {
+                if let id = renaming { store.setHeading(id, heading: renameText) }
+                renaming = nil
+            }
+            Button(t("Cancel", lang: seciliDil), role: .cancel) { renaming = nil }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("Home", lang: seciliDil))
+                    .font(.system(size: 30, weight: .heavy))
+                Text(greeting)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Text(t("Here's what needs your attention today.", lang: seciliDil))
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary.opacity(0.8))
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 8) {
+                Text(syncLabel)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                Button(customising ? t("Done", lang: seciliDil) : t("Customise", lang: seciliDil)) {
+                    customising.toggle()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let key = hour < 12 ? "Good morning" : (hour < 18 ? "Good afternoon" : "Good evening")
+        let name = (Auth.auth().currentUser?.displayName ?? "")
+            .split(separator: " ").first.map(String.init) ?? ""
+        return name.isEmpty ? t(key, lang: seciliDil) : "\(t(key, lang: seciliDil)), \(name)"
+    }
+
+    private var syncLabel: String {
+        guard let loaded = data.loadedAt else { return t("Loading…", lang: seciliDil) }
+        let minutes = max(1, Int(Date().timeIntervalSince(loaded) / 60))
+        return "\(t("Updated", lang: seciliDil)) \(minutes) \(t("min ago", lang: seciliDil))"
+    }
+
+    private var saveErrorBanner: some View {
+        Text(t("That change could not be saved. Your previous layout is back.", lang: seciliDil))
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.red)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.red.opacity(0.08))
+            .cornerRadius(10)
+    }
+
+    private var customiseBar: some View {
+        HStack {
+            Text(t("Drag cards to rearrange. Use a card's menu to resize, recolour, rename or hide it.", lang: seciliDil))
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+            Spacer()
+            Button(t("Reset layout", lang: seciliDil)) { store.resetAll() }
+                .buttonStyle(.borderless)
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.07))
+        .cornerRadius(10)
+    }
+
+    private var grid: some View {
+        GeometryReader { proxy in
+            let spacing: CGFloat = 14
+            let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
+            HomeGrid(
+                placements: visible,
+                columnCount: columnCount,
+                unit: unit,
+                spacing: spacing,
+                content: { placement, width, height in
+                    cardView(placement)
+                        .frame(width: width, height: height)
+                }
+            )
+        }
+        .frame(height: gridHeight)
+    }
+
+    /// The grid lives inside a ScrollView, so it has to state its own height.
+    private var gridHeight: CGFloat {
+        let rows = HomeGridLayout.rowCount(visible, columnCount: columnCount)
+        return CGFloat(rows) * 190 + CGFloat(max(0, rows - 1)) * 14
+    }
+
+    @ViewBuilder
+    private func cardView(_ placement: HomeCardPlacement) -> some View {
+        if let definition = HomeCards.definition(placement.id) {
+            HomeCardShell(
+                definition: definition,
+                placement: placement,
+                customising: customising,
+                lang: seciliDil,
+                onOpen: { onOpen(definition.destination) },
+                onResize: { store.resize(placement.id, to: $0) },
+                onTone: { store.setTone(placement.id, tone: $0) },
+                onRename: { renameText = placement.heading; renaming = placement.id },
+                onHide: { store.hide(placement.id) },
+                onReset: { store.reset(placement.id) },
+                onMove: { direction in
+                    if let index = store.layout.cards.firstIndex(where: { $0.id == placement.id }) {
+                        store.move(from: index, to: index + direction)
+                    }
+                },
+                content: {
+                    HomeCardBody(
+                        id: placement.id,
+                        size: placement.size,
+                        lang: seciliDil,
+                        currency: seciliParaBirimi,
+                        decimal: seciliOndalik,
+                        stepsJSON: customStepsJSON,
+                        access: access,
+                        data: data,
+                        onNewOrder: onNewOrder,
+                        onOpen: onOpen
+                    )
+                    .environmentObject(firebaseManager)
+                }
+            )
+        }
+    }
+
+    private var galleryRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(t("Add a card", lang: seciliDil))
+                .font(.system(size: 14, weight: .bold))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(gallery, id: \.id) { definition in
+                        Button("+ \(t(definition.title, lang: seciliDil))") { store.show(definition.id) }
+                            .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Grid
+
+
+/// Shelf packing for the Home grid.
+enum HomeGridLayout {
+    /// Placement is arithmetic, not rendering, so it lives outside the generic
+    /// view — a static member of HomeGrid<Content> cannot be called without
+    /// naming a Content the caller does not have.
+    static func slots(_ placements: [HomeCardPlacement], columnCount: Int) -> [(HomeCardPlacement, Int, Int)] {
+        var placed: [(HomeCardPlacement, Int, Int)] = []
+        // occupancy[row] is a bitmask of the columns already taken on that row.
+        var occupancy: [Int: Set<Int>] = [:]
+        for placement in placements {
+            let width = min(placement.size.columns, columnCount)
+            let height = placement.size.rows
+            var row = 0
+            var column = 0
+            outer: while true {
+                for candidate in 0...(max(0, columnCount - width)) {
+                    let fits = (0..<height).allSatisfy { rowOffset in
+                        (0..<width).allSatisfy { columnOffset in
+                            !(occupancy[row + rowOffset] ?? []).contains(candidate + columnOffset)
+                        }
+                    }
+                    if fits { column = candidate; break outer }
+                }
+                row += 1
+            }
+            for rowOffset in 0..<height {
+                for columnOffset in 0..<width {
+                    occupancy[row + rowOffset, default: []].insert(column + columnOffset)
+                }
+            }
+            placed.append((placement, row, column))
+        }
+        return placed
+    }
+
+    static func rowCount(_ placements: [HomeCardPlacement], columnCount: Int) -> Int {
+        slots(placements, columnCount: columnCount)
+            .map { $0.1 + $0.0.size.rows }
+            .max() ?? 0
+    }
+
+}
+
+/// A shelf-packing grid: cards keep their order and a 2-wide card that does not
+/// fit the remaining space starts the next row. SwiftUI's LazyVGrid cannot span
+/// two rows, and §2 needs 2×2, so the placement is done here.
+struct HomeGrid<Content: View>: View {
+    let placements: [HomeCardPlacement]
+    let columnCount: Int
+    let unit: CGFloat
+    let spacing: CGFloat
+    @ViewBuilder let content: (HomeCardPlacement, CGFloat, CGFloat) -> Content
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(HomeGridLayout.slots(placements, columnCount: columnCount), id: \.0.id) { entry in
+                let (placement, row, column) = entry
+                let width = min(placement.size.columns, columnCount)
+                let cardWidth = unit * CGFloat(width) + spacing * CGFloat(width - 1)
+                let cardHeight = 190 * CGFloat(placement.size.rows) + spacing * CGFloat(placement.size.rows - 1)
+                content(placement, cardWidth, cardHeight)
+                    .offset(x: (unit + spacing) * CGFloat(column), y: (190 + spacing) * CGFloat(row))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+}

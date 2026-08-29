@@ -8428,6 +8428,9 @@ struct ContentView: View {
 
     private var phoneNavMenuContent: some View {
         VStack(alignment: .leading, spacing: 1) {
+            phoneNavMenuRow(t("Home", lang: seciliDil), "square.grid.2x2.fill") {
+                aktifSekme = "Home"; phoneShowsOrderDetail = false
+            }
             if canAccessOrders {
                 phoneNavMenuRow(t("Orders", lang: seciliDil), "list.bullet") {
                     aktifSekme = "Orders"; phoneShowsOrderDetail = false
@@ -8774,6 +8777,7 @@ struct ContentView: View {
 
     private var topNavigationView: some View {
         HStack(spacing: 10) {
+            UstMenuButonu(title: t("Home", lang: seciliDil), icon: "square.grid.2x2.fill", isSelected: aktifSekme == "Home") { aktifSekme = "Home" }
             if canAccessOrders {
                 UstMenuButonu(title: t("Orders", lang: seciliDil), icon: "list.bullet", isSelected: aktifSekme == "Orders") { aktifSekme = "Orders" }
             }
@@ -9191,6 +9195,24 @@ struct ContentView: View {
                     .environmentObject(firebaseManager)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(bgMain)
+            } else if aktifSekme == "Home" {
+                HomeView(
+                    access: HomeAccess(
+                        orders: canAccessOrders,
+                        dashboard: canAccessDashboard,
+                        bankFeed: canAccessBankSpending,
+                        customers: canAccessCustomers,
+                        schedule: canAccessSchedule,
+                        files: canAccessFiles,
+                        notes: canAccessNotes,
+                        isOwner: firebaseManager.currentWorkspaceRole == "owner"
+                    ),
+                    onOpen: { destination in aktifSekme = destination },
+                    onNewOrder: { yeniSiparisEkle() }
+                )
+                .environmentObject(firebaseManager)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(bgMain)
             } else if aktifSekme == "Production" {
                 if canAccessOrders {
                     ProductionView(canEdit: canEditWorkflowFields, onOpenOrder: { order in
