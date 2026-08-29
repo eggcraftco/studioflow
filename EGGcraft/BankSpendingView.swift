@@ -309,7 +309,15 @@ final class BankScreenModel: ObservableObject {
     @Published var assignWaitingId: String?
     @Published var ruleSearch: String = ""
     @Published var previewRuleId: String?
+
     @Published var showNewRule = false
+    // A rule being edited in place: which one, and the draft of every field.
+    @Published var editingRuleId = ""
+    @Published var editRuleName = ""
+    @Published var editRuleKeyword = ""
+    @Published var editRuleCategory = ""
+    @Published var editRuleVat = ""
+    @Published var editRuleAppliesTo = "out"
     @Published var newRuleKeyword = ""
     @Published var newRuleCategory = ""
     @Published var busy: String?
@@ -354,6 +362,15 @@ final class BankScreenModel: ObservableObject {
             selectedYear = calendar.component(.year, from: next); selectedMonth = calendar.component(.month, from: next)
         }
         page = 1
+    }
+
+    func startEditingRule(_ rule: StudioBankRule) {
+        editingRuleId = rule.id
+        editRuleName = rule.name
+        editRuleKeyword = rule.keyword
+        editRuleCategory = rule.category
+        editRuleVat = rule.vatCode
+        editRuleAppliesTo = rule.appliesTo
     }
 
     func showAttention(_ queue: BankTxAttention) {
@@ -2893,6 +2910,64 @@ private struct BankOcrCard: View {
 
 // MARK: - Rules
 
+/// A bank rule's heading and every field under it, edited in place.
+private struct BankRuleEditor: View {
+    let rule: StudioBankRule
+    @ObservedObject var model: BankScreenModel
+    let fmt: BankFormat
+    let categoryOptions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField(fmt.t("Rule name"), text: $model.editRuleName)
+                .textFieldStyle(.roundedBorder)
+            HStack(spacing: 8) {
+                Text(fmt.t("If merchant contains")).font(.system(size: 12.5)).foregroundColor(.secondary)
+                TextField(fmt.t("keyword"), text: $model.editRuleKeyword)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 200)
+                Picker("", selection: $model.editRuleCategory) {
+                    ForEach(categoryOptions, id: \.self) { Text(fmt.t($0)).tag($0) }
+                }.frame(maxWidth: 180)
+            }
+            HStack(spacing: 8) {
+                Picker("", selection: $model.editRuleVat) {
+                    Text(fmt.t("Use category default")).tag("")
+                    ForEach(bankVatCodes, id: \.code) { Text(fmt.t($0.label)).tag($0.code) }
+                }.frame(maxWidth: 200)
+                Picker("", selection: $model.editRuleAppliesTo) {
+                    Text(fmt.t("Money out")).tag("out")
+                    Text(fmt.t("Money in")).tag("in")
+                    Text(fmt.t("Money in & out")).tag("both")
+                }.frame(maxWidth: 160)
+                Spacer()
+                Button(fmt.t("Cancel")) { model.editingRuleId = "" }.buttonStyle(.bordered)
+                Button(fmt.t("Save")) {
+                    guard let manager = model.manager else { return }
+                    let id = rule.id
+                    let keyword = model.editRuleKeyword.trimmingCharacters(in: .whitespaces).lowercased()
+                    let category = model.editRuleCategory
+                    let vat = model.editRuleVat
+                    let scope = model.editRuleAppliesTo
+                    let name = model.editRuleName.trimmingCharacters(in: .whitespaces)
+                    model.run("rule-\(id)") {
+                        // By id, not by keyword: the keyword is one of the
+                        // things being changed.
+                        try await manager.bankSaveRule(keyword: keyword, category: category,
+                                                       ruleId: id, vatCode: vat,
+                                                       appliesTo: scope, name: name)
+                        await MainActor.run { model.editingRuleId = "" }
+                        return fmt.t("Rule saved.")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.editRuleKeyword.trimmingCharacters(in: .whitespaces).count < 2
+                          || model.editRuleCategory.isEmpty || model.busy == "rule-\(rule.id)")
+            }
+        }
+        .padding(10).background(Color.accentColor.opacity(0.06)).cornerRadius(10)
+    }
+}
+
 private struct BankRulesSection: View {
     let d: BankDerived
     let rules: [StudioBankRule]
@@ -2904,7 +2979,11 @@ private struct BankRulesSection: View {
     let isPhone: Bool
     let isOwner: Bool
 
-    private func ruleName(_ rule: StudioBankRule) -> String { "\(rule.keyword.prefix(1).uppercased())\(rule.keyword.dropFirst()) \(fmt.t(rule.category)) \(fmt.t("Rule"))" }
+    private func ruleName(_ rule: StudioBankRule) -> String {
+        let named = rule.name.trimmingCharacters(in: .whitespaces)
+        if !named.isEmpty { return named }
+        return "\(rule.keyword.prefix(1).uppercased())\(rule.keyword.dropFirst()) \(fmt.t(rule.category)) \(fmt.t("Rule"))"
+    }
     private func appliesTo(_ txType: String) -> String {
         guard let meta = bankTxTypeMeta(txType) else { return "—" }
         if txType == "PURCHASE" || txType == "POS" { return fmt.t("Card spending") }
@@ -2970,6 +3049,13 @@ private struct BankRulesSection: View {
             ForEach(shown) { rule in
                 let stat = d.ruleStats[rule.id]
                 VStack(alignment: .leading, spacing: 6) {
+                    if model.editingRuleId == rule.id {
+                        // The heading and everything under it, in place. Rules
+                        // could only be created and deleted before, so getting
+                        // one wrong meant deleting it and typing it again.
+                        BankRuleEditor(rule: rule, model: model, fmt: fmt,
+                                       categoryOptions: categoryOptions)
+                    } else {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(ruleName(rule)).font(.system(size: 13, weight: .bold)).lineLimit(1)
@@ -2983,11 +3069,15 @@ private struct BankRulesSection: View {
                         }
                         BankChip(text: fmt.t("Active"), color: .green)
                         if isOwner {
+                            Button {
+                                model.startEditingRule(rule)
+                            } label: { Image(systemName: "pencil") }.buttonStyle(.plain).foregroundColor(.secondary)
                             Button(role: .destructive) {
                                 guard let manager = model.manager else { return }
                                 model.run("rule-\(rule.id)") { try await manager.bankDeleteRule(id: rule.id); return nil }
                             } label: { Image(systemName: "trash") }.buttonStyle(.plain).foregroundColor(.secondary)
                         }
+                    }
                     }
                     if model.previewRuleId == rule.id, let stat {
                         HStack(spacing: 14) {

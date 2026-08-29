@@ -3419,8 +3419,21 @@ class StudioFlowRepository(
     suspend fun bankSync(workspaceId: String): Int =
         ((bankCall("bankSyncTransactions", workspaceId, mapOf("force" to true))["imported"] as? Number)?.toInt()) ?: 0
 
-    suspend fun bankSaveRule(workspaceId: String, keyword: String, category: String) {
-        bankCall("bankSaveRule", workspaceId, mapOf("keyword" to keyword.lowercase(), "category" to category))
+    suspend fun bankSaveRule(
+        workspaceId: String, keyword: String, category: String,
+        ruleId: String = "", vatCode: String = "", appliesTo: String = "", name: String = ""
+    ) {
+        val payload = buildMap<String, Any> {
+            put("keyword", keyword.lowercase())
+            put("category", category)
+            // By id when editing, because the keyword is one of the things being
+            // changed and keying on it would leave the old rule behind.
+            if (ruleId.isNotBlank()) put("ruleId", ruleId)
+            if (vatCode.isNotBlank()) put("vatCode", vatCode)
+            if (appliesTo.isNotBlank()) put("appliesTo", appliesTo)
+            put("name", name)
+        }
+        bankCall("bankSaveRule", workspaceId, payload)
     }
 
     /** Marks a payee as recurring, or merges this merchant key into an existing vendor. */

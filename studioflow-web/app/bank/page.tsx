@@ -88,7 +88,13 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   CREDIT: { label: "Incoming", color: "#16a34a", translate: true },
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
-type BankRule = { id: string; keyword: string; category: string; vatCode: string; appliesTo: "out" | "in" | "both" };
+type BankRule = {
+  id: string; keyword: string; category: string; vatCode: string;
+  appliesTo: "out" | "in" | "both";
+  /** The owner's own wording. Empty means the heading built from the keyword
+   *  and the category, which is what a rule showed before it could be named. */
+  name: string;
+};
 // A receipt uploaded before its payment reached the bank feed; the server
 // re-scores it after every sync and attaches it when a confident match lands.
 type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
@@ -248,6 +254,13 @@ function BankPageContent() {
   const [newRuleCategory, setNewRuleCategory] = useState("");
   const [newRuleVat, setNewRuleVat] = useState("");
   const [newRuleAppliesTo, setNewRuleAppliesTo] = useState<BankRule["appliesTo"]>("out");
+  // A rule being edited in place: its id, and the draft of every field it has.
+  // Rules could only be created and deleted before, so getting one wrong meant
+  // deleting it and typing it again.
+  const [editingRuleId, setEditingRuleId] = useState("");
+  const [editRule, setEditRule] = useState<Omit<BankRule, "id">>(
+    { keyword: "", category: "", vatCode: "", appliesTo: "out", name: "" }
+  );
   // Category manager (Rules tab): one shared form for add + edit.
   const [catFormOpen, setCatFormOpen] = useState(false);
   const [catFormId, setCatFormId] = useState("");
@@ -431,6 +444,7 @@ function BankPageContent() {
             keyword: String(data.keyword || ""),
             category: String(data.category || ""),
             vatCode: String(data.vatCode || ""),
+            name: String(data.name || ""),
             appliesTo: (["out", "in", "both"].includes(String(data.appliesTo)) ? String(data.appliesTo) : "out") as BankRule["appliesTo"]
           };
         }));
@@ -1346,6 +1360,35 @@ function BankPageContent() {
       setBusy(null);
     }
   }
+  function startEditingRule(rule: BankRule) {
+    setEditingRuleId(rule.id);
+    setEditRule({
+      keyword: rule.keyword, category: rule.category, vatCode: rule.vatCode,
+      appliesTo: rule.appliesTo, name: rule.name,
+    });
+  }
+
+  async function saveEditedRule() {
+    const keyword = editRule.keyword.trim().toLowerCase();
+    if (!editingRuleId || keyword.length < 2 || !editRule.category) return;
+    setBusy(`rule-${editingRuleId}`);
+    try {
+      // By id, not by keyword: the keyword is one of the things being changed,
+      // and keying on it would leave the old rule behind.
+      await call("bankSaveRule", {
+        ruleId: editingRuleId, keyword, category: editRule.category,
+        vatCode: editRule.vatCode, appliesTo: editRule.appliesTo,
+        name: editRule.name.trim(),
+      });
+      setStatus(t("Rule saved."));
+      setEditingRuleId("");
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not save the rule.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function createSuggestedRule(item: { keyword: string; category: string }) {
     setBusy(`rule-${item.keyword}`);
     try {
@@ -2603,7 +2646,8 @@ function BankPageContent() {
             {transactions.length > 0 && tab === "rules" ? (
               <>
                 {(() => {
-                  const ruleName = (rule: BankRule) => `${rule.keyword.charAt(0).toUpperCase()}${rule.keyword.slice(1)} ${t(rule.category)} ${t("Rule")}`;
+                  const ruleName = (rule: BankRule) => rule.name.trim()
+                    || `${rule.keyword.charAt(0).toUpperCase()}${rule.keyword.slice(1)} ${t(rule.category)} ${t("Rule")}`;
                   const appliesTo = (txType: string) => {
                     const meta = TX_TYPE_META[txType];
                     if (!meta) return "—";
@@ -2714,6 +2758,59 @@ function BankPageContent() {
                                 ) : shownRules.map(rule => {
                                   const stat = ruleStats.get(rule.id);
                                   const active = previewRuleId === rule.id;
+                                  if (editingRuleId === rule.id) {
+                                    // The heading and everything under it, in place.
+                                    return (
+                                      <tr key={rule.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: "rgba(37,99,235,0.06)" }}>
+                                        <td style={{ ...rulesTd, paddingLeft: 18 }}>
+                                          <input type="text" value={editRule.name} autoFocus
+                                            placeholder={ruleName(rule)}
+                                            aria-label={t("Rule name")}
+                                            onChange={event => setEditRule(current => ({ ...current, name: event.target.value }))}
+                                            onKeyDown={event => { if (event.key === "Enter") void saveEditedRule(); if (event.key === "Escape") setEditingRuleId(""); }}
+                                            style={{ ...pickerInput, width: "100%", fontWeight: 700 }} />
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <input type="text" value={editRule.keyword}
+                                            aria-label={t("If merchant contains")}
+                                            onChange={event => setEditRule(current => ({ ...current, keyword: event.target.value }))}
+                                            onKeyDown={event => { if (event.key === "Enter") void saveEditedRule(); if (event.key === "Escape") setEditingRuleId(""); }}
+                                            style={{ ...pickerInput, width: "100%" }} />
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.category} aria-label={t("Category")}
+                                            onChange={event => setEditRule(current => ({ ...current, category: event.target.value }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            {categoryOptions.map(name => <option key={name} value={name}>{t(name)}</option>)}
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.vatCode} aria-label={t("VAT / Tax code")}
+                                            onChange={event => setEditRule(current => ({ ...current, vatCode: event.target.value }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            <option value="">{t("Use category default")}</option>
+                                            {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.appliesTo} aria-label={t("Applies to")}
+                                            onChange={event => setEditRule(current => ({ ...current, appliesTo: event.target.value as BankRule["appliesTo"] }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            <option value="out">{t("Money out")}</option>
+                                            <option value="in">{t("Money in")}</option>
+                                            <option value="both">{t("Money in & out")}</option>
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd} colSpan={2} />
+                                        <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
+                                          <button type="button" style={bankBtnSm} onClick={() => setEditingRuleId("")}>{t("Cancel")}</button>
+                                          <button type="button" style={{ ...bankBtnSm, marginLeft: 6, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}
+                                            disabled={busy === `rule-${rule.id}` || editRule.keyword.trim().length < 2 || !editRule.category}
+                                            onClick={() => void saveEditedRule()}>{t("Save")}</button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
                                   return (
                                     <tr key={rule.id} onClick={() => setPreviewRuleId(active ? null : rule.id)}
                                       style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", cursor: "pointer", background: active ? "rgba(37,99,235,0.08)" : undefined, boxShadow: active ? "inset 3px 0 0 #2563eb" : undefined }}>
@@ -2728,6 +2825,7 @@ function BankPageContent() {
                                       <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 9px", background: "rgba(22,163,74,0.12)", color: "#16a34a" }}>{t("Active")}</span></td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
+                                        {isOwner ? <button type="button" style={{ ...bankBtnSm, marginRight: 6 }} onClick={event => { event.stopPropagation(); startEditingRule(rule); }} aria-label={t("Edit")} title={t("Edit")}>✎</button> : null}
                                         {isOwner ? <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`} onClick={event => { event.stopPropagation(); void deleteRule(rule); }} aria-label={t("Delete this rule?")} title={t("Delete this rule?")}>✕</button> : null}
                                       </td>
                                     </tr>

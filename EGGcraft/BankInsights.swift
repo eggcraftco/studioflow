@@ -29,11 +29,20 @@ struct StudioBankRule: Identifiable, Equatable {
     let id: String
     let keyword: String
     let category: String
+    let vatCode: String
+    let appliesTo: String
+    /// The owner's own wording. Empty means the heading built from the keyword
+    /// and the category, which is what a rule showed before it could be named.
+    let name: String
 
     init(id: String, data: [String: Any]) {
         self.id = id
         keyword = ((data["keyword"] as? String) ?? "").lowercased()
         category = (data["category"] as? String) ?? ""
+        vatCode = (data["vatCode"] as? String) ?? ""
+        let scope = (data["appliesTo"] as? String) ?? "out"
+        appliesTo = ["out", "in", "both"].contains(scope) ? scope : "out"
+        name = (data["name"] as? String) ?? ""
     }
 }
 

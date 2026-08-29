@@ -287,8 +287,16 @@ extension FirebaseManager {
 
     // MARK: Rules
 
-    func bankSaveRule(keyword: String, category: String) async throws {
-        try await bankCall("bankSaveRule", ["keyword": keyword.lowercased(), "category": category])
+    func bankSaveRule(keyword: String, category: String, ruleId: String = "",
+                      vatCode: String = "", appliesTo: String = "", name: String = "") async throws {
+        var payload: [String: Any] = ["keyword": keyword.lowercased(), "category": category]
+        // By id when editing, because the keyword is one of the things being
+        // changed and keying on it would leave the old rule behind.
+        if !ruleId.isEmpty { payload["ruleId"] = ruleId }
+        if !vatCode.isEmpty { payload["vatCode"] = vatCode }
+        if !appliesTo.isEmpty { payload["appliesTo"] = appliesTo }
+        payload["name"] = name
+        try await bankCall("bankSaveRule", payload)
     }
 
     func bankDeleteRule(id: String) async throws {

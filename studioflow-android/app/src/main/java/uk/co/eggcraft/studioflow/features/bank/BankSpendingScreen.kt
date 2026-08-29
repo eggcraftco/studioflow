@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -986,7 +987,17 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                                 expanded = previewRuleId == rule.id,
                                 onToggle = { previewRuleId = if (previewRuleId == rule.id) null else rule.id },
                                 onShowMatches = { search = rule.keyword; flow = BankFlow.Spending; tab = BankTab.Transactions },
-                                onDelete = { run("rule-${rule.id}") { repository.bankDeleteRule(workspaceId, rule.id); null } })
+                                onDelete = { run("rule-${rule.id}") { repository.bankDeleteRule(workspaceId, rule.id); null } },
+                                categoryOptions = categoryOptions,
+                                onSave = { name, keyword, category, vat, scope ->
+                                    run("rule-${rule.id}") {
+                                        // By id, not by keyword: the keyword is
+                                        // one of the things being changed.
+                                        repository.bankSaveRule(workspaceId, keyword, category,
+                                            ruleId = rule.id, vatCode = vat, appliesTo = scope, name = name)
+                                        t("Rule saved.")
+                                    }
+                                })
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
                     }
@@ -1572,8 +1583,23 @@ private fun Modifier.verticalScrollCompat(): Modifier = this.then(Modifier)
 private fun RuleRow(
     rule: StudioBankRule, stats: Triple<Int, Double, Pair<String, String>>, taxCode: String?,
     t: (String) -> String, locale: Locale, fmt: (Double, String?) -> String, isOwner: Boolean,
-    expanded: Boolean, onToggle: () -> Unit, onShowMatches: () -> Unit, onDelete: () -> Unit
+    expanded: Boolean, onToggle: () -> Unit, onShowMatches: () -> Unit, onDelete: () -> Unit,
+    categoryOptions: List<String> = emptyList(),
+    onSave: (String, String, String, String, String) -> Unit = { _, _, _, _, _ -> }
 ) {
+    // The heading and everything under it, edited in place. Rules could only be
+    // created and deleted before, so getting one wrong meant deleting it and
+    // typing it again.
+    var editing by remember(rule.id) { mutableStateOf(false) }
+    if (editing) {
+        RuleEditor(rule, categoryOptions, t,
+            onCancel = { editing = false },
+            onSave = { name, keyword, category, vat, scope ->
+                editing = false
+                onSave(name, keyword, category, vat, scope)
+            })
+        return
+    }
     val (count, total, lastAndType) = stats
     val appliesTo = when (lastAndType.second) {
         "PURCHASE", "POS" -> t("Card spending")
@@ -1583,11 +1609,17 @@ private fun RuleRow(
     Column(Modifier.clickable(onClick = onToggle).padding(horizontal = 14.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                Text("${rule.keyword.replaceFirstChar { it.uppercase() }} ${t(rule.category)} ${t("Rule")}", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    rule.name.trim().ifEmpty {
+                        "${rule.keyword.replaceFirstChar { it.uppercase() }} ${t(rule.category)} ${t("Rule")}"
+                    },
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
                 Text("${t("If merchant contains")} ${rule.keyword.uppercase()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Chip(t(rule.category), categoryColor(rule.category))
             Chip(t("Active"), GREEN)
+            if (isOwner) IconButton(onClick = { editing = true }) { Icon(Icons.Filled.Edit, contentDescription = t("Edit"), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
             if (isOwner) IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
         }
         if (expanded) {
@@ -1598,6 +1630,71 @@ private fun RuleRow(
                     if (lastAndType.first.isNotBlank()) Text("${t("Last used")} ${displayDate(lastAndType.first, locale, true)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = onShowMatches, contentPadding = PaddingValues(0.dp)) { Text("${t("View matching transactions")} →", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 }
+            }
+        }
+    }
+}
+
+/** A bank rule's heading and every field under it, edited in place. */
+@Composable
+private fun RuleEditor(
+    rule: StudioBankRule, categoryOptions: List<String>, t: (String) -> String,
+    onCancel: () -> Unit, onSave: (String, String, String, String, String) -> Unit
+) {
+    var name by remember(rule.id) { mutableStateOf(rule.name) }
+    var keyword by remember(rule.id) { mutableStateOf(rule.keyword) }
+    var category by remember(rule.id) { mutableStateOf(rule.category) }
+    var vat by remember(rule.id) { mutableStateOf(rule.vatCode) }
+    var scope by remember(rule.id) { mutableStateOf(rule.appliesTo) }
+    Column(
+        Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(value = name, onValueChange = { name = it },
+            label = { Text(t("Rule name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = keyword, onValueChange = { keyword = it },
+            label = { Text(t("If merchant contains")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        CategoryPicker(category, categoryOptions, t) { category = it }
+        VatPicker(vat, t) { vat = it }
+        AppliesToPicker(scope, t) { scope = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onCancel) { Text(t("Cancel")) }
+            Button(
+                onClick = { onSave(name.trim(), keyword.trim().lowercase(), category, vat, scope) },
+                enabled = keyword.trim().length >= 2 && category.isNotBlank()
+            ) { Text(t("Save")) }
+        }
+    }
+}
+
+@Composable
+private fun VatPicker(selected: String, t: (String) -> String, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }) {
+            Text(if (selected.isBlank()) t("Use category default") else t(bankVatLabel(selected)), fontSize = 12.sp)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(t("Use category default")) }, onClick = { onSelect(""); open = false })
+            BANK_VAT_CODES.forEach { entry ->
+                DropdownMenuItem(text = { Text(t(entry.second)) }, onClick = { onSelect(entry.first); open = false })
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppliesToPicker(selected: String, t: (String) -> String, onSelect: (String) -> Unit) {
+    val options = listOf("out" to "Money out", "in" to "Money in", "both" to "Money in & out")
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }) {
+            Text(t(options.firstOrNull { it.first == selected }?.second ?: "Money out"), fontSize = 12.sp)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (id, label) ->
+                DropdownMenuItem(text = { Text(t(label)) }, onClick = { onSelect(id); open = false })
             }
         }
     }

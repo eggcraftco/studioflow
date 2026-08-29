@@ -77,7 +77,16 @@ data class StudioBankSplitLine(
 )
 
 /** Categorisation rule: "merchant contains keyword → category". */
-data class StudioBankRule(val id: String, val keyword: String, val category: String)
+data class StudioBankRule(
+    val id: String,
+    val keyword: String,
+    val category: String,
+    val vatCode: String = "",
+    val appliesTo: String = "out",
+    /** The owner's own wording. Empty means the heading built from the keyword
+     *  and the category, which is what a rule showed before it could be named. */
+    val name: String = ""
+)
 
 /**
  * A payee the owner grouped by hand: every merchant key in [keys] counts as the
@@ -105,7 +114,12 @@ data class StudioBankWaitingReceipt(
 fun bankRuleFromDocument(id: String, data: Map<String, Any?>): StudioBankRule = StudioBankRule(
     id = id,
     keyword = ((data["keyword"] as? String) ?: "").lowercase(),
-    category = (data["category"] as? String) ?: ""
+    category = (data["category"] as? String) ?: "",
+    vatCode = (data["vatCode"] as? String) ?: "",
+    appliesTo = ((data["appliesTo"] as? String) ?: "out").let {
+        if (it == "in" || it == "both") it else "out"
+    },
+    name = (data["name"] as? String) ?: ""
 )
 
 fun bankVendorFromDocument(id: String, data: Map<String, Any?>): StudioBankVendor = StudioBankVendor(

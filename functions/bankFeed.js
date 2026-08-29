@@ -1262,11 +1262,33 @@ function createBankFeedFunctions({ admin, onCall, onSchedule, HttpsError, uidIsC
     const vatCode = cleanText(request.data?.vatCode, 4).toUpperCase();
     if (vatCode && !BANK_VAT_CODES.includes(vatCode)) throw new HttpsError("invalid-argument", "Unknown VAT code.");
     const appliesTo = ["out", "in", "both"].includes(cleanText(request.data?.appliesTo, 8)) ? cleanText(request.data?.appliesTo, 8) : "out";
-    // One rule per keyword: saving again overwrites the category/VAT/scope.
-    const existing = await rulesRef(companyId).where("keyword", "==", keyword).limit(1).get();
-    const ruleRef = existing.empty ? rulesRef(companyId).doc() : existing.docs[0].ref;
+    // The owner's own wording for the rule. Empty means the heading the clients
+    // build from the keyword and the category, which is what they showed before
+    // a rule could be named at all.
+    const name = cleanText(request.data?.name, 60);
+
+    // Editing an existing rule is by id, because the keyword is the thing being
+    // changed: keying on it would leave the old rule behind and create a second.
+    const ruleId = cleanText(request.data?.ruleId, 120);
+    let ruleRef;
+    if (ruleId) {
+      ruleRef = rulesRef(companyId).doc(ruleId);
+      const current = await ruleRef.get();
+      if (!current.exists) throw new HttpsError("not-found", "That rule no longer exists.");
+      // Still one rule per keyword: refuse a rename onto another rule's keyword
+      // rather than quietly leaving two rules fighting over the same merchant.
+      const clash = await rulesRef(companyId).where("keyword", "==", keyword).limit(2).get();
+      if (clash.docs.some((doc) => doc.id !== ruleId)) {
+        throw new HttpsError("already-exists", "Another rule already uses that keyword.");
+      }
+    } else {
+      // One rule per keyword: saving again overwrites the category/VAT/scope.
+      const existing = await rulesRef(companyId).where("keyword", "==", keyword).limit(1).get();
+      ruleRef = existing.empty ? rulesRef(companyId).doc() : existing.docs[0].ref;
+    }
     await ruleRef.set({
       keyword, category, appliesTo,
+      name: name || admin.firestore.FieldValue.delete(),
       vatCode: vatCode || admin.firestore.FieldValue.delete(),
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
