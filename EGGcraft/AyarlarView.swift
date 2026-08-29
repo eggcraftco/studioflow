@@ -33,6 +33,12 @@ struct AyarlarView: View {
     @State private var seciliAyarSekmesi: String
     @State private var phoneShowsSettingsDetail: Bool = false
     @State private var wooCommerceCopyFeedback: String = ""
+    /// Which provider's screen the Integrations hub is showing, "" for the grid.
+    @State private var integrationsManaging: String = ""
+    @State private var integrationSignals = NivaDeskIntegrationSignals()
+    @State private var integrationSignalsLoaded = false
+    @State private var integrationsQuery: String = ""
+    @State private var integrationsFilter: String = "all"
     @State private var wooCommerceDeliveryURL: String = ""
     @State private var wooCommerceTokenLoading: Bool = false
     @State private var shopifyDeliveryURL: String = ""
@@ -385,7 +391,7 @@ struct AyarlarView: View {
             return !isWorkflowOnlySettingsRole && authVM.currentPlanEntitlements.advancedDashboardEnabled && workspaceAccessAllows("settingsFinancial")
         case "Plan & Access":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsPlanAccess")
-        case "WooCommerce", "Shopify", "Inbound":
+        case "Integrations", "WooCommerce", "Shopify", "Inbound":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsWorkflow")
         case "Upload Safety":
             return !isWorkflowOnlySettingsRole && workspaceAccessAllows("settingsSafetyUploads")
@@ -427,9 +433,7 @@ struct AyarlarView: View {
             ("Upload Safety", t("Safety & Uploads", lang: seciliDil), "shield.lefthalf.filled", "Files & Security"),
             ("Data", t("Data Management", lang: seciliDil), "externaldrive.fill", "Data & Backups"),
             ("Plan & Access", t("Plan & Access", lang: seciliDil), "creditcard.fill", "Billing"),
-            ("WooCommerce", t("WooCommerce Integration", lang: seciliDil), "cart.badge.plus", "Integrations"),
-            ("Shopify", t("Shopify Integration", lang: seciliDil), "bag.fill", "Integrations"),
-            ("Inbound", t("Other Platforms", lang: seciliDil), "link", "Integrations"),
+            ("Integrations", t("Integrations", lang: seciliDil), "puzzlepiece.extension.fill", "Integrations"),
             ("Support", t("Support / Tickets", lang: seciliDil), "questionmark.bubble.fill", "Support"),
             ("Legal", t("Legal", lang: seciliDil), "doc.text.fill", "Support")
         ]
@@ -642,12 +646,8 @@ struct AyarlarView: View {
             return t("Quick reply templates.", lang: seciliDil)
         case "Financial":
             return t("Fees, tax and calculations.", lang: seciliDil)
-        case "WooCommerce":
-            return t("Live website orders and webhook setup.", lang: seciliDil)
-        case "Shopify":
-            return t("Live Shopify orders and webhook setup.", lang: seciliDil)
-        case "Inbound":
-            return t("Connect any store via Zapier, Make or a custom webhook.", lang: seciliDil)
+        case "Integrations":
+            return t("Connect the tools you use to run your business.", lang: seciliDil)
         case "Upload Safety":
             return t("Upload rules, file limits and audit protection.", lang: seciliDil)
         case "Data":
@@ -696,6 +696,7 @@ struct AyarlarView: View {
                 }
             }
             else if seciliAyarSekmesi == "Financial" { if canEditWorkspace { finansalAyar } }
+            else if seciliAyarSekmesi == "Integrations" { if canEditWorkspace { integrationsHubAyari } }
             else if seciliAyarSekmesi == "WooCommerce" { if canEditWorkspace { wooCommerceIntegrationAyari } }
             else if seciliAyarSekmesi == "Shopify" { if canEditWorkspace { shopifyIntegrationAyari } }
             else if seciliAyarSekmesi == "Inbound" { if canEditWorkspace { inboundIntegrationAyari } }
@@ -6115,6 +6116,153 @@ struct AyarlarView: View {
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// One place for everything NivaDesk connects to.
+    ///
+    /// The three integration screens used to be three menu entries, which meant
+    /// the menu grew by one every time a provider did. They are now what a card's
+    /// Manage opens; the screens themselves are untouched.
+    private var integrationsHubAyari: some View {
+        Group {
+            if !integrationsManaging.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Button {
+                        integrationsManaging = ""
+                    } label: {
+                        Label(t("Integrations", lang: seciliDil), systemImage: "chevron.left")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+
+                    if integrationsManaging == "shopify" { shopifyIntegrationAyari }
+                    else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
+                    else { inboundIntegrationAyari }
+                }
+            } else {
+                integrationsGrid
+            }
+        }
+        .onAppear { loadIntegrationSignals() }
+    }
+
+    private var integrationsGrid: some View {
+        let rows = NivaDeskIntegration.all.map { ($0, $0.state(signals: integrationSignals)) }
+        let needle = integrationsQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        let shown = rows.filter { entry in
+            if !needle.isEmpty && !entry.0.name.lowercased().contains(needle) { return false }
+            switch integrationsFilter {
+            case "connected": return entry.1 == .connected || entry.1 == .attention
+            case "available": return entry.1 == .available || entry.1 == .webhook
+            case "planned": return entry.1 == .planned
+            default: return true
+            }
+        }
+        let connected = rows.filter { $0.1 == .connected }.count
+        let attention = rows.filter { $0.1 == .attention }.count
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t("Integrations", lang: seciliDil))
+                        .font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
+                    Text(t("Connect the tools you use to run your business.", lang: seciliDil))
+                        .font(.system(size: 18, weight: .bold))
+                }
+                Spacer(minLength: 8)
+                Button(t("Request an integration", lang: seciliDil)) { seciliAyarSekmesi = "Support" }
+                    .buttonStyle(.bordered)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                TextField(t("Search integrations...", lang: seciliDil), text: $integrationsQuery)
+                    .textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.15)))
+
+            HStack(spacing: 8) {
+                ForEach([("all", "All"), ("connected", "Connected"),
+                         ("available", "Available"), ("planned", "Coming soon")], id: \.0) { pair in
+                    Button {
+                        integrationsFilter = pair.0
+                    } label: {
+                        Text(t(pair.1, lang: seciliDil))
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .padding(.horizontal, 13).padding(.vertical, 6)
+                            .background(Capsule().fill(integrationsFilter == pair.0
+                                                       ? Color.accentColor.opacity(0.12) : .clear))
+                            .overlay(Capsule().stroke(integrationsFilter == pair.0
+                                                      ? .clear : Color.primary.opacity(0.15)))
+                            .foregroundColor(integrationsFilter == pair.0 ? .accentColor : .primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 8)
+                // Only once the reads have landed: "0 connected" while they are
+                // in flight is a statement about the network, not the workspace.
+                if integrationSignalsLoaded {
+                    Text(t("{count} connected", lang: seciliDil)
+                        .replacingOccurrences(of: "{count}", with: "\(connected)"))
+                        .font(.system(size: 12.5)).foregroundColor(HomeTone.green)
+                    if attention > 0 {
+                        Text(t("{count} needs attention", lang: seciliDil)
+                            .replacingOccurrences(of: "{count}", with: "\(attention)"))
+                            .font(.system(size: 12.5)).foregroundColor(HomeTone.orange)
+                    }
+                }
+            }
+
+            ForEach(NivaDeskIntegration.categories, id: \.0) { category in
+                let group = shown.filter { $0.0.category == category.0 }
+                if !group.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(t(category.1, lang: seciliDil)).font(.system(size: 15, weight: .bold))
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
+                            ForEach(group, id: \.0.id) { entry in
+                                IntegrationTile(provider: entry.0, state: entry.1, lang: seciliDil) {
+                                    integrationsManaging = entry.0.manage
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Four independent reads: one slow or refused answer must not blank the
+    /// other cards, so each settles on its own.
+    private func loadIntegrationSignals() {
+        let companyId = firebaseManager.currentCompanyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !companyId.isEmpty, !integrationSignalsLoaded else { return }
+        let functions = Functions.functions(region: "europe-west2")
+        integrationSignals.bankConnections = firebaseManager.bankConnections.filter(\.isLinked).count
+
+        functions.httpsCallable("getShopifyIntegrationsForWorkspace").call(["companyId": companyId]) { result, _ in
+            DispatchQueue.main.async {
+                let raw = (result?.data as? [String: Any])?["stores"] as? [[String: Any]] ?? []
+                integrationSignals.shopifyStores = raw.map {
+                    ($0["shop"] as? String ?? "", $0["status"] as? String ?? "")
+                }
+                integrationSignalsLoaded = true
+            }
+        }
+        for (name, channel) in [("getWooCommerceWebhookToken", "woocommerce"), ("getInboundWebhookToken", "inbound")] {
+            functions.httpsCallable(name).call(["companyId": companyId]) { result, _ in
+                DispatchQueue.main.async {
+                    guard let data = result?.data as? [String: Any] else { return }
+                    integrationSignals.channels[channel] = NivaDeskIntegrationChannel(
+                        lastDeliveryAtMs: (data["lastDeliveryAtMs"] as? Double) ?? 0,
+                        lastDeliveryOk: (data["lastDeliveryOk"] as? Bool) ?? false,
+                        lastDeliveryWasTest: (data["lastDeliveryWasTest"] as? Bool) ?? false
+                    )
+                    integrationSignalsLoaded = true
+                }
             }
         }
     }

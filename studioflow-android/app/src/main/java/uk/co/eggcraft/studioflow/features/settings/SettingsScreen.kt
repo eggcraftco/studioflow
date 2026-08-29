@@ -34,7 +34,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Business
@@ -405,9 +408,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
         SettingsSection("safety", "Safety & Uploads", "Upload rules, file limits and audit protection.", Icons.Filled.Security, "Files & Security"),
         SettingsSection("data", "Data Management", "Import, export and backup.", Icons.Filled.Storage, "Data & Backups"),
         SettingsSection("plan", "Plan & Access", "Plan, limits and feature access.", Icons.Filled.CreditCard, "Billing"),
-        SettingsSection("woo", "WooCommerce Integration", "Live website orders and webhook setup.", Icons.Filled.ShoppingCart, "Integrations"),
-        SettingsSection("shopify", "Shopify Integration", "Live Shopify orders and webhook setup.", Icons.Filled.ShoppingBag, "Integrations"),
-        SettingsSection("inbound", "Other Platforms", "Connect any store via Zapier, Make or a custom webhook.", Icons.Filled.Link, "Integrations"),
+        SettingsSection("integrations", "Integrations", "Connect the tools you use to run your business.", Icons.Filled.Hub, "Integrations"),
         SettingsSection("support", "Support / Tickets", "Contact your workspace owner or NivaDesk support.", Icons.Filled.Email, "Support"),
         SettingsSection("legal", "Legal", "Privacy, terms and policy documents.", Icons.Filled.Gavel, "Support")
     ).filter { section ->
@@ -440,7 +441,7 @@ private fun rememberSettingsSections(plan: StudioBillingPlan, access: WorkspaceM
                 "financial" -> plan.hasAdvancedFinance && access?.settingsFinancial != false
                 "safety" -> access?.settingsSafetyUploads != false
                 "data" -> access?.settingsData != false
-                "woo", "shopify", "inbound" -> access?.settingsWorkflow != false
+                "integrations", "woo", "shopify", "inbound" -> access?.settingsWorkflow != false
                 "plan" -> access?.settingsPlanAccess != false
                 "support" -> access?.settingsSupport != false
                 "team" -> access?.settingsTeamAccess != false
@@ -607,6 +608,9 @@ private fun SettingsDetailScreen(
                 "quickReply" -> QuickReplySettingsDetail(state, onUpdateWorkspaceSettings)
                 "messages" -> MessageSettingsDetail(state, onSaveMessageWorkspaceSettings, onReloadMessageWorkspaceSettings)
                 "financial" -> FinancialSettingsDetail(state, onUpdateWorkspaceSettings, onRecalculateFinancialSettings)
+                // The three provider screens are what a card's Manage opens; an
+                // old deep link that still names one lands straight on it.
+                "integrations" -> IntegrationsHubDetail(state)
                 "woo" -> WooCommerceDetail(state)
                 "shopify" -> ShopifyDetail(state)
                 "inbound" -> InboundDetail(state)
@@ -2150,6 +2154,137 @@ private fun ClientDomainRowCard(
                     fontSize = 12.sp,
                     color = Color(0xFFB45309)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * One place for everything NivaDesk connects to.
+ *
+ * WooCommerce, Shopify and Other Platforms used to be three menu entries, which
+ * meant the menu grew by one every time a provider did. They are now what a
+ * card's Manage opens; the screens themselves are untouched.
+ */
+@Composable
+private fun IntegrationsHubDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    var managing by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("all") }
+    var signals by remember { mutableStateOf(IntegrationSignals()) }
+    var loaded by remember { mutableStateOf(false) }
+
+    val workspace = state.workspace
+    LaunchedEffect(workspace?.id) {
+        val ws = workspace ?: return@LaunchedEffect
+        // Independent reads: one slow or refused answer must not blank the rest.
+        val stores = runCatching { repository.getShopifyAppStores(ws) }.getOrDefault(emptyList())
+        val woo = runCatching { repository.integrationChannelStatus(ws, "getWooCommerceWebhookToken") }
+            .getOrDefault(Triple(0L, false, false))
+        val inbound = runCatching { repository.integrationChannelStatus(ws, "getInboundWebhookToken") }
+            .getOrDefault(Triple(0L, false, false))
+        signals = IntegrationSignals(
+            shopifyStores = stores.associate { it.shop to it.status },
+            channels = mapOf(
+                "woocommerce" to IntegrationChannel(woo.first, woo.second, woo.third),
+                "inbound" to IntegrationChannel(inbound.first, inbound.second, inbound.third),
+            ),
+            bankConnections = state.bankConnections.count { it.isLinked },
+        )
+        loaded = true
+    }
+
+    if (managing.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(onClick = { managing = "" }) {
+                Icon(Icons.Filled.ArrowBack, null, Modifier.size(18.dp))
+                Text(t("Integrations"))
+            }
+            when (managing) {
+                "shopify" -> ShopifyDetail(state)
+                "woo" -> WooCommerceDetail(state)
+                else -> InboundDetail(state)
+            }
+        }
+        return
+    }
+
+    val rows = INTEGRATION_PROVIDERS.map { it to it.state(signals) }
+    val needle = query.trim().lowercase()
+    val shown = rows.filter { (provider, live) ->
+        if (needle.isNotEmpty() && !provider.displayName.lowercase().contains(needle)) return@filter false
+        when (filter) {
+            "connected" -> live == IntegrationState.Connected || live == IntegrationState.Attention
+            "available" -> live == IntegrationState.Available || live == IntegrationState.Webhook
+            "planned" -> live == IntegrationState.Planned
+            else -> true
+        }
+    }
+    val connected = rows.count { it.second == IntegrationState.Connected }
+    val attention = rows.count { it.second == IntegrationState.Attention }
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(t("Connect the tools you use to run your business."),
+            fontSize = 17.sp, fontWeight = FontWeight.Bold)
+
+        OutlinedTextField(
+            value = query, onValueChange = { query = it },
+            placeholder = { Text(t("Search integrations...")) },
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            singleLine = true, modifier = Modifier.fillMaxWidth()
+        )
+
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("all" to "All", "connected" to "Connected",
+                   "available" to "Available", "planned" to "Coming soon").forEach { (id, label) ->
+                val active = filter == id
+                Text(
+                    t(label), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (active) Color(0xFF2563EB) else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .clickable { filter = id }
+                        .background(
+                            if (active) Color(0xFF2563EB).copy(alpha = 0.12f) else Color.Transparent,
+                            RoundedCornerShape(999.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (active) Color.Transparent
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                            RoundedCornerShape(999.dp)
+                        )
+                        .padding(horizontal = 13.dp, vertical = 6.dp)
+                )
+            }
+        }
+
+        // Only once the reads have landed: "0 connected" while they are in flight
+        // is a statement about the network, not the workspace.
+        if (loaded) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(t("{count} connected").replace("{count}", connected.toString()),
+                    fontSize = 12.5.sp, color = Color(0xFF15803D))
+                if (attention > 0) {
+                    Text(t("{count} needs attention").replace("{count}", attention.toString()),
+                        fontSize = 12.5.sp, color = Color(0xFFC2410C))
+                }
+            }
+        }
+
+        INTEGRATION_CATEGORIES.forEach { (id, title) ->
+            val group = shown.filter { it.first.category == id }
+            if (group.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(t(title), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    group.forEach { (provider, live) ->
+                        IntegrationTile(provider, live, provider.detail(signals), t) {
+                            managing = provider.manage
+                        }
+                    }
+                }
             }
         }
     }

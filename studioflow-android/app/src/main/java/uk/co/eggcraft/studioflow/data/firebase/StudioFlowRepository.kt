@@ -904,6 +904,21 @@ class StudioFlowRepository(
         return data?.get("deliveryUrl") as? String ?: ""
     }
 
+    /** Whether anything has actually arrived on a webhook channel, and whether the
+     *  last one worked. The Integrations cards read this: a card that says
+     *  Connected when nothing has ever arrived is worse than no card at all. */
+    suspend fun integrationChannelStatus(workspace: StudioWorkspace, callable: String): Triple<Long, Boolean, Boolean> {
+        val result = functions.getHttpsCallable(callable)
+            .call(mapOf("companyId" to workspace.id))
+            .await()
+        val data = result.data as? Map<*, *> ?: return Triple(0L, false, false)
+        return Triple(
+            (data["lastDeliveryAtMs"] as? Number)?.toLong() ?: 0L,
+            data["lastDeliveryOk"] as? Boolean ?: false,
+            data["lastDeliveryWasTest"] as? Boolean ?: false,
+        )
+    }
+
     suspend fun getShopifyWebhookDeliveryUrl(workspace: StudioWorkspace): String {
         val result = functions.getHttpsCallable("getShopifyWebhookToken")
             .call(mapOf("companyId" to workspace.id))
