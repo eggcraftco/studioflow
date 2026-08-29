@@ -860,9 +860,28 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
     // The fourth tile is what the workspace pays on repeat, as the sheet has it —
     // the review queue is already the card's link.
     val fixedTotal = bankMonthlyFixed(state)
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        if (compact) Modifier.fillMaxSize() else Modifier,
+        verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
+    ) {
         SyncLine(state, t)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (compact) {
+            // Four across a phone truncates every label and every figure. Two by
+            // two gives each one half the width.
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                SlimTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green,
+                    Icons.Filled.ArrowDownward, Modifier.weight(1f))
+                SlimTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange,
+                    Icons.Filled.ArrowUpward, Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                SlimTile(t("Missing receipts"), "$missing",
+                    if (missing > 0) HomeTone.red else HomeTone.accent,
+                    Icons.Filled.ReceiptLong, Modifier.weight(1f))
+                SlimTile(t("Fixed"), if (fixedTotal > 0) "≈ " + money(fixedTotal, state) else "—",
+                    HomeTone.accent, Icons.Filled.CalendarMonth, Modifier.weight(1f))
+            }
+        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green,
                 modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowDownward)
             HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange,
@@ -873,7 +892,60 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
             HomeMetricTile(t("Fixed"), if (fixedTotal > 0) "≈ " + money(fixedTotal, state) else "—",
                 HomeTone.accent, modifier = Modifier.weight(1f), icon = Icons.Filled.CalendarMonth)
         }
-        if (size == HomeCardSize.TwoByTwo) {
+        if (size == HomeCardSize.TwoByTwo && compact) {
+            // The phone square: both panels take the full width and stack, and
+            // the chart is the flexible one. Side by side each got half a phone
+            // and truncated everything in it.
+            val (yIn, yOut) = yearTotals(state)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
+                    .padding(horizontal = 9.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                HomeEyebrow(t("Bank activity"))
+                BankChart(state, t)
+            }
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(11.dp))
+                    .padding(horizontal = 9.dp, vertical = 6.dp)
+            ) {
+                HomeEyebrow(t("Recent transactions"))
+                state.bankTransactions.take(3).forEach { tx ->
+                    val name = tx.counterparty.ifEmpty { tx.description }
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.size(20.dp).background(HomeTone.accent, CircleShape),
+                            contentAlignment = Alignment.Center) {
+                            Text(name.take(1).uppercase(), fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold, color = Color.White)
+                        }
+                        Text(name, fontSize = 11.sp, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text((if (tx.amount < 0) "−" else "+") + money(kotlin.math.abs(tx.amount), state),
+                            fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                            color = if (tx.amount < 0) HomeTone.red else HomeTone.green)
+                    }
+                }
+                Spacer(Modifier.height(3.dp))
+                HomeDivider()
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${t("This year")}:", fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${t("In")} ${money(yIn, state)}", fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold, color = HomeTone.green, maxLines = 1)
+                    Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${t("Out")} ${money(yOut, state)}", fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold, color = HomeTone.red, maxLines = 1)
+                }
+            }
+        } else if (size == HomeCardSize.TwoByTwo) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.weight(1f)) {
                     HomePanel {
@@ -904,7 +976,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                     }
                 }
             }
-            if (missing > 0) {
+            if (missing > 0 && !compact) {
                 Row(
                     Modifier
                         .fillMaxWidth()

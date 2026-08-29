@@ -1109,20 +1109,86 @@ struct HomeBankingBody: View {
                 // The fourth tile is what the workspace pays on repeat, as the
                 // sheet has it — the review queue is already the card's link.
                 let fixed = bankMonthlyFixedTotal(firebaseManager)
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: compact ? 7 : 10) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
-                    HStack(spacing: 10) {
-                        HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
-                                       tone: HomeTone.green, symbol: "arrow.down")
-                        HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
-                                       tone: HomeTone.orange, symbol: "arrow.up")
-                        HomeMetricTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
-                                       tone: missing > 0 ? HomeTone.red : HomeTone.accent, symbol: "doc.text.magnifyingglass")
-                        HomeMetricTile(label: t("Fixed", lang: lang),
-                                       value: fixed > 0 ? "≈ " + money(fixed) : "—",
-                                       tone: HomeTone.accent, symbol: "calendar")
+                    if compact {
+                        // Four across a phone truncates every label and every
+                        // figure. Two by two gives each one half the width.
+                        HStack(spacing: 7) {
+                            HomeSlimTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
+                                         tone: HomeTone.green, symbol: "arrow.down")
+                            HomeSlimTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
+                                         tone: HomeTone.orange, symbol: "arrow.up")
+                        }
+                        HStack(spacing: 7) {
+                            HomeSlimTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
+                                         tone: missing > 0 ? HomeTone.red : HomeTone.accent,
+                                         symbol: "doc.text.magnifyingglass")
+                            HomeSlimTile(label: t("Fixed", lang: lang),
+                                         value: fixed > 0 ? "≈ " + money(fixed) : "—",
+                                         tone: HomeTone.accent, symbol: "calendar")
+                        }
+                    } else {
+                        HStack(spacing: 10) {
+                            HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
+                                           tone: HomeTone.green, symbol: "arrow.down")
+                            HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
+                                           tone: HomeTone.orange, symbol: "arrow.up")
+                            HomeMetricTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
+                                           tone: missing > 0 ? HomeTone.red : HomeTone.accent, symbol: "doc.text.magnifyingglass")
+                            HomeMetricTile(label: t("Fixed", lang: lang),
+                                           value: fixed > 0 ? "≈ " + money(fixed) : "—",
+                                           tone: HomeTone.accent, symbol: "calendar")
+                        }
                     }
-                    if size == .twoByTwo {
+                    if size == .twoByTwo && compact {
+                        // The phone square: both panels take the full width and
+                        // stack, and the chart is the flexible one. Side by side
+                        // each got half a phone and truncated everything in it.
+                        VStack(alignment: .leading, spacing: 3) {
+                            HomeEyebrow(text: t("Bank activity", lang: lang))
+                            HomeBankChart(transactions: transactions, lang: lang)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                        VStack(alignment: .leading, spacing: 2) {
+                            HomeEyebrow(text: t("Recent transactions", lang: lang))
+                            ForEach(transactions.prefix(3), id: \.id) { tx in
+                                HStack(spacing: 8) {
+                                    Text(String((tx.counterparty.isEmpty ? tx.description : tx.counterparty).prefix(1)).uppercased())
+                                        .font(.system(size: 10, weight: .heavy)).foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(HomeTone.accent))
+                                    Text(tx.counterparty.isEmpty ? tx.description : tx.counterparty)
+                                        .font(.system(size: 11.5)).lineLimit(1)
+                                    Spacer(minLength: 6)
+                                    Text((tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)))
+                                        .font(.system(size: 11.5, weight: .bold))
+                                        .foregroundColor(tx.amount < 0 ? HomeTone.red : HomeTone.green)
+                                        .lineLimit(1).minimumScaleFactor(0.7)
+                                }
+                                .padding(.vertical, 3)
+                            }
+                            Divider().padding(.top, 3)
+                            HStack(spacing: 6) {
+                                Text(t("This year", lang: lang) + ":")
+                                    .font(.system(size: 10)).foregroundColor(.secondary)
+                                Text(t("In", lang: lang) + " " + money(homeYearTotals(transactions).received))
+                                    .font(.system(size: 10, weight: .bold)).foregroundColor(HomeTone.green)
+                                    .lineLimit(1).minimumScaleFactor(0.6)
+                                Text("·").foregroundColor(.secondary)
+                                Text(t("Out", lang: lang) + " " + money(homeYearTotals(transactions).spent))
+                                    .font(.system(size: 10, weight: .bold)).foregroundColor(HomeTone.red)
+                                    .lineLimit(1).minimumScaleFactor(0.6)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                    } else if size == .twoByTwo {
                         HStack(alignment: .top, spacing: 12) {
                             HomePanel {
                                 HomeEyebrow(text: t("Bank activity", lang: lang))
