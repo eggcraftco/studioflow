@@ -1504,7 +1504,10 @@ private fun StudioSectionContent(
                 state = state,
                 access = uk.co.eggcraft.studioflow.features.home.HomeAccess(
                     orders = state.workspace?.memberAccess?.orders ?: true,
-                    dashboard = state.workspace?.memberAccess?.dashboard ?: true,
+                    // Money is a finance-only card: the dashboard permission alone is
+                    // not enough, the member must also be allowed financial data.
+                    dashboard = (state.workspace?.memberAccess?.dashboard ?: true) &&
+                        (state.workspace?.canSeeFinancialData ?: true),
                     bankFeed = (state.workspace?.billingPlan?.allowsBankFeed ?: false) &&
                         (state.workspace?.isOwner == true ||
                             (state.workspace?.memberAccess?.bankFeed == true &&

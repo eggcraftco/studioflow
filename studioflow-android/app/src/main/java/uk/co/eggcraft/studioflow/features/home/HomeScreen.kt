@@ -42,7 +42,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import android.net.ConnectivityManager
+import android.net.Network
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import kotlinx.coroutines.awaitCancellation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -112,6 +117,23 @@ fun HomeScreen(
     var renameText by remember { mutableStateOf("") }
     var inventory by remember { mutableStateOf<StudioInventorySummary?>(null) }
     var inventoryFailed by remember { mutableStateOf(false) }
+    var loadedAtMillis by remember { mutableStateOf(0L) }
+    var reloadKey by remember { mutableStateOf(0) }
+    // §18 wants an offline label rather than a card that silently shows old
+    // numbers as if they were current. The Firestore listeners keep serving
+    // their cache; the screen just says so.
+    val context = LocalContext.current
+    var offline by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { offline = false }
+            override fun onLost(network: Network) { offline = true }
+        }
+        offline = manager?.activeNetwork == null
+        runCatching { manager?.registerDefaultNetworkCallback(callback) }
+        try { awaitCancellation() } finally { runCatching { manager?.unregisterNetworkCallback(callback) } }
+    }
     // Stages are the workspace's own, fetched once: the Orders & production card
     // derives each order's stage from them rather than storing one.
     var stages by remember { mutableStateOf(defaultProductionStages) }
@@ -125,7 +147,7 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(workspaceId) {
+    LaunchedEffect(workspaceId, reloadKey) {
         if (workspaceId.isBlank()) return@LaunchedEffect
         inventory = runCatching { repository.inventorySummary(workspaceId) }
             .onFailure { inventoryFailed = true }
@@ -134,6 +156,7 @@ fun HomeScreen(
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
             ?.let { stages = it }
+        loadedAtMillis = System.currentTimeMillis()
     }
 
     /**
@@ -190,8 +213,24 @@ fun HomeScreen(
                 Text(t("Here's what needs your attention today."),
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            OutlinedButton(onClick = { customising = !customising }) {
-                Text(if (customising) t("Done") else t("Customise"), fontSize = 12.sp)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    when {
+                        offline -> t("Offline — showing the last data this device had.")
+                        loadedAtMillis == 0L -> t("Loading…")
+                        else -> "${t("Updated")} ${
+                            ((System.currentTimeMillis() - loadedAtMillis) / 60000L).coerceAtLeast(1L)
+                        } ${t("min ago")}"
+                    },
+                    fontSize = 10.sp,
+                    maxLines = 2,
+                    textAlign = TextAlign.End,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable { reloadKey += 1 }
+                )
+                OutlinedButton(onClick = { customising = !customising }) {
+                    Text(if (customising) t("Done") else t("Customise"), fontSize = 12.sp)
+                }
             }
         }
 

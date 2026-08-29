@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Network
 import FirebaseAuth
 import FirebaseFirestore
 import SwiftUI
@@ -23,8 +24,10 @@ struct HomeAccess {
     var notes = true
     var isOwner = true
 
+    /// The finance-only cards need no extra test here: `dashboard` and `bankFeed`
+    /// already fold in the workspace's financial-data permission at the source,
+    /// the same way the Dashboard and Banking tabs decide whether to appear.
     func allows(_ card: HomeCardDefinition) -> Bool {
-        if card.financeOnly && !isOwner && !(card.access == .dashboard ? dashboard : bankFeed) { return false }
         switch card.access {
         case .always: return true
         case .orders: return orders
@@ -51,8 +54,24 @@ final class HomeData: ObservableObject {
     @Published var stages: [ProductionStage] = defaultProductionStages
     @Published var loadedAt: Date?
 
+    /// §18 wants an offline label rather than a card that silently shows old
+    /// numbers as if they were current. The Firestore listeners keep serving
+    /// their cache; the screen just says so.
+    @Published var offline = false
+
     private var notesListener: ListenerRegistration?
     private var notesKey = ""
+    private let pathMonitor = NWPathMonitor()
+    private var monitoring = false
+
+    func startMonitoring() {
+        guard !monitoring else { return }
+        monitoring = true
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor in self?.offline = path.status != .satisfied }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "home.path"))
+    }
 
     func load(manager: FirebaseManager, companyId: String) async {
         async let summary = try? manager.loadInventorySummary()
@@ -87,6 +106,10 @@ final class HomeData: ObservableObject {
         notesListener?.remove()
         notesListener = nil
         notesKey = ""
+        if monitoring {
+            pathMonitor.cancel()
+            monitoring = false
+        }
     }
 }
 
@@ -144,6 +167,7 @@ struct HomeView: View {
         }
         .background(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.97))
         .task {
+            data.startMonitoring()
             store.start(companyId: firebaseManager.currentCompanyId)
             await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId)
         }
@@ -175,9 +199,18 @@ struct HomeView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 8) {
-                Text(syncLabel)
-                    .font(.system(size: 11))
+                Button {
+                    Task { await data.load(manager: firebaseManager, companyId: firebaseManager.currentCompanyId) }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 9, weight: .bold))
+                        Text(syncLabel).font(.system(size: 11))
+                    }
                     .foregroundColor(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(t("Try again", lang: seciliDil))
                 Button(customising ? t("Done", lang: seciliDil) : t("Customise", lang: seciliDil)) {
                     customising.toggle()
                 }
@@ -195,6 +228,7 @@ struct HomeView: View {
     }
 
     private var syncLabel: String {
+        if data.offline { return t("Offline — showing the last data this device had.", lang: seciliDil) }
         guard let loaded = data.loadedAt else { return t("Loading…", lang: seciliDil) }
         let minutes = max(1, Int(Date().timeIntervalSince(loaded) / 60))
         return "\(t("Updated", lang: seciliDil)) \(minutes) \(t("min ago", lang: seciliDil))"
