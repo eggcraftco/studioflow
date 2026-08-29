@@ -1,0 +1,288 @@
+package uk.co.eggcraft.studioflow.features.home
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * The Home screen's card model, kept identical to the web's homeCards.ts and
+ * the Swift HomeCards.swift.
+ *
+ * Home is a reporting, alerting and quick-action layer — NOT a smaller copy of
+ * Orders, Banking, Inventory, Schedule or Files. Every card answers one of the
+ * three questions the screen exists for (what needs attention, what is next,
+ * where do I go for the detail) and then hands off to the full screen.
+ *
+ * This file is the single source of truth for what a card is: which sizes it
+ * supports, what it defaults to, who may see it and which section its link
+ * opens. Rendering lives in HomeScreen; the model does not.
+ */
+
+enum class HomeCardId {
+    GettingStarted, QuickActions, RecentActivity, Money, Banking,
+    Inventory, Customers, OrdersProduction, Schedule, Files, Notes;
+
+    /** The stored key. Stays stable across renames so a saved layout keeps working. */
+    val key: String
+        get() = when (this) {
+            GettingStarted -> "gettingStarted"
+            QuickActions -> "quickActions"
+            RecentActivity -> "recentActivity"
+            Money -> "money"
+            Banking -> "banking"
+            Inventory -> "inventory"
+            Customers -> "customers"
+            OrdersProduction -> "ordersProduction"
+            Schedule -> "schedule"
+            Files -> "files"
+            Notes -> "notes"
+        }
+
+    companion object {
+        fun fromKey(value: String): HomeCardId? = entries.firstOrNull { it.key == value }
+    }
+}
+
+/** 1x1 is a single square, 2x1 spans two columns, 2x2 spans two by two. */
+enum class HomeCardSize(val key: String, val columns: Int, val rows: Int, val label: String) {
+    OneByOne("1x1", 1, 1, "1×1"),
+    TwoByOne("2x1", 2, 1, "2×1"),
+    TwoByTwo("2x2", 2, 2, "2×2");
+
+    companion object {
+        fun fromKey(value: String): HomeCardSize? = entries.firstOrNull { it.key == value }
+    }
+}
+
+/** A card's colour theme. Colour never carries meaning on its own (§20). */
+enum class HomeCardTone(val key: String, val label: String) {
+    Standard("default", "Default"),
+    Blue("blue", "Blue"),
+    Green("green", "Green"),
+    Amber("amber", "Amber"),
+    Purple("purple", "Purple"),
+    Rose("rose", "Rose");
+
+    companion object {
+        fun fromKey(value: String): HomeCardTone = entries.firstOrNull { it.key == value } ?: Standard
+    }
+}
+
+/**
+ * Which navigation permission a card needs. A member without it never sees the
+ * card — §18 says a denied card explains itself or hides, never breaks.
+ */
+enum class HomeCardAccess { Always, Orders, Dashboard, BankFeed, Customers, Schedule, Files, Notes }
+
+data class HomeCardDefinition(
+    val id: HomeCardId,
+    /** English title. Runs through studioT() at render, and the owner may rename it. */
+    val title: String,
+    val sizes: List<HomeCardSize>,
+    val defaultSize: HomeCardSize,
+    val access: HomeCardAccess,
+    /** Owner-only cards: money and banking are workspace finances. */
+    val financeOnly: Boolean,
+    /** The section this card's single footer link opens. */
+    val destination: String,
+    val linkLabel: String
+)
+
+object HomeCards {
+    private val everySize = listOf(HomeCardSize.OneByOne, HomeCardSize.TwoByOne, HomeCardSize.TwoByTwo)
+
+    /**
+     * Gallery order, not layout order — the default layout below decides where
+     * each card starts.
+     */
+    val all: List<HomeCardDefinition> = listOf(
+        HomeCardDefinition(HomeCardId.GettingStarted, "Getting started", everySize, HomeCardSize.TwoByOne,
+            HomeCardAccess.Always, false, "Settings", "View checklist"),
+        HomeCardDefinition(HomeCardId.QuickActions, "Quick actions", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.Always, false, "Orders", "Open Orders"),
+        HomeCardDefinition(HomeCardId.RecentActivity, "Recent activity", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.Always, false, "Orders", "View all activity"),
+        HomeCardDefinition(HomeCardId.Money, "Money", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.Dashboard, true, "Dashboard", "Open Dashboard"),
+        HomeCardDefinition(HomeCardId.Banking, "Banking", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.BankFeed, true, "BankSpending", "Go to banking"),
+        HomeCardDefinition(HomeCardId.Inventory, "Inventory", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.Orders, false, "Inventory", "View inventory"),
+        HomeCardDefinition(HomeCardId.Customers, "Customers", everySize, HomeCardSize.OneByOne,
+            HomeCardAccess.Customers, false, "Customers", "View customers"),
+        HomeCardDefinition(HomeCardId.OrdersProduction, "Orders & production", everySize, HomeCardSize.TwoByOne,
+            HomeCardAccess.Orders, false, "Production", "View all orders"),
+        HomeCardDefinition(HomeCardId.Schedule, "Schedule", everySize, HomeCardSize.TwoByOne,
+            HomeCardAccess.Schedule, false, "Schedule", "Open Schedule"),
+        // Not "Files": that key is the navigation item and reads as "choose from
+        // files" in several languages. This card is the library itself.
+        HomeCardDefinition(HomeCardId.Files, "File library", everySize, HomeCardSize.TwoByOne,
+            HomeCardAccess.Files, false, "Files", "View all files"),
+        HomeCardDefinition(HomeCardId.Notes, "Notes", everySize, HomeCardSize.TwoByOne,
+            HomeCardAccess.Notes, false, "Notes", "View all notes")
+    )
+
+    fun definition(id: HomeCardId): HomeCardDefinition? = all.firstOrNull { it.id == id }
+}
+
+data class HomeCardPlacement(
+    val id: HomeCardId,
+    val size: HomeCardSize,
+    /** Owner's own wording for the heading; empty means the registry title. */
+    val heading: String = "",
+    val tone: HomeCardTone = HomeCardTone.Standard
+)
+
+/**
+ * Versioned, because a stored layout outlives the code that wrote it. A layout
+ * from an older version is migrated rather than thrown away; an unreadable one
+ * falls back to the default rather than leaving Home blank.
+ *
+ * Stored as a JSON string rather than a nested map. Firestore's dotted-key merge
+ * semantics have bitten this codebase before, and a layout is an ordered list: a
+ * merge that reorders or half-writes it is worse than one that replaces it whole.
+ */
+data class HomeLayout(
+    val cards: List<HomeCardPlacement>,
+    val hidden: List<HomeCardId>
+) {
+    /**
+     * Drops what this build cannot render and de-duplicates, so a layout written
+     * by a newer version — or a corrupted one — still opens.
+     */
+    fun normalised(): HomeLayout {
+        val seen = LinkedHashSet<HomeCardId>()
+        val kept = mutableListOf<HomeCardPlacement>()
+        for (card in cards) {
+            val definition = HomeCards.definition(card.id) ?: continue
+            if (!seen.add(card.id)) continue
+            kept += card.copy(
+                size = if (card.size in definition.sizes) card.size else definition.defaultSize,
+                heading = card.heading.take(40)
+            )
+        }
+        val hiddenIds = hidden.filter { HomeCards.definition(it) != null && it !in seen }
+        // A card that is neither placed nor hidden is new to this build: show it
+        // rather than silently losing it.
+        for (definition in HomeCards.all) {
+            if (definition.id !in seen && definition.id !in hiddenIds) {
+                kept += HomeCardPlacement(definition.id, definition.defaultSize)
+            }
+        }
+        return HomeLayout(kept, hiddenIds)
+    }
+
+    fun encode(): String {
+        val cardArray = JSONArray()
+        cards.forEach { card ->
+            cardArray.put(JSONObject().apply {
+                put("id", card.id.key)
+                put("size", card.size.key)
+                if (card.heading.isNotEmpty()) put("heading", card.heading)
+                if (card.tone != HomeCardTone.Standard) put("tone", card.tone.key)
+            })
+        }
+        val hiddenArray = JSONArray()
+        hidden.forEach { hiddenArray.put(it.key) }
+        return JSONObject().apply {
+            put("version", VERSION)
+            put("cards", cardArray)
+            put("hidden", hiddenArray)
+        }.toString()
+    }
+
+    companion object {
+        const val VERSION = 1
+
+        /** §3's suggested starting layout, in reading order across the grid. */
+        val standard: HomeLayout
+            get() = HomeLayout(
+                cards = listOf(
+                    HomeCardPlacement(HomeCardId.GettingStarted, HomeCardSize.TwoByOne),
+                    HomeCardPlacement(HomeCardId.QuickActions, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.RecentActivity, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.Money, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.Banking, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.Inventory, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.Customers, HomeCardSize.OneByOne),
+                    HomeCardPlacement(HomeCardId.OrdersProduction, HomeCardSize.TwoByOne),
+                    HomeCardPlacement(HomeCardId.Schedule, HomeCardSize.TwoByOne),
+                    HomeCardPlacement(HomeCardId.Files, HomeCardSize.TwoByOne),
+                    HomeCardPlacement(HomeCardId.Notes, HomeCardSize.TwoByOne)
+                ),
+                hidden = emptyList()
+            )
+
+        fun decode(json: String): HomeLayout {
+            if (json.isBlank()) return standard
+            return try {
+                val root = JSONObject(json)
+                val cards = mutableListOf<HomeCardPlacement>()
+                val cardArray = root.optJSONArray("cards") ?: JSONArray()
+                for (index in 0 until cardArray.length()) {
+                    val entry = cardArray.optJSONObject(index) ?: continue
+                    val id = HomeCardId.fromKey(entry.optString("id")) ?: continue
+                    cards += HomeCardPlacement(
+                        id = id,
+                        size = HomeCardSize.fromKey(entry.optString("size"))
+                            ?: HomeCards.definition(id)?.defaultSize ?: HomeCardSize.OneByOne,
+                        heading = entry.optString("heading", ""),
+                        tone = HomeCardTone.fromKey(entry.optString("tone", "default"))
+                    )
+                }
+                val hidden = mutableListOf<HomeCardId>()
+                val hiddenArray = root.optJSONArray("hidden") ?: JSONArray()
+                for (index in 0 until hiddenArray.length()) {
+                    HomeCardId.fromKey(hiddenArray.optString(index))?.let { hidden += it }
+                }
+                HomeLayout(cards, hidden).normalised()
+            } catch (_: Exception) {
+                // A layout we cannot read is not worth a blank Home screen.
+                standard
+            }
+        }
+    }
+}
+
+/**
+ * Shelf packing: cards keep their order, and one that does not fit the space
+ * left on a row starts the next. Compose's LazyVerticalGrid cannot span two
+ * rows, and §2 needs 2x2, so the placement is worked out here.
+ */
+object HomeGridLayout {
+    data class Slot(val placement: HomeCardPlacement, val row: Int, val column: Int)
+
+    fun slots(placements: List<HomeCardPlacement>, columnCount: Int): List<Slot> {
+        val occupied = HashMap<Int, MutableSet<Int>>()
+        val result = mutableListOf<Slot>()
+        for (placement in placements) {
+            val width = minOf(placement.size.columns, columnCount)
+            val height = placement.size.rows
+            var row = 0
+            var column = 0
+            outer@ while (true) {
+                for (candidate in 0..(columnCount - width)) {
+                    val fits = (0 until height).all { rowOffset ->
+                        (0 until width).all { columnOffset ->
+                            occupied[row + rowOffset]?.contains(candidate + columnOffset) != true
+                        }
+                    }
+                    if (fits) {
+                        column = candidate
+                        break@outer
+                    }
+                }
+                row += 1
+            }
+            for (rowOffset in 0 until height) {
+                for (columnOffset in 0 until width) {
+                    occupied.getOrPut(row + rowOffset) { mutableSetOf() }.add(column + columnOffset)
+                }
+            }
+            result += Slot(placement, row, column)
+        }
+        return result
+    }
+
+    fun rowCount(placements: List<HomeCardPlacement>, columnCount: Int): Int =
+        slots(placements, columnCount).maxOfOrNull { it.row + it.placement.size.rows } ?: 0
+}

@@ -53,6 +53,7 @@ import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.Error
@@ -147,6 +148,7 @@ import uk.co.eggcraft.studioflow.ui.theme.StudioRed
 import uk.co.eggcraft.studioflow.ui.theme.StudioWarningOrange
 
 enum class StudioSection(val title: String, val icon: ImageVector, val accessKey: String) {
+    Home("Home", Icons.Filled.GridView, "always"),
     Dashboard("Dashboard", Icons.Filled.Dashboard, "dashboard"),
     BankSpending("Bank", Icons.Filled.AccountBalance, "dashboard"),
     Orders("Orders", Icons.AutoMirrored.Outlined.ListAlt, "orders"),
@@ -284,11 +286,12 @@ fun StudioFlowMainScreen(
 ) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
-    var section by rememberSaveable { mutableStateOf(StudioSection.Orders) }
+    var section by rememberSaveable { mutableStateOf(StudioSection.Home) }
     var settingsStartKey by rememberSaveable { mutableStateOf<String?>(null) }
     var focusedCustomerName by rememberSaveable { mutableStateOf("") }
     var isNotificationDrawerOpen by rememberSaveable { mutableStateOf(false) }
     val preferredSectionOrder = listOf(
+        StudioSection.Home,
         StudioSection.Orders,
         StudioSection.Production,
         StudioSection.Inventory,
@@ -601,6 +604,10 @@ fun StudioFlowMainScreen(
                         settingsStartKey = null
                         section = StudioSection.Customers
                     },
+                    onNavigateSection = { destination ->
+                        settingsStartKey = null
+                        section = destination
+                    },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
                     onUpdateCustomer = onUpdateCustomer,
@@ -747,6 +754,10 @@ fun StudioFlowMainScreen(
                         focusedCustomerName = order.displayCustomerName
                         settingsStartKey = null
                         section = StudioSection.Customers
+                    },
+                    onNavigateSection = { destination ->
+                        settingsStartKey = null
+                        section = destination
                     },
                     onCreateOrder = onCreateOrder,
                     onCreateCustomer = onCreateCustomer,
@@ -1397,6 +1408,8 @@ private fun StudioSectionContent(
     onRestoreOrder: (StudioOrder) -> Unit,
     focusedCustomerName: String,
     onOpenCustomerFromOrder: (StudioOrder) -> Unit,
+    /** Home hands off to a full screen; the shell owns which section is showing. */
+    onNavigateSection: (StudioSection) -> Unit,
     onCreateOrder: () -> Unit,
     onCreateCustomer: (String, String, String, String, String, String, String, String, String) -> Unit,
     onUpdateCustomer: (StudioCustomer) -> Unit,
@@ -1487,6 +1500,25 @@ private fun StudioSectionContent(
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
     Column(modifier = modifier.fillMaxSize()) {
         when (activeSection) {
+            StudioSection.Home -> uk.co.eggcraft.studioflow.features.home.HomeScreen(
+                state = state,
+                access = uk.co.eggcraft.studioflow.features.home.HomeAccess(
+                    orders = state.workspace?.memberAccess?.orders ?: true,
+                    dashboard = state.workspace?.memberAccess?.dashboard ?: true,
+                    bankFeed = (state.workspace?.billingPlan?.allowsBankFeed ?: false) &&
+                        (state.workspace?.isOwner == true ||
+                            (state.workspace?.memberAccess?.bankFeed == true &&
+                                (state.workspace?.canSeeFinancialData ?: true))),
+                    customers = state.workspace?.memberAccess?.customers ?: true,
+                    schedule = state.workspace?.memberAccess?.schedule ?: true,
+                    files = state.workspace?.memberAccess?.clientFiles ?: true,
+                    notes = state.workspace?.memberAccess?.notes ?: true
+                ),
+                onOpenSection = { destination ->
+                    StudioSection.entries.firstOrNull { it.name == destination }?.let { onNavigateSection(it) }
+                },
+                onNewOrder = onCreateOrder
+            )
             StudioSection.Dashboard -> DashboardScreen(
                 state = state,
                 onUpdateWorkspaceSettings = onUpdateWorkspaceSettings

@@ -2930,6 +2930,43 @@ class StudioFlowRepository(
         return (raw["itemsMoved"] as? Number)?.toInt() ?: 0
     }
 
+    /**
+     * The signed-in user's Home layout for this workspace.
+     *
+     * personalInterfaceSettings is already the per-workspace, per-user document —
+     * the same place language and theme live. That is the scope the spec asks for:
+     * one member rearranging their Home must not move anyone else's.
+     */
+    fun homeLayoutFlow(workspaceId: String, userId: String): Flow<String> = callbackFlow {
+        if (workspaceId.isBlank() || userId.isBlank()) {
+            trySend("")
+            awaitClose { }
+            return@callbackFlow
+        }
+        val registration = db.collection("companies").document(workspaceId)
+            .collection("personalInterfaceSettings").document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                trySend(snapshot?.getString("homeLayout").orEmpty())
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /**
+     * Saved through the callable, never written straight to Firestore.
+     *
+     * personalInterfaceSettings is read-your-own but write-denied to clients on
+     * purpose — the rule routes writes through savePersonalInterfaceSettings so
+     * the server checks membership and validates the payload. A direct write
+     * looks like it works, because the SDK applies it locally first and the next
+     * snapshot then quietly replaces it with the server's unchanged copy.
+     */
+    suspend fun saveHomeLayout(workspaceId: String, layoutJson: String) {
+        functions.getHttpsCallable("savePersonalInterfaceSettings")
+            .call(mapOf("companyId" to workspaceId, "settings" to mapOf("homeLayout" to layoutJson)))
+            .await()
+    }
+
     suspend fun inventorySummary(workspaceId: String): StudioInventorySummary {
         val raw = inventoryCall("getInventorySummary", workspaceId)
         return StudioInventorySummary.from(raw["summary"] as? Map<*, *> ?: emptyMap<String, Any?>())
