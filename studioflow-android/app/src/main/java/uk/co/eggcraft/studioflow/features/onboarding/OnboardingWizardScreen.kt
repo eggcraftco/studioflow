@@ -36,16 +36,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val CardBackground = Color(0xFF1B1B1F)
-private val ScreenBackground = Color(0xFF121212)
-private val Accent = Color(0xFF4C8DFF)
-private val Muted = Color(0xFF9AA0A6)
+// The sign-up wizard is always light, on every platform. Whoever is answering
+// has not chosen a theme yet — the account is created on light and Settings can
+// change it afterwards — and the first screen anyone sees should not be dark.
+// These were 0xFF1B1B1F / 0xFF121212, which made this screen dark even for a
+// workspace running the light theme.
+private val CardBackground = Color(0xFFFFFFFF)
+private val ScreenBackground = Color(0xFFF6F7F9)
+private val Accent = Color(0xFF2563EB)
+private val Muted = Color(0xFF6B7280)
+/** Primary text on the light wizard. Named rather than Color.Black so the
+ *  contrast choice is visible in one place. */
+private val InkStrong = Color(0xFF17181C)
 
 @Composable
 private fun WizardChip(title: String, isOn: Boolean, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(999.dp),
-        color = if (isOn) Accent.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f),
+        color = if (isOn) Accent.copy(alpha = 0.18f) else InkStrong.copy(alpha = 0.05f),
         modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
     ) {
         TextButton(onClick = onClick) {
@@ -53,7 +61,7 @@ private fun WizardChip(title: String, isOn: Boolean, onClick: () -> Unit) {
                 title,
                 fontSize = 13.sp,
                 fontWeight = if (isOn) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isOn) Accent else Color.White
+                color = if (isOn) Accent else InkStrong
             )
         }
     }
@@ -63,7 +71,7 @@ private fun WizardChip(title: String, isOn: Boolean, onClick: () -> Unit) {
 private fun WizardOptionRow(title: String, detail: String, isOn: Boolean, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isOn) Accent.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.04f),
+        color = if (isOn) Accent.copy(alpha = 0.10f) else InkStrong.copy(alpha = 0.04f),
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
     ) {
         TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
@@ -76,7 +84,7 @@ private fun WizardOptionRow(title: String, detail: String, isOn: Boolean, onClic
                 ) {}
                 Spacer(Modifier.size(11.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                     if (detail.isNotBlank()) {
                         Text(detail, fontSize = 12.sp, color = Muted)
                     }
@@ -98,7 +106,7 @@ private fun WizardPicker(
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Muted)
         Box {
             OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(options.firstOrNull { it.first == selected }?.second ?: selected, color = Color.White)
+                Text(options.firstOrNull { it.first == selected }?.second ?: selected, color = InkStrong)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 options.forEach { (value, text) ->
@@ -122,7 +130,7 @@ private fun ConnectTile(
     val brand = Color(integration.colour)
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.04f),
+        color = InkStrong.copy(alpha = 0.04f),
         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -147,7 +155,7 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
             modifier = Modifier
                 .fillMaxWidth()
                 .height(4.dp)
-                .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                .background(InkStrong.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
         ) {
             Box(
                 modifier = Modifier
@@ -157,7 +165,7 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
             )
         }
         Spacer(Modifier.size(12.dp))
-        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = InkStrong)
         Spacer(Modifier.size(4.dp))
         Text(subtitle, fontSize = 13.sp, color = Muted)
     }
@@ -186,22 +194,22 @@ fun OnboardingWizardScreen(
 
     val title = when (step) {
         1 -> t("Workspace basics")
-        2 -> t("Tell us about your work")
-        3 -> t("What should NivaDesk help with first?")
+        2 -> t("What should NivaDesk help with first?")
+        3 -> t("Tell us about your work")
         4 -> t("Bring your work in")
         else -> t("Your plan")
     }
     val subtitle = when (step) {
         1 -> t("We've suggested these from your location. You can change them now or later in Settings.")
-        2 -> t("This sets up your order cards, production stages and labels.")
-        3 -> t("Your answer decides what your dashboard and first tasks show.")
+        2 -> t("Your answer decides what your dashboard and first tasks show.")
+        3 -> t("This sets up your order cards, production stages and labels.")
         4 -> t("Pick how you'd like to start. You can do any of the others later.")
         else -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
     }
     val canContinue = when (step) {
         1 -> answers.country.isNotBlank() && answers.currency.isNotBlank()
-        2 -> answers.workKinds.isNotEmpty()
-        3 -> answers.mainGoal != null
+        2 -> answers.mainGoal != null
+        3 -> answers.workKinds.isNotEmpty()
         4 -> answers.start != null
         // The plan step arrives with a recommendation already chosen.
         else -> true
@@ -247,8 +255,8 @@ fun OnboardingWizardScreen(
                         }
                     }
 
-                    2 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(t("What kind of work do you do?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    3 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text(t("What kind of work do you do?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                         Text(t("Pick as many as apply."), fontSize = 12.sp, color = Muted)
                         androidx.compose.foundation.layout.FlowRow(modifier = Modifier.fillMaxWidth()) {
                             OnboardingWorkKind.entries.forEach { kind ->
@@ -260,7 +268,7 @@ fun OnboardingWizardScreen(
                                 }
                             }
                         }
-                        Text(t("How do you mainly work?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(t("How do you mainly work?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                         OnboardingWorkflow.entries.forEach { flow ->
                             WizardOptionRow(t(flow.label), t(flow.detail), answers.workflow == flow) {
                                 answers = answers.copy(workflow = flow)
@@ -290,7 +298,7 @@ fun OnboardingWizardScreen(
                         )
                     }
 
-                    3 -> Column {
+                    2 -> Column {
                         val visible = if (showAllGoals) OnboardingGoal.entries
                         else OnboardingGoal.entries.filter { it.isPrimary }
                         visible.forEach { goal ->
@@ -308,7 +316,7 @@ fun OnboardingWizardScreen(
                         }
                         if (answers.mainGoal != null) {
                             Spacer(Modifier.size(8.dp))
-                            Text(t("Anything else?"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text(t("Anything else?"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                             Text(t("Up to two more. Optional."), fontSize = 11.sp, color = Muted)
                             androidx.compose.foundation.layout.FlowRow(modifier = Modifier.fillMaxWidth()) {
                                 OnboardingGoal.entries.filter { it != answers.mainGoal }.forEach { goal ->
@@ -327,7 +335,7 @@ fun OnboardingWizardScreen(
                     }
 
                     4 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(t("Connect your accounts"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(t("Connect your accounts"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                         Text(
                             t("Optional. Connecting now means your workspace opens with your real work already in it."),
                             fontSize = 12.sp, color = Muted
@@ -339,7 +347,7 @@ fun OnboardingWizardScreen(
                             t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time."),
                             fontSize = 11.sp, color = Muted
                         )
-                        Text(t("Or start another way"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text(t("Or start another way"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                         OnboardingStart.entries.forEach { option ->
                             WizardOptionRow(t(option.label), t(option.detail), answers.start == option) {
                                 answers = answers.copy(start = option)
@@ -382,7 +390,7 @@ fun OnboardingWizardScreen(
                     }
                 }
 
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                HorizontalDivider(color = InkStrong.copy(alpha = 0.10f))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         t("You can change all of this later in Settings."),
@@ -454,7 +462,7 @@ fun OnboardingReadyScreen(
                 .padding(horizontal = if (isCompact) 16.dp else 32.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(t("Your workspace is ready"), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(t("Your workspace is ready"), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = InkStrong)
                 Text(summary, fontSize = 13.sp, color = Muted)
                 tasks.forEachIndexed { index, task ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -468,10 +476,10 @@ fun OnboardingReadyScreen(
                             )
                         }
                         Spacer(Modifier.size(10.dp))
-                        Text(t(task), fontSize = 13.5.sp, color = Color.White)
+                        Text(t(task), fontSize = 13.5.sp, color = InkStrong)
                     }
                 }
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                HorizontalDivider(color = InkStrong.copy(alpha = 0.10f))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         t("You can change all of this later in Settings."),

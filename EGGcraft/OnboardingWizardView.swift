@@ -840,8 +840,8 @@ struct OnboardingWizardView: View {
     private var title: String {
         switch step {
         case 1: return t("Workspace basics", lang: lang)
-        case 2: return t("Tell us about your work", lang: lang)
-        case 3: return t("What should NivaDesk help with first?", lang: lang)
+        case 2: return t("What should NivaDesk help with first?", lang: lang)
+        case 3: return t("Tell us about your work", lang: lang)
         case 4: return t("Bring your work in", lang: lang)
         default: return t("Your plan", lang: lang)
         }
@@ -850,8 +850,8 @@ struct OnboardingWizardView: View {
     private var subtitle: String {
         switch step {
         case 1: return t("We've suggested these from your location. You can change them now or later in Settings.", lang: lang)
-        case 2: return t("This sets up your order cards, production stages and labels.", lang: lang)
-        case 3: return t("Your answer decides what your dashboard and first tasks show.", lang: lang)
+        case 2: return t("Your answer decides what your dashboard and first tasks show.", lang: lang)
+        case 3: return t("This sets up your order cards, production stages and labels.", lang: lang)
         case 4: return t("Pick how you'd like to start. You can do any of the others later.", lang: lang)
         default: return t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.", lang: lang)
         }
@@ -860,8 +860,8 @@ struct OnboardingWizardView: View {
     private var canContinue: Bool {
         switch step {
         case 1: return !answers.country.isEmpty && !answers.currency.isEmpty
-        case 2: return !answers.workKinds.isEmpty
-        case 3: return answers.mainGoal != nil
+        case 2: return answers.mainGoal != nil
+        case 3: return !answers.workKinds.isEmpty
         case 4: return answers.start != nil
         // The plan step arrives with a recommendation already chosen.
         default: return true
@@ -877,8 +877,8 @@ struct OnboardingWizardView: View {
     private var stepBody: some View {
         switch step {
         case 1: OnboardingStepBasics(answers: $answers, lang: lang)
-        case 2: OnboardingStepWork(answers: $answers, lang: lang)
-        case 3: OnboardingStepGoal(answers: $answers, showAllGoals: $showAllGoals, lang: lang)
+        case 2: OnboardingStepGoal(answers: $answers, showAllGoals: $showAllGoals, lang: lang)
+        case 3: OnboardingStepWork(answers: $answers, lang: lang)
         case 4:
             OnboardingStepStart(answers: $answers, lang: lang, saving: saving) { integration in
                 onConnect(answers, integration)

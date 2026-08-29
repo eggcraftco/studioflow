@@ -10334,9 +10334,14 @@ struct ContentView: View {
         .frame(maxWidth: 540)
     }
 
-    /// The four-question wizard (see OnboardingWizardView.swift), in place of the
-    /// old business-type dropdown and prompt box. There is no Skip: the last step
-    /// offers "Start empty" and "I'll set this up later" as real answers instead.
+    /// The sign-up wizard (see OnboardingWizardView.swift), in place of the old
+    /// business-type dropdown and prompt box. There is no Skip: step four offers
+    /// "Start empty" and "I'll set this up later" as real answers instead, and
+    /// step five confirms which plan the free fortnight is spent on.
+    ///
+    /// Always presented light. Whoever is answering has not chosen a theme yet —
+    /// the account is created on light and Settings can change it afterwards —
+    /// and the first screen anyone sees should not be a half-applied dark one.
     private var businessTemplateOnboardingView: some View {
         ZStack {
             bgMain.ignoresSafeArea()
@@ -10368,6 +10373,7 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(.light)
     }
 
     private func applyOnboardingWizardAnswers(_ answers: OnboardingAnswers) {

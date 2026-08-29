@@ -9265,6 +9265,16 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
     updatedAt: timestamp
   }, { merge: true });
 
+  // A new account opens in light. Written EXPLICITLY rather than by changing the
+  // "System" default, because that default is also what every existing member
+  // who never picked a theme is running on — moving it would take them off the
+  // system setting they chose by not choosing. This only touches accounts being
+  // created right now, and Settings can move it to Dark or System afterwards.
+  batch.set(personalInterfaceSettingsDocRef(uid, uid), {
+    appTheme: "Light",
+    updatedAt: timestamp
+  }, { merge: true });
+
   batch.set(companyRef, {
     companyId: uid,
     ownerUid: uid,
