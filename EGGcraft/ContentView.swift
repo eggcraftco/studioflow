@@ -11194,6 +11194,10 @@ struct ContentView: View {
 
     private func canOpenTab(_ tab: String) -> Bool {
         switch tab {
+        // Home needs no permission of its own: it shows only the cards the member
+        // is already allowed to see, and hides the rest. Gating the tab itself
+        // would lock out exactly the people it is meant to orient.
+        case "Home": return true
         case "Orders": return canAccessOrders
         case "Dashboard": return canAccessDashboard
         case "BankSpending": return canAccessBankSpending
@@ -11214,7 +11218,7 @@ struct ContentView: View {
     }
 
     private var firstAccessibleWorkspaceTab: String {
-        ["Orders", "Dashboard", "Schedule", "TeamSchedule", "Customers", "QuickReply", "Messages", "Notes", "Settings"].first(where: canOpenTab) ?? "Orders"
+        ["Home", "Orders", "Dashboard", "Schedule", "TeamSchedule", "Customers", "QuickReply", "Messages", "Notes", "Settings"].first(where: canOpenTab) ?? "Home"
     }
 
     private func enforceWorkspaceRoleAccess() {

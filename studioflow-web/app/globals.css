@@ -27112,7 +27112,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
    never across the whole card (§4).
    =================================================================== */
 
-.home-screen { display: flex; flex-direction: column; gap: 18px; padding-bottom: 40px; }
+/* Home is the one screen that wants the whole window. The shell caps every page
+   at 1180px, which is right for reading a form and wrong for a four-column board
+   — at that width the cards are narrower than their own content. Only Home opts
+   out, so no other screen changes. */
+.shell-container:has(> * > .home-screen),
+.shell-container:has(.home-screen) { max-width: none; }
+
+.home-screen { display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px; }
 
 .home-header {
   display: flex; align-items: flex-start; justify-content: space-between;
