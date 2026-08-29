@@ -27176,6 +27176,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-card-grip:active { cursor: grabbing; }
 .home-card-icon { display: inline-flex; width: 20px; height: 20px; opacity: 0.75; flex: 0 0 auto; }
 .home-card-icon svg { width: 100%; height: 100%; }
+/* Two of the card glyphs are drawn as a currentColor disc with the shape cut out
+   of it. The cutout is white by default, and the only dark-mode override lives
+   inside .order-detail-card — so on a dark Home the disc turned near-white and
+   swallowed its own glyph. Cut it out in the card's surface colour instead. */
+body[data-studio-theme="dark"] .home-card-icon { --card-title-icon-cutout: #16181c; }
+@media (prefers-color-scheme: dark) {
+  body:not([data-studio-theme="light"]) .home-card-icon { --card-title-icon-cutout: #16181c; }
+}
 .home-card-title {
   margin: 0; font-size: 14px; font-weight: 780; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
