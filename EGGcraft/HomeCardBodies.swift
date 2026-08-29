@@ -201,8 +201,17 @@ struct HomeRecentActivityBody: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows), id: \.id) { item in
-                    HomeRow(title: item.title.isEmpty ? t("Update", lang: lang) : item.title,
-                            detail: homeRelative(item.createdAt, lang: lang))
+                    VStack(alignment: .leading, spacing: 0) {
+                        HomeRow(title: item.title.isEmpty ? t("Update", lang: lang) : item.title,
+                                detail: homeRelative(item.createdAt, lang: lang))
+                        if size != .oneByOne, !item.message.isEmpty {
+                            Text(item.message)
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
             }
         }
@@ -574,7 +583,7 @@ struct HomeFilesBody: View {
                 if size == .oneByOne {
                     Text("\(files.count)")
                         .font(.system(size: 26, weight: .heavy))
-                    Text(t("Files", lang: lang))
+                    Text(t("File library", lang: lang))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.secondary)
                 } else {

@@ -295,25 +295,45 @@ export function CustomersCardBody({ size, data, t, moneySettings, hideNumbers }:
 /* -------------------------------------------------------- Recent activity */
 
 export function RecentActivityCardBody({ size, data, t }: CardBodyProps) {
-  const rows = data.orders
-    .slice()
-    .sort((a, b) => (b.paymentDate?.getTime() ?? 0) - (a.paymentDate?.getTime() ?? 0))
-    .slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
+  // The workspace's own notification stream, not a second list of orders sorted
+  // by date — that was the Orders card again under a different heading, which is
+  // exactly what §5 says this card must not be.
+  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
 
   if (rows.length === 0) return null;
 
   return (
     <ul className="home-list home-activity">
-      {rows.map((order) => (
-        <li key={order.id}>
-          <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-            {order.designName || order.watchRef || order.customerName}
-          </Link>
-          <span className="home-activity-status">{t(order.status || "Not Yet")}</span>
-        </li>
-      ))}
+      {rows.map((item) => {
+        const line = (
+          <>
+            <span className="home-activity-title">{item.title || t("Update")}</span>
+            {size !== "1x1" && item.message ? (
+              <span className="home-activity-message">{item.message}</span>
+            ) : null}
+          </>
+        );
+        return (
+          <li key={item.id}>
+            {item.orderId ? (
+              <Link href={`/orders?selectedOrderId=${encodeURIComponent(item.orderId)}`}>{line}</Link>
+            ) : (
+              <span>{line}</span>
+            )}
+            <span className="home-activity-status">{homeRelative(item.createdAtMillis, t)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
+}
+
+/** "12 min ago" while it is fresh, then a plain date. */
+function homeRelative(millis: number, t: (text: string) => string) {
+  if (!millis) return "";
+  const minutes = Math.max(1, Math.round((Date.now() - millis) / 60000));
+  if (minutes < 60) return `${minutes} ${t("min ago")}`;
+  return new Date(millis).toLocaleDateString();
 }
 
 /* ------------------------------------------------------------------ Files */

@@ -230,6 +230,11 @@ private fun HomeRecentActivityBody(size: HomeCardSize, state: StudioFlowUiState,
         Column {
             rows.forEach { item ->
                 HomeRow(item.title.ifEmpty { t("Update") }, relativeLabel(item.createdAt, t))
+                if (size != HomeCardSize.OneByOne && item.message.isNotBlank()) {
+                    Text(item.message, fontSize = 9.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
@@ -517,7 +522,7 @@ private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, t: (Stri
     if (size == HomeCardSize.OneByOne) {
         Column {
             Text("${files.size}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-            Text(t("Files"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+            Text(t("File library"), fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
