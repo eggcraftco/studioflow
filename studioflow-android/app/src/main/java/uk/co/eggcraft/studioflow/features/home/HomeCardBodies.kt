@@ -17,7 +17,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Note
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Inventory2
@@ -665,13 +669,21 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
         return
     }
 
+    // The fourth tile is what the workspace pays on repeat, as the sheet has it —
+    // the review queue is already the card's link.
+    val fixedTotal = bankMonthlyFixed(state)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SyncLine(state, t)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, modifier = Modifier.weight(1f))
-            HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange, modifier = Modifier.weight(1f))
-            HomeMetricTile(t("to review"), "$toReview", if (toReview > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
-            HomeMetricTile(t("missing receipts"), "$missing", if (missing > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+            HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green,
+                modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowDownward)
+            HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange,
+                modifier = Modifier.weight(1f), icon = Icons.Filled.ArrowUpward)
+            HomeMetricTile(t("Missing receipts"), "$missing",
+                if (missing > 0) HomeTone.red else HomeTone.accent,
+                modifier = Modifier.weight(1f), icon = Icons.Filled.ReceiptLong)
+            HomeMetricTile(t("Fixed"), if (fixedTotal > 0) "≈ " + money(fixedTotal, state) else "—",
+                HomeTone.accent, modifier = Modifier.weight(1f), icon = Icons.Filled.CalendarMonth)
         }
         if (size == HomeCardSize.TwoByTwo) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -720,10 +732,13 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
                     Column {
                         Text(t("{count} transactions need a receipt").replace("{count}", "$missing"),
                             fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(t("Read-only bank connection. NivaDesk never moves money."),
+                        Text(t("We couldn't find a receipt for {count} transactions.").replace("{count}", "$missing"),
                             fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    Spacer(Modifier.weight(1f))
+                    Text("${t("Go to banking")}  →", fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold, color = HomeTone.accent, maxLines = 1)
                 }
             }
         } else {

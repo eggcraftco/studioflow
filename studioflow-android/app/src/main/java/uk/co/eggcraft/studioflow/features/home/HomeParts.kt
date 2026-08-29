@@ -115,14 +115,22 @@ fun HomeEyebrow(text: String, strong: Boolean = true) {
 }
 
 @Composable
-fun HomeMetricTile(label: String, value: String, tone: Color = HomeTone.accent, sub: String = "", modifier: Modifier = Modifier) {
+fun HomeMetricTile(
+    label: String, value: String, tone: Color = HomeTone.accent, sub: String = "",
+    modifier: Modifier = Modifier,
+    /** The mark inside the tinted disc, tinted by the tile's own colour. */
+    icon: ImageVector? = null
+) {
     Column(
         modifier
             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Box(Modifier.size(20.dp).background(tone.copy(alpha = 0.16f), CircleShape))
+        Box(Modifier.size(20.dp).background(tone.copy(alpha = 0.16f), CircleShape),
+            contentAlignment = Alignment.Center) {
+            if (icon != null) Icon(icon, null, Modifier.size(11.dp), tone)
+        }
         Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
             overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = tone,

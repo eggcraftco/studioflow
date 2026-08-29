@@ -888,13 +888,21 @@ struct HomeBankingBody: View {
                     Spacer(minLength: 0)
                 }
             } else {
+                // The fourth tile is what the workspace pays on repeat, as the
+                // sheet has it — the review queue is already the card's link.
+                let fixed = bankMonthlyFixedTotal(firebaseManager)
                 VStack(alignment: .leading, spacing: 10) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
                     HStack(spacing: 10) {
-                        HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
-                        HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.orange)
-                        HomeMetricTile(label: t("to review", lang: lang), value: "\(toReview)", tone: toReview > 0 ? HomeTone.orange : HomeTone.accent)
-                        HomeMetricTile(label: t("missing receipts", lang: lang), value: "\(missing)", tone: missing > 0 ? HomeTone.orange : HomeTone.accent)
+                        HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
+                                       tone: HomeTone.green, symbol: "arrow.down")
+                        HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent),
+                                       tone: HomeTone.orange, symbol: "arrow.up")
+                        HomeMetricTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
+                                       tone: missing > 0 ? HomeTone.red : HomeTone.accent, symbol: "doc.text.magnifyingglass")
+                        HomeMetricTile(label: t("Fixed", lang: lang),
+                                       value: fixed > 0 ? "≈ " + money(fixed) : "—",
+                                       tone: HomeTone.accent, symbol: "calendar")
                     }
                     if size == .twoByTwo {
                         HStack(alignment: .top, spacing: 12) {
@@ -932,10 +940,14 @@ struct HomeBankingBody: View {
                                     Text(t("{count} transactions need a receipt", lang: lang)
                                         .replacingOccurrences(of: "{count}", with: "\(missing)"))
                                         .font(.system(size: 12.5, weight: .bold))
-                                    Text(t("Read-only bank connection. NivaDesk never moves money.", lang: lang))
+                                    Text(t("We couldn't find a receipt for {count} transactions.", lang: lang)
+                                        .replacingOccurrences(of: "{count}", with: "\(missing)"))
                                         .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                                 }
                                 Spacer()
+                                Text(t("Go to banking", lang: lang) + "  →")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(HomeTone.accent)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 9)
                             .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.orange.opacity(0.09)))

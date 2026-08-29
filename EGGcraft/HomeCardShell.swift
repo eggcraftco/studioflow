@@ -203,9 +203,16 @@ struct HomeMetricTile: View {
     let value: String
     var tone: Color = HomeTone.accent
     var sub: String = ""
+    /// The mark inside the tinted disc, tinted by the tile's own colour.
+    var symbol: String = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Circle().fill(tone.opacity(0.16)).frame(width: 22, height: 22)
+            ZStack {
+                Circle().fill(tone.opacity(0.16)).frame(width: 22, height: 22)
+                if !symbol.isEmpty {
+                    Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).foregroundColor(tone)
+                }
+            }
             Text(label)
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundColor(.secondary)
