@@ -27901,9 +27901,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 @media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1000px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
-  .home-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
-  /* One column: every card spans it, whatever size it was asked to be. */
-  .home-card { grid-column: span 1 !important; grid-row: span 1 !important; }
+  /* Two columns on a phone, so a pair of 1x1 cards sits side by side instead of
+     each one eating a whole screen. A 2x1 or 2x2 still takes the full width —
+     it is drawn for two columns and there are exactly two. */
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(196px, auto); gap: 12px; }
   /* Phone cards are tapped, not dragged — long-press enters customise instead. */
   .home-screen:not(.is-customising) .home-card-grip,
   .home-screen:not(.is-customising) .home-card-menu-button { display: none; }

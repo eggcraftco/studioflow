@@ -272,11 +272,10 @@ fun HomeScreen(
         // then run off the edge.
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val availableDp = maxWidth.value.toInt()
-            val columnCount = when {
-                availableDp >= 840 -> 3
-                availableDp >= 600 -> 2
-                else -> 1
-            }
+            // Two columns on a phone, so a pair of 1x1 cards sits side by side
+            // instead of each one eating a whole screen. A 2x1 or 2x2 still fills
+            // the width — it is drawn for two columns and there are exactly two.
+            val columnCount = if (availableDp >= 840) 3 else 2
             val unit = (availableDp - CARD_GAP * (columnCount - 1)) / columnCount
             val rows = HomeGridLayout.rowCount(visible, columnCount)
             Box(
