@@ -46,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PersonAddAlt
@@ -2179,33 +2180,45 @@ private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, compact:
         return
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeMetricTile(t("Total files"), "${files.size}", HomeTone.accent, modifier = Modifier.weight(1f))
-            HomeMetricTile(t("Storage"), fileSize(used.toDouble()), HomeTone.green, modifier = Modifier.weight(1f))
+    // The sheet's three figures: how many, how full, and how many are floating
+    // free. The last is the only one that asks for anything to be done, so it
+    // gets the banner and the way to do it. Every file here comes FROM an order,
+    // so none are unlinked — the figure stays honest at zero rather than
+    // counting the wrong thing.
+    val unlinked = files.filter { it.first.id.isEmpty() }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 10.dp)) {
+            StockTile(t("files"), "${files.size}", HomeTone.accent, compact, Modifier.weight(1f))
+            StockTile(t("Storage"), if (limitBytes > 0) "$pct%" else fileSize(used.toDouble()),
+                if (pct >= 90) HomeTone.red else HomeTone.green, compact, Modifier.weight(1f),
+                sub = if (limitBytes > 0) "${fileSize(used.toDouble())} ${t("of")} ${fileSize(limitBytes.toDouble())}" else "")
+            StockTile(t("Unlinked"), "${unlinked.size}",
+                if (unlinked.isEmpty()) HomeTone.accent else HomeTone.orange, compact, Modifier.weight(1f))
         }
-        HomePanel {
+        HomePanel(compact = compact) {
             HomeEyebrow(t("Recent files"))
-            files.take(if (size == HomeCardSize.TwoByTwo) 5 else 3).forEach { (order, file) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Box(
-                        Modifier
-                            .size(width = 17.dp, height = 21.dp)
-                            .background(fileTone(file.fileName).copy(alpha = 0.16f), RoundedCornerShape(3.dp))
-                            .border(1.dp, fileTone(file.fileName).copy(alpha = 0.5f), RoundedCornerShape(3.dp))
-                    )
-                    Text(file.fileName, fontSize = 12.sp, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    HomeChip(order.customerName.ifEmpty { t("Order") })
-                }
+            files.take(4).forEach { (order, file) -> FileRow(file, order, t, compact) }
+        }
+        if (unlinked.isNotEmpty()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(HomeTone.orange.copy(alpha = 0.12f), RoundedCornerShape(11.dp))
+                    .border(1.dp, HomeTone.orange.copy(alpha = 0.28f), RoundedCornerShape(11.dp))
+                    .padding(horizontal = if (compact) 9.dp else 12.dp, vertical = if (compact) 6.dp else 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 9.dp)
+            ) {
+                Icon(Icons.Filled.Link, null, Modifier.size(if (compact) 13.dp else 15.dp), HomeTone.orange)
+                Text(t("{count} files are not linked to a record.").replace("{count}", "${unlinked.size}"),
+                    fontSize = if (compact) 10.5.sp else 12.sp, fontWeight = FontWeight.SemiBold,
+                    color = HomeTone.orange, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f))
+                Text(t("Review"), fontSize = if (compact) 10.sp else 11.5.sp,
+                    fontWeight = FontWeight.ExtraBold, color = HomeTone.orange)
             }
         }
-        if (size == HomeCardSize.TwoByTwo) {
-            Text(t("One file, multiple links — no duplicates."), fontSize = 10.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Spacer(Modifier.weight(1f))
     }
 }
 

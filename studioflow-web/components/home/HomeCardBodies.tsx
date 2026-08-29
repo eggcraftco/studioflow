@@ -1244,14 +1244,6 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     );
   }
 
-  const tiles = (
-    <div className="home-tile-row is-triple">
-      <MoneyTile label={t("Total files")} value={String(files.length)} tone="blue" />
-      <MoneyTile label={t("Storage")} value={humanSize(used)} tone="green" />
-      <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
-    </div>
-  );
-
   if (size === "2x1") {
     return (
       <div className="home-money is-wide is-files">
@@ -1262,29 +1254,27 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     );
   }
 
+  // The sheet's three figures: how many, how full, and how many are floating
+  // free. The last is the only one that asks for anything to be done.
   return (
-    <div className="home-money is-large">
-      {tiles}
-      <div className="home-money-panels">
-        <div className="home-panel is-flush">
-          <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-          <ul className="home-record-list">{files.slice(0, 5).map(row)}</ul>
-        </div>
-        <div className="home-panel is-flush">
-          <p className="home-eyebrow is-strong">{t("Needs linking")}</p>
-          {unlinked.length === 0 ? (
-            <p className="home-card-note">{t("All set — nice work.")}</p>
-          ) : (
-            <>
-              <p className="home-card-note">
-                {t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}
-              </p>
-              <ul className="home-record-list">{unlinked.slice(0, 3).map(row)}</ul>
-            </>
-          )}
-        </div>
+    <div className="home-money is-large is-files">
+      <div className="home-tile-row is-triple">
+        <MoneyTile label={t("files")} value={String(files.length)} tone="blue" />
+        <MoneyTile label={t("Storage")} value={pct !== null ? `${pct}%` : humanSize(used)}
+                   tone="green" sub={limitBytes > 0 ? `${humanSize(used)} ${t("of")} ${humanSize(limitBytes)}` : undefined} />
+        <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
       </div>
-      <p className="home-action-note">{t("One file, multiple links — no duplicates.")}</p>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list">{files.slice(0, 4).map(fileRow)}</ul>
+      </div>
+      {unlinked.length > 0 ? (
+        <Link className="home-linking-banner" href="/files">
+          <span aria-hidden="true">🔗</span>
+          <strong>{t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}</strong>
+          <em>{t("Review")}</em>
+        </Link>
+      ) : null}
     </div>
   );
 }

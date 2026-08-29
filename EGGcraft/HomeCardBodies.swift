@@ -2580,29 +2580,56 @@ struct HomeFilesBody: View {
                     Spacer(minLength: 0)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        HomeMetricTile(label: t("Total files", lang: lang), value: "\(files.count)", tone: HomeTone.accent)
-                        HomeMetricTile(label: t("Storage", lang: lang), value: homeFileSize(used), tone: HomeTone.green)
+                // The sheet's three figures: how many, how full, and how many
+                // are floating free. The last is the only one that asks for
+                // anything to be done, so it gets the banner and the way to do
+                // it.
+                let limitBytes = Double(auth.effectiveStorageLimitMB) * 1024 * 1024
+                let pct = limitBytes > 0 ? min(100, Int((used / limitBytes) * 100)) : 0
+                // Every file here comes FROM an order, so none are unlinked —
+                // an order with a blank customer name is not an unlinked file.
+                // The figure stays honest at zero rather than counting the
+                // wrong thing; web reads a list that can carry loose files.
+                let unlinked = files.filter { $0.0.id?.isEmpty ?? true }
+                VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+                    HStack(spacing: compact ? 5 : 10) {
+                        HomeStockTile(label: t("files", lang: lang), value: "\(files.count)",
+                                      tone: HomeTone.accent, compact: compact)
+                        HomeStockTile(label: t("Storage", lang: lang),
+                                      value: limitBytes > 0 ? "\(pct)%" : homeFileSize(used),
+                                      tone: pct >= 90 ? HomeTone.red : HomeTone.green, compact: compact,
+                                      sub: limitBytes > 0
+                                        ? "\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))"
+                                        : "")
+                        HomeStockTile(label: t("Unlinked", lang: lang), value: "\(unlinked.count)",
+                                      tone: unlinked.isEmpty ? HomeTone.accent : HomeTone.orange,
+                                      compact: compact)
                     }
-                    HomePanel {
+                    HomePanel(compact: compact) {
                         HomeEyebrow(text: t("Recent files", lang: lang))
-                        ForEach(Array(files.prefix(size == .twoByTwo ? 5 : 3).enumerated()), id: \.offset) { _, entry in
-                            HStack(spacing: 9) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(homeFileTone(entry.1.fileName).opacity(0.16))
-                                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(homeFileTone(entry.1.fileName).opacity(0.5), lineWidth: 1))
-                                    .frame(width: 17, height: 21)
-                                Text(entry.1.fileName).font(.system(size: 12)).lineLimit(1)
-                                Spacer(minLength: 6)
-                                HomeChip(text: entry.0.customerName.isEmpty ? t("Order", lang: lang) : entry.0.customerName)
-                            }
-                            .padding(.vertical, 5)
+                        ForEach(Array(files.prefix(4).enumerated()), id: \.offset) { _, entry in
+                            HomeFileRow(file: entry.1, order: entry.0, lang: lang, compact: compact)
                         }
                     }
-                    if size == .twoByTwo {
-                        Text(t("One file, multiple links — no duplicates.", lang: lang))
-                            .font(.system(size: 11)).foregroundColor(.secondary)
+                    if !unlinked.isEmpty {
+                        HStack(spacing: compact ? 7 : 9) {
+                            Image(systemName: "link")
+                                .font(.system(size: compact ? 11 : 13)).foregroundColor(HomeTone.orange)
+                            Text(t("{count} files are not linked to a record.", lang: lang)
+                                    .replacingOccurrences(of: "{count}", with: "\(unlinked.count)"))
+                                .font(.system(size: compact ? 10.5 : 12, weight: .semibold))
+                                .foregroundColor(HomeTone.orange).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(t("Review", lang: lang))
+                                .font(.system(size: compact ? 10 : 11.5, weight: .heavy))
+                                .foregroundColor(HomeTone.orange)
+                                .padding(.horizontal, 9).padding(.vertical, 2)
+                                .overlay(Capsule().stroke(HomeTone.orange.opacity(0.5), lineWidth: 1))
+                        }
+                        .padding(.horizontal, compact ? 9 : 12).padding(.vertical, compact ? 6 : 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 11).fill(HomeTone.orange.opacity(0.12)))
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(HomeTone.orange.opacity(0.28), lineWidth: 1))
                     }
                     Spacer(minLength: 0)
                 }
