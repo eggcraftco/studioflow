@@ -150,9 +150,13 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string): Ho
     (async () => {
       setDomain("inventory", "loading");
       try {
-        const next = await getInventorySummary(workspace);
+        // The callable answers { ok, summary } — the summary is nested. Reading
+        // the wrapper as if it were the summary gave every field undefined, and
+        // cash(undefined) still prints a currency zero, so the card looked fine
+        // while showing nothing. No cast here: let the compiler check the shape.
+        const response = await getInventorySummary(workspace);
         if (cancelled.current) return;
-        setInventory(next as InventorySummary);
+        setInventory(response.summary ?? null);
         setDomain("inventory", "ready");
       } catch {
         if (!cancelled.current) setDomain("inventory", "error");

@@ -1,4 +1,5 @@
 "use client";
+import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivateMoney } from "@/components/PricePrivacy";
@@ -132,6 +133,8 @@ export function InventoryContent({
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  // Arriving from Home's "Add inventory item" quick action.
+  useQuickActionParam("new", Boolean(workspace), () => setModalOpen(true));
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [openingOpen, setOpeningOpen] = useState(false);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioT } from "@/lib/studioflow/language";
 import { loadWorkspaceContext, loadRecentOrders, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
@@ -42,6 +43,12 @@ export default function NotesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPhone, setIsPhone] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Arriving from Home's "Add note" quick action: open the composer straight
+  // away rather than dropping the user on a list they then have to act on.
+  useQuickActionParam("new", Boolean(user), () => {
+    if (!user) return;
+    setEditing(newKeepNote(user.uid, user.email ?? "", user.displayName ?? ""));
+  });
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 768px)");

@@ -8,6 +8,7 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import {
   loadWorkspaceContext,
   loadWorkspaceCustomers,
@@ -543,6 +544,9 @@ export default function CustomersPage() {
     setForm(EMPTY_CUSTOMER_FORM);
     setFormMode("create");
   }
+
+  // Arriving from Home's "Add customer" quick action.
+  useQuickActionParam("new", Boolean(workspace), openCreateForm);
 
   function openEditForm(customer: CustomerDirectoryItem) {
     setActionStatus("");

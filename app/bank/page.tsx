@@ -14,6 +14,7 @@ import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from "fi
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
@@ -325,6 +326,13 @@ function BankPageContent() {
   // mutation (connect, categorise, receipts, Pandle) stays with the owner.
   const canViewBank = isOwner || workspaceAccessAllows(workspace?.memberAccess, "bankFeed");
   const companyId = workspace?.id ?? "";
+  // Arriving from Home's "Add receipt" quick action: open the receipt picker.
+  // The feed is read-only (§7) — a receipt is matched to a transaction, never
+  // typed in as a new one.
+  useQuickActionParam("receipt", Boolean(companyId), () => {
+    document.getElementById("bank-ocr-input")?.click();
+  });
+
 
   // Live views over the server-written feed (owner-only per Firestore rules).
   useEffect(() => {
