@@ -528,7 +528,10 @@ fun HomeCardShell(
                     fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
-                if (headerPill.isNotEmpty()) {
+                // While customising, a phone header carries the grip and the ⋯ as
+                // well; the pill is a label you read, not something you move, so
+                // it stands down and gives the title its width back.
+                if (headerPill.isNotEmpty() && !(compact && customising)) {
                     Spacer(Modifier.width(7.dp))
                     // The promise sits beside the title, not in a footnote.
                     // softWrap = false, or a narrow card wraps the pill one letter
@@ -542,7 +545,7 @@ fun HomeCardShell(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                if (headerNote.isNotEmpty()) {
+                if (headerNote.isNotEmpty() && !(compact && customising)) {
                     Text(headerNote, fontSize = 10.sp, maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)

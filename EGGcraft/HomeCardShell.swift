@@ -73,7 +73,10 @@ struct HomeCardShell<CardBody: View>: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .layoutPriority(1)
-                if !headerPill.isEmpty {
+                // While customising, a phone header carries the grip and the ⋯ as
+                // well; the pill is a label you read, not something you move, so
+                // it stands down and gives the title its width back.
+                if !headerPill.isEmpty && !(compact && customising) {
                     // fixedSize, or a narrow card wraps the pill one letter per
                     // line — which is exactly what it did on a phone.
                     Text(headerPill)
@@ -94,7 +97,7 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
-            if !headerNote.isEmpty {
+            if !headerNote.isEmpty && !(compact && customising) {
                 Text(headerNote)
                     .font(.system(size: 10.5))
                     .foregroundColor(.secondary)

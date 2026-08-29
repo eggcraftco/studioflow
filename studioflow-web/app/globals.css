@@ -27944,6 +27944,11 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-figure-row > span { padding: 0 8px; }
   .home-figure-row em { font-size: 10.5px; }
   .home-figure-row b { font-size: 16px; }
+  /* While customising, the header carries the grip and the menu as well; the
+     pill is a label you read, not something you move, so it stands down and
+     gives the title its width back. */
+  .home-screen.is-customising .home-card .home-pill { display: none; }
+
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
   .home-card .home-card-body { padding-bottom: 14px; }
