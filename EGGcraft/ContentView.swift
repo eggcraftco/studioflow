@@ -7520,7 +7520,10 @@ struct ContentView: View {
     @State private var aramaMetni: String = ""
     @State private var seciliSiralama: SiralamaTuru = .akilli
     @State private var aktifSiparisFiltresi: SiparisHizliFiltre = .all
-    @State private var aktifSekme: String = UserDefaults.standard.string(forKey: "studioRequestedStartTab") ?? "Orders"
+    // Opens on Home, not the order list — the premise of the screen is to show
+    // what needs attention before you pick where to go. A quick action or a
+    // notification that asked for a specific tab still wins.
+    @State private var aktifSekme: String = UserDefaults.standard.string(forKey: "studioRequestedStartTab") ?? "Home"
     @State private var isActivityDrawerOpen: Bool = false
     @FocusState private var orderListFocused: Bool
     @FocusState private var searchFocused: Bool

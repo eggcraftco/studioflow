@@ -17,6 +17,11 @@ import {
 
 // Post-login destination: honour a same-site ?next= (used by e.g. the Shopify
 // connect handshake) and fall back to the app default. Same-origin only.
+// Signing in lands on Home, not the order list. That is the whole premise of
+// the screen: see what needs attention first, then choose where to go. A ?next=
+// link still wins, so a shared deep link is unaffected.
+const HOME_AFTER_SIGN_IN = "/home";
+
 function nextDestination(fallback: string) {
   if (typeof window === "undefined") return fallback;
   const next = new URLSearchParams(window.location.search).get("next") || "";
@@ -54,7 +59,7 @@ function LoginPageContent() {
   const closeMenu = () => setMenuOpen(false);
 
   useEffect(() => {
-    if (!loading && user) router.replace(nextDestination("/orders"));
+    if (!loading && user) router.replace(nextDestination(HOME_AFTER_SIGN_IN));
   }, [loading, router, user]);
 
   async function handleEmailLogin(event: FormEvent) {
@@ -63,7 +68,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace(nextDestination("/orders"));
+      router.replace(nextDestination(HOME_AFTER_SIGN_IN));
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : t("login.errorLoginFailed"));
     } finally {
@@ -139,7 +144,7 @@ function LoginPageContent() {
             setError(null);
             setSubmitting(true);
           }}
-          onSuccess={() => router.replace(nextDestination("/orders"))}
+          onSuccess={() => router.replace(nextDestination(HOME_AFTER_SIGN_IN))}
           onError={message => {
             setSubmitting(false);
             if (message) setError(message);
