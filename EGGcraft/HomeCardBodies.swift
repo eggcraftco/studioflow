@@ -40,7 +40,7 @@ struct HomeCardBody: View {
         case .banking:
             HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .inventory:
-            HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
+            HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .customers:
             HomeCustomersBody(size: size, lang: lang)
         case .ordersProduction:
@@ -1436,6 +1436,7 @@ struct HomeInventoryBody: View {
     let lang: String
     let currency: String
     let decimal: String
+    let compact: Bool
     @ObservedObject var data: HomeData
 
     var body: some View {
@@ -1458,13 +1459,26 @@ struct HomeInventoryBody: View {
                     Spacer(minLength: 0)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        HomeMetricTile(label: t("total value", lang: lang), value: money(summary.totalValue), tone: HomeTone.accent)
-                        HomeMetricTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)", tone: HomeTone.accent, sub: money(summary.uniqueValue))
-                        HomeMetricTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)", tone: HomeTone.accent, sub: money(summary.quantityValue))
-                        HomeMetricTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
-                                       tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent)
+                VStack(alignment: .leading, spacing: compact ? 7 : 10) {
+                    HStack(spacing: compact ? 6 : 10) {
+                        if compact {
+                            // Four tall tiles do not fit a phone row: the card
+                            // grew past its own height and lost its heading off
+                            // the top and a cost row off the bottom.
+                            HomeSlimTile(label: t("total value", lang: lang), value: money(summary.totalValue),
+                                         tone: HomeTone.accent, symbol: "shippingbox")
+                            HomeSlimTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
+                                         tone: HomeTone.accent, symbol: "square.stack.3d.up")
+                            HomeSlimTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                         tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent,
+                                         symbol: "exclamationmark.triangle")
+                        } else {
+                            HomeMetricTile(label: t("total value", lang: lang), value: money(summary.totalValue), tone: HomeTone.accent)
+                            HomeMetricTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)", tone: HomeTone.accent, sub: money(summary.uniqueValue))
+                            HomeMetricTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)", tone: HomeTone.accent, sub: money(summary.quantityValue))
+                            HomeMetricTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                           tone: summary.lowStockCount > 0 ? HomeTone.orange : HomeTone.accent)
+                        }
                     }
                     if size == .twoByTwo {
                         // Unique and quantity are different things and the split is
@@ -1837,28 +1851,42 @@ struct HomeOrdersProductionBody: View {
                     Spacer(minLength: 0)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: compact ? 7 : 10) {
                     if size == .twoByTwo {
-                        HStack(spacing: 10) {
-                            HomeMetricTile(label: t("Active orders", lang: lang), value: "\(live.count)",
-                                           tone: HomeTone.accent, symbol: "doc.text")
-                            HomeMetricTile(label: t("Overdue", lang: lang), value: "\(late.count)",
-                                           tone: late.isEmpty ? HomeTone.accent : HomeTone.red, symbol: "clock")
+                        HStack(spacing: compact ? 7 : 10) {
+                            if compact {
+                                // The square has no room for the tall tile; the slim
+                                // one carries the same two figures in half the height.
+                                HomeSlimTile(label: t("Active orders", lang: lang), value: "\(live.count)",
+                                             tone: HomeTone.accent, symbol: "doc.text")
+                                HomeSlimTile(label: t("Overdue", lang: lang), value: "\(late.count)",
+                                             tone: late.isEmpty ? HomeTone.accent : HomeTone.red, symbol: "clock")
+                            } else {
+                                HomeMetricTile(label: t("Active orders", lang: lang), value: "\(live.count)",
+                                               tone: HomeTone.accent, symbol: "doc.text")
+                                HomeMetricTile(label: t("Overdue", lang: lang), value: "\(late.count)",
+                                               tone: late.isEmpty ? HomeTone.accent : HomeTone.red, symbol: "clock")
+                            }
                         }
                     }
                     HomeEyebrow(text: t("Production flow", lang: lang))
                     HomeStageFlow(stages: data.stages, resolved: resolved, lang: lang, compact: compact)
                     if size == .twoByTwo {
-                        HomePanel {
+                        // The panel is the flexible piece here: the flow above it is
+                        // a fixed height and the tiles are, so this is what gives
+                        // when the square runs short.
+                        HomePanel(compact: compact) {
                             HomeEyebrow(text: t("Priority orders", lang: lang))
-                            ForEach(Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(3)), id: \.id) { order in
+                            ForEach(Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(compact ? 2 : 3)), id: \.id) { order in
                                 let entry = resolved.first { $0.0.id == order.id }
                                 let stage = data.stages.first { $0.id == entry?.1.stageId }
                                 HStack(spacing: 7) {
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(order.customerName.isEmpty ? order.designName : order.customerName)
-                                            .font(.system(size: 12, weight: .bold)).lineLimit(1)
-                                        if !order.designName.isEmpty {
+                                            .font(.system(size: compact ? 11.5 : 12, weight: .bold)).lineLimit(1)
+                                        // One line on the square: the second was
+                                        // what tipped the content past the card.
+                                        if !compact, !order.designName.isEmpty {
                                             Text(order.designName)
                                                 .font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
                                         }
@@ -1874,7 +1902,7 @@ struct HomeOrdersProductionBody: View {
                                             : t("Overdue", lang: lang), tone: HomeTone.red)
                                     }
                                 }
-                                .padding(.vertical, 5)
+                                .padding(.vertical, compact ? 3 : 5)
                             }
                         }
                     }

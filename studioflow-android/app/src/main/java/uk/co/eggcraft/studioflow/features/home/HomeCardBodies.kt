@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PersonAddAlt
@@ -100,7 +101,7 @@ fun HomeCardBody(
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
-        HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, t)
+        HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, compact, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, t)
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
@@ -1187,7 +1188,7 @@ private fun BankChart(state: StudioFlowUiState, t: (String) -> String, compact: 
 @Composable
 private fun HomeInventoryBody(
     size: HomeCardSize, state: StudioFlowUiState,
-    inventory: StudioInventorySummary?, inventoryFailed: Boolean, t: (String) -> String
+    inventory: StudioInventorySummary?, inventoryFailed: Boolean, compact: Boolean, t: (String) -> String
 ) {
     if (inventoryFailed) {
         Text(t("This could not be loaded."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1208,13 +1209,26 @@ private fun HomeInventoryBody(
         }
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HomeMetricTile(t("total value"), money(summary.totalValue, state), HomeTone.accent, modifier = Modifier.weight(1f))
-            HomeMetricTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent, money(summary.uniqueValue, state), Modifier.weight(1f))
-            HomeMetricTile(t("Quantity stock"), "${summary.quantityCount}", HomeTone.accent, money(summary.quantityValue, state), Modifier.weight(1f))
-            HomeMetricTile(t("low stock"), "${summary.lowStockCount}",
-                if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)) {
+            if (compact) {
+                // Four tall tiles do not fit a phone row: the card grew past its
+                // own height and lost its heading off the top and a cost row off
+                // the bottom.
+                SlimTile(t("total value"), money(summary.totalValue, state), HomeTone.accent,
+                    Icons.Filled.Inventory2, Modifier.weight(1f))
+                SlimTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent,
+                    Icons.Filled.Layers, Modifier.weight(1f))
+                SlimTile(t("low stock"), "${summary.lowStockCount}",
+                    if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent,
+                    Icons.Filled.Warning, Modifier.weight(1f))
+            } else {
+                HomeMetricTile(t("total value"), money(summary.totalValue, state), HomeTone.accent, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Unique items"), "${summary.uniqueCount}", HomeTone.accent, money(summary.uniqueValue, state), Modifier.weight(1f))
+                HomeMetricTile(t("Quantity stock"), "${summary.quantityCount}", HomeTone.accent, money(summary.quantityValue, state), Modifier.weight(1f))
+                HomeMetricTile(t("low stock"), "${summary.lowStockCount}",
+                    if (summary.lowStockCount > 0) HomeTone.orange else HomeTone.accent, modifier = Modifier.weight(1f))
+            }
         }
         if (size == HomeCardSize.TwoByTwo) {
             // Unique and quantity are different things and the split is the point (§8).
@@ -1516,12 +1530,22 @@ private fun HomeOrdersProductionBody(
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (size == HomeCardSize.TwoByTwo) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HomeMetricTile(t("Active orders"), "${live.size}", HomeTone.accent,
-                    modifier = Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.ListAlt)
-                HomeMetricTile(t("Overdue"), "${late.size}",
-                    if (late.isEmpty()) HomeTone.accent else HomeTone.red,
-                    modifier = Modifier.weight(1f), icon = Icons.Filled.Schedule)
+            Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 8.dp)) {
+                if (compact) {
+                    // The square has no room for the tall tile; the slim one
+                    // carries the same two figures in half the height.
+                    SlimTile(t("Active orders"), "${live.size}", HomeTone.accent,
+                        Icons.AutoMirrored.Filled.ListAlt, Modifier.weight(1f))
+                    SlimTile(t("Overdue"), "${late.size}",
+                        if (late.isEmpty()) HomeTone.accent else HomeTone.red,
+                        Icons.Filled.Schedule, Modifier.weight(1f))
+                } else {
+                    HomeMetricTile(t("Active orders"), "${live.size}", HomeTone.accent,
+                        modifier = Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.ListAlt)
+                    HomeMetricTile(t("Overdue"), "${late.size}",
+                        if (late.isEmpty()) HomeTone.accent else HomeTone.red,
+                        modifier = Modifier.weight(1f), icon = Icons.Filled.Schedule)
+                }
             }
         }
         HomeEyebrow(t("Production flow"))
@@ -1549,19 +1573,26 @@ private fun HomeOrdersProductionBody(
             }
         }
         if (size == HomeCardSize.TwoByTwo) {
-            HomePanel {
+            // The panel is the flexible piece: the flow above it is a fixed
+            // height and so are the tiles, so this is what gives when the
+            // square runs short.
+            HomePanel(compact = compact) {
                 HomeEyebrow(t("Priority orders"))
-                (late + live.filterNot { o -> late.any { it.id == o.id } }).take(3).forEach { order ->
+                (late + live.filterNot { o -> late.any { it.id == o.id } })
+                    .take(if (compact) 2 else 3).forEach { order ->
                     val due = homeDueDate(order.paymentDate, order.deliveryTime)
                     val overdue = due.before(Date())
                     val stage = stages.firstOrNull { st -> st.id == resolved.first { it.first.id == order.id }.second.stageId }
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    Row(Modifier.fillMaxWidth().padding(vertical = if (compact) 2.dp else 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
+                            Text(order.customerName.ifEmpty { order.designName },
+                                fontSize = if (compact) 11.5.sp else 12.sp,
                                 fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (order.designName.isNotEmpty()) {
+                            // One line on the square: the second was what tipped
+                            // the content past the card.
+                            if (!compact && order.designName.isNotEmpty()) {
                                 Text(order.designName, fontSize = 10.sp, maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -613,7 +613,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 
   const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);
   return (
-    <div className="home-money is-large">
+    <div className="home-money is-large is-production">
       <div className="home-tile-row is-pair">
         <MoneyTile label={t("active orders")} value={String(open.length)} tone="blue" />
         <MoneyTile label={t("Overdue")} value={String(late.length)} tone={late.length > 0 ? "orange" : "blue"} />

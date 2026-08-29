@@ -27949,6 +27949,25 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
      gives the title its width back. */
   .home-screen.is-customising .home-card .home-pill { display: none; }
 
+  /* A 2x2 is a square, so its content has to fit one — the body clips, which
+     means anything that does not fit is not "a bit tall", it is missing. The
+     tile lies down, the panels lose their padding, and the longest list gives
+     up its last row. */
+  .home-card-2x2 .home-money-tile {
+    flex-direction: row; align-items: center; gap: 7px; padding: 5px 9px;
+  }
+  .home-card-2x2 .home-money-tile-dot { flex: 0 0 auto; width: 20px; height: 20px; }
+  .home-card-2x2 .home-money-tile em { flex: 1 1 auto; min-width: 0; font-size: 10px; }
+  .home-card-2x2 .home-money-tile b { flex: 0 0 auto; font-size: 14px; }
+  .home-card-2x2 .home-money-tile i { display: none; }
+  .home-card-2x2 .home-panel { padding: 6px 9px; gap: 2px; }
+  .home-card-2x2 .home-flow-node { width: 22px; height: 22px; }
+  .home-card-2x2 .home-flow b { font-size: 14px; }
+  .home-card-2x2 .home-flow em { font-size: 9.5px; }
+  /* Only the production card stacks three blocks; the rest of the 2x2s were
+     already reviewed at three rows and must keep them. */
+  .home-card-2x2 .home-money.is-production .home-record-list li:nth-child(n + 3) { display: none; }
+
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
   .home-card .home-card-body { padding-bottom: 14px; }

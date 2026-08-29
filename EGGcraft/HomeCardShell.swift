@@ -333,10 +333,13 @@ struct HomeEyebrow: View {
 }
 
 struct HomePanel<Content: View>: View {
+    /// A phone square cannot spare 20pt of panel padding on top of everything
+    /// else it carries.
+    var compact: Bool = false
     @ViewBuilder let content: () -> Content
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) { content() }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+        VStack(alignment: .leading, spacing: compact ? 3 : 6) { content() }
+            .padding(.horizontal, compact ? 10 : 12).padding(.vertical, compact ? 7 : 10)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
     }

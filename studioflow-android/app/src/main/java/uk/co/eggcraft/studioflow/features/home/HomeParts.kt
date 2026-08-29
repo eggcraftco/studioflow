@@ -185,13 +185,15 @@ fun HomeChip(text: String, tone: Color = HomeTone.accent) {
 }
 
 @Composable
-fun HomePanel(content: @Composable () -> Unit) {
+fun HomePanel(compact: Boolean = false, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
+            // A phone square cannot spare 18dp of panel padding on top of
+            // everything else the card already carries.
             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+            .padding(horizontal = if (compact) 9.dp else 11.dp, vertical = if (compact) 6.dp else 9.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 5.dp)
     ) { content() }
 }
 
