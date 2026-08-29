@@ -118,11 +118,13 @@ fun HomeCardBody(
     /** Getting started only: the steps this member has waved off, and the way to
      *  wave one off. */
     setupSkipped: List<String> = emptyList(),
-    onSkipSetupStep: ((String) -> Unit)? = null
+    onSkipSetupStep: ((String) -> Unit)? = null,
+    onRestoreSetupSkipped: (() -> Unit)? = null
 ) {
     when (id) {
         HomeCardId.GettingStarted ->
-            HomeGettingStartedBody(size, state, inventory, t, setupSkipped, onSkipSetupStep)
+            HomeGettingStartedBody(size, state, inventory, t, setupSkipped, onSkipSetupStep,
+                onRestoreSetupSkipped)
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, period, t)
@@ -479,7 +481,9 @@ private fun HomeGettingStartedBody(
     inventory: StudioInventorySummary?,
     t: (String) -> String,
     skipped: List<String> = emptyList(),
-    onSkip: ((String) -> Unit)? = null
+    onSkip: ((String) -> Unit)? = null,
+    /** "Skip for now" is only true if a skipped step can come back. */
+    onRestoreSkipped: (() -> Unit)? = null
 ) {
     val inventoryCount = (inventory?.uniqueCount ?: 0) + (inventory?.quantityCount ?: 0)
     val fromStore = state.orders.any {
@@ -489,7 +493,7 @@ private fun HomeGettingStartedBody(
         SetupStep("profile", "Set up business profile", "Name, currency and tax so every document reads right.", "Settings", "Open settings", true),
         SetupStep("customer", "Add your first customer", "Orders, notes and files all hang off a customer.", "Customers", "Add customer", state.customers.isNotEmpty()),
         SetupStep("order", "Create your first order", "The record everything else in NivaDesk attaches to.", "Orders", "Create order", state.orders.isNotEmpty()),
-        SetupStep("shop", "Connect your shop", "Import orders automatically.", "Settings", "Connect shop", fromStore),
+        SetupStep("shop", "Connect your shop", "Import orders automatically from Shopify or WooCommerce.", "Settings", "Connect shop", fromStore),
         SetupStep("inventory", "Add an inventory item", "Track what you own, what is reserved and what is low.", "Inventory", "Add item", inventoryCount > 0),
         SetupStep("bank", "Connect your bank", "Read-only. Spending arrives and you categorise it.", "BankSpending", "Connect bank", state.bankTransactions.isNotEmpty())
     )
@@ -518,24 +522,24 @@ private fun HomeGettingStartedBody(
                     // the way past it, not on a list of what is still open —
                     // that list is the wall §15 says never to put here.
                     HomeNextPanel(next, t, "compact")
-                    if (onSkip != null) {
-                        Text(
-                            t("Skip"), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
-                            color = HomeTone.accent,
-                            modifier = Modifier.clickable { onSkip(next.id) }
-                        )
-                    }
-                } else Text(t("All set — nice work."), fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (onSkip != null) HomeSkipText(t("Skip for now")) { onSkip(next.id) }
+                } else HomeAllSetNote(skipped, onRestoreSkipped, t)
             }
-            HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Column(Modifier.weight(1f)) {
-                    HomeEyebrow(t("Completed"))
-                    done.take(3).forEach { HomeCheckRow(t(it.label), "done") }
-                }
+            // The one thing to do next on the left, what is left after it on the
+            // right. The Completed list that used to hold the left column is
+            // gone: a card whose job is to move you forward spent half itself on
+            // work already finished.
+            HomeCardSize.TwoByOne -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (next != null) HomeNextPanel(next, t, "inline")
-                    todo.take(2).forEach { HomeCheckRow(t(it.label), "todo") }
+                    if (next != null) {
+                        HomeNextPanel(next, t, "inline")
+                        if (onSkip != null) HomeSkipText(t("Skip for now")) { onSkip(next.id) }
+                    } else HomeAllSetNote(skipped, onRestoreSkipped, t)
+                }
+                Box(Modifier.width(1.dp).fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                Column(Modifier.weight(1f)) {
+                    todo.take(3).forEach { HomeCheckRow(t(it.label), "todo") }
                 }
             }
             HomeCardSize.TwoByTwo -> {
@@ -580,6 +584,27 @@ private fun HomeGettingStartedBody(
 
 /** The recommendation — blue enough to be the obvious next thing, calm enough
  *  that it is not a payment prompt (§15). */
+/** The way past a step that is not for this workshop. */
+@Composable
+private fun HomeSkipText(label: String, onClick: () -> Unit) {
+    Text(label, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold,
+        color = HomeTone.accent, modifier = Modifier.clickable(onClick = onClick))
+}
+
+/** The end of the checklist, and the way back into it. "Skip for now" has to be
+ *  true: without a way to bring a skipped step back, "now" is a promise the card
+ *  does not keep, and there is nothing left to do here. */
+@Composable
+private fun HomeAllSetNote(skipped: List<String>, onRestore: (() -> Unit)?, t: (String) -> String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(t("All set — nice work."), fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (skipped.isNotEmpty() && onRestore != null) {
+            HomeSkipText(t("{count} skipped").replace("{count}", skipped.size.toString()), onRestore)
+        }
+    }
+}
+
 @Composable
 private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String) {
     Column(
@@ -594,8 +619,9 @@ private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String)
     ) {
         if (style == "large") Text(t("Recommended next"), fontSize = 11.sp,
             fontWeight = FontWeight.Bold, color = HomeTone.accent)
-        if (style == "inline") Text(t("Up next"), fontSize = 11.sp,
-            fontWeight = FontWeight.Bold, color = HomeTone.accent)
+        // The wide card's "Up next" label goes: a single tinted panel under a
+        // progress bar does not need to be told it is what comes next, and the
+        // line that says why earns the space instead.
         Text(t(step.label), fontSize = if (style == "compact") 12.5.sp else 13.5.sp,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -613,7 +639,7 @@ private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String)
             fontSize = if (style == "compact") 11.sp else 12.sp,
             fontWeight = FontWeight.Bold, color = Color.White,
             modifier = Modifier
-                .then(if (style == "large") Modifier.fillMaxWidth() else Modifier)
+                .then(if (style == "compact") Modifier else Modifier.fillMaxWidth())
                 .background(HomeTone.accent, RoundedCornerShape(9.dp))
                 .padding(
                     horizontal = if (style == "compact") 11.dp else 16.dp,

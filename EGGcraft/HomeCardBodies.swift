@@ -30,14 +30,16 @@ struct HomeCardBody: View {
     /// to wave one off.
     var setupSkipped: [String] = []
     var onSkipSetupStep: ((String) -> Void)? = nil
+    var onRestoreSetupSkipped: (() -> Void)? = nil
 
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
         switch id {
         case .gettingStarted:
-            HomeGettingStartedBody(size: size, lang: lang, data: data,
-                                   skipped: setupSkipped, onSkip: onSkipSetupStep)
+            HomeGettingStartedBody(size: size, lang: lang, data: data, compact: compact,
+                                   skipped: setupSkipped, onSkip: onSkipSetupStep,
+                                   onRestoreSkipped: onRestoreSetupSkipped)
         case .quickActions:
             HomeQuickActionsBody(size: size, lang: lang, access: access, onNewOrder: onNewOrder, onOpen: onOpen)
         case .recentActivity:
@@ -182,9 +184,13 @@ struct HomeGettingStartedBody: View {
     let size: HomeCardSize
     let lang: String
     @ObservedObject var data: HomeData
+    /// Phone layout: the wide card's two columns get less room than a desktop's.
+    var compact: Bool = false
     /// Steps this member has waved off, and the way to wave one off.
     var skipped: [String] = []
     var onSkip: ((String) -> Void)? = nil
+    /// "Skip for now" is only true if a skipped step can come back.
+    var onRestoreSkipped: (() -> Void)? = nil
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     private var steps: [HomeSetupStep] {
@@ -204,7 +210,7 @@ struct HomeGettingStartedBody: View {
                           blurb: "The record everything else in NivaDesk attaches to.",
                           destination: "Orders", cta: "Create order", done: !firebaseManager.siparisler.isEmpty),
             HomeSetupStep(id: "shop", label: "Connect your shop",
-                          blurb: "Import orders automatically.",
+                          blurb: "Import orders automatically from Shopify or WooCommerce.",
                           destination: "Settings", cta: "Connect shop", done: fromStore),
             HomeSetupStep(id: "inventory", label: "Add an inventory item",
                           blurb: "Track what you own, what is reserved and what is low.",
@@ -238,35 +244,36 @@ struct HomeGettingStartedBody: View {
                     // that list is the wall §15 says never to put here.
                     HomeNextPanel(step: step, lang: lang, style: .compact)
                     if let onSkip {
-                        Button { onSkip(step.id) } label: {
-                            Text(t("Skip", lang: lang))
-                                .font(.system(size: 11.5, weight: .semibold))
-                                .foregroundColor(HomeTone.accent)
-                        }
-                        .buttonStyle(.plain)
+                        HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                     }
                 } else {
-                    HomeCardNote(text: t("All set — nice work.", lang: lang))
+                    HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
                 }
                 Spacer(minLength: 0)
             } else if size == .twoByOne {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HomeEyebrow(text: t("Completed", lang: lang))
-                        ForEach(done.prefix(3), id: \.id) { step in
-                            HomeCheckRow(label: t(step.label, lang: lang), state: .done)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // The one thing to do next on the left, what is left after it on
+                // the right. The Completed list that used to hold the left column
+                // is gone: a card whose job is to move you forward spent half
+                // itself on work already finished.
+                HStack(alignment: .top, spacing: compact ? 10 : 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         if let step = next {
-                            HomeNextPanel(step: step, lang: lang, style: .inline)
+                            HomeNextPanel(step: step, lang: lang, style: .inline, compact: compact)
+                            if let onSkip {
+                                HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
+                            }
                         } else {
-                            HomeCardNote(text: t("All set — nice work.", lang: lang))
+                            HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
                         }
-                        ForEach(todo.prefix(2), id: \.id) { step in
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(todo.prefix(3), id: \.id) { step in
                             HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
                         }
+                        Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -346,21 +353,53 @@ struct HomeCheckRow: View {
 
 /// The recommendation. Blue enough to be the obvious next thing, calm enough
 /// that it is not a payment prompt (§15).
+/// The way past a step that is not for this workshop.
+struct HomeSkipButton: View {
+    let label: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundColor(HomeTone.accent)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The end of the checklist, and the way back into it. "Skip for now" has to be
+/// true: without a way to bring a skipped step back, "now" is a promise the card
+/// does not keep, and there is nothing left to do here.
+struct HomeAllSetNote: View {
+    let skipped: [String]
+    let onRestore: (() -> Void)?
+    let lang: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HomeCardNote(text: t("All set — nice work.", lang: lang))
+            if !skipped.isEmpty, let onRestore {
+                HomeSkipButton(label: t("{count} skipped", lang: lang)
+                    .replacingOccurrences(of: "{count}", with: "\(skipped.count)"),
+                               action: onRestore)
+            }
+        }
+    }
+}
+
 struct HomeNextPanel: View {
     enum Style { case compact, inline, large }
     let step: HomeSetupStep
     let lang: String
     let style: Style
+    var compact: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: style == .compact ? 5 : 7) {
             if style == .large { eyebrow(t("Recommended next", lang: lang)) }
-            if style == .inline { eyebrow(t("Up next", lang: lang)) }
-            if style == .large {
-                body(vertical: true)
-            } else {
-                body(vertical: style == .compact)
-            }
+            // The wide card's "Up next" label goes: a single tinted panel under a
+            // progress bar does not need to be told it is what comes next, and
+            // the line that says why earns the space instead.
+            body(vertical: true)
         }
         .padding(.horizontal, style == .compact ? 10 : 12)
         .padding(.vertical, style == .compact ? 7 : 10)
@@ -373,17 +412,9 @@ struct HomeNextPanel: View {
     }
 
     @ViewBuilder private func body(vertical: Bool) -> some View {
-        if vertical {
-            VStack(alignment: .leading, spacing: 8) {
-                title
-                button
-            }
-        } else {
-            HStack(alignment: .top, spacing: 10) {
-                title
-                Spacer(minLength: 4)
-                button
-            }
+        VStack(alignment: .leading, spacing: style == .compact ? 5 : 7) {
+            title
+            button
         }
     }
 
@@ -396,8 +427,11 @@ struct HomeNextPanel: View {
             // step's own name plus its blurb runs past the bottom of a 174pt
             // card in German. The page the button opens explains itself.
             if style != .compact {
+                // Two lines and no more: a third in German pushes the button off
+                // the bottom of a card whose height is fixed.
                 Text(t(step.blurb, lang: lang))
-                    .font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+                    .font(.system(size: compact ? 10.5 : 11.5))
+                    .foregroundColor(.secondary).lineLimit(2)
             }
         }
     }
@@ -409,8 +443,8 @@ struct HomeNextPanel: View {
             .font(.system(size: style == .compact ? 11 : 12, weight: .bold))
             .foregroundColor(.white)
             .padding(.horizontal, style == .compact ? 11 : 16)
-            .padding(.vertical, style == .compact ? 4 : 8)
-            .frame(maxWidth: style == .large ? .infinity : nil)
+            .padding(.vertical, style == .compact ? 4 : 7)
+            .frame(maxWidth: style == .compact ? nil : .infinity)
             .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
     }
 }

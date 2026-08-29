@@ -1594,14 +1594,17 @@ const SETUP_STEPS = [
   { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
   { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
   { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
-  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically.", href: "/settings?section=integrations&category=commerce&intent=connect-shop", cta: "Connect shop" },
+  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically from Shopify or WooCommerce.", href: "/settings?section=integrations&category=commerce&intent=connect-shop", cta: "Connect shop" },
   { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
   { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
 ] as const;
 
-export function GettingStartedCardBody({ size, data, t, skipped = [], onSkip }: CardBodyProps & {
+export function GettingStartedCardBody({
+  size, data, t, skipped = [], onSkip, onRestoreSkipped,
+}: CardBodyProps & {
   skipped?: string[];
   onSkip?: (stepId: string) => void;
+  onRestoreSkipped?: () => void;
 }) {
   const steps = SETUP_STEPS.filter((step) => !skipped.includes(step.id)).map((step) => ({
     ...step,
@@ -1634,40 +1637,46 @@ export function GettingStartedCardBody({ size, data, t, skipped = [], onSkip }: 
             {onSkip ? (
               <button type="button" className="home-setup-skip"
                       onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-                {t("Skip")}
+                {t("Skip for now")}
               </button>
             ) : null}
           </>
         ) : (
-          <p className="home-card-note">{t("All set — nice work.")}</p>
+          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
         )}
       </div>
     );
   }
 
-  // 2x1: what is done on the left, what is next on the right (§15 — never a
-  // blocking wall, always one obvious continue).
+  // 2x1: the one thing to do next on the left, what is left after it on the
+  // right (§15 — never a blocking wall, always one obvious continue). The
+  // Completed list that used to hold the left column is gone: a card whose job
+  // is to move you forward spent half itself on work already finished.
   if (size === "2x1") {
     return (
       <div className="home-setup is-split">
-        <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
+        <HomeProgress complete={complete} total={steps.length} t={t} />
         <div className="home-setup-columns">
-          <div>
-            <p className="home-eyebrow is-strong">{t("Completed")}</p>
-            <ul className="home-check-list">
-              {done.slice(0, 3).map((step) => (
-                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
-              ))}
-            </ul>
+          <div className="home-setup-next">
+            {next ? (
+              <>
+                <NextStepPanel step={next} t={t} inline />
+                {onSkip ? (
+                  <button type="button" className="home-setup-skip"
+                          onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                    {t("Skip for now")}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            )}
           </div>
-          <div>
-            {next ? <NextStepPanel step={next} t={t} inline /> : <p className="home-card-note">{t("All set — nice work.")}</p>}
-            <ul className="home-check-list">
-              {todo.slice(0, 2).map((step) => (
-                <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-              ))}
-            </ul>
-          </div>
+          <ul className="home-check-list is-ruled">
+            {todo.slice(0, 3).map((step) => (
+              <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
+            ))}
+          </ul>
         </div>
       </div>
     );
@@ -1720,6 +1729,33 @@ function HomeProgress({ complete, total, t, hideLabel }: { complete: number; tot
         <span style={{ width: `${(complete / total) * 100}%` }} />
       </div>
     </>
+  );
+}
+
+/**
+ * The end of the checklist, and the way back into it.
+ *
+ * "Skip for now" has to be true: without a way to bring a skipped step back,
+ * the word "now" is a promise the card does not keep. There is nothing left to
+ * do here, so this is where the offer belongs.
+ */
+function AllSetNote({
+  skipped, onRestore, t,
+}: {
+  skipped: string[];
+  onRestore?: () => void;
+  t: (text: string) => string;
+}) {
+  return (
+    <div className="home-setup-allset">
+      <p className="home-card-note">{t("All set — nice work.")}</p>
+      {skipped.length > 0 && onRestore ? (
+        <button type="button" className="home-setup-skip"
+                onClick={(event) => { event.stopPropagation(); onRestore(); }}>
+          {t("{count} skipped").replace("{count}", String(skipped.length))}
+        </button>
+      ) : null}
+    </div>
   );
 }
 

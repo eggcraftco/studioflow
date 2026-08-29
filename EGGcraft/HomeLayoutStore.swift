@@ -102,6 +102,22 @@ final class HomeLayoutStore: ObservableObject {
         }
     }
 
+    /// "Skip for now" is only true if a skipped step can come back.
+    func restoreSkippedSetupSteps() {
+        guard !setupSkipped.isEmpty else { return }
+        let previous = setupSkipped
+        setupSkipped = []
+        Task { @MainActor in
+            do {
+                _ = try await Functions.functions(region: "europe-west2")
+                    .httpsCallable("savePersonalInterfaceSettings")
+                    .call(["settings": ["setupSkipped": [String]()]])
+            } catch {
+                setupSkipped = previous
+            }
+        }
+    }
+
     // MARK: - Layout edits
 
     func move(from index: Int, to target: Int) {

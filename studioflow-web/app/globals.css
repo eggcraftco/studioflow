@@ -28188,6 +28188,48 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* ---- Getting started ------------------------------------------------- */
 .home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
 .home-setup-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
+/* The rule between the panel and what is left after it, as the sheet draws it. */
+.home-setup-columns > .home-check-list.is-ruled { border-left: 1px solid var(--border); padding-left: 16px; margin-top: 0; }
+.home-setup-next { display: flex; flex-direction: column; min-width: 0; }
+.home-setup-next .home-next-panel { flex: 1 1 auto; }
+/* The panel stacks here, as the sheet draws it: side by side the step's own
+   name and its blurb share about 150px and both wrap to four lines. */
+.home-setup-next .home-next-body { flex-direction: column; align-items: stretch; gap: 7px; }
+.home-setup-next .home-next-button { align-self: stretch; text-align: center; padding: 7px 14px; }
+/* Two lines and no more: the sentence is a hint, and a third line in German
+   pushes the button off the bottom of a card whose height is fixed. */
+.home-setup-next .home-next-body p {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.home-setup-next .home-next-panel.is-inline { padding: 8px 12px; }
+/* Three things share a 240px card: the count, the bar and the columns. */
+.home-setup.is-split { gap: 7px; }
+.home-setup.is-split .home-setup-skip { margin-top: 3px; }
+/* The "Up next" label goes. A single tinted panel under a progress bar does not
+   need to be told it is what comes next, and the line that says why — which the
+   card measured at 240px tall has no room for otherwise — earns the space. */
+.home-setup-next .home-next-panel .home-eyebrow.is-accent { display: none; }
+.home-setup-allset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+/* A 2x1 on a phone is 359x174 with a 46px header — the sheet's card is drawn
+   nearly five times that wide. Measured, the panel as drawn overshoots the
+   bottom by 114px, so on a narrow card it gives up the label above it and the
+   line that explains why, and keeps the step, the button and the way past it. */
+@container (max-width: 420px) {
+  .home-setup.is-split { gap: 6px; }
+  .home-setup.is-split .home-metric-label { font-size: 10.5px; }
+  .home-setup.is-split .home-progress { margin: 0; }
+  .home-setup-columns { gap: 10px; }
+  .home-setup-columns > .home-check-list.is-ruled { padding-left: 10px; }
+  .home-setup-next .home-next-panel.is-inline { padding: 8px 10px; }
+  .home-setup-next .home-next-body { gap: 6px; }
+  .home-setup-next .home-next-body strong { font-size: 12.5px; line-height: 1.15; }
+  .home-setup-next .home-next-body p { display: none; }
+  .home-setup-next .home-next-button { align-self: stretch; text-align: center; padding: 4px 10px; font-size: 11px; }
+  .home-setup.is-split .home-setup-skip { margin-top: 4px; font-size: 11px; }
+  .home-setup-columns .home-check-list li { padding: 4px 0; font-size: 11px; gap: 7px; }
+  .home-setup-columns .home-check { width: 14px; height: 14px; }
+}
 .home-setup.is-large .home-setup-columns { gap: 14px; }
 .home-setup-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 

@@ -230,6 +230,17 @@ fun HomeScreen(
         }
     }
 
+    /** "Skip for now" is only true if a skipped step can come back. */
+    fun restoreSkippedSetupSteps() {
+        if (setupSkipped.isEmpty()) return
+        val previous = setupSkipped
+        setupSkipped = emptyList()
+        scope.launch {
+            runCatching { repository.saveSetupSkipped(workspaceId, emptyList()) }
+                .onFailure { setupSkipped = previous }
+        }
+    }
+
     val visible = layout.cards.filter { placement ->
         HomeCards.definition(placement.id)?.let { access.allows(it) } == true
     }
@@ -478,7 +489,8 @@ fun HomeScreen(
                             onNewOrder = onNewOrder,
                             onOpenSection = onOpenSection,
                             setupSkipped = setupSkipped,
-                            onSkipSetupStep = { skipSetupStep(it) }
+                            onSkipSetupStep = { skipSetupStep(it) },
+                            onRestoreSetupSkipped = { restoreSkippedSetupSteps() }
                         )
                     }
                 }

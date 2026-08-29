@@ -158,6 +158,13 @@ export default function HomePage() {
     });
   }, [workspace?.id]);
 
+  /** "Skip for now" is only true if a skipped step can come back. */
+  const handleRestoreSkipped = useCallback(() => {
+    if (!workspace?.id) return;
+    setSetupSkipped([]);
+    void saveSetupSkipped(workspace.id, []);
+  }, [workspace?.id]);
+
   // The 2x2 stock card is the only one that names individual items, and the
   // list behind it is a 500-row callable — so it is only fetched when that card
   // is actually on the layout at that size.
@@ -260,7 +267,14 @@ export default function HomePage() {
       case "notes": return <NotesCardBody {...props} />;
       case "quickActions": return <QuickActionsCardBody {...props} />;
       case "gettingStarted":
-        return <GettingStartedCardBody {...props} skipped={setupSkipped} onSkip={handleSkipStep} />;
+        return (
+          <GettingStartedCardBody
+            {...props}
+            skipped={setupSkipped}
+            onSkip={handleSkipStep}
+            onRestoreSkipped={handleRestoreSkipped}
+          />
+        );
       default: return null;
     }
   }

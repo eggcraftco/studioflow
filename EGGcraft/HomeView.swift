@@ -488,7 +488,8 @@ struct HomeView: View {
                         onNewOrder: onNewOrder,
                         onOpen: onOpen,
                         setupSkipped: store.setupSkipped,
-                        onSkipSetupStep: { store.skipSetupStep($0) }
+                        onSkipSetupStep: { store.skipSetupStep($0) },
+                        onRestoreSetupSkipped: { store.restoreSkippedSetupSteps() }
                     )
                     .environmentObject(firebaseManager)
                 }
