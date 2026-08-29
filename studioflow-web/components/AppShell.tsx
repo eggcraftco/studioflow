@@ -93,6 +93,9 @@ const NAV_ITEMS: Array<
   | { href: string; label: string; icon: NavIconName }
   | { label: string; icon: NavIconName; disabled: true }
 > = [
+  // Home first: it is the screen that answers what needs attention, and the one
+  // people should land on rather than an order list.
+  { href: "/home", label: "Home", icon: "dashboard" },
   { href: "/orders", label: "Orders", icon: "orders" },
   { href: "/production", label: "Production", icon: "schedule" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },

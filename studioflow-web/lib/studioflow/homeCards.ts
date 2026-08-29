@@ -159,7 +159,9 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   },
   {
     id: "files",
-    title: "Files",
+    // Not "Files": that key is the navigation item and reads as "choose from
+    // files" in several languages. This card is the library itself.
+    title: "File library",
     icon: "files",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",

@@ -7469,6 +7469,60 @@ exports.getPersonalInterfaceSettings = onCall({ region: "europe-west2" }, async 
   };
 });
 
+/** The Home cards the server will accept in a stored layout, and the sizes each
+ *  may take. Mirrors HOME_CARDS on the clients; a layout naming anything else is
+ *  not trusted just because it arrived from a signed-in user. */
+const HOME_CARD_SIZES_BY_ID = {
+  gettingStarted: ["1x1", "2x1", "2x2"],
+  quickActions: ["1x1", "2x1", "2x2"],
+  recentActivity: ["1x1", "2x1", "2x2"],
+  money: ["1x1", "2x1", "2x2"],
+  banking: ["1x1", "2x1", "2x2"],
+  inventory: ["1x1", "2x1", "2x2"],
+  customers: ["1x1", "2x1", "2x2"],
+  ordersProduction: ["1x1", "2x1", "2x2"],
+  schedule: ["1x1", "2x1", "2x2"],
+  files: ["1x1", "2x1", "2x2"],
+  notes: ["1x1", "2x1", "2x2"]
+};
+const HOME_CARD_TONES = new Set(["blue", "green", "amber", "purple", "rose"]);
+
+/**
+ * Validates a Home layout before it is stored.
+ *
+ * A layout is small, ordered and fully enumerable, so there is no reason to keep
+ * anything we did not recognise: unknown ids, unsupported sizes, duplicates and
+ * over-long headings are dropped rather than written. Returns a JSON string, or
+ * "" when there is nothing worth storing.
+ */
+function cleanHomeLayout(raw) {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    if (raw.length > 8000) return "";
+    try { parsed = JSON.parse(raw); } catch { return ""; }
+  }
+  if (!parsed || typeof parsed !== "object") return "";
+  const seen = new Set();
+  const cards = [];
+  for (const entry of Array.isArray(parsed.cards) ? parsed.cards.slice(0, 40) : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const id = String(entry.id || "");
+    const allowed = HOME_CARD_SIZES_BY_ID[id];
+    if (!allowed || seen.has(id)) continue;
+    seen.add(id);
+    const card = { id, size: allowed.includes(entry.size) ? entry.size : allowed[0] };
+    const heading = typeof entry.heading === "string" ? entry.heading.trim().slice(0, 40) : "";
+    if (heading) card.heading = heading;
+    if (HOME_CARD_TONES.has(entry.tone)) card.tone = entry.tone;
+    cards.push(card);
+  }
+  const hidden = (Array.isArray(parsed.hidden) ? parsed.hidden : [])
+    .filter((id) => typeof id === "string" && HOME_CARD_SIZES_BY_ID[id])
+    .slice(0, 20);
+  if (cards.length === 0 && hidden.length === 0) return "";
+  return JSON.stringify({ version: 1, cards, hidden });
+}
+
 exports.savePersonalInterfaceSettings = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   // Personal language + theme (and finance-free PDF flags) are available to EVERY
@@ -7479,6 +7533,14 @@ exports.savePersonalInterfaceSettings = onCall({ region: "europe-west2" }, async
   const updates = { companyId, userId: uid, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedByUid: uid };
   if (Object.prototype.hasOwnProperty.call(incoming, "appTheme")) updates.appTheme = cleanPersonalTheme(incoming.appTheme, "System");
   if (Object.prototype.hasOwnProperty.call(incoming, "selectedLanguage")) updates.selectedLanguage = cleanQuickReplyText(incoming.selectedLanguage, 80) || "English";
+  // The Home layout is per-user like the theme, and every member may have one.
+  if (Object.prototype.hasOwnProperty.call(incoming, "homeLayout")) {
+    const cleaned = cleanHomeLayout(incoming.homeLayout);
+    if (cleaned) {
+      updates.homeLayout = cleaned;
+      updates.homeLayoutUpdatedAtMs = Date.now();
+    }
+  }
   const pdfKeys = ["pdfShowCustomer", "pdfShowContact", "pdfShowPreview", "pdfShowMaterials", "pdfShowPriority", "pdfShowStatus", "pdfShowShipping", "pdfShowAddress", "pdfShowShippingAddress"];
   if (pdfKeys.some((key) => Object.prototype.hasOwnProperty.call(incoming, key))) {
     requireWorkspaceAreaAccess(companyData, uid, "exportData", "PDF Export is not enabled for your workspace account.");
