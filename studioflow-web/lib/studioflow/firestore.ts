@@ -919,7 +919,22 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
 
   const companyData = companySnapshot?.data() ?? {};
   const hasBillingPlan = typeof companyData.billingPlan === "string" && companyData.billingPlan.length > 0;
-  const entitlements = entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
+  // Mirror of the server's rule (billingPlanFromCompanyData + trialHasExpired):
+  // an expired trial stops unlocking the paid plan. Without this the client kept
+  // presenting Team after the fortnight ran out while every server call refused
+  // it — the UI offering what the backend would not honour. Same 36h grace, so a
+  // late renewal webhook does not lock anyone out.
+  const trialExpired = (() => {
+    if (String(companyData.billingStatus || "").trim().toLowerCase() !== "trialing") return false;
+    const endsAt = dateValue(companyData.billingTrialEndsAt)?.getTime()
+      ?? dateValue(companyData.billingCurrentPeriodEnd)?.getTime()
+      ?? 0;
+    if (!endsAt) return false;
+    return Date.now() > endsAt + 36 * 60 * 60 * 1000;
+  })();
+  const entitlements = trialExpired
+    ? entitlementsForPlan("demo", "demo")
+    : entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
   const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
   const storageAddonStatus = stringValue(companyData.billingStorageAddonStatus, "");
   const storageAddonActive = ["active", "trialing", "past_due"].includes(storageAddonStatus.toLowerCase());
@@ -945,7 +960,10 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     memberAccess: workspaceMemberAccess(companyData, uid, normalizeWorkspaceRole(role) === "owner"),
     billingPlan: entitlements.plan,
     billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
-    billingPlanName: stringValue(companyData.billingPlanName, entitlements.title),
+    // An expired trial must not keep announcing the plan it used to have.
+    billingPlanName: trialExpired
+      ? entitlements.title
+      : stringValue(companyData.billingPlanName, entitlements.title),
     billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
     billingCurrentPeriodEndMs: dateValue(companyData.billingCurrentPeriodEnd)?.getTime() ?? 0,
     billingTrialEndsAtMs: dateValue(companyData.billingTrialEndsAt)?.getTime()

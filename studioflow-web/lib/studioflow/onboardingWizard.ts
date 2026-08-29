@@ -1,5 +1,6 @@
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 import { DEFAULT_PRODUCTION_STAGES, type ProductionStage } from "@/lib/studioflow/production";
 
@@ -40,7 +41,34 @@ export type OnboardingAnswers = {
   mainGoal: OnboardingGoal | "";
   extraGoals: OnboardingGoal[];
   start: OnboardingStart | "";
+  /** The plan the last step confirmed. Empty until that step is reached. */
+  plan: OnboardingTrialPlan | "";
 };
+
+export type OnboardingTrialPlan = "lifetime_lite" | "pro_monthly" | "team_monthly";
+
+/**
+ * What the answers imply, and what the last step shows as chosen.
+ *
+ * The same rule the server applies (automaticTrialPlanFor): a workspace that
+ * says it has a team gets the plan that covers one, because trialling Pro would
+ * hide the very features they came for. Anyone can pick a different one.
+ */
+export function recommendedTrialPlan(answers: Pick<OnboardingAnswers, "teamSize">): OnboardingTrialPlan {
+  return seatsForTeamSize(answers.teamSize) > 1 ? "team_monthly" : "pro_monthly";
+}
+
+/** Order matters: this is the order the last step lists them in. */
+export const ONBOARDING_TRIAL_PLANS: {
+  id: OnboardingTrialPlan;
+  title: string;
+  priceKey: string;
+  summary: string;
+}[] = [
+  { id: "lifetime_lite", title: "NivaDesk Starter", priceKey: "lite_monthly", summary: "One person, the essentials." },
+  { id: "pro_monthly", title: "NivaDesk Pro", priceKey: "pro_monthly", summary: "One studio, everything in it." },
+  { id: "team_monthly", title: "NivaDesk Team", priceKey: "team_monthly", summary: "Shared work, roles and permissions." }
+];
 
 export const ONBOARDING_WORK_KINDS: { id: OnboardingWorkKind; label: string }[] = [
   { id: "watches_jewellery", label: "Watches & jewellery" },
@@ -342,5 +370,22 @@ export async function saveOnboardingAnswers(
     await setDoc(doc(db, "companies", companyId), {
       onboardingTeamSize: seatsForTeamSize(answers.teamSize),
     }, { merge: true });
+
+    // The trial starts at sign-up, before this answer exists, so it starts on
+    // Pro. Now that we know there is a team, ask the server to raise it — the
+    // client cannot write billing fields, and the end date must not move.
+    // A failure here is not worth losing the answers over: the workspace simply
+    // keeps trialling Pro.
+    // The trial started at sign-up on Pro, before any of this was known. Put it
+    // on the plan the last step confirmed. The client cannot write billing
+    // fields and the end date must not move, so the server does it.
+    // A failure here is not worth losing the answers over: the workspace simply
+    // keeps trialling Pro.
+    const chosenPlan = answers.plan || recommendedTrialPlan(answers);
+    try {
+      await httpsCallable(functions, "setTrialPlan")({ plan: chosenPlan });
+    } catch (error) {
+      console.warn("setTrialPlan failed", error);
+    }
   }, "Saving your workspace setup.");
 }

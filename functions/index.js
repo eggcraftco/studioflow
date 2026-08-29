@@ -2094,8 +2094,19 @@ async function startAutomaticTrial(companyRef, companyData = {}, reason = "first
 
     const trialPlan = automaticTrialPlanFor(companyData);
     const endsAtMs = Date.now() + AUTOMATIC_TRIAL_DAYS * 24 * 60 * 60 * 1000;
+    // The plan's NAME and limits travel with the plan. Without them the
+    // workspace keeps whatever sign-up wrote — a Team trial that calls itself
+    // "Free Demo" and reports 50 MB and one seat. Every surface that names the
+    // plan reads billingPlanName: the trial banner, the dashboard header and
+    // Settings ▸ Plan & Access, so a trial announced under the free plan's name
+    // reads as no trial at all. applyShopifySubscription already writes all
+    // three; this is the same write.
+    const trialEntitlements = PLAN_ENTITLEMENTS[trialPlan] || PLAN_ENTITLEMENTS.demo;
     await companyRef.set({
       billingPlan: trialPlan,
+      billingPlanName: trialEntitlements.displayName || trialPlan,
+      billingStorageLimitMB: trialEntitlements.storageLimitMB ?? null,
+      billingTeamMemberLimit: trialEntitlements.teamMemberLimit ?? null,
       billingStatus: "trialing",
       billingProvider: "nivadesk_trial",
       billingTrialEndsAt: admin.firestore.Timestamp.fromMillis(endsAtMs),
@@ -9118,6 +9129,87 @@ exports.changeAccountEmail = onCall({ region: "europe-west2" }, async (request) 
   };
 });
 
+/**
+ * The workspace fields that start the free fortnight at sign-up.
+ *
+ * Plan NAME and limits travel with the plan, or the workspace announces itself
+ * under whatever sign-up wrote — the bug that had a Team trial calling itself
+ * "Free Demo" with 50 MB and one seat.
+ */
+function trialGrantAtSignup(timestamp) {
+  const plan = "pro_monthly";
+  const entitlements = PLAN_ENTITLEMENTS[plan] || PLAN_ENTITLEMENTS.demo;
+  const endsAtMs = Date.now() + AUTOMATIC_TRIAL_DAYS * 24 * 60 * 60 * 1000;
+  return {
+    billingPlan: plan,
+    billingPlanName: entitlements.displayName || plan,
+    billingPlanSource: "signup_trial",
+    billingStatus: "trialing",
+    billingProvider: "nivadesk_trial",
+    billingProviderRawStatus: "trialing",
+    billingStorageLimitMB: entitlements.storageLimitMB ?? null,
+    billingTeamMemberLimit: entitlements.teamMemberLimit ?? null,
+    billingTrialEndsAt: admin.firestore.Timestamp.fromMillis(endsAtMs),
+    billingTrialStartedAt: timestamp,
+    billingTrialStartReason: "signup",
+    billingTrialUsedAt: timestamp
+  };
+}
+
+/** The plans the sign-up wizard may put a trial on. */
+const TRIAL_SELECTABLE_PLANS = new Set(["lifetime_lite", "pro_monthly", "team_monthly"]);
+
+/**
+ * Puts a running sign-up trial on the plan the owner chose at the end of the
+ * wizard.
+ *
+ * Sign-up cannot know what they need — the questions come afterwards — so the
+ * trial starts on Pro and the last step confirms it. The end date is never
+ * touched: this changes what the fortnight contains, never how long is left of
+ * it, and it cannot start a trial that does not already exist. Only the owner,
+ * only a trial we granted, only while it runs.
+ */
+exports.setTrialPlan = onCall({ region: "europe-west2" }, async (request) => {
+  const uid = String(request.auth?.uid || "").trim();
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  const companyId = await activeCompanyIdForUid(uid);
+  if (!companyId) return { ok: true, changed: false, why: "no_workspace" };
+
+  const companyRef = admin.firestore().collection("companies").doc(companyId);
+  const snap = await companyRef.get();
+  if (!snap.exists) return { ok: true, changed: false, why: "no_workspace" };
+  const data = snap.data() || {};
+
+  if (String(data.ownerUid || companyId) !== uid) {
+    return { ok: true, changed: false, why: "not_owner" };
+  }
+  // Only a trial WE granted, and only while it is still running.
+  if (String(data.billingProvider || "") !== "nivadesk_trial") {
+    return { ok: true, changed: false, why: "not_a_nivadesk_trial" };
+  }
+  if (String(data.billingStatus || "") !== "trialing" || trialHasExpired(data)) {
+    return { ok: true, changed: false, why: "not_trialing" };
+  }
+
+  // The owner's explicit choice, falling back to what their answers imply.
+  const requested = String(request.data?.plan || "").trim();
+  const target = TRIAL_SELECTABLE_PLANS.has(requested) ? requested : automaticTrialPlanFor(data);
+  if (target === String(data.billingPlan || "")) {
+    return { ok: true, changed: false, why: "already_on_that_plan" };
+  }
+
+  const entitlements = PLAN_ENTITLEMENTS[target] || PLAN_ENTITLEMENTS.demo;
+  await companyRef.set({
+    billingPlan: target,
+    billingPlanName: entitlements.displayName || target,
+    billingStorageLimitMB: entitlements.storageLimitMB ?? null,
+    billingTeamMemberLimit: entitlements.teamMemberLimit ?? null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+
+  return { ok: true, changed: true, plan: target, planName: entitlements.displayName || target };
+});
+
 exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (request) => {
   const uid = String(request.auth?.uid || "").trim();
   if (!uid) {
@@ -9184,13 +9276,17 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
     memberUids: admin.firestore.FieldValue.arrayUnion(uid),
     memberRoles: { [uid]: "owner" },
     members: { [uid]: ownerMember },
-    billingPlan: "demo",
-    billingPlanName: "Free",
-    billingPlanSource: "signup_free",
-    billingStatus: "free",
-    billingProviderRawStatus: "free",
-    billingStorageLimitMB: 50,
-    billingTeamMemberLimit: 1,
+    // The fortnight starts here, at registration, not at the first order. The
+    // earlier rule waited for a first order so none of the fourteen days were
+    // spent looking around — but nothing ever told anyone the clock had not
+    // started, so a workspace sat on "Free" while believing it was trialling.
+    // A stated fourteen days from signing up is worth more than an unstated
+    // fourteen from a moment nobody can see.
+    //
+    // Pro, because the team size is not known yet: the wizard asks after this
+    // runs. promoteTrialPlanForTeamSize raises it to Team when the answer says
+    // so, and never moves this end date.
+    ...trialGrantAtSignup(timestamp),
     signupCompletedAt: timestamp,
     updatedAt: timestamp,
     createdAt: companySnapshot.exists ? (existing.createdAt || timestamp) : timestamp
@@ -13482,10 +13578,10 @@ exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
     console.warn("Order billing usage update failed:", error?.message || error);
   }
 
-  // The first real order is what starts the fourteen days — see
-  // startAutomaticTrial. Returned so the client can say so out loud rather than
-  // changing the workspace's plan behind the owner's back.
-  const trial = await startAutomaticTrial(companyRef, companyData, "first_order");
+  // The fortnight now starts at sign-up (trialGrantAtSignup), so nothing about
+  // it happens here any more. The field stays in the response because clients
+  // read it; it is simply always "not started by this order" now.
+  const trial = { started: false, why: "granted_at_signup" };
 
   // Whether this was the first order in the workspace. The report's point: the
   // first success deserves saying so plainly, and NOT a sales message. When a
@@ -14088,10 +14184,8 @@ exports.createSwiftOrder = onCall({ region: "europe-west2" }, async (request) =>
     console.warn("Swift order billing usage update failed:", error?.message || error);
   }
 
-  // Mac and iPhone create orders through here, so the first real order starts
-  // the trial from those apps too — the entitlement belongs to the workspace,
-  // not to whichever client happened to be open.
-  const swiftTrial = await startAutomaticTrial(companyRef, companyData, "first_order");
+  // Same as the web path: the fortnight belongs to the sign-up, not to an order.
+  const swiftTrial = { started: false, why: "granted_at_signup" };
   const swiftFirstOrder = await workspaceHasOnlyThisOrder(companyId, orderRef.id);
 
   return {
