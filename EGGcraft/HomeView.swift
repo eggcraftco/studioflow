@@ -449,6 +449,7 @@ struct HomeView: View {
                 headerNote: definition.id == .banking && isCompact && placement.size == .twoByOne
                     && !firebaseManager.bankTransactions.isEmpty
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
+                headerDateBadge: definition.id == .schedule && placement.size != .oneByOne,
                 onOpen: { onOpen(definition.destination) },
                 onAdd: definition.id == .files ? { onOpen("Files") }
                     : definition.id == .notes ? {

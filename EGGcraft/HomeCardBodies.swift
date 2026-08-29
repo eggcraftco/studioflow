@@ -49,7 +49,7 @@ struct HomeCardBody: View {
         case .ordersProduction:
             HomeOrdersProductionBody(size: size, lang: lang, stepsJSON: stepsJSON, compact: compact, data: data)
         case .schedule:
-            HomeScheduleBody(size: size, lang: lang)
+            HomeScheduleBody(size: size, lang: lang, compact: compact)
         case .files:
             HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .notes:
@@ -91,6 +91,75 @@ func homeDayLabel(_ date: Date, lang: String) -> String {
     formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
     formatter.dateFormat = "d MMM"
     return formatter.string(from: date)
+}
+
+/// The chip answers "when", never "how far along" — production status stays out
+/// of this card (§10). A start still ahead of us beats the deadline, because
+/// nothing is late on an order that has not begun yet. A weekday on its own only
+/// reads unambiguously inside the coming week; past that it takes a date.
+func homeDueChip(_ order: Siparis, due: Date, lang: String) -> (label: String, tone: Color) {
+    let today = homeStartOfToday()
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+
+    let startsIn = calendar.dateComponents([.day], from: today,
+                                           to: calendar.startOfDay(for: order.paymentDate)).day ?? 0
+    if startsIn > 0 && startsIn < 7 {
+        formatter.dateFormat = "EEE"
+        return (t("Starts {day}", lang: lang)
+            .replacingOccurrences(of: "{day}", with: formatter.string(from: order.paymentDate)),
+                HomeTone.accent)
+    }
+
+    let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: due)).day ?? 0
+    if days < 0 { return (t("Overdue", lang: lang), HomeTone.red) }
+    if days == 0 { return (t("Due today", lang: lang), HomeTone.red) }
+    if days == 1 { return (t("Tomorrow", lang: lang), HomeTone.orange) }
+    formatter.dateFormat = "d MMM"
+    return (formatter.string(from: due), HomeTone.slate)
+}
+
+/// The sheet names the row after the order. A workspace that never gave the
+/// order a reference has only the customer, and then that is the name. On a
+/// phone the word "Order" costs a third of the row, and the "#1094" beside it
+/// says the same thing on a card already headed Schedule.
+func homeOrderReference(_ order: Siparis, name: String, lang: String, compact: Bool) -> String {
+    let raw = order.watchRef.trimmingCharacters(in: .whitespaces)
+    if raw.isEmpty { return name }
+    let hash = raw.hasPrefix("#") ? raw : "#" + raw
+    return compact ? hash : "\(t("Order", lang: lang)) \(hash)"
+}
+
+/// A phone 1×1 is a 174pt square with a header on top: the sheet's one-line row
+/// — reference, customer and chip side by side — fits two of the three, so the
+/// customer drops to a second line rather than pushing the chip off the card.
+struct HomeDueRow: View {
+    let reference: String
+    let name: String
+    let chip: String
+    let tone: Color
+    var compact: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 8) {
+                Text(reference)
+                    .font(.system(size: compact ? 12 : 12.5, weight: .bold))
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                HomeChip(text: chip, tone: tone)
+            }
+            if !name.isEmpty {
+                Text(name)
+                    .font(.system(size: compact ? 10 : 11.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, compact ? 4 : 6)
+    }
 }
 
 // MARK: - Getting started
@@ -2342,6 +2411,7 @@ struct HomeStageFlow: View {
 struct HomeScheduleBody: View {
     let size: HomeCardSize
     let lang: String
+    var compact: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -2357,10 +2427,14 @@ struct HomeScheduleBody: View {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else if size == .oneByOne {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(upcoming.prefix(3)), id: \.0.id) { entry in
-                    HomeRow(title: entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName,
-                            detail: homeDayLabel(entry.1, lang: lang),
-                            tone: entry.1 < homeStartOfToday() ? HomeTone.red : .secondary)
+                let rows = Array(upcoming.prefix(3))
+                ForEach(Array(rows.enumerated()), id: \.element.0.id) { index, entry in
+                    let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
+                    let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
+                    HomeDueRow(reference: homeOrderReference(entry.0, name: name, lang: lang, compact: compact),
+                               name: entry.0.watchRef.trimmingCharacters(in: .whitespaces).isEmpty ? "" : name,
+                               chip: chip.label, tone: chip.tone, compact: compact)
+                    if index < rows.count - 1 { Divider().opacity(0.5) }
                 }
                 Spacer(minLength: 0)
             }

@@ -21,6 +21,11 @@ struct HomeCardShell<CardBody: View>: View {
     var headerPill: String = ""
     /// A quiet line on the right of the header — how fresh the feed is.
     var headerNote: String = ""
+    /// Today's date, beside the heading, so "Due today" has something to be
+    /// relative to. A 1×1 header does not get one: measured, it takes enough of
+    /// that row to truncate the card's own name, and the rows below already name
+    /// the day in words.
+    var headerDateBadge: Bool = false
     let onOpen: () -> Void
     /// The + the sheet puts on the notes card: the thing you most often want
     /// from a wall of notes is one more note.
@@ -119,6 +124,24 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
+            if headerDateBadge {
+                VStack(spacing: 1) {
+                    VStack(spacing: 2) {
+                        Text(homeTodayWeekday(lang: lang))
+                            .font(.system(size: 9.5, weight: .bold))
+                            .opacity(0.9)
+                        Text("\(Calendar.current.component(.day, from: Date()))")
+                            .font(.system(size: 16, weight: .heavy))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8).padding(.top, 5).padding(.bottom, 6)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(HomeTone.accent))
+                    Text(t("Today", lang: lang))
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .fixedSize()
+            }
             if let onAdd {
                 Button(action: onAdd) {
                     Image(systemName: "plus")
@@ -237,6 +260,14 @@ struct HomeCardShell<CardBody: View>: View {
 
 /// The palette the reference uses. Colour never carries meaning on its own —
 /// every figure it tints is also named in words (§20).
+/// "Sat" in the workspace's own language, for the header's date badge.
+func homeTodayWeekday(lang: String) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+    formatter.dateFormat = "EEE"
+    return formatter.string(from: Date())
+}
+
 enum HomeTone {
     static let accent = Color(red: 0.15, green: 0.39, blue: 0.92)
     static let green = Color(red: 0.08, green: 0.50, blue: 0.24)

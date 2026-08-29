@@ -350,6 +350,16 @@ export default function HomePage() {
                   >
                     +
                   </button>
+                ) : placement.id === "schedule" ? (
+                  // The rows say "today", "tomorrow", "starts Sun". The sheet
+                  // anchors them by naming the day they are relative to.
+                  <span className="home-date-badge">
+                    <b>
+                      <i>{new Date().toLocaleDateString(undefined, { weekday: "short" })}</i>
+                      {new Date().getDate()}
+                    </b>
+                    <em>{t("Today")}</em>
+                  </span>
                 ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
                   // The promise sits beside the title, not in a footnote: this
                   // feed can never move money and the card should lead with that.

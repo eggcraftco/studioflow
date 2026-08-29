@@ -78,6 +78,7 @@ import uk.co.eggcraft.studioflow.features.production.ProductionStage
 import uk.co.eggcraft.studioflow.features.production.ProductionStageKind
 import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import androidx.compose.material3.HorizontalDivider
 import java.text.SimpleDateFormat
 import uk.co.eggcraft.studioflow.features.dashboard.adjustedDashboardNetProfit
 import uk.co.eggcraft.studioflow.features.dashboard.dashboardCustomExpenseTotal
@@ -146,6 +147,59 @@ private fun startOfToday(): Date = Calendar.getInstance().apply {
     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.time
+
+private fun startOfDay(date: Date): Date = Calendar.getInstance().apply {
+    time = date
+    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+}.time
+
+/** The chip answers "when", never "how far along" — production status stays out
+ *  of this card (§10). A start still ahead of us beats the deadline, because
+ *  nothing is late on an order that has not begun yet. A weekday on its own only
+ *  reads unambiguously inside the coming week; past that it takes a date. */
+private fun homeDueChip(paymentDate: Date, due: Date, t: (String) -> String): Pair<String, Color> {
+    val today = startOfToday().time
+    val startsIn = (startOfDay(paymentDate).time - today) / 86_400_000L
+    if (startsIn in 1L..6L) {
+        val day = SimpleDateFormat("EEE", Locale.getDefault()).format(paymentDate)
+        return t("Starts {day}").replace("{day}", day) to HomeTone.accent
+    }
+    val days = (startOfDay(due).time - today) / 86_400_000L
+    return when {
+        days < 0L -> t("Overdue") to HomeTone.red
+        days == 0L -> t("Due today") to HomeTone.red
+        days == 1L -> t("Tomorrow") to HomeTone.orange
+        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(due) to HomeTone.slate
+    }
+}
+
+/** The sheet names the row after the order. A workspace that never gave the
+ *  order a reference has only the customer, and then that is the name. */
+private fun homeOrderReference(ref: String, name: String, t: (String) -> String, withWord: Boolean): String {
+    if (ref.isEmpty()) return name
+    val hash = if (ref.startsWith("#")) ref else "#" + ref
+    return if (withWord) "${t("Order")} $hash" else hash
+}
+
+/** A phone 1x1 is a 174dp square with a header on top: the sheet's one-line row
+ *  — reference, customer and chip side by side — fits two of the three, so the
+ *  customer drops to a second line rather than pushing the chip off the card. */
+@Composable
+private fun HomeDueRow(reference: String, name: String, chip: String, tone: Color) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(reference, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            HomeChip(chip, tone)
+        }
+        if (name.isNotEmpty()) {
+            Text(name, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
 
 private fun dayLabel(date: Date, t: (String) -> String): String {
     val days = (date.time - startOfToday().time) / 86_400_000L
@@ -1986,16 +2040,24 @@ private fun HomeScheduleBody(size: HomeCardSize, state: StudioFlowUiState, t: (S
         return
     }
     if (size == HomeCardSize.OneByOne) {
-        Column {
-            upcoming.take(3).forEach { (order, due) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(dayLabel(due, t), fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                        color = if (due.before(startOfToday())) HomeTone.red
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
+        BoxWithConstraints {
+            // The word "Order" costs a third of a phone row, and the "#1094"
+            // beside it says the same thing on a card already headed Schedule.
+            val roomForTheWord = maxWidth > 220.dp
+            Column {
+                val rows = upcoming.take(3)
+                rows.forEachIndexed { index, (order, due) ->
+                    val (label, tone) = homeDueChip(order.paymentDate, due, t)
+                    val name = order.customerName.ifEmpty { order.designName }
+                    val ref = order.watchRef.trim()
+                    HomeDueRow(
+                        reference = homeOrderReference(ref, name, t, roomForTheWord),
+                        name = if (ref.isEmpty()) "" else name,
+                        chip = label, tone = tone
+                    )
+                    if (index < rows.size - 1) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    }
                 }
             }
         }

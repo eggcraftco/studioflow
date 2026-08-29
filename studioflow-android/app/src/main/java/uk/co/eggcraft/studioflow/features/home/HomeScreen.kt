@@ -72,8 +72,10 @@ import uk.co.eggcraft.studioflow.features.production.defaultProductionStages
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import uk.co.eggcraft.studioflow.language.LocalStudioLanguage
 import uk.co.eggcraft.studioflow.language.studioT
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
 /**
  * Home: the screen that answers what needs attention, what is next, and where to
@@ -399,6 +401,8 @@ fun HomeScreen(
                         headerNote = if (definition.id == HomeCardId.Banking && compact &&
                             slot.placement.size == HomeCardSize.TwoByOne && state.bankTransactions.isNotEmpty())
                             homeSyncLabel(state, t) else "",
+                        headerDateBadge = definition.id == HomeCardId.Schedule &&
+                            slot.placement.size != HomeCardSize.OneByOne,
                         onOpen = { onOpenSection(definition.destination) },
                         // The + the sheet puts on the notes card: the thing you
                         // most often want from a wall of notes is one more note.
@@ -539,6 +543,11 @@ fun HomeCardShell(
     headerPill: String = "",
     /** A quiet line on the right of the header — how fresh the feed is. */
     headerNote: String = "",
+    /** Today's date, beside the heading, so "Due today" has something to be
+     *  relative to. A 1x1 header does not get one: measured, it takes enough of
+     *  that row to truncate the card's own name, and the rows below already name
+     *  the day in words. */
+    headerDateBadge: Boolean = false,
     onOpen: () -> Unit,
     onResize: (HomeCardSize) -> Unit,
     /** Shown as a + in the header when the card has something to add. */
@@ -601,6 +610,25 @@ fun HomeCardShell(
                     if (subtitle.isNotEmpty() && !subtitleInline) {
                         Text(subtitle, fontSize = 10.5.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (headerDateBadge) {
+                    Spacer(Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            Modifier
+                                .background(HomeTone.accent, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(SimpleDateFormat("EEE", Locale.getDefault()).format(Date()),
+                                fontSize = 9.5.sp, fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.9f))
+                            Text(SimpleDateFormat("d", Locale.getDefault()).format(Date()),
+                                fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                        }
+                        Text(t("Today"), fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

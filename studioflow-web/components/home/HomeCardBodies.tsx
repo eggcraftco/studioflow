@@ -11,6 +11,7 @@ import {
   orderSalesTotal,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
+import type { ScheduleOrderItem } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney } from "@/lib/studioflow/money";
@@ -847,19 +848,53 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   };
 
+  // The chip answers "when", never "how far along" — production status stays
+  // out of this card (§10). A start still ahead of us beats the deadline,
+  // because nothing is late on an order that has not begun yet. A weekday on
+  // its own only reads unambiguously inside the coming week; past that it
+  // takes a date.
+  const startOfDayOf = (date: Date) => new Date(new Date(date).setHours(0, 0, 0, 0));
+  const daysFromToday = (date: Date) => Math.round((startOfDayOf(date).getTime() - today.getTime()) / 86400000);
+  const dueChip = (order: ScheduleOrderItem) => {
+    const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
+    if (startsIn > 0 && startsIn < 7) {
+      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(undefined, { weekday: "short" });
+      return { label: t("Starts {day}").replace("{day}", day), hue: "hue-blue" };
+    }
+    const days = daysFromToday(order.dueDate!);
+    if (days < 0) return { label: t("Overdue"), hue: "hue-red" };
+    if (days === 0) return { label: t("Due today"), hue: "hue-red" };
+    if (days === 1) return { label: t("Tomorrow"), hue: "hue-amber" };
+    return {
+      label: order.dueDate!.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+      hue: "hue-slate",
+    };
+  };
+
   if (size === "1x1") {
     return (
-      <ul className="home-record-list">
-        {upcoming.slice(0, 3).map((order) => (
-          <li key={order.id}>
-            <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-              {order.customerName || order.designName}
-            </Link>
-            <span className={order.dueDate! < today ? "home-chip is-late" : "home-chip is-muted"}>
-              {dayLabel(order.dueDate!)}
-            </span>
-          </li>
-        ))}
+      <ul className="home-due-list">
+        {upcoming.slice(0, 3).map((order) => {
+          const chip = dueChip(order);
+          const ref = order.watchRef.trim();
+          const name = order.customerName || order.designName;
+          return (
+            <li key={order.id}>
+              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                <span className="home-due-head">
+                  {/* The sheet names the row after the order. A workspace that
+                      never gave the order a reference has only the customer,
+                      and then that is the name. */}
+                  <b>
+                    {ref ? <><i>{t("Order")}</i>{ref.startsWith("#") ? ref : `#${ref}`}</> : name}
+                  </b>
+                  <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
+                </span>
+                {ref && name ? <em>{name}</em> : null}
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     );
   }

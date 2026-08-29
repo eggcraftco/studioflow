@@ -27393,6 +27393,67 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-week-strip i { font-style: normal; font-size: 10.5px; min-height: 14px; opacity: 0.75; }
 .home-week-strip i.has-work { color: #1d4ed8; font-weight: 800; }
 
+/* Schedule's small card is a deadline list: which order, and when (§10). The
+   sheet sets the reference, the customer and the chip on one line; a phone
+   column is 162px wide, which fits two of the three, so the customer drops to
+   a second line rather than pushing the chip off the card. */
+.home-due-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.home-due-list li { border-bottom: 1px solid var(--border); }
+.home-due-list li:last-child { border-bottom: 0; }
+.home-due-list a { display: block; color: inherit; text-decoration: none; padding: 7px 0; }
+.home-due-list a:hover .home-due-head b { text-decoration: underline; }
+.home-due-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.home-due-head b {
+  font-size: 12.5px; font-weight: 700; flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.home-due-head b i { font-style: normal; margin-right: 4px; }
+.home-due-head .home-chip { flex: 0 0 auto; }
+.home-due-list em {
+  display: block; font-style: normal; font-size: 11.5px; opacity: 0.62;
+  margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A 1x1 on a phone is a 174px square with a header on top: three deadlines fit
+   only if both lines are set tight. The sheet's roomier row is what a card four
+   times this size can afford. */
+@container (max-width: 220px) {
+  /* The word "Order" costs 38px of the row, and "#1094" beside it says the same
+     thing on a card already headed Schedule. */
+  .home-due-head b i { display: none; }
+  .home-due-list { margin-top: 0; }
+  .home-due-list a { padding: 4px 0; }
+  /* The card already has a bottom padding of its own. */
+  .home-due-list li:last-child a { padding-bottom: 0; }
+  .home-due-head b { font-size: 12px; line-height: 1.1; }
+  .home-due-list em { font-size: 10px; line-height: 1.15; margin-top: 0; }
+  .home-due-head .home-chip { padding: 2px 6px; font-size: 10px; }
+}
+
+/* The date badge is a 2x1 and 2x2 thing. A 1x1 header — 238px on a desktop,
+   174px on a phone — already carries the handle, the icon, the card's name and
+   the menu, and measured, the badge takes enough of that row to truncate the
+   word "Schedule" itself. The rows below still name the day in words, which is
+   what the badge was there to anchor. */
+@container (max-width: 300px) {
+  .home-card-head-slot:has(.home-date-badge) { display: none; }
+}
+.home-chip.hue-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.home-chip.hue-amber { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+.home-chip.hue-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+.home-chip.hue-slate { background: rgba(100, 116, 139, 0.14); color: #475569; }
+
+/* Today's date, beside the heading, so "Due today" has something to be
+   relative to. */
+.home-date-badge { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: 0 0 auto; }
+.home-date-badge b {
+  display: flex; flex-direction: column; align-items: center; line-height: 1;
+  background: #2563eb; color: #fff; border-radius: 10px; padding: 5px 8px 6px;
+  font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.home-date-badge b i { font-style: normal; font-size: 9.5px; font-weight: 700; opacity: 0.9; margin-bottom: 2px; }
+.home-date-badge em { font-style: normal; font-size: 10px; opacity: 0.6; }
+
 .home-deadline-row { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
 .home-deadline-row li { display: flex; align-items: center; gap: 8px; padding: 0 10px; min-width: 0; }
 .home-deadline-row li + li { border-left: 1px solid var(--border); }
