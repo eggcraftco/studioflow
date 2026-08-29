@@ -1377,6 +1377,8 @@ struct HomeBankFigure: View {
     /// Three figures on a phone square give each label about 45pt, so there the
     /// name wraps rather than truncates and the box is tighter all round.
     var compact: Bool = false
+    /// A quieter second figure under the value — what those items are worth.
+    var sub: String = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
@@ -1386,8 +1388,45 @@ struct HomeBankFigure: View {
                 .frame(height: compact ? 22 : nil, alignment: .top)
             Text(value).font(.system(size: compact ? 15 : 19, weight: .heavy)).foregroundColor(tone)
                 .lineLimit(1).minimumScaleFactor(0.55)
+            if !sub.isEmpty {
+                Text(sub).font(.system(size: compact ? 9 : 10.5)).foregroundColor(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
         }
         .padding(.horizontal, compact ? 6 : 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// One of the two stock holdings that are not free shelf: what it is, how many
+/// items, and what they are worth. The name stays dark and only the figures
+/// take the tone — a whole row in one colour reads as an alert.
+struct HomeHolding: View {
+    let symbol: String
+    let label: String
+    let count: Int
+    let value: String
+    let tone: Color
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        HStack(spacing: compact ? 7 : 10) {
+            Image(systemName: symbol)
+                .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                .foregroundColor(tone)
+                .frame(width: compact ? 26 : 30, height: compact ? 26 : 30)
+                .background(Circle().fill(tone.opacity(0.15)))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.system(size: compact ? 11 : 12.5, weight: .semibold)).lineLimit(1)
+                Text("\(count) \(t("items", lang: lang))")
+                    .font(.system(size: compact ? 9.5 : 11)).foregroundColor(tone).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Text(value)
+                .font(.system(size: compact ? 11.5 : 13, weight: .heavy)).foregroundColor(tone)
+                .lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .padding(.horizontal, compact ? 8 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -1635,6 +1674,41 @@ struct HomeInventoryBody: View {
                             (summary.lowStockCount, HomeTone.red),
                             (summary.reservedCount, HomeTone.slate)
                         ], height: compact ? 6 : 9)
+                    }
+                }
+            } else if size == .twoByOne {
+                // The sheet's wide card: what the stock is worth and how it
+                // splits, ruled apart, then the two holdings that are not free
+                // stock — reserved against orders, and what is still on its way.
+                // Both carry their count AND their value; a bare amount does not
+                // say how much of the shelf it is.
+                VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("total value", lang: lang),
+                                       value: money(summary.totalValue),
+                                       tone: HomeTone.indigo, compact: compact)
+                            .layoutPriority(1.4)
+                        Divider().frame(height: compact ? 34 : 40)
+                        HomeBankFigure(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
+                                       compact: compact, sub: money(summary.uniqueValue))
+                        Divider().frame(height: compact ? 34 : 40)
+                        HomeBankFigure(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)",
+                                       compact: compact, sub: money(summary.quantityValue))
+                        Divider().frame(height: compact ? 34 : 40)
+                        HomeBankFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                                       tone: summary.lowStockCount > 0 ? HomeTone.red : .primary, compact: compact)
+                            .layoutPriority(0.7)
+                    }
+                    Spacer(minLength: 0)
+                    Divider()
+                    HStack(spacing: 0) {
+                        HomeHolding(symbol: "cart", label: t("Reserved", lang: lang),
+                                    count: summary.reservedCount, value: money(summary.reservedValue),
+                                    tone: HomeTone.orange, lang: lang, compact: compact)
+                        Divider().frame(height: compact ? 26 : 32)
+                        HomeHolding(symbol: "shippingbox", label: t("incoming", lang: lang),
+                                    count: summary.incomingCount, value: money(summary.incomingValue),
+                                    tone: HomeTone.green, lang: lang, compact: compact)
                     }
                 }
             } else {

@@ -311,7 +311,11 @@ export default function HomePage() {
                 placement.id === "ordersProduction" && placement.size !== "1x1"
                   ? t("{count} active").replace("{count}",
                       String(data.scheduleOrders.filter((order) => !order.isDelivered).length))
-                  : undefined
+                  // The wide stock card names what it is a view of, as the
+                  // sheet does — the figures alone do not say.
+                  : placement.id === "inventory" && placement.size !== "1x1"
+                    ? t("Stock overview")
+                    : undefined
               }
               subtitleInline={placement.id === "ordersProduction"}
               headerSlot={

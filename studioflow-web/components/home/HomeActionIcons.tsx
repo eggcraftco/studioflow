@@ -94,7 +94,9 @@ export function HomeActionIcon({ name }: { name: HomeActionIconName }) {
 export type HomeTileIconName =
   | "in" | "out" | "receiptAlert" | "recurring" | "review"
   // The four production counts the 1x1 square carries.
-  | "ready" | "inProduction" | "readyToShip" | "overdue";
+  | "ready" | "inProduction" | "readyToShip" | "overdue"
+  // The two stock holdings that are not free shelf.
+  | "reserved" | "incomingStock";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -160,6 +162,22 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
         <svg {...common}>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 7.5V12l3 2" />
+        </svg>
+      );
+    case "reserved":
+      return (
+        <svg {...common}>
+          <path d="M4 5h2l2.2 9.5h9L19 8H7" />
+          <circle cx="10" cy="18.5" r="1.4" />
+          <circle cx="16.5" cy="18.5" r="1.4" />
+        </svg>
+      );
+    case "incomingStock":
+      return (
+        <svg {...common}>
+          <path d="M3.5 7h9v8h-9zM12.5 10h3.5l2.5 2.5V15h-6z" />
+          <circle cx="7" cy="17.5" r="1.6" />
+          <circle cx="16" cy="17.5" r="1.6" />
         </svg>
       );
   }

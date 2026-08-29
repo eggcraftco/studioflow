@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -1158,7 +1159,8 @@ private fun CostDivider() {
 /** Three figures on a phone square give each label about 45dp, so there the name
  *  wraps rather than truncates and the box is tighter all round. */
 @Composable
-private fun StockFigure(label: String, value: String, tone: Color, compact: Boolean, modifier: Modifier) {
+private fun StockFigure(label: String, value: String, tone: Color, compact: Boolean,
+                        modifier: Modifier, sub: String = "") {
     Column(modifier.padding(horizontal = if (compact) 6.dp else 10.dp)) {
         Text(label, fontSize = if (compact) 9.5.sp else 11.sp,
             maxLines = if (compact) 2 else 1, overflow = TextOverflow.Ellipsis,
@@ -1166,6 +1168,40 @@ private fun StockFigure(label: String, value: String, tone: Color, compact: Bool
             modifier = if (compact) Modifier.height(22.dp) else Modifier,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, fontSize = if (compact) 15.sp else 18.sp, fontWeight = FontWeight.ExtraBold,
+            color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // A quieter second figure under the value — what those items are worth.
+        if (sub.isNotEmpty()) {
+            Text(sub, fontSize = if (compact) 9.sp else 10.5.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** One of the two stock holdings that are not free shelf: what it is, how many
+ *  items, and what they are worth. The name stays dark and only the figures take
+ *  the tone — a whole row in one colour reads as an alert. */
+@Composable
+private fun Holding(
+    icon: ImageVector, label: String, count: Int, value: String, tone: Color,
+    t: (String) -> String, compact: Boolean, modifier: Modifier
+) {
+    Row(
+        modifier.padding(horizontal = if (compact) 8.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
+    ) {
+        Box(
+            Modifier.size(if (compact) 26.dp else 30.dp).background(tone.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Icon(icon, null, Modifier.size(if (compact) 13.dp else 15.dp), tone) }
+        Column(Modifier.weight(1f)) {
+            Text(label, fontSize = if (compact) 11.sp else 12.5.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("$count ${t("items")}", fontSize = if (compact) 9.5.sp else 11.sp,
+                color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(value, fontSize = if (compact) 11.5.sp else 13.sp, fontWeight = FontWeight.ExtraBold,
             color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -1381,6 +1417,41 @@ private fun HomeInventoryBody(
         }
         return
     }
+    if (size == HomeCardSize.TwoByOne) {
+        // The sheet's wide card: what the stock is worth and how it splits,
+        // ruled apart, then the two holdings that are not free stock — reserved
+        // against orders, and what is still on its way. Both carry their count
+        // AND their value; a bare amount does not say how much of the shelf it
+        // is.
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                StockFigure(t("total value"), money(summary.totalValue, state), HomeTone.indigo,
+                    compact, Modifier.weight(1.4f))
+                StockDivider(compact)
+                StockFigure(t("Unique items"), "${summary.uniqueCount}", Color.Unspecified,
+                    compact, Modifier.weight(1f), sub = money(summary.uniqueValue, state))
+                StockDivider(compact)
+                StockFigure(t("Quantity stock"), "${summary.quantityCount}", Color.Unspecified,
+                    compact, Modifier.weight(1f), sub = money(summary.quantityValue, state))
+                StockDivider(compact)
+                StockFigure(t("low stock"), "${summary.lowStockCount}",
+                    if (summary.lowStockCount > 0) HomeTone.red else Color.Unspecified,
+                    compact, Modifier.weight(0.7f))
+            }
+            Spacer(Modifier.weight(1f))
+            HomeDivider()
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Holding(Icons.Filled.ShoppingCart, t("Reserved"), summary.reservedCount,
+                    money(summary.reservedValue, state), HomeTone.orange, t, compact, Modifier.weight(1f))
+                StockDivider(compact)
+                Holding(Icons.Filled.LocalShipping, t("incoming"), summary.incomingCount,
+                    money(summary.incomingValue, state), HomeTone.green, t, compact, Modifier.weight(1f))
+            }
+        }
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)) {
             if (compact) {

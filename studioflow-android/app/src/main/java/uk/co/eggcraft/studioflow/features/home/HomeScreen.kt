@@ -366,7 +366,11 @@ fun HomeScreen(
                         // The sheet names the load beside the title on the wide
                         // card, and under it on the phone, which has no width to
                         // spare for a second thing on that line.
-                        subtitle = if (definition.id == HomeCardId.OrdersProduction &&
+                        // The wide stock card names what it is a view of, as
+                        // the sheet does — the figures alone do not say.
+                        subtitle = if (definition.id == HomeCardId.Inventory &&
+                            slot.placement.size != HomeCardSize.OneByOne) t("Stock overview")
+                        else if (definition.id == HomeCardId.OrdersProduction &&
                             slot.placement.size == HomeCardSize.TwoByOne)
                             t("{count} active").replace("{count}",
                                 "${state.orders.count { !it.isDeleted && !it.isDelivered && it.countsTowardBalance }}")

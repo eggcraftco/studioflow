@@ -415,7 +415,11 @@ struct HomeView: View {
                 // The sheet names the load beside the title on the wide card, and
                 // under it on the phone, which has no width to spare for a second
                 // thing on that line.
-                subtitle: definition.id == .ordersProduction && placement.size == .twoByOne
+                // The wide stock card names what it is a view of, as the sheet
+                // does — the figures alone do not say.
+                subtitle: definition.id == .inventory && placement.size != .oneByOne
+                    ? t("Stock overview", lang: seciliDil)
+                    : definition.id == .ordersProduction && placement.size == .twoByOne
                     ? t("{count} active", lang: seciliDil)
                         .replacingOccurrences(of: "{count}", with: "\(homeLiveOrders(firebaseManager.siparisler).count)")
                     : "",

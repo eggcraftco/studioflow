@@ -517,13 +517,49 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   );
 
   if (size === "2x1") {
+    // The sheet's wide card: what the stock is worth and how it splits, ruled
+    // apart, then the two holdings that are not free stock — reserved against
+    // orders, and what is still on its way. Both carry their count AND their
+    // value; a bare amount does not say how much of the shelf it is.
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <ul className="home-cost-list is-compact">
-          <li><span className="home-cost-dot tone-0" aria-hidden="true" /><em>{t("Reserved")}</em><b>{money(summary.reservedValue)}</b></li>
-          <li><span className="home-cost-dot tone-2" aria-hidden="true" /><em>{t("incoming")}</em><b>{money(summary.incomingValue)}</b></li>
-          <li><span className="home-cost-dot tone-3" aria-hidden="true" /><em>{t("Customer owned")}</em><b>{summary.customerOwnedCount}</b></li>
+      <div className="home-money is-wide is-stock">
+        <div className="home-figure-row is-quad">
+          <span>
+            <em>{t("total value")}</em>
+            <b className="is-total">{money(summary.totalValue)}</b>
+          </span>
+          <span>
+            <em>{t("Unique items")}</em>
+            <b>{summary.uniqueCount}</b>
+            <i>{money(summary.uniqueValue)}</i>
+          </span>
+          <span>
+            <em>{t("Quantity stock")}</em>
+            <b>{summary.quantityCount}</b>
+            <i>{money(summary.quantityValue)}</i>
+          </span>
+          <span>
+            <em>{t("low stock")}</em>
+            <b className={summary.lowStockCount > 0 ? "is-negative" : ""}>{summary.lowStockCount}</b>
+          </span>
+        </div>
+        <ul className="home-holding-row">
+          <li className="is-reserved">
+            <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="reserved" /></span>
+            <span className="home-holding-name">
+              <strong>{t("Reserved")}</strong>
+              <em>{summary.reservedCount} {t("items")}</em>
+            </span>
+            <b>{money(summary.reservedValue)}</b>
+          </li>
+          <li className="is-incoming">
+            <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="incomingStock" /></span>
+            <span className="home-holding-name">
+              <strong>{t("incoming")}</strong>
+              <em>{summary.incomingCount} {t("items")}</em>
+            </span>
+            <b>{money(summary.incomingValue)}</b>
+          </li>
         </ul>
       </div>
     );

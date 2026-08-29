@@ -27365,16 +27365,21 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-flow-node { width: 26px; height: 26px; border-radius: 999px; position: relative; z-index: 1; }
 .home-flow em { font-style: normal; font-size: 10.5px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .home-flow b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.home-flow-node.tone-green, .home-flow b.tone-green { background: rgba(22, 163, 74, 0.16); color: #15803d; }
-.home-flow-node.tone-blue, .home-flow b.tone-blue { background: rgba(37, 99, 235, 0.16); color: #1d4ed8; }
+/* The bare .tone-green / .tone-blue / .tone-positive / .tone-negative classes
+   have a global `color: … !important` earlier in this file, and !important is
+   the only thing that beats !important. Without these the lanes, the flow
+   figures and the chips all painted that global's green and blue instead of
+   their own — close enough to look right and wrong everywhere it mattered. */
+.home-flow-node.tone-green, .home-flow b.tone-green { background: rgba(22, 163, 74, 0.16); color: #15803d !important; }
+.home-flow-node.tone-blue, .home-flow b.tone-blue { background: rgba(37, 99, 235, 0.16); color: #1d4ed8 !important; }
 .home-flow-node.tone-red, .home-flow b.tone-red { background: rgba(220, 38, 38, 0.14); color: #dc2626; }
 .home-flow-node.tone-purple, .home-flow b.tone-purple { background: rgba(124, 58, 237, 0.14); color: #6d28d9; }
 .home-flow-node.tone-slate, .home-flow b.tone-slate { background: rgba(100, 116, 139, 0.16); color: #475569; }
 .home-flow b { background: none; }
 
 .home-chip.is-late { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
-.home-chip.tone-green { background: rgba(22, 163, 74, 0.12); color: #15803d; }
-.home-chip.tone-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+.home-chip.tone-green { background: rgba(22, 163, 74, 0.12); color: #15803d !important; }
+.home-chip.tone-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8 !important; }
 .home-chip.tone-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
 .home-chip.tone-purple { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
 .home-chip.tone-slate { background: rgba(100, 116, 139, 0.14); color: #475569; }
@@ -27507,6 +27512,7 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0;
   border: 1px solid var(--border); border-radius: 12px; padding: 10px 4px;
 }
+.home-count em { color: var(--foreground); }
 .home-count em {
   font-style: normal; font-size: 10.5px; opacity: 0.62; text-align: center;
   /* Four names across a real 336px square is ~76px each — "In production" only
@@ -27606,6 +27612,47 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-figure-row.is-ruled { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
 .home-figure-row.is-ruled > span { align-items: flex-start; text-align: left; }
 .home-money.is-stock .home-mix-bar { margin-top: 12px; }
+
+/* The wide stock card: four figures ruled apart, then the two holdings that are
+   not free shelf. Each holding carries its count AND its value — a bare amount
+   does not say how much of the shelf it is. */
+.home-figure-row.is-quad { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.home-figure-row.is-quad i {
+  font-style: normal; font-size: 10.5px; opacity: 0.55; font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-figure-row b.is-total { color: #4338ca; }
+
+.home-holding-row {
+  list-style: none; margin: 0; padding: 12px 0 0; display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--border); margin-top: auto;
+}
+.home-holding-row li {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 14px;
+}
+.home-holding-row li + li { border-left: 1px solid var(--border); }
+.home-holding-row li:first-child { padding-left: 0; }
+.home-holding-badge {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.home-holding-badge svg { width: 16px; height: 16px; }
+.home-holding-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.home-holding-name strong {
+  font-size: 12.5px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-holding-name em { font-style: normal; font-size: 11px; white-space: nowrap; }
+.home-holding-row b {
+  font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.home-holding-row li.is-reserved .home-holding-badge { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.home-holding-row li.is-reserved .home-holding-name em,
+.home-holding-row li.is-reserved b { color: #c2410c; }
+.home-holding-row li.is-incoming .home-holding-badge { background: rgba(22, 163, 74, 0.14); color: #15803d; }
+.home-holding-row li.is-incoming .home-holding-name em,
+.home-holding-row li.is-incoming b { color: #15803d; }
 
 .home-bank-split {
   display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px;
@@ -28004,8 +28051,8 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .home-lane-row b { font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.home-lane-row li.tone-green { color: #16a34a; }
-.home-lane-row li.tone-blue { color: #2563eb; }
+.home-lane-row li.tone-green { color: #16a34a !important; }
+.home-lane-row li.tone-blue { color: #2563eb !important; }
 .home-lane-row li.tone-red { color: #dc2626; }
 .home-lane-row li.tone-purple { color: #7c3aed; }
 .home-lane-row li.tone-slate { color: #64748b; }
@@ -28190,6 +28237,27 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   }
   .home-figure-row.is-ruled b { font-size: 15px; }
   .home-money.is-stock .home-mix-bar { margin-top: 6px; height: 6px; }
+  /* Four labels across a 335px phone card get about 77px each — "Quantity
+     stock" does not fit on one line in most languages, so they wrap. */
+  /* The headline is the widest thing on the row and "Low stock" is one digit,
+     so the columns are not equal — the sheet draws them the same way. */
+  .home-figure-row.is-quad { grid-template-columns: 1.4fr 1fr 1fr 0.7fr; }
+  .home-figure-row.is-quad > span { padding: 0 7px; }
+  .home-figure-row.is-quad em {
+    font-size: 9.5px; line-height: 1.15; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 22px;
+  }
+  .home-figure-row.is-quad b { font-size: 14px; }
+  .home-figure-row.is-quad b.is-total { font-size: 13px; }
+  .home-figure-row.is-quad i { font-size: 9px; }
+  .home-holding-row { padding-top: 9px; }
+  .home-holding-row li { gap: 7px; padding: 0 8px; }
+  .home-holding-badge { width: 26px; height: 26px; }
+  .home-holding-badge svg { width: 14px; height: 14px; }
+  .home-holding-name strong { font-size: 11px; }
+  .home-holding-name em { font-size: 9.5px; }
+  .home-holding-row b { font-size: 11.5px; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
