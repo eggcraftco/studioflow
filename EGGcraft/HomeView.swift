@@ -113,7 +113,8 @@ struct HomeView: View {
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
-    private var columnCount: Int { sizeClass == .compact ? 2 : 3 }
+    // §17: phone is a single column of full-width cards, not a shrunken desktop.
+    private var columnCount: Int { sizeClass == .compact ? 1 : 3 }
     #else
     private var columnCount: Int { 4 }
     #endif

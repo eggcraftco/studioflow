@@ -88,7 +88,8 @@ struct HomeCardShell<CardBody: View>: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(.secondary)
-                .frame(width: 26, height: 22)
+                // §17 asks for at least 44x44pt of touch target; the glyph stays small.
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)

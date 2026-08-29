@@ -163,7 +163,13 @@ fun HomeScreen(
     }
 
     val configuration = LocalConfiguration.current
-    val columnCount = if (configuration.screenWidthDp >= 840) 3 else 2
+    // §17: phone is a single column of full-width cards; tablets get two, wide
+    // tablets three. A shrunken desktop grid is explicitly not wanted.
+    val columnCount = when {
+        configuration.screenWidthDp >= 840 -> 3
+        configuration.screenWidthDp >= 600 -> 2
+        else -> 1
+    }
     val gridWidth = configuration.screenWidthDp - 32
     val unit = (gridWidth - CARD_GAP * (columnCount - 1)) / columnCount
     val rows = HomeGridLayout.rowCount(visible, columnCount)
@@ -389,14 +395,20 @@ fun HomeCardShell(
                         MaterialTheme.colorScheme.onSurface else homeToneColor(placement.tone)
                 )
                 Box {
-                    Icon(
-                        Icons.Filled.MoreHoriz,
-                        contentDescription = t("Card options"),
-                        modifier = Modifier
-                            .size(22.dp)
+                    // §17 asks for at least 44dp of touch target; the glyph stays small.
+                    Box(
+                        Modifier
+                            .size(44.dp)
                             .clickable { menuOpen = true },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreHoriz,
+                            contentDescription = t("Card options"),
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         Text(t("Resize"), fontSize = 10.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),

@@ -9,12 +9,19 @@ import {
   type StudioActivityNotification,
 } from "@/lib/studioflow/notifications";
 import {
+  DEFAULT_PRODUCTION_STAGES,
+  productionStagesFromSettings,
+  type ProductionStage,
+} from "@/lib/studioflow/production";
+import { loadWorkspaceBlockHeadings, type HeadingItem } from "@/lib/studioflow/blockHeadings";
+import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
   loadRecentOrders,
   loadScheduleOrders,
   loadWorkspaceClientFiles,
   loadWorkspaceCustomers,
+  loadWorkspaceProductionStages,
   workspaceAccessAllows,
   type ClientFileListItem,
   type CustomerDirectoryItem,
@@ -60,6 +67,8 @@ export type HomeData = {
   files: ClientFileListItem[];
   bankTransactions: HomeBankTx[];
   activity: StudioActivityNotification[];
+  productionStages: ProductionStage[];
+  productionSteps: HeadingItem[];
   bankLastSync: Date | null;
   lastLoadedAtMs: number;
   offline: boolean;
@@ -85,6 +94,8 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
   const [files, setFiles] = useState<ClientFileListItem[]>([]);
   const [bankTransactions, setBankTransactions] = useState<HomeBankTx[]>([]);
   const [activity, setActivity] = useState<StudioActivityNotification[]>([]);
+  const [productionStages, setProductionStages] = useState<ProductionStage[]>(DEFAULT_PRODUCTION_STAGES);
+  const [productionSteps, setProductionSteps] = useState<HeadingItem[]>([]);
   const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
   const [lastLoadedAtMs, setLastLoadedAtMs] = useState(0);
   const [offline, setOffline] = useState(false);
@@ -135,6 +146,20 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       } catch {
         if (!cancelled.current) setDomain("orders", "error");
       }
+    })();
+
+    // The production stage is never stored — it is derived from the order's own
+    // steps against the workspace's own stages, by the one rule the Production
+    // screen uses. Matching order.status against a hard-coded list is a second,
+    // incompatible definition, and it read zero for every stage.
+    (async () => {
+      const [rawStages, headings] = await Promise.all([
+        loadWorkspaceProductionStages(workspaceId).catch(() => null),
+        loadWorkspaceBlockHeadings(workspace).catch(() => null),
+      ]);
+      if (cancelled.current) return;
+      setProductionStages(productionStagesFromSettings(rawStages));
+      setProductionSteps((headings?.customSteps ?? []).filter((step) => Boolean(step.title?.trim())));
     })();
 
     (async () => {
@@ -253,6 +278,8 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       files,
       bankTransactions,
       activity,
+      productionStages,
+      productionSteps,
       bankLastSync,
       lastLoadedAtMs,
       offline,
@@ -260,7 +287,8 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, files, bankTransactions, activity, bankLastSync, lastLoadedAtMs, offline, reload,
+      inventory, files, bankTransactions, activity, productionStages, productionSteps,
+      bankLastSync, lastLoadedAtMs, offline, reload,
     ],
   );
 }
