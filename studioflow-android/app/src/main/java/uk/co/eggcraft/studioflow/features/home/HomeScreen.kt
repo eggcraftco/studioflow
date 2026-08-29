@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.features.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.border
@@ -394,6 +395,11 @@ fun HomeScreen(
                             slot.placement.size == HomeCardSize.TwoByOne && state.bankTransactions.isNotEmpty())
                             homeSyncLabel(state, t) else "",
                         onOpen = { onOpenSection(definition.destination) },
+                        // The + the sheet puts on the notes card: the thing you
+                        // most often want from a wall of notes is one more note.
+                        onAdd = if (definition.id == HomeCardId.Notes) {
+                            { onOpenSection("Notes") }
+                        } else null,
                         onResize = { size -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(size = size) else it
                         })) },
@@ -528,6 +534,8 @@ fun HomeCardShell(
     headerNote: String = "",
     onOpen: () -> Unit,
     onResize: (HomeCardSize) -> Unit,
+    /** Shown as a + in the header when the card has something to add. */
+    onAdd: (() -> Unit)? = null,
     onPeriod: (HomeCardPeriod) -> Unit,
     onTone: (HomeCardTone) -> Unit,
     onRename: () -> Unit,
@@ -587,6 +595,19 @@ fun HomeCardShell(
                         Text(subtitle, fontSize = 10.5.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (onAdd != null) {
+                    Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier
+                            .size(if (compact) 24.dp else 28.dp)
+                            .background(HomeTone.accent, RoundedCornerShape(9.dp))
+                            .clickable(onClick = onAdd),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Filled.Add, t("New note"),
+                            Modifier.size(if (compact) 14.dp else 16.dp), Color.White)
                     }
                 }
                 // The range the card's totals cover. It sits in the header

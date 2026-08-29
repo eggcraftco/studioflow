@@ -446,6 +446,12 @@ struct HomeView: View {
                     && !firebaseManager.bankTransactions.isEmpty
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
+                onAdd: definition.id == .notes ? {
+                    // The same route the app-icon shortcut takes: raise the flag
+                    // the Notes tab reads, then go there.
+                    UserDefaults.standard.set(true, forKey: "pendingQuickActionNewNote")
+                    onOpen("Notes")
+                } : nil,
                 onResize: { store.resize(placement.id, to: $0) },
                 onPeriod: { store.setPeriod(placement.id, period: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },

@@ -53,7 +53,7 @@ struct HomeCardBody: View {
         case .files:
             HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .notes:
-            HomeNotesBody(size: size, lang: lang, data: data)
+            HomeNotesBody(size: size, lang: lang, compact: compact, data: data)
         }
     }
 }
@@ -2577,6 +2577,7 @@ func homeFileTone(_ name: String) -> Color {
 struct HomeNotesBody: View {
     let size: HomeCardSize
     let lang: String
+    var compact: Bool = false
     @ObservedObject var data: HomeData
 
     var body: some View {
@@ -2599,7 +2600,8 @@ struct HomeNotesBody: View {
                 }
             } else {
                 let shown = Array((pinned + recent).prefix(size == .oneByOne ? 2 : 3))
-                HomeNoteGrid(notes: shown, lang: lang, columns: size == .oneByOne ? 1 : 3)
+                HomeNoteGrid(notes: shown, lang: lang,
+                             columns: size == .oneByOne ? 1 : 3, compact: compact)
             }
         }
     }
@@ -2609,10 +2611,12 @@ struct HomeNoteGrid: View {
     let notes: [StudioKeepNote]
     let lang: String
     let columns: Int
+    var compact: Bool = false
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 9), count: columns), spacing: 9) {
+        let spacing: CGFloat = compact ? 5 : 9
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
             ForEach(notes, id: \.id) { note in
-                HomeNoteTile(note: note, lang: lang)
+                HomeNoteTile(note: note, lang: lang, compact: compact)
             }
         }
     }
@@ -2622,12 +2626,25 @@ struct HomeNoteGrid: View {
 struct HomeNoteTile: View {
     let note: StudioKeepNote
     let lang: String
+    /// Two notes in a 162pt square leave about 46pt each, so the body drops to
+    /// one line and the type comes down.
+    var compact: Bool = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
-                .font(.system(size: 12.5, weight: .heavy)).lineLimit(1)
+        VStack(alignment: .leading, spacing: compact ? 1 : 4) {
+            HStack(spacing: compact ? 4 : 5) {
+                // Pinned first is the order; the mark is what says so.
+                if note.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: compact ? 8 : 9.5))
+                        .foregroundColor(HomeTone.orange)
+                }
+                Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
+                    .font(.system(size: compact ? 11 : 12.5, weight: .heavy)).lineLimit(1)
+            }
             if !note.text.isEmpty {
-                Text(note.text).font(.system(size: 11.5)).foregroundColor(.secondary).lineLimit(2)
+                Text(note.text)
+                    .font(.system(size: compact ? 9 : 11.5)).foregroundColor(.secondary)
+                    .lineLimit(compact ? 1 : 2)
             }
             Spacer(minLength: 0)
             HStack(spacing: 6) {
@@ -2643,8 +2660,8 @@ struct HomeNoteTile: View {
                 }
             }
         }
-        .padding(.horizontal, 11).padding(.vertical, 9)
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+        .padding(.horizontal, compact ? 8 : 11).padding(.vertical, compact ? 4 : 9)
+        .frame(maxWidth: .infinity, minHeight: compact ? 0 : 66, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12).fill(homeNoteColour(note.colorName)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
     }

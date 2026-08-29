@@ -1289,8 +1289,13 @@ function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: stri
   startOfDay.setHours(0, 0, 0, 0);
   const days = reminder ? Math.round((reminder.getTime() - startOfDay.getTime()) / 86400000) : null;
   return (
-    <Link className={`home-note tone-${note.colorName || "default"}`} href={`/notes?note=${encodeURIComponent(note.id)}`}>
-      <strong>{note.title || t("Untitled note")}</strong>
+    // hue-, not tone-: a global `.tone-green { color: … !important }` earlier in
+    // the stylesheet would repaint a green note's text its own green.
+    <Link className={`home-note hue-${note.colorName || "default"}`} href={`/notes?note=${encodeURIComponent(note.id)}`}>
+      <strong>
+        {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
+        {note.title || t("Untitled note")}
+      </strong>
       {note.text ? <p>{note.text}</p> : null}
       <span className="home-note-foot">
         {chip ? <span className="home-chip is-muted">{chip}</span> : null}

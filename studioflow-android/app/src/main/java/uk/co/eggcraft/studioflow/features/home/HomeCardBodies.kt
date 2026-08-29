@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.ui.draw.clip
@@ -119,7 +120,7 @@ fun HomeCardBody(
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
         HomeCardId.Files -> HomeFilesBody(size, state, compact, t)
-        HomeCardId.Notes -> HomeNotesBody(size, state, t)
+        HomeCardId.Notes -> HomeNotesBody(size, state, compact, t)
     }
 }
 
@@ -2190,7 +2191,7 @@ private fun fileTone(name: String): Color {
 // --------------------------------------------------------------------- Notes
 
 @Composable
-private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
     // Notes only. Not files, not AI replies (§13). Pinned first.
     val live = state.keepNotes.filter { !it.isDeleted && !it.isArchived }
     if (live.isEmpty()) {
@@ -2203,23 +2204,27 @@ private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, t: (Stri
         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             if (pinned.isNotEmpty()) {
                 HomeEyebrow(t("Pinned"))
-                NoteGrid(pinned.take(2), t)
+                NoteGrid(pinned.take(2), t, compact)
             }
             HomeEyebrow(t("Recent"))
-            NoteGrid(recent.take(if (pinned.isEmpty()) 4 else 2), t)
+            NoteGrid(recent.take(if (pinned.isEmpty()) 4 else 2), t, compact)
         }
     } else {
-        NoteGrid((pinned + recent).take(if (size == HomeCardSize.OneByOne) 2 else 2), t)
+        NoteGrid((pinned + recent).take(2), t, compact,
+            columns = if (size == HomeCardSize.OneByOne) 1 else 2)
     }
 }
 
 @Composable
-private fun NoteGrid(notes: List<StudioKeepNote>, t: (String) -> String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        notes.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                pair.forEach { NoteTile(it, t, Modifier.weight(1f)) }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
+private fun NoteGrid(
+    notes: List<StudioKeepNote>, t: (String) -> String, compact: Boolean, columns: Int = 2
+) {
+    val gap = if (compact) 5.dp else 8.dp
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+        notes.chunked(columns).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                pair.forEach { NoteTile(it, t, compact, Modifier.weight(1f)) }
+                repeat(columns - pair.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -2227,18 +2232,30 @@ private fun NoteGrid(notes: List<StudioKeepNote>, t: (String) -> String) {
 
 /** A note keeps its own colour — that is the note's, not the card's. */
 @Composable
-private fun NoteTile(note: StudioKeepNote, t: (String) -> String, modifier: Modifier) {
+private fun NoteTile(note: StudioKeepNote, t: (String) -> String, compact: Boolean, modifier: Modifier) {
+    val radius = RoundedCornerShape(if (compact) 10.dp else 12.dp)
     Column(
         modifier
-            .background(noteColour(note.colorName), RoundedCornerShape(12.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+            .background(noteColour(note.colorName), radius)
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), radius)
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 9.dp),
+        // Two notes in a 162dp square leave about 46dp each, so the body drops
+        // to one line and the type comes down.
+        verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 4.dp)
     ) {
-        Text(note.title.ifEmpty { t("Untitled note") }, fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 5.dp)) {
+            // Pinned first is the order; the mark is what says so.
+            if (note.isPinned) {
+                Icon(Icons.Filled.PushPin, null, Modifier.size(if (compact) 9.dp else 11.dp), HomeTone.orange)
+            }
+            Text(note.title.ifEmpty { t("Untitled note") },
+                fontSize = if (compact) 11.sp else 12.sp,
+                fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         if (note.text.isNotEmpty()) {
-            Text(note.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            Text(note.text, fontSize = if (compact) 9.sp else 11.sp,
+                maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (note.linkedOrderLabel.isNotEmpty()) HomeChip(note.linkedOrderLabel, HomeTone.slate)

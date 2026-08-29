@@ -326,7 +326,19 @@ export default function HomePage() {
               }
               subtitleInline={placement.id === "ordersProduction"}
               headerSlot={
-                placement.id === "banking" && data.bankTransactions.length > 0 ? (
+                // The sheet puts a + on the notes card, because the thing you
+                // most often want from a wall of notes is one more note.
+                placement.id === "notes" ? (
+                  <button
+                    type="button"
+                    className="home-add-button"
+                    aria-label={t("New Note")}
+                    title={t("New Note")}
+                    onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                  >
+                    +
+                  </button>
+                ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
                   // The promise sits beside the title, not in a footnote: this
                   // feed can never move money and the card should lead with that.
                   <span className="home-pill is-warning is-solid">{t("Read-only")}</span>

@@ -22,6 +22,9 @@ struct HomeCardShell<CardBody: View>: View {
     /// A quiet line on the right of the header — how fresh the feed is.
     var headerNote: String = ""
     let onOpen: () -> Void
+    /// The + the sheet puts on the notes card: the thing you most often want
+    /// from a wall of notes is one more note.
+    var onAdd: (() -> Void)? = nil
     let onResize: (HomeCardSize) -> Void
     let onPeriod: (HomeCardPeriod) -> Void
     let onTone: (HomeCardTone) -> Void
@@ -116,6 +119,17 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
+            if let onAdd {
+                Button(action: onAdd) {
+                    Image(systemName: "plus")
+                        .font(.system(size: compact ? 12 : 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("New note", lang: lang))
+            }
             // The range the card's totals cover. It sits in the header because a
             // figure without its period is not an answer — §4 puts the filter
             // here, beside the heading, not in a footnote.

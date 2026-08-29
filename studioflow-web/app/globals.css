@@ -27446,16 +27446,26 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-note:hover { box-shadow: 0 6px 18px rgba(23, 25, 35, 0.08); }
 .home-note strong { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-note p { margin: 0; font-size: 11.5px; opacity: 0.75; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.home-note-pin { margin-right: 5px; font-size: 11px; }
+/* The + the sheet puts on the notes card: the thing you most often want from a
+   wall of notes is one more note. */
+.home-add-button {
+  width: 28px; height: 28px; border-radius: 9px; border: 0; cursor: pointer;
+  background: #2563eb; color: #fff; font-size: 18px; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.home-add-button:hover { background: #1d4ed8; }
+.home-add-button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .home-note-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; flex-wrap: wrap; }
 .home-note-foot em { font-style: normal; font-size: 10.5px; opacity: 0.7; }
 .home-note-foot em.is-due { color: #dc2626; font-weight: 700; opacity: 1; }
 .home-note-foot em.is-soon { color: #15803d; font-weight: 700; opacity: 1; }
-.home-note.tone-yellow { background: #fef7e0; border-color: #f7e3a1; }
-.home-note.tone-blue { background: #e5f0fd; border-color: #bcd8f7; }
-.home-note.tone-green { background: #e7f6ec; border-color: #bde5c8; }
-.home-note.tone-red { background: #fdeaea; border-color: #f6c6c6; }
-.home-note.tone-purple { background: #f1ecfd; border-color: #dbcdf8; }
-.home-note.tone-orange { background: #fdeee0; border-color: #f7d3b0; }
+.home-note.hue-yellow { background: #fef7e0; border-color: #f7e3a1; }
+.home-note.hue-blue { background: #e5f0fd; border-color: #bcd8f7; }
+.home-note.hue-green { background: #e7f6ec; border-color: #bde5c8; }
+.home-note.hue-red { background: #fdeaea; border-color: #f6c6c6; }
+.home-note.hue-purple { background: #f1ecfd; border-color: #dbcdf8; }
+.home-note.hue-orange { background: #fdeee0; border-color: #f7d3b0; }
 
 /* Activity */
 .home-activity-list { list-style: none; margin: 4px 0 0; padding: 0; }
@@ -28326,6 +28336,19 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-attention-list strong { font-size: 11px; }
   .home-attention-chip { font-size: 9.5px; padding: 2px 7px; }
   .home-attention-where { font-size: 10px; max-width: 58px; }
+
+  /* Two notes in a 162px square leave about 46px each. The sheet draws this
+     card far larger, so here the body is one line rather than two and the
+     type comes down — the title and whatever the note is attached to are what
+     survive, because those are the parts you act on. */
+  .home-note-grid[data-size="1x1"] { gap: 5px; }
+  .home-note-grid[data-size="1x1"] .home-note { padding: 4px 8px; gap: 1px; border-radius: 10px; }
+  .home-note-grid[data-size="1x1"] .home-note strong { font-size: 11px; }
+  .home-note-grid[data-size="1x1"] .home-note p { font-size: 9px; line-height: 1.25; -webkit-line-clamp: 1; }
+  .home-note-grid[data-size="1x1"] .home-note-foot { gap: 4px; }
+  .home-note-grid[data-size="1x1"] .home-chip { font-size: 9px; padding: 0 6px; line-height: 1.5; }
+  .home-note-grid[data-size="1x1"] .home-note-foot em { font-size: 9px; }
+  .home-note-pin { font-size: 9px; margin-right: 4px; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
