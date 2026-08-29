@@ -10421,6 +10421,17 @@ struct ContentView: View {
         // them to decide whether the fortnight should be Pro or Team.
         database.collection("companies").document(companyId)
             .setData(["onboardingTeamSize": answers.teamSize.seats], merge: true)
+
+        // The trial started at sign-up on Pro, before any of this was known. Put
+        // it on the plan the last step confirmed. The client cannot write billing
+        // fields and the end date must not move, so the server does it. A failure
+        // here is not worth losing the answers over: the workspace simply keeps
+        // trialling Pro.
+        Functions.functions(region: "europe-west2")
+            .httpsCallable("setTrialPlan")
+            .call(["plan": answers.chosenPlan.rawValue]) { _, error in
+                if let error { print("setTrialPlan failed: \(error.localizedDescription)") }
+            }
     }
 
     private struct BusinessOnboardingPreset {

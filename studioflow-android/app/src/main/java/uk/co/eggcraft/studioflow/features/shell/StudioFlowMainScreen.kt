@@ -1128,6 +1128,17 @@ private fun WorkspaceOnboardingScreen(
                 onboardingWizardUpdates(answers, state.user?.uid ?: ""),
             "Workspace setup completed."
         )
+        // The trial started at sign-up on Pro, before any of this was known. Put
+        // it on the plan the last step confirmed. The client cannot write billing
+        // fields and the end date must not move, so the server does it. A failure
+        // here is not worth losing the answers over: the workspace simply keeps
+        // trialling Pro.
+        com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
+            .getHttpsCallable("setTrialPlan")
+            .call(mapOf("plan" to answers.chosenPlan.raw))
+            .addOnFailureListener { error ->
+                android.util.Log.w("StudioFlow", "setTrialPlan failed", error)
+            }
     }
 
     OnboardingWizardScreen(

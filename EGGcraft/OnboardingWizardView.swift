@@ -103,6 +103,39 @@ enum OnboardingWorkflow: String, CaseIterable {
     }
 }
 
+/// The plans the sign-up wizard may put a trial on. Mirrors the web list and
+/// the server's TRIAL_SELECTABLE_PLANS.
+enum OnboardingTrialPlan: String, CaseIterable {
+    case starter = "lifetime_lite"
+    case pro = "pro_monthly"
+    case team = "team_monthly"
+
+    var title: String {
+        switch self {
+        case .starter: return "NivaDesk Starter"
+        case .pro: return "NivaDesk Pro"
+        case .team: return "NivaDesk Team"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .starter: return "One person, the essentials."
+        case .pro: return "One studio, everything in it."
+        case .team: return "Shared work, roles and permissions."
+        }
+    }
+
+    /// Stripe list price, the same labels the web shows.
+    var price: String {
+        switch self {
+        case .starter: return "£9 / month"
+        case .pro: return "£19 / month"
+        case .team: return "£49 / month"
+        }
+    }
+}
+
 enum OnboardingTeamSize: String, CaseIterable {
     case solo
     case twoToFive = "2_5"
@@ -302,10 +335,22 @@ struct OnboardingAnswers {
     var mainGoal: OnboardingGoal?
     var extraGoals: [OnboardingGoal] = []
     var start: OnboardingStart?
+    /// The plan the last step confirmed. nil until that step is reached.
+    var plan: OnboardingTrialPlan?
 
     var businessType: String {
         workKinds.first?.businessType ?? "General Small Business"
     }
+
+    /// What the answers imply, and what the last step shows as chosen. Same rule
+    /// as the server's automaticTrialPlanFor: a workspace that says it has a
+    /// team gets the plan that covers one, because trialling Pro would hide the
+    /// very features they came for.
+    var recommendedPlan: OnboardingTrialPlan {
+        teamSize.seats > 1 ? .team : .pro
+    }
+
+    var chosenPlan: OnboardingTrialPlan { plan ?? recommendedPlan }
 
     var goals: [String] {
         guard let main = mainGoal else { return extraGoals.map { $0.rawValue } }
@@ -652,6 +697,75 @@ private struct OnboardingConnectTile: View {
     }
 }
 
+
+/// Step 5: the plan the answers imply, and the two alternatives.
+///
+/// The trial already started at sign-up on Pro — sign-up cannot know the team
+/// size, the questions come after — so this step confirms which plan the
+/// fortnight should be spent on. Choosing here never changes when it ends.
+private struct OnboardingStepPlan: View {
+    @Binding var answers: OnboardingAnswers
+    let lang: String
+
+    private var trialEndsLabel: String {
+        let ends = Date().addingTimeInterval(14 * 24 * 60 * 60)
+        return ends.formatted(.dateTime.day().month(.wide))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(OnboardingTrialPlan.allCases, id: \.self) { plan in
+                let selected = answers.chosenPlan == plan
+                Button {
+                    answers.plan = plan
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                            .foregroundColor(selected ? .accentColor : .secondary)
+                            .font(.system(size: 15))
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 8) {
+                                Text(t(plan.title, lang: lang))
+                                    .font(.system(size: 15, weight: .bold))
+                                if plan == answers.recommendedPlan {
+                                    Text(t("Recommended for your answers", lang: lang))
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(Color.accentColor.opacity(0.14))
+                                        .foregroundColor(.accentColor)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            Text(t(plan.summary, lang: lang))
+                                .font(.system(size: 12.5)).foregroundColor(.secondary)
+                            // One sentence, not three fragments: the free period,
+                            // the date it ends and the price after it are one
+                            // thought, and splitting them breaks word order in
+                            // half the languages we ship.
+                            Text(t("Free until {date}, then {price}.", lang: lang)
+                                .replacingOccurrences(of: "{date}", with: trialEndsLabel)
+                                .replacingOccurrences(of: "{price}", with: plan.price))
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 15).padding(.vertical, 13)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 13)
+                            .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                                          lineWidth: selected ? 1.8 : 1.2)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            Text(t("We picked this from your answers — you told us how many people work with you and what you need first. Change it here, or later in Settings; nothing is charged today.", lang: lang))
+                .font(.system(size: 12)).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 private struct OnboardingStepStart: View {
     @Binding var answers: OnboardingAnswers
     let lang: String
@@ -721,14 +835,15 @@ struct OnboardingWizardView: View {
     @State private var answers = OnboardingAnswers()
     @State private var showAllGoals = false
 
-    private let totalSteps = 4
+    private let totalSteps = 5
 
     private var title: String {
         switch step {
         case 1: return t("Workspace basics", lang: lang)
         case 2: return t("Tell us about your work", lang: lang)
         case 3: return t("What should NivaDesk help with first?", lang: lang)
-        default: return t("Bring your work in", lang: lang)
+        case 4: return t("Bring your work in", lang: lang)
+        default: return t("Your plan", lang: lang)
         }
     }
 
@@ -737,7 +852,8 @@ struct OnboardingWizardView: View {
         case 1: return t("We've suggested these from your location. You can change them now or later in Settings.", lang: lang)
         case 2: return t("This sets up your order cards, production stages and labels.", lang: lang)
         case 3: return t("Your answer decides what your dashboard and first tasks show.", lang: lang)
-        default: return t("Pick how you'd like to start. You can do any of the others later.", lang: lang)
+        case 4: return t("Pick how you'd like to start. You can do any of the others later.", lang: lang)
+        default: return t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.", lang: lang)
         }
     }
 
@@ -746,7 +862,9 @@ struct OnboardingWizardView: View {
         case 1: return !answers.country.isEmpty && !answers.currency.isEmpty
         case 2: return !answers.workKinds.isEmpty
         case 3: return answers.mainGoal != nil
-        default: return answers.start != nil
+        case 4: return answers.start != nil
+        // The plan step arrives with a recommendation already chosen.
+        default: return true
         }
     }
 
@@ -761,10 +879,11 @@ struct OnboardingWizardView: View {
         case 1: OnboardingStepBasics(answers: $answers, lang: lang)
         case 2: OnboardingStepWork(answers: $answers, lang: lang)
         case 3: OnboardingStepGoal(answers: $answers, showAllGoals: $showAllGoals, lang: lang)
-        default:
+        case 4:
             OnboardingStepStart(answers: $answers, lang: lang, saving: saving) { integration in
                 onConnect(answers, integration)
             }
+        default: OnboardingStepPlan(answers: $answers, lang: lang)
         }
     }
 

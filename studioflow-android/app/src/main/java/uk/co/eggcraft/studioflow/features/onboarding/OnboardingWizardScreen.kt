@@ -182,25 +182,29 @@ fun OnboardingWizardScreen(
     var answers by remember { mutableStateOf(OnboardingAnswers()) }
     var showAllGoals by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    val total = 4
+    val total = 5
 
     val title = when (step) {
         1 -> t("Workspace basics")
         2 -> t("Tell us about your work")
         3 -> t("What should NivaDesk help with first?")
-        else -> t("Bring your work in")
+        4 -> t("Bring your work in")
+        else -> t("Your plan")
     }
     val subtitle = when (step) {
         1 -> t("We've suggested these from your location. You can change them now or later in Settings.")
         2 -> t("This sets up your order cards, production stages and labels.")
         3 -> t("Your answer decides what your dashboard and first tasks show.")
-        else -> t("Pick how you'd like to start. You can do any of the others later.")
+        4 -> t("Pick how you'd like to start. You can do any of the others later.")
+        else -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
     }
     val canContinue = when (step) {
         1 -> answers.country.isNotBlank() && answers.currency.isNotBlank()
         2 -> answers.workKinds.isNotEmpty()
         3 -> answers.mainGoal != null
-        else -> answers.start != null
+        4 -> answers.start != null
+        // The plan step arrives with a recommendation already chosen.
+        else -> true
     }
 
     BoxWithConstraints(
@@ -322,7 +326,7 @@ fun OnboardingWizardScreen(
                         }
                     }
 
-                    else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    4 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(t("Connect your accounts"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                         Text(
                             t("Optional. Connecting now means your workspace opens with your real work already in it."),
@@ -341,6 +345,40 @@ fun OnboardingWizardScreen(
                                 answers = answers.copy(start = option)
                             }
                         }
+                    }
+
+                    // Step 5: the plan the answers imply, and the alternatives.
+                    // The trial already started at sign-up on Pro — sign-up
+                    // cannot know the team size, the questions come after — so
+                    // this confirms which plan the fortnight is spent on.
+                    // Choosing here never changes when it ends.
+                    else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Read the language OUTSIDE remember: a composition
+                        // local is a @Composable read and cannot happen inside
+                        // the calculation lambda.
+                        val planLocale = uk.co.eggcraft.studioflow.language.studioLocale(
+                            uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+                        )
+                        val trialEnds = remember(planLocale) {
+                            val cal = java.util.Calendar.getInstance()
+                            cal.add(java.util.Calendar.DAY_OF_YEAR, 14)
+                            java.text.SimpleDateFormat("d MMMM", planLocale).format(cal.time)
+                        }
+                        OnboardingTrialPlan.entries.forEach { plan ->
+                            WizardOptionRow(
+                                t(plan.title) + (if (plan == answers.recommendedPlan) "  •  " + t("Recommended for your answers") else ""),
+                                t(plan.summary) + "\n" + t("Free until {date}, then {price}.")
+                                    .replace("{date}", trialEnds)
+                                    .replace("{price}", plan.price),
+                                answers.chosenPlan == plan
+                            ) {
+                                answers = answers.copy(plan = plan)
+                            }
+                        }
+                        Text(
+                            t("We picked this from your answers — you told us how many people work with you and what you need first. Change it here, or later in Settings; nothing is charged today."),
+                            fontSize = 11.sp, color = Muted
+                        )
                     }
                 }
 

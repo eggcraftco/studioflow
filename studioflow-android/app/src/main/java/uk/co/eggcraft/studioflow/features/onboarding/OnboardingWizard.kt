@@ -179,6 +179,14 @@ enum class OnboardingIntegration(
     CHATGPT("chatgpt", "ChatGPT", "Ask about your orders, and draft replies, from inside ChatGPT.", "settings:quickReply", 0xFF10A37F)
 }
 
+/** The plans the sign-up wizard may put a trial on. Mirrors the web list and
+ *  the server's TRIAL_SELECTABLE_PLANS. */
+enum class OnboardingTrialPlan(val raw: String, val title: String, val summary: String, val price: String) {
+    STARTER("lifetime_lite", "NivaDesk Starter", "One person, the essentials.", "£9 / month"),
+    PRO("pro_monthly", "NivaDesk Pro", "One studio, everything in it.", "£19 / month"),
+    TEAM("team_monthly", "NivaDesk Team", "Shared work, roles and permissions.", "£49 / month")
+}
+
 data class OnboardingAnswers(
     val country: String = "GB",
     val currency: String = "GBP",
@@ -189,8 +197,21 @@ data class OnboardingAnswers(
     val volume: OnboardingVolume? = null,
     val mainGoal: OnboardingGoal? = null,
     val extraGoals: List<OnboardingGoal> = emptyList(),
-    val start: OnboardingStart? = null
+    val start: OnboardingStart? = null,
+    /** The plan the last step confirmed. null until that step is reached. */
+    val plan: OnboardingTrialPlan? = null
 ) {
+    /**
+     * What the answers imply, and what the last step shows as chosen. Same rule
+     * as the server's automaticTrialPlanFor: a workspace that says it has a team
+     * gets the plan that covers one, because trialling Pro would hide the very
+     * features they came for.
+     */
+    val recommendedPlan: OnboardingTrialPlan
+        get() = if (teamSize.seats > 1) OnboardingTrialPlan.TEAM else OnboardingTrialPlan.PRO
+
+    val chosenPlan: OnboardingTrialPlan get() = plan ?: recommendedPlan
+
     /**
      * The preset engine keys off a business-type phrase, so the chosen work
      * kinds are turned back into the vocabulary it already understands.
