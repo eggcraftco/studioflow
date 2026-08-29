@@ -2210,8 +2210,9 @@ private fun HomeNotesBody(size: HomeCardSize, state: StudioFlowUiState, compact:
             NoteGrid(recent.take(if (pinned.isEmpty()) 4 else 2), t, compact)
         }
     } else {
-        NoteGrid((pinned + recent).take(2), t, compact,
-            columns = if (size == HomeCardSize.OneByOne) 1 else 2)
+        // Three across on the wide card, as the sheet lays them out.
+        val columns = if (size == HomeCardSize.OneByOne) 1 else 3
+        NoteGrid((pinned + recent).take(if (columns == 1) 2 else 3), t, compact, columns = columns)
     }
 }
 
@@ -2234,32 +2235,55 @@ private fun NoteGrid(
 @Composable
 private fun NoteTile(note: StudioKeepNote, t: (String) -> String, compact: Boolean, modifier: Modifier) {
     val radius = RoundedCornerShape(if (compact) 10.dp else 12.dp)
-    Column(
-        modifier
-            .background(noteColour(note.colorName), radius)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), radius)
-            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 9.dp),
-        // Two notes in a 162dp square leave about 46dp each, so the body drops
-        // to one line and the type comes down.
-        verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 4.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 5.dp)) {
-            // Pinned first is the order; the mark is what says so.
-            if (note.isPinned) {
-                Icon(Icons.Filled.PushPin, null, Modifier.size(if (compact) 9.dp else 11.dp), HomeTone.orange)
-            }
+    Box(modifier) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(noteColour(note.colorName), radius)
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), radius)
+                .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 9.dp),
+            // Two notes in a 162dp square leave about 46dp each, so the body
+            // drops to one line and the type comes down.
+            verticalArrangement = Arrangement.spacedBy(if (compact) 1.dp else 4.dp)
+        ) {
             Text(note.title.ifEmpty { t("Untitled note") },
                 fontSize = if (compact) 11.sp else 12.sp,
-                fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                // Only a pinned note pays for the pin's corner: reserving it on
+                // every note would cost the unpinned ones a word for nothing.
+                modifier = Modifier.padding(end = if (note.isPinned) 14.dp else 0.dp))
+            if (note.text.isNotEmpty()) {
+                Text(note.text, fontSize = if (compact) 9.sp else 11.sp,
+                    maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val chip = note.linkedOrderLabel.ifEmpty { note.linkedCustomerName }
+            if (chip.isNotEmpty()) HomeChip(chip, noteAccent(note.colorName))
         }
-        if (note.text.isNotEmpty()) {
-            Text(note.text, fontSize = if (compact) 9.sp else 11.sp,
-                maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Top right, out of the title's way — the sheet marks the corner rather
+        // than pushing the heading along.
+        if (note.isPinned) {
+            Icon(
+                Icons.Filled.PushPin, null,
+                Modifier.align(Alignment.TopEnd)
+                    .padding(top = if (compact) 5.dp else 8.dp, end = if (compact) 6.dp else 9.dp)
+                    .size(if (compact) 10.dp else 12.dp),
+                noteAccent(note.colorName)
+            )
         }
-        if (note.linkedOrderLabel.isNotEmpty()) HomeChip(note.linkedOrderLabel, HomeTone.slate)
     }
+}
+
+/** The chip on a coloured note takes that note's colour — grey on a tinted
+ *  ground reads as disabled. */
+private fun noteAccent(name: String): Color = when (name.lowercase()) {
+    "yellow" -> Color(0xFF8A6100)
+    "blue" -> Color(0xFF1D4ED8)
+    "green" -> Color(0xFF15803D)
+    "red" -> Color(0xFFB91C1C)
+    "purple" -> Color(0xFF6D28D9)
+    "orange" -> Color(0xFF9A3412)
+    else -> HomeTone.slate
 }
 
 private fun noteColour(name: String): Color = when (name.lowercase()) {

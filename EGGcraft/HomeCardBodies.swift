@@ -2631,16 +2631,11 @@ struct HomeNoteTile: View {
     var compact: Bool = false
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 1 : 4) {
-            HStack(spacing: compact ? 4 : 5) {
-                // Pinned first is the order; the mark is what says so.
-                if note.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: compact ? 8 : 9.5))
-                        .foregroundColor(HomeTone.orange)
-                }
-                Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
-                    .font(.system(size: compact ? 11 : 12.5, weight: .heavy)).lineLimit(1)
-            }
+            Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
+                .font(.system(size: compact ? 11 : 12.5, weight: .heavy)).lineLimit(1)
+                // Only a pinned note pays for the pin's corner: reserving it on
+                // every note would cost the unpinned ones a word for nothing.
+                .padding(.trailing, note.isPinned ? 14 : 0)
             if !note.text.isEmpty {
                 Text(note.text)
                     .font(.system(size: compact ? 9 : 11.5)).foregroundColor(.secondary)
@@ -2649,9 +2644,9 @@ struct HomeNoteTile: View {
             Spacer(minLength: 0)
             HStack(spacing: 6) {
                 if !note.linkedOrderLabel.isEmpty {
-                    HomeChip(text: note.linkedOrderLabel, tone: HomeTone.slate)
+                    HomeChip(text: note.linkedOrderLabel, tone: homeNoteAccent(note.colorName))
                 } else if !note.linkedCustomerName.isEmpty {
-                    HomeChip(text: note.linkedCustomerName, tone: HomeTone.slate)
+                    HomeChip(text: note.linkedCustomerName, tone: homeNoteAccent(note.colorName))
                 }
                 if let reminder = note.reminderDate {
                     Text(homeDayLabel(reminder, lang: lang))
@@ -2663,6 +2658,16 @@ struct HomeNoteTile: View {
         .padding(.horizontal, compact ? 8 : 11).padding(.vertical, compact ? 4 : 9)
         .frame(maxWidth: .infinity, minHeight: compact ? 0 : 66, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12).fill(homeNoteColour(note.colorName)))
+        // Top right, out of the title's way — the sheet marks the corner rather
+        // than pushing the heading along.
+        .overlay(alignment: .topTrailing) {
+            if note.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: compact ? 8.5 : 10))
+                    .foregroundColor(homeNoteAccent(note.colorName))
+                    .padding(.top, compact ? 5 : 8).padding(.trailing, compact ? 6 : 9)
+            }
+        }
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
     }
 }
@@ -2676,5 +2681,19 @@ func homeNoteColour(_ name: String) -> Color {
     case "purple": return Color(red: 0.945, green: 0.925, blue: 0.992)
     case "orange": return Color(red: 0.992, green: 0.933, blue: 0.878)
     default: return Color.primary.opacity(0.03)
+    }
+}
+
+/// The chip on a coloured note takes that note's colour — grey on a tinted
+/// ground reads as disabled.
+func homeNoteAccent(_ name: String) -> Color {
+    switch name.lowercased() {
+    case "yellow": return Color(red: 0.541, green: 0.380, blue: 0.000)
+    case "blue": return Color(red: 0.114, green: 0.306, blue: 0.847)
+    case "green": return Color(red: 0.082, green: 0.502, blue: 0.239)
+    case "red": return Color(red: 0.725, green: 0.110, blue: 0.110)
+    case "purple": return Color(red: 0.427, green: 0.157, blue: 0.851)
+    case "orange": return Color(red: 0.604, green: 0.204, blue: 0.071)
+    default: return HomeTone.slate
     }
 }

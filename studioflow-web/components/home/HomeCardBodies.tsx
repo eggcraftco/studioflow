@@ -1291,14 +1291,19 @@ function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: stri
   return (
     // hue-, not tone-: a global `.tone-green { color: … !important }` earlier in
     // the stylesheet would repaint a green note's text its own green.
-    <Link className={`home-note hue-${note.colorName || "default"}`} href={`/notes?note=${encodeURIComponent(note.id)}`}>
-      <strong>
-        {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
-        {note.title || t("Untitled note")}
-      </strong>
+    <Link
+      className={`home-note hue-${note.colorName || "default"}${note.isPinned ? " is-pinned" : ""}`}
+      href={`/notes?note=${encodeURIComponent(note.id)}`}
+    >
+      {/* Top right, out of the title's way — the sheet marks the corner rather
+          than pushing the heading along. */}
+      {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
+      <strong>{note.title || t("Untitled note")}</strong>
       {note.text ? <p>{note.text}</p> : null}
       <span className="home-note-foot">
-        {chip ? <span className="home-chip is-muted">{chip}</span> : null}
+        {/* The chip takes the note's own colour, not a grey one — it belongs to
+            the note, and on a coloured ground grey reads as disabled. */}
+        {chip ? <span className="home-chip is-note">{chip}</span> : null}
         {days !== null ? (
           <em className={days <= 0 ? "is-due" : days === 1 ? "is-soon" : ""}>
             {days === 0 ? t("Today") : days === 1 ? t("Tomorrow") : reminder?.toLocaleDateString()}
