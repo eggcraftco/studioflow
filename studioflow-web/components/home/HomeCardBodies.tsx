@@ -856,14 +856,6 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayLabel = (date: Date) => {
-    const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - today.getTime()) / 86400000);
-    if (days === 0) return t("Today");
-    if (days === 1) return t("Tomorrow");
-    if (days < 0) return t("Overdue");
-    return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-  };
-
   // The chip answers "when", never "how far along" — production status stays
   // out of this card (§10). A start still ahead of us beats the deadline,
   // because nothing is late on an order that has not begun yet. A weekday on
@@ -924,25 +916,6 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     return date;
   });
 
-  const deadlines = (
-    <ul className="home-deadline-row">
-      {upcoming.slice(0, 3).map((order) => {
-        const overdue = order.dueDate! < today;
-        const tone = overdue ? "red" : dayLabel(order.dueDate!) === t("Tomorrow") ? "blue" : "green";
-        return (
-          <li key={order.id}>
-            <span className={`home-deadline-dot tone-${tone}`} aria-hidden="true" />
-            <span>
-              <em className={`tone-${tone}`}>{dayLabel(order.dueDate!)}</em>
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                {order.customerName || order.designName}
-              </Link>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
 
   if (size === "2x1") {
     const weekEndDay = new Date(days[6]);
@@ -1000,51 +973,82 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     );
   }
 
-  // A read-only bar per order across the week. Read-only on purpose: dragging a
-  // date here would fight the gesture that moves the card itself (§10).
-  const weekEnd = new Date(days[6]);
-  weekEnd.setHours(23, 59, 59, 999);
-  const bars = upcoming
-    .filter((order) => order.dueDate! >= weekStart && (order.paymentDate ?? order.dueDate!) <= weekEnd)
-    .slice(0, 5);
-  const span = weekEnd.getTime() - weekStart.getTime();
-  const pct = (date: Date) =>
-    Math.max(0, Math.min(100, ((date.getTime() - weekStart.getTime()) / span) * 100));
+  // The big card is the same week, with room for the day it is read against,
+  // four bars instead of three, and the next deadlines spelled out under it.
+  // Read-only on purpose: dragging a date here would fight the gesture that
+  // moves the card itself (§10).
+  const columnOf = (date: Date) =>
+    Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
+  const todayColumn = columnOf(today);
+  const bars = upcoming.slice(0, 4);
+  // "Upcoming" is what is still ahead. The timeline above already carries the
+  // late ones, and repeating them here would spend the section on old news.
+  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 2);
 
   return (
-    <div className="home-money is-large">
-      <p className="home-eyebrow is-strong">{t("Weekly timeline")}</p>
-      <div className="home-timeline">
-        <ol className="home-timeline-head">
-          {days.map((date) => (
-            <li key={date.toISOString()} className={date.getTime() === today.getTime() ? "is-today" : ""}>
-              {date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
-            </li>
-          ))}
-        </ol>
-        <ul className="home-timeline-rows">
-          {bars.map((order, index) => {
-            const from = pct(order.paymentDate ?? weekStart);
-            const to = pct(order.dueDate!);
-            const overdue = order.dueDate! < today;
-            return (
-              <li key={order.id}>
-                <span className="home-timeline-name">{order.customerName || order.designName}</span>
-                <span className="home-timeline-track">
-                  <i
-                    className={overdue ? "tone-red" : `tone-${["blue", "green", "purple", "amber", "teal"][index % 5]}`}
-                    style={{ left: `${Math.min(from, to)}%`, width: `${Math.max(4, Math.abs(to - from))}%` }}
-                  >
-                    {overdue ? t("Overdue") : ""}
-                  </i>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <p className="home-eyebrow is-strong">{t("Upcoming deadlines")}</p>
-      {deadlines}
+    <div className="home-week is-large" style={{ gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto` }}>
+      {days.map((date, index) => (
+        <span key={date.toISOString()} className={`home-week-day${index === todayColumn ? " is-today" : ""}`}
+              style={{ gridColumn: index + 2 }}>
+          <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+          <b>{date.getDate()}</b>
+          {index === todayColumn ? <i>{t("Today")}</i> : null}
+        </span>
+      ))}
+      <p className="home-week-eyebrow" style={{ gridRow: 2 }}>{t("Weekly timeline")}</p>
+      {/* One element draws every day line and row line: seven spans and four
+          more would say the same thing and cost eleven DOM nodes. */}
+      <span className="home-week-guides" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      {bars.map((order, row) => {
+        const chip = dueChip(order);
+        const name = order.customerName || order.designName;
+        const ref = order.watchRef.trim();
+        const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
+        const to = columnOf(order.dueDate!);
+        const offWeek = to < 0;
+        const end = Math.min(Math.max(to, from), 6);
+        const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+        // The section below spells out the dates, so up here only the bars that
+        // need doing something about carry a word.
+        const urgent = offWeek || columnOf(order.dueDate!) <= todayColumn + 1;
+        return (
+          <Fragment key={order.id}>
+            <Link className="home-week-name" style={{ gridRow: row + 3 }}
+                  href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+              {ref ? <><b>{ref.startsWith("#") ? ref : `#${ref}`}</b> {name}</> : name}
+            </Link>
+            <span className={`home-week-bar ${chip.hue}${offWeek ? " is-off-week" : ""}`}
+                  style={{ gridRow: row + 3, gridColumn: `${start + 2} / ${end + 3}` }}>
+              {urgent ? <em>{chip.label}</em> : null}
+            </span>
+          </Fragment>
+        );
+      })}
+      {ahead.length > 0 ? (
+        <>
+          <p className="home-week-eyebrow is-ruled" style={{ gridRow: bars.length + 3 }}>{t("Upcoming")}</p>
+          <ul className="home-upcoming" style={{ gridRow: bars.length + 4 }}>
+            {ahead.map((order) => {
+              const chip = dueChip(order);
+              const name = order.customerName || order.designName;
+              const ref = order.watchRef.trim();
+              return (
+                <li key={order.id}>
+                  <span className={`home-upcoming-mark ${chip.hue}`} aria-hidden="true">
+                    <HomeTileIcon name="reminder" />
+                  </span>
+                  <span>
+                    <em className={chip.hue}>{chip.label}</em>
+                    <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                      {ref ? `${ref.startsWith("#") ? ref : `#${ref}`} ${name}` : name}
+                    </Link>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -2440,16 +2440,16 @@ struct HomeScheduleBody: View {
             }
         } else {
             let week = homeWeekDays()
+            let today = homeStartOfToday()
             if size == .twoByOne {
                 HomeWeekTimeline(days: week, entries: Array(upcoming.prefix(3)), lang: lang, compact: compact)
             } else {
-            VStack(alignment: .leading, spacing: 10) {
-                HomeEyebrow(text: t("Weekly timeline", lang: lang))
-                HomeTimeline(week: week, entries: Array(upcoming.prefix(5)), lang: lang)
-                HomeEyebrow(text: t("Upcoming deadlines", lang: lang))
-                HomeDeadlineRow(entries: Array(upcoming.prefix(3)), lang: lang)
-                Spacer(minLength: 0)
-            }
+                // "Upcoming" is what is still ahead. The timeline above already
+                // carries the late ones, and repeating them here would spend the
+                // section on old news.
+                HomeWeekTimeline(days: week, entries: Array(upcoming.prefix(4)),
+                                 ahead: Array(upcoming.filter { $0.1 >= today }.prefix(2)),
+                                 lang: lang, compact: compact, large: true)
             }
         }
     }
@@ -2462,8 +2462,14 @@ struct HomeScheduleBody: View {
 struct HomeWeekTimeline: View {
     let days: [Date]
     let entries: [(Siparis, Date)]
+    /// The deadlines still ahead, spelled out under the week. Empty on the wide
+    /// card, which has no room for a second section.
+    var ahead: [(Siparis, Date)] = []
     let lang: String
     var compact: Bool = false
+    /// The big card has room for the day it is read against, a fourth bar and
+    /// the dates underneath.
+    var large: Bool = false
 
     var body: some View {
         let today = homeStartOfToday()
@@ -2475,58 +2481,167 @@ struct HomeWeekTimeline: View {
 
         return GeometryReader { geo in
             let cell = max(0, geo.size.width - nameWidth) / 7
-            ZStack(alignment: .topLeading) {
-                if let todayIndex {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(HomeTone.accent.opacity(0.07))
-                        .frame(width: cell, height: geo.size.height)
-                        .offset(x: nameWidth + cell * CGFloat(todayIndex))
-                }
-                VStack(spacing: 2) {
-                    HStack(spacing: 0) {
-                        Color.clear.frame(width: nameWidth)
-                        ForEach(Array(days.enumerated()), id: \.element) { index, day in
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    // Not Color.clear: it is greedy in both axes and would make
+                    // the day strip as tall as the whole card.
+                    Spacer(minLength: 0).frame(width: nameWidth)
+                    ForEach(Array(days.enumerated()), id: \.element) { index, day in
+                        let isToday = index == todayIndex
+                        VStack(spacing: 0) {
                             VStack(spacing: 0) {
                                 Text(formatter.string(from: day))
-                                    .font(.system(size: 9.5, weight: index == todayIndex ? .bold : .regular))
-                                    .opacity(index == todayIndex ? 0.85 : 0.6)
+                                    .font(.system(size: large ? 10.5 : 9.5,
+                                                  weight: isToday ? .bold : .regular))
+                                    .opacity(isToday ? 1 : 0.6)
                                 Text("\(Calendar.current.component(.day, from: day))")
-                                    .font(.system(size: 11.5, weight: .bold))
+                                    .font(.system(size: large ? 13 : 11.5, weight: .bold))
                             }
-                            .foregroundColor(index == todayIndex ? HomeTone.accent : .primary)
-                            .frame(width: cell)
+                            // The big card marks today the way the sheet does —
+                            // solid, with the word under it. The wide card has
+                            // no height for either and tints the column instead.
+                            .foregroundColor(isToday ? (large ? .white : HomeTone.accent) : .primary)
+                            .padding(.horizontal, large && isToday ? 9 : 0)
+                            .padding(.vertical, large && isToday ? 3 : 0)
+                            .background(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(large && isToday ? HomeTone.accent : .clear)
+                            )
+                            // A day column is about 34pt wide and the mark needs
+                            // more than that: let it take its own width and sit
+                            // over its neighbours rather than wrap to four lines.
+                            .fixedSize()
+                            if large && isToday {
+                                Text(t("Today", lang: lang))
+                                    .font(.system(size: 9.5))
+                                    .foregroundColor(HomeTone.accent)
+                                    .padding(.top, 2)
+                            }
                         }
+                        .frame(width: cell)
                     }
-                    .padding(.bottom, 4)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(Color.primary.opacity(0.12))
-                            .frame(height: 1)
-                            .padding(.leading, nameWidth)
-                    }
+                }
+                .padding(.bottom, large ? 8 : 4)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color.primary.opacity(0.12))
+                        .frame(height: 1)
+                        .padding(.leading, large ? 0 : nameWidth)
+                }
 
-                    ForEach(Array(entries.enumerated()), id: \.element.0.id) { _, entry in
-                        let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
-                        let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
-                        let ref = entry.0.watchRef.trimmingCharacters(in: .whitespaces)
-                        let placed = homeWeekBarColumns(order: entry.0, due: entry.1, days: days)
+                if large {
+                    HomeEyebrow(text: t("Weekly timeline", lang: lang))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                }
+
+                ZStack(alignment: .topLeading) {
+                    if large {
+                        // A line at the head of every day column, so a bar can be
+                        // read back to the day it starts on.
                         HStack(spacing: 0) {
-                            Text(ref.isEmpty ? name : "\(ref.hasPrefix("#") ? ref : "#" + ref) \(name)")
-                                .font(.system(size: compact ? 10.5 : 11.5))
-                                .foregroundColor(.primary.opacity(0.75))
-                                .lineLimit(1)
-                                .frame(width: nameWidth - 8, alignment: .leading)
-                                .padding(.trailing, 8)
-                            ZStack(alignment: .leading) {
-                                Color.clear
-                                HomeWeekBar(label: chip.label, tone: chip.tone, dashed: placed.offWeek)
-                                    // A bar narrower than its own chip grows to
-                                    // fit the word, and grows leftward at the
-                                    // last column so it stays on the card.
-                                    .frame(width: max(54, cell * CGFloat(placed.end - placed.start + 1)))
-                                    .offset(x: cell * CGFloat(placed.start))
+                            Color.clear.frame(width: nameWidth)
+                            ForEach(0..<7, id: \.self) { _ in
+                                Rectangle().fill(Color.primary.opacity(0.08))
+                                    .frame(width: 1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
-                        .frame(maxHeight: .infinity)
+                    } else if let todayIndex {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(HomeTone.accent.opacity(0.07))
+                            .frame(width: cell)
+                            .offset(x: nameWidth + cell * CGFloat(todayIndex))
+                    }
+                    VStack(spacing: 2) {
+                        ForEach(Array(entries.enumerated()), id: \.element.0.id) { _, entry in
+                            let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
+                            let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
+                            let ref = entry.0.watchRef.trimmingCharacters(in: .whitespaces)
+                            let placed = homeWeekBarColumns(order: entry.0, due: entry.1, days: days)
+                            // The section below spells out the dates, so up here
+                            // only the bars that need doing something about carry
+                            // a word.
+                            let urgent = placed.offWeek
+                                || (Calendar.current.dateComponents([.day], from: today,
+                                                                    to: Calendar.current.startOfDay(for: entry.1)).day ?? 0) <= 1
+                            HStack(spacing: 0) {
+                                Text(ref.isEmpty ? name : "\(ref.hasPrefix("#") ? ref : "#" + ref) \(name)")
+                                    .font(.system(size: compact ? 10.5 : 11.5))
+                                    .foregroundColor(.primary.opacity(0.75))
+                                    .lineLimit(1)
+                                    .frame(width: nameWidth - 8, alignment: .leading)
+                                    .padding(.trailing, 8)
+                                ZStack(alignment: .leading) {
+                                    Color.clear
+                                    HomeWeekBar(label: large && !urgent ? "" : chip.label,
+                                                tone: chip.tone, dashed: placed.offWeek)
+                                        // A bar narrower than its own chip grows
+                                        // to fit the word, and grows leftward at
+                                        // the last column so it stays on the card.
+                                        .frame(width: large && !urgent
+                                               ? max(cell, cell * CGFloat(placed.end - placed.start + 1))
+                                               : max(54, cell * CGFloat(placed.end - placed.start + 1)))
+                                        .offset(x: cell * CGFloat(placed.start))
+                                }
+                            }
+                            .frame(maxHeight: .infinity)
+                            .overlay(alignment: .bottom) {
+                                if large {
+                                    Rectangle().fill(Color.primary.opacity(0.08))
+                                        .frame(height: 1).padding(.leading, nameWidth)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if large && !ahead.isEmpty {
+                    Rectangle().fill(Color.primary.opacity(0.12))
+                        .frame(height: 1).padding(.top, 6)
+                    HomeEyebrow(text: t("Upcoming", lang: lang))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 6)
+                    HomeUpcomingRow(entries: ahead, lang: lang)
+                }
+            }
+        }
+    }
+}
+
+/// The next deadlines, spelled out: the timeline says when in the week, this
+/// says which day and whose order.
+struct HomeUpcomingRow: View {
+    let entries: [(Siparis, Date)]
+    let lang: String
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.element.0.id) { index, entry in
+                let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
+                let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
+                let ref = entry.0.watchRef.trimmingCharacters(in: .whitespaces)
+                HStack(spacing: 9) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(chip.tone)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(chip.tone.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(chip.label)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(chip.tone)
+                            .lineLimit(1)
+                        Text(ref.isEmpty ? name : "\(ref.hasPrefix("#") ? ref : "#" + ref) \(name)")
+                            .font(.system(size: 11.5))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, index == 0 ? 0 : 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .leading) {
+                    if index > 0 {
+                        Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
                     }
                 }
             }
@@ -2597,87 +2712,6 @@ func homeWeekDays() -> [Date] {
     let offset = -((weekday + 5) % 7)
     let start = Calendar.current.date(byAdding: .day, value: offset, to: today) ?? today
     return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
-}
-
-/// A read-only bar per order across the week. Read-only on purpose: dragging a
-/// date here would fight the gesture that moves the card itself (§10).
-struct HomeTimeline: View {
-    let week: [Date]
-    let entries: [(Siparis, Date)]
-    let lang: String
-
-    private let palette: [Color] = [HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal]
-
-    var body: some View {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
-        formatter.dateFormat = "EEE d"
-        let start = week.first ?? Date()
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: week.last ?? Date()) ?? Date()
-        let span = end.timeIntervalSince(start)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 0) {
-                Color.clear.frame(width: 86)
-                ForEach(week, id: \.self) { day in
-                    Text(formatter.string(from: day))
-                        .font(.system(size: 9.5))
-                        .foregroundColor(Calendar.current.isDateInToday(day) ? HomeTone.accent : .secondary)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            ForEach(Array(entries.enumerated()), id: \.element.0.id) { index, entry in
-                HStack(spacing: 8) {
-                    Text(entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName)
-                        .font(.system(size: 11)).lineLimit(1)
-                        .frame(width: 86, alignment: .leading)
-                    GeometryReader { proxy in
-                        let from = max(0, min(1, entry.0.paymentDate.timeIntervalSince(start) / span))
-                        let to = max(0, min(1, entry.1.timeIntervalSince(start) / span))
-                        let overdue = entry.1 < homeStartOfToday()
-                        let tone = overdue ? HomeTone.red : palette[index % palette.count]
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(tone.opacity(0.18))
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(tone, lineWidth: 1))
-                            .frame(width: max(8, proxy.size.width * CGFloat(abs(to - from))))
-                            .offset(x: proxy.size.width * CGFloat(min(from, to)))
-                    }
-                    .frame(height: 16)
-                }
-            }
-        }
-        .padding(.horizontal, 10).padding(.vertical, 8)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
-    }
-}
-
-struct HomeDeadlineRow: View {
-    let entries: [(Siparis, Date)]
-    let lang: String
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(entries.enumerated()), id: \.element.0.id) { index, entry in
-                if index > 0 { Divider().frame(height: 30) }
-                let overdue = entry.1 < homeStartOfToday()
-                let soon = Calendar.current.isDateInTomorrow(entry.1)
-                let tone = overdue ? HomeTone.red : (soon ? HomeTone.accent : HomeTone.green)
-                HStack(spacing: 8) {
-                    Circle().fill(tone.opacity(0.16)).frame(width: 24, height: 24)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(homeDayLabel(entry.1, lang: lang))
-                            .font(.system(size: 11.5, weight: .bold)).foregroundColor(tone)
-                        Text(entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName)
-                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.top, 8)
-        .overlay(Rectangle().frame(height: 1).foregroundColor(.primary.opacity(0.08)), alignment: .top)
-    }
 }
 
 // MARK: - Files

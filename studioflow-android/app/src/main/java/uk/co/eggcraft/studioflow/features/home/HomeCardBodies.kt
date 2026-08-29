@@ -21,10 +21,10 @@ import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.automirrored.filled.ListAlt
@@ -80,6 +80,7 @@ import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.HorizontalDivider
 import java.text.SimpleDateFormat
 import uk.co.eggcraft.studioflow.features.dashboard.adjustedDashboardNetProfit
@@ -150,72 +151,195 @@ private fun startOfToday(): Date = Calendar.getInstance().apply {
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.time
 
-/** The sheet's wide schedule card is a week, not a list: every order gets a bar
- *  on the days it occupies, read against today's column. Compose has no grid
- *  that spans columns, so the track measures itself and the bars are placed by
- *  day width — the same arithmetic the web grid does for free. */
+/** The sheet's schedule card is a week, not a list: every order gets a bar on
+ *  the days it occupies, read against today's column. Compose has no grid that
+ *  spans columns, so the track measures itself and the bars are placed by day
+ *  width — the same arithmetic the web grid does for free. */
 @Composable
-private fun HomeWeekTimeline(days: List<Date>, entries: List<Pair<StudioOrder, Date>>, t: (String) -> String) {
+private fun HomeWeekTimeline(
+    days: List<Date>,
+    entries: List<Pair<StudioOrder, Date>>,
+    t: (String) -> String,
+    /** The deadlines still ahead, spelled out under the week. Empty on the wide
+     *  card, which has no room for a second section. */
+    ahead: List<Pair<StudioOrder, Date>> = emptyList(),
+    /** The big card has room for the day it is read against, a fourth bar and
+     *  the dates underneath. */
+    large: Boolean = false,
+) {
     val todayIndex = days.indexOfFirst { sameDay(it, Date()) }
+    val today = startOfToday()
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val nameWidth = if (maxWidth > 420.dp) 140.dp else 96.dp
         val cell = (maxWidth - nameWidth) / 7
-        Box(Modifier.fillMaxSize()) {
-            if (todayIndex >= 0) {
-                Box(
-                    Modifier
-                        .offset(x = nameWidth + cell * todayIndex)
-                        .width(cell)
-                        .fillMaxHeight()
-                        .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(8.dp))
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
-                    Spacer(Modifier.width(nameWidth))
-                    days.forEachIndexed { index, day ->
-                        Column(Modifier.width(cell), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column {
+            Row(Modifier.padding(bottom = if (large) 8.dp else 4.dp), verticalAlignment = Alignment.Bottom) {
+                Spacer(Modifier.width(nameWidth))
+                days.forEachIndexed { index, day ->
+                    val isToday = index == todayIndex
+                    Column(Modifier.width(cell), horizontalAlignment = Alignment.CenterHorizontally) {
+                        // The big card marks today the way the sheet does —
+                        // solid, with the word under it. The wide card has no
+                        // height for either and tints the column instead.
+                        Column(
+                            Modifier
+                                // A day column is about 34dp wide and the mark
+                                // needs more than that: let it take its own width
+                                // and sit over its neighbours rather than wrap.
+                                .wrapContentWidth(unbounded = true)
+                                .background(
+                                    if (large && isToday) HomeTone.accent else Color.Transparent,
+                                    RoundedCornerShape(9.dp)
+                                )
+                                .padding(
+                                    horizontal = if (large && isToday) 9.dp else 0.dp,
+                                    vertical = if (large && isToday) 3.dp else 0.dp
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val ink = if (isToday) {
+                                if (large) Color.White else HomeTone.accent
+                            } else MaterialTheme.colorScheme.onSurfaceVariant
                             Text(SimpleDateFormat("EEE", Locale.getDefault()).format(day),
-                                fontSize = 9.5.sp,
-                                fontWeight = if (index == todayIndex) FontWeight.Bold else FontWeight.Normal,
-                                color = if (index == todayIndex) HomeTone.accent
-                                else MaterialTheme.colorScheme.onSurfaceVariant)
+                                fontSize = if (large) 10.5.sp else 9.5.sp,
+                                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                                color = ink)
                             Text(SimpleDateFormat("d", Locale.getDefault()).format(day),
-                                fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
-                                color = if (index == todayIndex) HomeTone.accent
+                                fontSize = if (large) 13.sp else 11.5.sp, fontWeight = FontWeight.Bold,
+                                color = if (isToday && large) Color.White
+                                else if (isToday) HomeTone.accent
                                 else MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (large && isToday) {
+                            Text(t("Today"), fontSize = 9.5.sp, color = HomeTone.accent,
+                                modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                 }
-                HorizontalDivider(
-                    Modifier.padding(start = nameWidth),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
-                )
-                entries.forEach { (order, due) ->
-                    val (label, tone) = homeDueChip(order.paymentDate, due, t)
-                    val name = order.customerName.ifEmpty { order.designName }
-                    val ref = order.watchRef.trim()
-                    val placed = homeWeekBarColumns(order.paymentDate, due, days)
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            if (ref.isEmpty()) name
-                            else "${if (ref.startsWith("#")) ref else "#" + ref} $name",
-                            fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                            modifier = Modifier.width(nameWidth - 8.dp).padding(end = 8.dp)
-                        )
-                        Box(Modifier.fillMaxWidth()) {
-                            HomeWeekBar(
-                                label = label, tone = tone, dashed = placed.third,
-                                modifier = Modifier
-                                    .offset(x = cell * placed.first)
-                                    // A bar narrower than its own chip grows to
-                                    // fit the word, and grows leftward at the
-                                    // last column so it stays on the card.
-                                    .width(maxOf(54.dp, cell * (placed.second - placed.first + 1)))
-                            )
+            }
+            HorizontalDivider(
+                Modifier.padding(start = if (large) 0.dp else nameWidth),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            )
+            if (large) {
+                Box(Modifier.padding(vertical = 6.dp)) { HomeEyebrow(t("Weekly timeline")) }
+            }
+            Box(Modifier.weight(1f)) {
+                if (large) {
+                    // A line at the head of every day column, so a bar can be
+                    // read back to the day it starts on.
+                    Row(Modifier.fillMaxSize()) {
+                        Spacer(Modifier.width(nameWidth))
+                        repeat(7) {
+                            Box(Modifier.width(cell).fillMaxHeight()) {
+                                Box(Modifier.width(1.dp).fillMaxHeight()
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)))
+                            }
                         }
                     }
+                } else if (todayIndex >= 0) {
+                    Box(
+                        Modifier
+                            .offset(x = nameWidth + cell * todayIndex)
+                            .width(cell)
+                            .fillMaxHeight()
+                            .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(8.dp))
+                    )
+                }
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    entries.forEach { (order, due) ->
+                        val (label, tone) = homeDueChip(order.paymentDate, due, t)
+                        val name = order.customerName.ifEmpty { order.designName }
+                        val ref = order.watchRef.trim()
+                        val placed = homeWeekBarColumns(order.paymentDate, due, days)
+                        // The section below spells out the dates, so up here only
+                        // the bars that need doing something about carry a word.
+                        val urgent = placed.third || (startOfDay(due).time - today.time) / 86_400_000L <= 1L
+                        Box(Modifier.weight(1f)) {
+                            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    if (ref.isEmpty()) name
+                                    else "${if (ref.startsWith("#")) ref else "#" + ref} $name",
+                                    fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    modifier = Modifier.width(nameWidth - 8.dp).padding(end = 8.dp)
+                                )
+                                Box(Modifier.fillMaxWidth()) {
+                                    HomeWeekBar(
+                                        label = if (large && !urgent) "" else label,
+                                        tone = tone, dashed = placed.third,
+                                        modifier = Modifier
+                                            .offset(x = cell * placed.first)
+                                            // A bar narrower than its own chip
+                                            // grows to fit the word, and grows
+                                            // leftward at the last column so it
+                                            // stays on the card.
+                                            .width(
+                                                if (large && !urgent) cell * (placed.second - placed.first + 1)
+                                                else maxOf(54.dp, cell * (placed.second - placed.first + 1))
+                                            )
+                                    )
+                                }
+                            }
+                            if (large) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(start = nameWidth)
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (large && ahead.isNotEmpty()) {
+                HorizontalDivider(
+                    Modifier.padding(top = 6.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                )
+                Box(Modifier.padding(vertical = 6.dp)) { HomeEyebrow(t("Upcoming")) }
+                HomeUpcomingRow(ahead, t)
+            }
+        }
+    }
+}
+
+/** The next deadlines, spelled out: the timeline says when in the week, this
+ *  says which day and whose order. */
+@Composable
+private fun HomeUpcomingRow(entries: List<Pair<StudioOrder, Date>>, t: (String) -> String) {
+    Row {
+        entries.forEachIndexed { index, (order, due) ->
+            if (index > 0) {
+                Box(Modifier.width(1.dp).height(30.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+            }
+            val (label, tone) = homeDueChip(order.paymentDate, due, t)
+            val name = order.customerName.ifEmpty { order.designName }
+            val ref = order.watchRef.trim()
+            Row(
+                Modifier.weight(1f).padding(start = if (index == 0) 0.dp else 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Box(
+                    Modifier.size(30.dp).background(tone.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.CalendarMonth, null, Modifier.size(16.dp), tone)
+                }
+                Column {
+                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = tone,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        if (ref.isEmpty()) name
+                        else "${if (ref.startsWith("#")) ref else "#" + ref} $name",
+                        fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -2181,80 +2305,16 @@ private fun HomeScheduleBody(size: HomeCardSize, state: StudioFlowUiState, t: (S
         return
     }
     val week = weekDays()
-    if (size == HomeCardSize.TwoByOne) {
-        HomeWeekTimeline(week, upcoming.take(3), t)
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HomeEyebrow(t("Weekly timeline"))
-        // The bars are read-only on purpose: dragging a date here would fight
-        // the gesture that moves the card itself (§10).
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row {
-                Spacer(Modifier.width(80.dp))
-                week.forEach { day ->
-                    Text(SimpleDateFormat("EEE d", Locale.getDefault()).format(day),
-                        fontSize = 9.sp, modifier = Modifier.weight(1f),
-                        color = if (sameDay(day, Date())) HomeTone.accent
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            val start = week.first().time
-            val span = (week.last().time + 86_400_000L - start).toFloat()
-            val palette = listOf(HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal)
-            upcoming.take(5).forEachIndexed { index, (order, due) ->
-                val from = ((order.paymentDate.time - start) / span).coerceIn(0f, 1f)
-                val to = ((due.time - start) / span).coerceIn(0f, 1f)
-                val overdue = due.before(startOfToday())
-                val tone = if (overdue) HomeTone.red else palette[index % palette.size]
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(80.dp))
-                    Row(Modifier.weight(1f).height(16.dp)) {
-                        if (minOf(from, to) > 0f) Spacer(Modifier.weight(minOf(from, to)))
-                        Box(
-                            Modifier
-                                .weight(maxOf(0.04f, kotlin.math.abs(to - from)))
-                                .height(16.dp)
-                                .background(tone.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
-                                .border(1.dp, tone, RoundedCornerShape(6.dp))
-                        )
-                        val rest = 1f - maxOf(from, to)
-                        if (rest > 0f) Spacer(Modifier.weight(rest))
-                    }
-                }
-            }
-        }
-        HomeEyebrow(t("Upcoming deadlines"))
-        Row {
-            upcoming.take(3).forEachIndexed { index, (order, due) ->
-                if (index > 0) {
-                    Box(Modifier.width(1.dp).height(30.dp)
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
-                }
-                val overdue = due.before(startOfToday())
-                val tone = if (overdue) HomeTone.red else HomeTone.green
-                Row(Modifier.weight(1f).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.size(24.dp).background(tone.copy(alpha = 0.16f), CircleShape))
-                    Column {
-                        Text(dayLabel(due, t), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = tone)
-                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-    }
+    // "Upcoming" is what is still ahead. The timeline already carries the late
+    // ones, and repeating them would spend the section on old news.
+    val ahead = upcoming.filter { !it.second.before(startOfToday()) }.take(2)
+    HomeWeekTimeline(
+        week,
+        upcoming.take(if (size == HomeCardSize.TwoByOne) 3 else 4),
+        t,
+        ahead = if (size == HomeCardSize.TwoByOne) emptyList() else ahead,
+        large = size != HomeCardSize.TwoByOne
+    )
 }
 
 /** The visible week, Monday first, so the strip and the timeline agree. */

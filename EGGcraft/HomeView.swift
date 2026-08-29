@@ -442,7 +442,7 @@ struct HomeView: View {
                         .replacingOccurrences(of: "{count}", with: "\(homeLiveOrders(firebaseManager.siparisler).count)")
                     // The wide schedule card draws a week; the sheet names which
                     // week beside the heading.
-                    : definition.id == .schedule && placement.size == .twoByOne
+                    : definition.id == .schedule && placement.size != .oneByOne
                     ? homeWeekRangeLabel(lang: seciliDil)
                     : "",
                 subtitleInline: !isCompact,
@@ -453,7 +453,6 @@ struct HomeView: View {
                 headerNote: definition.id == .banking && isCompact && placement.size == .twoByOne
                     && !firebaseManager.bankTransactions.isEmpty
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
-                headerDateBadge: definition.id == .schedule && placement.size == .twoByTwo,
                 onOpen: { onOpen(definition.destination) },
                 onAdd: definition.id == .files ? { onOpen("Files") }
                     : definition.id == .notes ? {

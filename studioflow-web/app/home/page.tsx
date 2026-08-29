@@ -327,9 +327,9 @@ export default function HomePage() {
                     // the sheet reads it.
                     : placement.id === "files" && placement.size !== "1x1"
                       ? `${data.files.length} ${t("files")}`
-                      // The wide schedule card draws a week; the sheet names
-                      // which week beside the heading.
-                      : placement.id === "schedule" && placement.size === "2x1"
+                      // Both week cards name which week beside the heading; the
+                      // 1x1 has no week to name.
+                      : placement.id === "schedule" && placement.size !== "1x1"
                         ? homeWeekRangeLabel()
                         : undefined
               }
@@ -356,16 +356,6 @@ export default function HomePage() {
                   >
                     +
                   </button>
-                ) : placement.id === "schedule" && placement.size === "2x2" ? (
-                  // The rows say "today", "tomorrow", "starts Sun". The sheet
-                  // anchors them by naming the day they are relative to.
-                  <span className="home-date-badge">
-                    <b>
-                      <i>{new Date().toLocaleDateString(undefined, { weekday: "short" })}</i>
-                      {new Date().getDate()}
-                    </b>
-                    <em>{t("Today")}</em>
-                  </span>
                 ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
                   // The promise sits beside the title, not in a footnote: this
                   // feed can never move money and the card should lead with that.
