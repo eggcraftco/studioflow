@@ -126,12 +126,13 @@ enum OnboardingTrialPlan: String, CaseIterable {
         }
     }
 
-    /// Stripe list price, the same labels the web shows.
-    var price: String {
+    /// Amount only. The period is translated and joined at render — "£9 / month"
+    /// is English, and this screen is read in twelve languages.
+    var amount: String {
         switch self {
-        case .starter: return "£9 / month"
-        case .pro: return "£19 / month"
-        case .team: return "£49 / month"
+        case .starter: return "£9"
+        case .pro: return "£19"
+        case .team: return "£49"
         }
     }
 }
@@ -707,9 +708,14 @@ private struct OnboardingStepPlan: View {
     @Binding var answers: OnboardingAnswers
     let lang: String
 
+    /// Written in the workspace language, not the device locale: the rest of the
+    /// card is translated and a English month name beside it reads as a bug.
     private var trialEndsLabel: String {
         let ends = Date().addingTimeInterval(14 * 24 * 60 * 60)
-        return ends.formatted(.dateTime.day().month(.wide))
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+        formatter.setLocalizedDateFormatFromTemplate("d MMMM")
+        return formatter.string(from: ends)
     }
 
     var body: some View {
@@ -744,7 +750,7 @@ private struct OnboardingStepPlan: View {
                             // half the languages we ship.
                             Text(t("Free until {date}, then {price}.", lang: lang)
                                 .replacingOccurrences(of: "{date}", with: trialEndsLabel)
-                                .replacingOccurrences(of: "{price}", with: plan.price))
+                                .replacingOccurrences(of: "{price}", with: "\(plan.amount) / \(t("month", lang: lang))"))
                                 .font(.system(size: 12.5, weight: .semibold))
                         }
                         Spacer(minLength: 0)

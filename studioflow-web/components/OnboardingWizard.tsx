@@ -32,7 +32,7 @@ import {
   type OnboardingWorkflow,
   recommendedTrialPlan,
 } from "@/lib/studioflow/onboardingWizard";
-import { STRIPE_LIST_PRICE_LABELS } from "@/lib/studioflow/plans";
+import { studioLocaleTag } from "@/lib/studioflow/language";
 
 const CURRENCIES = [
   ["£", "GBP (£)"], ["$", "USD ($)"], ["€", "EUR (€)"], ["₺", "TRY (₺)"],
@@ -75,12 +75,16 @@ const TOTAL_STEPS = 5;
 
 export function OnboardingWizard({
   t,
+  language,
   saving,
   error,
   onFinish,
   onConnect,
 }: {
   t: (text: string) => string;
+  /** The workspace language, so the trial's end date is written in it rather
+   *  than in whatever locale the browser happens to run. */
+  language: string;
   saving: boolean;
   error: string;
   onFinish: (answers: OnboardingAnswers) => void;
@@ -123,9 +127,9 @@ export function OnboardingWizard({
   // a date attached rather than being an abstract "later".
   const trialEndsLabel = useMemo(() => {
     const ends = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    try { return ends.toLocaleDateString(undefined, { day: "numeric", month: "long" }); }
+    try { return ends.toLocaleDateString(studioLocaleTag(language), { day: "numeric", month: "long" }); }
     catch { return ""; }
-  }, []);
+  }, [language]);
 
   const visibleGoals = showMoreGoals ? ONBOARDING_GOALS : ONBOARDING_GOALS.filter(goal => goal.primary);
 
@@ -405,7 +409,7 @@ export function OnboardingWizard({
                           languages we ship. */}
                       {t("Free until {date}, then {price}.")
                         .replace("{date}", trialEndsLabel)
-                        .replace("{price}", STRIPE_LIST_PRICE_LABELS[plan.priceKey] ?? "")}
+                        .replace("{price}", `${plan.amount} / ${t("month")}`)}
                     </span>
                   </span>
                 </label>

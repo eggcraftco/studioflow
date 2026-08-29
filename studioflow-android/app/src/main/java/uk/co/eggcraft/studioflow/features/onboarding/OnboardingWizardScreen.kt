@@ -377,7 +377,7 @@ fun OnboardingWizardScreen(
                                 t(plan.title) + (if (plan == answers.recommendedPlan) "  •  " + t("Recommended for your answers") else ""),
                                 t(plan.summary) + "\n" + t("Free until {date}, then {price}.")
                                     .replace("{date}", trialEnds)
-                                    .replace("{price}", plan.price),
+                                    .replace("{price}", plan.amount + " / " + t("month")),
                                 answers.chosenPlan == plan
                             ) {
                                 answers = answers.copy(plan = plan)

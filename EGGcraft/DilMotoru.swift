@@ -3032,3 +3032,23 @@ func formatFiyat(_ val: Double, ondalik: String) -> String {
     let formatter = NumberFormatter(); formatter.numberStyle = .decimal; formatter.minimumFractionDigits = 2; formatter.maximumFractionDigits = 2; formatter.decimalSeparator = ondalik; formatter.groupingSeparator = ondalik == "," ? "." : ","
     return formatter.string(from: NSNumber(value: val)) ?? String(format: "%.2f", val).replacingOccurrences(of: ".", with: ondalik)
 }
+
+/// The BCP-47 locale for a workspace language, so dates and numbers are written
+/// in the language the workspace reads rather than the device's own.
+func localeIdentifier(forLanguage lang: String) -> String {
+    switch lang {
+    case "Türkçe": return "tr_TR"
+    case "Deutsch": return "de_DE"
+    case "Français": return "fr_FR"
+    case "Italiano": return "it_IT"
+    case "Español (Spanish)": return "es_ES"
+    case "Português": return "pt_PT"
+    case "Русский (Russian)": return "ru_RU"
+    case "日本語 (Japanese)": return "ja_JP"
+    case "中文 (Chinese)": return "zh_CN"
+    case "العربية (Arabic)": return "ar_SA"
+    case "हिन्दी (Hindi)": return "hi_IN"
+    default: return "en_GB"
+    }
+}
+

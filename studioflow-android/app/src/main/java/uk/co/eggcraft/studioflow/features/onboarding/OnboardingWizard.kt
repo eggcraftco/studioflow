@@ -181,10 +181,12 @@ enum class OnboardingIntegration(
 
 /** The plans the sign-up wizard may put a trial on. Mirrors the web list and
  *  the server's TRIAL_SELECTABLE_PLANS. */
-enum class OnboardingTrialPlan(val raw: String, val title: String, val summary: String, val price: String) {
-    STARTER("lifetime_lite", "NivaDesk Starter", "One person, the essentials.", "£9 / month"),
-    PRO("pro_monthly", "NivaDesk Pro", "One studio, everything in it.", "£19 / month"),
-    TEAM("team_monthly", "NivaDesk Team", "Shared work, roles and permissions.", "£49 / month")
+enum class OnboardingTrialPlan(val raw: String, val title: String, val summary: String, val amount: String) {
+    // Amount only. The period is translated and joined at render — "£9 / month"
+    // is English, and this screen is read in twelve languages.
+    STARTER("lifetime_lite", "NivaDesk Starter", "One person, the essentials.", "£9"),
+    PRO("pro_monthly", "NivaDesk Pro", "One studio, everything in it.", "£19"),
+    TEAM("team_monthly", "NivaDesk Team", "Shared work, roles and permissions.", "£49")
 }
 
 data class OnboardingAnswers(
