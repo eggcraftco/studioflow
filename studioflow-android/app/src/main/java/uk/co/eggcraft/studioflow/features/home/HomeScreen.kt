@@ -40,7 +40,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import android.net.ConnectivityManager
@@ -104,6 +111,7 @@ fun HomeScreen(
     val lang = LocalStudioLanguage.current
     val t: (String) -> String = { studioT(it, lang) }
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     val repository = remember { StudioFlowRepository() }
     val workspaceId = state.workspace?.id.orEmpty()
     val userId = state.user?.uid.orEmpty()
@@ -114,6 +122,10 @@ fun HomeScreen(
     var customising by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<HomeCardId?>(null) }
+    // Long-press drag, offered only in Customise mode: outside it a long press on
+    // a card should leave the page free to scroll.
+    var draggingId by remember { mutableStateOf<HomeCardId?>(null) }
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var renameText by remember { mutableStateOf("") }
     var inventory by remember { mutableStateOf<StudioInventorySummary?>(null) }
     var inventoryFailed by remember { mutableStateOf(false) }
@@ -275,14 +287,57 @@ fun HomeScreen(
                 val cardHeight = CARD_UNIT_HEIGHT * slot.placement.size.rows +
                     CARD_GAP * (slot.placement.size.rows - 1)
                 val definition = HomeCards.definition(slot.placement.id) ?: return@forEach
+                val isDragging = draggingId == slot.placement.id
                 Box(
                     Modifier
                         .offset(
-                            x = ((unit + CARD_GAP) * slot.column).dp,
-                            y = ((CARD_UNIT_HEIGHT + CARD_GAP) * slot.row).dp
+                            x = ((unit + CARD_GAP) * slot.column).dp +
+                                (if (isDragging) with(density) { dragOffset.x.toDp() } else 0.dp),
+                            y = ((CARD_UNIT_HEIGHT + CARD_GAP) * slot.row).dp +
+                                (if (isDragging) with(density) { dragOffset.y.toDp() } else 0.dp)
                         )
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .alpha(if (isDragging) 0.75f else 1f)
                         .width(cardWidth.dp)
                         .height(cardHeight.dp)
+                        .then(
+                            if (!customising) Modifier
+                            else Modifier.pointerInput(slot.placement.id, columnCount, visible.size) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingId = slot.placement.id
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount
+                                    },
+                                    onDragEnd = {
+                                        // Where the card was let go, in grid cells.
+                                        val cellWidth = (unit + CARD_GAP).toFloat()
+                                        val cellHeight = (CARD_UNIT_HEIGHT + CARD_GAP).toFloat()
+                                        val movedColumns = (dragOffset.x / density.density / cellWidth).roundToInt()
+                                        val movedRows = (dragOffset.y / density.density / cellHeight).roundToInt()
+                                        val steps = movedRows * columnCount + movedColumns
+                                        val index = layout.cards.indexOfFirst { it.id == slot.placement.id }
+                                        if (index >= 0 && steps != 0) {
+                                            val target = (index + steps).coerceIn(0, layout.cards.size - 1)
+                                            if (target != index) {
+                                                val reordered = layout.cards.toMutableList()
+                                                reordered.add(target, reordered.removeAt(index))
+                                                commit(layout.copy(cards = reordered))
+                                            }
+                                        }
+                                        draggingId = null
+                                        dragOffset = Offset.Zero
+                                    },
+                                    onDragCancel = {
+                                        draggingId = null
+                                        dragOffset = Offset.Zero
+                                    }
+                                )
+                            }
+                        )
                 ) {
                     HomeCardShell(
                         definition = definition,

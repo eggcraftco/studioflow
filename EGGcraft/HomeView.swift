@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import UniformTypeIdentifiers
 import Network
 import FirebaseAuth
 import FirebaseFirestore
@@ -131,6 +132,9 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var customising = false
+    /// The card currently under the pointer, so a drop knows where it landed.
+    @State private var draggingID: HomeCardID?
+    @State private var dropTargetID: HomeCardID?
     @State private var renaming: HomeCardID?
     @State private var renameText = ""
 
@@ -275,6 +279,33 @@ struct HomeView: View {
                 content: { placement, width, height in
                     cardView(placement)
                         .frame(width: width, height: height)
+                        .opacity(draggingID == placement.id ? 0.5 : 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.blue, lineWidth: dropTargetID == placement.id && draggingID != placement.id ? 3 : 0)
+                        )
+                        // Dragging is offered only in Customise mode: outside it a
+                        // long press on a card should still scroll the page.
+                        .onDrag(if: customising) {
+                            draggingID = placement.id
+                            return NSItemProvider(object: placement.id.rawValue as NSString)
+                        }
+                        .onDrop(of: [.text], isTargeted: Binding(
+                            get: { dropTargetID == placement.id },
+                            set: { targeted in
+                                if targeted { dropTargetID = placement.id }
+                                else if dropTargetID == placement.id { dropTargetID = nil }
+                            }
+                        )) { _ in
+                            defer { draggingID = nil; dropTargetID = nil }
+                            guard customising,
+                                  let moving = draggingID, moving != placement.id,
+                                  let from = store.layout.cards.firstIndex(where: { $0.id == moving }),
+                                  let to = store.layout.cards.firstIndex(where: { $0.id == placement.id })
+                            else { return false }
+                            store.move(from: from, to: to)
+                            return true
+                        }
                 }
             )
         }
@@ -338,6 +369,16 @@ struct HomeView: View {
                 }
             }
         }
+    }
+}
+
+
+private extension View {
+    /// `.onDrag` has no "sometimes" — attaching it unconditionally would make a
+    /// long press on any card start a drag even when the user is only reading.
+    @ViewBuilder
+    func onDrag(if enabled: Bool, _ provider: @escaping () -> NSItemProvider) -> some View {
+        if enabled { self.onDrag(provider) } else { self }
     }
 }
 
