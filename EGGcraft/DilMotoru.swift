@@ -1,5 +1,10 @@
 import Foundation
 
+/// The languages NivaDesk ships. One list, so the setup wizard and Settings
+/// cannot offer different sets.
+let studioSupportedLanguages = ["English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"]
+
+
 struct CustomRule: Identifiable, Codable, Equatable { var id = UUID(); var title: String; var desc: String }
 struct CustomProduct: Identifiable, Codable, Equatable { var id = UUID(); var title: String; var desc: String }
 struct CustomStep: Identifiable, Codable, Equatable { var id = UUID(); var title: String }
@@ -2954,6 +2959,7 @@ private let studioFlowFeatureTranslations_11 = _make_studioFlowFeatureTranslatio
 
 
 @_optimize(none) private func _make_studioFlowFeatureTranslations_12() -> [String: [String: String]] { return [
+    "Language": ["Türkçe": "Dil", "Deutsch": "Sprache", "Français": "Langue", "Italiano": "Lingua", "Español (Spanish)": "Idioma", "Português": "Idioma", "Русский (Russian)": "Язык", "日本語 (Japanese)": "言語", "中文 (Chinese)": "语言", "العربية (Arabic)": "اللغة", "हिन्दी (Hindi)": "भाषा"],
     "This month": ["Türkçe": "Bu ay", "Deutsch": "Diesen Monat", "Français": "Ce mois-ci", "Italiano": "Questo mese", "Español (Spanish)": "Este mes", "Português": "Este mês", "Русский (Russian)": "Этот месяц", "日本語 (Japanese)": "今月", "中文 (Chinese)": "本月", "العربية (Arabic)": "هذا الشهر", "हिन्दी (Hindi)": "इस महीने"],
     "All time": ["Türkçe": "Tüm zamanlar", "Deutsch": "Gesamter Zeitraum", "Français": "Depuis le début", "Italiano": "Sempre", "Español (Spanish)": "Todo el tiempo", "Português": "Todo o período", "Русский (Russian)": "За всё время", "日本語 (Japanese)": "全期間", "中文 (Chinese)": "全部时间", "العربية (Arabic)": "كل الأوقات", "हिन्दी (Hindi)": "सभी समय"],
     "Date range": ["Türkçe": "Tarih aralığı", "Deutsch": "Zeitraum", "Français": "Période", "Italiano": "Intervallo di date", "Español (Spanish)": "Intervalo de fechas", "Português": "Intervalo de datas", "Русский (Russian)": "Период", "日本語 (Japanese)": "期間", "中文 (Chinese)": "日期范围", "العربية (Arabic)": "النطاق الزمني", "हिन्दी (Hindi)": "तिथि सीमा"],

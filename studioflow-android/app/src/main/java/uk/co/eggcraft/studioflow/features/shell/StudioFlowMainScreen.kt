@@ -1165,6 +1165,11 @@ private fun WorkspaceOnboardingScreen(
             // survive the trip.
             saveAnswers(answers)
             onOpenIntegration(integration.destination)
+        },
+        // Language is ALWAYS personal — same rule the Settings screen applies —
+        // and it lands immediately so the rest of the setup reads in it.
+        onLanguageChange = { chosen ->
+            onUpdateWorkspaceSettings(mapOf("personalSelectedLanguage" to chosen), "")
         }
     )
 }

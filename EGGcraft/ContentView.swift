@@ -10440,6 +10440,7 @@ struct ContentView: View {
         var payload: [String: Any] = [
             "selectedCountry": answers.country,
             "selectedCurrency": answers.currency,
+            "selectedLanguage": answers.language,
             "selectedTimeZone": answers.timeZone,
             "onboardingWorkKinds": answers.workKinds.map { $0.rawValue },
             "onboardingWorkflow": answers.workflow.rawValue,

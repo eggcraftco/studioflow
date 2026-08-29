@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uk.co.eggcraft.studioflow.language.STUDIO_SUPPORTED_LANGUAGES
 
 // The sign-up wizard is always light, on every platform. Whoever is answering
 // has not chosen a theme yet — the account is created on light and Settings can
@@ -184,7 +185,9 @@ fun OnboardingWizardScreen(
     /** Saves what has been answered so far, then opens the integration — the
      *  answers must be on disk before we navigate away, or a person who connects
      *  Shopify comes back to an empty workspace and the wizard again. */
-    onConnect: (OnboardingAnswers, OnboardingIntegration) -> Unit
+    onConnect: (OnboardingAnswers, OnboardingIntegration) -> Unit,
+    /** Applied the moment it changes, so the wizard itself switches over. */
+    onLanguageChange: (String) -> Unit = {}
 ) {
     var step by remember { mutableStateOf(1) }
     var answers by remember { mutableStateOf(OnboardingAnswers()) }
@@ -207,7 +210,7 @@ fun OnboardingWizardScreen(
         else -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
     }
     val canContinue = when (step) {
-        1 -> answers.country.isNotBlank() && answers.currency.isNotBlank()
+        1 -> answers.country.isNotBlank() && answers.currency.isNotBlank() && answers.language.isNotBlank()
         2 -> answers.mainGoal != null
         3 -> answers.workKinds.isNotEmpty()
         4 -> answers.start != null
@@ -249,6 +252,13 @@ fun OnboardingWizardScreen(
                         }
                         WizardPicker(t("Currency"), answers.currency, onboardingCurrencies) { value ->
                             answers = answers.copy(currency = value)
+                        }
+                        // Applied the moment it changes, so the rest of the
+                        // setup already reads in the language just chosen.
+                        WizardPicker(t("Language"), answers.language,
+                            STUDIO_SUPPORTED_LANGUAGES.map { it to it }) { value ->
+                            answers = answers.copy(language = value)
+                            onLanguageChange(value)
                         }
                         WizardPicker(t("Time zone"), answers.timeZone, onboardingTimeZones.map { it to it }) { value ->
                             answers = answers.copy(timeZone = value)

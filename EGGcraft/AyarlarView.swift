@@ -98,7 +98,7 @@ struct AyarlarView: View {
     @AppStorage("pendingSupportTicketType") private var pendingSupportTicketType: String = ""
     @AppStorage("pendingSupportTicketOpenRequestedAt") private var pendingSupportTicketOpenRequestedAt: Double = 0
     @AppStorage("seciliDil") private var seciliDil: String = "English"
-    let desteklenenDiller = ["English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"]
+    let desteklenenDiller = studioSupportedLanguages
     
     @AppStorage("seciliParaBirimi") private var seciliParaBirimi: String = "£"
     let paraBirimleri = ["£" : "GBP (£)", "$" : "USD ($)", "€" : "EUR (€)", "₺" : "TRY (₺)", "¥" : "JPY (¥)", "A$" : "AUD (A$)", "C$" : "CAD (C$)", "CHF" : "CHF (CHF)", "د.إ" : "AED (د.إ)"]

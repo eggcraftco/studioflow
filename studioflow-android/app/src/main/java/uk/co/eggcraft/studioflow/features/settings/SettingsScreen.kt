@@ -167,6 +167,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.tasks.await
+import uk.co.eggcraft.studioflow.language.STUDIO_SUPPORTED_LANGUAGES
 
 private val StudioOrange = Color(0xFFFF9500)
 private val StudioPurple = Color(0xFFCC2FE1)
@@ -742,7 +743,7 @@ private fun LanguageLabelsDetail(state: StudioFlowUiState, onSave: (Map<String, 
             MenuField(
                 label = t("Select Language"),
                 value = state.workspaceSettings.selectedLanguage,
-                options = listOf("English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"),
+                options = STUDIO_SUPPORTED_LANGUAGES,
                 // Language is ALWAYS personal — same rule as theme: each user picks
                 // their own language across their devices, regardless of role.
                 onSelect = { onSave(mapOf("personalSelectedLanguage" to it), "Language saved.") }

@@ -77,7 +77,17 @@ internal fun normalizeLang(raw: String?): String {
 
 // Home: the reporting and quick-action screen. Values are taken verbatim from
 // language.ts so a heading reads identically on web, Mac, iPhone and here.
+/** The languages NivaDesk ships. One list, so the setup wizard and Settings
+ *  cannot offer different sets. */
+val STUDIO_SUPPORTED_LANGUAGES = listOf(
+    "English", "Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)",
+    "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)",
+    "العربية (Arabic)", "हिन्दी (Hindi)"
+)
+
+
 private val TR_HOME: Map<String, Map<String, String>> by lazy { mapOf(
+    "Language" to mapOf("Türkçe" to "Dil", "Deutsch" to "Sprache", "Français" to "Langue", "Italiano" to "Lingua", "Español (Spanish)" to "Idioma", "Português" to "Idioma", "Русский (Russian)" to "Язык", "日本語 (Japanese)" to "言語", "中文 (Chinese)" to "语言", "العربية (Arabic)" to "اللغة", "हिन्दी (Hindi)" to "भाषा"),
     "This month" to mapOf("Türkçe" to "Bu ay", "Deutsch" to "Diesen Monat", "Français" to "Ce mois-ci", "Italiano" to "Questo mese", "Español (Spanish)" to "Este mes", "Português" to "Este mês", "Русский (Russian)" to "Этот месяц", "日本語 (Japanese)" to "今月", "中文 (Chinese)" to "本月", "العربية (Arabic)" to "هذا الشهر", "हिन्दी (Hindi)" to "इस महीने"),
     "All time" to mapOf("Türkçe" to "Tüm zamanlar", "Deutsch" to "Gesamter Zeitraum", "Français" to "Depuis le début", "Italiano" to "Sempre", "Español (Spanish)" to "Todo el tiempo", "Português" to "Todo o período", "Русский (Russian)" to "За всё время", "日本語 (Japanese)" to "全期間", "中文 (Chinese)" to "全部时间", "العربية (Arabic)" to "كل الأوقات", "हिन्दी (Hindi)" to "सभी समय"),
     "Date range" to mapOf("Türkçe" to "Tarih aralığı", "Deutsch" to "Zeitraum", "Français" to "Période", "Italiano" to "Intervallo di date", "Español (Spanish)" to "Intervalo de fechas", "Português" to "Intervalo de datas", "Русский (Russian)" to "Период", "日本語 (Japanese)" to "期間", "中文 (Chinese)" to "日期范围", "العربية (Arabic)" to "النطاق الزمني", "हिन्दी (Hindi)" to "तिथि सीमा"),

@@ -328,6 +328,8 @@ let onboardingIntegrations: [OnboardingIntegration] = [
 struct OnboardingAnswers {
     var country: String = "GB"
     var currency: String = "GBP"
+    /// The workspace's language, guessed from the device and changed right here.
+    var language: String = studioLanguageForDeviceLocale()
     var timeZone: String = TimeZone.current.identifier
     var workKinds: [OnboardingWorkKind] = []
     var workflow: OnboardingWorkflow = .madeToOrder
@@ -504,6 +506,7 @@ private struct OnboardingHeader: View {
 private struct OnboardingStepBasics: View {
     @Binding var answers: OnboardingAnswers
     let lang: String
+    @AppStorage("seciliDil") private var seciliDil: String = "English"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -533,6 +536,22 @@ private struct OnboardingStepBasics: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                // Picked here rather than hunted for in Settings afterwards, and
+                // applied the moment it changes so the rest of the setup already
+                // reads in it.
+                Text(t("Language", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                Picker("", selection: $answers.language) {
+                    ForEach(studioSupportedLanguages, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .onChange(of: answers.language) { newValue in
+                    seciliDil = newValue
+                }
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(t("Time zone", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)

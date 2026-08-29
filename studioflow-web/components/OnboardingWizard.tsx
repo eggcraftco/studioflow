@@ -32,7 +32,11 @@ import {
   type OnboardingWorkflow,
   recommendedTrialPlan,
 } from "@/lib/studioflow/onboardingWizard";
-import { studioLocaleTag } from "@/lib/studioflow/language";
+import {
+  SUPPORTED_STUDIO_LANGUAGES,
+  studioLanguageForLocaleTag,
+  studioLocaleTag,
+} from "@/lib/studioflow/language";
 
 const CURRENCIES = [
   ["£", "GBP (£)"], ["$", "USD ($)"], ["€", "EUR (€)"], ["₺", "TRY (₺)"],
@@ -61,7 +65,17 @@ function suggestedSettings() {
     /* defaults are fine */
   }
   const match = COUNTRIES.find(entry => entry[0] === region) ?? COUNTRIES[0];
-  return { country: match[0], currency: match[2], timeZone };
+  // The browser already knows which language this person reads; offering it as
+  // the suggestion beats making them find it in Settings afterwards.
+  let language = "English";
+  try {
+    language = studioLanguageForLocaleTag(
+      typeof navigator !== "undefined" ? navigator.language : "en"
+    );
+  } catch {
+    /* English is a fine default */
+  }
+  return { country: match[0], currency: match[2], language, timeZone };
 }
 
 const TIME_ZONES = [
@@ -79,6 +93,7 @@ export function OnboardingWizard({
   saving,
   error,
   onFinish,
+  onLanguageChange,
   onConnect,
 }: {
   t: (text: string) => string;
@@ -88,6 +103,8 @@ export function OnboardingWizard({
   saving: boolean;
   error: string;
   onFinish: (answers: OnboardingAnswers) => void;
+  /** Applied the moment it changes, so the wizard itself switches over. */
+  onLanguageChange?: (language: string) => void;
   /** Saves what has been answered so far, then hands off to the integration.
    *  Connecting leaves the app for an OAuth round trip, so the answers have to
    *  be on disk before we go or the whole wizard is lost on the way back. */
@@ -99,6 +116,7 @@ export function OnboardingWizard({
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => ({
     country: suggested.country,
     currency: suggested.currency,
+    language: suggested.language,
     timeZone: suggested.timeZone,
     workKinds: [],
     workflow: "made_to_order",
@@ -117,7 +135,7 @@ export function OnboardingWizard({
   // answerable the moment it opens — the reader confirms it or picks another.
   const chosenPlan = answers.plan || recommendedTrialPlan(answers);
   const canContinue =
-    step === 1 ? Boolean(answers.country && answers.currency && answers.timeZone)
+    step === 1 ? Boolean(answers.country && answers.currency && answers.language && answers.timeZone)
       : step === 2 ? Boolean(answers.mainGoal)
         : step === 3 ? answers.workKinds.length > 0
           : step === 4 ? Boolean(answers.start)
@@ -198,6 +216,22 @@ export function OnboardingWizard({
               <span>{t("Currency")}</span>
               <select value={answers.currency} onChange={event => set("currency", event.target.value)}>
                 {CURRENCIES.map(([symbol, label]) => <option key={symbol} value={symbol}>{label}</option>)}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("Language")}</span>
+              <select
+                value={answers.language}
+                onChange={event => {
+                  set("language", event.target.value);
+                  // Immediately, not on Finish: the rest of the wizard should
+                  // already be in the language they just chose.
+                  onLanguageChange?.(event.target.value);
+                }}
+              >
+                {SUPPORTED_STUDIO_LANGUAGES.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
               </select>
             </label>
             <label className="onboard-field">

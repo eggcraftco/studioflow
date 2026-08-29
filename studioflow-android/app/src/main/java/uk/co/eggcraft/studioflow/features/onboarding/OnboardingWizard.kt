@@ -192,6 +192,9 @@ enum class OnboardingTrialPlan(val raw: String, val title: String, val summary: 
 data class OnboardingAnswers(
     val country: String = "GB",
     val currency: String = "GBP",
+    /** The workspace's language, changed right here rather than hunted for in
+     *  Settings afterwards. */
+    val language: String = "English",
     val timeZone: String = "Europe/London",
     val workKinds: List<OnboardingWorkKind> = emptyList(),
     val workflow: OnboardingWorkflow = OnboardingWorkflow.MADE_TO_ORDER,
@@ -233,6 +236,7 @@ data class OnboardingAnswers(
 fun onboardingWizardUpdates(answers: OnboardingAnswers, userId: String): Map<String, Any?> = buildMap {
     put("selectedCountry", answers.country)
     put("selectedCurrency", answers.currency)
+    put("selectedLanguage", answers.language)
     put("selectedTimeZone", answers.timeZone)
     put("onboardingWorkKinds", answers.workKinds.map { it.id })
     put("onboardingWorkflow", answers.workflow.id)
