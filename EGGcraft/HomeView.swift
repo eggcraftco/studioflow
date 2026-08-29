@@ -59,9 +59,15 @@ final class HomeData: ObservableObject {
     /// numbers as if they were current. The Firestore listeners keep serving
     /// their cache; the screen just says so.
     @Published var offline = false
+    /// The newest lastSyncedAt across the workspace's bank connections. This is
+    /// the real signal — a live snapshot only says the listener fired, not that
+    /// the bank handed anything over.
+    @Published var bankLastSync: Date?
+    @Published var bankNeedsAttention = false
 
     private var notesListener: ListenerRegistration?
     private var notesKey = ""
+    private var bankListener: ListenerRegistration?
     private let pathMonitor = NWPathMonitor()
     private var monitoring = false
 
@@ -83,6 +89,7 @@ final class HomeData: ObservableObject {
         if !nextStages.isEmpty { stages = nextStages }
         loadedAt = Date()
         listenNotes(companyId: companyId)
+        listenBankHealth(companyId: companyId)
     }
 
     private func listenNotes(companyId: String) {
@@ -103,7 +110,33 @@ final class HomeData: ObservableObject {
             }
     }
 
+    private func listenBankHealth(companyId: String) {
+        guard !companyId.isEmpty, bankListener == nil else { return }
+        bankListener = Firestore.firestore()
+            .collection("companies").document(companyId)
+            .collection("bankConnections")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self, error == nil, let documents = snapshot?.documents else { return }
+                var newest: Date?
+                var unhealthy = false
+                for document in documents {
+                    let data = document.data()
+                    if let stamp = (data["lastSyncedAt"] as? Timestamp)?.dateValue() {
+                        if newest == nil || stamp > newest! { newest = stamp }
+                    }
+                    if (data["status"] as? String) == "linked",
+                       (data["syncState"] as? String ?? "ok") != "ok" { unhealthy = true }
+                }
+                Task { @MainActor in
+                    self.bankLastSync = newest
+                    self.bankNeedsAttention = unhealthy
+                }
+            }
+    }
+
     func stop() {
+        bankListener?.remove()
+        bankListener = nil
         notesListener?.remove()
         notesListener = nil
         notesKey = ""
@@ -332,6 +365,8 @@ struct HomeView: View {
                 placement: placement,
                 customising: customising,
                 lang: seciliDil,
+                headerPill: definition.id == .banking && !firebaseManager.bankTransactions.isEmpty
+                    ? t("Read-only", lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
                 onResize: { store.resize(placement.id, to: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },

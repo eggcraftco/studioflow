@@ -36,7 +36,7 @@ struct HomeCardBody: View {
         case .money:
             HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal)
         case .banking:
-            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal)
+            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
         case .inventory:
             HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
         case .customers:
@@ -807,6 +807,7 @@ struct HomeBankingBody: View {
     let lang: String
     let currency: String
     let decimal: String
+    @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -824,21 +825,27 @@ struct HomeBankingBody: View {
             let missing = transactions.filter { $0.amount < 0 && !$0.hasReceipt }.count
 
             if size == .oneByOne {
-                VStack(alignment: .leading, spacing: 10) {
+                // As the sheet draws it: how fresh the feed is, then what left the
+                // account this month, then what came in against what still needs a
+                // receipt. The read-only promise moved up beside the title.
+                VStack(alignment: .leading, spacing: 8) {
+                    HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
+                    Text(t("Spent this month", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("−" + money(spent))
+                        .font(.system(size: 25, weight: .heavy))
+                        .foregroundColor(HomeTone.red)
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     HomeSplitPair {
-                        Text("\(toReview)").font(.system(size: 28, weight: .heavy))
-                            .foregroundColor(toReview > 0 ? HomeTone.orange : .primary)
-                        Text(t("to review", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                        HomeFigure(label: t("Incoming", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                     } right: {
-                        Text("\(missing)").font(.system(size: 28, weight: .heavy))
-                            .foregroundColor(missing > 0 ? HomeTone.orange : .primary)
-                        Text(t("missing receipts", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                        HomeFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
+                                   tone: missing > 0 ? HomeTone.red : .primary)
                     }
                     Spacer(minLength: 0)
-                    HomeReadOnlyNote(lang: lang, short: true)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
+                    HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
                     HStack(spacing: 10) {
                         HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                         HomeMetricTile(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.orange)
@@ -896,6 +903,34 @@ struct HomeBankingBody: View {
                 }
             }
         }
+    }
+}
+
+/// How fresh the feed is. The real signal is the connection's own lastSyncedAt —
+/// a live snapshot only says the listener fired, not that the bank handed
+/// anything over, which is what made "Connected" misleading in the first place.
+struct HomeSyncLine: View {
+    let lastSync: Date?
+    let unhealthy: Bool
+    let lang: String
+
+    var body: some View {
+        let seconds = lastSync.map { Date().timeIntervalSince($0) } ?? -1
+        let days = Int(seconds / 86400)
+        let hours = Int(seconds / 3600)
+        let stale = lastSync == nil || days >= 2 || unhealthy
+        let label: String = {
+            guard lastSync != nil else { return t("Never synced", lang: lang) }
+            if days >= 1 { return t("Last synced {n} days ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(days)") }
+            if hours >= 1 { return t("Last synced {n}h ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(hours)") }
+            return t("Last synced just now", lang: lang)
+        }()
+        return HStack(spacing: 6) {
+            Image(systemName: stale ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
+                .font(.system(size: 11))
+            Text(label).font(.system(size: 11.5))
+        }
+        .foregroundColor(stale ? HomeTone.orange : .secondary)
     }
 }
 

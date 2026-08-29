@@ -98,7 +98,10 @@ data class HomeCardDefinition(
     val financeOnly: Boolean,
     /** The section this card's single footer link opens. */
     val destination: String,
-    val linkLabel: String
+    val linkLabel: String,
+    /** Banking uses the solid badge the reference gives it; everything else the
+     *  ring. Last in the list so every positional entry above stays valid. */
+    val filledBadge: Boolean = false
 )
 
 object HomeCards {
@@ -117,8 +120,9 @@ object HomeCards {
             HomeCardAccess.Always, false, "Orders", "View all activity"),
         HomeCardDefinition(HomeCardId.Money, "Money", Icons.Filled.Payments, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Dashboard, true, "Dashboard", "Open Dashboard"),
-        HomeCardDefinition(HomeCardId.Banking, "Banking", Icons.Filled.AccountBalance, everySize, HomeCardSize.OneByOne,
-            HomeCardAccess.BankFeed, true, "BankSpending", "Go to banking"),
+        HomeCardDefinition(HomeCardId.Banking, "Banking", Icons.Filled.AccountBalance, filledBadge = true,
+            sizes = everySize, defaultSize = HomeCardSize.OneByOne, access = HomeCardAccess.BankFeed,
+            financeOnly = true, destination = "BankSpending", linkLabel = "Go to banking"),
         HomeCardDefinition(HomeCardId.Inventory, "Inventory", Icons.Filled.Inventory2, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Orders, false, "Inventory", "View inventory"),
         HomeCardDefinition(HomeCardId.Customers, "Customers", Icons.Filled.People, everySize, HomeCardSize.OneByOne,

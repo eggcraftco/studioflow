@@ -347,6 +347,8 @@ fun HomeScreen(
                         placement = slot.placement,
                         customising = customising,
                         t = t,
+                        headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
+                            t("Read-only") else "",
                         onOpen = { onOpenSection(definition.destination) },
                         onResize = { size -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(size = size) else it
@@ -464,6 +466,7 @@ fun HomeCardShell(
     placement: HomeCardPlacement,
     customising: Boolean,
     t: (String) -> String,
+    headerPill: String = "",
     onOpen: () -> Unit,
     onResize: (HomeCardSize) -> Unit,
     onTone: (HomeCardTone) -> Unit,
@@ -493,15 +496,27 @@ fun HomeCardShell(
                 }
                 HomeBadge(
                     definition.icon,
-                    if (placement.tone == HomeCardTone.Standard) HomeTone.accent else homeToneColor(placement.tone)
+                    if (placement.tone == HomeCardTone.Standard) HomeTone.accent else homeToneColor(placement.tone),
+                    definition.filledBadge
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
                     placement.heading.ifEmpty { t(definition.title) },
                     fontSize = 14.5.sp, fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
+                if (headerPill.isNotEmpty()) {
+                    Spacer(Modifier.width(7.dp))
+                    // The promise sits beside the title, not in a footnote.
+                    Text(
+                        headerPill, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold,
+                        color = HomeTone.orange,
+                        modifier = Modifier
+                            .background(HomeTone.orange.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(Modifier.weight(1f))
                 Box {
                     // §17 asks for at least 44dp of touch target; the glyph stays small.
                     Box(

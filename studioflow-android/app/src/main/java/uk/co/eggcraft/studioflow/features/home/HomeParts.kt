@@ -72,12 +72,15 @@ fun HomeGripDots(modifier: Modifier = Modifier) {
 
 /** A ringed badge gives every card the same anchor whatever glyph it carries. */
 @Composable
-fun HomeBadge(icon: ImageVector, tone: Color = HomeTone.accent) {
+fun HomeBadge(icon: ImageVector, tone: Color = HomeTone.accent, filled: Boolean = false) {
     Box(
-        Modifier.size(38.dp).border(2.dp, tone, CircleShape),
+        Modifier
+            .size(38.dp)
+            .then(if (filled) Modifier.background(tone, CircleShape) else Modifier.border(2.dp, tone, CircleShape)),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, contentDescription = null, tint = tone, modifier = Modifier.size(17.dp))
+        Icon(icon, contentDescription = null, tint = if (filled) Color.White else tone,
+            modifier = Modifier.size(17.dp))
     }
 }
 

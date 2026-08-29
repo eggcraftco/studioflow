@@ -11,6 +11,8 @@ struct HomeCardShell<CardBody: View>: View {
     let lang: String
     /// A short line under the title — "3 of 6 complete", a date range.
     var subtitle: String = ""
+    /// A small mark beside the title — Banking's read-only promise.
+    var headerPill: String = ""
     let onOpen: () -> Void
     let onResize: (HomeCardSize) -> Void
     let onTone: (HomeCardTone) -> Void
@@ -49,11 +51,20 @@ struct HomeCardShell<CardBody: View>: View {
     private var header: some View {
         HStack(spacing: 11) {
             if customising { HomeGripDots() }
-            HomeBadge(symbol: definition.icon, tone: placement.tone)
+            HomeBadge(symbol: definition.icon, tone: placement.tone, filled: definition.filledBadge)
             VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 7) {
                 Text(heading)
                     .font(.system(size: 15.5, weight: .heavy))
                     .lineLimit(1)
+                if !headerPill.isEmpty {
+                    Text(headerPill)
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundColor(HomeTone.orange)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Capsule().fill(HomeTone.orange.opacity(0.16)))
+                }
+                }
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 11.5))
@@ -160,13 +171,15 @@ struct HomeGripDots: View {
 struct HomeBadge: View {
     let symbol: String
     var tone: HomeCardTone = .standard
+    var filled: Bool = false
     private var colour: Color { tone == .standard ? HomeTone.accent : tone.accent }
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(colour)
+            .foregroundColor(filled ? .white : colour)
             .frame(width: 38, height: 38)
-            .overlay(Circle().stroke(colour, lineWidth: 2))
+            .background(Circle().fill(filled ? colour : .clear))
+            .overlay(Circle().stroke(colour, lineWidth: filled ? 0 : 2))
     }
 }
 

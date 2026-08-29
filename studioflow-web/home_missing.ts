@@ -8,6 +8,4 @@ for (const f of files) {
   for (const m of s.matchAll(/(?:title|linkLabel|label|blurb|cta):\s*"((?:[^"\\]|\\.)*)"/g)) keys.add(m[1]);
 }
 const bad = [...keys].filter(k => k.trim() && studioT(k, "Türkçe") === k);
-fs.writeFileSync("/tmp/home_new.txt", bad.join("\n"));
-console.log(`anahtar ${keys.size}, cevrilmemis ${bad.length}`);
-bad.forEach(b => console.log("  -", b));
+console.log(`cevrilmemis ${bad.length}`); bad.forEach(b => console.log("  -", b));

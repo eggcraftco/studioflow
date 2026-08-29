@@ -25,7 +25,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PersonAddAlt
 import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -594,17 +596,24 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
     val missing = transactions.count { it.amount < 0 && !it.hasReceipt }
 
     if (size == HomeCardSize.OneByOne) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // As the sheet draws it: how fresh the feed is, then what left the account
+        // this month, then what came in against what still needs a receipt. The
+        // read-only promise moved up beside the title.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SyncLine(state, t)
+            Text(t("Spent this month"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("−" + money(spent, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+                color = HomeTone.red, maxLines = 1, overflow = TextOverflow.Ellipsis)
             HomeSplitPair(
-                t("to review"), "$toReview", if (toReview > 0) HomeTone.orange else Color.Unspecified,
-                t("missing receipts"), "$missing", if (missing > 0) HomeTone.orange else Color.Unspecified
+                t("Incoming"), "+" + money(incoming, state), HomeTone.green,
+                t("missing receipts"), "$missing", if (missing > 0) HomeTone.red else Color.Unspecified
             )
-            ReadOnlyNote(t, short = true)
         }
         return
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SyncLine(state, t)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HomeMetricTile(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, modifier = Modifier.weight(1f))
             HomeMetricTile(t("Spent this month"), "−" + money(spent, state), HomeTone.orange, modifier = Modifier.weight(1f))
@@ -667,6 +676,37 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
         } else {
             ReadOnlyNote(t, short = false)
         }
+    }
+}
+
+/**
+ * How fresh the feed is. The real signal is the connection's own lastSyncedAt —
+ * a live snapshot only says the listener fired, not that the bank handed
+ * anything over, which is what made "Connected" misleading in the first place.
+ */
+@Composable
+private fun SyncLine(state: StudioFlowUiState, t: (String) -> String) {
+    val newest: Long? = state.bankConnections.mapNotNull { it.lastSyncedAtMillis }.maxOrNull()
+    val unhealthy = state.bankConnections.any { it.isLinked && it.syncState != "ok" }
+    val millis = newest?.let { Date().time - it } ?: -1L
+    val days = (millis / 86_400_000L).toInt()
+    val hours = (millis / 3_600_000L).toInt()
+    val stale = newest == null || days >= 2 || unhealthy
+    val label = when {
+        newest == null -> t("Never synced")
+        days >= 1 -> t("Last synced {n} days ago").replace("{n}", "$days")
+        hours >= 1 -> t("Last synced {n}h ago").replace("{n}", "$hours")
+        else -> t("Last synced just now")
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(
+            if (stale) Icons.Filled.Warning else Icons.Filled.Sync,
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = if (stale) HomeTone.orange else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(label, fontSize = 11.sp,
+            color = if (stale) HomeTone.orange else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

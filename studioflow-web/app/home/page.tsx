@@ -271,6 +271,13 @@ export default function HomePage() {
               customising={customising}
               t={t}
               state={cardState(placement.id, isEmpty(placement.id))}
+              headerSlot={
+                placement.id === "banking" && data.bankTransactions.length > 0 ? (
+                  // The promise sits beside the title, not in a footnote: this
+                  // feed can never move money and the card should lead with that.
+                  <span className="home-pill is-warning is-solid">{t("Read-only")}</span>
+                ) : undefined
+              }
               onMove={(direction) => void commit(moveHomeCard(layout, index, index + direction))}
               onResize={(size: HomeCardSize) => void commit(resizeHomeCard(layout, placement.id, size))}
               onHide={() => void commit(hideHomeCard(layout, placement.id))}
