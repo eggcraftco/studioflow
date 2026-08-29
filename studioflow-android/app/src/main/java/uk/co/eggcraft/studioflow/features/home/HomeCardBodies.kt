@@ -748,6 +748,63 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
         return
     }
 
+    if (size == HomeCardSize.TwoByOne && compact) {
+        // The phone wide card: three figures ruled apart, one recent counterparty
+        // across the full width, and the repeat cost against the year to date. No
+        // side column — half a phone truncates both.
+        val fixed = bankMonthlyFixed(state)
+        val (yearIn, yearOut) = yearTotals(state)
+        val top = state.bankTransactions.firstOrNull()
+        Column(Modifier.fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BankFigure(t("Incoming this month"), "+" + money(incoming, state), HomeTone.green, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(34.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                BankFigure(t("Spent this month"), "−" + money(spent, state), HomeTone.red, Modifier.weight(1f))
+                Box(Modifier.width(1.dp).height(34.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                BankFigure(t("Missing receipts"), "$missing",
+                    if (missing > 0) HomeTone.orange else MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp)); HomeDivider(); Spacer(Modifier.height(8.dp))
+            if (top != null) {
+                val name = top.counterparty.ifEmpty { top.description }
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Box(Modifier.size(24.dp).background(HomeTone.accent, CircleShape),
+                        contentAlignment = Alignment.Center) {
+                        Text(name.take(1).uppercase(), fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold, color = Color.White)
+                    }
+                    Text(name, fontSize = 12.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text((if (top.amount < 0) "−" else "+") + money(kotlin.math.abs(top.amount), state),
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                        color = if (top.amount < 0) HomeTone.red else HomeTone.green)
+                }
+                Spacer(Modifier.height(8.dp)); HomeDivider(); Spacer(Modifier.height(8.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                if (fixed > 0) {
+                    Box(Modifier.size(20.dp).background(HomeTone.accent.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center) {
+                        Text("£", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+                    }
+                    Text(t("Fixed ≈ {amount}/month").replace("{amount}", money(fixed, state)),
+                        fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(t("This year"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${t("In")} ${money(yearIn, state)}", fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold, color = HomeTone.green, maxLines = 1)
+                Text("${t("Out")} ${money(yearOut, state)}", fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold, color = HomeTone.red, maxLines = 1)
+            }
+        }
+        return
+    }
+
     if (size == HomeCardSize.TwoByOne) {
         // As the sheet draws it: three figures across the top, then the last few
         // counterparties beside what is paid on repeat.
@@ -955,20 +1012,36 @@ private fun receiptWarning(count: Int, t: (String) -> String): String =
  * a live snapshot only says the listener fired, not that the bank handed
  * anything over, which is what made "Connected" misleading in the first place.
  */
-@Composable
-private fun SyncLine(state: StudioFlowUiState, t: (String) -> String) {
-    val newest: Long? = state.bankConnections.mapNotNull { it.lastSyncedAtMillis }.maxOrNull()
-    val unhealthy = state.bankConnections.any { it.isLinked && it.syncState != "ok" }
-    val millis = newest?.let { Date().time - it } ?: -1L
+fun homeSyncLabel(state: StudioFlowUiState, t: (String) -> String): String {
+    // The elvis has to bind to the whole expression, so the type is non-null
+    // afterwards — declaring it Long? kept the null in play past the return.
+    val newest = state.bankConnections.mapNotNull { it.lastSyncedAtMillis }.maxOrNull()
+        ?: return t("Never synced")
+    val millis = Date().time - newest
     val days = (millis / 86_400_000L).toInt()
     val hours = (millis / 3_600_000L).toInt()
-    val stale = newest == null || days >= 2 || unhealthy
-    val label = when {
-        newest == null -> t("Never synced")
+    return when {
         days >= 1 -> t("Last synced {n} days ago").replace("{n}", "$days")
         hours >= 1 -> t("Last synced {n}h ago").replace("{n}", "$hours")
         else -> t("Last synced just now")
     }
+}
+
+/** Money in and out since 1 January. */
+private fun yearTotals(state: StudioFlowUiState): Pair<Double, Double> {
+    val prefix = SimpleDateFormat("yyyy-", Locale.UK).format(Date())
+    val rows = state.bankTransactions.filter { it.bookingDate.startsWith(prefix) }
+    return rows.filter { it.amount > 0 }.sumOf { it.amount } to
+        rows.filter { it.amount < 0 }.sumOf { -it.amount }
+}
+
+@Composable
+private fun SyncLine(state: StudioFlowUiState, t: (String) -> String) {
+    val newest: Long? = state.bankConnections.mapNotNull { it.lastSyncedAtMillis }.maxOrNull()
+    val unhealthy = state.bankConnections.any { it.isLinked && it.syncState != "ok" }
+    val days = newest?.let { ((Date().time - it) / 86_400_000L).toInt() } ?: 0
+    val stale = newest == null || days >= 2 || unhealthy
+    val label = homeSyncLabel(state, t)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Icon(
             if (stale) Icons.Filled.Warning else Icons.Filled.Sync,

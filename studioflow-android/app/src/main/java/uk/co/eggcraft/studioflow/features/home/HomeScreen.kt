@@ -352,6 +352,12 @@ fun HomeScreen(
                         t = t,
                         headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
                             t("Read-only") else "",
+                        // The sheet puts the feed's freshness on the right of the
+                        // header for the wide phone card, where the body has no
+                        // row to spare.
+                        headerNote = if (definition.id == HomeCardId.Banking && compact &&
+                            slot.placement.size == HomeCardSize.TwoByOne && state.bankTransactions.isNotEmpty())
+                            homeSyncLabel(state, t) else "",
                         onOpen = { onOpenSection(definition.destination) },
                         onResize = { size -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(size = size) else it
@@ -474,6 +480,8 @@ fun HomeCardShell(
     compact: Boolean = false,
     t: (String) -> String,
     headerPill: String = "",
+    /** A quiet line on the right of the header — how fresh the feed is. */
+    headerNote: String = "",
     onOpen: () -> Unit,
     onResize: (HomeCardSize) -> Unit,
     onTone: (HomeCardTone) -> Unit,
@@ -534,6 +542,12 @@ fun HomeCardShell(
                     )
                 }
                 Spacer(Modifier.weight(1f))
+                if (headerNote.isNotEmpty()) {
+                    Text(headerNote, fontSize = 10.sp, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(6.dp))
+                }
                 // On a phone the ⋯ costs a quarter of the card's width. It appears
                 // while customising, which is when it is wanted; the rest of the
                 // time the card is a tap target.

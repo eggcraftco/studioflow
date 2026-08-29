@@ -392,6 +392,11 @@ struct HomeView: View {
                 lang: seciliDil,
                 headerPill: definition.id == .banking && !firebaseManager.bankTransactions.isEmpty
                     ? t("Read-only", lang: seciliDil) : "",
+                // The sheet puts the feed's freshness on the right of the header
+                // for the wide phone card, where the body has no row to spare.
+                headerNote: definition.id == .banking && isCompact && placement.size == .twoByOne
+                    && !firebaseManager.bankTransactions.isEmpty
+                    ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
                 onResize: { store.resize(placement.id, to: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },

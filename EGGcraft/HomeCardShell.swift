@@ -16,6 +16,8 @@ struct HomeCardShell<CardBody: View>: View {
     var subtitle: String = ""
     /// A small mark beside the title — Banking's read-only promise.
     var headerPill: String = ""
+    /// A quiet line on the right of the header — how fresh the feed is.
+    var headerNote: String = ""
     let onOpen: () -> Void
     let onResize: (HomeCardSize) -> Void
     let onTone: (HomeCardTone) -> Void
@@ -92,6 +94,13 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
+            if !headerNote.isEmpty {
+                Text(headerNote)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
             // On a phone the ⋯ costs a quarter of the card's width. It appears
             // while customising, which is when it is wanted; the rest of the time
             // the card is a tap target.

@@ -1007,6 +1007,60 @@ struct HomeBankingBody: View {
                     }
                     Spacer(minLength: 0)
                 }
+            } else if size == .twoByOne && compact {
+                // The phone wide card: three figures ruled apart, one recent
+                // counterparty across the full width, and the repeat cost against
+                // the year to date. No side column — half a phone truncates both.
+                let fixed = bankMonthlyFixedTotal(firebaseManager)
+                let totals = homeYearTotals(transactions)
+                let yearIn = totals.received
+                let yearOut = totals.spent
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
+                        Divider().frame(height: 34)
+                        HomeBankFigure(label: t("Spent this month", lang: lang), value: "−" + money(spent), tone: HomeTone.red)
+                        Divider().frame(height: 34)
+                        HomeBankFigure(label: t("Missing receipts", lang: lang), value: "\(missing)",
+                                       tone: missing > 0 ? HomeTone.orange : .primary)
+                    }
+                    Divider().padding(.vertical, 8)
+                    if let top = transactions.first {
+                        HStack(spacing: 9) {
+                            Text(String((top.counterparty.isEmpty ? top.description : top.counterparty).prefix(1)).uppercased())
+                                .font(.system(size: 11, weight: .heavy)).foregroundColor(.white)
+                                .frame(width: 24, height: 24)
+                                .background(Circle().fill(HomeTone.accent))
+                            Text(top.counterparty.isEmpty ? top.description : top.counterparty)
+                                .font(.system(size: 12.5)).lineLimit(1)
+                            Spacer(minLength: 6)
+                            Text((top.amount < 0 ? "−" : "+") + money(abs(top.amount)))
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundColor(top.amount < 0 ? HomeTone.red : HomeTone.green)
+                                .lineLimit(1)
+                        }
+                        Divider().padding(.vertical, 8)
+                    }
+                    HStack(spacing: 8) {
+                        if fixed > 0 {
+                            Text("£").font(.system(size: 10, weight: .heavy)).foregroundColor(HomeTone.accent)
+                                .frame(width: 20, height: 20)
+                                .background(Circle().fill(HomeTone.accent.opacity(0.12)))
+                            Text(t("Fixed ≈ {amount}/month", lang: lang)
+                                .replacingOccurrences(of: "{amount}", with: money(fixed)))
+                                .font(.system(size: 11)).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                        Spacer(minLength: 6)
+                        Text(t("This year", lang: lang)).font(.system(size: 10.5)).foregroundColor(.secondary)
+                        Text(t("In", lang: lang) + " " + money(yearIn))
+                            .font(.system(size: 10.5, weight: .bold)).foregroundColor(HomeTone.green)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                        Text(t("Out", lang: lang) + " " + money(yearOut))
+                            .font(.system(size: 10.5, weight: .bold)).foregroundColor(HomeTone.red)
+                            .lineLimit(1).minimumScaleFactor(0.6)
+                    }
+                    Spacer(minLength: 0)
+                }
             } else if size == .twoByOne {
                 // As the sheet draws it: three figures across the top, then the
                 // last few counterparties beside what is paid on repeat.
@@ -1160,6 +1214,28 @@ func homeReceiptWarning(_ count: Int, lang: String) -> String {
 /// How fresh the feed is. The real signal is the connection's own lastSyncedAt —
 /// a live snapshot only says the listener fired, not that the bank handed
 /// anything over, which is what made "Connected" misleading in the first place.
+/// Money in and out since 1 January. A ViewBuilder cannot hold the statements a
+/// DateFormatter needs, so the arithmetic lives here.
+func homeYearTotals(_ transactions: [StudioBankTransaction]) -> (received: Double, spent: Double) {
+    let year = Calendar.current.component(.year, from: Date())
+    let prefix = String(format: "%04d-", year)
+    let rows = transactions.filter { $0.bookingDate.hasPrefix(prefix) }
+    return (
+        rows.filter { $0.amount > 0 }.reduce(0) { $0 + $1.amount },
+        rows.filter { $0.amount < 0 }.reduce(0) { $0 + abs($1.amount) }
+    )
+}
+
+func homeSyncLabel(_ lastSync: Date?, lang: String) -> String {
+    guard let lastSync else { return t("Never synced", lang: lang) }
+    let seconds = Date().timeIntervalSince(lastSync)
+    let days = Int(seconds / 86400)
+    let hours = Int(seconds / 3600)
+    if days >= 1 { return t("Last synced {n} days ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(days)") }
+    if hours >= 1 { return t("Last synced {n}h ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(hours)") }
+    return t("Last synced just now", lang: lang)
+}
+
 struct HomeSyncLine: View {
     let lastSync: Date?
     let unhealthy: Bool
@@ -1168,14 +1244,8 @@ struct HomeSyncLine: View {
     var body: some View {
         let seconds = lastSync.map { Date().timeIntervalSince($0) } ?? -1
         let days = Int(seconds / 86400)
-        let hours = Int(seconds / 3600)
         let stale = lastSync == nil || days >= 2 || unhealthy
-        let label: String = {
-            guard lastSync != nil else { return t("Never synced", lang: lang) }
-            if days >= 1 { return t("Last synced {n} days ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(days)") }
-            if hours >= 1 { return t("Last synced {n}h ago", lang: lang).replacingOccurrences(of: "{n}", with: "\(hours)") }
-            return t("Last synced just now", lang: lang)
-        }()
+        let label = homeSyncLabel(lastSync, lang: lang)
         return HStack(spacing: 6) {
             Image(systemName: stale ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath")
                 .font(.system(size: 11))
