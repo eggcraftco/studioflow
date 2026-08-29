@@ -177,7 +177,16 @@ function resolveProductionStage(orderData = {}, stages = DEFAULT_PRODUCTION_STAG
   }
 
   if (total === 0) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null };
-  if (doneCount >= total) return { stageId: shipReady.id, source: "auto", doneCount, total, blocker: null };
+  // Two milestones, not one: the work being finished and the job leaving the
+  // workshop. Every step ticked means it is MADE — Ready to Ship. It only
+  // becomes Done once it has actually gone, which dispatch is the record of.
+  // Without this the board had no automatic route into Done at all: finishing
+  // every step parked the card in Ready to Ship for ever and somebody had to
+  // drag it across by hand.
+  if (doneCount >= total) {
+    const gone = orderData.isDispatched === true;
+    return { stageId: gone && done ? done.id : shipReady.id, source: "auto", doneCount, total, blocker: null };
+  }
   if (values.every(stepIsIdle)) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null };
 
   // Name binding: when the step now being worked shares its name with a stage

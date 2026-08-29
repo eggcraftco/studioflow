@@ -198,7 +198,12 @@ fun resolveProductionStage(
     }
 
     if (total == 0) return result(readyStage, "auto")
-    if (doneCount >= total) return result(shipReady, "auto")
+    // Two milestones, not one: the work being finished and the job leaving the
+    // workshop. Every step ticked means it is MADE — Ready to Ship. It only
+    // becomes Done once it has actually gone, which dispatch is the record of.
+    if (doneCount >= total) {
+        return result(if (order.isDispatched) (doneStage ?: shipReady) else shipReady, "auto")
+    }
     if (values.all { productionStepIsIdle(it) }) return result(readyStage, "auto")
 
     // Name binding: when the step being worked shares its name with a lane,

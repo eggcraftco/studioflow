@@ -11650,7 +11650,11 @@ struct ContentView: View {
         }
     }
     
-    private func hizliTamamla(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Done"; guncelSiparis.status = "Done"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Done" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
+    // "Mark as Done" now means it. Ticking every step only ever said the piece
+    // was MADE, which the board reads as Ready to Ship — so the menu said Done
+    // and the card stopped one lane short, and somebody had to drag it across.
+    // Dispatch is the record of the job leaving, so the gesture sets that too.
+    private func hizliTamamla(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Done"; guncelSiparis.status = "Done"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Done" }; guncelSiparis.extraStatuses = yeniExtralar }; guncelSiparis.isDispatched = true; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
     private func hizliIptalEt(_ siparis: Siparis) { guard canEditWorkflowFields else { return }; var guncelSiparis = siparis; guncelSiparis.designStatus = "Cancelled"; guncelSiparis.status = "Cancelled"; if let extralar = guncelSiparis.extraStatuses { var yeniExtralar = extralar; for key in yeniExtralar.keys { yeniExtralar[key] = "Cancelled" }; guncelSiparis.extraStatuses = yeniExtralar }; withAnimation { firebaseManager.updateSiparis(guncelSiparis); if seciliSiparis?.id == guncelSiparis.id { seciliSiparis = guncelSiparis } } }
     private func silmeTalebiGonder(_ siparis: Siparis) {
         guard requiresOwnerApprovalForDeletion else { return }

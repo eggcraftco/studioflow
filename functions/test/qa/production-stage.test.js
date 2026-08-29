@@ -45,6 +45,29 @@ function order(values, extra = {}) {
   pass("untouched / underway / finished land in the right lanes");
 }
 
+// 1b. Finished is not the same as gone. Every step ticked means the piece is
+// MADE; it reaches Done when it has actually left, which dispatch records.
+// Before this the board had no automatic route into Done at all — a finished
+// order sat in Ready to Ship until somebody dragged it across by hand.
+{
+  const finished = ["Done", "Done", "Done", "Done", "Done"];
+  assert.strictEqual(stageOf(order(finished)), "ready_to_ship");
+  assert.strictEqual(stageOf(order(finished, { isDispatched: true })), "done");
+  assert.strictEqual(stageOf(order(finished, { isDelivered: true })), "done");
+  // Dispatch does not skip the work: a half-built order that someone marked
+  // dispatched is still in production, not finished.
+  assert.strictEqual(
+    stageOf(order(["Done", "In Progress", "Not Yet", "Not Yet", "Not Yet"], { isDispatched: true })),
+    "in_production"
+  );
+  // And a blocker still outranks everything, dispatched or not.
+  assert.strictEqual(
+    stageOf(order(finished, { isDispatched: true, productionBlocker: { reason: "supplier_delay", note: "" } })),
+    "blocked"
+  );
+  pass("finished is Ready to Ship; dispatched is Done");
+}
+
 // 2. An empty order (no answers at all) is Ready, not In Production — a job
 // nobody has touched must not look like work in flight.
 {
