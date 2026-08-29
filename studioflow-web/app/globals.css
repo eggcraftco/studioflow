@@ -27156,10 +27156,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-grid {
   display: grid; gap: 16px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  /* Rows grow, so a card can never paint over its neighbour here. The minimum
-     matches the fixed row the native grids use, so the same layout reads the
-     same on all four platforms. */
-  grid-auto-rows: minmax(236px, auto);
+  /* The row IS the column width, so a 1x1 is a square, a 2x1 is two squares
+     wide and a 2x2 is four squares merged (§2). --home-unit is published by the
+     grid itself, because CSS cannot derive one track from the other; the 236px
+     is only what the first paint uses before the measurement lands. A fixed row
+     against a much wider column is what made the desktop cards read as squat
+     letterboxes. Rows still grow rather than let a card paint over its
+     neighbour. */
+  grid-auto-rows: minmax(var(--home-unit, 236px), auto);
 }
 
 .home-card {
@@ -27424,11 +27428,44 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* Customer mix: one bar, three segments, and a key that names each one — the
    proportions are never carried by colour alone (§20). */
 .home-mix { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+/* The 1x1 square: the count, then the four production figures, then the split
+   as one bar. The square gives each figure room for its name — the reference
+   sheet's 1x1 is a square, not a letterbox. */
+.home-money.is-square { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+.home-lede { display: flex; align-items: baseline; gap: 8px; margin: 0; min-width: 0; }
+.home-lede strong { font-size: 34px; font-weight: 850; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.home-lede span { font-size: 14px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-count-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
+.home-count {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 4px;
+}
+.home-count em {
+  font-style: normal; font-size: 10.5px; opacity: 0.62; text-align: center;
+  /* Four names across a real 336px square is ~76px each — "In production" only
+     survives on two lines, and a truncated name is not a name. */
+  line-height: 1.2; max-width: 100%;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-count b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-count-icon { display: inline-flex; }
+.home-count-icon svg { width: 17px; height: 17px; }
+.home-count.tone-green b, .home-count.tone-green .home-count-icon { color: #15803d; }
+.home-count.tone-blue b, .home-count.tone-blue .home-count-icon { color: #2563eb; }
+.home-count.tone-red b, .home-count.tone-red .home-count-icon { color: #dc2626; }
+.home-count.tone-slate b, .home-count.tone-slate .home-count-icon { color: #64748b; }
+
 .home-mix-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
 .home-mix-bar i { display: block; border-radius: 999px; }
 .home-mix-bar i.tone-new { background: #16a34a; }
 .home-mix-bar i.tone-returning { background: #7c3aed; }
 .home-mix-bar i.tone-existing { background: #14b8a6; }
+/* Stage kinds, so the orders square's bar reads the same as its flow lanes. */
+.home-mix-bar i.tone-green { background: #16a34a; }
+.home-mix-bar i.tone-blue { background: #2563eb; }
+.home-mix-bar i.tone-red { background: #dc2626; }
+.home-mix-bar i.tone-purple { background: #7c3aed; }
+.home-mix-bar i.tone-slate { background: #94a3b8; }
 .home-mix-key { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-mix-key li { display: flex; flex-direction: column; gap: 1px; padding: 0 10px; min-width: 0; }
 .home-mix-key li + li { border-left: 1px solid var(--border); }
@@ -27570,6 +27607,23 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* Green is money in, blue is money still owed, orange is money out. The label
    always names the figure, so the colours are reinforcement, not the message. */
 .home-money { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+/* A 1x1 is a square now, not a 236px letterbox, so the figures spread down it
+   the way the reference sheet draws them: the headline stays under the top
+   line and the pair beneath it sits on the floor of the card. Bunched at the
+   top with the bottom half empty is what a card built for the old row looks
+   like in a square. */
+/* A 1x1 header carries the same five parts in a single column's width, so the
+   title runs out of room by a hair and picks up an ellipsis it does not need. */
+.home-card-1x1 .home-card-head { gap: 10px; }
+.home-card-1x1 .home-card-title { font-size: 16px; }
+.home-card-1x1 .home-money { gap: 14px; }
+.home-card-1x1 .home-money > .home-split-pair:last-child,
+.home-card-1x1 .home-money > .home-count-pair:last-child { margin-top: auto; }
+.home-card-1x1 .home-metric-label { font-size: 13px; }
+.home-card-1x1 .home-metric-value { font-size: 36px; }
+.home-card-1x1 .home-split-pair em { font-size: 12.5px; }
+.home-card-1x1 .home-split-pair b { font-size: 19px; }
+.home-card-1x1 .home-split-pair b.is-plain { font-size: 14px; }
 .home-metric-value { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .home-metric-value.is-positive { color: #15803d; }
 .home-metric-value.is-negative { color: #dc2626; }

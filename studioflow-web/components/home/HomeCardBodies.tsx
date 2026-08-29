@@ -581,16 +581,42 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
 
   if (size === "1x1") {
+    // The square reads top to bottom: how many are live, how they are split,
+    // then the split as one bar. The counts come from the workspace's own stage
+    // kinds — never a fixed list of stage names.
+    const byKind = (kind: string) =>
+      byStage.filter((stage) => stage.kind === kind).reduce((sum, stage) => sum + stage.count, 0);
+    const counts: { label: string; value: number; tone: string; icon: HomeTileIconName }[] = [
+      { label: t("Ready"), value: byKind("ready"), tone: "green", icon: "ready" },
+      { label: t("In production"), value: byKind("active"), tone: "blue", icon: "inProduction" },
+      { label: t("Ready to ship"), value: byKind("shipready"), tone: "green", icon: "readyToShip" },
+      { label: t("Overdue"), value: late.length, tone: late.length > 0 ? "red" : "slate", icon: "overdue" },
+    ];
+    const total = byStage.reduce((sum, stage) => sum + stage.count, 0);
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("active orders")}</p>
-        <strong className="home-metric-value is-info">{open.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("Overdue")}</em><b className={late.length > 0 ? "is-warning" : ""}>{late.length}</b></span>
-          <span><em>{t("Ready to ship")}</em><b className="is-positive">
-            {byStage.filter((s) => s.kind === "shipready").reduce((sum, s) => sum + s.count, 0)}
-          </b></span>
+      <div className="home-money is-square">
+        <p className="home-lede">
+          <strong>{open.length}</strong>
+          <span>{t("active orders")}</span>
+        </p>
+        <div className="home-count-row">
+          {counts.map((count) => (
+            <div key={count.label} className={`home-count tone-${count.tone}`}>
+              <em>{count.label}</em>
+              <b>{count.value}</b>
+              <span className="home-count-icon" aria-hidden="true"><HomeTileIcon name={count.icon} /></span>
+            </div>
+          ))}
         </div>
+        <span className="home-mix-bar" aria-hidden="true">
+          {byStage.filter((stage) => stage.count > 0).map((stage) => (
+            <i
+              key={stage.id}
+              className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}
+              style={{ flex: `${total > 0 ? stage.count / total : 0} 1 0` }}
+            />
+          ))}
+        </span>
       </div>
     );
   }

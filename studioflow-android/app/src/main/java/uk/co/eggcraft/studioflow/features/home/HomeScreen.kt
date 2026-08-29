@@ -100,7 +100,6 @@ data class HomeAccess(
 // One row's height and the gutter between cards. The grid places cards at fixed
 // offsets, so the row has to be the height the tallest card actually needs — a
 // row shorter than its content does not shrink the card, it clips it.
-private const val CARD_UNIT_HEIGHT = 236
 private const val CARD_GAP = 16
 
 @Composable
@@ -277,9 +276,12 @@ fun HomeScreen(
             // the width — it is drawn for two columns and there are exactly two.
             val columnCount = if (availableDp >= 840) 3 else 2
             val unit = (availableDp - CARD_GAP * (columnCount - 1)) / columnCount
-            // On a phone the row IS the column width, so a 1x1 comes out square.
+            // The row IS the column width at every size, so a 1x1 is a square, a
+            // 2x1 is two squares wide and a 2x2 is four squares merged (§2). A
+            // fixed row against a much wider column is what made the wide-screen
+            // cards read as squat letterboxes.
             val compact = availableDp < 600
-            val rowHeight = if (compact) unit else CARD_UNIT_HEIGHT
+            val rowHeight = unit
             val rows = HomeGridLayout.rowCount(visible, columnCount)
             Box(
                 Modifier
@@ -320,7 +322,7 @@ fun HomeScreen(
                                     onDragEnd = {
                                         // Where the card was let go, in grid cells.
                                         val cellWidth = (unit + CARD_GAP).toFloat()
-                                        val cellHeight = (CARD_UNIT_HEIGHT + CARD_GAP).toFloat()
+                                        val cellHeight = (rowHeight + CARD_GAP).toFloat()
                                         val movedColumns = (dragOffset.x / density.density / cellWidth).roundToInt()
                                         val movedRows = (dragOffset.y / density.density / cellHeight).roundToInt()
                                         val steps = movedRows * columnCount + movedColumns

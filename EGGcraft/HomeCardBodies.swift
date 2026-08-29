@@ -42,13 +42,13 @@ struct HomeCardBody: View {
         case .inventory:
             HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .customers:
-            HomeCustomersBody(size: size, lang: lang)
+            HomeCustomersBody(size: size, lang: lang, compact: compact)
         case .ordersProduction:
             HomeOrdersProductionBody(size: size, lang: lang, stepsJSON: stepsJSON, compact: compact, data: data)
         case .schedule:
             HomeScheduleBody(size: size, lang: lang)
         case .files:
-            HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal)
+            HomeFilesBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .notes:
             HomeNotesBody(size: size, lang: lang, data: data)
         }
@@ -582,18 +582,18 @@ struct HomeMoneyBody: View {
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
 
             if size == .oneByOne {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Net profit", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+                    Text(t("Net profit", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
                     Text(money(profit))
-                        .font(.system(size: 25, weight: .heavy))
+                        .font(.system(size: compact ? 25 : 33, weight: .heavy))
                         .foregroundColor(profit >= 0 ? HomeTone.green : HomeTone.red)
                         .lineLimit(1).minimumScaleFactor(0.5)
+                    Spacer(minLength: 0)
                     HomeSplitPair {
                         HomeFigure(label: t("Revenue", lang: lang), value: money(revenue), tone: HomeTone.green)
                     } right: {
                         HomeFigure(label: t("Outstanding", lang: lang), value: money(outstanding), tone: HomeTone.accent)
                     }
-                    Spacer(minLength: 0)
                     HomeRatioBar(revenue: revenue, costs: costs, lang: lang, money: money)
                 }
             } else if size == .twoByOne && compact {
@@ -996,18 +996,18 @@ struct HomeBankingBody: View {
             } else if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
-                    Text(t("Spent this month", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(t("Spent this month", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
                     Text("−" + money(spent))
-                        .font(.system(size: 25, weight: .heavy))
+                        .font(.system(size: compact ? 25 : 33, weight: .heavy))
                         .foregroundColor(HomeTone.red)
                         .lineLimit(1).minimumScaleFactor(0.5)
+                    Spacer(minLength: 0)
                     HomeSplitPair {
                         HomeFigure(label: t("Incoming", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                     } right: {
                         HomeFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
                                    tone: missing > 0 ? HomeTone.red : .primary)
                     }
-                    Spacer(minLength: 0)
                 }
             } else if size == .twoByOne && compact {
                 // The phone wide card: three figures ruled apart, one recent
@@ -1446,17 +1446,17 @@ struct HomeInventoryBody: View {
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
             if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("total value", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
+                    Text(t("total value", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
                     Text(money(summary.totalValue))
-                        .font(.system(size: 25, weight: .heavy))
+                        .font(.system(size: compact ? 25 : 33, weight: .heavy))
                         .lineLimit(1).minimumScaleFactor(0.5)
+                    Spacer(minLength: 0)
                     HomeSplitPair {
                         HomeFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
                                    tone: summary.lowStockCount > 0 ? HomeTone.orange : .primary)
                     } right: {
                         HomeFigure(label: t("incoming", lang: lang), value: "\(summary.incomingCount)", tone: HomeTone.green)
                     }
-                    Spacer(minLength: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: compact ? 7 : 10) {
@@ -1558,6 +1558,7 @@ struct HomeDonutKey: View {
 struct HomeCustomersBody: View {
     let size: HomeCardSize
     let lang: String
+    var compact: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -1581,14 +1582,14 @@ struct HomeCustomersBody: View {
 
             if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("customers", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
-                    Text("\(customers.count)").font(.system(size: 28, weight: .heavy))
+                    Text(t("customers", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
+                    Text("\(customers.count)").font(.system(size: compact ? 28 : 36, weight: .heavy))
+                    Spacer(minLength: 0)
                     HomeSplitPair {
                         HomeFigure(label: t("active orders", lang: lang), value: "\(withActive)", tone: HomeTone.green)
                     } right: {
                         HomeFigure(label: t("Latest", lang: lang), value: customers.first?.name ?? "—")
                     }
-                    Spacer(minLength: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
@@ -1740,10 +1741,11 @@ struct HomeOrdersProductionBody: View {
             }
             let shipReadyIDs = Set(data.stages.filter { $0.kind == .shipready }.map { $0.id })
 
-            if size == .oneByOne && compact {
-                // The sheet reads left to right: how many are live, then how they
-                // are split, then the split as one bar. Four counts across a
-                // square are a mark and a number — the label would not survive.
+            if size == .oneByOne {
+                // The sheet reads top to bottom: how many are live, then how they
+                // are split, then the split as one bar. The desktop square has
+                // room for each count's name; on a phone the label would not
+                // survive the width, so the mark carries it instead.
                 let readyIDs = Set(data.stages.filter { $0.kind == .ready }.map { $0.id })
                 let activeIDs = Set(data.stages.filter { $0.kind == .active }.map { $0.id })
                 let counts: [(String, Int, Color, String)] = [
@@ -1756,45 +1758,40 @@ struct HomeOrdersProductionBody: View {
                     (t("Overdue", lang: lang), late.count,
                      late.isEmpty ? HomeTone.slate : HomeTone.red, "clock"),
                 ]
-                VStack(alignment: .leading, spacing: 9) {
+                VStack(alignment: .leading, spacing: compact ? 9 : 14) {
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text("\(live.count)")
-                            .font(.system(size: 32, weight: .heavy))
+                            .font(.system(size: compact ? 32 : 42, weight: .heavy))
                             .lineLimit(1).minimumScaleFactor(0.5)
                         Text(t("active orders", lang: lang))
-                            .font(.system(size: 12)).foregroundColor(.secondary)
+                            .font(.system(size: compact ? 12 : 15)).foregroundColor(.secondary)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
                     Spacer(minLength: 0)
-                    HStack(spacing: 5) {
+                    HStack(spacing: compact ? 5 : 8) {
                         ForEach(Array(counts.enumerated()), id: \.offset) { _, entry in
-                            VStack(spacing: 3) {
-                                Image(systemName: entry.3).font(.system(size: 11)).foregroundColor(entry.2)
-                                Text("\(entry.1)").font(.system(size: 15, weight: .heavy)).foregroundColor(entry.2)
+                            VStack(spacing: compact ? 3 : 6) {
+                                if !compact {
+                                    Text(entry.0)
+                                        .font(.system(size: 11.5)).foregroundColor(.secondary)
+                                        .lineLimit(1).minimumScaleFactor(0.6)
+                                }
+                                Text("\(entry.1)")
+                                    .font(.system(size: compact ? 15 : 26, weight: .heavy)).foregroundColor(entry.2)
                                     .lineLimit(1).minimumScaleFactor(0.6)
+                                Image(systemName: entry.3)
+                                    .font(.system(size: compact ? 11 : 15)).foregroundColor(entry.2)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                            .padding(.vertical, compact ? 6 : 11)
+                            .padding(.horizontal, 4)
+                            .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel("\(entry.0): \(entry.1)")
                         }
                     }
-                    HomeStageBar(stages: data.stages, resolved: resolved)
-                }
-            } else if size == .oneByOne {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(t("active orders", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
-                    Text("\(live.count)").font(.system(size: 28, weight: .heavy)).foregroundColor(HomeTone.accent)
-                    HomeSplitPair {
-                        HomeFigure(label: t("Overdue", lang: lang), value: "\(late.count)",
-                                   tone: late.isEmpty ? .primary : HomeTone.orange)
-                    } right: {
-                        HomeFigure(label: t("Ready to ship", lang: lang),
-                                   value: "\(resolved.filter { shipReadyIDs.contains($0.1.stageId) }.count)",
-                                   tone: HomeTone.green)
-                    }
                     Spacer(minLength: 0)
+                    HomeStageBar(stages: data.stages, resolved: resolved)
                 }
             } else if size == .twoByOne && compact {
                 // The sheet gives the wide phone card four counts and then the
@@ -2147,6 +2144,7 @@ struct HomeFilesBody: View {
     let lang: String
     let currency: String
     let decimal: String
+    var compact: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
@@ -2161,14 +2159,14 @@ struct HomeFilesBody: View {
             let used = files.reduce(0.0) { $0 + Double($1.1.fileSize) }
             if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Total files", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
-                    Text("\(files.count)").font(.system(size: 28, weight: .heavy)).foregroundColor(HomeTone.accent)
+                    Text(t("Total files", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
+                    Text("\(files.count)").font(.system(size: compact ? 28 : 36, weight: .heavy)).foregroundColor(HomeTone.accent)
+                    Spacer(minLength: 0)
                     HomeSplitPair {
                         HomeFigure(label: t("Storage", lang: lang), value: homeFileSize(used))
                     } right: {
                         HomeFigure(label: t("File library", lang: lang), value: "\(files.count)")
                     }
-                    Spacer(minLength: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {

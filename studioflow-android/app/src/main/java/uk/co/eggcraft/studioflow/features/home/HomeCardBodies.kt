@@ -102,10 +102,10 @@ fun HomeCardBody(
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, t)
         HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
         HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, compact, t)
-        HomeCardId.Customers -> HomeCustomersBody(size, state, t)
+        HomeCardId.Customers -> HomeCustomersBody(size, state, compact, t)
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, compact, t)
         HomeCardId.Schedule -> HomeScheduleBody(size, state, t)
-        HomeCardId.Files -> HomeFilesBody(size, state, t)
+        HomeCardId.Files -> HomeFilesBody(size, state, compact, t)
         HomeCardId.Notes -> HomeNotesBody(size, state, t)
     }
 }
@@ -489,11 +489,17 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
     val profit = orders.sumOf { it.netProfit }
 
     when (size) {
-        HomeCardSize.OneByOne -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(t("Net profit"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(money(profit, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+        // The square distributes: the headline stays under the top line and the
+        // pair beneath it sits on the floor of the card (§2).
+        HomeCardSize.OneByOne -> Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+            Text(t("Net profit"), fontSize = if (compact) 11.sp else 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(money(profit, state), fontSize = if (compact) 24.sp else 32.sp,
+                fontWeight = FontWeight.ExtraBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 color = if (profit >= 0) HomeTone.green else HomeTone.red)
+            Spacer(Modifier.weight(1f))
             HomeSplitPair(
                 t("Revenue"), money(revenue, state), HomeTone.green,
                 t("Outstanding"), money(outstanding, state), HomeTone.accent
@@ -1198,10 +1204,14 @@ private fun HomeInventoryBody(
         Text(t("Loading…"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); return
     }
     if (size == HomeCardSize.OneByOne) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(t("total value"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(money(summary.totalValue, state), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold,
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+            Text(t("total value"), fontSize = if (compact) 11.sp else 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(money(summary.totalValue, state), fontSize = if (compact) 24.sp else 32.sp,
+                fontWeight = FontWeight.ExtraBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.weight(1f))
             HomeSplitPair(
                 t("low stock"), "${summary.lowStockCount}", if (summary.lowStockCount > 0) HomeTone.orange else Color.Unspecified,
                 t("incoming"), "${summary.incomingCount}", HomeTone.green
@@ -1281,7 +1291,7 @@ private fun DonutKey(colour: Color, label: String, value: String, percent: Float
 // ----------------------------------------------------------------- Customers
 
 @Composable
-private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
     val customers = state.customers
     if (customers.isEmpty()) {
         Text(t("Nothing here yet."), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1299,9 +1309,12 @@ private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, t: (
     val existing = (customers.size - newThisMonth - returning).coerceAtLeast(0)
 
     if (size == HomeCardSize.OneByOne) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(t("customers"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${customers.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+            Text(t("customers"), fontSize = if (compact) 11.sp else 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${customers.size}", fontSize = if (compact) 26.sp else 34.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.weight(1f))
             HomeSplitPair(
                 t("active orders"), "$withActive", HomeTone.green,
                 t("Latest"), customers.firstOrNull()?.name ?: "—"
@@ -1424,10 +1437,11 @@ private fun HomeOrdersProductionBody(
     val late = live.filter { homeDueDate(it.paymentDate, it.deliveryTime).before(Date()) }
     val shipReadyIds = stages.filter { it.kind == ProductionStageKind.ShipReady }.map { it.id }.toSet()
 
-    if (size == HomeCardSize.OneByOne && compact) {
-        // The sheet reads left to right: how many are live, then how they are
-        // split, then the split as one bar. Four counts across a square are a
-        // mark and a number — the label would not survive.
+    if (size == HomeCardSize.OneByOne) {
+        // The sheet reads top to bottom: how many are live, then how they are
+        // split, then the split as one bar. The wide-screen square has room for
+        // each count's name; on a phone the label would not survive the width,
+        // so the mark carries it instead.
         val readyIds = stages.filter { it.kind == ProductionStageKind.Ready }.map { it.id }.toSet()
         val activeIds = stages.filter { it.kind == ProductionStageKind.Active }.map { it.id }.toSet()
         val counts = listOf(
@@ -1436,45 +1450,41 @@ private fun HomeOrdersProductionBody(
             Quad(t("Ready to ship"), resolved.count { it.second.stageId in shipReadyIds }, HomeTone.green, Icons.Filled.LocalShipping),
             Quad(t("Overdue"), late.size, if (late.isEmpty()) HomeTone.slate else HomeTone.red, Icons.Filled.Schedule)
         )
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("${live.size}", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(t("active orders"), fontSize = 12.sp, maxLines = 1,
+                Text("${live.size}", fontSize = if (compact) 30.sp else 38.sp,
+                    fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(t("active orders"), fontSize = if (compact) 12.sp else 14.sp, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 4.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp)) {
                 counts.forEach { entry ->
                     Column(
                         Modifier
                             .weight(1f)
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(9.dp))
-                            .padding(vertical = 5.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                                RoundedCornerShape(if (compact) 9.dp else 12.dp))
+                            .padding(vertical = if (compact) 5.dp else 10.dp, horizontal = 3.dp)
                             .semantics { contentDescription = "${entry.label}: ${entry.count}" },
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 5.dp)
                     ) {
-                        Icon(entry.icon, null, Modifier.size(12.dp), entry.tone)
-                        Text("${entry.count}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold,
-                            color = entry.tone, maxLines = 1)
+                        if (!compact) {
+                            Text(entry.label, fontSize = 11.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("${entry.count}", fontSize = if (compact) 14.sp else 23.sp,
+                            fontWeight = FontWeight.ExtraBold, color = entry.tone, maxLines = 1)
+                        Icon(entry.icon, null, Modifier.size(if (compact) 12.dp else 16.dp), entry.tone)
                     }
                 }
             }
+            Spacer(Modifier.weight(1f))
             StageBar(stages, resolved)
-        }
-        return
-    }
-
-    if (size == HomeCardSize.OneByOne) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(t("active orders"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${live.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
-            HomeSplitPair(
-                t("Overdue"), "${late.size}", if (late.isEmpty()) Color.Unspecified else HomeTone.orange,
-                t("Ready to ship"), "${resolved.count { it.second.stageId in shipReadyIds }}", HomeTone.green
-            )
         }
         return
     }
@@ -1759,7 +1769,7 @@ private fun sameDay(a: Date, b: Date): Boolean {
 // --------------------------------------------------------------------- Files
 
 @Composable
-private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
     // One file, linked to as many records as it belongs to — the card counts
     // files, never copies (§14).
     val files = state.orders.filter { !it.isDeleted }.flatMap { order -> order.clientFiles.map { order to it } }
@@ -1769,9 +1779,13 @@ private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, t: (Stri
     }
     val used = files.sumOf { it.second.fileSize }
     if (size == HomeCardSize.OneByOne) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(t("Total files"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${files.size}", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+            Text(t("Total files"), fontSize = if (compact) 11.sp else 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${files.size}", fontSize = if (compact) 26.sp else 34.sp,
+                fontWeight = FontWeight.ExtraBold, color = HomeTone.accent)
+            Spacer(Modifier.weight(1f))
             HomeSplitPair(
                 t("Storage"), fileSize(used.toDouble()),
                 rightLabel = t("File library"), rightValue = "${files.size}"

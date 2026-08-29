@@ -87,6 +87,27 @@ export default function HomePage() {
   const [saveError, setSaveError] = useState("");
   // The layout as the server last accepted it, so a failed save can be undone.
   const lastSaved = useRef<HomeLayout | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  // A square 1x1 needs the row to equal the column, and CSS has no way to read
+  // one track's size into the other. The grid measures itself and publishes the
+  // column width; the stylesheet does the rest.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const apply = () => {
+      const styles = getComputedStyle(grid);
+      const columns = styles.gridTemplateColumns.split(" ").filter(Boolean).length;
+      if (columns < 1) return;
+      const gap = parseFloat(styles.columnGap) || 0;
+      const unit = (grid.clientWidth - gap * (columns - 1)) / columns;
+      if (unit > 0) grid.style.setProperty("--home-unit", `${Math.round(unit)}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -262,7 +283,10 @@ export default function HomePage() {
           </div>
         ) : null}
 
-        <div className="home-grid">
+        {/* The row height is the column width, so a 1x1 is a square, a 2x1 is two
+            squares wide and a 2x2 is four squares merged (§2). CSS cannot derive
+            one track from the other, so the grid measures itself. */}
+        <div className="home-grid" ref={gridRef}>
           {cards.map(({ placement, definition }, index) => (
             <HomeCardShell
               key={placement.id}

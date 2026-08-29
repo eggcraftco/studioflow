@@ -173,6 +173,8 @@ struct HomeView: View {
     @State private var dropTargetID: HomeCardID?
     @State private var renaming: HomeCardID?
     @State private var renameText = ""
+    /// The grid's own column width once it has laid out. Squares come from this.
+    @State private var measuredUnit: CGFloat = 0
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -186,15 +188,19 @@ struct HomeView: View {
     private var isCompact: Bool { false }
     #endif
 
-    /// The phone's square row, from the screen width rather than the grid's — the
-    /// grid has not measured itself yet when the ScrollView asks for a height.
-    private var compactRowEstimate: CGFloat {
+    /// The square row, from the screen width rather than the grid's — the grid
+    /// has not measured itself yet when the ScrollView asks for a height. Once
+    /// it has, `measuredUnit` takes over.
+    private var rowEstimate: CGFloat {
         #if os(iOS)
         let width = UIScreen.main.bounds.width - 44
-        return (width - HomeGridMetrics.gap) / 2
         #else
-        return HomeGridMetrics.rowHeight
+        // No AppKit here: the grid measures itself a frame later anyway, and
+        // this only has to keep the ScrollView from clipping until it does.
+        let width: CGFloat = 1200
         #endif
+        let columns = CGFloat(columnCount)
+        return max(160, (width - HomeGridMetrics.gap * (columns - 1)) / columns)
     }
 
     private var visible: [HomeCardPlacement] {
@@ -329,8 +335,11 @@ struct HomeView: View {
         GeometryReader { proxy in
             let spacing = HomeGridMetrics.gap
             let unit = (proxy.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount)
-            // On a phone the row IS the column width, so a 1×1 comes out square.
-            let row = isCompact ? unit : HomeGridMetrics.rowHeight
+            // The row IS the column width at every size, so a 1×1 is a square,
+            // a 2×1 is two squares wide and a 2×2 is four squares merged — §2.
+            // A fixed row against a much wider column is what made the desktop
+            // cards read as squat letterboxes.
+            let row = unit
             HomeGrid(
                 placements: visible,
                 columnCount: columnCount,
@@ -374,6 +383,8 @@ struct HomeView: View {
                         }
                 }
             )
+            .onAppear { measuredUnit = unit }
+            .onChange(of: proxy.size.width) { _ in measuredUnit = unit }
         }
         .frame(height: gridHeight)
     }
@@ -384,7 +395,7 @@ struct HomeView: View {
         // Only the phone's row is derived from the width; the reader sees the
         // real height once the grid lays out, and this keeps the ScrollView from
         // clipping in the meantime.
-        let row = isCompact ? compactRowEstimate : HomeGridMetrics.rowHeight
+        let row = measuredUnit > 0 ? measuredUnit : rowEstimate
         return CGFloat(rows) * row + CGFloat(max(0, rows - 1)) * HomeGridMetrics.gap
     }
 
