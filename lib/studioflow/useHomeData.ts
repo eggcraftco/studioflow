@@ -14,6 +14,7 @@ import {
   type ProductionStage,
 } from "@/lib/studioflow/production";
 import { loadWorkspaceBlockHeadings, type HeadingItem } from "@/lib/studioflow/blockHeadings";
+import { detectRecurringSpends, monthlyFixedTotal, type BankVendor } from "@/lib/studioflow/bankInsights";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
   loadDashboardCounts,
@@ -52,6 +53,12 @@ export type HomeBankTx = {
   id: string;
   /** Who the money moved to or from, as the feed named it. */
   name: string;
+  /** The raw pair the recurring detector groups on. */
+  counterparty: string;
+  description: string;
+  currency: string;
+  /** "YYYY-MM-DD", the shape the shared bank helpers read. */
+  bookingDay: string;
   amount: number;
   bookingDate: Date | null;
   categoryId: string;
@@ -79,6 +86,9 @@ export type HomeData = {
   bankLastSync: Date | null;
   /** True when a linked connection is reporting anything other than a clean sync. */
   bankNeedsAttention: boolean;
+  /** What the workspace pays every month on repeat, by the same rule the
+   *  Banking screen uses — detected from the feed plus the owner's own vendors. */
+  bankMonthlyFixed: number;
   lastLoadedAtMs: number;
   offline: boolean;
   reload: (domain?: HomeDomain) => void;
@@ -108,6 +118,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
   const [notes, setNotes] = useState<StudioKeepNote[]>([]);
   const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
   const [bankNeedsAttention, setBankNeedsAttention] = useState(false);
+  const [bankVendors, setBankVendors] = useState<BankVendor[]>([]);
   const [lastLoadedAtMs, setLastLoadedAtMs] = useState(0);
   const [offline, setOffline] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -252,6 +263,10 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
             return {
               id: txDoc.id,
               name: String(data.counterparty || data.description || ""),
+              counterparty: String(data.counterparty || ""),
+              description: String(data.description || ""),
+              currency: String(data.currency || ""),
+              bookingDay: typeof raw === "string" ? raw : (bookingDate ? bookingDate.toISOString().slice(0, 10) : ""),
               amount: Number(data.amount ?? 0),
               bookingDate,
               categoryId: String(data.categoryId ?? ""),
@@ -304,6 +319,35 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     );
   }, [workspaceId, canSeeBank]);
 
+  useEffect(() => {
+    if (!workspaceId || !canSeeBank) return;
+    return onSnapshot(
+      collection(db, "companies", workspaceId, "bankVendors"),
+      (snap) => setBankVendors(snap.docs.map((docSnap) => {
+        const data = docSnap.data() as Record<string, unknown>;
+        return {
+          id: docSnap.id,
+          name: String(data.name || ""),
+          keys: Array.isArray(data.keys) ? (data.keys as string[]) : [],
+          cadence: (["weekly", "monthly", "yearly"].includes(String(data.cadence))
+            ? String(data.cadence) : "monthly") as BankVendor["cadence"],
+        };
+      })),
+      () => setBankVendors([]),
+    );
+  }, [workspaceId, canSeeBank]);
+
+  const bankMonthlyFixed = useMemo(
+    () => monthlyFixedTotal(detectRecurringSpends(
+      bankTransactions.map((tx) => ({
+        id: tx.id, amount: tx.amount, currency: tx.currency,
+        bookingDate: tx.bookingDay, counterparty: tx.counterparty, description: tx.description,
+      })),
+      bankVendors,
+    )),
+    [bankTransactions, bankVendors],
+  );
+
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   return useMemo(
@@ -323,6 +367,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       notes,
       bankLastSync,
       bankNeedsAttention,
+      bankMonthlyFixed,
       lastLoadedAtMs,
       offline,
       reload,
@@ -330,7 +375,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
       inventory, files, bankTransactions, activity, productionStages, productionSteps, notes,
-      bankLastSync, bankNeedsAttention, lastLoadedAtMs, offline, reload,
+      bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],
   );
 }
