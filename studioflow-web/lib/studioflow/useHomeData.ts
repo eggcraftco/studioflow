@@ -81,6 +81,8 @@ export type HomeData = {
   orders: OrderListItem[];
   scheduleOrders: ScheduleOrderItem[];
   customers: CustomerDirectoryItem[];
+  /** The plan's storage ceiling. A size on its own says nothing without it. */
+  storageLimitMB: number;
   inventory: InventorySummary | null;
   /** Only populated when a 2x2 stock card asked for it. */
   inventoryItems: InventoryItem[];
@@ -394,6 +396,7 @@ export function useHomeData(
       orders,
       scheduleOrders,
       customers,
+      storageLimitMB: workspace?.billingStorageLimitMB ?? 0,
       inventory,
       inventoryItems,
       files,
@@ -411,7 +414,7 @@ export function useHomeData(
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
+      workspace, inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
       bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],
   );

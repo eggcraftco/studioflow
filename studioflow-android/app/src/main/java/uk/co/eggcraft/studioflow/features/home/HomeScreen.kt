@@ -378,7 +378,12 @@ fun HomeScreen(
                         // spare for a second thing on that line.
                         // The wide stock card names what it is a view of, as
                         // the sheet does — the figures alone do not say.
-                        subtitle = if (definition.id == HomeCardId.Inventory &&
+                        // How many files there are belongs beside the heading,
+                        // as the sheet reads it.
+                        subtitle = if (definition.id == HomeCardId.Files &&
+                            slot.placement.size != HomeCardSize.OneByOne)
+                            "${state.orders.filter { !it.isDeleted }.sumOf { it.clientFiles.size }} ${t("files")}"
+                        else if (definition.id == HomeCardId.Inventory &&
                             slot.placement.size != HomeCardSize.OneByOne) t("Stock overview")
                         else if (definition.id == HomeCardId.OrdersProduction &&
                             slot.placement.size == HomeCardSize.TwoByOne)
@@ -397,9 +402,11 @@ fun HomeScreen(
                         onOpen = { onOpenSection(definition.destination) },
                         // The + the sheet puts on the notes card: the thing you
                         // most often want from a wall of notes is one more note.
-                        onAdd = if (definition.id == HomeCardId.Notes) {
-                            { onOpenSection("Notes") }
-                        } else null,
+                        onAdd = when (definition.id) {
+                            HomeCardId.Notes -> { { onOpenSection("Notes") } }
+                            HomeCardId.Files -> { { onOpenSection("Files") } }
+                            else -> null
+                        },
                         onResize = { size -> commit(layout.copy(cards = layout.cards.map {
                             if (it.id == slot.placement.id) it.copy(size = size) else it
                         })) },

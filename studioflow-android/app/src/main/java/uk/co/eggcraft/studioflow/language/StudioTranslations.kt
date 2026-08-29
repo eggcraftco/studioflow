@@ -87,6 +87,8 @@ val STUDIO_SUPPORTED_LANGUAGES = listOf(
 
 
 private val TR_HOME: Map<String, Map<String, String>> by lazy { mapOf(
+    "files" to mapOf("Türkçe" to "dosya", "Deutsch" to "Dateien", "Français" to "fichiers", "Italiano" to "file", "Español (Spanish)" to "archivos", "Português" to "ficheiros", "Русский (Russian)" to "файлов", "日本語 (Japanese)" to "件のファイル", "中文 (Chinese)" to "个文件", "العربية (Arabic)" to "ملفات", "हिन्दी (Hindi)" to "फ़ाइलें"),
+    "Just now" to mapOf("Türkçe" to "Az önce", "Deutsch" to "Gerade eben", "Français" to "À l'instant", "Italiano" to "Proprio ora", "Español (Spanish)" to "Ahora mismo", "Português" to "Agora mesmo", "Русский (Russian)" to "Только что", "日本語 (Japanese)" to "たった今", "中文 (Chinese)" to "刚刚", "العربية (Arabic)" to "الآن", "हिन्दी (Hindi)" to "अभी"),
     // Re-copied verbatim from web after the duplicate sweep: mapOf keeps the
     // LAST entry, so a second definition further down silently replaced these.
     "Notes" to mapOf("Türkçe" to "Notlar", "Deutsch" to "Notizen", "Français" to "Notes", "Italiano" to "Note", "Español (Spanish)" to "Notas", "Português" to "Notas", "Русский (Russian)" to "Заметки", "日本語 (Japanese)" to "メモ", "中文 (Chinese)" to "笔记", "العربية (Arabic)" to "ملاحظات", "हिन्दी (Hindi)" to "नोट्स"),

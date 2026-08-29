@@ -832,6 +832,13 @@ class AuthViewModel: ObservableObject {
     // Total self-service ceiling for the Team plan.
     var teamSeatSelfServiceMax: Int { 10 }
 
+    /// Base plan storage + any active add-on, in MB. The number behind
+    /// `effectiveStorageLimitText`, so Home can draw a bar with it rather than
+    /// reporting a size with no ceiling.
+    var effectiveStorageLimitMB: Int {
+        currentPlanEntitlements.storageLimitMB + currentStorageAddonMB
+    }
+
     // Base plan storage + any active add-on, as a display string (e.g. "110 GB").
     var effectiveStorageLimitText: String {
         let totalMB = currentPlanEntitlements.storageLimitMB + currentStorageAddonMB

@@ -322,13 +322,25 @@ export default function HomePage() {
                   // sheet does — the figures alone do not say.
                   : placement.id === "inventory" && placement.size !== "1x1"
                     ? t("Stock overview")
-                    : undefined
+                    // How many files there are belongs beside the heading, as
+                    // the sheet reads it.
+                    : placement.id === "files" && placement.size !== "1x1"
+                      ? `${data.files.length} ${t("files")}`
+                      : undefined
               }
-              subtitleInline={placement.id === "ordersProduction"}
+              subtitleInline={placement.id === "ordersProduction" || placement.id === "files"}
               headerSlot={
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
-                placement.id === "notes" ? (
+                placement.id === "files" ? (
+                  <button
+                    type="button"
+                    className="home-add-button is-wide"
+                    onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                  >
+                    ↑ {t("Upload file")}
+                  </button>
+                ) : placement.id === "notes" ? (
                   <button
                     type="button"
                     className="home-add-button"

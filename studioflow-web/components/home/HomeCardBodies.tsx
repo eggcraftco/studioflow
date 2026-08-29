@@ -1161,6 +1161,20 @@ function humanSize(bytes: number) {
   return `${bytes} B`;
 }
 
+/** "2 min ago" / "Today" / "Yesterday" / the date — what the sheet shows beside
+ *  a file, and what a person actually asks about a recent upload. */
+function homeAgo(when: Date, t: (text: string) => string) {
+  const mins = Math.round((Date.now() - when.getTime()) / 60000);
+  if (mins < 1) return t("Just now");
+  if (mins < 60) return `${mins} ${t("min ago")}`;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const days = Math.floor((startOfDay.getTime() - when.getTime()) / 86400000);
+  if (days < 0) return t("Today");
+  if (days === 0) return t("Yesterday");
+  return when.toLocaleDateString();
+}
+
 export function FilesCardBody({ size, data, t }: CardBodyProps) {
   const files = data.files;
   if (files.length === 0) return null;
@@ -1169,6 +1183,25 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   // files, never copies (§14).
   const unlinked = files.filter((file) => !file.orderId);
   const used = files.reduce((sum, file) => sum + (file.fileSize || 0), 0);
+
+  /** The sheet's row: what kind of file it is, its name, what it is attached to,
+   *  and when it arrived. */
+  const fileRow = (file: (typeof files)[number]) => {
+    const kind = fileKind(file.fileName, file.contentType);
+    const ext = (file.fileName.split(".").pop() || "").slice(0, 4).toUpperCase();
+    return (
+      <li key={file.fileId || file.id}>
+        <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
+          <span className={`home-file-icon is-${kind}`} aria-hidden="true">{ext}</span>
+          <strong>{file.fileName}</strong>
+          {file.orderId ? (
+            <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+          ) : null}
+          <em>{file.uploadedAt ? homeAgo(file.uploadedAt, t) : ""}</em>
+        </Link>
+      </li>
+    );
+  };
 
   const row = (file: (typeof files)[number]) => (
     <li key={file.fileId || file.id}>
@@ -1206,10 +1239,25 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   );
 
   if (size === "2x1") {
+    // The sheet leads with how full the workspace is, not how many bytes it
+    // holds: a size on its own says nothing without the plan's ceiling.
+    const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
+    const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <ul className="home-record-list">{files.slice(0, 3).map(row)}</ul>
+      <div className="home-money is-wide is-files">
+        {limitBytes > 0 ? (
+          <div className="home-quota">
+            <span className="home-quota-line">
+              <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
+              <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
+            </span>
+            <span className="home-quota-bar" aria-hidden="true">
+              <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
+            </span>
+          </div>
+        ) : null}
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list">{files.slice(0, 3).map(fileRow)}</ul>
       </div>
     );
   }

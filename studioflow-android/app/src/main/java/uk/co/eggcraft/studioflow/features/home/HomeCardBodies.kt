@@ -80,6 +80,7 @@ import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
 import java.text.SimpleDateFormat
 import uk.co.eggcraft.studioflow.features.dashboard.adjustedDashboardNetProfit
 import uk.co.eggcraft.studioflow.features.dashboard.dashboardCustomExpenseTotal
+import uk.co.eggcraft.studioflow.data.model.StudioClientFile
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -2143,6 +2144,37 @@ private fun HomeFilesBody(size: HomeCardSize, state: StudioFlowUiState, compact:
         }
         return
     }
+    if (size == HomeCardSize.TwoByOne) {
+        // The sheet leads with how full the workspace is, not how many bytes it
+        // holds: a size on its own says nothing without the plan's ceiling.
+        val limitBytes = (state.workspace?.effectiveStorageLimitMB ?: 0L) * 1024 * 1024
+        val pct = if (limitBytes > 0) ((used.toDouble() / limitBytes) * 100).toInt().coerceAtMost(100) else 0
+        Column(Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 9.dp)) {
+            if (limitBytes > 0) {
+                Column(verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${fileSize(used.toDouble())} ${t("of")} ${fileSize(limitBytes.toDouble())}",
+                            fontSize = if (compact) 10.5.sp else 12.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.weight(1f))
+                        Text("$pct%", fontSize = if (compact) 10.5.sp else 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (pct >= 90) HomeTone.red else HomeTone.accent)
+                    }
+                    HomeProgressBar(pct / 100f, tint = if (pct >= 90) HomeTone.red else HomeTone.accent)
+                }
+            }
+            // The eyebrow goes first on a phone — the card is called Files and
+            // the rows are plainly the recent ones, so it was the line carrying
+            // the least.
+            if (!compact) HomeEyebrow(t("Recent files"))
+            files.take(3).forEach { (order, file) -> FileRow(file, order, t, compact) }
+            Spacer(Modifier.weight(1f))
+        }
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HomeMetricTile(t("Total files"), "${files.size}", HomeTone.accent, modifier = Modifier.weight(1f))
@@ -2298,6 +2330,47 @@ private fun NoteTile(note: StudioKeepNote, t: (String) -> String, compact: Boole
             )
         }
     }
+}
+
+/** The sheet's file row: what kind it is, its name, what it is attached to, and
+ *  when it arrived — the last is what a person actually asks about an upload. */
+@Composable
+private fun FileRow(file: StudioClientFile, order: StudioOrder, t: (String) -> String, compact: Boolean) {
+    val tone = fileTone(file.fileName)
+    val ext = file.fileName.substringAfterLast('.', "").take(4).uppercase()
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = if (compact) 2.dp else 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
+    ) {
+        Box(
+            Modifier
+                .size(if (compact) 20.dp else 28.dp)
+                .background(tone.copy(alpha = 0.14f), RoundedCornerShape(if (compact) 5.dp else 7.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(ext, fontSize = if (compact) 6.5.sp else 8.sp, fontWeight = FontWeight.ExtraBold, color = tone)
+        }
+        Text(file.fileName, fontSize = if (compact) 10.5.sp else 12.5.sp,
+            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f))
+        val link = order.designName.ifEmpty { order.customerName }
+        if (link.isNotEmpty()) HomeChip(link, HomeTone.accent)
+        Text(agoLabel(file.uploadedAt, t), fontSize = if (compact) 9.5.sp else 11.5.sp,
+            maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** "Just now" / "5 min ago" / "Today" / "Yesterday" / the date. */
+private fun agoLabel(when_: Date?, t: (String) -> String): String {
+    if (when_ == null) return ""
+    val mins = ((Date().time - when_.time) / 60000L).toInt()
+    if (mins < 1) return t("Just now")
+    if (mins < 60) return "$mins ${t("min ago")}"
+    val days = ((startOfToday().time - when_.time) / 86_400_000L).toInt()
+    if (days <= 0) return t("Today")
+    if (days == 1) return t("Yesterday")
+    return SimpleDateFormat("d MMM", Locale.getDefault()).format(when_)
 }
 
 /** What a note is about, and the one fact worth showing beside it: when it is

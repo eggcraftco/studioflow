@@ -2509,6 +2509,8 @@ struct HomeFilesBody: View {
     let decimal: String
     var compact: Bool = false
     @EnvironmentObject var firebaseManager: FirebaseManager
+    /// The plan's storage ceiling — a size with no ceiling is not an answer.
+    @EnvironmentObject var auth: AuthViewModel
 
     var body: some View {
         // One file, linked to as many records as it belongs to — the card counts
@@ -2530,6 +2532,35 @@ struct HomeFilesBody: View {
                     } right: {
                         HomeFigure(label: t("File library", lang: lang), value: "\(files.count)")
                     }
+                }
+            } else if size == .twoByOne {
+                // The sheet leads with how full the workspace is, not how many
+                // bytes it holds: a size on its own says nothing without the
+                // plan's ceiling.
+                let limitBytes = Double(auth.effectiveStorageLimitMB) * 1024 * 1024
+                let pct = limitBytes > 0 ? min(100, Int((used / limitBytes) * 100)) : 0
+                VStack(alignment: .leading, spacing: compact ? 5 : 9) {
+                    if limitBytes > 0 {
+                        VStack(alignment: .leading, spacing: compact ? 3 : 5) {
+                            HStack {
+                                Text("\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))")
+                                    .font(.system(size: compact ? 10.5 : 12.5)).foregroundColor(.secondary)
+                                Spacer(minLength: 6)
+                                Text("\(pct)%")
+                                    .font(.system(size: compact ? 10.5 : 12.5, weight: .heavy))
+                                    .foregroundColor(pct >= 90 ? HomeTone.red : HomeTone.accent)
+                            }
+                            HomeProgressBar(fraction: Double(pct) / 100, tint: pct >= 90 ? HomeTone.red : HomeTone.accent)
+                        }
+                    }
+                    // The eyebrow goes first on a phone — the card is called
+                    // Files and the rows are plainly the recent ones, so it was
+                    // the line carrying the least.
+                    if !compact { HomeEyebrow(text: t("Recent files", lang: lang)) }
+                    ForEach(Array(files.prefix(3).enumerated()), id: \.offset) { _, entry in
+                        HomeFileRow(file: entry.1, order: entry.0, lang: lang, compact: compact)
+                    }
+                    Spacer(minLength: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
@@ -2648,6 +2679,46 @@ struct HomeNoteGrid: View {
             }
         }
     }
+}
+
+/// The sheet's file row: what kind it is, its name, what it is attached to, and
+/// when it arrived — the last is what a person actually asks about an upload.
+struct HomeFileRow: View {
+    let file: ClientFileItem
+    let order: Siparis
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        let tone = homeFileTone(file.fileName)
+        let ext = String((file.fileName.split(separator: ".").last ?? "").prefix(4)).uppercased()
+        HStack(spacing: compact ? 7 : 10) {
+            Text(ext)
+                .font(.system(size: compact ? 6.5 : 8, weight: .heavy)).foregroundColor(tone)
+                .frame(width: compact ? 20 : 28, height: compact ? 20 : 28)
+                .background(RoundedRectangle(cornerRadius: compact ? 5 : 7).fill(tone.opacity(0.14)))
+            Text(file.fileName)
+                .font(.system(size: compact ? 10.5 : 12.5, weight: .semibold)).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !order.customerName.isEmpty || !order.designName.isEmpty {
+                HomeChip(text: order.designName.isEmpty ? order.customerName : order.designName,
+                         tone: HomeTone.accent)
+            }
+            Text(homeAgoLabel(file.uploadedAt, lang: lang))
+                .font(.system(size: compact ? 9.5 : 11.5)).foregroundColor(.secondary).lineLimit(1)
+        }
+        .padding(.vertical, compact ? 2 : 5)
+    }
+}
+
+/// "Just now" / "5 min ago" / "Today" / "Yesterday" / the date.
+func homeAgoLabel(_ when: Date, lang: String) -> String {
+    let mins = Int(Date().timeIntervalSince(when) / 60)
+    if mins < 1 { return t("Just now", lang: lang) }
+    if mins < 60 { return "\(mins) " + t("min ago", lang: lang) }
+    let days = Calendar.current.dateComponents([.day], from: when, to: homeStartOfToday()).day ?? 0
+    if days <= 0 { return t("Today", lang: lang) }
+    if days == 1 { return t("Yesterday", lang: lang) }
+    return when.formatted(date: .abbreviated, time: .omitted)
 }
 
 /// A note keeps its own colour — that is the note's, not the card's.

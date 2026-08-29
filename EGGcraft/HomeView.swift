@@ -431,7 +431,11 @@ struct HomeView: View {
                 // thing on that line.
                 // The wide stock card names what it is a view of, as the sheet
                 // does — the figures alone do not say.
-                subtitle: definition.id == .inventory && placement.size != .oneByOne
+                // How many files there are belongs beside the heading, as the
+                // sheet reads it.
+                subtitle: definition.id == .files && placement.size != .oneByOne
+                    ? "\(firebaseManager.siparisler.flatMap { $0.clientFiles ?? [] }.count) " + t("files", lang: seciliDil)
+                    : definition.id == .inventory && placement.size != .oneByOne
                     ? t("Stock overview", lang: seciliDil)
                     : definition.id == .ordersProduction && placement.size == .twoByOne
                     ? t("{count} active", lang: seciliDil)
@@ -446,12 +450,14 @@ struct HomeView: View {
                     && !firebaseManager.bankTransactions.isEmpty
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
-                onAdd: definition.id == .notes ? {
+                onAdd: definition.id == .files ? { onOpen("Files") }
+                    : definition.id == .notes ? {
                     // The same route the app-icon shortcut takes: raise the flag
                     // the Notes tab reads, then go there.
                     UserDefaults.standard.set(true, forKey: "pendingQuickActionNewNote")
                     onOpen("Notes")
-                } : nil,
+                }
+                    : nil,
                 onResize: { store.resize(placement.id, to: $0) },
                 onPeriod: { store.setPeriod(placement.id, period: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },
