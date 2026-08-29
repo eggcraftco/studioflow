@@ -1,0 +1,76 @@
+import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase/client";
+import {
+  defaultHomeLayout,
+  normaliseHomeLayout,
+  type HomeLayout,
+} from "@/lib/studioflow/homeCards";
+
+/**
+ * Where a Home layout lives, and why.
+ *
+ * personalInterfaceSettings is already the per-workspace, per-user document —
+ * the same place language and theme live. That is exactly the scope §16 asks
+ * for: one member rearranging their Home must not move anyone else's.
+ *
+ * Stored as a JSON string rather than a nested map. Firestore's dotted-key
+ * merge semantics have bitten this codebase before, and a layout is an ordered
+ * list: a merge that reorders or half-writes it is worse than one that replaces
+ * it whole.
+ */
+function homeLayoutRef(companyId: string, userId: string) {
+  return doc(db, "companies", companyId, "personalInterfaceSettings", userId);
+}
+
+const FIELD = "homeLayout";
+
+function parseStoredLayout(value: unknown): HomeLayout {
+  if (typeof value !== "string" || !value.trim()) return defaultHomeLayout();
+  try {
+    return normaliseHomeLayout(JSON.parse(value));
+  } catch {
+    // A layout we cannot read is not worth a blank Home screen.
+    return defaultHomeLayout();
+  }
+}
+
+export async function loadHomeLayout(companyId: string): Promise<HomeLayout> {
+  const userId = auth.currentUser?.uid ?? "";
+  if (!companyId || !userId) return defaultHomeLayout();
+  try {
+    const snapshot = await getDoc(homeLayoutRef(companyId, userId));
+    return parseStoredLayout(snapshot.exists() ? snapshot.data()?.[FIELD] : undefined);
+  } catch {
+    return defaultHomeLayout();
+  }
+}
+
+/**
+ * Live layout, so a change made on another device lands here too.
+ * Returns the unsubscribe.
+ */
+export function subscribeHomeLayout(
+  companyId: string,
+  onLayout: (layout: HomeLayout) => void,
+): () => void {
+  const userId = auth.currentUser?.uid ?? "";
+  if (!companyId || !userId) {
+    onLayout(defaultHomeLayout());
+    return () => {};
+  }
+  return onSnapshot(
+    homeLayoutRef(companyId, userId),
+    (snapshot) => onLayout(parseStoredLayout(snapshot.exists() ? snapshot.data()?.[FIELD] : undefined)),
+    () => onLayout(defaultHomeLayout()),
+  );
+}
+
+export async function saveHomeLayout(companyId: string, layout: HomeLayout): Promise<void> {
+  const userId = auth.currentUser?.uid ?? "";
+  if (!companyId || !userId) return;
+  await setDoc(
+    homeLayoutRef(companyId, userId),
+    { [FIELD]: JSON.stringify(layout), homeLayoutUpdatedAtMs: Date.now() },
+    { merge: true },
+  );
+}

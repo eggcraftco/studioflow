@@ -27104,3 +27104,267 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .onboard-plan { padding: 12px 13px; }
   .onboard-plan-head strong { font-size: 14px; }
 }
+
+/* ===================================================================
+   Home — the reporting, alerting and quick-action layer.
+   Four columns wide, then three, two and one (§17). Cards keep a calm
+   neutral surface; colour lives in the icon, the status and the accent,
+   never across the whole card (§4).
+   =================================================================== */
+
+.home-screen { display: flex; flex-direction: column; gap: 18px; padding-bottom: 40px; }
+
+.home-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.home-header h1 { margin: 0; font-size: 26px; font-weight: 820; letter-spacing: -0.01em; }
+.home-greeting { margin: 2px 0 0; font-size: 14.5px; font-weight: 650; opacity: 0.8; }
+.home-subline { margin: 2px 0 0; font-size: 13px; opacity: 0.6; }
+.home-header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.home-sync { font-size: 12.5px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.home-customise {
+  min-height: 44px; padding: 0 16px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 13.5px; font-weight: 700;
+}
+.home-customise[aria-pressed="true"] { border-color: #2563eb; color: #2563eb; }
+
+.home-save-error {
+  margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 650;
+  background: rgba(220, 38, 38, 0.10); color: #b91c1c;
+}
+.home-customise-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 12px; font-size: 12.5px;
+  background: rgba(37, 99, 235, 0.08); color: #1d4ed8;
+}
+.home-customise-bar p { margin: 0; }
+.home-customise-bar button {
+  min-height: 36px; padding: 0 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid rgba(37, 99, 235, 0.4); background: transparent;
+  color: inherit; font-weight: 700; font-size: 12.5px;
+}
+
+.home-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(190px, auto);
+}
+
+.home-card {
+  display: flex; flex-direction: column; min-width: 0;
+  border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+  box-shadow: 0 10px 30px rgba(23, 25, 35, 0.05);
+  overflow: hidden;
+}
+.home-card.is-customising { outline: 1px dashed rgba(37, 99, 235, 0.35); outline-offset: 2px; }
+.home-card.is-dragging { opacity: 0.55; transform: scale(0.99); }
+/* The ghost placeholder a card is about to land in. */
+.home-card.is-drop-target { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16); }
+
+.home-card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px 8px; min-width: 0;
+}
+.home-card-grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border: 0; background: transparent; cursor: grab;
+  opacity: 0.35; font-size: 15px; border-radius: 7px; flex: 0 0 auto;
+}
+.home-card-grip:hover, .home-card-grip:focus-visible { opacity: 0.9; background: rgba(120, 120, 140, 0.12); }
+.home-card-grip:active { cursor: grabbing; }
+.home-card-icon { display: inline-flex; width: 20px; height: 20px; opacity: 0.75; flex: 0 0 auto; }
+.home-card-icon svg { width: 100%; height: 100%; }
+.home-card-title {
+  margin: 0; font-size: 14px; font-weight: 780; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-card-heading-input {
+  font-size: 14px; font-weight: 780; min-width: 0; flex: 1 1 auto;
+  border: 1px solid #2563eb; border-radius: 7px; padding: 3px 7px;
+  background: var(--surface); color: inherit;
+}
+.home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.home-card-menu-wrap { position: relative; flex: 0 0 auto; }
+.home-card-menu-button {
+  width: 30px; height: 30px; border: 0; background: transparent; cursor: pointer;
+  border-radius: 8px; opacity: 0.5; font-size: 15px; line-height: 1;
+}
+.home-card-menu-button:hover, .home-card-menu-button:focus-visible { opacity: 1; background: rgba(120, 120, 140, 0.12); }
+.home-card-menu {
+  position: absolute; right: 0; top: 34px; z-index: 30; min-width: 190px;
+  display: flex; flex-direction: column; gap: 2px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 18px 44px rgba(23, 25, 35, 0.18);
+}
+.home-card-menu > button {
+  min-height: 36px; text-align: left; padding: 0 10px; border: 0; border-radius: 8px;
+  background: transparent; cursor: pointer; font-size: 13px; font-weight: 620; color: inherit;
+}
+.home-card-menu > button:hover { background: rgba(120, 120, 140, 0.10); }
+.home-card-menu-label {
+  margin: 6px 0 2px; padding: 0 10px; font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.5;
+}
+.home-card-menu-sizes { display: flex; gap: 6px; padding: 0 8px 4px; }
+.home-card-menu-sizes button {
+  flex: 1; min-height: 32px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border); background: transparent; color: inherit;
+}
+.home-card-menu-sizes button.is-active { border-color: #2563eb; color: #2563eb; }
+.home-card-menu-tones { display: flex; gap: 6px; padding: 0 10px 6px; }
+.home-tone-swatch {
+  width: 22px; height: 22px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid rgba(120, 120, 140, 0.35);
+}
+.home-tone-swatch.is-active { box-shadow: 0 0 0 2.5px rgba(37, 99, 235, 0.35); }
+.home-tone-default { background: var(--surface); }
+.home-tone-blue { background: #dbeafe; }
+.home-tone-green { background: #dcfce7; }
+.home-tone-amber { background: #fef3c7; }
+.home-tone-purple { background: #ede9fe; }
+.home-tone-rose { background: #ffe4e6; }
+
+/* Card tone: a tint on the header edge, not a repaint of the whole card (§4). */
+.home-card.home-tone-blue { border-top: 3px solid #60a5fa; }
+.home-card.home-tone-green { border-top: 3px solid #4ade80; }
+.home-card.home-tone-amber { border-top: 3px solid #fbbf24; }
+.home-card.home-tone-purple { border-top: 3px solid #a78bfa; }
+.home-card.home-tone-rose { border-top: 3px solid #fb7185; }
+
+.home-card-body { flex: 1 1 auto; min-height: 0; padding: 4px 14px 10px; overflow: hidden; }
+.home-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 14px; border-top: 1px solid var(--border); font-size: 12.5px;
+}
+.home-card-link { font-weight: 720; color: #2563eb; text-decoration: none; }
+.home-card-link:hover { text-decoration: underline; }
+.home-card-stale { opacity: 0.55; font-size: 11.5px; }
+.home-card-note { margin: 8px 0 0; font-size: 11px; opacity: 0.55; line-height: 1.45; }
+
+/* States (§18) — each keeps the card's size rather than collapsing it. */
+.home-card-skeleton { display: flex; flex-direction: column; gap: 9px; padding-top: 8px; }
+.home-card-skeleton span {
+  height: 13px; border-radius: 7px; background: rgba(120, 120, 140, 0.14);
+  animation: home-shimmer 1.4s ease-in-out infinite;
+}
+.home-card-skeleton span:nth-child(1) { width: 52%; height: 24px; }
+.home-card-skeleton span:nth-child(2) { width: 86%; }
+.home-card-skeleton span:nth-child(3) { width: 68%; }
+@keyframes home-shimmer { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.home-card-state {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding-top: 10px; font-size: 12.5px; opacity: 0.75;
+}
+.home-card-state p { margin: 0; }
+.home-card-state-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 999px; font-weight: 800;
+  background: rgba(220, 38, 38, 0.12); color: #b91c1c;
+}
+.home-card-retry {
+  min-height: 34px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: inherit;
+  font-size: 12.5px; font-weight: 700;
+}
+.home-card-offline-tag {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; background: rgba(120, 120, 140, 0.16);
+}
+
+/* Card content shapes */
+.home-metric-label { margin: 2px 0 0; font-size: 12px; opacity: 0.6; }
+.home-metric-value { display: block; font-size: 26px; font-weight: 820; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.home-metric-split { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; flex-wrap: wrap; }
+.home-metric-split span { display: flex; flex-direction: column; gap: 1px; }
+.home-metric-split em { font-style: normal; opacity: 0.55; font-size: 11px; }
+.home-count-line { margin: 4px 0 0; font-size: 13px; }
+.home-count-line strong { font-size: 18px; font-weight: 800; margin-right: 5px; font-variant-numeric: tabular-nums; }
+.home-stat-row { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+.home-stat { display: flex; flex-direction: column; gap: 2px; min-width: 96px; flex: 1 1 96px; }
+.home-stat-label { font-size: 11px; opacity: 0.6; }
+.home-stat strong { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-sub-title { margin: 12px 0 6px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; }
+.home-breakdown-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.home-breakdown-row:last-child { border-bottom: 0; }
+.home-breakdown-row strong { font-variant-numeric: tabular-nums; }
+
+.home-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.home-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 6px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); min-width: 0;
+}
+.home-list li:last-child { border-bottom: 0; }
+.home-list a { color: inherit; text-decoration: none; font-weight: 640; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-list a:hover { text-decoration: underline; }
+.home-chip {
+  font-size: 10.5px; font-weight: 700; padding: 2.5px 8px; border-radius: 999px;
+  background: rgba(37, 99, 235, 0.10); color: #1d4ed8; text-decoration: none; white-space: nowrap;
+}
+.home-chip.is-muted { background: rgba(120, 120, 140, 0.14); color: inherit; opacity: 0.7; }
+
+.home-flow-row { list-style: none; margin: 6px 0 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.home-flow-row li { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1 1 90px; }
+.home-flow-row strong { margin-left: auto; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-flow-name { opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-flow-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; }
+.home-flow-dot.stage-0 { background: #22c55e; }
+.home-flow-dot.stage-1 { background: #2563eb; }
+.home-flow-dot.stage-2 { background: #f59e0b; }
+.home-flow-dot.stage-3 { background: #a855f7; }
+.home-flow-dot.stage-4 { background: #16a34a; }
+
+.home-quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 4px; }
+.home-quick-action {
+  min-height: 44px; border-radius: 11px; cursor: pointer; font-size: 12.5px; font-weight: 700;
+  border: 1px solid var(--border); background: rgba(120, 120, 140, 0.06); color: inherit;
+}
+.home-quick-action.is-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.home-quick-action:hover { border-color: rgba(37, 99, 235, 0.5); }
+
+.home-progress { height: 6px; border-radius: 999px; background: rgba(120, 120, 140, 0.18); overflow: hidden; margin: 8px 0 10px; }
+.home-progress span { display: block; height: 100%; background: #2563eb; border-radius: 999px; }
+.home-next-step { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px; background: rgba(37, 99, 235, 0.08); }
+.home-next-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; }
+.home-check-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.home-check-list li { display: flex; align-items: center; gap: 8px; }
+.home-check-list li.is-done { opacity: 0.6; text-decoration: line-through; }
+
+.home-notes { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+.home-note {
+  flex: 1 1 150px; min-width: 0; padding: 9px 11px; border-radius: 11px;
+  background: rgba(251, 191, 36, 0.10); font-size: 12px;
+}
+.home-note p { margin: 0 0 6px; }
+
+.home-gallery { display: flex; flex-direction: column; gap: 8px; }
+.home-gallery h2 { margin: 0; font-size: 14px; font-weight: 780; }
+.home-gallery-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.home-gallery-row button {
+  min-height: 40px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+  border: 1px dashed var(--border); background: transparent; color: inherit;
+  font-size: 12.5px; font-weight: 700;
+}
+
+.is-positive { color: #16a34a; }
+.is-negative, .is-warning { color: #b45309; }
+.is-info { color: #2563eb; }
+
+/* Responsive (§17): four, three, two, one — never a shrunken desktop card. */
+@media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  /* One column: every card spans it, whatever size it was asked to be. */
+  .home-card { grid-column: span 1 !important; grid-row: span 1 !important; }
+  /* Phone cards are tapped, not dragged — long-press enters customise instead. */
+  .home-screen:not(.is-customising) .home-card-grip,
+  .home-screen:not(.is-customising) .home-card-menu-button { display: none; }
+  .home-header h1 { font-size: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-card, .home-card.is-dragging { transition: none; transform: none; }
+  .home-card-skeleton span { animation: none; }
+}
