@@ -1335,6 +1335,12 @@ private fun HomeCustomersBody(size: HomeCardSize, state: StudioFlowUiState, t: (
 
 // -------------------------------------------------------- Orders & production
 
+@Composable
+private fun StageDivider() {
+    Box(Modifier.width(1.dp).height(32.dp)
+        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+}
+
 private data class Quad(val label: String, val count: Int, val tone: Color, val icon: ImageVector)
 
 /** The whole board as one bar: a segment per stage, sized by how many sit in it.
@@ -1445,6 +1451,56 @@ private fun HomeOrdersProductionBody(
         }
         return
     }
+    if (size == HomeCardSize.TwoByOne && compact) {
+        // The sheet gives the wide phone card four counts and then the orders that
+        // need a decision. Six stage circles with their names underneath truncated
+        // every name on a phone.
+        val readyIds = stages.filter { it.kind == ProductionStageKind.Ready }.map { it.id }.toSet()
+        val activeIds = stages.filter { it.kind == ProductionStageKind.Active }.map { it.id }.toSet()
+        val priority = (late + live.filterNot { o -> late.any { it.id == o.id } }).take(2)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BankFigure(t("Ready"), "${resolved.count { it.second.stageId in readyIds }}",
+                    HomeTone.green, Modifier.weight(1f))
+                StageDivider()
+                BankFigure(t("In production"), "${resolved.count { it.second.stageId in activeIds }}",
+                    HomeTone.accent, Modifier.weight(1f))
+                StageDivider()
+                BankFigure(t("Ready to ship"), "${resolved.count { it.second.stageId in shipReadyIds }}",
+                    HomeTone.green, Modifier.weight(1f))
+                StageDivider()
+                BankFigure(t("Overdue"), "${late.size}",
+                    if (late.isEmpty()) MaterialTheme.colorScheme.onSurface else HomeTone.red, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp)); HomeDivider(); Spacer(Modifier.height(4.dp))
+            priority.forEach { order ->
+                val stage = stages.firstOrNull { st -> st.id == resolved.first { it.first.id == order.id }.second.stageId }
+                val due = homeDueDate(order.paymentDate, order.deliveryTime)
+                val overdue = due.before(Date())
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (order.designName.isNotEmpty()) {
+                            Text(order.designName, fontSize = 10.5.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    if (overdue) {
+                        val days = ((Date().time - due.time) / 86_400_000L).toInt()
+                        HomeChip(if (days > 0) t("{days}d late").replace("{days}", "$days") else t("Overdue"),
+                            HomeTone.red)
+                    }
+                    if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
+                }
+            }
+        }
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (size == HomeCardSize.TwoByTwo) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

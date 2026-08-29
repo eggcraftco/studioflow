@@ -350,6 +350,13 @@ fun HomeScreen(
                         customising = customising,
                         compact = compact,
                         t = t,
+                        // The sheet names the load under the title on the wide
+                        // phone card.
+                        subtitle = if (definition.id == HomeCardId.OrdersProduction && compact &&
+                            slot.placement.size == HomeCardSize.TwoByOne)
+                            t("{count} active").replace("{count}",
+                                "${state.orders.count { !it.isDeleted && !it.isDelivered && it.countsTowardBalance }}")
+                        else "",
                         headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
                             t("Read-only") else "",
                         // The sheet puts the feed's freshness on the right of the
@@ -479,6 +486,8 @@ fun HomeCardShell(
      *  is the tap target instead. */
     compact: Boolean = false,
     t: (String) -> String,
+    /** A short line under the title — the load this card is reporting on. */
+    subtitle: String = "",
     headerPill: String = "",
     /** A quiet line on the right of the header — how fresh the feed is. */
     headerNote: String = "",
@@ -523,11 +532,18 @@ fun HomeCardShell(
                     size = if (compact) 30.dp else 38.dp
                 )
                 Spacer(Modifier.width(if (compact) 8.dp else 10.dp))
-                Text(
-                    placement.heading.ifEmpty { t(definition.title) },
-                    fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
+                Column {
+                    Text(
+                        placement.heading.ifEmpty { t(definition.title) },
+                        fontSize = if (compact) 13.5.sp else 14.5.sp, fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    if (subtitle.isNotEmpty()) {
+                        Text(subtitle, fontSize = 10.5.sp, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 // While customising, a phone header carries the grip and the ⋯ as
                 // well; the pill is a label you read, not something you move, so
                 // it stands down and gives the title its width back.

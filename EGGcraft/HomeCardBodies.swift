@@ -1769,6 +1769,60 @@ struct HomeOrdersProductionBody: View {
                     }
                     Spacer(minLength: 0)
                 }
+            } else if size == .twoByOne && compact {
+                // The sheet gives the wide phone card four counts and then the
+                // orders that need a decision. Six stage circles with their names
+                // underneath truncated every name on a phone.
+                let readyIDs = Set(data.stages.filter { $0.kind == .ready }.map { $0.id })
+                let activeIDs = Set(data.stages.filter { $0.kind == .active }.map { $0.id })
+                let priority = (late + live.filter { order in !late.contains { $0.id == order.id } }).prefix(2)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("Ready", lang: lang),
+                                       value: "\(resolved.filter { readyIDs.contains($0.1.stageId) }.count)",
+                                       tone: HomeTone.green)
+                        Divider().frame(height: 32)
+                        HomeBankFigure(label: t("In production", lang: lang),
+                                       value: "\(resolved.filter { activeIDs.contains($0.1.stageId) }.count)",
+                                       tone: HomeTone.accent)
+                        Divider().frame(height: 32)
+                        HomeBankFigure(label: t("Ready to ship", lang: lang),
+                                       value: "\(resolved.filter { shipReadyIDs.contains($0.1.stageId) }.count)",
+                                       tone: HomeTone.green)
+                        Divider().frame(height: 32)
+                        HomeBankFigure(label: t("Overdue", lang: lang), value: "\(late.count)",
+                                       tone: late.isEmpty ? .primary : HomeTone.red)
+                    }
+                    Divider().padding(.vertical, 8)
+                    ForEach(Array(priority), id: \.id) { order in
+                        let entry = resolved.first { $0.0.id == order.id }
+                        let stage = data.stages.first { $0.id == entry?.1.stageId }
+                        let due = homeDueDate(order)
+                        let overdue = (due ?? .distantFuture) < Date()
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(order.customerName.isEmpty ? order.designName : order.customerName)
+                                    .font(.system(size: 12.5, weight: .bold)).lineLimit(1)
+                                if !order.designName.isEmpty {
+                                    Text(order.designName)
+                                        .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                                }
+                            }
+                            Spacer(minLength: 6)
+                            if overdue, let due {
+                                let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
+                                HomeChip(text: days > 0
+                                    ? t("{days}d late", lang: lang).replacingOccurrences(of: "{days}", with: "\(days)")
+                                    : t("Overdue", lang: lang), tone: HomeTone.red)
+                            }
+                            if let stage {
+                                HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                    Spacer(minLength: 0)
+                }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     if size == .twoByTwo {

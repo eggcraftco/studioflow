@@ -397,6 +397,11 @@ struct HomeView: View {
                 customising: customising,
                 compact: isCompact,
                 lang: seciliDil,
+                // The sheet names the load under the title on the wide phone card.
+                subtitle: definition.id == .ordersProduction && isCompact && placement.size == .twoByOne
+                    ? t("{count} active", lang: seciliDil)
+                        .replacingOccurrences(of: "{count}", with: "\(homeLiveOrders(firebaseManager.siparisler).count)")
+                    : "",
                 headerPill: definition.id == .banking && !firebaseManager.bankTransactions.isEmpty
                     ? t("Read-only", lang: seciliDil) : "",
                 // The sheet puts the feed's freshness on the right of the header
