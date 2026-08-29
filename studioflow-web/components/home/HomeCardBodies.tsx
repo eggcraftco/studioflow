@@ -183,7 +183,8 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
     kind: stage.kind,
     count: resolved.filter((entry) => entry.stageId === stage.id).length,
   }));
-  const overdue = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now()).length;
+  const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
+  const overdue = late.length;
 
   if (size === "1x1") {
     return (
@@ -211,11 +212,15 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
         ))}
       </ol>
       {size === "2x2" ? (
+        <>
+          <p className="home-section-label">{t("At risk")}</p>
+          {/* A bigger card has to earn its space. When nothing is late it says so
+              rather than leaving the extra height blank, which reads as broken. */}
+          {late.length === 0 ? (
+            <p className="home-card-note">{t("All set — nice work.")}</p>
+          ) : null}
         <ul className="home-list">
-          {open
-            .filter((order) => order.dueDate && order.dueDate.getTime() < Date.now())
-            .slice(0, 5)
-            .map((order) => (
+          {late.map((order) => (
               <li key={order.id}>
                 <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
                   {order.designName || order.watchRef || order.customerName}
@@ -224,6 +229,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
               </li>
             ))}
         </ul>
+        </>
       ) : null}
     </div>
   );
