@@ -280,17 +280,23 @@ fun HomeScreen(
             // On a phone the row IS the column width, so a 1x1 comes out square.
             val compact = availableDp < 600
             val rowHeight = if (compact) unit else CARD_UNIT_HEIGHT
-            val rows = HomeGridLayout.rowCount(visible, columnCount)
+            // A phone's 2x2 takes three of its square rows: the row height that
+            // makes a 1x1 square leaves a 2x2 shorter than the chart and lists it
+            // carries.
+            val rowSpan: (HomeCardPlacement) -> Int = { placement ->
+                if (compact && placement.size == HomeCardSize.TwoByTwo) 3 else placement.size.rows
+            }
+            val rows = HomeGridLayout.rowCount(visible, columnCount, rowSpan)
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height((rows * rowHeight + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
             ) {
-            HomeGridLayout.slots(visible, columnCount).forEach { slot ->
+            HomeGridLayout.slots(visible, columnCount, rowSpan).forEach { slot ->
                 val width = minOf(slot.placement.size.columns, columnCount)
                 val cardWidth = unit * width + CARD_GAP * (width - 1)
-                val cardHeight = rowHeight * slot.placement.size.rows +
-                    CARD_GAP * (slot.placement.size.rows - 1)
+                val span = rowSpan(slot.placement)
+                val cardHeight = rowHeight * span + CARD_GAP * (span - 1)
                 val definition = HomeCards.definition(slot.placement.id) ?: return@forEach
                 val isDragging = draggingId == slot.placement.id
                 Box(

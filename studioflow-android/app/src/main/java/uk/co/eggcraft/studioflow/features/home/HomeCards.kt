@@ -269,12 +269,16 @@ data class HomeLayout(
 object HomeGridLayout {
     data class Slot(val placement: HomeCardPlacement, val row: Int, val column: Int)
 
-    fun slots(placements: List<HomeCardPlacement>, columnCount: Int): List<Slot> {
+    fun slots(
+        placements: List<HomeCardPlacement>,
+        columnCount: Int,
+        rowSpan: (HomeCardPlacement) -> Int = { it.size.rows }
+    ): List<Slot> {
         val occupied = HashMap<Int, MutableSet<Int>>()
         val result = mutableListOf<Slot>()
         for (placement in placements) {
             val width = minOf(placement.size.columns, columnCount)
-            val height = placement.size.rows
+            val height = rowSpan(placement)
             var row = 0
             var column = 0
             outer@ while (true) {
@@ -301,6 +305,9 @@ object HomeGridLayout {
         return result
     }
 
-    fun rowCount(placements: List<HomeCardPlacement>, columnCount: Int): Int =
-        slots(placements, columnCount).maxOfOrNull { it.row + it.placement.size.rows } ?: 0
+    fun rowCount(
+        placements: List<HomeCardPlacement>,
+        columnCount: Int,
+        rowSpan: (HomeCardPlacement) -> Int = { it.size.rows }
+    ): Int = slots(placements, columnCount, rowSpan).maxOfOrNull { it.row + rowSpan(it.placement) } ?: 0
 }
