@@ -391,6 +391,10 @@ fun HomeScreen(
                             slot.placement.size == HomeCardSize.TwoByOne)
                             t("{count} active").replace("{count}",
                                 "${state.orders.count { !it.isDeleted && !it.isDelivered && it.countsTowardBalance }}")
+                        // The wide schedule card draws a week; the sheet names
+                        // which week beside the heading.
+                        else if (definition.id == HomeCardId.Schedule &&
+                            slot.placement.size == HomeCardSize.TwoByOne) homeWeekRangeLabel()
                         else "",
                         subtitleInline = !compact,
                         headerPill = if (definition.id == HomeCardId.Banking && state.bankTransactions.isNotEmpty())
@@ -402,7 +406,7 @@ fun HomeScreen(
                             slot.placement.size == HomeCardSize.TwoByOne && state.bankTransactions.isNotEmpty())
                             homeSyncLabel(state, t) else "",
                         headerDateBadge = definition.id == HomeCardId.Schedule &&
-                            slot.placement.size != HomeCardSize.OneByOne,
+                            slot.placement.size == HomeCardSize.TwoByTwo,
                         onOpen = { onOpenSection(definition.destination) },
                         // The + the sheet puts on the notes card: the thing you
                         // most often want from a wall of notes is one more note.

@@ -18,6 +18,7 @@ import {
   QuickActionsCardBody,
   RecentActivityCardBody,
   ScheduleCardBody,
+  homeWeekRangeLabel,
   type CardBodyProps,
   type QuickActionId,
 } from "@/components/home/HomeCardBodies";
@@ -326,9 +327,14 @@ export default function HomePage() {
                     // the sheet reads it.
                     : placement.id === "files" && placement.size !== "1x1"
                       ? `${data.files.length} ${t("files")}`
-                      : undefined
+                      // The wide schedule card draws a week; the sheet names
+                      // which week beside the heading.
+                      : placement.id === "schedule" && placement.size === "2x1"
+                        ? homeWeekRangeLabel()
+                        : undefined
               }
-              subtitleInline={placement.id === "ordersProduction" || placement.id === "files"}
+              subtitleInline={placement.id === "ordersProduction" || placement.id === "files"
+                || placement.id === "schedule"}
               headerSlot={
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
@@ -350,7 +356,7 @@ export default function HomePage() {
                   >
                     +
                   </button>
-                ) : placement.id === "schedule" ? (
+                ) : placement.id === "schedule" && placement.size === "2x2" ? (
                   // The rows say "today", "tomorrow", "starts Sun". The sheet
                   // anchors them by naming the day they are relative to.
                   <span className="home-date-badge">

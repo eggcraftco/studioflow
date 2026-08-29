@@ -27454,6 +27454,69 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-date-badge b i { font-style: normal; font-size: 9.5px; font-weight: 700; opacity: 0.9; margin-bottom: 2px; }
 .home-date-badge em { font-style: normal; font-size: 10px; opacity: 0.6; }
 
+/* The wide card is a week, not a list: the sheet gives every order a bar on
+   the days it occupies, read against today's column. One grid holds the day
+   headings, the names and the bars, so a bar lands exactly on its days —
+   percentages inside a row box drift by a pixel or two per column. */
+.home-week {
+  display: grid;
+  /* The name column takes a share of the card, not a fixed width, so the same
+     grid reads on a 359px phone card and a 488px desktop one. */
+  grid-template-columns: clamp(84px, 30%, 200px) repeat(7, minmax(0, 1fr));
+  /* The rows share whatever the header leaves, so three deadlines always fit
+     rather than the third falling off the bottom. */
+  grid-template-rows: auto repeat(3, minmax(0, 1fr));
+  height: 100%;
+  align-items: center;
+  column-gap: 0; row-gap: 2px;
+}
+.home-week-day {
+  grid-row: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  font-size: 9.5px; line-height: 1.15; padding: 2px 0 4px;
+  border-bottom: 1px solid var(--border);
+  align-self: stretch; justify-content: flex-end;
+}
+.home-week-day em { font-style: normal; opacity: 0.6; }
+.home-week-day b { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.home-week-day.is-today { color: #1d4ed8; }
+.home-week-day.is-today em { opacity: 0.85; font-weight: 700; }
+/* The band sits behind everything and spans the card, which is what makes
+   "before today" and "after today" readable at a glance. */
+.home-week-today {
+  grid-row: 1 / -1; align-self: stretch;
+  background: rgba(37, 99, 235, 0.07);
+  border-radius: 8px;
+}
+.home-week-name {
+  grid-column: 1;
+  font-size: 10.5px; color: inherit; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-right: 8px; opacity: 0.75;
+}
+.home-week-name b { font-weight: 700; opacity: 1; font-variant-numeric: tabular-nums; }
+.home-week-name:hover { text-decoration: underline; }
+.home-week-bar {
+  height: 18px; border-radius: 7px; border: 1px solid;
+  display: flex; align-items: center; justify-content: flex-end;
+  /* A bar narrower than its own chip says nothing, so it grows to fit the word
+     and gives up a little day accuracy — the word is the point. */
+  min-width: 54px;
+  padding: 0 6px; overflow: hidden;
+}
+
+.home-week-bar em {
+  font-style: normal; font-size: 9.5px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* A deadline that fell before this week has no span to draw: the chip stands
+   on its own so the row still says the order is late. */
+.home-week-bar.is-off-week { border-style: dashed; background: transparent !important; }
+.home-week-bar.hue-red { background: rgba(220, 38, 38, 0.10); border-color: rgba(220, 38, 38, 0.5); color: #dc2626; }
+.home-week-bar.hue-amber { background: rgba(249, 115, 22, 0.12); border-color: rgba(234, 88, 12, 0.5); color: #c2410c; }
+.home-week-bar.hue-purple { background: rgba(124, 58, 237, 0.10); border-color: rgba(124, 58, 237, 0.45); color: #6d28d9; }
+.home-week-bar.hue-blue { background: rgba(37, 99, 235, 0.10); border-color: rgba(37, 99, 235, 0.45); color: #1d4ed8; }
+
 .home-deadline-row { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
 .home-deadline-row li { display: flex; align-items: center; gap: 8px; padding: 0 10px; min-width: 0; }
 .home-deadline-row li + li { border-left: 1px solid var(--border); }

@@ -109,7 +109,7 @@ func homeDueChip(_ order: Siparis, due: Date, lang: String) -> (label: String, t
         formatter.dateFormat = "EEE"
         return (t("Starts {day}", lang: lang)
             .replacingOccurrences(of: "{day}", with: formatter.string(from: order.paymentDate)),
-                HomeTone.accent)
+                HomeTone.purple)
     }
 
     let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: due)).day ?? 0
@@ -117,7 +117,7 @@ func homeDueChip(_ order: Siparis, due: Date, lang: String) -> (label: String, t
     if days == 0 { return (t("Due today", lang: lang), HomeTone.red) }
     if days == 1 { return (t("Tomorrow", lang: lang), HomeTone.orange) }
     formatter.dateFormat = "d MMM"
-    return (formatter.string(from: due), HomeTone.slate)
+    return (formatter.string(from: due), HomeTone.accent)
 }
 
 /// The sheet names the row after the order. A workspace that never gave the
@@ -2440,19 +2440,154 @@ struct HomeScheduleBody: View {
             }
         } else {
             let week = homeWeekDays()
+            if size == .twoByOne {
+                HomeWeekTimeline(days: week, entries: Array(upcoming.prefix(3)), lang: lang, compact: compact)
+            } else {
             VStack(alignment: .leading, spacing: 10) {
-                if size == .twoByOne {
-                    HomeWeekStrip(days: week, dues: upcoming.map { $0.1 }, lang: lang)
-                } else {
-                    HomeEyebrow(text: t("Weekly timeline", lang: lang))
-                    HomeTimeline(week: week, entries: Array(upcoming.prefix(5)), lang: lang)
-                    HomeEyebrow(text: t("Upcoming deadlines", lang: lang))
-                }
+                HomeEyebrow(text: t("Weekly timeline", lang: lang))
+                HomeTimeline(week: week, entries: Array(upcoming.prefix(5)), lang: lang)
+                HomeEyebrow(text: t("Upcoming deadlines", lang: lang))
                 HomeDeadlineRow(entries: Array(upcoming.prefix(3)), lang: lang)
                 Spacer(minLength: 0)
             }
+            }
         }
     }
+}
+
+/// The sheet's wide schedule card is a week, not a list: every order gets a bar
+/// on the days it occupies, read against today's column. SwiftUI has no grid
+/// that spans columns, so the track measures itself and the bars are placed by
+/// day width — the same arithmetic the web grid does for free.
+struct HomeWeekTimeline: View {
+    let days: [Date]
+    let entries: [(Siparis, Date)]
+    let lang: String
+    var compact: Bool = false
+
+    var body: some View {
+        let today = homeStartOfToday()
+        let todayIndex = days.firstIndex { Calendar.current.isDate($0, inSameDayAs: today) }
+        let nameWidth: CGFloat = compact ? 96 : 140
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+        formatter.dateFormat = "EEE"
+
+        return GeometryReader { geo in
+            let cell = max(0, geo.size.width - nameWidth) / 7
+            ZStack(alignment: .topLeading) {
+                if let todayIndex {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(HomeTone.accent.opacity(0.07))
+                        .frame(width: cell, height: geo.size.height)
+                        .offset(x: nameWidth + cell * CGFloat(todayIndex))
+                }
+                VStack(spacing: 2) {
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: nameWidth)
+                        ForEach(Array(days.enumerated()), id: \.element) { index, day in
+                            VStack(spacing: 0) {
+                                Text(formatter.string(from: day))
+                                    .font(.system(size: 9.5, weight: index == todayIndex ? .bold : .regular))
+                                    .opacity(index == todayIndex ? 0.85 : 0.6)
+                                Text("\(Calendar.current.component(.day, from: day))")
+                                    .font(.system(size: 11.5, weight: .bold))
+                            }
+                            .foregroundColor(index == todayIndex ? HomeTone.accent : .primary)
+                            .frame(width: cell)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Color.primary.opacity(0.12))
+                            .frame(height: 1)
+                            .padding(.leading, nameWidth)
+                    }
+
+                    ForEach(Array(entries.enumerated()), id: \.element.0.id) { _, entry in
+                        let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
+                        let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
+                        let ref = entry.0.watchRef.trimmingCharacters(in: .whitespaces)
+                        let placed = homeWeekBarColumns(order: entry.0, due: entry.1, days: days)
+                        HStack(spacing: 0) {
+                            Text(ref.isEmpty ? name : "\(ref.hasPrefix("#") ? ref : "#" + ref) \(name)")
+                                .font(.system(size: compact ? 10.5 : 11.5))
+                                .foregroundColor(.primary.opacity(0.75))
+                                .lineLimit(1)
+                                .frame(width: nameWidth - 8, alignment: .leading)
+                                .padding(.trailing, 8)
+                            ZStack(alignment: .leading) {
+                                Color.clear
+                                HomeWeekBar(label: chip.label, tone: chip.tone, dashed: placed.offWeek)
+                                    // A bar narrower than its own chip grows to
+                                    // fit the word, and grows leftward at the
+                                    // last column so it stays on the card.
+                                    .frame(width: max(54, cell * CGFloat(placed.end - placed.start + 1)))
+                                    .offset(x: cell * CGFloat(placed.start))
+                            }
+                        }
+                        .frame(maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Which columns a bar covers, and whether the deadline fell before this week —
+/// then there is no span to draw and the chip stands on its own.
+func homeWeekBarColumns(order: Siparis, due: Date, days: [Date]) -> (start: Int, end: Int, offWeek: Bool) {
+    let calendar = Calendar.current
+    let weekStart = days.first ?? homeStartOfToday()
+    let column = { (date: Date) -> Int in
+        calendar.dateComponents([.day], from: weekStart, to: calendar.startOfDay(for: date)).day ?? 0
+    }
+    let from = max(0, column(order.paymentDate))
+    let to = column(due)
+    let end = min(max(to, from), 6)
+    let start = end == 6 ? min(from, 5) : min(from, 6)
+    return (start, end, to < 0)
+}
+
+struct HomeWeekBar: View {
+    let label: String
+    let tone: Color
+    var dashed: Bool = false
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Text(label)
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundColor(tone)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 18)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(dashed ? Color.clear : tone.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(tone.opacity(0.5),
+                              style: StrokeStyle(lineWidth: 1, dash: dashed ? [3, 2] : []))
+        )
+    }
+}
+
+/// "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months.
+func homeWeekRangeLabel(lang: String) -> String {
+    let week = homeWeekDays()
+    guard let start = week.first, let end = week.last else { return "" }
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+    formatter.dateFormat = "d MMM"
+    let sameMonth = calendar.component(.month, from: start) == calendar.component(.month, from: end)
+    if sameMonth {
+        return "\(calendar.component(.day, from: start))–\(formatter.string(from: end))"
+    }
+    return "\(formatter.string(from: start)) – \(formatter.string(from: end))"
 }
 
 /// The visible week, Monday first, so the strip and the timeline agree.
@@ -2462,35 +2597,6 @@ func homeWeekDays() -> [Date] {
     let offset = -((weekday + 5) % 7)
     let start = Calendar.current.date(byAdding: .day, value: offset, to: today) ?? today
     return (0..<7).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: start) }
-}
-
-struct HomeWeekStrip: View {
-    let days: [Date]
-    let dues: [Date]
-    let lang: String
-    var body: some View {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
-        return HStack(spacing: 0) {
-            ForEach(days, id: \.self) { day in
-                let count = dues.filter { Calendar.current.isDate($0, inSameDayAs: day) }.count
-                let isToday = Calendar.current.isDateInToday(day)
-                VStack(spacing: 1) {
-                    Text(formatter.shortWeekdaySymbols[Calendar.current.component(.weekday, from: day) - 1])
-                        .font(.system(size: 10)).foregroundColor(.secondary)
-                    Text("\(Calendar.current.component(.day, from: day))")
-                        .font(.system(size: 14, weight: .bold))
-                    Text(count > 0 ? "\(count)" : " ")
-                        .font(.system(size: 10.5, weight: count > 0 ? .heavy : .regular))
-                        .foregroundColor(count > 0 ? HomeTone.accent : .clear)
-                }
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity)
-                .background(RoundedRectangle(cornerRadius: 9)
-                    .fill(isToday ? HomeTone.accent.opacity(0.09) : .clear))
-            }
-        }
-    }
 }
 
 /// A read-only bar per order across the week. Read-only on purpose: dragging a

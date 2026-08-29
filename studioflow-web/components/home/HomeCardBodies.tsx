@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
@@ -832,6 +833,21 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 
 /* --------------------------------------------------------------- Schedule */
 
+/// "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months.
+export function homeWeekRangeLabel() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const sameMonth = start.getMonth() === end.getMonth();
+  const endLabel = end.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const startLabel = sameMonth
+    ? String(start.getDate())
+    : start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return sameMonth ? `${startLabel}–${endLabel}` : `${startLabel} – ${endLabel}`;
+}
+
 export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   // Dates and deadlines only — never production status again (§10).
   const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
@@ -859,7 +875,7 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
     if (startsIn > 0 && startsIn < 7) {
       const day = startOfDayOf(order.paymentDate!).toLocaleDateString(undefined, { weekday: "short" });
-      return { label: t("Starts {day}").replace("{day}", day), hue: "hue-blue" };
+      return { label: t("Starts {day}").replace("{day}", day), hue: "hue-purple" };
     }
     const days = daysFromToday(order.dueDate!);
     if (days < 0) return { label: t("Overdue"), hue: "hue-red" };
@@ -867,7 +883,7 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     if (days === 1) return { label: t("Tomorrow"), hue: "hue-amber" };
     return {
       label: order.dueDate!.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
-      hue: "hue-slate",
+      hue: "hue-blue",
     };
   };
 
@@ -929,22 +945,57 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   );
 
   if (size === "2x1") {
+    const weekEndDay = new Date(days[6]);
+    weekEndDay.setHours(23, 59, 59, 999);
+    const columnOf = (date: Date) =>
+      Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
+    const todayColumn = columnOf(today);
+
     return (
-      <div className="home-money is-wide">
-        <ol className="home-week-strip">
-          {days.map((date) => {
-            const count = open.filter((order) => order.dueDate!.toDateString() === date.toDateString()).length;
-            const isToday = date.getTime() === today.getTime();
-            return (
-              <li key={date.toISOString()} className={isToday ? "is-today" : ""}>
-                <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
-                <b>{date.getDate()}</b>
-                <i className={count > 0 ? "has-work" : ""}>{count > 0 ? count : ""}</i>
-              </li>
-            );
-          })}
-        </ol>
-        {deadlines}
+      <div className="home-week">
+        {/* Today's column runs the height of the card, as the sheet draws it —
+            it is what every bar is read against. */}
+        {todayColumn >= 0 && todayColumn <= 6 ? (
+          <span className="home-week-today" style={{ gridColumn: todayColumn + 2 }} aria-hidden="true" />
+        ) : null}
+        {days.map((date, index) => {
+          const isToday = index === todayColumn;
+          return (
+            <span key={date.toISOString()} className={`home-week-day${isToday ? " is-today" : ""}`}
+                  style={{ gridColumn: index + 2 }}>
+              <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+              <b>{date.getDate()}</b>
+            </span>
+          );
+        })}
+        {upcoming.slice(0, 3).map((order, row) => {
+          const chip = dueChip(order);
+          const name = order.customerName || order.designName;
+          const ref = order.watchRef.trim();
+          // A deadline that fell before this week has no bar to draw — the row
+          // still has to say the order is late, so the chip stands on its own.
+          const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
+          const to = columnOf(order.dueDate!);
+          const offWeek = to < 0;
+          // A bar narrower than its own chip has to borrow a column, and it
+          // borrows to the left: borrowing to the right runs off the card.
+          const end = Math.min(Math.max(to, from), 6);
+          const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+          // The name and the bar are grid items of the card's own grid, not of a
+          // row box: that is what makes a bar land exactly on its days.
+          return (
+            <Fragment key={order.id}>
+              <Link className="home-week-name" style={{ gridRow: row + 2 }}
+                    href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                {ref ? <><b>{ref.startsWith("#") ? ref : `#${ref}`}</b> {name}</> : name}
+              </Link>
+              <span className={`home-week-bar ${chip.hue}${offWeek ? " is-off-week" : ""}`}
+                    style={{ gridRow: row + 2, gridColumn: `${start + 2} / ${end + 3}` }}>
+                <em>{chip.label}</em>
+              </span>
+            </Fragment>
+          );
+        })}
       </div>
     );
   }

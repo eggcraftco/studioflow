@@ -78,6 +78,8 @@ import uk.co.eggcraft.studioflow.features.production.ProductionStage
 import uk.co.eggcraft.studioflow.features.production.ProductionStageKind
 import uk.co.eggcraft.studioflow.features.production.resolveProductionStage
 import uk.co.eggcraft.studioflow.features.shell.StudioFlowUiState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.HorizontalDivider
 import java.text.SimpleDateFormat
 import uk.co.eggcraft.studioflow.features.dashboard.adjustedDashboardNetProfit
@@ -148,6 +150,121 @@ private fun startOfToday(): Date = Calendar.getInstance().apply {
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.time
 
+/** The sheet's wide schedule card is a week, not a list: every order gets a bar
+ *  on the days it occupies, read against today's column. Compose has no grid
+ *  that spans columns, so the track measures itself and the bars are placed by
+ *  day width — the same arithmetic the web grid does for free. */
+@Composable
+private fun HomeWeekTimeline(days: List<Date>, entries: List<Pair<StudioOrder, Date>>, t: (String) -> String) {
+    val todayIndex = days.indexOfFirst { sameDay(it, Date()) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val nameWidth = if (maxWidth > 420.dp) 140.dp else 96.dp
+        val cell = (maxWidth - nameWidth) / 7
+        Box(Modifier.fillMaxSize()) {
+            if (todayIndex >= 0) {
+                Box(
+                    Modifier
+                        .offset(x = nameWidth + cell * todayIndex)
+                        .width(cell)
+                        .fillMaxHeight()
+                        .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(8.dp))
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.Bottom) {
+                    Spacer(Modifier.width(nameWidth))
+                    days.forEachIndexed { index, day ->
+                        Column(Modifier.width(cell), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(SimpleDateFormat("EEE", Locale.getDefault()).format(day),
+                                fontSize = 9.5.sp,
+                                fontWeight = if (index == todayIndex) FontWeight.Bold else FontWeight.Normal,
+                                color = if (index == todayIndex) HomeTone.accent
+                                else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(SimpleDateFormat("d", Locale.getDefault()).format(day),
+                                fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
+                                color = if (index == todayIndex) HomeTone.accent
+                                else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+                HorizontalDivider(
+                    Modifier.padding(start = nameWidth),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                )
+                entries.forEach { (order, due) ->
+                    val (label, tone) = homeDueChip(order.paymentDate, due, t)
+                    val name = order.customerName.ifEmpty { order.designName }
+                    val ref = order.watchRef.trim()
+                    val placed = homeWeekBarColumns(order.paymentDate, due, days)
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (ref.isEmpty()) name
+                            else "${if (ref.startsWith("#")) ref else "#" + ref} $name",
+                            fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            modifier = Modifier.width(nameWidth - 8.dp).padding(end = 8.dp)
+                        )
+                        Box(Modifier.fillMaxWidth()) {
+                            HomeWeekBar(
+                                label = label, tone = tone, dashed = placed.third,
+                                modifier = Modifier
+                                    .offset(x = cell * placed.first)
+                                    // A bar narrower than its own chip grows to
+                                    // fit the word, and grows leftward at the
+                                    // last column so it stays on the card.
+                                    .width(maxOf(54.dp, cell * (placed.second - placed.first + 1)))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Which columns a bar covers, and whether the deadline fell before this week —
+ *  then there is no span to draw and the chip stands on its own. */
+private fun homeWeekBarColumns(paymentDate: Date, due: Date, days: List<Date>): Triple<Int, Int, Boolean> {
+    val weekStart = startOfDay(days.first()).time
+    val column = { date: Date -> ((startOfDay(date).time - weekStart) / 86_400_000L).toInt() }
+    val from = maxOf(0, column(paymentDate))
+    val to = column(due)
+    val end = minOf(maxOf(to, from), 6)
+    val start = if (end == 6) minOf(from, 5) else minOf(from, 6)
+    return Triple(start, end, to < 0)
+}
+
+@Composable
+private fun HomeWeekBar(label: String, tone: Color, dashed: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .height(18.dp)
+            .background(if (dashed) Color.Transparent else tone.copy(alpha = 0.10f), RoundedCornerShape(7.dp))
+            .border(
+                BorderStroke(1.dp, tone.copy(alpha = 0.5f)),
+                RoundedCornerShape(7.dp)
+            )
+            .padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = tone,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months. */
+fun homeWeekRangeLabel(): String {
+    val week = weekDays()
+    val start = week.first()
+    val end = week.last()
+    val monthOf = { d: Date -> Calendar.getInstance().apply { time = d }.get(Calendar.MONTH) }
+    val dayOf = { d: Date -> Calendar.getInstance().apply { time = d }.get(Calendar.DAY_OF_MONTH) }
+    val long = SimpleDateFormat("d MMM", Locale.getDefault())
+    return if (monthOf(start) == monthOf(end)) "${dayOf(start)}\u2013${long.format(end)}"
+    else "${long.format(start)} \u2013 ${long.format(end)}"
+}
+
 private fun startOfDay(date: Date): Date = Calendar.getInstance().apply {
     time = date
     set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
@@ -163,14 +280,14 @@ private fun homeDueChip(paymentDate: Date, due: Date, t: (String) -> String): Pa
     val startsIn = (startOfDay(paymentDate).time - today) / 86_400_000L
     if (startsIn in 1L..6L) {
         val day = SimpleDateFormat("EEE", Locale.getDefault()).format(paymentDate)
-        return t("Starts {day}").replace("{day}", day) to HomeTone.accent
+        return t("Starts {day}").replace("{day}", day) to HomeTone.purple
     }
     val days = (startOfDay(due).time - today) / 86_400_000L
     return when {
         days < 0L -> t("Overdue") to HomeTone.red
         days == 0L -> t("Due today") to HomeTone.red
         days == 1L -> t("Tomorrow") to HomeTone.orange
-        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(due) to HomeTone.slate
+        else -> SimpleDateFormat("d MMM", Locale.getDefault()).format(due) to HomeTone.accent
     }
 }
 
@@ -2064,79 +2181,58 @@ private fun HomeScheduleBody(size: HomeCardSize, state: StudioFlowUiState, t: (S
         return
     }
     val week = weekDays()
+    if (size == HomeCardSize.TwoByOne) {
+        HomeWeekTimeline(week, upcoming.take(3), t)
+        return
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (size == HomeCardSize.TwoByOne) {
-            Row(Modifier.fillMaxWidth()) {
+        HomeEyebrow(t("Weekly timeline"))
+        // The bars are read-only on purpose: dragging a date here would fight
+        // the gesture that moves the card itself (§10).
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row {
+                Spacer(Modifier.width(80.dp))
                 week.forEach { day ->
-                    val count = upcoming.count { sameDay(it.second, day) }
-                    val isToday = sameDay(day, Date())
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .background(if (isToday) HomeTone.accent.copy(alpha = 0.09f) else Color.Transparent,
-                                RoundedCornerShape(9.dp))
-                            .padding(vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(SimpleDateFormat("EEE", Locale.getDefault()).format(day), fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(SimpleDateFormat("d", Locale.getDefault()).format(day),
-                            fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(if (count > 0) "$count" else " ", fontSize = 10.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (count > 0) HomeTone.accent else Color.Transparent)
+                    Text(SimpleDateFormat("EEE d", Locale.getDefault()).format(day),
+                        fontSize = 9.sp, modifier = Modifier.weight(1f),
+                        color = if (sameDay(day, Date())) HomeTone.accent
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            val start = week.first().time
+            val span = (week.last().time + 86_400_000L - start).toFloat()
+            val palette = listOf(HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal)
+            upcoming.take(5).forEachIndexed { index, (order, due) ->
+                val from = ((order.paymentDate.time - start) / span).coerceIn(0f, 1f)
+                val to = ((due.time - start) / span).coerceIn(0f, 1f)
+                val overdue = due.before(startOfToday())
+                val tone = if (overdue) HomeTone.red else palette[index % palette.size]
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(80.dp))
+                    Row(Modifier.weight(1f).height(16.dp)) {
+                        if (minOf(from, to) > 0f) Spacer(Modifier.weight(minOf(from, to)))
+                        Box(
+                            Modifier
+                                .weight(maxOf(0.04f, kotlin.math.abs(to - from)))
+                                .height(16.dp)
+                                .background(tone.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                                .border(1.dp, tone, RoundedCornerShape(6.dp))
+                        )
+                        val rest = 1f - maxOf(from, to)
+                        if (rest > 0f) Spacer(Modifier.weight(rest))
                     }
                 }
             }
-        } else {
-            HomeEyebrow(t("Weekly timeline"))
-            // The bars are read-only on purpose: dragging a date here would fight
-            // the gesture that moves the card itself (§10).
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row {
-                    Spacer(Modifier.width(80.dp))
-                    week.forEach { day ->
-                        Text(SimpleDateFormat("EEE d", Locale.getDefault()).format(day),
-                            fontSize = 9.sp, modifier = Modifier.weight(1f),
-                            color = if (sameDay(day, Date())) HomeTone.accent
-                            else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                val start = week.first().time
-                val span = (week.last().time + 86_400_000L - start).toFloat()
-                val palette = listOf(HomeTone.accent, HomeTone.green, HomeTone.purple, HomeTone.amber, HomeTone.teal)
-                upcoming.take(5).forEachIndexed { index, (order, due) ->
-                    val from = ((order.paymentDate.time - start) / span).coerceIn(0f, 1f)
-                    val to = ((due.time - start) / span).coerceIn(0f, 1f)
-                    val overdue = due.before(startOfToday())
-                    val tone = if (overdue) HomeTone.red else palette[index % palette.size]
-                    Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 10.5.sp,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(80.dp))
-                        Row(Modifier.weight(1f).height(16.dp)) {
-                            if (minOf(from, to) > 0f) Spacer(Modifier.weight(minOf(from, to)))
-                            Box(
-                                Modifier
-                                    .weight(maxOf(0.04f, kotlin.math.abs(to - from)))
-                                    .height(16.dp)
-                                    .background(tone.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
-                                    .border(1.dp, tone, RoundedCornerShape(6.dp))
-                            )
-                            val rest = 1f - maxOf(from, to)
-                            if (rest > 0f) Spacer(Modifier.weight(rest))
-                        }
-                    }
-                }
-            }
-            HomeEyebrow(t("Upcoming deadlines"))
         }
+        HomeEyebrow(t("Upcoming deadlines"))
         Row {
             upcoming.take(3).forEachIndexed { index, (order, due) ->
                 if (index > 0) {
