@@ -658,7 +658,7 @@ struct HomeMoneyBody: View {
                     }
                     VStack(alignment: .leading, spacing: 3) {
                         HomeEyebrow(text: t("Revenue & profit", lang: lang))
-                        HomeRevenueChart(orders: orders, lang: lang)
+                        HomeRevenueChart(orders: orders, lang: lang, compact: true)
                     }
                     .padding(.horizontal, 10).padding(.vertical, 7)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -857,6 +857,8 @@ struct HomeCostRow: View {
 struct HomeRevenueChart: View {
     let orders: [Siparis]
     let lang: String
+    /// On a square phone card the chart is the piece that yields.
+    var compact: Bool = false
 
     var body: some View {
         let weeks = 12
@@ -888,7 +890,7 @@ struct HomeRevenueChart: View {
                             line(profit, peak: peak, size: proxy.size).stroke(HomeTone.green, lineWidth: 1.6)
                         }
                     }
-                    .frame(minHeight: 54)
+                    .frame(minHeight: compact ? 30 : 54)
                 }
             }
         }
@@ -1147,14 +1149,14 @@ struct HomeBankingBody: View {
                         // each got half a phone and truncated everything in it.
                         VStack(alignment: .leading, spacing: 3) {
                             HomeEyebrow(text: t("Bank activity", lang: lang))
-                            HomeBankChart(transactions: transactions, lang: lang)
+                            HomeBankChart(transactions: transactions, lang: lang, compact: true)
                         }
                         .padding(.horizontal, 10).padding(.vertical, 7)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .overlay(RoundedRectangle(cornerRadius: 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
                         VStack(alignment: .leading, spacing: 2) {
                             HomeEyebrow(text: t("Recent transactions", lang: lang))
-                            ForEach(transactions.prefix(3), id: \.id) { tx in
+                            ForEach(transactions.prefix(2), id: \.id) { tx in
                                 HStack(spacing: 8) {
                                     Text(String((tx.counterparty.isEmpty ? tx.description : tx.counterparty).prefix(1)).uppercased())
                                         .font(.system(size: 10, weight: .heavy)).foregroundColor(.white)
@@ -1349,6 +1351,9 @@ func homeISODate(_ date: Date) -> String {
 struct HomeBankChart: View {
     let transactions: [StudioBankTransaction]
     let lang: String
+    /// On a square phone card the chart is the piece that yields, so its floor
+    /// has to be low enough to let the panels below it keep their rows.
+    var compact: Bool = false
 
     var body: some View {
         let weeks = 12
@@ -1392,7 +1397,7 @@ struct HomeBankChart: View {
                                 .stroke(HomeTone.orange, lineWidth: 1.6)
                         }
                     }
-                    .frame(minHeight: 54)
+                    .frame(minHeight: compact ? 30 : 54)
                 }
             }
         }

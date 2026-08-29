@@ -249,10 +249,13 @@ fun HomeCostRow(colour: Color, label: String, value: String) {
 fun HomeSeriesChart(
     series: List<Pair<List<Double>, Color>>,
     fillFirst: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** On a square phone card the chart is the piece that yields, so its floor
+     *  has to be low enough to let the panels below it keep their rows. */
+    compact: Boolean = false
 ) {
     val peak = maxOf(1.0, series.flatMap { it.first }.maxOrNull() ?: 1.0)
-    Canvas(modifier.fillMaxWidth().height(56.dp)) {
+    Canvas(modifier.fillMaxWidth().height(if (compact) 34.dp else 56.dp)) {
         series.forEachIndexed { index, (values, colour) ->
             if (values.size < 2) return@forEachIndexed
             val step = size.width / (values.size - 1)

@@ -229,6 +229,13 @@ struct HomeView: View {
             let companyId = firebaseManager.currentCompanyId
             guard !companyId.isEmpty else { return }
             store.start(companyId: companyId)
+            // The bank feed was only ever started by the Banking screen, so the
+            // Banking card sat empty until the user had opened Banking at least
+            // once. Home asks for it too; the call returns early when the same
+            // listener is already running, so opening both costs nothing.
+            if access.bankFeed {
+                firebaseManager.startBankFeedRealtime(companyId: companyId, isOwner: true)
+            }
             await data.load(manager: firebaseManager, companyId: companyId)
         }
         .onDisappear { data.stop() }

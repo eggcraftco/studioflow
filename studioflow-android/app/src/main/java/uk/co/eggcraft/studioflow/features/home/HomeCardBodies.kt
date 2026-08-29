@@ -577,7 +577,7 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     HomeEyebrow(t("Revenue & profit"))
-                    RevenueChart(orders, t)
+                    RevenueChart(orders, t, compact = true)
                 }
                 Row(
                     Modifier
@@ -639,7 +639,7 @@ private fun HomeMoneyBody(size: HomeCardSize, state: StudioFlowUiState, compact:
 
 /** Revenue and profit over the last twelve weeks, from the orders themselves. */
 @Composable
-private fun RevenueChart(orders: List<StudioOrder>, t: (String) -> String) {
+private fun RevenueChart(orders: List<StudioOrder>, t: (String) -> String, compact: Boolean = false) {
     val weeks = 12
     val revenue = DoubleArray(weeks)
     val profit = DoubleArray(weeks)
@@ -662,7 +662,7 @@ private fun RevenueChart(orders: List<StudioOrder>, t: (String) -> String) {
         }
         HomeSeriesChart(
             listOf(revenue.toList() to HomeTone.accent, profit.toList() to HomeTone.green),
-            fillFirst = true
+            fillFirst = true, compact = compact
         )
     }
 }
@@ -906,7 +906,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 HomeEyebrow(t("Bank activity"))
-                BankChart(state, t)
+                BankChart(state, t, compact = true)
             }
             Column(
                 Modifier
@@ -915,7 +915,7 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compac
                     .padding(horizontal = 9.dp, vertical = 6.dp)
             ) {
                 HomeEyebrow(t("Recent transactions"))
-                state.bankTransactions.take(3).forEach { tx ->
+                state.bankTransactions.take(2).forEach { tx ->
                     val name = tx.counterparty.ifEmpty { tx.description }
                     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1146,7 +1146,7 @@ private fun ReadOnlyNote(t: (String) -> String, short: Boolean) {
 }
 
 @Composable
-private fun BankChart(state: StudioFlowUiState, t: (String) -> String) {
+private fun BankChart(state: StudioFlowUiState, t: (String) -> String, compact: Boolean = false) {
     val weeks = 12
     val incoming = DoubleArray(weeks)
     val spent = DoubleArray(weeks)
@@ -1171,7 +1171,7 @@ private fun BankChart(state: StudioFlowUiState, t: (String) -> String) {
         }
         HomeSeriesChart(
             listOf(incoming.toList() to HomeTone.green, spent.toList() to HomeTone.orange),
-            fillFirst = true
+            fillFirst = true, compact = compact
         )
     }
 }
