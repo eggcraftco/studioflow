@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
-import { HomeActionIcon, type HomeActionIconName } from "@/components/home/HomeActionIcons";
+import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
 import type { HomeCardSize } from "@/lib/studioflow/homeCards";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
@@ -144,10 +144,16 @@ export function MoneyCardBody({ size, data, t, moneySettings, hideNumbers }: Car
   );
 }
 
-function MoneyTile({ label, value, tone, sub }: { label: string; value: string; tone: "green" | "blue" | "orange"; sub?: string }) {
+function MoneyTile({
+  label, value, tone, sub, icon,
+}: {
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red"; sub?: string; icon?: HomeTileIconName;
+}) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
-      <span className="home-money-tile-dot" aria-hidden="true" />
+      <span className="home-money-tile-dot" aria-hidden="true">
+        {icon ? <HomeTileIcon name={icon} /> : null}
+      </span>
       <em>{label}</em>
       <b>{value}</b>
       {sub ? <i>{sub}</i> : null}
@@ -237,12 +243,17 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
     );
   }
 
+  // The fourth tile is what the workspace pays on repeat, as the sheet has it —
+  // the review queue is already the card's link, and repeating what the second
+  // tile implies would waste the slot.
   const tiles = (
     <div className="home-tile-row">
-      <MoneyTile label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
-      <MoneyTile label={t("Spent this month")} value={`−${money(spent)}`} tone="orange" />
-      <MoneyTile label={t("to review")} value={String(toReview)} tone={toReview > 0 ? "orange" : "blue"} />
-      <MoneyTile label={t("missing receipts")} value={String(missingReceipts)} tone={missingReceipts > 0 ? "orange" : "blue"} />
+      <MoneyTile icon="in" label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
+      <MoneyTile icon="out" label={t("Spent this month")} value={`−${money(spent)}`} tone="orange" />
+      <MoneyTile icon="receiptAlert" label={t("Missing receipts")} value={String(missingReceipts)}
+                 tone={missingReceipts > 0 ? "red" : "blue"} />
+      <MoneyTile icon="recurring" label={t("Fixed")}
+                 value={data.bankMonthlyFixed > 0 ? `≈ ${money(data.bankMonthlyFixed)}` : "—"} tone="blue" />
     </div>
   );
 
@@ -319,7 +330,8 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
             ))}
           </ul>
           <p className="home-year-line">
-            {t("This year")}: <b className="is-positive">{money(yearIn)}</b> · <b className="is-warning">{money(yearOut)}</b>
+            {t("This year")}: <em>{t("In")}</em> <b className="is-positive">{money(yearIn)}</b>
+            {" · "}<em>{t("Out")}</em> <b className="is-negative">{money(yearOut)}</b>
           </p>
         </div>
       </div>
@@ -328,8 +340,11 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
           <span className="home-alert-dot" aria-hidden="true">!</span>
           <span>
             <strong>{t("{count} transactions need a receipt").replace("{count}", String(missingReceipts))}</strong>
-            <em>{t("Read-only bank connection. NivaDesk never moves money.")}</em>
+            <em>{t("We couldn't find a receipt for {count} transactions.").replace("{count}", String(missingReceipts))}</em>
           </span>
+          <Link className="home-alert-link" href="/bank?tab=receipts">
+            {t("Go to banking")} <span aria-hidden="true">→</span>
+          </Link>
         </div>
       ) : null}
     </div>
@@ -369,7 +384,11 @@ function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy
 function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTransactions"]; t: (text: string) => string }) {
   const weeks = 12;
   const now = new Date();
-  const buckets = Array.from({ length: weeks }, () => ({ incoming: 0, spent: 0 }));
+  const buckets = Array.from({ length: weeks }, (_, index) => {
+    const end = new Date(now);
+    end.setDate(now.getDate() - (weeks - 1 - index) * 7);
+    return { incoming: 0, spent: 0, at: end };
+  });
   for (const tx of transactions) {
     if (!tx.bookingDate) continue;
     const weeksAgo = Math.floor((now.getTime() - tx.bookingDate.getTime()) / (7 * 24 * 3600 * 1000));
@@ -378,27 +397,51 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
     if (tx.amount >= 0) bucket.incoming += tx.amount;
     else bucket.spent += Math.abs(tx.amount);
   }
-  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.incoming, b.spent)));
-  const width = 100;
-  const height = 46;
-  const line = (key: "incoming" | "spent") =>
-    buckets.map((b, i) => `${(i / (weeks - 1)) * width},${height - (b[key] / peak) * height}`).join(" ");
-
   if (buckets.every((b) => b.incoming === 0 && b.spent === 0)) {
     return <p className="home-card-note">{t("Not enough history yet.")}</p>;
   }
+
+  // Round the top up to something a person would write on an axis, so the
+  // gridlines land on readable numbers rather than the exact peak.
+  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.incoming, b.spent)));
+  const magnitude = Math.pow(10, Math.floor(Math.log10(peak)));
+  const top = Math.ceil(peak / magnitude) * magnitude;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => share * top);
+  const shortMoney = (value: number) =>
+    value >= 1000 ? `${Math.round(value / 100) / 10}K` : String(Math.round(value));
+
+  const width = 100;
+  const height = 46;
+  const line = (key: "incoming" | "spent") =>
+    buckets.map((b, i) => `${(i / (weeks - 1)) * width},${height - (b[key] / top) * height}`).join(" ");
+  const dayMonth = (date: Date) => date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+
   return (
     <>
       <p className="home-chart-key">
         <span><i className="is-profit" aria-hidden="true" />{t("Incoming")}</span>
         <span><i className="is-spent" aria-hidden="true" />{t("Spent")}</span>
       </p>
-      <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
-           aria-label={t("Bank activity")}>
-        <polygon className="home-chart-area is-profit" points={`0,${height} ${line("incoming")} ${width},${height}`} />
-        <polyline className="home-chart-line is-profit" points={line("incoming")} />
-        <polyline className="home-chart-line is-spent" points={line("spent")} />
-      </svg>
+      <div className="home-chart-frame">
+        <ul className="home-chart-axis" aria-hidden="true">
+          {[...ticks].reverse().map((value) => <li key={value}>{shortMoney(value)}</li>)}
+        </ul>
+        <div className="home-chart-plot">
+          <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
+               aria-label={t("Bank activity")}>
+            {ticks.map((value) => (
+              <line key={value} className="home-chart-grid" x1="0" x2={width}
+                    y1={height - (value / top) * height} y2={height - (value / top) * height} />
+            ))}
+            <polygon className="home-chart-area is-profit" points={`0,${height} ${line("incoming")} ${width},${height}`} />
+            <polyline className="home-chart-line is-profit" points={line("incoming")} />
+            <polyline className="home-chart-line is-spent" points={line("spent")} />
+          </svg>
+          <ul className="home-chart-dates" aria-hidden="true">
+            {[0, 3, 6, 9, 11].map((index) => <li key={index}>{dayMonth(buckets[index].at)}</li>)}
+          </ul>
+        </div>
+      </div>
     </>
   );
 }

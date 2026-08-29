@@ -88,3 +88,47 @@ export function HomeActionIcon({ name }: { name: HomeActionIconName }) {
       );
   }
 }
+
+/** The small marks the metric tiles carry. Line drawings at 20px, tinted by
+ *  the tile's own colour. */
+export type HomeTileIconName = "in" | "out" | "receiptAlert" | "recurring" | "review";
+
+export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (name) {
+    case "in":
+      return <svg {...common}><path d="M12 4v14M6.5 12.5 12 18l5.5-5.5" /></svg>;
+    case "out":
+      return <svg {...common}><path d="M12 20V6M6.5 11.5 12 6l5.5 5.5" /></svg>;
+    case "receiptAlert":
+      return (
+        <svg {...common}>
+          <path d="M5 4h10v11l-2.5-1.5L10 15l-2.5-1.5L5 15z" />
+          <path d="M7.5 7.5h5M7.5 10.5h3" />
+          <path d="M18.5 8v4M18.5 15v.5" />
+        </svg>
+      );
+    case "recurring":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M4 9.5h16M8.5 3.5v3M15.5 3.5v3" />
+        </svg>
+      );
+    case "review":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="6" />
+          <path d="m15.5 15.5 4 4" />
+        </svg>
+      );
+  }
+}
