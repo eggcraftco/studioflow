@@ -27083,7 +27083,7 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .onboard-plan {
   display: flex; gap: 12px; align-items: flex-start;
   padding: 14px 16px; border: 1.5px solid rgba(120,120,140,0.22);
-  border-radius: 14px; cursor: pointer; background: var(--card-bg, #fff);
+  border-radius: 14px; cursor: pointer; background: var(--surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .onboard-plan:hover { border-color: rgba(37,99,235,0.45); }

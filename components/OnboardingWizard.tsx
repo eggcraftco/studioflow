@@ -163,13 +163,15 @@ export function OnboardingWizard({
             step === 1 ? t("Workspace basics")
               : step === 2 ? t("Tell us about your work")
                 : step === 3 ? t("What should NivaDesk help with first?")
-                  : t("Bring your work in")
+                  : step === 4 ? t("Bring your work in")
+                    : t("Your plan")
           }</h1>
           <p>{
             step === 1 ? t("We've suggested these from your location. You can change them now or later in Settings.")
               : step === 2 ? t("This sets up your order cards, production stages and labels.")
                 : step === 3 ? t("Your answer decides what your dashboard and first tasks show.")
-                  : t("Pick how you'd like to start. You can do any of the others later.")
+                  : step === 4 ? t("Pick how you'd like to start. You can do any of the others later.")
+                    : t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
           }</p>
         </header>
 
