@@ -72,11 +72,16 @@ struct HomeCardShell<CardBody: View>: View {
                     .minimumScaleFactor(0.75)
                     .layoutPriority(1)
                 if !headerPill.isEmpty {
+                    // fixedSize, or a narrow card wraps the pill one letter per
+                    // line — which is exactly what it did on a phone.
                     Text(headerPill)
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundColor(HomeTone.orange)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Capsule().fill(HomeTone.orange.opacity(0.16)))
+                        .layoutPriority(1)
                 }
                 }
                 if !subtitle.isEmpty {

@@ -93,7 +93,7 @@ fun HomeCardBody(
         HomeCardId.QuickActions -> HomeQuickActionsBody(size, access, t, onNewOrder, onOpenSection)
         HomeCardId.RecentActivity -> HomeRecentActivityBody(size, state, t)
         HomeCardId.Money -> HomeMoneyBody(size, state, compact, t)
-        HomeCardId.Banking -> HomeBankingBody(size, state, t)
+        HomeCardId.Banking -> HomeBankingBody(size, state, compact, t)
         HomeCardId.Inventory -> HomeInventoryBody(size, state, inventory, inventoryFailed, t)
         HomeCardId.Customers -> HomeCustomersBody(size, state, t)
         HomeCardId.OrdersProduction -> HomeOrdersProductionBody(size, state, stages, t)
@@ -678,7 +678,7 @@ private fun ChartKey(colour: Color, label: String) {
 // ------------------------------------------------------------------- Banking
 
 @Composable
-private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
+private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, compact: Boolean, t: (String) -> String) {
     // How the bank work is going — never a second copy of Money's totals (§7).
     val transactions = state.bankTransactions
     if (transactions.isEmpty()) {
@@ -692,10 +692,49 @@ private fun HomeBankingBody(size: HomeCardSize, state: StudioFlowUiState, t: (St
     val toReview = transactions.count { it.category.isBlank() }
     val missing = transactions.count { it.amount < 0 && !it.hasReceipt }
 
+    if (size == HomeCardSize.OneByOne && compact) {
+        // The phone square: what left the account, ruled off above and below, with
+        // what came in against the receipts still owed. No sync line here — the
+        // header already carries the promise, and a square has no row to spare.
+        Column(Modifier.fillMaxSize()) {
+            HomeDivider()
+            Spacer(Modifier.weight(1f))
+            Text(t("Spent this month"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("−" + money(spent, state), fontSize = 26.sp, fontWeight = FontWeight.ExtraBold,
+                color = HomeTone.red, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.weight(1f))
+            HomeDivider()
+            Row(Modifier.padding(top = 9.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column {
+                    Text(t("Incoming"), fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("+" + money(incoming, state), fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold, color = HomeTone.green,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (missing > 0) {
+                    Box(Modifier.width(1.dp).height(30.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)))
+                    Row(
+                        Modifier
+                            .background(HomeTone.orange.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 7.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Filled.Warning, null, Modifier.size(11.dp), HomeTone.orange)
+                        Text(receiptWarning(missing, t), fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold, color = HomeTone.orange,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+        return
+    }
+
     if (size == HomeCardSize.OneByOne) {
-        // As the sheet draws it: how fresh the feed is, then what left the account
-        // this month, then what came in against what still needs a receipt. The
-        // read-only promise moved up beside the title.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SyncLine(state, t)
             Text(t("Spent this month"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -904,6 +943,12 @@ private fun bankMonthlyFixed(state: StudioFlowUiState): Double =
     bankDetectRecurring(state.bankTransactions, state.bankVendors)
         .filter { it.active }
         .sumOf { it.monthlyEquivalent }
+
+/** "1 receipt missing" reads wrong in the plural and the other way round in
+ *  every language that inflects, so the two are separate strings. */
+private fun receiptWarning(count: Int, t: (String) -> String): String =
+    t(if (count == 1) "{count} receipt missing" else "{count} receipts missing")
+        .replace("{count}", "$count")
 
 /**
  * How fresh the feed is. The real signal is the connection's own lastSyncedAt —

@@ -523,9 +523,11 @@ fun HomeCardShell(
                 if (headerPill.isNotEmpty()) {
                     Spacer(Modifier.width(7.dp))
                     // The promise sits beside the title, not in a footnote.
+                    // softWrap = false, or a narrow card wraps the pill one letter
+                    // per line — which is exactly what it did on a phone.
                     Text(
                         headerPill, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold,
-                        color = HomeTone.orange,
+                        color = HomeTone.orange, maxLines = 1, softWrap = false,
                         modifier = Modifier
                             .background(HomeTone.orange.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
                             .padding(horizontal = 8.dp, vertical = 2.dp)

@@ -38,7 +38,7 @@ struct HomeCardBody: View {
         case .money:
             HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact)
         case .banking:
-            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
+            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .inventory:
             HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, data: data)
         case .customers:
@@ -933,6 +933,7 @@ struct HomeBankingBody: View {
     let lang: String
     let currency: String
     let decimal: String
+    var compact: Bool = false
     @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
@@ -950,10 +951,47 @@ struct HomeBankingBody: View {
             let toReview = transactions.filter { $0.category.trimmingCharacters(in: .whitespaces).isEmpty }.count
             let missing = transactions.filter { $0.amount < 0 && !$0.hasReceipt }.count
 
-            if size == .oneByOne {
-                // As the sheet draws it: how fresh the feed is, then what left the
-                // account this month, then what came in against what still needs a
-                // receipt. The read-only promise moved up beside the title.
+            if size == .oneByOne && compact {
+                // The phone square: what left the account, ruled off above and
+                // below, with what came in against the receipts still owed. No
+                // sync line here — the header already carries the promise, and a
+                // square has no row to spare.
+                VStack(alignment: .leading, spacing: 0) {
+                    Divider()
+                    Spacer(minLength: 8)
+                    Text(t("Spent this month", lang: lang))
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                    Text("−" + money(spent))
+                        .font(.system(size: 27, weight: .heavy))
+                        .foregroundColor(HomeTone.red)
+                        .lineLimit(1).minimumScaleFactor(0.45)
+                    Spacer(minLength: 8)
+                    Divider()
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(t("Incoming", lang: lang)).font(.system(size: 10.5)).foregroundColor(.secondary)
+                            Text("+" + money(incoming))
+                                .font(.system(size: 14, weight: .heavy))
+                                .foregroundColor(HomeTone.green)
+                                .lineLimit(1).minimumScaleFactor(0.5)
+                        }
+                        if missing > 0 {
+                            Divider().frame(height: 30)
+                            HStack(spacing: 5) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 10)).foregroundColor(HomeTone.orange)
+                                Text(homeReceiptWarning(missing, lang: lang))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(HomeTone.orange)
+                                    .lineLimit(1).minimumScaleFactor(0.7)
+                            }
+                            .padding(.horizontal, 7).padding(.vertical, 5)
+                            .background(Capsule().fill(HomeTone.orange.opacity(0.14)))
+                        }
+                    }
+                    .padding(.top, 9)
+                }
+            } else if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
                     Text(t("Spent this month", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
@@ -1110,6 +1148,13 @@ func bankMonthlyFixedTotal(_ manager: FirebaseManager) -> Double {
     bankDetectRecurring(manager.bankTransactions, vendors: manager.bankVendors)
         .filter { $0.active }
         .reduce(0) { $0 + $1.monthlyEquivalent }
+}
+
+/// "1 receipt missing" reads wrong in the plural and the other way round in
+/// every language that inflects, so the two are separate strings.
+func homeReceiptWarning(_ count: Int, lang: String) -> String {
+    let key = count == 1 ? "{count} receipt missing" : "{count} receipts missing"
+    return t(key, lang: lang).replacingOccurrences(of: "{count}", with: "\(count)")
 }
 
 /// How fresh the feed is. The real signal is the connection's own lastSyncedAt —
