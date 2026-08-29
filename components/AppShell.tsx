@@ -944,6 +944,26 @@ function DemoPlanBanner({
   );
 }
 
+/**
+ * Pins the onboarding screens to the light palette for as long as they are on
+ * screen, and hands the document back to the user's own theme on the way out.
+ */
+function OnboardingLightTheme() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRoot = root.dataset.studioTheme;
+    const previousBody = body.dataset.studioTheme;
+    root.dataset.studioTheme = "light";
+    body.dataset.studioTheme = "light";
+    return () => {
+      if (previousRoot) root.dataset.studioTheme = previousRoot; else delete root.dataset.studioTheme;
+      if (previousBody) body.dataset.studioTheme = previousBody; else delete body.dataset.studioTheme;
+    };
+  }, []);
+  return null;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const shellAlreadyMounted = useContext(AppShellMountedContext);
   const { user } = useAuth();
@@ -1812,6 +1832,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   if (showWorkspaceOnboarding) {
     return (
       <AppShellMountedContext.Provider value={true}>
+        {/* The first questions are always asked on white, whatever the theme
+            says. Someone answering them has not chosen a theme yet — the
+            account defaults to light and Settings can change it afterwards —
+            and a half-applied dark theme on the very first screen is the worst
+            possible first impression. data-studio-theme is what the stylesheet
+            keys off, so setting it on this subtree is enough. */}
+        <OnboardingLightTheme />
         {finishedAnswers ? (
           <OnboardingReady
             answers={finishedAnswers}

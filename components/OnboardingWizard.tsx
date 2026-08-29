@@ -114,8 +114,8 @@ export function OnboardingWizard({
   const chosenPlan = answers.plan || recommendedTrialPlan(answers);
   const canContinue =
     step === 1 ? Boolean(answers.country && answers.currency && answers.timeZone)
-      : step === 2 ? answers.workKinds.length > 0
-        : step === 3 ? Boolean(answers.mainGoal)
+      : step === 2 ? Boolean(answers.mainGoal)
+        : step === 3 ? answers.workKinds.length > 0
           : step === 4 ? Boolean(answers.start)
             : Boolean(chosenPlan);
 
@@ -161,15 +161,15 @@ export function OnboardingWizard({
           </div>
           <h1>{
             step === 1 ? t("Workspace basics")
-              : step === 2 ? t("Tell us about your work")
-                : step === 3 ? t("What should NivaDesk help with first?")
+              : step === 2 ? t("What should NivaDesk help with first?")
+                : step === 3 ? t("Tell us about your work")
                   : step === 4 ? t("Bring your work in")
                     : t("Your plan")
           }</h1>
           <p>{
             step === 1 ? t("We've suggested these from your location. You can change them now or later in Settings.")
-              : step === 2 ? t("This sets up your order cards, production stages and labels.")
-                : step === 3 ? t("Your answer decides what your dashboard and first tasks show.")
+              : step === 2 ? t("Your answer decides what your dashboard and first tasks show.")
+                : step === 3 ? t("This sets up your order cards, production stages and labels.")
                   : step === 4 ? t("Pick how you'd like to start. You can do any of the others later.")
                     : t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
           }</p>
@@ -207,7 +207,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {step === 3 ? (
           <div className="onboard-sections">
             <div>
               <h2>{t("What kind of work do you do?")}</h2>
@@ -265,7 +265,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {step === 2 ? (
           <div className="onboard-sections">
             <div className="onboard-options">
               {visibleGoals.map(goal => (
