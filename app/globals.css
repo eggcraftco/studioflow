@@ -27908,7 +27908,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   /* A 1x1 on a phone is a square: the size exists to answer one question at a
      glance, and a footer link only stretches it. The card itself opens the
      screen it summarises. */
+  /* Every card is a square on a phone: a 1x1 is one column across, a 2x2 is two
+     — and two square rows tall, which is the same square. The content fits the
+     square rather than the square stretching to the content. */
   .home-card.is-square { aspect-ratio: 1; }
+  .home-card-2x2 { aspect-ratio: 1; }
+  .home-card-2x2 .home-money-panels { grid-template-rows: 1fr; min-height: 0; }
+  .home-card-2x2 .home-panel { min-height: 0; overflow: hidden; }
+  .home-card-2x2 .home-chart-frame { min-height: 0; }
   .home-card.is-square .home-card-foot { display: none; }
   .home-card.is-square .home-card-body { padding-bottom: 14px; }
   .home-card.is-square { cursor: pointer; }
