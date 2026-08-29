@@ -27,7 +27,9 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -1368,6 +1370,17 @@ private fun StageBar(stages: List<ProductionStage>, resolved: List<Pair<StudioOr
 
 /** A stage's colour follows its kind, not its position — a workspace may define
  *  any number of lanes and an index-keyed palette runs out. */
+/** The mark for each lane. Finished work is not a bottleneck, so the flow leaves
+ *  the Done lane out — the card is about what still needs a decision. */
+private fun stageSymbol(kind: ProductionStageKind): ImageVector = when (kind) {
+    ProductionStageKind.Ready -> Icons.Filled.CheckCircle
+    ProductionStageKind.Active -> Icons.Filled.Build
+    ProductionStageKind.Blocked -> Icons.Filled.Schedule
+    ProductionStageKind.Review -> Icons.Filled.Search
+    ProductionStageKind.ShipReady -> Icons.Filled.LocalShipping
+    ProductionStageKind.Done -> Icons.Filled.CheckCircle
+}
+
 private fun stageTone(kind: ProductionStageKind): Color = when (kind) {
     ProductionStageKind.Ready -> HomeTone.green
     ProductionStageKind.Active -> HomeTone.accent
@@ -1504,22 +1517,34 @@ private fun HomeOrdersProductionBody(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (size == HomeCardSize.TwoByTwo) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HomeMetricTile(t("active orders"), "${live.size}", HomeTone.accent, modifier = Modifier.weight(1f))
+                HomeMetricTile(t("Active orders"), "${live.size}", HomeTone.accent,
+                    modifier = Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.ListAlt)
                 HomeMetricTile(t("Overdue"), "${late.size}",
-                    if (late.isEmpty()) HomeTone.accent else HomeTone.orange, modifier = Modifier.weight(1f))
+                    if (late.isEmpty()) HomeTone.accent else HomeTone.red,
+                    modifier = Modifier.weight(1f), icon = Icons.Filled.Schedule)
             }
         }
         HomeEyebrow(t("Production flow"))
+        // Done is left out: finished work is not a bottleneck, and on a phone the
+        // sixth lane was what pushed every name into an ellipsis.
         Row(Modifier.fillMaxWidth()) {
-            stages.forEach { stage ->
+            stages.filter { it.kind != ProductionStageKind.Done }.forEach { stage ->
                 val count = resolved.count { it.second.stageId == stage.id }
                 val tone = stageTone(stage.kind)
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(Modifier.size(26.dp).background(tone.copy(alpha = 0.16f), CircleShape))
-                    Text(t(stage.title), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Column(Modifier.weight(1f).padding(horizontal = 1.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Box(Modifier.size(if (compact) 24.dp else 28.dp)
+                        .background(tone.copy(alpha = 0.16f), CircleShape),
+                        contentAlignment = Alignment.Center) {
+                        Icon(stageSymbol(stage.kind), null,
+                            Modifier.size(if (compact) 12.dp else 14.dp), tone)
+                    }
+                    Text(t(stage.title), fontSize = if (compact) 8.5.sp else 10.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("$count", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = tone)
+                    Text("$count", fontSize = if (compact) 13.sp else 15.sp,
+                        fontWeight = FontWeight.ExtraBold, color = tone)
                 }
             }
         }
@@ -1529,11 +1554,20 @@ private fun HomeOrdersProductionBody(
                 (late + live.filterNot { o -> late.any { it.id == o.id } }).take(3).forEach { order ->
                     val due = homeDueDate(order.paymentDate, order.deliveryTime)
                     val overdue = due.before(Date())
+                    val stage = stages.firstOrNull { st -> st.id == resolved.first { it.first.id == order.id }.second.stageId }
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(order.customerName.ifEmpty { order.designName }, fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (order.designName.isNotEmpty()) {
+                                Text(order.designName, fontSize = 10.sp, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
                         if (overdue) {
                             val days = ((Date().time - due.time) / 86_400_000L).toInt()
                             HomeChip(if (days > 0) t("{days}d late").replace("{days}", "$days") else t("Overdue"),

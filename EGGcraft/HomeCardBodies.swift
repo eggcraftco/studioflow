@@ -1662,6 +1662,19 @@ struct HomeMixBar: View {
 
 /// A stage's colour follows its kind, not its position — a workspace may define
 /// any number of lanes and an index-keyed palette runs out.
+/// The mark for each lane. Finished work is not a bottleneck, so the flow leaves
+/// the Done lane out — the card is about what still needs a decision.
+func homeStageSymbol(_ kind: ProductionStageKind) -> String {
+    switch kind {
+    case .ready: return "checkmark.circle"
+    case .active: return "hammer"
+    case .blocked: return "clock"
+    case .review: return "magnifyingglass"
+    case .shipready: return "shippingbox"
+    case .done: return "checkmark.seal"
+    }
+}
+
 func homeStageTone(_ kind: ProductionStageKind) -> Color {
     switch kind {
     case .ready: return HomeTone.green
@@ -1827,21 +1840,33 @@ struct HomeOrdersProductionBody: View {
                 VStack(alignment: .leading, spacing: 10) {
                     if size == .twoByTwo {
                         HStack(spacing: 10) {
-                            HomeMetricTile(label: t("active orders", lang: lang), value: "\(live.count)", tone: HomeTone.accent)
+                            HomeMetricTile(label: t("Active orders", lang: lang), value: "\(live.count)",
+                                           tone: HomeTone.accent, symbol: "doc.text")
                             HomeMetricTile(label: t("Overdue", lang: lang), value: "\(late.count)",
-                                           tone: late.isEmpty ? HomeTone.accent : HomeTone.orange)
+                                           tone: late.isEmpty ? HomeTone.accent : HomeTone.red, symbol: "clock")
                         }
                     }
                     HomeEyebrow(text: t("Production flow", lang: lang))
-                    HomeStageFlow(stages: data.stages, resolved: resolved, lang: lang)
+                    HomeStageFlow(stages: data.stages, resolved: resolved, lang: lang, compact: compact)
                     if size == .twoByTwo {
                         HomePanel {
                             HomeEyebrow(text: t("Priority orders", lang: lang))
                             ForEach(Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(3)), id: \.id) { order in
-                                HStack(spacing: 8) {
-                                    Text(order.customerName.isEmpty ? order.designName : order.customerName)
-                                        .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                let entry = resolved.first { $0.0.id == order.id }
+                                let stage = data.stages.first { $0.id == entry?.1.stageId }
+                                HStack(spacing: 7) {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(order.customerName.isEmpty ? order.designName : order.customerName)
+                                            .font(.system(size: 12, weight: .bold)).lineLimit(1)
+                                        if !order.designName.isEmpty {
+                                            Text(order.designName)
+                                                .font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
+                                        }
+                                    }
                                     Spacer(minLength: 6)
+                                    if let stage {
+                                        HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
+                                    }
                                     if let due = homeDueDate(order), due < Date() {
                                         let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
                                         HomeChip(text: days > 0
@@ -1891,26 +1916,34 @@ struct HomeStageFlow: View {
     let stages: [ProductionStage]
     let resolved: [(Siparis, ResolvedProductionStage)]
     let lang: String
+    var compact: Bool = false
 
     var body: some View {
+        // Done is left out: finished work is not a bottleneck, and on a phone the
+        // sixth lane was what pushed every name into an ellipsis.
+        let lanes = stages.filter { $0.kind != .done }
         HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(stages.enumerated()), id: \.element.id) { index, stage in
+            ForEach(Array(lanes.enumerated()), id: \.element.id) { index, stage in
                 let count = resolved.filter { $0.1.stageId == stage.id }.count
                 let tone = homeStageTone(stage.kind)
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     ZStack {
                         if index > 0 {
                             Rectangle().fill(Color.primary.opacity(0.10)).frame(height: 1)
                                 .offset(x: -22)
                         }
-                        Circle().fill(tone.opacity(0.16)).frame(width: 26, height: 26)
+                        Circle().fill(tone.opacity(0.16)).frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
+                        Image(systemName: homeStageSymbol(stage.kind))
+                            .font(.system(size: compact ? 11 : 13, weight: .semibold))
+                            .foregroundColor(tone)
                     }
                     Text(t(stage.title, lang: lang))
-                        .font(.system(size: 10.5)).foregroundColor(.secondary)
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                    Text("\(count)").font(.system(size: 16, weight: .heavy)).foregroundColor(tone)
+                        .font(.system(size: compact ? 9 : 10.5)).foregroundColor(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                    Text("\(count)").font(.system(size: compact ? 14 : 16, weight: .heavy)).foregroundColor(tone)
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, 1)
             }
         }
     }
