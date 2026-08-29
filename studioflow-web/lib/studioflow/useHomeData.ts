@@ -49,6 +49,8 @@ export type HomeDomainStatus = "loading" | "ready" | "error" | "denied";
 
 export type HomeBankTx = {
   id: string;
+  /** Who the money moved to or from, as the feed named it. */
+  name: string;
   amount: number;
   bookingDate: Date | null;
   categoryId: string;
@@ -240,6 +242,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
                   : null;
             return {
               id: txDoc.id,
+              name: String(data.counterparty || data.description || ""),
               amount: Number(data.amount ?? 0),
               bookingDate,
               categoryId: String(data.categoryId ?? ""),
