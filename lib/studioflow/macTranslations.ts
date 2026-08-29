@@ -2942,7 +2942,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "नियम 2 (लाभ)"
   },
   "Revenue": {
-    "Türkçe": "Standart KDV (Sıfır)",
+    "Türkçe": "Ciro",
     "Deutsch": "Umsatz",
     "Français": "Chiffre d'affaires",
     "Italiano": "Ricavi",
@@ -2955,7 +2955,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "राजस्व"
   },
   "Profit": {
-    "Türkçe": "Margin Scheme (2.El)",
+    "Türkçe": "Kâr",
     "Deutsch": "Gewinn",
     "Français": "Profit",
     "Italiano": "Profitto",

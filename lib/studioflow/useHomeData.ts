@@ -5,6 +5,10 @@ import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { getInventorySummary, type InventorySummary } from "@/lib/studioflow/inventory";
 import {
+  listenToActivityNotifications,
+  type StudioActivityNotification,
+} from "@/lib/studioflow/notifications";
+import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
   loadRecentOrders,
@@ -55,6 +59,7 @@ export type HomeData = {
   inventory: InventorySummary | null;
   files: ClientFileListItem[];
   bankTransactions: HomeBankTx[];
+  activity: StudioActivityNotification[];
   bankLastSync: Date | null;
   lastLoadedAtMs: number;
   offline: boolean;
@@ -69,7 +74,7 @@ const EMPTY_STATUS: Record<HomeDomain, HomeDomainStatus> = {
   bank: "loading",
 };
 
-export function useHomeData(workspace: WorkspaceContext | null, uid: string): HomeData {
+export function useHomeData(workspace: WorkspaceContext | null, uid: string, email = ""): HomeData {
   const [status, setStatus] = useState<Record<HomeDomain, HomeDomainStatus>>(EMPTY_STATUS);
   const [counts, setCounts] = useState<DashboardCounts | null>(null);
   const [financeOrders, setFinanceOrders] = useState<DashboardFinanceOrder[]>([]);
@@ -79,6 +84,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string): Ho
   const [inventory, setInventory] = useState<InventorySummary | null>(null);
   const [files, setFiles] = useState<ClientFileListItem[]>([]);
   const [bankTransactions, setBankTransactions] = useState<HomeBankTx[]>([]);
+  const [activity, setActivity] = useState<StudioActivityNotification[]>([]);
   const [bankLastSync, setBankLastSync] = useState<Date | null>(null);
   const [lastLoadedAtMs, setLastLoadedAtMs] = useState(0);
   const [offline, setOffline] = useState(false);
@@ -225,6 +231,14 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string): Ho
     return () => unsubscribe();
   }, [workspaceId, canSeeBank, setDomain, reloadKey]);
 
+  // Recent activity is the workspace's own notification stream, live, and
+  // already filtered to what this user is a recipient of — §12 is explicit that
+  // activity must never widen what someone can see.
+  useEffect(() => {
+    if (!workspace?.id) return;
+    return listenToActivityNotifications(workspace, uid, email, setActivity);
+  }, [workspace, uid, email]);
+
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   return useMemo(
@@ -238,6 +252,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string): Ho
       inventory,
       files,
       bankTransactions,
+      activity,
       bankLastSync,
       lastLoadedAtMs,
       offline,
@@ -245,7 +260,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string): Ho
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, files, bankTransactions, bankLastSync, lastLoadedAtMs, offline, reload,
+      inventory, files, bankTransactions, activity, bankLastSync, lastLoadedAtMs, offline, reload,
     ],
   );
 }

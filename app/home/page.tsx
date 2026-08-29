@@ -113,7 +113,7 @@ export default function HomePage() {
     });
   }, [workspace?.id]);
 
-  const data = useHomeData(workspace, user?.uid ?? "");
+  const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "");
 
   /**
    * Optimistic layout (§19): the grid moves under the hand immediately and the
@@ -218,8 +218,8 @@ export default function HomePage() {
       case "banking": return data.bankTransactions.length === 0;
       case "inventory": return !data.inventory;
       case "ordersProduction":
-      case "schedule":
-      case "recentActivity": return data.orders.length === 0;
+      case "schedule": return data.orders.length === 0;
+      case "recentActivity": return data.activity.length === 0;
       case "customers": return data.customers.length === 0;
       case "files": return data.files.length === 0;
       case "notes": return data.orders.every((order) => !(order.notes || "").trim());
