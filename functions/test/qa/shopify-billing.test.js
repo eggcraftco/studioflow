@@ -118,8 +118,11 @@ const workspaceBilledOutsideShopify = new Function(
     /shopifyBilled\s*=\s*\(workspace\?\.billingProvider[^\n]*shopify/.test(planPage),
     "the plan page knows who bills this workspace"
   );
+  // The guard widened from Shopify-only to every outside rail (Apple, Google
+  // Play, Shopify), so assert the chain rather than the old variable name.
   assert(
-    /purchasesEnabled\s*=\s*!shopifyBilled/.test(planPage),
+    /billedElsewhere\s*=\s*shopifyBilled\s*\|\|/.test(planPage)
+      && /purchasesEnabled\s*=\s*!billedElsewhere/.test(planPage),
     "and disables its purchase buttons when Shopify does"
   );
   pass("the web offers no Stripe checkout to a Shopify merchant");

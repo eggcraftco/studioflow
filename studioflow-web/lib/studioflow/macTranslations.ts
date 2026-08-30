@@ -275,7 +275,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "अपने वर्कस्पेस स्वामी या एडमिन को अनुरोध भेजें।"
   },
   "My Workspace Tickets": {
-    "Türkçe": "Workspace Ticketlarım",
+    "Türkçe": "Çalışma Alanı Taleplerim",
     "Deutsch": "Meine Workspace-Tickets",
     "Français": "Mes tickets d'espace",
     "Italiano": "I miei ticket dello spazio",
@@ -692,7 +692,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "No orders in this schedule range.": {
     "Türkçe": "Bu plan aralığında sipariş yok.",
-    "Deutsch": "Keine Bestellungen in diesem Zeitraum.",
+    "Deutsch": "Keine Aufträge in diesem Zeitraum.",
     "Français": "Aucune commande dans cette période.",
     "Italiano": "Nessun ordine in questo intervallo.",
     "Español (Spanish)": "No hay pedidos en este rango.",
@@ -1201,7 +1201,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Most Orders": {
     "Türkçe": "En Çok Sipariş",
-    "Deutsch": "Meiste Bestellungen",
+    "Deutsch": "Meiste Aufträge",
     "Français": "Plus de commandes",
     "Italiano": "Più Ordini",
     "Español (Spanish)": "Más Pedidos",
@@ -1240,7 +1240,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Orders": {
     "Türkçe": "Siparişler",
-    "Deutsch": "Bestellungen",
+    "Deutsch": "Aufträge",
     "Français": "Commandes",
     "Italiano": "Ordini",
     "Español (Spanish)": "Pedidos",
@@ -6366,7 +6366,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "जानकारी"
   },
   "Workspace conversation": {
-    "Türkçe": "Workspace sohbeti",
+    "Türkçe": "Çalışma alanı sohbeti",
     "Deutsch": "Workspace-Unterhaltung",
     "Français": "Conversation Workspace",
     "Italiano": "Conversazione del workspace",
@@ -6379,7 +6379,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "वर्कस्पेस बातचीत"
   },
   "Workspace broadcast channel": {
-    "Türkçe": "Workspace duyuru kanalı",
+    "Türkçe": "Çalışma alanı duyuru kanalı",
     "Deutsch": "Workspace-Broadcastkanal",
     "Français": "Canal de diffusion Workspace",
     "Italiano": "Canale broadcast workspace",
@@ -8927,7 +8927,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "उपलब्ध नहीं"
   },
   "Current Workspace": {
-    "Türkçe": "Geçerli Workspace",
+    "Türkçe": "Geçerli Çalışma Alanı",
     "Deutsch": "Aktueller Arbeitsbereich",
     "Français": "Espace de travail actuel",
     "Italiano": "Workspace attuale",
@@ -8953,7 +8953,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "लोगों को आमंत्रित करें"
   },
   "Workspaces": {
-    "Türkçe": "Workspace’ler",
+    "Türkçe": "Çalışma alanları",
     "Deutsch": "Arbeitsbereiche",
     "Français": "Espaces de travail",
     "Italiano": "Workspace",
@@ -9304,7 +9304,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "पहला ऑर्डर बनाएँ"
   },
   "Set up your workspace": {
-    "Türkçe": "Workspace’i Kur",
+    "Türkçe": "Çalışma Alanını Kur",
     "Deutsch": "Arbeitsbereich einrichten",
     "Français": "Configurer l’espace",
     "Italiano": "Configura workspace",
@@ -9850,7 +9850,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "सदस्य हटाया गया."
   },
   "Access request sent. The workspace owner can approve it from Team Access.": {
-    "Türkçe": "Erişim isteği gönderildi. Workspace sahibi Team Access ekranından onaylayabilir.",
+    "Türkçe": "Erişim isteği gönderildi. Çalışma alanı sahibi Team Access ekranından onaylayabilir.",
     "Deutsch": "Anfrage gesendet. Der Besitzer kann sie unter Team Access genehmigen.",
     "Français": "Demande envoyée. Le propriétaire peut l’approuver depuis Team Access.",
     "Italiano": "Richiesta inviata. Il proprietario può approvarla da Team Access.",
@@ -11852,7 +11852,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "ब्रांड उपशीर्षक"
   },
   "Workspace Logo": {
-    "Türkçe": "Workspace Logosu",
+    "Türkçe": "Çalışma Alanı Logosu",
     "Deutsch": "Workspace-Logo",
     "Français": "Logo de l’espace de travail",
     "Italiano": "Logo workspace",
@@ -16182,7 +16182,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Cancel Order": {
     "Türkçe": "Siparişi İptal Et",
-    "Deutsch": "Bestellung stornieren",
+    "Deutsch": "Auftrag stornieren",
     "Français": "Annuler la commande",
     "Italiano": "Annulla ordine",
     "Español (Spanish)": "Cancelar pedido",
