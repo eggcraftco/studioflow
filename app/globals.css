@@ -27722,9 +27722,16 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* Activity */
 .home-activity-list { list-style: none; margin: 4px 0 0; padding: 0; }
-.home-activity-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.home-activity-list li { display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
 .home-activity-list li:last-child { border-bottom: 0; }
-.home-activity-mark { width: 26px; height: 26px; border-radius: 999px; flex: 0 0 auto; }
+/* The disc carries a white glyph now. It was a bare colour chip, which in a
+   1x1 read as an empty avatar slot rather than as a kind of event. */
+.home-activity-mark {
+  width: 30px; height: 30px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.home-activity-mark svg { width: 16px; height: 16px; display: block; }
+.home-activity-symbol { font-size: 14px; font-weight: 800; line-height: 1; font-style: normal; }
 .home-activity-mark.tone-green { background: #16a34a; }
 .home-activity-mark.tone-purple { background: #7c3aed; }
 .home-activity-mark.tone-blue { background: #2563eb; }
@@ -27733,8 +27740,8 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-activity-mark.tone-teal { background: #14b8a6; }
 .home-activity-mark.tone-slate { background: #64748b; }
 .home-activity-text { flex: 1 1 auto; min-width: 0; }
-.home-activity-text strong { display: block; font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-activity-text em { display: block; font-style: normal; font-size: 11px; opacity: 0.65; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-activity-text strong { display: block; font-size: 13px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-activity-text em { display: block; font-style: normal; font-size: 11.5px; opacity: 0.6; line-height: 1.25; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-activity-when { font-size: 11px; opacity: 0.6; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ---- Inventory & Customers -------------------------------------------- */
@@ -28042,8 +28049,31 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
    like in a square. */
 /* A 1x1 header carries the same five parts in a single column's width, so the
    title runs out of room by a hair and picks up an ellipsis it does not need. */
-.home-card-1x1 .home-card-head { gap: 10px; }
-.home-card-1x1 .home-card-title { font-size: 16px; }
+/* Shaving the gap and the type was not enough: the grip, a 38px badge, two
+   gaps and the overflow button leave a 1x1 column about 120px for a heading
+   that needs a little more, so "Recent activity" came out as "Recent …".
+   The badge is the part with room to give — it is an anchor, not a picture. */
+.home-card-1x1 .home-card-head { gap: 8px; padding-left: 16px; padding-right: 16px; }
+.home-card-1x1 .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
+.home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
+.home-card-1x1 .home-card-title { font-size: 15px; }
+
+/* A 1x1 is ~240px of content. Disc, title, detail and time on one line left
+   the title with about 120px, so "Order #10234 created" arrived as
+   "Order #…". Two rows instead: the title gets the full width, and the detail
+   and the time share the line below it. */
+.home-card-1x1 .home-activity-list li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-areas: "mark title title" "mark detail when";
+  column-gap: 11px;
+  align-items: center;
+}
+.home-card-1x1 .home-activity-mark { grid-area: mark; align-self: center; }
+.home-card-1x1 .home-activity-text { display: contents; }
+.home-card-1x1 .home-activity-text strong { grid-area: title; }
+.home-card-1x1 .home-activity-text em { grid-area: detail; margin-top: 0; }
+.home-card-1x1 .home-activity-when { grid-area: when; padding-left: 8px; }
 .home-card-1x1 .home-money { gap: 14px; }
 .home-card-1x1 .home-money > .home-split-pair:last-child,
 .home-card-1x1 .home-money > .home-count-pair:last-child { margin-top: auto; }

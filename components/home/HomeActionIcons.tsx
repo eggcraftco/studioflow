@@ -212,3 +212,74 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
       );
   }
 }
+
+/**
+ * The activity feed's glyphs.
+ *
+ * Filled white marks that sit inside the coloured disc, unlike the line
+ * drawings above: at this size (a 30px disc in a 1x1 card) a stroked glyph
+ * turns to grey mush, and the disc's colour is what makes the row scannable.
+ * Colour never carries the meaning on its own — the title always names the
+ * event — so these read as reinforcement, not as a legend to learn.
+ */
+export type HomeActivityIconName =
+  | "order" | "payment" | "production" | "file"
+  | "inventory" | "customer" | "schedule" | "update";
+
+export function HomeActivityIcon({ name }: { name: HomeActivityIconName }) {
+  const common = { viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true };
+  switch (name) {
+    case "order":
+      return (
+        <svg {...common}>
+          <path d="M3.5 4.2h2.1a1 1 0 0 1 .98.8l.27 1.3h12.4a1 1 0 0 1 .98 1.2l-1.16 5.4a1.7 1.7 0 0 1-1.66 1.34H9.1a1.7 1.7 0 0 1-1.66-1.33L5.55 5.9H3.5a.85.85 0 0 1 0-1.7Z" />
+          <circle cx="9.7" cy="18.6" r="1.7" />
+          <circle cx="17.4" cy="18.6" r="1.7" />
+        </svg>
+      );
+    case "production":
+      // Eight fat teeth, not twelve fine ones: at 16px a detailed cog fills in
+      // and reads as a dark blob rather than as a gear.
+      return (
+        <svg {...common}>
+          <path d="M12 2.2a2 2 0 0 1 1.9 1.35l.35 1.02c.3.11.6.24.87.4l.99-.44a2 2 0 0 1 2.34.5l1.52 1.52a2 2 0 0 1 .5 2.34l-.44.99c.16.28.29.57.4.87l1.02.35A2 2 0 0 1 21.8 12v2.15a2 2 0 0 1-1.35 1.9l-1.02.35c-.11.3-.24.59-.4.87l.44.99a2 2 0 0 1-.5 2.34l-1.52 1.52-.03-.02a2 2 0 0 1-2.31.48l-.99-.44c-.28.16-.57.29-.87.4l-.35 1.02H10.1l-.35-1.02c-.3-.11-.59-.24-.87-.4l-.99.44a2 2 0 0 1-2.34-.5L4.03 20.6a2 2 0 0 1-.5-2.34l.44-.99c-.16-.28-.29-.57-.4-.87l-1.02-.35A2 2 0 0 1 2.2 14.15V12a2 2 0 0 1 1.35-1.9l1.02-.35c.11-.3.24-.59.4-.87l-.44-.99a2 2 0 0 1 .5-2.34L6.55 4.03a2 2 0 0 1 2.34-.5l.99.44c.28-.16.57-.29.87-.4l.35-1.02A2 2 0 0 1 12 2.2Zm0 5.9a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" />
+        </svg>
+      );
+    case "file":
+      return (
+        <svg {...common}>
+          <path d="M6.6 2.6h6.3l5.1 5.1v12.1a1.7 1.7 0 0 1-1.7 1.7H6.6a1.7 1.7 0 0 1-1.7-1.7V4.3a1.7 1.7 0 0 1 1.7-1.7Z" />
+          <path d="M13.2 3v4.4h4.4" fill="#000" fillOpacity=".28" />
+        </svg>
+      );
+    case "inventory":
+      return (
+        <svg {...common}>
+          <path d="M12 2.4 3.2 6.9v10.2L12 21.6l8.8-4.5V6.9L12 2.4Zm0 2 6.1 3.1L12 10.6 5.9 7.5 12 4.4Z" />
+          <path d="M4.9 8.9 11.1 12v7L4.9 15.9V8.9Zm8 3.1 6.2-3.1v7L12.9 19v-7Z" />
+        </svg>
+      );
+    case "customer":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8.1" r="3.9" />
+          <path d="M12 13.4c-4 0-7.2 2.4-7.2 5.4 0 .9.7 1.6 1.6 1.6h11.2c.9 0 1.6-.7 1.6-1.6 0-3-3.2-5.4-7.2-5.4Z" />
+        </svg>
+      );
+    case "schedule":
+      return (
+        <svg {...common}>
+          <path d="M7.4 2.6c.5 0 .9.4.9.9v1h6.4v-1a.9.9 0 1 1 1.8 0v1h1.2a2 2 0 0 1 2 2v12.6a2 2 0 0 1-2 2H5.3a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h1.2v-1c0-.5.4-.9.9-.9ZM5.1 9.4v9.1h13.8V9.4H5.1Z" />
+          <rect x="7" y="11.4" width="3.2" height="3.2" rx=".8" />
+        </svg>
+      );
+    case "update":
+    default:
+      return (
+        <svg {...common}>
+          <path d="M12 2.8a9.2 9.2 0 1 0 9.2 9.2.9.9 0 0 0-1.8 0A7.4 7.4 0 1 1 12 4.6a.9.9 0 0 0 0-1.8Z" />
+          <path d="M12.9 7.3a.9.9 0 0 0-1.8 0v5.1c0 .3.2.6.4.8l3.2 2a.9.9 0 1 0 .95-1.53l-2.77-1.72V7.3Z" />
+        </svg>
+      );
+  }
+}
