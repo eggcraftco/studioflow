@@ -794,6 +794,26 @@ function createStripeBillingFunctions({
         };
       }
 
+      // Shopify bills through its own API and writes the plan straight onto the
+      // workspace, so it never leaves a row in subscriptions: "no active plan
+      // subscription" is the normal, healthy state for a paying Shopify
+      // merchant. The Shopify side already refuses to overwrite a live
+      // Stripe/Apple/Google plan; this is that same courtesy in the other
+      // direction. Without it, a merchant who once tried Stripe (leaving a
+      // customer id behind), then subscribed on Shopify, would be dropped to
+      // Demo the moment anything triggered a resolve.
+      const shopifyStatus = String(currentData.shopifySubscriptionStatus || currentData.billingStatus || "").trim().toLowerCase();
+      if (currentSource === "shopify" && currentPlan && currentPlan !== "demo" && ["active", "trialing", "past_due"].includes(shopifyStatus)) {
+        await workspace.ref.set({ ...resolutionFields }, { merge: true });
+        return {
+          plan: currentPlan,
+          provider: "shopify",
+          activePlanSubscriptionCount: 0,
+          hasMultipleActiveSubscriptions: false,
+          preservedShopifyPlan: true
+        };
+      }
+
       const normalizedTriggerStatus = String(triggerProviderStatus || "").trim().toLowerCase();
       const legacyStatus = normalizedTriggerStatus === "unpaid"
         ? "expired"
