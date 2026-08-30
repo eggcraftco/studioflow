@@ -2887,7 +2887,11 @@ class AuthViewModel: ObservableObject {
         profileErrorMessage = "Manual plan switching is disabled. Plans are managed through secure billing."
     }
 
-    func prepareAppleSubscriptionPurchaseToken() async throws -> UUID {
+    /// - Parameter purpose: what this token is about to buy. The same token mints
+    ///   a plan and a storage add-on, and only the plan may be refused when the
+    ///   workspace already pays for one on another rail, so the server has to be
+    ///   told which of the two this is.
+    func prepareAppleSubscriptionPurchaseToken(purpose: String = "plan") async throws -> UUID {
         guard let companyId = currentCompanyId, !companyId.isEmpty else {
             throw NSError(domain: "StudioFlowBilling", code: 1, userInfo: [NSLocalizedDescriptionKey: "Company ID is not configured."])
         }
@@ -2895,7 +2899,7 @@ class AuthViewModel: ObservableObject {
         #if canImport(FirebaseFunctions)
         let result = try await Functions.functions(region: "europe-west2")
             .httpsCallable("prepareAppleSubscriptionPurchase")
-            .call(["companyId": companyId])
+            .call(["companyId": companyId, "purpose": purpose])
         guard let data = result.data as? [String: Any],
               let rawToken = data["appAccountToken"] as? String,
               let token = UUID(uuidString: rawToken) else {

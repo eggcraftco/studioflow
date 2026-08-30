@@ -1413,6 +1413,53 @@ function createStripeBillingFunctions({
     };
   });
 
+  // Four rails sell the same plan, and none of them can see the other three at
+  // the till. Shopify has always refused to sell to a workspace paying
+  // elsewhere; nothing stopped the other direction, so an owner paying Stripe
+  // for Pro could open the iOS app, tap Team, and pay twice for one workspace.
+  // The resolver would notice - it records billingHasMultipleActiveSubscriptions
+  // and picks the higher tier - but noticing a double charge is not preventing
+  // one. Returns the provider already billing them, or "" when the till is free.
+  //
+  // Add-ons are deliberately not covered: seats and storage are sold through
+  // Stripe whatever rail the plan came from, and blocking those would break a
+  // flow that works today.
+  const LIVE_BILLING_STATUSES = ["active", "trialing", "past_due"];
+  function workspacePlanBilledByOtherProvider(companyData = {}, targetProvider = "") {
+    const plan = String(companyData.billingPlan || "").trim().toLowerCase();
+    if (!plan || plan === "demo") return "";
+
+    const status = String(companyData.billingEffectiveStatus || companyData.billingStatus || "").trim().toLowerCase();
+    if (!LIVE_BILLING_STATUSES.includes(status)) return "";
+
+    const provider = String(
+      companyData.billingEffectiveProvider
+      || companyData.billingProvider
+      || companyData.billingPlanSource
+      || ""
+    ).trim().toLowerCase();
+    // A manual or complimentary grant is not a till anyone can be charged at,
+    // so it must not block a workspace from actually buying a plan.
+    if (!provider || ["none", "manual", "manual_workspace", "comp_review", "signup_trial", "entitlement_resolver"].includes(provider)) return "";
+
+    return provider === String(targetProvider || "").trim().toLowerCase() ? "" : provider;
+  }
+
+  const BILLED_ELSEWHERE_MESSAGE = {
+    stripe: "This workspace already pays for its plan by card. Change or cancel that subscription first, then come back.",
+    apple: "This workspace already pays for its plan through the App Store. Change or cancel it in your Apple subscriptions first, then come back.",
+    google: "This workspace already pays for its plan through Google Play. Change or cancel it in your Play subscriptions first, then come back.",
+    shopify: "This workspace already pays for its plan through Shopify. Change or cancel it in your Shopify admin first, then come back."
+  };
+  function refuseSecondTill(companyData, targetProvider) {
+    const other = workspacePlanBilledByOtherProvider(companyData, targetProvider);
+    if (!other) return;
+    throw new HttpsError(
+      "failed-precondition",
+      BILLED_ELSEWHERE_MESSAGE[other] || "This workspace already pays for its plan somewhere else. Change or cancel that subscription first, then come back."
+    );
+  }
+
   const createStripeCheckoutSession = onCall({ region: STRIPE_BILLING_REGION, secrets: [STRIPE_SECRET_KEY] }, async (request) => {
     const item = billingItemFromRequest(request);
     const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
@@ -1422,6 +1469,9 @@ function createStripeBillingFunctions({
       return { ok: true, configured: false, message: config.message };
     }
     requireBillingEnvironmentAccess(request, config);
+    if (item.type === "plan") {
+      refuseSecondTill(companyData, "stripe");
+    }
 
     // Additional team seats: only on the Team plan, single subscription slot,
     // quantity 1..5 (Team includes 5, self-service cap is 10 total).
@@ -1548,6 +1598,13 @@ function createStripeBillingFunctions({
   const prepareAppleSubscriptionPurchase = onCall({ region: APPLE_BILLING_REGION }, async (request) => {
     const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
     ownerOrAdminRole(companyData, uid);
+    // The same token mints a plan and a storage add-on, so the guard has to be
+    // told which one this is. Add-ons are sold on every rail and must keep
+    // working; an app version too old to say what it is buying is left alone
+    // rather than blocked, which is the state it was already in.
+    if (String(request.data?.purpose || "").trim() === "plan") {
+      refuseSecondTill(companyData, "apple");
+    }
     let appAccountToken = String(companyData.billingAppleAppAccountToken || "").trim();
     if (!appAccountToken) {
       appAccountToken = crypto.randomUUID();
@@ -1930,6 +1987,9 @@ function createStripeBillingFunctions({
   const prepareGooglePlayPurchase = onCall({ region: GOOGLE_BILLING_REGION }, async (request) => {
     const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, true);
     ownerOrAdminRole(companyData, uid);
+    if (String(request.data?.purpose || "").trim() === "plan") {
+      refuseSecondTill(companyData, "google");
+    }
     let accountToken = String(companyData.billingGoogleAccountToken || "").trim();
     if (!accountToken) {
       accountToken = crypto.randomUUID();

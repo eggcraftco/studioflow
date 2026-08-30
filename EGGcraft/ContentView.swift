@@ -14641,7 +14641,7 @@ struct AccountProfileView: View {
             await storeKitManager.loadProducts()
         }
         do {
-            let appAccountToken = try await authVM.prepareAppleSubscriptionPurchaseToken()
+            let appAccountToken = try await authVM.prepareAppleSubscriptionPurchaseToken(purpose: "storage_addon")
             guard let jws = await storeKitManager.purchaseStorageAddon(option.productId, appAccountToken: appAccountToken) else {
                 if !storeKitManager.errorMessage.isEmpty {
                     storeKitActionAlertMessage = storeKitManager.errorMessage

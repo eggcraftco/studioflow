@@ -1070,9 +1070,13 @@ class StudioFlowRepository(
 
     // Mints (or reuses) the workspace-linked obfuscated account token used as the
     // Google Play obfuscatedAccountId. Mirrors prepareAppleSubscriptionPurchase.
-    suspend fun prepareGooglePlayPurchase(workspace: StudioWorkspace): String {
+    // [purpose] says what this token is about to buy. The same token mints a plan
+    // and a storage add-on, and only the plan may be refused when the workspace
+    // already pays for one on another rail, so the server has to be told which
+    // of the two this is.
+    suspend fun prepareGooglePlayPurchase(workspace: StudioWorkspace, purpose: String = "plan"): String {
         val result = functions.getHttpsCallable("prepareGooglePlayPurchase")
-            .call(mapOf("companyId" to workspace.id))
+            .call(mapOf("companyId" to workspace.id, "purpose" to purpose))
             .await()
         val data = result.data as? Map<*, *>
         return data?.get("obfuscatedAccountId") as? String ?: ""

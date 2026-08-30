@@ -173,7 +173,25 @@ export default function PlanPage() {
   // must not be able to route around Shopify by opening the website.
   const shopifyBilled = (workspace?.billingProvider || "").toLowerCase() === "shopify"
     || (Boolean(workspace?.shopifyLinkedShop) && !workspace?.billingSubscriptionId);
-  const purchasesEnabled = !shopifyBilled && (liveBillingEnabled || allowInternalBillingTests);
+
+  // Shopify was never the only rail that can already be charging for this
+  // workspace. An owner paying through the App Store or Google Play who buys
+  // again here pays twice for one workspace, so the till is closed for them too
+  // and the page says where their plan actually lives. The server refuses the
+  // same purchase either way; this is so nobody has to find that out by
+  // clicking. Add-ons are untouched - they are sold here whatever rail the plan
+  // came from.
+  const planProvider = (workspace?.billingEffectiveProvider || workspace?.billingProvider || "").toLowerCase();
+  const planIsLive = ["active", "trialing", "past_due"].includes(
+    (workspace?.billingStatus || "").toLowerCase())
+    && Boolean(workspace?.billingPlan) && workspace?.billingPlan !== "demo";
+  const storeBilled = planIsLive && (planProvider === "apple" || planProvider === "google");
+  const storeBilledName = planProvider === "apple" ? "the App Store" : "Google Play";
+  const storeBilledWhere = planProvider === "apple"
+    ? "your Apple subscriptions (Settings ▸ your name ▸ Subscriptions), or from the NivaDesk Mac or iPhone app"
+    : "your Google Play subscriptions, or from the NivaDesk Android app";
+  const billedElsewhere = shopifyBilled || storeBilled;
+  const purchasesEnabled = !billedElsewhere && (liveBillingEnabled || allowInternalBillingTests);
   const purchaseLabel = (label: string) =>
     liveBillingEnabled || !allowInternalBillingTests ? label : `Test ${label}`;
 
@@ -370,6 +388,18 @@ export default function PlanPage() {
             </section>
           ) : null}
 
+          {storeBilled ? (
+            <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+              <div className="pill">Billing</div>
+              <h2 style={{ margin: "10px 0 6px" }}>This workspace is billed through {storeBilledName}</h2>
+              <p style={{ color: "var(--muted)", margin: 0, maxWidth: 720 }}>
+                Your NivaDesk plan is charged by {storeBilledName}, so changing or cancelling it happens
+                in {storeBilledWhere}. Buying again here would charge this workspace twice, so nothing
+                is sold on this page while that subscription is live.
+              </p>
+            </section>
+          ) : null}
+
           <section className="plan-compare-grid" style={{ marginBottom: 18 }}>
             {Object.values(PLAN_ENTITLEMENTS).map(plan => {
               const checkout = PLAN_CHECKOUT_OPTIONS[plan.plan];
@@ -381,6 +411,8 @@ export default function PlanPage() {
                 // Not a dead card: say where the plan is bought instead of
                 // showing a button that must not exist here.
                 <span>Change this plan from NivaDesk inside your Shopify admin.</span>
+              ) : storeBilled ? (
+                <span>Change this plan in {storeBilledWhere}.</span>
               ) : checkout && purchasesEnabled ? (
                 <div style={{ display: "grid", gap: 8, width: "100%" }}>
                   <button

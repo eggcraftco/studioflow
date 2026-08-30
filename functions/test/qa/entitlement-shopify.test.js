@@ -67,4 +67,49 @@ assert(
   "the Shopify plan is preserved before the Demo downgrade is written");
 pass("preservation is decided before the downgrade");
 
+// 6. The other direction of the same promise: four rails sell the same plan
+//    and none of them can see the other three at the till, so the server is
+//    the only place a second charge can be refused.
+function lift(name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert(start > 0, `${name} is in stripeBilling.js`);
+  const rest = source.slice(start + 1);
+  return source.slice(start, start + 1 + rest.search(/\n  (?:function |const |async function )/));
+}
+const statuses = source.match(/const LIVE_BILLING_STATUSES = \[[^\]]*\];/);
+assert(statuses, "the live-status list is still there to lift");
+const billedByOther = new Function(
+  `${statuses[0]}\n${lift("workspacePlanBilledByOtherProvider")}\nreturn workspacePlanBilledByOtherProvider;`)();
+
+const stripePro = { billingPlan: "pro", billingStatus: "active", billingEffectiveProvider: "stripe" };
+assert.strictEqual(billedByOther(stripePro, "apple"), "stripe", "iOS is told Stripe already bills this workspace");
+assert.strictEqual(billedByOther(stripePro, "google"), "stripe");
+assert.strictEqual(billedByOther(stripePro, "stripe"), "", "changing tier on the SAME rail stays allowed");
+pass("a workspace paying on one rail cannot be sold a plan on another");
+
+// A grant nobody is charged for must never block a real purchase.
+for (const source_ of ["manual_workspace", "comp_review", "signup_trial", "entitlement_resolver"]) {
+  assert.strictEqual(
+    billedByOther({ billingPlan: "pro", billingStatus: "active", billingEffectiveProvider: source_ }, "stripe"), "",
+    `${source_} is a grant, not a till`);
+}
+pass("manual and complimentary grants do not block buying");
+
+// Nothing live, nothing to protect.
+assert.strictEqual(billedByOther({ billingPlan: "demo", billingStatus: "active", billingEffectiveProvider: "stripe" }, "apple"), "");
+assert.strictEqual(billedByOther({ billingPlan: "pro", billingStatus: "cancelled", billingEffectiveProvider: "stripe" }, "apple"), "");
+assert.strictEqual(billedByOther({ billingPlan: "pro", billingStatus: "expired", billingEffectiveProvider: "stripe" }, "apple"), "");
+pass("a demo, cancelled or expired workspace can still buy");
+
+// 7. Add-ons must survive the guard: they are sold on Stripe whatever rail the
+//    plan came from, and on the stores they share the plan's prepare call.
+assert(
+  /if \(item\.type === "plan"\) \{\s*refuseSecondTill\(companyData, "stripe"\);/.test(source),
+  "Stripe checkout guards plans only, never seats or storage");
+for (const rail of ["apple", "google"]) {
+  const re = new RegExp(`if \\(String\\(request\\.data\\?\\.purpose \\|\\| ""\\)\\.trim\\(\\) === "plan"\\) \\{\\s*refuseSecondTill\\(companyData, "${rail}"\\);`);
+  assert(re.test(source), `${rail} guards only what the client calls a plan`);
+}
+pass("storage and seat add-ons are never refused by the plan guard");
+
 console.log("\nAll entitlement/Shopify checks passed.");

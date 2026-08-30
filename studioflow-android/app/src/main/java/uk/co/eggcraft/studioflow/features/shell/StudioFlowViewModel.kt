@@ -900,7 +900,7 @@ class StudioFlowViewModel @JvmOverloads constructor(
     fun purchaseGoogleStorageAddon(activity: Activity, offer: StudioGoogleStorageOffer) {
         val workspace = mutableState.value.workspace ?: return
         viewModelScope.launch {
-            runCatching { repository.prepareGooglePlayPurchase(workspace) }
+            runCatching { repository.prepareGooglePlayPurchase(workspace, purpose = "storage_addon") }
                 .onSuccess { token ->
                     if (token.isEmpty()) {
                         mutableState.update { it.copy(errorMessage = "Could not start Google Play purchase.") }
