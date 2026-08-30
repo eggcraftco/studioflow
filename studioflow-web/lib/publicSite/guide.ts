@@ -28,6 +28,11 @@ import type { GuideNode } from "@/lib/publicSite/guideChrome";
 
 // --- English tree ----------------------------------------------------------
 
+// Edited this file? The assistants do not read it - they read
+// functions/assistant/guideCorpus.json, built from here. Run
+//   node functions/assistant/buildGuideCorpus.js
+// and commit what it writes, or the bot keeps answering from the old text.
+// functions/test/qa/guide-corpus-fresh.test.js fails if you forget.
 const TREE_EN: GuideNode[] = [
   {
     id: "getting-started",
