@@ -178,9 +178,28 @@ check(() => {
 }, "external ids are deterministic");
 
 check(() => {
-  assert.strictEqual(etsy.externalOrderKey("c/1", "2 2", "3.3"), "c1_22_33");
-  assert.strictEqual(etsy.safeIdPart("../../etc/passwd"), "etcpasswd");
+  assert.ok(!etsy.safeIdPart("../../etc/passwd").includes("/"), "no path separator survives");
+  assert.ok(!etsy.safeIdPart("a/b").includes("/"));
+  assert.strictEqual(etsy.safeIdPart("331234567"), "331234567", "an ordinary Etsy id passes through");
+  assert.strictEqual(etsy.safeIdPart("K3mQ8vZp2LxR7tYw1NcB4dFg6HjA"), "K3mQ8vZp2LxR7tYw1NcB4dFg6HjA",
+    "an ordinary Firebase uid passes through, so ids stay readable");
 }, "path characters cannot escape a document id");
+
+check(() => {
+  // Stripping alone is not injective: "A.B" and "AB" would strip to the same
+  // thing, and one workspace's rows would land on another's. Anything altered
+  // carries a digest of the original.
+  const pairs = [["a-b", "ab"], ["A.B", "AB"], ["comp any", "company"], ["x_1", "x1"], ["a_222", "a"]];
+  for (const [left, right] of pairs) {
+    assert.notStrictEqual(
+      etsy.externalOrderKey(left, "222", "333"),
+      etsy.externalOrderKey(right, "222", "333"),
+      `${left} and ${right} must not share an id`
+    );
+  }
+  // …and the separator cannot be shifted either.
+  assert.notStrictEqual(etsy.externalOrderKey("a", "222_333", "444"), etsy.externalOrderKey("a_222", "333", "444"));
+}, "two different workspaces can never share an external-order id");
 
 check(() => {
   assert.strictEqual(etsy.etsyUserIdFromToken("12345.abcdef"), "12345");

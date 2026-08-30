@@ -419,8 +419,26 @@ function verifyWebhookSignature({ rawBody, webhookId, webhookTimestamp, webhookS
 // database cannot hold a duplicate even if two workers race.
 // ---------------------------------------------------------------------------
 
+/**
+ * Make one component of a document id, injectively.
+ *
+ * Stripping characters is not enough on its own: "A.B" and "AB" strip to the
+ * same thing, and with "_" as the separator an id that itself contains "_"
+ * can shift the boundary between components. Either would let one workspace's
+ * external-order row land on another's — the isolation failure that matters
+ * most here.
+ *
+ * So anything that had to be changed or truncated carries a short digest of
+ * the original. Ordinary ids (Firebase UIDs, Etsy's numeric shop and receipt
+ * ids) are already plain alphanumerics and pass through unchanged, which keeps
+ * the common id readable.
+ */
 function safeIdPart(value) {
-  return String(value || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+  const raw = String(value || "");
+  const clean = raw.replace(/[^A-Za-z0-9]/g, "");
+  if (clean === raw && raw.length <= 48) return clean;
+  const digest = crypto.createHash("sha256").update(raw, "utf8").digest("hex").slice(0, 10);
+  return `${clean.slice(0, 48)}${digest}`;
 }
 
 function externalOrderKey(companyId, shopId, receiptId) {
