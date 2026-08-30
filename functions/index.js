@@ -30,6 +30,7 @@ const ROYALMAIL_CLIENT_SECRET = defineSecret("ROYALMAIL_CLIENT_SECRET");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const ETSY_KEYSTRING = defineSecret("ETSY_KEYSTRING");
 const ETSY_TOKEN_KEY = defineSecret("ETSY_TOKEN_KEY");
+const ETSY_WEBHOOK_SECRET = defineSecret("ETSY_WEBHOOK_SECRET");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
@@ -5696,6 +5697,18 @@ exports.previewEtsyImport = etsySyncExports.previewEtsyImport;
 exports.runEtsyImport = etsySyncExports.runEtsyImport;
 exports.syncEtsyNow = etsySyncExports.syncEtsyNow;
 exports.resolveEtsyCustomerMatch = etsySyncExports.resolveEtsyCustomerMatch;
+
+const { createEtsyWebhookFunction } = require("./etsyWebhook");
+exports.etsyWebhook = createEtsyWebhookFunction({
+  admin,
+  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY, ETSY_WEBHOOK_SECRET] }, handler),
+  etsy: etsyModule,
+  connect: etsyConnectExports._internal,
+  applyReceipt: etsySyncExports._internal.applyReceipt,
+  signingSecret: () => ETSY_WEBHOOK_SECRET.value(),
+  companySettingsDocRef,
+  resolveDefaultDeliveryTime
+});
 
 const { createProductionFunctions } = require("./production");
 const productionExports = createProductionFunctions({
