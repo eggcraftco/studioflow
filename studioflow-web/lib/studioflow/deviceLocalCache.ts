@@ -5,6 +5,10 @@
 // intentionally left alone.
 
 const DEVICE_LOCAL_WORKSPACE_KEYS = [
+  // The remembered UI language. Kept so the first paint after a reload is in
+  // the right language instead of English, and cleared here so the next person
+  // to sign in on this browser does not inherit the last one's language.
+  "nv_lang",
   "workspaceCardsLockedV1",
   "orderDetailHeaderShowDeliveryTime",
   "orderDetailHeaderShowUpcomingSchedule",
