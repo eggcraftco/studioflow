@@ -1061,7 +1061,9 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Turning them on, and off" },
       { kind: "bullets", items: [
-        "The first time you open NivaDesk on a device it asks that device for permission. Say no and nothing else changes; say yes later from the operating system's own notification settings for NivaDesk.",
+        "The first time you open NivaDesk on a device it asks that device for permission. Say no and nothing else changes.",
+        "There is no switch inside NivaDesk: notifications are turned on and off by the device itself, one device at a time. On iPhone and iPad, Settings ▸ Notifications ▸ NivaDesk. On Mac, System Settings ▸ Notifications ▸ NivaDesk. On Android, Settings ▸ Apps ▸ NivaDesk ▸ Notifications. In a browser, the site settings for nivadesk.app.",
+        "Turning them off on your phone leaves them on everywhere else you are signed in, which is usually what people want.",
         "A device registers itself when you sign in, and is removed when you sign out — so a phone you have signed out of stops receiving anything about that workspace.",
         "Notifications follow the workspace you are signed in to. They are not sent to people outside it, and a notification meant for particular people is sent only to them."
       ] }
@@ -2091,7 +2093,9 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Açmak ve kapatmak" },
       { kind: "bullets", items: [
-        "NivaDesk'i bir cihazda ilk açtığınızda o cihazdan izin ister. Hayır derseniz başka hiçbir şey değişmez; sonra açmak isterseniz işletim sisteminin NivaDesk için kendi bildirim ayarlarından açarsınız.",
+        "NivaDesk'i bir cihazda ilk açtığınızda o cihazdan izin ister. Hayır derseniz başka hiçbir şey değişmez.",
+        "NivaDesk'in içinde bir anahtar yoktur: bildirimleri cihazın kendisi açar ve kapatır, her cihaz için ayrı ayrı. iPhone ve iPad'de Ayarlar ▸ Bildirimler ▸ NivaDesk. Mac'te Sistem Ayarları ▸ Bildirimler ▸ NivaDesk. Android'de Ayarlar ▸ Uygulamalar ▸ NivaDesk ▸ Bildirimler. Tarayıcıda nivadesk.app için site ayarları.",
+        "Telefonunuzda kapatmanız, oturum açtığınız diğer yerlerde açık kalmasını engellemez; genelde istenen de budur.",
         "Cihaz, oturum açtığınızda kendini kaydeder ve çıkış yaptığınızda kaydı silinir — çıkış yaptığınız bir telefon o çalışma alanıyla ilgili hiçbir şey almayı bırakır.",
         "Bildirimler oturum açtığınız çalışma alanını izler. Dışarıdaki kişilere gönderilmez ve belirli kişiler için olan bir bildirim yalnızca onlara gider."
       ] }

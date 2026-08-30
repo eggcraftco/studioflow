@@ -3664,7 +3664,10 @@ function websiteAssistantGuideBlock(question) {
         // Exact-word matching scores those as nothing, every Turkish question
         // falls through to "send the whole guide", and one short question costs
         // fifty-five thousand characters. Compare stems as well as whole words.
-        const STEM = 6;
+        // Turkish verbs part company early: "kapatırım" and "kapatmak" agree
+        // only on "kapat", five letters. Six was long enough to keep them apart
+        // and lose the match the reader was asking for.
+        const STEM = 5;
         const stems = new Set(words.filter((w) => w.length >= STEM).map((w) => w.slice(0, STEM)));
         let score = 0;
         tokens.forEach((word) => {
@@ -3718,8 +3721,9 @@ function websiteAssistantSystemPrompt(language, guideBlock = "") {
     "Rules:",
     "1. Answer ONLY from the facts below. Never guess a price, a limit, a date or a feature.",
     "2. When the facts genuinely cover the question, write the answer in \"reply\" and set \"confident\": true.",
-    "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and make \"reply\" exactly this sentence, translated into the visitor's language: \"I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.\" Do not add anything else to it.",
+    "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and make \"reply\" exactly this sentence, translated into the visitor's language: \"I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.\" Do not add anything else to it. Translate it every time: leaving it in English in a conversation held in another language is a mistake, not a fallback.",
     "4. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it (that is still a confident answer).",
+    "3b. \"Their own account\" in rule 3 means their data or their state - what they were charged, why their sync failed, what is in their workspace. It does NOT mean a question phrased in the first person about how a feature works: \"how do I turn off notifications\" is a how-to question and the guide answers it. Do not go unconfident merely because a question says \"my\" or \"I\".",
     "4b. HOW-TO questions (which button, which menu, step by step): answer ONLY from the guide excerpts below. If no excerpt covers those steps, that is an unconfident case — never improvise steps, screens or menu paths, and never answer a how-to question by pointing at the ChatGPT app.",
     "5. Keep confident replies short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
     `6. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
@@ -3747,16 +3751,66 @@ async function websiteAssistantKey() {
   return { key: String(key || "").trim(), reason: key ? "ok" : "missing_key", companyId };
 }
 
+// A provider outage used to end as silence: the visitor's message sat in the
+// thread with no answer and no explanation, which reads as a broken product
+// and is invisible to us as well. Say something instead, and write the real
+// reason where an admin can read it.
+// The model was asked to translate the "not sure" sentence and kept answering a
+// Turkish conversation in English. It is one fixed sentence, so the server says
+// it rather than hoping: a visitor who wrote in Turkish is answered in Turkish
+// even when the answer is that we do not know.
+const WEBSITE_ASSISTANT_UNSURE = {
+  "English": "I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.",
+  "Türkçe": "Bu konuda tam emin değilim. Bu konuşmayı NivaDesk ekibine iletebilirim.",
+  "Deutsch": "Da bin ich mir nicht ganz sicher. Ich kann dieses Gespräch an das NivaDesk-Team weitergeben.",
+  "Français": "Je n\u2019en suis pas tout à fait sûr. Je peux transmettre cette conversation à l\u2019équipe NivaDesk.",
+  "Italiano": "Su questo non sono del tutto sicuro. Posso passare questa conversazione al team NivaDesk.",
+  "Español (Spanish)": "No estoy del todo seguro de esto. Puedo pasar esta conversación al equipo de NivaDesk.",
+  "Português": "Não tenho a certeza sobre isto. Posso passar esta conversa à equipa NivaDesk.",
+  "Русский (Russian)": "В этом я не совсем уверен. Я могу передать этот разговор команде NivaDesk.",
+  "日本語 (Japanese)": "これについては確かなことが言えません。この会話を NivaDesk チームにお渡しできます。",
+  "中文 (Chinese)": "这一点我不太确定。我可以把这段对话转交给 NivaDesk 团队。",
+  "العربية (Arabic)": "لست متأكدًا تمامًا من هذا. يمكنني تحويل هذه المحادثة إلى فريق NivaDesk.",
+  "हिन्दी (Hindi)": "इस बारे में मैं पूरी तरह निश्चित नहीं हूँ। मैं यह बातचीत NivaDesk टीम को भेज सकता हूँ।"
+};
+function websiteAssistantUnsureReply(language) {
+  return WEBSITE_ASSISTANT_UNSURE[String(language || "").trim()] || WEBSITE_ASSISTANT_UNSURE.English;
+}
+
+const WEBSITE_ASSISTANT_UNAVAILABLE_REPLY =
+  "I can\u2019t reach my answers right now. I can pass this conversation to the NivaDesk team.";
+async function recordWebsiteAssistantFailure(status, message) {
+  try {
+    await websiteAssistantConfigRef().set({
+      lastProviderErrorStatus: Number(status) || 0,
+      lastProviderError: String(message || "").slice(0, 400),
+      lastProviderErrorAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.warn("websiteAssistant could not record its own failure:", error?.message || error);
+  }
+}
+
 // Returns { reply, confident } — or null when the assistant should stay quiet
 // and leave the question for a person. "confident: false" is the structured
 // version of "I\u2019m not fully sure": the widget turns it into the
 // Send-to-team / Keep-chatting offer instead of letting the model bluff.
-async function websiteAssistantReply(ticketData = {}, history = []) {
+async function websiteAssistantReply(ticketData = {}, historyIn = []) {
+  let history = Array.isArray(historyIn) ? historyIn : [];
   const { key, reason } = await websiteAssistantKey();
   if (!key) {
     if (reason !== "disabled") console.warn("websiteAssistant skipped:", reason);
     return null;
   }
+
+  // Drop our own "not sure" turns before showing the model the conversation.
+  // They carry no information, and it anchors on them: once it had said it
+  // twice, it kept saying it even after the guide gained the answer - the same
+  // question in a fresh thread was answered perfectly.
+  const unsureSentences = new Set(Object.values(WEBSITE_ASSISTANT_UNSURE).map((s) => s.trim()));
+  unsureSentences.add(WEBSITE_ASSISTANT_UNAVAILABLE_REPLY.trim());
+  history = history.filter((item) => item.fromVisitor
+    || (!item.unsure && !unsureSentences.has(String(item.message || "").trim())));
 
   const lastVisitorMessage = [...history].reverse().find((item) => item.fromVisitor);
   const guideBlock = websiteAssistantGuideBlock(lastVisitorMessage ? lastVisitorMessage.message : "");
@@ -3783,7 +3837,8 @@ async function websiteAssistantReply(ticketData = {}, history = []) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error("websiteAssistant OpenAI error", response.status, payload?.error?.message || "");
-      return null;
+      await recordWebsiteAssistantFailure(response.status, payload?.error?.message || payload?.error?.code || "");
+      return { reply: WEBSITE_ASSISTANT_UNAVAILABLE_REPLY, confident: false };
     }
     const raw = String(payload?.choices?.[0]?.message?.content || "");
     let reply = "";
@@ -3798,10 +3853,14 @@ async function websiteAssistantReply(ticketData = {}, history = []) {
       reply = cleanSupportMultiline(raw, 3000);
     }
     if (!reply) return null;
+    // An unsure answer is one fixed sentence, so it is said in the visitor's
+    // language here instead of depending on the model to remember rule 3.
+    if (!confident) return { reply: websiteAssistantUnsureReply(ticketData.language), confident };
     return { reply, confident };
   } catch (error) {
     console.error("websiteAssistant request failed", error?.message || error);
-    return null;
+    await recordWebsiteAssistantFailure(0, error?.message || String(error));
+    return { reply: WEBSITE_ASSISTANT_UNAVAILABLE_REPLY, confident: false };
   }
 }
 
@@ -3815,6 +3874,11 @@ async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
       return {
         message: String(item.message || ""),
         fromVisitor: String(item.authorRole || "") === "visitor",
+        // Written when the reply was stored, so an unsure turn is recognised by
+        // the flag rather than by matching its wording - which fails against
+        // the free-form translations the model produced before the sentence
+        // became the server's.
+        unsure: item.assistantConfident === false,
         createdAtMillis: supportTimestampMillis(item.createdAt)
       };
     })
@@ -3907,7 +3971,13 @@ const APP_ASSISTANT_STOPWORDS = new Set([
   // chapters instead of the one that had the answer.
   "please", "answer", "answers", "reply", "explain", "tell", "show", "give",
   "now", "again", "also", "just", "some", "need", "want", "would", "could",
-  "should", "help", "thanks", "thank", "hello", "lütfen", "bana", "biraz"
+  "should", "help", "thanks", "thank", "hello", "lütfen", "bana", "biraz",
+  // Turkish question words carried no meaning and plenty of noise: "nasıl"
+  // ("how") appears in half the guide, so "Bildirimleri nasıl kapatırım?"
+  // ranked three unrelated chapters above the one titled Notifications.
+  "nasıl", "nasil", "nedir", "nerede", "nereden", "neden", "hangi", "kaç",
+  "için", "ile", "veya", "ama", "daha", "çok", "var", "yok", "olur", "yapılır",
+  "yapabilirim", "edebilirim", "istiyorum", "mümkün", "acaba"
 ]);
 
 function appAssistantTokens(text) {
@@ -4230,7 +4300,10 @@ exports.getWebsiteAssistantConfig = onCall({ region: "europe-west2" }, async (re
       visible: true,
       enabled: config.enabled === true,
       companyId: String(config.companyId || ""),
-      hasKey: Boolean(key)
+      hasKey: Boolean(key),
+      lastProviderError: String(config.lastProviderError || ""),
+      lastProviderErrorStatus: Number(config.lastProviderErrorStatus || 0),
+      lastProviderErrorAtMillis: supportTimestampMillis(config.lastProviderErrorAt)
     };
   } catch (error) {
     throw supportCallableInternalError("getWebsiteAssistantConfig", error);
