@@ -40,6 +40,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
@@ -620,6 +622,39 @@ fun NotesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 15.sp,
                     modifier = Modifier.weight(1f)
+                )
+                // The two shortcuts the Mac and iPhone composer has: a note that
+                // starts as a checklist, and one that starts with a picture.
+                Icon(
+                    Icons.Filled.Checklist,
+                    contentDescription = t("Checklist"),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(end = 18.dp)
+                        .clickable {
+                            editingNote = StudioKeepNote(
+                                id = UUID.randomUUID().toString(),
+                                text = "☐ ",
+                                createdAt = Date(),
+                                updatedAt = Date(),
+                                manualOrder = System.currentTimeMillis().toDouble()
+                            )
+                        }
+                )
+                Icon(
+                    Icons.Filled.Image,
+                    contentDescription = t("Image"),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(end = 18.dp)
+                        .clickable {
+                            editingNote = StudioKeepNote(
+                                id = UUID.randomUUID().toString(),
+                                createdAt = Date(),
+                                updatedAt = Date(),
+                                manualOrder = System.currentTimeMillis().toDouble()
+                            )
+                        }
                 )
                 Icon(Icons.Filled.Add, contentDescription = t("New Note"), tint = StudioBlue)
             }
@@ -1523,6 +1558,11 @@ private fun NoteEditorDialog(
     val colors = listOf("default", "red", "orange", "yellow", "green", "blue", "purple", "pink")
     AlertDialog(
         onDismissRequest = onDismiss,
+        // The platform default leaves a dialog about 40dp narrower than it needs
+        // here, which is what pushed the fourth Type chip onto a row of its own
+        // and squeezed every other row in the editor.
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.96f),
         title = { Text(if (note.isEmpty) t("New Note") else t("Edit Note"), fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
@@ -1563,7 +1603,14 @@ private fun NoteEditorDialog(
                                 // A team note's natural home is the whole workspace.
                                 if (value == "team") visibility = "workspace"
                             },
-                            label = { Text(t(label), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            label = {
+                                Text(t(label), fontSize = 11.5.sp, fontWeight = FontWeight.Bold,
+                                    maxLines = 1)
+                            },
+                            // Four chips at the default 16dp do not fit a phone
+                            // dialog, and "Team" dropped to a row of its own.
+                            modifier = Modifier.padding(0.dp),
+                            shape = RoundedCornerShape(9.dp)
                         )
                     }
                 }
@@ -1689,26 +1736,29 @@ private fun NoteEditorDialog(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(t("Reminder"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var datePickerOpen by remember { mutableStateOf(false) }
-                Row(
+                // A fixed Row squeezed the third chip until "Pick date" wrapped
+                // inside it and made the whole row twice as tall. It flows now,
+                // and no label ever takes a second line.
+                androidx.compose.foundation.layout.FlowRow(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     AssistChip(
                         onClick = { reminderDate = Date(System.currentTimeMillis() + 24L * 60 * 60 * 1000) },
-                        label = { Text(t("Tomorrow")) }
+                        label = { Text(t("Tomorrow"), fontSize = 12.sp, maxLines = 1) }
                     )
                     AssistChip(
                         onClick = { reminderDate = Date(System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000) },
-                        label = { Text(t("Next week")) }
+                        label = { Text(t("Next week"), fontSize = 12.sp, maxLines = 1) }
                     )
                     AssistChip(
                         onClick = { datePickerOpen = true },
-                        label = { Text(t("Pick date")) }
+                        label = { Text(t("Pick date"), fontSize = 12.sp, maxLines = 1) }
                     )
                     if (reminderDate != null) {
                         AssistChip(
                             onClick = { reminderDate = null },
-                            label = { Text("Clear") }
+                            label = { Text(t("Clear"), fontSize = 12.sp, maxLines = 1) }
                         )
                     }
                 }

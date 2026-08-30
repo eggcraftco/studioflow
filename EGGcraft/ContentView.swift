@@ -5171,7 +5171,7 @@ struct StudioKeepNotesView: View {
                                 saveComposerIfNeeded()
                             }
                         } label: {
-                            Image(systemName: "ellipsis.vertical")
+                            Image(systemName: "ellipsis")
                         }
                         .buttonStyle(.plain)
                         .help(keepShortcutText("More"))
@@ -7242,7 +7242,11 @@ struct StudioKeepNoteEditor: View {
 
 
     private var mobileEditorBottomBar: some View {
-        HStack(spacing: 20) {
+        // Four 34pt icons, a 54pt Done and six 20pt gaps plus 40pt of padding
+        // come to 350 of a 390pt phone, which left the timestamp about 40pt —
+        // so it wrapped to one character per line, grew the bar to half the
+        // screen, and pushed the delete menu off the end of it.
+        HStack(spacing: 12) {
             Button {
                 let copy = StudioKeepNote(
                     title: note.title.isEmpty ? "Copy" : "\(note.title) Copy",
@@ -7286,6 +7290,12 @@ struct StudioKeepNoteEditor: View {
                 .font(.system(size: 13.5, weight: .medium))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                // Never a second line: in a language whose word for "Edited" is
+                // longer this is the one thing on the bar that can give way.
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
 
             Spacer()
 
@@ -7295,7 +7305,7 @@ struct StudioKeepNoteEditor: View {
                     dismiss()
                 }
             } label: {
-                Image(systemName: "ellipsis.vertical")
+                Image(systemName: "ellipsis")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(.secondary)
                     .frame(width: 34, height: 34)
@@ -7312,7 +7322,7 @@ struct StudioKeepNoteEditor: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
             mobileEditorBackground
