@@ -130,7 +130,7 @@ export function RecipesPanel({
         ) : null}
       </div>
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       {loading ? (
         <p className="inventory-note">{t("Loading…")}</p>

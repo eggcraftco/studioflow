@@ -192,7 +192,7 @@ export function PurchasesPanel({
         </div>
       ) : null}
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       {loading ? (
         <p className="inventory-note">{t("Loading purchases…")}</p>
@@ -572,7 +572,7 @@ function NewPurchaseModal({
             <textarea className="input" rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
           </label>
 
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
 
         <div className="inventory-modal-foot">
@@ -694,7 +694,7 @@ function ReceiveLinesModal({
               </div>
             ))}
           </div>
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
         <div className="inventory-modal-foot">
           <span />
@@ -836,7 +836,7 @@ function MatchPaymentModal({
             </div>
           )}
 
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
         <div className="inventory-modal-foot">
           {purchase.bankTransactionId ? (

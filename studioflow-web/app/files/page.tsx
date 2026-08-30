@@ -536,7 +536,7 @@ export default function FilesPage() {
       {error ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
           <CardTitle icon="lock" eyebrow={t("File error")} title={t("Could not load client files")} />
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 
@@ -655,8 +655,8 @@ export default function FilesPage() {
             </p>
           )}
 
-          {uploadStatus ? <p style={{ color: "var(--muted)", margin: "14px 0 0", fontWeight: 800 }}>{uploadStatus}</p> : null}
-          {uploadError ? <p style={{ color: "var(--danger)", margin: "14px 0 0", fontWeight: 800 }}>{uploadError}</p> : null}
+          {uploadStatus ? <p style={{ color: "var(--muted)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadStatus)}</p> : null}
+          {uploadError ? <p style={{ color: "var(--danger)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadError)}</p> : null}
         </section>
       ) : null}
 
@@ -681,8 +681,8 @@ export default function FilesPage() {
                 <option value="size">Largest first</option>
               </select>
             </div>
-            {actionStatus ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 800 }}>{actionStatus}</p> : null}
-            {actionError ? <p style={{ color: "var(--danger)", margin: "10px 0 0", fontWeight: 800 }}>{actionError}</p> : null}
+            {actionStatus ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 800 }}>{t(actionStatus)}</p> : null}
+            {actionError ? <p style={{ color: "var(--danger)", margin: "10px 0 0", fontWeight: 800 }}>{t(actionError)}</p> : null}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {canUseClientFiles && files.length > 0 ? (

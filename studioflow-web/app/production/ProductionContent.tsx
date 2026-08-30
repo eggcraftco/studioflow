@@ -347,7 +347,7 @@ export function ProductionContent({
         </div>
       </header>
 
-      {notice ? <p className="production-notice">{notice}</p> : null}
+      {notice ? <p className="production-notice">{t(notice)}</p> : null}
 
       <div className="production-kpis">
         <KpiCard tone="blue" icon="▶" label={t("Active")} value={summary.active} />

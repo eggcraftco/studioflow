@@ -400,7 +400,7 @@ export function OpeningStockModal({
             </>
           ) : null}
 
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
 
         <div className="inventory-modal-foot">

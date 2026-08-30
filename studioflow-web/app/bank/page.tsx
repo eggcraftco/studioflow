@@ -1574,8 +1574,8 @@ function BankPageContent() {
         {!canViewBank ? (
           <p style={{ fontSize: 13, opacity: 0.75 }}>{t("Bank connections are managed by the workspace owner.")}</p>
         ) : null}
-        {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
-        {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+        {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{t(status)}</p> : null}
+        {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{t(error)}</p> : null}
         {rulePrompt ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, padding: "8px 12px", borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
             <span>{t("Always categorise")} <strong>"{rulePrompt.keyword}"</strong> {t("as")} <strong>{t(rulePrompt.category)}</strong>?</span>

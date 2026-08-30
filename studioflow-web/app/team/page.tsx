@@ -287,8 +287,8 @@ export default function TeamPage() {
               </button>
             </div>
           </form>
-          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{message}</p> : null}
-          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{error}</p> : null}
+          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{t(message)}</p> : null}
+          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{t(error)}</p> : null}
         </section>
         {!hasTeamPlan ? (
           <section className="card" style={{ padding: 22, maxWidth: 760 }}>
@@ -344,8 +344,8 @@ export default function TeamPage() {
               </button>
             </div>
           </form>
-          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{message}</p> : null}
-          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{error}</p> : null}
+          {message ? <p style={{ color: "var(--success)", marginTop: 16 }}>{t(message)}</p> : null}
+          {error ? <p style={{ color: "var(--danger)", marginTop: 16 }}>{t(error)}</p> : null}
         </section>
       </AppShell>
     );
@@ -440,7 +440,7 @@ export default function TeamPage() {
 
       {message ? (
         <section className="card" style={{ padding: 18, marginBottom: 18, background: "rgba(16,185,129,0.08)" }}>
-          <strong>{message}</strong>
+          <strong>{t(message)}</strong>
         </section>
       ) : null}
 
@@ -448,7 +448,7 @@ export default function TeamPage() {
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
           <div className="pill">{t("Team error")}</div>
           <h2 style={{ margin: "12px 0 6px" }}>{t("Could not complete Team Access action")}</h2>
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 

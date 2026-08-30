@@ -174,7 +174,7 @@ export default function AppHelpAssistant({
               maxLength={1000}
               required
             />
-            {error ? <p className="app-help-error">{error}</p> : null}
+            {error ? <p className="app-help-error">{t(error)}</p> : null}
             <button type="submit" className="button" disabled={busy}>
               {busy ? t("Asking...") : t("Ask")}
             </button>

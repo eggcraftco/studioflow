@@ -1582,7 +1582,7 @@ function OrderNoteEntry({
             {t("Cancel")}
           </button>
         </div>
-        {error ? <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{error}</div> : null}
+        {error ? <div style={{ marginTop: 6, fontSize: 12, color: "#dc2626" }}>{t(error)}</div> : null}
       </div>
     );
   }

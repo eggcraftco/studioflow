@@ -5723,7 +5723,7 @@ export function OrderDetailContent({
                   in the populated branch, so the outcome of the very first
                   "Create estimate" click — success or refusal — had nowhere to
                   render, and the card just blinked. */}
-              {estimateNotice ? <p className="estimate-card-note">{estimateNotice}</p> : null}
+              {estimateNotice ? <p className="estimate-card-note">{t(estimateNotice)}</p> : null}
               {!canSeeFinance ? (
                 <p className="estimate-card-note">Hidden on this workspace role.</p>
               ) : !currentEstimate ? (
@@ -5924,7 +5924,7 @@ export function OrderDetailContent({
                   </div>
                 ) : null}
 
-                {portalNotice ? <p className="portal-notice">{portalNotice}</p> : null}
+                {portalNotice ? <p className="portal-notice">{t(portalNotice)}</p> : null}
               </div>
 
               <div className="portal-section">
@@ -6428,8 +6428,8 @@ export function OrderDetailContent({
                 {!canUseCalendarExport ? (
                   <p className="app-calendar-status muted-copy">Available from NivaDesk Starter.</p>
                 ) : null}
-                {calendarStatus ? <p className="app-calendar-status success-copy">{calendarStatus}</p> : null}
-                {calendarError ? <p className="app-calendar-status layout-error">{calendarError}</p> : null}
+                {calendarStatus ? <p className="app-calendar-status success-copy">{t(calendarStatus)}</p> : null}
+                {calendarError ? <p className="app-calendar-status layout-error">{t(calendarError)}</p> : null}
               </div>
               <div className="app-card-divider" />
               <InlineValueRow
@@ -6611,8 +6611,8 @@ export function OrderDetailContent({
             {renderCardTitle(cardId)}
             {canSeeFinance ? (
               <>
-                {financeStatus ? <p className="layout-status finance-inline-message">{financeStatus}</p> : null}
-                {financeError ? <p className="layout-error finance-inline-message">{financeError}</p> : null}
+                {financeStatus ? <p className="layout-status finance-inline-message">{t(financeStatus)}</p> : null}
+                {financeError ? <p className="layout-error finance-inline-message">{t(financeError)}</p> : null}
                 <div className="app-card-panel app-financial-panel">
                   {canSeeAdvancedFinance ? (
                   <>
@@ -7075,8 +7075,8 @@ export function OrderDetailContent({
           <section key={cardId} className="card order-detail-card">
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-schedule-panel">
-              {scheduleStatus ? <p className="layout-status finance-inline-message">{scheduleStatus}</p> : null}
-              {scheduleError ? <p className="layout-error finance-inline-message">{scheduleError}</p> : null}
+              {scheduleStatus ? <p className="layout-status finance-inline-message">{t(scheduleStatus)}</p> : null}
+              {scheduleError ? <p className="layout-error finance-inline-message">{t(scheduleError)}</p> : null}
               <div className="app-schedule-quick-row">
                 <span>Quick Reminder</span>
                 <select
@@ -7304,8 +7304,8 @@ export function OrderDetailContent({
               ) : (
                 <div className="app-work-locked">Your workspace role can view Work Time but cannot edit it.</div>
               )}
-              {workTimeStatus ? <p className="file-action-status">{workTimeStatus}</p> : null}
-              {workTimeError ? <p className="file-action-error">{workTimeError}</p> : null}
+              {workTimeStatus ? <p className="file-action-status">{t(workTimeStatus)}</p> : null}
+              {workTimeError ? <p className="file-action-error">{t(workTimeError)}</p> : null}
               {groups.length === 0 ? (
                 <div className="app-work-empty">
                   <span>◷</span>
@@ -7455,8 +7455,8 @@ export function OrderDetailContent({
                 <StatCard label={t("Overdue")} value={overdueTasks.length} tone="gray" />
                 <StatCard label="Done" value={doneTasks.length} tone="green" />
               </div>
-              {todoStatus ? <p className="layout-status finance-inline-message">{todoStatus}</p> : null}
-              {todoError ? <p className="layout-error finance-inline-message">{todoError}</p> : null}
+              {todoStatus ? <p className="layout-status finance-inline-message">{t(todoStatus)}</p> : null}
+              {todoError ? <p className="layout-error finance-inline-message">{t(todoError)}</p> : null}
               <div className="app-todo-add-panel">
                 <div className="app-todo-add-row">
                   <input
@@ -7841,8 +7841,8 @@ export function OrderDetailContent({
                 </div>
               ) : null}
               {!canUseClientFiles ? <ClientFilesUpgradeHint /> : null}
-              {fileActionStatus ? <p className="file-action-status">{fileActionStatus}</p> : null}
-              {fileActionError ? <p className="file-action-error">{fileActionError}</p> : null}
+              {fileActionStatus ? <p className="file-action-status">{t(fileActionStatus)}</p> : null}
+              {fileActionError ? <p className="file-action-error">{t(fileActionError)}</p> : null}
               {clientFileItems.length === 0 ? (
                 <div className="app-client-files-empty">
                   <span>▱</span>
@@ -8634,8 +8634,8 @@ export function OrderDetailContent({
         </div>
       ) : null}
 
-      {orderActionError ? <p className="layout-error order-action-message">{orderActionError}</p> : null}
-      {inlineError ? <p className="layout-error order-action-message">{inlineError}</p> : null}
+      {orderActionError ? <p className="layout-error order-action-message">{t(orderActionError)}</p> : null}
+      {inlineError ? <p className="layout-error order-action-message">{t(inlineError)}</p> : null}
 
       <OrderEditModal
         order={order}
@@ -8868,8 +8868,8 @@ export function OrderDetailContent({
             </div>
 
             {savingLayout ? <p className="layout-status">Saving card layout...</p> : null}
-            {layoutStatus ? <p className="layout-status">{layoutStatus}</p> : null}
-            {layoutError ? <p className="layout-error">{layoutError}</p> : null}
+            {layoutStatus ? <p className="layout-status">{t(layoutStatus)}</p> : null}
+            {layoutError ? <p className="layout-error">{t(layoutError)}</p> : null}
           </section>
         </div>
       ) : null}
@@ -9081,7 +9081,7 @@ function OrderEditModal({
 
         {lockedMessage ? (
           <div className="mini-panel compact-mini-panel">
-            <p className="muted-copy" style={{ margin: 0 }}>{lockedMessage}</p>
+            <p className="muted-copy" style={{ margin: 0 }}>{t(lockedMessage)}</p>
           </div>
         ) : null}
 
@@ -9139,8 +9139,8 @@ function OrderEditModal({
             </label>
           ) : null}
 
-          {status ? <p className="layout-status">{status}</p> : null}
-          {error ? <p className="layout-error">{error}</p> : null}
+          {status ? <p className="layout-status">{t(status)}</p> : null}
+          {error ? <p className="layout-error">{t(error)}</p> : null}
 
           <div className="add-order-actions">
             <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>
@@ -9688,8 +9688,8 @@ function BlockHeadingsModal({
           {renderEditor()}
         </div>
 
-        {status ? <p className="layout-status">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {status ? <p className="layout-status">{t(status)}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
 
         <div className="add-order-actions">
           <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Close</button>

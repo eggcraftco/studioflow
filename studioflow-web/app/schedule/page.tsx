@@ -1220,8 +1220,8 @@ export default function SchedulePage() {
             </div>
           ) : null}
 
-          {scheduleStatus ? <p className="layout-status schedule-action-message">{scheduleStatus}</p> : null}
-          {scheduleError ? <p className="layout-error schedule-action-message">{scheduleError}</p> : null}
+          {scheduleStatus ? <p className="layout-status schedule-action-message">{t(scheduleStatus)}</p> : null}
+          {scheduleError ? <p className="layout-error schedule-action-message">{t(scheduleError)}</p> : null}
 
           {!teamMode && showScheduleGuide && canEditSchedule && scheduleGuideOpen ? (
             <div className="schedule-first-use-guide" role="note">
@@ -1491,7 +1491,7 @@ export default function SchedulePage() {
           ) : error ? (
             <section className="card app-card schedule-empty-card">
               <CardTitle icon="lock" eyebrow={t("Schedule error")} title={t("Could not load schedule")} />
-              <p className="layout-error">{error}</p>
+              <p className="layout-error">{t(error)}</p>
             </section>
           ) : visibleOrders.length === 0 && !loadingSchedule ? (
             <section className="card app-card schedule-empty-card">
@@ -1810,7 +1810,7 @@ function ScheduleTimelineRow({
           <strong>{titleForOrder(order)}</strong>
           <small>{designForOrder(order)}</small>
           <span className="schedule-order-meta">
-            <span className={statusClass}>{status}</span>
+            <span className={statusClass}>{t(status)}</span>
             <span>{shortDate(orderStartDate(order))} - {shortDate(orderDueDate(order))}</span>
             {countdown ? <span>{countdown}</span> : null}
           </span>

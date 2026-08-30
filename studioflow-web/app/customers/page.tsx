@@ -790,7 +790,7 @@ export default function CustomersPage() {
           {error ? (
             <div className="mini-panel compact-mini-panel">
               <CardTitle icon="lock" eyebrow={t("Customer error")} title={t("Could not load customers")} />
-              <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+              <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
             </div>
           ) : null}
 
@@ -825,8 +825,8 @@ export default function CustomersPage() {
         />
 
         <main className="customers-detail-pane">
-          {actionStatus ? <p className="layout-status customer-action-message">{actionStatus}</p> : null}
-          {actionError ? <p className="layout-error customer-action-message">{actionError}</p> : null}
+          {actionStatus ? <p className="layout-status customer-action-message">{t(actionStatus)}</p> : null}
+          {actionError ? <p className="layout-error customer-action-message">{t(actionError)}</p> : null}
 
           {selectedCustomer ? (
             <CustomerDetail
@@ -858,7 +858,7 @@ export default function CustomersPage() {
           mode={formMode}
           form={form}
           saving={savingCustomer}
-          error={actionError}
+          error={t(actionError)}
           onChange={setForm}
           onCancel={() => {
             if (!savingCustomer) setFormMode(null);
@@ -873,7 +873,7 @@ export default function CustomersPage() {
           right={selectedDuplicate.other}
           reason={selectedDuplicate.reason}
           merging={mergingCustomers}
-          error={actionError}
+          error={t(actionError)}
           canSeeFinance={canSeeFinance}
           moneySettings={moneySettings ?? ({} as StudioMoneySettings)}
           language={language}
@@ -1866,6 +1866,8 @@ function CustomerFormModal({
   onCancel: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const updateField = (field: keyof CustomerFormInput, value: string) => onChange({
     ...form,
     [field]: value,
@@ -1952,7 +1954,7 @@ function CustomerFormModal({
             <textarea className="input add-order-notes" value={form.notes} onChange={event => updateField("notes", event.target.value)} disabled={saving} />
           </label>
 
-          {error ? <p className="layout-error" style={{ margin: 0 }}>{error}</p> : null}
+          {error ? <p className="layout-error" style={{ margin: 0 }}>{t(error)}</p> : null}
 
           <div className="add-order-actions">
             <button className="button secondary" type="button" disabled={saving} onClick={onCancel}>Cancel</button>
@@ -2077,7 +2079,7 @@ function MergeCustomersModal({
           {countLabel(other.orderCount, "order", "orders", t)} → <strong>{customerDisplayName(primary.name)}</strong>
         </p>
 
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
 
         <div className="add-order-actions" style={{ display: "flex", gap: 10 }}>
           <button className="button secondary" type="button" onClick={onClose} disabled={merging}>{t("Cancel")}</button>

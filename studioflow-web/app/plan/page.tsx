@@ -25,6 +25,7 @@ import {
   resyncStripeWorkspaceEntitlements,
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
+import { studioT } from "@/lib/studioflow/language";
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
   orders_read: "View existing orders",
@@ -108,7 +109,8 @@ function showInternalBillingControls(email: string) {
 
 export default function PlanPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [counts, setCounts] = useState<DashboardCounts | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -277,7 +279,7 @@ export default function PlanPage() {
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
           <div className="pill">Billing error</div>
           <h2 style={{ margin: "12px 0 6px" }}>Could not load plan information</h2>
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 
@@ -323,7 +325,7 @@ export default function PlanPage() {
                   <span className="pill">Owner only</span>
                 ) : null}
               </div>
-              {billingMessage ? <p style={{ color: "var(--muted)", marginBottom: 0 }}>{billingMessage}</p> : null}
+              {billingMessage ? <p style={{ color: "var(--muted)", marginBottom: 0 }}>{t(billingMessage)}</p> : null}
               <p style={{ color: "var(--muted)", marginBottom: 0, fontSize: 13 }}>
                 Billing provider: {workspace.billingEffectiveProvider || "none"} · Subscription: {workspace.billingSubscriptionId || "not connected"}
               </p>

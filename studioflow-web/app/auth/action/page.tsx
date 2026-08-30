@@ -13,6 +13,8 @@ import {
   verifyPasswordResetCode
 } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 type Phase =
   | "working"
@@ -68,6 +70,8 @@ async function performAuthAction(mode: string, oobCode: string): Promise<ActionR
 }
 
 function AuthActionContent() {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const params = useSearchParams();
   const mode = params.get("mode") ?? "";
   const oobCode = params.get("oobCode") ?? "";
@@ -176,7 +180,7 @@ function AuthActionContent() {
                 autoComplete="new-password"
                 required
               />
-              {message ? <p style={{ color: "var(--danger)", margin: 0, fontSize: 13 }}>{message}</p> : null}
+              {message ? <p style={{ color: "var(--danger)", margin: 0, fontSize: 13 }}>{t(message)}</p> : null}
               <button className="button" type="submit" disabled={busy}>
                 {busy ? "Saving…" : "Save new password"}
               </button>
@@ -206,7 +210,7 @@ function AuthActionContent() {
           <>
             <div style={{ fontSize: 40 }} aria-hidden="true">⚠️</div>
             <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>Link problem</h1>
-            <p style={{ color: "var(--muted)", marginBottom: 22 }}>{message}</p>
+            <p style={{ color: "var(--muted)", marginBottom: 22 }}>{t(message)}</p>
             {goToLogin}
           </>
         ) : null}

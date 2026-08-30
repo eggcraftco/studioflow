@@ -201,7 +201,7 @@ export function CategoriesPanel({
         ) : null}
       </header>
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       {orphans.length > 0 ? (
         <p className="inv-categories-orphans">

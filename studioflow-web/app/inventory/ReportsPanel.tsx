@@ -103,7 +103,7 @@ export function ReportsPanel({
         </div>
       </div>
 
-      {error ? <p className="inventory-notice">{error}</p> : null}
+      {error ? <p className="inventory-notice">{t(error)}</p> : null}
 
       {report ? (
         <>

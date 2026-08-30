@@ -140,7 +140,7 @@ export function VerifyEmailBanner({ user }: { user: User }) {
       <button type="button" onClick={() => void check()} disabled={busy} style={{ border: 0, background: "transparent", fontWeight: 800, cursor: "pointer", color: "#7a5200", textDecoration: "underline" }}>
         {t("I've verified — continue")}
       </button>
-      {status ? <span style={{ fontWeight: 800 }}>{status}</span> : null}
+      {status ? <span style={{ fontWeight: 800 }}>{t(status)}</span> : null}
       <button
         type="button"
         aria-label={t("Collapse")}
@@ -164,6 +164,8 @@ export function VerifyEmailBanner({ user }: { user: User }) {
 }
 
 export function VerifyEmailScreen({ user }: { user: User }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -209,7 +211,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
         <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 20px" }}>
           Click the link in that email, then come back here.
         </p>
-        {status ? <p style={{ fontSize: 13, fontWeight: 650, margin: "0 0 14px" }}>{status}</p> : null}
+        {status ? <p style={{ fontSize: 13, fontWeight: 650, margin: "0 0 14px" }}>{t(status)}</p> : null}
         <div style={{ display: "grid", gap: 10 }}>
           <button className="button" type="button" onClick={() => void checkVerified()} disabled={busy}>
             I&apos;ve verified, continue

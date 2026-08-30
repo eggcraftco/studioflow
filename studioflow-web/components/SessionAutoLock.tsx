@@ -189,7 +189,7 @@ export function SessionAutoLock() {
           </button>
         ) : null}
 
-        {error ? <p className="session-lock-error">{error}</p> : null}
+        {error ? <p className="session-lock-error">{t(error)}</p> : null}
 
         <button className="session-lock-signout" type="button" onClick={handleSignOut} disabled={busy}>
           {t("Sign out instead")}

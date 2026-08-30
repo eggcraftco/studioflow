@@ -9,6 +9,8 @@ import {
   type ExportRangePreset,
   type ExportTemplate
 } from "@/lib/studioflow/exportOrders";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 type TemplateOption = {
   id: ExportTemplate;
@@ -62,6 +64,8 @@ export function ExportOrdersPanel({
   canSeeFinance: boolean;
   disabled?: boolean;
 }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const templates = useMemo(() => TEMPLATES.filter((tpl) => canSeeFinance || !tpl.finance), [canSeeFinance]);
   const [template, setTemplate] = useState<ExportTemplate>("finance");
   // The dashboard's Export CSV button arrives with the period the reader was
@@ -216,8 +220,8 @@ export function ExportOrdersPanel({
         {busy ? "Preparing…" : "Download CSV"}
       </button>
 
-      {status ? <p style={{ margin: "14px 0 0", color: "var(--muted)", fontWeight: 800 }}>{status}</p> : null}
-      {error ? <p style={{ margin: "14px 0 0", color: "var(--danger, #c0392b)", fontWeight: 800 }}>{error}</p> : null}
+      {status ? <p style={{ margin: "14px 0 0", color: "var(--muted)", fontWeight: 800 }}>{t(status)}</p> : null}
+      {error ? <p style={{ margin: "14px 0 0", color: "var(--danger, #c0392b)", fontWeight: 800 }}>{t(error)}</p> : null}
     </div>
   );
 }

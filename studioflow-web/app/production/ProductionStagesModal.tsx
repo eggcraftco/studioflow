@@ -155,7 +155,7 @@ export function ProductionStagesModal({
           ＋ {t("Add column")}
         </button>
 
-        {error ? <p className="production-notice">{error}</p> : null}
+        {error ? <p className="production-notice">{t(error)}</p> : null}
 
         <div className="production-modal-actions">
           <button type="button" className="production-btn" onClick={onClose} disabled={busy}>{t("Cancel")}</button>

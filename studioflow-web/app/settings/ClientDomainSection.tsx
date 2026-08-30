@@ -100,8 +100,8 @@ export function ClientDomainSection({
         {t("Your customers' links — order tracking, estimates and every future customer page — can carry YOUR name instead of ours.")}
       </p>
 
-      {status ? <p style={{ margin: 0, fontSize: 13, color: "#16a34a", fontWeight: 600 }}>✓ {status}</p> : null}
-      {error ? <p style={{ margin: 0, fontSize: 13, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+      {status ? <p style={{ margin: 0, fontSize: 13, color: "#16a34a", fontWeight: 600 }}>✓ {t(status)}</p> : null}
+      {error ? <p style={{ margin: 0, fontSize: 13, color: "#dc2626", fontWeight: 600 }}>{t(error)}</p> : null}
 
       {/* ---- Level 1: the free subdomain --------------------------------- */}
       <section className="mini-panel" style={{ display: "grid", gap: 10, padding: 16 }}>

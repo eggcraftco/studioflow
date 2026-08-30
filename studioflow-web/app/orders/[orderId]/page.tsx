@@ -18,11 +18,13 @@ import {
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
 import { OrderDetailContent } from "../OrderDetailContent";
+import { studioT } from "@/lib/studioflow/language";
 
 export default function OrderDetailPage() {
   const params = useParams<{ orderId: string }>();
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [order, setOrder] = useState<OrderDetail | null>(null);
@@ -135,7 +137,7 @@ export default function OrderDetailPage() {
       {error ? (
         <section className="card order-error-card">
           <CardTitle icon="lock" eyebrow="Order error" title="Could not load order" />
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 

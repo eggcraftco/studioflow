@@ -327,7 +327,7 @@ export default function HomePage() {
           </div>
         </header>
 
-        {saveError ? <p className="home-save-error" role="alert">{saveError}</p> : null}
+        {saveError ? <p className="home-save-error" role="alert">{t(saveError)}</p> : null}
 
         {customising ? (
           <div className="home-customise-bar">

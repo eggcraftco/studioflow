@@ -564,7 +564,7 @@ function WorkspaceOnboardingScreen({
               {t("Skip for now")}
             </button>
           </div>
-          {error ? <p className="layout-error">{error}</p> : null}
+          {error ? <p className="layout-error">{t(error)}</p> : null}
         </div>
 
         <p className="workspace-onboarding-footer">
@@ -1892,7 +1892,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             t={t}
             language={language}
             saving={onboardingSaving}
-            error={onboardingError}
+            error={t(onboardingError)}
             onFinish={(answers) => void completeOnboardingWizard(answers)}
             onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
             onConnect={(answers, href) => void connectFromOnboarding(answers, href)}
@@ -2376,7 +2376,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <div className="app-shell-scroll-area">
             {orderCreateError ? (
               <p className="layout-error toolbar-action-message">
-                {orderCreateError}
+                {t(orderCreateError)}
               </p>
             ) : null}
             {children}
