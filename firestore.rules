@@ -527,6 +527,33 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Push tokens. A token is the address of one person's phone, and members
+    // share a workspace, not each other's devices: under the wildcard any member
+    // could read every colleague's token or delete it and silence their alerts.
+    //
+    // Nobody reads this collection from a client - the server sends the pushes
+    // and reads with admin rights, which rules do not apply to - so reads are
+    // closed outright. Writes are allowed only for the row carrying your own
+    // uid, which is the field all four apps already write, so registering and
+    // signing out keep working exactly as they did.
+    match /companies/{companyId}/deviceTokens/{tokenId} {
+      allow read: if false;
+      allow create: if signedIn()
+        && canReadCompany(companyId)
+        && request.resource.data.userId == request.auth.uid;
+      // Update has to ask TWO questions, and the first one is the one that
+      // matters: a merge write carries the merged result, so checking only what
+      // is being written let a member set userId to their own and take over a
+      // colleague's row. Own it first, and still own it afterwards.
+      allow update: if signedIn()
+        && canReadCompany(companyId)
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn()
+        && canReadCompany(companyId)
+        && resource.data.userId == request.auth.uid;
+    }
+
     // The connection trail. Every sibling bank collection was already excluded
     // from the wildcard above; this one was missed, which left an audit log any
     // member could rewrite. Android reads it in the Banking screen, so it stays
@@ -680,6 +707,7 @@ service cloud.firestore {
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
+        && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
         && canReadCompany(companyId);
@@ -717,6 +745,7 @@ service cloud.firestore {
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
         && collectionId != 'bankAuditLog'
+        && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
         && canWriteCompanyData(companyId);
