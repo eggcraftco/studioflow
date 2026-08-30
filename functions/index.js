@@ -4042,9 +4042,14 @@ function appAssistantRelevantSections(question, limit = 4) {
     return { section, score };
   });
 
-  const ranked = scored
-    .filter((item) => item.score >= 2)
-    .sort((a, b) => b.score - a.score)
+  const sortedByScore = scored.filter((item) => item.score >= 2).sort((a, b) => b.score - a.score);
+  // Keep the chapters that are actually about the question. A chapter scoring
+  // 3 next to one scoring 14 is noise riding along on a shared word, and it
+  // shows: the answer cited "What your setup answers change" for a question
+  // about counting stock. Half the leader's score is the cut.
+  const leadScore = sortedByScore.length ? sortedByScore[0].score : 0;
+  const ranked = sortedByScore
+    .filter((item) => item.score * 2 >= leadScore)
     .slice(0, limit);
   const matched = ranked.map((item) => item.section);
 

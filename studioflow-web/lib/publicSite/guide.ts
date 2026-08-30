@@ -722,13 +722,13 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Printing a QR label for an item" },
       { kind: "bullets", items: [
-        "Every item can print a QR label to stick on the tray, box or bag it lives in.",
+        "Open the item in Inventory and press Label; the label sheet opens with Print label on it. Stick it on the tray, box or bag the item lives in.",
         "The code is a link, not just a number: scanning it with any phone camera opens that item in NivaDesk, so whoever is standing at the shelf sees the stock figure, the location and the photos without searching for it.",
         "Scanning works for anyone signed in to the workspace; someone who is not signed in is asked to sign in first."
       ] },
       { kind: "sub", text: "Stocktake: counting what is really on the shelf" },
       { kind: "bullets", items: [
-        "A stocktake walks you through counting, one item at a time, and shows the counted figure beside the figure NivaDesk holds.",
+        "It lives under Inventory ▸ Stocktake. Start a count opens one; each item then has a Count box for what you actually found, beside the figure NivaDesk holds.",
         "Nothing changes until you finish the count. When you do, every difference is written to the movement ledger as a correction, with who counted it and when — so the stock figure and the audit trail can never disagree.",
         "You can count part of the shelf: filter to a category or a location and stocktake only that.",
         "The ledger keeps the old figure too, so a miscount can be traced and corrected rather than argued about."
@@ -1754,13 +1754,13 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Bir ürün için QR etiketi yazdırma" },
       { kind: "bullets", items: [
-        "Her ürün için, durduğu tepsiye, kutuya veya poşete yapıştırılacak bir QR etiketi yazdırılabilir.",
+        "Ürünü Envanter'de açın ve Label (Etiket) düğmesine basın; açılan etiket sayfasında Print label (Etiketi yazdır) vardır. Ürünün durduğu tepsiye, kutuya veya poşete yapıştırın.",
         "Kod yalnızca bir numara değil, bir bağlantıdır: herhangi bir telefon kamerasıyla okutulduğunda o ürünü NivaDesk'te açar; rafın başındaki kişi aramaya gerek kalmadan stok sayısını, konumu ve fotoğrafları görür.",
         "Okutma, çalışma alanında oturum açmış herkes için çalışır; oturum açmamış birinden önce giriş yapması istenir."
       ] },
       { kind: "sub", text: "Sayım: rafta gerçekte ne olduğunu saymak" },
       { kind: "bullets", items: [
-        "Sayım sizi ürün ürün ilerletir ve saydığınız adedi NivaDesk'in tuttuğu adedin yanında gösterir.",
+        "Envanter ▸ Sayım (Stocktake) altındadır. \"Start a count\" bir sayım açar; her ürünün yanında gerçekte bulduğunuz adedi yazacağınız bir Count kutusu ve NivaDesk'in tuttuğu adet yan yana durur.",
         "Sayımı bitirene kadar hiçbir şey değişmez. Bitirdiğinizde her fark, kimin ne zaman saydığıyla birlikte hareket defterine bir düzeltme olarak yazılır — böylece stok sayısı ile denetim izi asla birbirini tutmazlık edemez.",
         "Rafın bir bölümünü sayabilirsiniz: bir kategoriye veya konuma göre süzüp yalnızca onu sayın.",
         "Defter eski adedi de saklar; yanlış bir sayım tartışılmak yerine izlenip düzeltilebilir."
