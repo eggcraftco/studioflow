@@ -2104,9 +2104,9 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
       ) : null}
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Lite") : t("Workflow settings are read-only")} />
+          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Starter") : t("Workflow settings are read-only")} />
           <p className="muted-copy">
-            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Lite.") : t("Your current workspace role cannot edit workflow settings.")}
+            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Starter.") : t("Your current workspace role cannot edit workflow settings.")}
           </p>
         </section>
       ) : null}

@@ -7075,7 +7075,7 @@ private fun AdminInsightsDetail() {
         loading = false
     }
 
-    val planLabels = mapOf("demo" to "Free", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+    val planLabels = mapOf("demo" to "Free", "lifetime_lite" to "Starter", "pro_monthly" to "Pro", "team_monthly" to "Team")
     val planColors = mapOf(
         "demo" to Color(0xFF8A5CF6),
         "lifetime_lite" to Color(0xFF0A84FF),
@@ -7192,7 +7192,7 @@ private fun AdminInsightsDetail() {
 
 // --- NivaDesk admin: top-level Insights hub with left sidebar ---------------
 
-private val aiHubPlanLabels = mapOf("demo" to "Free", "lifetime_lite" to "Lite", "pro_monthly" to "Pro", "team_monthly" to "Team")
+private val aiHubPlanLabels = mapOf("demo" to "Free", "lifetime_lite" to "Starter", "pro_monthly" to "Pro", "team_monthly" to "Team")
 private val aiHubPlanColors = mapOf(
     "demo" to Color(0xFF8A5CF6),
     "lifetime_lite" to Color(0xFF0A84FF),

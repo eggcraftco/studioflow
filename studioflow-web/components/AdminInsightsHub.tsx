@@ -1344,7 +1344,7 @@ type AdminInsights = {
 
 const ADMIN_PLAN_LABELS: Record<string, string> = {
   demo: "Free",
-  lifetime_lite: "Lite",
+  lifetime_lite: "Starter",
   pro_monthly: "Pro",
   team_monthly: "Team"
 };

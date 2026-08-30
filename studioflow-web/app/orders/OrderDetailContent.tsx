@@ -2612,7 +2612,7 @@ export function OrderDetailContent({
     setCalendarError(null);
 
     if (!canUseCalendarExport) {
-      setCalendarError("Apple Calendar export is available from NivaDesk Lite.");
+      setCalendarError("Apple Calendar export is available from NivaDesk Starter.");
       return;
     }
 
@@ -3022,7 +3022,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from NivaDesk Lite.");
+      setLayoutError("Card customization is available from NivaDesk Starter.");
       return;
     }
     if (!canEditCardLayout) {
@@ -3411,7 +3411,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from NivaDesk Lite.");
+      setLayoutError("Card customization is available from NivaDesk Starter.");
       return;
     }
     if (!canEditOrderFully) {
@@ -3450,7 +3450,7 @@ export function OrderDetailContent({
     setLayoutStatus(null);
 
     if (!canCustomizeCards) {
-      setLayoutError("Card customization is available from NivaDesk Lite.");
+      setLayoutError("Card customization is available from NivaDesk Starter.");
       return;
     }
     if (!canEditOrderFully) {
@@ -4761,7 +4761,7 @@ export function OrderDetailContent({
     setTodoError(null);
 
     if (!canUseCalendarExport) {
-      setTodoError("Apple Calendar and Reminders are available from NivaDesk Lite.");
+      setTodoError("Apple Calendar and Reminders are available from NivaDesk Starter.");
       return;
     }
 
@@ -5221,7 +5221,7 @@ export function OrderDetailContent({
     const locked = !canEditCardLayout || !layoutReady;
     const headingAvailable = WEB_BLOCK_HEADING_CARD_IDS.has(cardId);
     const lockedNote = !canCustomizeCards
-      ? "Card customization is available from NivaDesk Lite."
+      ? "Card customization is available from NivaDesk Starter."
       : !canEditCardLayout
         ? "Your workspace role cannot edit card layout."
         : "Card layout is loading.";
@@ -6353,7 +6353,7 @@ export function OrderDetailContent({
                 />
               </div>
             ) : (
-              <LockedInline title={t("Materials & Inventory locked")} note={t("Materials cards are available from NivaDesk Lite.")} />
+              <LockedInline title={t("Materials & Inventory locked")} note={t("Materials cards are available from NivaDesk Starter.")} />
             )}
           </section>
         );
@@ -6426,7 +6426,7 @@ export function OrderDetailContent({
                 </button>
                 <p>Downloads an all-day calendar file from the created date to the delivery due date.</p>
                 {!canUseCalendarExport ? (
-                  <p className="app-calendar-status muted-copy">Available from NivaDesk Lite.</p>
+                  <p className="app-calendar-status muted-copy">Available from NivaDesk Starter.</p>
                 ) : null}
                 {calendarStatus ? <p className="app-calendar-status success-copy">{calendarStatus}</p> : null}
                 {calendarError ? <p className="app-calendar-status layout-error">{calendarError}</p> : null}
@@ -7154,7 +7154,7 @@ export function OrderDetailContent({
                   + Add Reminder
                 </button>
                 {!canNotifyScheduleItems ? (
-                  <p className="muted-copy app-schedule-note-copy">Calendar and reminder notifications are available from NivaDesk Lite.</p>
+                  <p className="muted-copy app-schedule-note-copy">Calendar and reminder notifications are available from NivaDesk Starter.</p>
                 ) : null}
               </div>
               <div className="app-schedule-list-block">
@@ -7412,7 +7412,7 @@ export function OrderDetailContent({
                 </div>
               </div>
             ) : (
-              <LockedInline title={t("History / Log locked")} note={t("History cards are available from NivaDesk Lite.")} />
+              <LockedInline title={t("History / Log locked")} note={t("History cards are available from NivaDesk Starter.")} />
             )}
           </section>
         );
@@ -8047,7 +8047,7 @@ export function OrderDetailContent({
         ) : (
           <span
             className="order-card-layout-lock-handle"
-            title={cardsLocked ? t("Layout locked") : t("Card customization is available from NivaDesk Lite.")}
+            title={cardsLocked ? t("Layout locked") : t("Card customization is available from NivaDesk Starter.")}
             aria-label={cardsLocked ? t("Layout locked") : t("Card customization locked")}
           >
             <CardIconGlyph icon="lock" />
@@ -8785,7 +8785,7 @@ export function OrderDetailContent({
 
             {!canCustomizeCards ? (
               <div className="mini-panel locked-panel compact-mini-panel">
-                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Card customization is available from NivaDesk Lite.")} />
+                <CardTitle icon="lock" eyebrow={t("Locked")} title={t("Card customization is available from NivaDesk Starter.")} />
               </div>
             ) : null}
 
@@ -9347,7 +9347,7 @@ function BlockHeadingsModal({
     setStatus("");
 
     if (!canSave) {
-      setError(canCustomizeCards ? "Your workspace role cannot edit block headings." : "Card customization is available from NivaDesk Lite.");
+      setError(canCustomizeCards ? "Your workspace role cannot edit block headings." : "Card customization is available from NivaDesk Starter.");
       return;
     }
 
@@ -9479,7 +9479,7 @@ function BlockHeadingsModal({
 
   function renderEditor() {
     if (!canCustomizeCards) {
-      return <LockedInline title={t("Card customization is available from NivaDesk Lite.")} note={t("Demo / Free workspaces cannot edit block headings.")} />;
+      return <LockedInline title={t("Card customization is available from NivaDesk Starter.")} note={t("Demo / Free workspaces cannot edit block headings.")} />;
     }
 
     if (!supported) {

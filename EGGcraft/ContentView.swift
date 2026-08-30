@@ -17053,7 +17053,7 @@ struct SchedulePlannerView: View {
         case .demo:
             return t("Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
         case .lifetimeLite:
-            return t("Lite includes personal weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.", lang: seciliDil)
+            return t("Starter includes personal weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.", lang: seciliDil)
         case .proMonthly:
             return t("Pro includes full personal schedule planning with advanced filters and long-range views.", lang: seciliDil)
         case .teamMonthly:

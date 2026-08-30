@@ -1819,7 +1819,7 @@ struct DashboardView: View {
                 Spacer()
 
                 if !canSeeAdvancedFinance {
-                    Text("Lite")
+                    Text("Starter")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.blue)
                         .padding(.horizontal, 7)

@@ -9221,7 +9221,7 @@ struct LandingStatsAdminView: View {
 
 // MARK: - NivaDesk admin: cross-workspace Admin Insights (drill-in pages)
 
-private let aiPlanLabels: [String: String] = ["demo": "Free", "lifetime_lite": "Lite", "pro_monthly": "Pro", "team_monthly": "Team"]
+private let aiPlanLabels: [String: String] = ["demo": "Free", "lifetime_lite": "Starter", "pro_monthly": "Pro", "team_monthly": "Team"]
 private let aiPlanColors: [String: Color] = ["demo": .purple, "lifetime_lite": .blue, "pro_monthly": .green, "team_monthly": .orange]
 private let aiPlanOrder = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
 

@@ -77,7 +77,7 @@ export const WEB_BLOCK_HEADING_CARD_IDS = new Set<OrderDetailCardId>([
 
 function friendlyBlockHeadingError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("NivaDesk Lite")) return "Card customization is available from NivaDesk Lite.";
+  if (message.includes("NivaDesk Starter")) return "Card customization is available from NivaDesk Starter.";
   if (/permission|role|denied/i.test(message)) return "Your workspace role cannot edit block headings.";
   if (/not available on web/i.test(message)) return "Block heading editing for this card is not available on web yet.";
   return message || "Could not save block headings. Please try again.";

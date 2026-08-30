@@ -6069,7 +6069,7 @@ struct SiparisDetayView: View {
 
     private func addAppleReminder(for item: OrderToDoItem) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            toDoMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            toDoMessage = t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
             return
         }
         #if canImport(EventKit)
@@ -7337,7 +7337,7 @@ struct SiparisDetayView: View {
 
     private func addAppleReminder(for item: ScheduleAlertItem) {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            scheduleMessage = lt("Reminder saved, but Apple Reminder could not be added.") + " " + t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
             return
         }
         #if canImport(EventKit)
@@ -10153,7 +10153,7 @@ struct SiparisDetayView: View {
 
     private func saveAppleCalendarEvent() {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
             return
         }
         calendarMessage = "Updating Apple Calendar..."
@@ -10189,7 +10189,7 @@ struct SiparisDetayView: View {
 
     private func removeAppleCalendarEvent() {
         guard authVM.currentPlanEntitlements.calendarRemindersEnabled else {
-            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil)
+            calendarMessage = t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil)
             return
         }
         guard let eventId = appleCalendarEventId else { return }
@@ -10224,7 +10224,7 @@ struct SiparisDetayView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             if !authVM.currentPlanEntitlements.calendarRemindersEnabled {
-                Label(t("Apple Calendar and Reminders are available from NivaDesk Lite.", lang: seciliDil), systemImage: "lock.fill")
+                Label(t("Apple Calendar and Reminders are available from NivaDesk Starter.", lang: seciliDil), systemImage: "lock.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(studioWarningOrange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -14090,7 +14090,7 @@ struct DetayKarti<Content: View>: View {
                 Label(t("Reset", lang: seciliDil), systemImage: "arrow.counterclockwise")
             }
         } else {
-            Label(t("Card moving, resizing and colours are available from NivaDesk Lite.", lang: seciliDil), systemImage: "lock.fill")
+            Label(t("Card moving, resizing and colours are available from NivaDesk Starter.", lang: seciliDil), systemImage: "lock.fill")
         }
     }
 
@@ -14409,7 +14409,7 @@ struct DetayKarti<Content: View>: View {
                 Divider().padding(.horizontal, 6).padding(.vertical, 6)
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "lock.fill").font(.system(size: 11)).foregroundColor(.secondary)
-                    Text(t("Card moving, resizing and colours are available from NivaDesk Lite.", lang: seciliDil))
+                    Text(t("Card moving, resizing and colours are available from NivaDesk Starter.", lang: seciliDil))
                         .font(.system(size: 11)).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
