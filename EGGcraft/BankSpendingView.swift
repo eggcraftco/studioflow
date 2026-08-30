@@ -274,7 +274,7 @@ enum BankTab: String, CaseIterable, Identifiable {
     }
 }
 
-enum BankPeriodMode: String { case week, month, year }
+enum BankPeriodMode: String { case week, month, year, custom }
 enum BankTxFlow: String { case all, out, `in` }
 enum BankTxAttention: String { case none, any, uncategorised, noReceipt, duplicate }
 enum BankReceiptFilter: String { case all, missing, matched }
@@ -292,6 +292,9 @@ struct BankOcrState: Equatable {
 final class BankScreenModel: ObservableObject {
     @Published var tab: BankTab = .overview
     @Published var period: BankPeriodMode = .month
+    /// Any two dates, not just the three periods the picker offers.
+    @Published var customFrom = Date()
+    @Published var customTo = Date()
     @Published var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @Published var selectedMonth: Int = Calendar.current.component(.month, from: Date())
     @Published var weekStart: Date = BankScreenModel.startOfWeek(Date())
@@ -360,6 +363,9 @@ final class BankScreenModel: ObservableObject {
             var components = DateComponents(); components.year = selectedYear; components.month = selectedMonth + delta; components.day = 1
             guard let next = calendar.date(from: components), next <= now else { return }
             selectedYear = calendar.component(.year, from: next); selectedMonth = calendar.component(.month, from: next)
+        case .custom:
+            // A range the person chose by hand has no next or previous.
+            return
         }
         page = 1
     }
@@ -458,6 +464,20 @@ struct BankDerived {
             let formatter = DateFormatter(); formatter.locale = studioLocale(lang); formatter.setLocalizedDateFormatFromTemplate("d MMM")
             label = "\(formatter.string(from: model.weekStart)) – \(formatter.string(from: calendar.date(byAdding: .day, value: 6, to: model.weekStart) ?? model.weekStart))"
             current = BankScreenModel.startOfWeek(now) == model.weekStart
+        case .custom:
+            // Whichever order the two dates were picked in.
+            let a = iso.string(from: model.customFrom), b = iso.string(from: model.customTo)
+            let start = min(a, b), end = max(a, b)
+            let startDate = min(model.customFrom, model.customTo)
+            let days = max(1, (calendar.dateComponents([.day], from: startDate, to: max(model.customFrom, model.customTo)).day ?? 0) + 1)
+            // The same number of days again, ending the day before the range.
+            let prevEnd = iso.string(from: calendar.date(byAdding: .day, value: -1, to: startDate) ?? startDate)
+            let prevStart = iso.string(from: calendar.date(byAdding: .day, value: -days, to: startDate) ?? startDate)
+            inRange = { $0 >= start && $0 <= end }
+            inPrevious = { $0 >= prevStart && $0 <= prevEnd }
+            let formatter = DateFormatter(); formatter.locale = studioLocale(lang); formatter.setLocalizedDateFormatFromTemplate("d MMM")
+            label = "\(formatter.string(from: startDate)) – \(formatter.string(from: max(model.customFrom, model.customTo)))"
+            current = true
         }
 
         let visible = transactions.filter { inRange($0.bookingDate) }
@@ -775,12 +795,31 @@ private struct BankPeriodControl: View {
                 Text(fmt.t("Weekly")).tag(BankPeriodMode.week)
                 Text(fmt.t("Monthly")).tag(BankPeriodMode.month)
                 Text(fmt.t("Yearly")).tag(BankPeriodMode.year)
+                Text(fmt.t("Date range")).tag(BankPeriodMode.custom)
             }
-            .pickerStyle(.segmented).frame(maxWidth: 220)
-            .onChange(of: model.period) { _ in model.page = 1 }
-            Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
-            Text(label).font(.system(size: 12.5, weight: .bold)).lineLimit(1).frame(minWidth: 96)
-            Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
+            .pickerStyle(.segmented).frame(maxWidth: 300)
+            .onChange(of: model.period) { mode in
+                model.page = 1
+                // Open the range on the month already on show, so the figures do
+                // not blank while two dates are being picked.
+                if mode == .custom {
+                    var components = DateComponents()
+                    components.year = model.selectedYear; components.month = model.selectedMonth; components.day = 1
+                    model.customFrom = Calendar.current.date(from: components) ?? Date()
+                    model.customTo = Date()
+                }
+            }
+            if model.period == .custom {
+                DatePicker("", selection: $model.customFrom, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden().accessibilityLabel(fmt.t("From"))
+                Text("–").foregroundColor(.secondary)
+                DatePicker("", selection: $model.customTo, in: ...Date(), displayedComponents: .date)
+                    .labelsHidden().accessibilityLabel(fmt.t("To"))
+            } else {
+                Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+                Text(label).font(.system(size: 12.5, weight: .bold)).lineLimit(1).frame(minWidth: 96)
+                Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
+            }
         }
     }
 }
@@ -2639,7 +2678,11 @@ private struct BankReceiptsSection: View {
                 .padding(14).frame(maxWidth: .infinity, minHeight: 118, alignment: .leading).background(background).cornerRadius(14)
             }
         }
-        if !waiting.isEmpty {
+        // Always here, even at zero. A receipt sent from ChatGPT before its payment
+        // reaches the feed is kept in NivaDesk and attached later, and this is the
+        // only place it can be seen — a section that appears only when something is
+        // in it is a place nobody can find when they go looking for it.
+        if true {
             BankWaitingCard(waiting: waiting, d: d, model: model, fmt: fmt, isOwner: isOwner, isPhone: isPhone)
         }
         VStack(alignment: .leading, spacing: 0) {
@@ -2745,6 +2788,11 @@ private struct BankWaitingCard: View {
                 }
             }
             Text(fmt.t("Attached automatically when the payment arrives in the feed.")).font(.system(size: 11.5)).foregroundColor(.secondary)
+            if waiting.isEmpty {
+                Text(fmt.t("Nothing waiting. Receipts sent before their payment reaches the bank feed are held here until it does."))
+                    .font(.system(size: 12.5)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             ForEach(waiting) { item in
                 BankWaitingRow(item: item, subtitle: waitingSubtitle(item), d: d, model: model, fmt: fmt, isOwner: isOwner)
             }

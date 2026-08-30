@@ -214,7 +214,11 @@ function BankPageContent() {
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [customCategories, setCustomCategories] = useState<BankCategoryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [view, setView] = useState<"week" | "month" | "year">("month");
+  const [view, setView] = useState<"week" | "month" | "year" | "custom">("month");
+  // Any two dates, not just the three periods the tabs offer. Kept as ISO days so
+  // it compares directly against bookingDate, which is already an ISO day.
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   // Week view: Monday of the selected week (local time).
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   // Transactions table direction filter: everything, spending only, or incoming only.
@@ -952,13 +956,20 @@ function BankPageContent() {
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
   const weekStartIso = isoDay(weekStart);
   const weekEndIso = isoDay(addDays(weekStart, 6));
-  const isCurrentPeriod = view === "month"
+  // A custom range is whatever the person picked, in the order they picked it.
+  const customStart = customFrom && customTo ? (customFrom <= customTo ? customFrom : customTo) : "";
+  const customEnd = customFrom && customTo ? (customFrom <= customTo ? customTo : customFrom) : "";
+  const isCurrentPeriod = view === "custom"
+    ? true
+    : view === "month"
     ? selectedYear === now.getFullYear() && selectedMonth === now.getMonth()
     : view === "week"
       ? weekStartIso >= isoDay(startOfWeek(now))
       : selectedYear === now.getFullYear();
 
   function stepPeriod(direction: -1 | 1) {
+    // A range the person chose by hand has no next or previous.
+    if (view === "custom") return;
     if (view === "year") {
       setSelectedYear(year => Math.min(now.getFullYear(), year + direction));
       return;
@@ -993,17 +1004,28 @@ function BankPageContent() {
   // The list follows the selected period; anything older stays reachable by
   // switching the tab back.
   const visibleTransactions = useMemo(() => {
+    if (view === "custom") {
+      if (!customStart || !customEnd) return transactions;
+      return transactions.filter(item => item.bookingDate >= customStart && item.bookingDate <= customEnd);
+    }
     if (view === "week") {
       return transactions.filter(item => item.bookingDate >= weekStartIso && item.bookingDate <= weekEndIso);
     }
     const prefix = view === "month" ? monthPrefix : String(selectedYear);
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
-  }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso]);
+  }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso, customStart, customEnd]);
 
   // Previous period spend (week/month/year) for the "vs last …" delta.
   const previousPeriodSpent = useMemo(() => {
     let inRange: (date: string) => boolean;
-    if (view === "week") {
+    if (view === "custom") {
+      // The same number of days again, ending the day before the range starts.
+      if (!customStart || !customEnd) return 0;
+      const days = Math.round((new Date(customEnd).getTime() - new Date(customStart).getTime()) / 86400000) + 1;
+      const previousEnd = isoDay(addDays(new Date(customStart), -1));
+      const previousStart = isoDay(addDays(new Date(customStart), -days));
+      inRange = date => date >= previousStart && date <= previousEnd;
+    } else if (view === "week") {
       const start = isoDay(addDays(weekStart, -7));
       const end = isoDay(addDays(weekStart, -1));
       inRange = date => date >= start && date <= end;
@@ -1015,7 +1037,7 @@ function BankPageContent() {
       inRange = date => date.startsWith(String(selectedYear - 1));
     }
     return transactions.filter(item => item.amount < 0 && inRange(item.bookingDate)).reduce((acc, item) => acc + Math.abs(item.amount), 0);
-  }, [transactions, view, weekStart, selectedYear, selectedMonth]);
+  }, [transactions, view, weekStart, selectedYear, selectedMonth, customStart, customEnd]);
 
   // Spending per effective category for the selected period (Year/Month tab).
   // Every category name present in the feed (presets + custom), for the
@@ -1467,19 +1489,25 @@ function BankPageContent() {
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
   const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
   const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
-  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention, txSearch, txReview]);
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, customStart, customEnd, txFlow, txAttention, txSearch, txReview]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
-  const periodLabel = view === "month"
+  const periodLabel = view === "custom"
+    ? (customStart && customEnd
+        ? `${new Date(customStart).toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${new Date(customEnd).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+        : t("Pick two dates"))
+    : view === "month"
     ? new Date(selectedYear, selectedMonth, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : view === "week"
       ? `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
       : String(selectedYear);
-  const weekTotal = view === "week" ? visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0) : 0;
-  const spentTotal = view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
+  const rangeTotal = visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+  const weekTotal = view === "week" ? rangeTotal : 0;
+  const spentTotal = view === "custom" ? rangeTotal : view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
   const spentDelta = previousPeriodSpent > 0 ? ((spentTotal - previousPeriodSpent) / previousPeriodSpent) * 100 : null;
-  const deltaLabel = view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
+  const deltaLabel = view === "custom" ? t("vs the same length before")
+    : view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
   const incomingCount = visibleTransactions.filter(item => item.amount > 0).length;
   function showIncoming() {
     setTab("transactions");
@@ -1629,19 +1657,37 @@ function BankPageContent() {
               </div>
               <span style={{ flex: 1 }} />
               <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
-                {(["week", "month", "year"] as const).map(option => (
+                {(["week", "month", "year", "custom"] as const).map(option => (
                   <button key={option} type="button" role="tab" aria-selected={view === option}
-                    onClick={() => setView(option)}
+                    onClick={() => {
+                      // Opening the range with something in it: the month on show,
+                      // so the figures do not blank while two dates are picked.
+                      if (option === "custom" && !customFrom && !customTo) {
+                        setCustomFrom(`${monthPrefix}-01`);
+                        setCustomTo(isoDay(now));
+                      }
+                      setView(option);
+                    }}
                     style={{ border: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, background: view === option ? "#2563eb" : "transparent", color: view === option ? "#fff" : "inherit" }}>
-                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : t("Yearly")}
+                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : option === "year" ? t("Yearly") : t("Date range")}
                   </button>
                 ))}
               </div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
-                <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
-              </span>
+              {view === "custom" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, paddingBottom: 2 }}>
+                  <input type="date" value={customFrom} max={isoDay(now)} onChange={event => setCustomFrom(event.target.value)}
+                         aria-label={t("From")} style={bankDateInput} />
+                  <span style={{ opacity: 0.5 }}>–</span>
+                  <input type="date" value={customTo} max={isoDay(now)} onChange={event => setCustomTo(event.target.value)}
+                         aria-label={t("To")} style={bankDateInput} />
+                </span>
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
+                  <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
+                  <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
+                  <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
+                </span>
+              )}
             </div>
 
             {/* ---- Connected account bar ---------------------------------- */}
@@ -2520,8 +2566,13 @@ function BankPageContent() {
                     ) : null}
                   </div>
                 </div>
-                {waitingReceipts.length ? (
-                  <div style={{ ...bankCard, borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.05)" }}>
+                {/* Always here, even at zero. A receipt sent from ChatGPT before its
+                    payment reaches the feed is kept in NivaDesk and attached later,
+                    and this is the only place it can be seen — a section that
+                    appears only when something is in it is a place nobody can find
+                    when they go looking for it. */}
+                {true ? (
+                  <div style={{ ...bankCard, borderColor: waitingReceipts.length ? "rgba(245,158,11,0.35)" : "rgba(120,120,140,0.2)", background: waitingReceipts.length ? "rgba(245,158,11,0.05)" : "transparent" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <TileBadge bg="rgba(245,158,11,0.16)">⏳</TileBadge>
                       <strong style={{ fontSize: 14.5 }}>{t("Waiting for the bank")} ({waitingReceipts.length})</strong>
@@ -2529,6 +2580,11 @@ function BankPageContent() {
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
                       {isOwner ? <button type="button" style={bankBtnSm} disabled={busy === "waiting-match"} onClick={() => void matchWaitingNow()}>⟳ {busy === "waiting-match" ? t("Matching…") : t("Match now")}</button> : null}
                     </div>
+                    {waitingReceipts.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: 12.5, opacity: 0.7 }}>
+                        {t("Nothing waiting. Receipts sent before their payment reaches the bank feed are held here until it does.")}
+                      </p>
+                    ) : null}
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {waitingReceipts.map(item => {
                         const ageDays = item.createdAt ? Math.floor((Date.now() - item.createdAt.getTime()) / 86400000) : 0;
@@ -3469,6 +3525,11 @@ const bankBtn: React.CSSProperties = {
   border: "1px solid rgba(120,120,140,0.3)", background: "transparent", color: "inherit",
   borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer"
 };
+const bankDateInput: React.CSSProperties = {
+  border: "1px solid rgba(120,120,140,0.3)", borderRadius: 8, padding: "5px 9px",
+  fontSize: 12.5, background: "transparent", color: "inherit", fontFamily: "inherit"
+};
+
 const bankBtnSm: React.CSSProperties = { ...bankBtn, padding: "5px 12px", fontSize: 12 };
 // Stat tiles share a min height and push their footer link to the bottom so a
 // row of them lines up however much text each one carries.

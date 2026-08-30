@@ -233,6 +233,13 @@ struct HomeView: View {
                 if customising && !gallery.isEmpty { galleryRow }
             }
             .padding(22)
+            // The grid is capped at 1000pt but the column filled the window and
+            // pinned everything to its leading edge, so on a wide Mac the cards
+            // sat against the left with all the empty space on the right. The
+            // heading travels with them, or the two end up out of line — this is
+            // the same rule the web screen uses (max-width + margin-inline auto).
+            .frame(maxWidth: HomeGridMetrics.maxWidth + 44)
+            .frame(maxWidth: .infinity)
         }
         .background(colorScheme == .dark ? Color(white: 0.08) : Color(white: 0.97))
         // Keyed on the workspace id, not run once on appear: on a cold launch this

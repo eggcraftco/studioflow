@@ -162,7 +162,7 @@ private enum class BankTab(val title: String) {
     Overview("Overview"), Transactions("Transactions"), Recurring("Recurring"), Receipts("Receipts"), Rules("Rules")
 }
 
-private enum class BankPeriodView { Week, Month, Year }
+private enum class BankPeriodView { Week, Month, Year, Custom }
 private enum class BankFlow { All, Attention, Incoming, Spending }
 private enum class BankReceiptFilter { All, Missing, Matched }
 
@@ -248,6 +248,12 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
 
     var tab by rememberSaveable { mutableStateOf(BankTab.Overview) }
     var view by rememberSaveable { mutableStateOf(BankPeriodView.Month) }
+    // Any two dates, not just the three periods the tabs offer. Held as epoch
+    // millis so rememberSaveable can keep them across a rotation.
+    var customFromMillis by rememberSaveable { mutableStateOf(0L) }
+    var customToMillis by rememberSaveable { mutableStateOf(0L) }
+    /// "" closed, "from" or "to" while that half of the range is being picked.
+    var datePickerTarget by rememberSaveable { mutableStateOf("") }
     val now = remember { Calendar.getInstance() }
     var selectedYear by rememberSaveable { mutableIntStateOf(now.get(Calendar.YEAR)) }
     var selectedMonth by rememberSaveable { mutableIntStateOf(now.get(Calendar.MONTH) + 1) }
@@ -367,6 +373,22 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
             periodLabel = "${short.format(start)} – ${short.format(endCal.time)}"
             isCurrentPeriod = bankStartOfWeek(Date()).time == weekStartMillis
         }
+        BankPeriodView.Custom -> {
+            // Whichever order the two dates were picked in.
+            val lo = minOf(customFromMillis, customToMillis)
+            val hi = maxOf(customFromMillis, customToMillis)
+            val startIso = bankIsoDay(Date(lo)); val endIso = bankIsoDay(Date(hi))
+            val days = ((hi - lo) / 86_400_000L).toInt() + 1
+            // The same number of days again, ending the day before the range.
+            val prevEnd = Calendar.getInstance().apply { timeInMillis = lo; add(Calendar.DAY_OF_MONTH, -1) }
+            val prevStart = Calendar.getInstance().apply { timeInMillis = lo; add(Calendar.DAY_OF_MONTH, -days) }
+            val prevStartIso = bankIsoDay(prevStart.time); val prevEndIso = bankIsoDay(prevEnd.time)
+            inRange = { it in startIso..endIso }
+            inPrevious = { it in prevStartIso..prevEndIso }
+            val short = SimpleDateFormat("d MMM", locale)
+            periodLabel = "${short.format(Date(lo))} – ${short.format(Date(hi))}"
+            isCurrentPeriod = true
+        }
     }
 
     fun stepPeriod(delta: Int) {
@@ -383,6 +405,8 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                 val next = Calendar.getInstance().apply { timeInMillis = weekStartMillis; add(Calendar.DAY_OF_MONTH, delta * 7) }
                 if (next.timeInMillis <= System.currentTimeMillis()) weekStartMillis = next.timeInMillis
             }
+            // A range the person chose by hand has no next or previous.
+            BankPeriodView.Custom -> Unit
         }
         page = 1
     }
@@ -561,7 +585,42 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
             return@LazyColumn
         }
         item {
-            PeriodRow(view, periodLabel, isCurrentPeriod, t, onView = { view = it; page = 1 }, onStep = ::stepPeriod)
+            if (datePickerTarget.isNotEmpty()) {
+                val target = datePickerTarget
+                val pickerState = androidx.compose.material3.rememberDatePickerState(
+                    initialSelectedDateMillis = if (target == "from") customFromMillis else customToMillis
+                )
+                androidx.compose.material3.DatePickerDialog(
+                    onDismissRequest = { datePickerTarget = "" },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pickerState.selectedDateMillis?.let {
+                                if (target == "from") customFromMillis = it else customToMillis = it
+                            }
+                            page = 1
+                            datePickerTarget = ""
+                        }) { Text("OK") }
+                    },
+                    dismissButton = { TextButton(onClick = { datePickerTarget = "" }) { Text(t("Cancel")) } }
+                ) { androidx.compose.material3.DatePicker(state = pickerState) }
+            }
+            PeriodRow(
+                view, periodLabel, isCurrentPeriod, t,
+                onView = { next ->
+                    // Open the range on the month already on show, so the figures
+                    // do not blank while two dates are being picked.
+                    if (next == BankPeriodView.Custom && customFromMillis == 0L) {
+                        customFromMillis = Calendar.getInstance()
+                            .apply { set(selectedYear, selectedMonth - 1, 1, 0, 0, 0) }.timeInMillis
+                        customToMillis = System.currentTimeMillis()
+                    }
+                    view = next
+                    page = 1
+                },
+                onStep = ::stepPeriod,
+                onPickFrom = { datePickerTarget = "from" },
+                onPickTo = { datePickerTarget = "to" }
+            )
         }
 
         when (tab) {
@@ -581,7 +640,7 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                         // line: "↑58% vs last month · £396.32" is readable at a
                         // glance, and "↑58%" on its own is not.
                         StatTileSpec(t("Total spent"), fmt(spentTotal, null),
-                            delta?.let { "${if (it <= 0) "↓" else "↑"}${String.format(Locale.UK, "%.0f", abs(it))}% ${t(when (view) { BankPeriodView.Year -> "vs last year"; BankPeriodView.Week -> "vs last week"; else -> "vs last month" })} · ${fmt(previousSpent, null)}" },
+                            delta?.let { "${if (it <= 0) "↓" else "↑"}${String.format(Locale.UK, "%.0f", abs(it))}% ${t(when (view) { BankPeriodView.Year -> "vs last year"; BankPeriodView.Week -> "vs last week"; BankPeriodView.Custom -> "vs the same length before"; else -> "vs last month" })} · ${fmt(previousSpent, null)}" },
                             if ((delta ?: 0.0) <= 0) GREEN else MaterialTheme.colorScheme.onSurfaceVariant, RED, Icons.Filled.AccountBalance),
                         StatTileSpec(t("Incoming"), "+" + fmt(incomingTotal, null), "$incomingCount ${t("payments received")}", null, GREEN, Icons.Filled.Check) { flow = BankFlow.Incoming; tab = BankTab.Transactions },
                         StatTileSpec(t("Recurring spend"), "${fmt(recurringMonthly, null)} / ${t("month")}", "${activeRecurring.size} ${t("active")} · ${cancelledRecurring.size} ${t("possibly cancelled")}", null, AMBER, Icons.Filled.Refresh) { tab = BankTab.Recurring },
@@ -854,9 +913,16 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                         }
                     ))
                 }
-                if (waiting.isNotEmpty()) {
+                // Always here, even at zero. A receipt sent from ChatGPT before its
+                // payment reaches the feed is kept in NivaDesk and attached later,
+                // and this is the only place it can be seen — a section that
+                // appears only when something is in it is a place nobody can find
+                // when they go looking for it.
+                run {
                     item {
-                        Surface(shape = RoundedCornerShape(14.dp), color = AMBER.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
+                        Surface(shape = RoundedCornerShape(14.dp),
+                            color = if (waiting.isEmpty()) Color.Transparent else AMBER.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Icon(Icons.Filled.HourglassEmpty, contentDescription = null, tint = AMBER, modifier = Modifier.size(18.dp))
@@ -873,6 +939,13 @@ fun BankSpendingScreen(state: StudioFlowUiState) {
                                     }
                                 }
                                 Text(t("Attached automatically when the payment arrives in the feed."), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (waiting.isEmpty()) {
+                                    Text(
+                                        t("Nothing waiting. Receipts sent before their payment reaches the bank feed are held here until it does."),
+                                        fontSize = 12.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 waiting.forEach { item ->
                                     WaitingRow(
                                         item = item, t = t, locale = locale, fmt = fmt, isOwner = isOwner,
@@ -1247,15 +1320,31 @@ private fun StatTile(spec: StatTileSpec, modifier: Modifier) {
 }
 
 @Composable
-private fun PeriodRow(view: BankPeriodView, label: String, isCurrent: Boolean, t: (String) -> String, onView: (BankPeriodView) -> Unit, onStep: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun PeriodRow(
+    view: BankPeriodView, label: String, isCurrent: Boolean, t: (String) -> String,
+    onView: (BankPeriodView) -> Unit, onStep: (Int) -> Unit,
+    onPickFrom: () -> Unit = {}, onPickTo: () -> Unit = {}
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        verticalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         FilterChip(selected = view == BankPeriodView.Week, onClick = { onView(BankPeriodView.Week) }, label = { Text(t("Weekly"), fontSize = 12.sp) })
         FilterChip(selected = view == BankPeriodView.Month, onClick = { onView(BankPeriodView.Month) }, label = { Text(t("Monthly"), fontSize = 12.sp) })
         FilterChip(selected = view == BankPeriodView.Year, onClick = { onView(BankPeriodView.Year) }, label = { Text(t("Yearly"), fontSize = 12.sp) })
-        Spacer(Modifier.weight(1f))
-        IconButton(onClick = { onStep(-1) }) { Icon(Icons.Filled.ChevronLeft, contentDescription = t("Previous period")) }
-        Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
-        IconButton(onClick = { onStep(1) }, enabled = !isCurrent) { Icon(Icons.Filled.ChevronRight, contentDescription = t("Next period")) }
+        FilterChip(selected = view == BankPeriodView.Custom, onClick = { onView(BankPeriodView.Custom) }, label = { Text(t("Date range"), fontSize = 12.sp) })
+        if (view == BankPeriodView.Custom) {
+            // The label is the range, and each half of it opens its own picker.
+            val halves = label.split(" – ")
+            OutlinedButton(onClick = onPickFrom) { Text(halves.getOrElse(0) { t("From") }, fontSize = 12.sp) }
+            Text("–", modifier = Modifier.align(Alignment.CenterVertically))
+            OutlinedButton(onClick = onPickTo) { Text(halves.getOrElse(1) { t("To") }, fontSize = 12.sp) }
+        } else {
+            IconButton(onClick = { onStep(-1) }) { Icon(Icons.Filled.ChevronLeft, contentDescription = t("Previous period")) }
+            Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1,
+                modifier = Modifier.align(Alignment.CenterVertically))
+            IconButton(onClick = { onStep(1) }, enabled = !isCurrent) { Icon(Icons.Filled.ChevronRight, contentDescription = t("Next period")) }
+        }
     }
 }
 
