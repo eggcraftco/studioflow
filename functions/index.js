@@ -3657,12 +3657,26 @@ function websiteAssistantGuideBlock(question) {
     if (tokens.size === 0) return "";
     const scored = sections
       .map((section) => {
-        const hay = new Set(appAssistantTokens(`${section.title || ""} ${section.text || ""}`));
+        const words = appAssistantTokens(`${section.title || ""} ${section.search || section.text || ""}`);
+        const hay = new Set(words);
+        // Turkish glues its endings on: a reader types "bildirimleri" and the
+        // guide says "bildirimler", "uygulamasını" against "uygulaması".
+        // Exact-word matching scores those as nothing, every Turkish question
+        // falls through to "send the whole guide", and one short question costs
+        // fifty-five thousand characters. Compare stems as well as whole words.
+        const STEM = 6;
+        const stems = new Set(words.filter((w) => w.length >= STEM).map((w) => w.slice(0, STEM)));
         let score = 0;
-        tokens.forEach((word) => { if (hay.has(word)) score += 1; });
+        tokens.forEach((word) => {
+          if (hay.has(word)) { score += 1; return; }
+          if (word.length >= STEM && stems.has(word.slice(0, STEM))) score += 1;
+        });
         return { section, score };
       })
-      .filter((row) => row.score >= 2)
+      // Two matches proves the chapter is on topic - but a question that boils
+      // down to one word ("stocktake") can never score two, and demanding it
+      // sent the entire guide for the clearest questions of all.
+      .filter((row) => row.score >= 2 || (tokens.size === 1 && row.score === 1))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
     if (scored.length === 0) {
@@ -3916,7 +3930,9 @@ function appAssistantRelevantSections(question, limit = 4) {
   const tokens = appAssistantTokens(question);
   const scored = corpus.map((section) => {
     const headings = String(section.headings || "");
-    const haystack = `${section.path} ${section.title} ${headings} ${section.text}`.toLowerCase();
+    // `search` carries the same chapter in Turkish as well, so a Turkish
+    // question stops matching nothing and falling back to the whole guide.
+    const haystack = `${section.path} ${section.title} ${headings} ${section.search || section.text}`.toLowerCase();
     let score = 0;
     for (const token of new Set(tokens)) {
       if (!haystack.includes(token)) continue;

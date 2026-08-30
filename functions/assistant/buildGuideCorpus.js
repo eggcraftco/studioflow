@@ -76,6 +76,19 @@ function nodeText(node) {
   return parts.join("\n").replace(/\s+\n/g, "\n").trim();
 }
 
+// The Turkish tree, by id, so a section can be searched in Turkish as well as
+// English. Without this a Turkish question matches nothing in an English
+// corpus, every retrieval falls back to "send the whole guide", and a
+// one-line question costs fifty-five thousand characters of prompt.
+const trById = new Map();
+(function indexTr(nodes) {
+  for (const node of nodes || []) {
+    const id = String(node.id || "");
+    if (id) trById.set(id, node);
+    if (node.children?.length) indexTr(node.children);
+  }
+})(treeTr);
+
 const sections = [];
 function walk(nodes, trail) {
   for (const node of nodes || []) {
@@ -83,12 +96,20 @@ function walk(nodes, trail) {
     const pathTitles = [...trail, title];
     const text = nodeText(node);
     if (text) {
+      // `search` is for matching only; `text` is what the model is shown, so
+      // the excerpt stays in one language and the answer is still translated.
+      const tr = trById.get(String(node.id || ""));
+      const trText = tr ? nodeText(tr) : "";
+      const trTitle = tr ? String(tr.title || "") : "";
+      const trHeadings = tr ? nodeHeadings(tr) : "";
       sections.push({
         id: String(node.id || ""),
         title,
         path: pathTitles.join(" › "),
         headings: nodeHeadings(node),
-        text
+        text,
+        search: [title, nodeHeadings(node), text, trTitle, trHeadings, trText]
+          .filter(Boolean).join(" ")
       });
     }
     if (node.children?.length) walk(node.children, pathTitles);
