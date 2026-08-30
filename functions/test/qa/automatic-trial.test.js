@@ -14,7 +14,9 @@ const SOURCE = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "ut
 function pass(name) { console.log("PASS ", name); }
 
 function lift(name) {
-  const start = SOURCE.indexOf(`function ${name}(`);
+  const start = SOURCE.indexOf(`function ${name}(`) >= 0
+    ? SOURCE.indexOf(`function ${name}(`)
+    : SOURCE.indexOf(`const ${name} = `);
   const from = SOURCE.lastIndexOf("\n", start) + 1;
   const rest = SOURCE.slice(start + 1);
   const nextTop = rest.search(/\n(?:function |const |async function |exports\.)/);
@@ -38,10 +40,15 @@ const admin = {
   })
 };
 
+// The engine grew a dependency on the plan catalogue (it writes the plan's
+// display name alongside the key). Lifted from the source too, so this test
+// keeps checking the shipped table rather than a copy that can drift.
+const PLAN_ENTITLEMENTS = new Function(`${lift("PLAN_ENTITLEMENTS")}\nreturn PLAN_ENTITLEMENTS;`)();
+
 const startAutomaticTrial = new Function(
-  "admin", "normalizeBillingPlan", "console", "AUTOMATIC_TRIAL_DAYS",
+  "admin", "normalizeBillingPlan", "console", "AUTOMATIC_TRIAL_DAYS", "PLAN_ENTITLEMENTS",
   `${lift("automaticTrialPlanFor")}\n${lift("workspaceHasUsedTrial")}\n${lift("startAutomaticTrial")}\nreturn startAutomaticTrial;`
-)(admin, (v, d) => String(v || d), console, 14);
+)(admin, (v, d) => String(v || d), console, 14, PLAN_ENTITLEMENTS);
 
 // The constant the engine closes over must be the one it ships with, or this
 // test would happily pass against a changed trial length.
@@ -126,13 +133,19 @@ async function main() {
   // 7. Both order paths start it — web and the native apps write through
   // different callables and the entitlement belongs to the workspace.
   {
+    // The model moved: the fortnight is granted at sign-up now, not at the
+    // first order. The order callables still REPORT it, because the apps read
+    // trialStarted to decide whether to say anything — they just always report
+    // it as already granted.
     for (const fn of ["createWebOrder", "createSwiftOrder"]) {
       const at = SOURCE.indexOf(`exports.${fn} =`);
       const body = SOURCE.slice(at, SOURCE.indexOf("\nexports.", at + 10));
-      assert(/startAutomaticTrial\(companyRef, companyData, "first_order"\)/.test(body), `${fn} starts the trial`);
-      assert(/trialStarted:/.test(body), `${fn} tells the client it happened`);
+      assert(/why: "granted_at_signup"/.test(body), `${fn} knows the trial came from sign-up`);
+      assert(/trialStarted:/.test(body), `${fn} still tells the client where it stands`);
     }
-    pass("web and native both start it, and both say so");
+    assert(/billingPlanSource: "signup_trial"/.test(SOURCE), "sign-up grants the trial");
+    assert(/billingTrialStartReason: "signup"/.test(SOURCE), "and stamps why");
+    pass("the fortnight is granted at sign-up, and the order callables say so");
   }
 
   console.log("\n✅ AUTOMATIC TRIAL GEÇTİ");
