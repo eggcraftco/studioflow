@@ -3651,7 +3651,7 @@ const WEBSITE_ASSISTANT_FACTS = [
 // assistant reads, so this costs no extra I/O.
 function websiteAssistantGuideBlock(question) {
   try {
-    const sections = appAssistantCorpus();
+    const sections = appAssistantPublicCorpus();
     if (!Array.isArray(sections) || sections.length === 0) return "";
     const tokens = new Set(appAssistantTokens(question));
     if (tokens.size === 0) return "";
@@ -3721,11 +3721,14 @@ function websiteAssistantSystemPrompt(language, guideBlock = "") {
     "Rules:",
     "1. Answer ONLY from the facts below. Never guess a price, a limit, a date or a feature.",
     "2. When the facts genuinely cover the question, write the answer in \"reply\" and set \"confident\": true.",
-    "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and make \"reply\" exactly this sentence, translated into the visitor's language: \"I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.\" Do not add anything else to it. Translate it every time: leaving it in English in a conversation held in another language is a mistake, not a fallback.",
+    "3. When they do not — or the visitor asks about their own account, a bug, billing trouble, or anything you cannot verify — set \"confident\": false and leave \"reply\" empty. The handover sentence is written for you, in the visitor's own language, and the widget turns it into a one-press way to reach the team. Do not write your own version of it.",
     "4. Never claim a feature exists unless it is listed. If asked about something that is not there, say it is not available today rather than promising it (that is still a confident answer).",
     "3b. \"Their own account\" in rule 3 means their data or their state - what they were charged, why their sync failed, what is in their workspace. It does NOT mean a question phrased in the first person about how a feature works: \"how do I turn off notifications\" is a how-to question and the guide answers it. Do not go unconfident merely because a question says \"my\" or \"I\".",
-    "4b. HOW-TO questions (which button, which menu, step by step): answer ONLY from the guide excerpts below. If no excerpt covers those steps, that is an unconfident case — never improvise steps, screens or menu paths, and never answer a how-to question by pointing at the ChatGPT app.",
+    "4b. You are talking to someone on the public website, who may not have an account. Say what a feature is for and what it does — that is what they are asking. Do NOT walk them through the app: no menu paths, no button names, no step-by-step. Someone who wants that detail either signs up (it is free to start, no card) or talks to the team, and both are better answers than a set of directions to a screen they cannot open. Never improvise steps you were not given, and never answer a how-to question by pointing at the ChatGPT app.",
+    "4c. \"That part is inside the app\" is a CONFIDENT answer, never an unsure one. Give it in two short sentences: what the feature does, then that the steps live inside the app, which is free to start with no card, and that the team can take over this chat if they would rather ask a person.",
+    "4d. Never offer to redirect, forward or send them anywhere, and never give out an email address or a support link. The NivaDesk team reads this very conversation — say they can take it from here.",
     "5. Keep confident replies short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
+    "5b. You are a help desk, not a chatbot demo. Write like a person who works here and wants this sorted: answer the question first, no greetings, no \"as an AI\", no apologising for what you are. If someone just wants to talk to the team, that is a fine thing to want — they can say so and the conversation goes straight to us. Never send them somewhere else to ask: no support portals, no help centres, no forms, no \"please email us at\" when they are already talking to us here.",
     `6. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
     "6b. A visitor may switch language mid-conversation, or ask you to answer in another language. Do that, and answer the question in the same turn. Switching language is never a reason to be unsure: the facts do not change with the language they are written in, so judge confidence on the facts alone and then write the answer in the language asked for.",
     "7. Never ask for passwords, card details or API keys.",
@@ -3760,18 +3763,18 @@ async function websiteAssistantKey() {
 // it rather than hoping: a visitor who wrote in Turkish is answered in Turkish
 // even when the answer is that we do not know.
 const WEBSITE_ASSISTANT_UNSURE = {
-  "English": "I\u2019m not fully sure about this one. I can pass this conversation to the NivaDesk team.",
-  "Türkçe": "Bu konuda tam emin değilim. Bu konuşmayı NivaDesk ekibine iletebilirim.",
-  "Deutsch": "Da bin ich mir nicht ganz sicher. Ich kann dieses Gespräch an das NivaDesk-Team weitergeben.",
-  "Français": "Je n\u2019en suis pas tout à fait sûr. Je peux transmettre cette conversation à l\u2019équipe NivaDesk.",
-  "Italiano": "Su questo non sono del tutto sicuro. Posso passare questa conversazione al team NivaDesk.",
-  "Español (Spanish)": "No estoy del todo seguro de esto. Puedo pasar esta conversación al equipo de NivaDesk.",
-  "Português": "Não tenho a certeza sobre isto. Posso passar esta conversa à equipa NivaDesk.",
-  "Русский (Russian)": "В этом я не совсем уверен. Я могу передать этот разговор команде NivaDesk.",
-  "日本語 (Japanese)": "これについては確かなことが言えません。この会話を NivaDesk チームにお渡しできます。",
-  "中文 (Chinese)": "这一点我不太确定。我可以把这段对话转交给 NivaDesk 团队。",
-  "العربية (Arabic)": "لست متأكدًا تمامًا من هذا. يمكنني تحويل هذه المحادثة إلى فريق NivaDesk.",
-  "हिन्दी (Hindi)": "इस बारे में मैं पूरी तरह निश्चित नहीं हूँ। मैं यह बातचीत NivaDesk टीम को भेज सकता हूँ।"
+  "English": "Let me get a person onto this — I can pass this conversation straight to the NivaDesk team.",
+  "Türkçe": "Bunu bir arkadaşımıza aktarayım — bu konuşmayı doğrudan NivaDesk ekibine iletebilirim.",
+  "Deutsch": "Ich hole jemanden dazu — ich kann dieses Gespräch direkt an das NivaDesk-Team geben.",
+  "Français": "Je passe la main à quelqu\u2019un — je peux transmettre cette conversation directement à l\u2019équipe NivaDesk.",
+  "Italiano": "Ci faccio guardare una persona — posso passare questa conversazione direttamente al team NivaDesk.",
+  "Español (Spanish)": "Que lo vea una persona — puedo pasar esta conversación directamente al equipo de NivaDesk.",
+  "Português": "Deixe-me chamar uma pessoa — posso passar esta conversa diretamente à equipa NivaDesk.",
+  "Русский (Russian)": "Подключу человека — я могу передать этот разговор напрямую команде NivaDesk.",
+  "日本語 (Japanese)": "担当者につなぎます — この会話をそのまま NivaDesk チームにお渡しできます。",
+  "中文 (Chinese)": "让同事来接手 — 我可以把这段对话直接转给 NivaDesk 团队。",
+  "العربية (Arabic)": "دعني أُشرك أحد الزملاء — يمكنني تحويل هذه المحادثة مباشرة إلى فريق NivaDesk.",
+  "हिन्दी (Hindi)": "इसे किसी व्यक्ति को दिखाता हूँ — मैं यह बातचीत सीधे NivaDesk टीम को दे सकता हूँ।"
 };
 function websiteAssistantUnsureReply(language) {
   return WEBSITE_ASSISTANT_UNSURE[String(language || "").trim()] || WEBSITE_ASSISTANT_UNSURE.English;
@@ -3852,10 +3855,13 @@ async function websiteAssistantReply(ticketData = {}, historyIn = []) {
       // whole thing as a confident reply rather than dropping it.
       reply = cleanSupportMultiline(raw, 3000);
     }
-    if (!reply) return null;
-    // An unsure answer is one fixed sentence, so it is said in the visitor's
-    // language here instead of depending on the model to remember rule 3.
+    // The handover is one fixed sentence, said here in the visitor's language
+    // rather than left to the model. This has to come BEFORE the empty-reply
+    // guard: the prompt now asks for an empty reply when it is unsure, and an
+    // empty reply used to mean "say nothing at all" - which is the silence
+    // this whole path exists to prevent.
     if (!confident) return { reply: websiteAssistantUnsureReply(ticketData.language), confident };
+    if (!reply) return null;
     return { reply, confident };
   } catch (error) {
     console.error("websiteAssistant request failed", error?.message || error);
@@ -3946,6 +3952,24 @@ function appAssistantNotes() {
     }
   }
   return appAssistantNotesCache;
+}
+
+// The public website reads a smaller corpus than the app does. A visitor is
+// asking what NivaDesk does; a member is asking how to do it. Feeding the
+// operating guide to the website answered "Settings ▸ Data Management ▸
+// Export" to people with no workspace to open, and handed the product's
+// working detail to anyone who typed a question into a marketing page.
+let appAssistantPublicCorpusCache = null;
+function appAssistantPublicCorpus() {
+  if (!appAssistantPublicCorpusCache) {
+    try {
+      appAssistantPublicCorpusCache = require("./assistant/guidePublicCorpus.json").sections || [];
+    } catch (error) {
+      console.error("appAssistant: public guide corpus missing", error?.message || error);
+      appAssistantPublicCorpusCache = [];
+    }
+  }
+  return appAssistantPublicCorpusCache;
 }
 
 function appAssistantCorpus() {

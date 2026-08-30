@@ -117,6 +117,54 @@ function walk(nodes, trail) {
 }
 walk(tree, []);
 
+// A second, smaller corpus for the assistant on the public website. A visitor
+// who has not signed up is asking what NivaDesk does, not which menu to open:
+// answering "Settings ▸ Data Management ▸ Export, then pick a template" to
+// someone with no workspace is noise, and it hands the product's operating
+// detail to anyone who asks. So the public corpus keeps the prose that says
+// what a feature is for and drops the bullets and sub-headings that say how to
+// work it. The trial and plan chapters are the exception - what they cost and
+// what happens at the end of a trial is exactly what a visitor should be told,
+// and those chapters carry it in their bullets.
+const PUBLIC_IN_FULL = new Set([
+  "trial-and-plans", "trial-no-credit-card", "trial-when-it-starts",
+  "trial-when-it-ends", "trial-monthly-yearly", "plan-where-billed"
+]);
+function publicNodeText(node) {
+  if (PUBLIC_IN_FULL.has(String(node.id || ""))) return nodeText(node);
+  return (node.blocks || [])
+    .filter((block) => block.kind === "para")
+    .map((block) => String(block.text || ""))
+    .join("\n")
+    .trim();
+}
+const publicSections = [];
+(function walkPublic(nodes, trail) {
+  for (const node of nodes || []) {
+    const title = String(node.title || node.id || "");
+    const pathTitles = [...trail, title];
+    const text = publicNodeText(node);
+    if (text) {
+      const tr = trById.get(String(node.id || ""));
+      publicSections.push({
+        id: String(node.id || ""),
+        title,
+        path: pathTitles.join(" › "),
+        headings: "",
+        text,
+        search: [title, text, tr ? String(tr.title || "") : "", tr ? publicNodeText(tr) : ""]
+          .filter(Boolean).join(" ")
+      });
+    }
+    if (node.children?.length) walkPublic(node.children, pathTitles);
+  }
+})(tree, []);
+fs.writeFileSync(
+  path.join(__dirname, "guidePublicCorpus.json"),
+  JSON.stringify({ builtFrom: "studioflow-web/lib/publicSite/guide.ts (public subset)", sections: publicSections }, null, 1)
+);
+console.log(`guidePublicCorpus.json: ${publicSections.length} sections, ${Math.round(fs.statSync(path.join(__dirname, "guidePublicCorpus.json")).size / 1024)} KB`);
+
 fs.writeFileSync(TARGET, JSON.stringify({ builtFrom: "studioflow-web/lib/publicSite/guide.ts", sections }, null, 1));
 console.log(`guideCorpus.json: ${sections.length} sections, ${Math.round(fs.statSync(TARGET).size / 1024)} KB`);
 

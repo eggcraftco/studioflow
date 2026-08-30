@@ -1,0 +1,437 @@
+{
+ "builtFrom": "studioflow-web/lib/publicSite/guide.ts (public subset)",
+ "sections": [
+  {
+   "id": "getting-started",
+   "title": "Getting started",
+   "path": "Getting started",
+   "headings": "",
+   "text": "What happens the first time you sign in, and how to set up your new workspace.",
+   "search": "Getting started What happens the first time you sign in, and how to set up your new workspace. Başlarken İlk kez giriş yaptığınızda ne olur ve yeni çalışma alanınızı nasıl kurarsınız."
+  },
+  {
+   "id": "first-sign-in-setup",
+   "title": "Setting up your workspace when you first sign in",
+   "path": "Getting started › Setting up your workspace when you first sign in",
+   "headings": "",
+   "text": "When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings.",
+   "search": "Setting up your workspace when you first sign in When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings. İlk girişte çalışma alanınızı kurma NivaDesk'i ilk açtığınızda dört soruluk bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her soru cevaplanabilir ve son adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesiyle adımlar arasında dolaşabilirsiniz.\nKurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir."
+  },
+  {
+   "id": "what-the-setup-changes",
+   "title": "What your setup answers change",
+   "path": "Getting started › What your setup answers change",
+   "headings": "",
+   "text": "The questions are not a survey: each answer changes the workspace you get.\nNothing here is permanent: your business type, workflow steps, labels and production stages can all be changed later in Settings.",
+   "search": "What your setup answers change The questions are not a survey: each answer changes the workspace you get.\nNothing here is permanent: your business type, workflow steps, labels and production stages can all be changed later in Settings. Kurulum cevaplarınız neyi değiştirir Sorular anket değildir: her cevap elinize geçen çalışma alanını değiştirir.\nBurada hiçbir şey kalıcı değildir: iş türünüzü, iş akışı adımlarınızı, etiketlerinizi ve üretim aşamalarınızı sonradan Settings'ten değiştirebilirsiniz."
+  },
+  {
+   "id": "trial-and-plans",
+   "title": "Your free trial and plans",
+   "path": "Your free trial and plans",
+   "headings": "",
+   "text": "What signing up costs, when the paid trial starts, and what happens when it ends.",
+   "search": "Your free trial and plans What signing up costs, when the paid trial starts, and what happens when it ends. Ücretsiz denemeniz ve planlar Kaydolmanın maliyeti, ücretli denemenin ne zaman başladığı ve bittiğinde ne olduğu."
+  },
+  {
+   "id": "trial-no-credit-card",
+   "title": "No credit card to sign up",
+   "path": "Your free trial and plans › No credit card to sign up",
+   "headings": "",
+   "text": "You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, 10 customers, your personal notes and export access, at no cost and with no time limit.\nThe 14-day trial of the paid plan is separate, and it does not start when you register.",
+   "search": "No credit card to sign up You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, 10 customers, your personal notes and export access, at no cost and with no time limit.\nThe 14-day trial of the paid plan is separate, and it does not start when you register. Kaydolmak için kredi kartı yok NivaDesk'e kaydolmak için kredi kartı gerekmez; kurulumun hiçbir yerinde ödeme bilgisi istenmez. Free planın süresi hiç dolmaz: 10 aktif sipariş, 10 müşteri, kişisel notlarınız ve dışa aktarma erişimi; ücretsiz ve süresiz.\nÜcretli planın 14 günlük denemesi bundan ayrıdır ve kaydolduğunuzda başlamaz."
+  },
+  {
+   "id": "trial-when-it-starts",
+   "title": "When the 14-day trial starts",
+   "path": "Your free trial and plans › When the 14-day trial starts",
+   "headings": "",
+   "text": "- It starts when you create your first order — not at sign-up, so the fortnight is spent working rather than looking around.\n- It runs on Pro, or on Team if you said more than one person would use NivaDesk during setup.\n- No credit card is taken and no subscription is created. Nothing renews and nothing can be charged.\n- A banner shows what is left, and what the trial has been worth so far. It collapses if you would rather not see it.\nEach workspace gets one trial, so starting a paid plan at checkout does not add another fortnight on top.",
+   "search": "When the 14-day trial starts - It starts when you create your first order — not at sign-up, so the fortnight is spent working rather than looking around.\n- It runs on Pro, or on Team if you said more than one person would use NivaDesk during setup.\n- No credit card is taken and no subscription is created. Nothing renews and nothing can be charged.\n- A banner shows what is left, and what the trial has been worth so far. It collapses if you would rather not see it.\nEach workspace gets one trial, so starting a paid plan at checkout does not add another fortnight on top. 14 günlük deneme ne zaman başlar - İlk siparişinizi oluşturduğunuzda başlar — kayıtta değil; böylece iki hafta etrafa bakarak değil çalışarak geçer.\n- Pro üzerinde çalışır; kurulumda NivaDesk'i birden fazla kişinin kullanacağını söylediyseniz Team üzerinde.\n- Kredi kartı alınmaz ve abonelik oluşturulmaz. Hiçbir şey yenilenmez, hiçbir ücret çekilemez.\n- Bir şerit kalan süreyi ve denemenin şu ana dek ne kazandırdığını gösterir. Görmek istemezseniz katlanır.\nHer çalışma alanına bir deneme verilir; ödeme sayfasından ücretli plan başlatmak üstüne ikinci bir iki hafta eklemez."
+  },
+  {
+   "id": "trial-when-it-ends",
+   "title": "What happens when the trial ends",
+   "path": "Your free trial and plans › What happens when the trial ends",
+   "headings": "",
+   "text": "The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable.\nWhat stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep.\nUpgrading later picks everything up exactly where it stopped.",
+   "search": "What happens when the trial ends The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable.\nWhat stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep.\nUpgrading later picks everything up exactly where it stopped. Deneme bitince ne olur Çalışma alanı Free'ye döner ve bir bildirim bunu açıkça söyler; \"Free ile devam et\" ile \"Bir plan seç\" yan yana durur. Hiçbir şey silinmez: bütün siparişler, müşteriler, dosyalar ve notlar görünür ve dışa aktarılabilir kalır.\nDuran şeyler ücretli plan özellikleridir — Client Files, gelişmiş finans, ekip mesajlaşması — ve Free'nin 10 aktif sipariş sınırının üstünde yeni sipariş açmak. Biten siparişleri arşivlemek sizi sınırın altına döndürür. NivaDesk hangi siparişlerinizin kalacağına asla kendisi karar vermez.\nSonradan yükseltmek her şeyi kaldığı yerden devam ettirir."
+  },
+  {
+   "id": "plan-where-billed",
+   "title": "Where your plan is billed, and why you can only buy in one place",
+   "path": "Your free trial and plans › Where your plan is billed, and why you can only buy in one place",
+   "headings": "",
+   "text": "A NivaDesk plan can be paid for in four places: by card on the website, through the App Store on Mac and iPhone, through Google Play on Android, or on your Shopify invoice if you installed us from the Shopify App Store. Whichever one you used is the only place that plan can be changed.\n- The plan page in every app tells you where your subscription lives, and does not offer to sell you the same plan a second time — buying again somewhere else would mean two companies charging you for one workspace, and neither of them would know about the other.\n- To move to a different plan, change it where you already pay: the website Billing portal, your Apple subscriptions, your Google Play subscriptions, or the NivaDesk app inside your Shopify admin.\n- To move to a different place, cancel the subscription you have first, then buy again where you want it. Your workspace and everything in it stay exactly as they are.\n- Changing tier where you already pay — Lite to Pro, monthly to yearly — is a normal upgrade and works as it always did.\n- Extra storage and extra team seats are add-ons, not plans. They are sold wherever you are, whichever place your plan is billed.",
+   "search": "Where your plan is billed, and why you can only buy in one place A NivaDesk plan can be paid for in four places: by card on the website, through the App Store on Mac and iPhone, through Google Play on Android, or on your Shopify invoice if you installed us from the Shopify App Store. Whichever one you used is the only place that plan can be changed.\n- The plan page in every app tells you where your subscription lives, and does not offer to sell you the same plan a second time — buying again somewhere else would mean two companies charging you for one workspace, and neither of them would know about the other.\n- To move to a different plan, change it where you already pay: the website Billing portal, your Apple subscriptions, your Google Play subscriptions, or the NivaDesk app inside your Shopify admin.\n- To move to a different place, cancel the subscription you have first, then buy again where you want it. Your workspace and everything in it stay exactly as they are.\n- Changing tier where you already pay — Lite to Pro, monthly to yearly — is a normal upgrade and works as it always did.\n- Extra storage and extra team seats are add-ons, not plans. They are sold wherever you are, whichever place your plan is billed. Planınız nerede faturalanıyor ve neden tek yerden satın alınır Bir NivaDesk planı dört yerden ödenebilir: web sitesinde kartla, Mac ve iPhone'da App Store üzerinden, Android'de Google Play üzerinden, ya da bizi Shopify App Store'dan kurduysanız Shopify faturanızda. Hangisini kullandıysanız, o plan yalnızca orada değiştirilebilir.\n- Her uygulamadaki plan sayfası aboneliğinizin nerede olduğunu söyler ve aynı planı ikinci kez satmaya kalkmaz — başka bir yerden tekrar almak, tek bir çalışma alanı için iki şirketin sizden ayrı ayrı ücret alması demek olurdu ve ikisinin de diğerinden haberi olmazdı.\n- Farklı bir plana geçmek için, hâlihazırda ödediğiniz yerden değiştirin: web sitesindeki Faturalandırma portalı, Apple abonelikleriniz, Google Play abonelikleriniz veya Shopify yönetim panelinizdeki NivaDesk uygulaması.\n- Farklı bir yere taşınmak için önce mevcut aboneliğinizi iptal edin, sonra istediğiniz yerden tekrar satın alın. Çalışma alanınız ve içindeki her şey olduğu gibi kalır.\n- Zaten ödediğiniz yerde kademe değiştirmek — Lite'tan Pro'ya, aylıktan yıllığa — normal bir yükseltmedir ve her zamanki gibi çalışır.\n- Ek depolama ve ek ekip koltuğu birer eklentidir, plan değildir. Planınız nerede faturalanıyor olursa olsun, bulunduğunuz yerden satın alınabilirler."
+  },
+  {
+   "id": "trial-monthly-yearly",
+   "title": "Monthly and yearly billing",
+   "path": "Your free trial and plans › Monthly and yearly billing",
+   "headings": "",
+   "text": "Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly.\nYou can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us.",
+   "search": "Monthly and yearly billing Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly.\nYou can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us. Aylık ve yıllık faturalandırma Yıllık faturalandırma, on iki ay için on aylık fiyattır. Plan sayfası her yıllık fiyatın yanında aylık karşılığını ve tam tasarruf tutarını gösterir — Pro yılda £190, yani ayda £15.83 ve £38 tasarruf — böylece ikisini dürüstçe karşılaştırabilirsiniz.\nAylık ve yıllık arasında istediğiniz zaman geçebilir, Settings ▸ Plan & Access üzerinden bize yazmadan iptal edebilirsiniz."
+  },
+  {
+   "id": "dashboard",
+   "title": "Dashboard",
+   "path": "Dashboard",
+   "headings": "",
+   "text": "Your home overview. Start your day here to see what needs attention before you dive into individual orders.",
+   "search": "Dashboard Your home overview. Start your day here to see what needs attention before you dive into individual orders. Panel (Dashboard) Ana özet ekranınız. Tek tek siparişlere dalmadan önce neyin ilgi istediğini görmek için güne buradan başlayın."
+  },
+  {
+   "id": "orders",
+   "title": "Orders",
+   "path": "Orders",
+   "headings": "",
+   "text": "Orders is the heart of NivaDesk: the list of every job you are working on. From here you create orders, find them quickly and open one to manage all of its details.\nOpening an order shows a set of cards: Preview, Order Summary, Financial Info, Client Files and more. Each card covers one part of the job. You decide which cards you see and how they are arranged.\nSelect a card on the left to see exactly what it does and what you can change in it.",
+   "search": "Orders Orders is the heart of NivaDesk: the list of every job you are working on. From here you create orders, find them quickly and open one to manage all of its details.\nOpening an order shows a set of cards: Preview, Order Summary, Financial Info, Client Files and more. Each card covers one part of the job. You decide which cards you see and how they are arranged.\nSelect a card on the left to see exactly what it does and what you can change in it. Siparişler (Orders) Siparişler, NivaDesk'in kalbidir: üzerinde çalıştığınız tüm işlerin listesi. Buradan sipariş oluşturur, hızlıca bulur ve birini açıp tüm detaylarını yönetirsiniz.\nBir siparişi açtığınızda Preview, Order Summary, Financial Info, Client Files ve daha fazlası gibi kartlar gelir. Her kart işin bir bölümünü kapsar. Hangi kartları göreceğinize ve nasıl dizileceğine siz karar verirsiniz.\nSoldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün."
+  },
+  {
+   "id": "card-preview",
+   "title": "Preview card",
+   "path": "Orders › Preview card",
+   "headings": "",
+   "text": "The Preview card is the visual header of the order. It shows the order image and your business logo, giving you and your client an instant sense of the job.\nTip: a good preview photo makes orders far easier to recognize at a glance in a busy list.",
+   "search": "Preview card The Preview card is the visual header of the order. It shows the order image and your business logo, giving you and your client an instant sense of the job.\nTip: a good preview photo makes orders far easier to recognize at a glance in a busy list. Preview kartı Preview kartı, siparişin görsel başlığıdır. Sipariş görselini ve işletme logonuzu gösterir; hem size hem müşterinize işe dair anında bir fikir verir.\nİpucu: iyi bir önizleme fotoğrafı, kalabalık bir listede siparişleri bir bakışta tanımayı çok kolaylaştırır."
+  },
+  {
+   "id": "card-repair-intake",
+   "title": "Repair Intake & Item card",
+   "path": "Orders › Repair Intake & Item card",
+   "headings": "",
+   "text": "When a customer hands you their own item to repair, service or alter, this card is the record of what came in. It is deliberately not inventory: the item is stamped as customer-owned so nothing downstream can mistake it for your stock.\nTip: photograph the item at intake even when it looks fine. It is the cheapest possible protection against a disagreement about a scratch later.",
+   "search": "Repair Intake & Item card When a customer hands you their own item to repair, service or alter, this card is the record of what came in. It is deliberately not inventory: the item is stamped as customer-owned so nothing downstream can mistake it for your stock.\nTip: photograph the item at intake even when it looks fine. It is the cheapest possible protection against a disagreement about a scratch later. Onarım Kabulü ve Ürün kartı Müşteri onarım, bakım ya da tadilat için kendi ürününü size teslim ettiğinde, gelen şeyin kaydı bu karttır. Bilinçli olarak stok değildir: ürün müşteriye ait olarak damgalanır, böylece hiçbir yerde sizin stoğunuzla karıştırılamaz.\nİpucu: ürün sağlam görünse bile kabulde fotoğraflayın. Sonradan çıkacak bir çizik tartışmasına karşı en ucuz korumadır."
+  },
+  {
+   "id": "card-estimate",
+   "title": "Estimate & Approval card",
+   "path": "Orders › Estimate & Approval card",
+   "headings": "",
+   "text": "Quote a price, send it to the customer, and keep proof of what they agreed to. The estimate is built from the order's invoice items, and every revision is preserved — an approved estimate is evidence of what was agreed, so it is never edited or deleted.",
+   "search": "Estimate & Approval card Quote a price, send it to the customer, and keep proof of what they agreed to. The estimate is built from the order's invoice items, and every revision is preserved — an approved estimate is evidence of what was agreed, so it is never edited or deleted. Teklif ve Onay kartı Fiyat verin, müşteriye gönderin ve neye onay verdiğinin kanıtını saklayın. Teklif siparişin fatura kalemlerinden oluşur ve her revizyon korunur — onaylanmış bir teklif, üzerinde anlaşılanın kanıtıdır; bu yüzden asla düzenlenmez veya silinmez."
+  },
+  {
+   "id": "card-customer-portal",
+   "title": "Customer Portal card",
+   "path": "Orders › Customer Portal card",
+   "headings": "",
+   "text": "The question every repair shop answers all day is ‘is mine ready yet?’. This card is the answer: one link per order that the customer opens with no login, showing where their item is.\nInternal notes, cost prices, supplier names, profit and team messages. These are not filtered out of the order on the way to the page — the page is built only from the parts you switch on, so nothing else can leak into it.\nTip: send the link when the item comes in, not when it is finished. Most of the calls you are trying to avoid happen in the middle.",
+   "search": "Customer Portal card The question every repair shop answers all day is ‘is mine ready yet?’. This card is the answer: one link per order that the customer opens with no login, showing where their item is.\nInternal notes, cost prices, supplier names, profit and team messages. These are not filtered out of the order on the way to the page — the page is built only from the parts you switch on, so nothing else can leak into it.\nTip: send the link when the item comes in, not when it is finished. Most of the calls you are trying to avoid happen in the middle. Müşteri Portalı kartı Her onarım atölyesinin gün boyu cevapladığı soru şudur: ‘benimki hazır mı?’. Bu kart o sorunun cevabı: sipariş başına tek bir bağlantı, müşteri giriş yapmadan açar ve ürününün nerede olduğunu görür.\nİç notlar, maliyet fiyatları, tedarikçi adları, kâr ve ekip mesajları. Bunlar sayfaya giderken siparişten süzülmüyor — sayfa yalnızca sizin açtığınız bölümlerden kuruluyor, dolayısıyla başka bir şeyin sızması mümkün değil.\nİpucu: bağlantıyı iş bitince değil, ürün geldiğinde gönderin. Kaçınmaya çalıştığınız telefonların çoğu aradaki süreçte gelir."
+  },
+  {
+   "id": "card-summary",
+   "title": "Order Summary card",
+   "path": "Orders › Order Summary card",
+   "headings": "",
+   "text": "The Order Summary card is your at-a-glance status panel: the key numbers, stages and dates you check most often, all in one place.",
+   "search": "Order Summary card The Order Summary card is your at-a-glance status panel: the key numbers, stages and dates you check most often, all in one place. Order Summary kartı Order Summary (Sipariş Özeti) kartı, bir bakışta durum panelinizdir: en sık kontrol ettiğiniz temel rakamlar, aşamalar ve tarihler tek yerde."
+  },
+  {
+   "id": "card-customer",
+   "title": "Customer & Communication card",
+   "path": "Orders › Customer & Communication card",
+   "headings": "",
+   "text": "This card holds who the order is for and how to reach them: the customer's details and your communication channels, all editable in place.\nTap any value to edit it in place (if your role can edit order details).",
+   "search": "Customer & Communication card This card holds who the order is for and how to reach them: the customer's details and your communication channels, all editable in place.\nTap any value to edit it in place (if your role can edit order details). Customer & Communication kartı Bu kart, siparişin kime ait olduğunu ve müşteriye nasıl ulaşacağınızı tutar: müşteri bilgileri ve iletişim kanallarınız; hepsi yerinde düzenlenebilir.\nHerhangi bir değere dokunarak yerinde düzenleyin (rolünüz sipariş detaylarını düzenleyebiliyorsa)."
+  },
+  {
+   "id": "card-materials",
+   "title": "Materials & Inventory card",
+   "path": "Orders › Materials & Inventory card",
+   "headings": "",
+   "text": "Track the parts and materials a job needs, whether each one is sourced, received and ready, so you never start work missing something.\nTap a row to flip it between yes and no as materials arrive.",
+   "search": "Materials & Inventory card Track the parts and materials a job needs, whether each one is sourced, received and ready, so you never start work missing something.\nTap a row to flip it between yes and no as materials arrive. Materials & Inventory kartı Bir işin ihtiyaç duyduğu parça ve malzemeleri takip edin, her birinin tedarik edildi mi, geldi mi, hazır mı, böylece işe eksikle başlamazsınız.\nMalzemeler geldikçe bir satıra dokunarak evet/hayır arasında değiştirin."
+  },
+  {
+   "id": "card-priority",
+   "title": "Priority / Risk card",
+   "path": "Orders › Priority / Risk card",
+   "headings": "",
+   "text": "Flag how urgent an order is and whether anything is holding it up, so the team can focus on what matters and spot stuck jobs early.\nPick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top.",
+   "search": "Priority / Risk card Flag how urgent an order is and whether anything is holding it up, so the team can focus on what matters and spot stuck jobs early.\nPick a value from each dropdown and it saves instantly. Priority and risk also feed the smart sort and the status badges in the Orders list, so flagged jobs rise to the top. Priority / Risk kartı Bir siparişin ne kadar acil olduğunu ve onu bekleten bir şey olup olmadığını işaretleyin; böylece ekip önemli olana odaklanır ve takılan işleri erkenden fark eder.\nHer açılır menüden bir değer seçin, anında kaydedilir. Öncelik ve risk ayrıca akıllı sıralamayı ve Siparişler listesindeki durum rozetlerini besler; işaretlenen işler en üste çıkar."
+  },
+  {
+   "id": "card-delivery",
+   "title": "Timeline & Delivery card",
+   "path": "Orders › Timeline & Delivery card",
+   "headings": "",
+   "text": "See the order's timeline at a glance and keep the delivery date front and center, so nothing is delivered late.",
+   "search": "Timeline & Delivery card See the order's timeline at a glance and keep the delivery date front and center, so nothing is delivered late. Timeline & Delivery kartı Siparişin zaman çizelgesini bir bakışta görün ve teslim tarihini hep ön planda tutun; böylece hiçbir şey geç teslim edilmez."
+  },
+  {
+   "id": "card-notes",
+   "title": "Notes card",
+   "path": "Orders › Notes card",
+   "headings": "",
+   "text": "Keep written notes about the order, instructions, decisions and reminders, in one place the whole workspace can see.",
+   "search": "Notes card Keep written notes about the order, instructions, decisions and reminders, in one place the whole workspace can see. Notes kartı Sipariş hakkındaki yazılı notları, talimatlar, kararlar ve hatırlatmalar, tüm çalışma alanının görebileceği tek bir yerde tutun."
+  },
+  {
+   "id": "card-clientfiles",
+   "title": "Client Files card",
+   "path": "Orders › Client Files card",
+   "headings": "",
+   "text": "Attach the documents and images that belong to this order, proofs, designs, receipts, reference photos, so everything for the job lives with it.",
+   "search": "Client Files card Attach the documents and images that belong to this order, proofs, designs, receipts, reference photos, so everything for the job lives with it. Client Files kartı Bu siparişe ait belge ve görselleri, provalar, tasarımlar, fişler, referans fotoğraflar, ekleyin; böylece işe dair her şey onunla birlikte durur."
+  },
+  {
+   "id": "card-todo",
+   "title": "To Do card",
+   "path": "Orders › To Do card",
+   "headings": "",
+   "text": "A task checklist for this specific order: break the job into steps, assign them and track what is done.",
+   "search": "To Do card A task checklist for this specific order: break the job into steps, assign them and track what is done. To Do kartı Bu siparişe özel bir görev kontrol listesi: işi adımlara bölün, atayın ve neyin yapıldığını takip edin."
+  },
+  {
+   "id": "card-worktime",
+   "title": "Work Time card",
+   "path": "Orders › Work Time card",
+   "headings": "",
+   "text": "Track how much time you spend on an order, so you can see the real effort per job and price future work more accurately.",
+   "search": "Work Time card Track how much time you spend on an order, so you can see the real effort per job and price future work more accurately. Work Time kartı Bir siparişe ne kadar zaman harcadığınızı takip edin; böylece iş başına gerçek emeği görür ve gelecekteki işleri daha doğru fiyatlandırırsınız."
+  },
+  {
+   "id": "card-financial",
+   "title": "Financial Info card",
+   "path": "Orders › Financial Info card",
+   "headings": "",
+   "text": "The full money picture for the order: what was charged, what it costs you, the tax, and the real profit left over.\nThis card only appears for roles allowed to see finances; for everyone else the order's money stays hidden.",
+   "search": "Financial Info card The full money picture for the order: what was charged, what it costs you, the tax, and the real profit left over.\nThis card only appears for roles allowed to see finances; for everyone else the order's money stays hidden. Financial Info kartı Siparişin tam para tablosu: ne tahsil edildi, size maliyeti ne, vergi ne kadar ve geriye kalan gerçek kâr.\nBu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır."
+  },
+  {
+   "id": "card-status",
+   "title": "Production Status card",
+   "path": "Orders › Production Status card",
+   "headings": "",
+   "text": "Track where the order is in production: each stage of your workflow with its own status, so anyone can see progress at a glance.",
+   "search": "Production Status card Track where the order is in production: each stage of your workflow with its own status, so anyone can see progress at a glance. Production Status kartı Siparişin üretimde nerede olduğunu takip edin: iş akışınızın her aşaması kendi durumuyla; böylece herkes ilerlemeyi bir bakışta görür."
+  },
+  {
+   "id": "card-shipping",
+   "title": "Shipping & Tracking card",
+   "path": "Orders › Shipping & Tracking card",
+   "headings": "",
+   "text": "Manage delivery for the order: the courier, the tracking number, and live status updates, all without leaving the app.",
+   "search": "Shipping & Tracking card Manage delivery for the order: the courier, the tracking number, and live status updates, all without leaving the app. Shipping & Tracking kartı Siparişin teslimatını yönetin: kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan."
+  },
+  {
+   "id": "card-schedule",
+   "title": "Schedule & Alerts card",
+   "path": "Orders › Schedule & Alerts card",
+   "headings": "",
+   "text": "Set reminders tied to this order so important follow-ups, approvals, payments, client updates, never get forgotten.",
+   "search": "Schedule & Alerts card Set reminders tied to this order so important follow-ups, approvals, payments, client updates, never get forgotten. Schedule & Alerts kartı Bu siparişe bağlı hatırlatıcılar kurun; böylece önemli takipler, onaylar, ödemeler, müşteri güncellemeleri, asla unutulmaz."
+  },
+  {
+   "id": "card-history",
+   "title": "History / Log card",
+   "path": "Orders › History / Log card",
+   "headings": "",
+   "text": "An automatic audit trail of the order, what changed and when, so you can always see how it reached its current state.",
+   "search": "History / Log card An automatic audit trail of the order, what changed and when, so you can always see how it reached its current state. History / Log kartı Siparişin otomatik bir değişiklik kaydı, neyin ne zaman değiştiği, böylece mevcut duruma nasıl geldiğini her zaman görebilirsiniz."
+  },
+  {
+   "id": "schedule",
+   "title": "Schedule",
+   "path": "Schedule",
+   "headings": "",
+   "text": "A calendar view of your orders by delivery date, so you can plan your week and see what is coming up.",
+   "search": "Schedule A calendar view of your orders by delivery date, so you can plan your week and see what is coming up. Schedule (Takvim) Siparişlerinizin teslim tarihine göre takvim görünümü; haftanızı planlayın ve yaklaşanları görün."
+  },
+  {
+   "id": "team-schedule",
+   "title": "Team Schedule",
+   "path": "Team Schedule",
+   "headings": "",
+   "text": "A team view of the schedule: every member in a row, with the jobs assigned to them laid out across the days. See who is doing what and when, balance the workload and keep delivery dates on track.",
+   "search": "Team Schedule A team view of the schedule: every member in a row, with the jobs assigned to them laid out across the days. See who is doing what and when, balance the workload and keep delivery dates on track."
+  },
+  {
+   "id": "notes",
+   "title": "Notes",
+   "path": "Notes",
+   "headings": "",
+   "text": "A full notes board for your workspace: capture ideas, lists and reminders, share them with your team, and keep the important ones pinned to the top.",
+   "search": "Notes A full notes board for your workspace: capture ideas, lists and reminders, share them with your team, and keep the important ones pinned to the top. Notes (Notlar) Çalışma alanınız için tam bir not panosu: fikirleri, listeleri ve hatırlatmaları yakalayın, ekibinizle paylaşın ve önemlileri en üste sabitleyin."
+  },
+  {
+   "id": "customers",
+   "title": "Customers",
+   "path": "Customers",
+   "headings": "",
+   "text": "Your client directory: every customer with their details and the work linked to them.",
+   "search": "Customers Your client directory: every customer with their details and the work linked to them. Customers (Müşteriler) Müşteri rehberiniz: her müşteri, bilgileri ve ona bağlı işlerle birlikte."
+  },
+  {
+   "id": "production",
+   "title": "Production",
+   "path": "Production",
+   "headings": "",
+   "text": "The operations layer between Orders and Schedule. Orders says what a customer asked for; Schedule says when it must be ready; Production answers the question you actually ask each morning — where is every live job right now, and what has stopped.\nProduction status is deliberately separate from order, payment and delivery status. A job can be paid for, undelivered, and still sitting in Quality Check; keeping the three apart is what stops a workshop losing track of its own work.",
+   "search": "Production The operations layer between Orders and Schedule. Orders says what a customer asked for; Schedule says when it must be ready; Production answers the question you actually ask each morning — where is every live job right now, and what has stopped.\nProduction status is deliberately separate from order, payment and delivery status. A job can be paid for, undelivered, and still sitting in Quality Check; keeping the three apart is what stops a workshop losing track of its own work. Üretim Siparişler ile Takvim arasındaki operasyon katmanı. Siparişler müşterinin ne istediğini, Takvim ne zaman hazır olması gerektiğini söyler; Üretim ise her sabah gerçekten sorduğunuz soruyu cevaplar — hangi iş şu anda nerede ve ne durmuş?\nÜretim durumu; sipariş, ödeme ve teslimat durumundan bilinçli olarak ayrıdır. Bir iş ödenmiş, teslim edilmemiş ve hâlâ Kalite Kontrol'de olabilir; bu üçünü ayrı tutmak, atölyenin kendi işini gözden kaçırmasını önler."
+  },
+  {
+   "id": "inventory",
+   "title": "Inventory",
+   "path": "Inventory",
+   "headings": "",
+   "text": "Your stock room inside NivaDesk: the watches, dials, parts and consumables your business owns, what they cost, where they stand and what they are promised to. A customer's own property can be held and tracked too — it is marked as theirs and never counted as your asset.",
+   "search": "Inventory Your stock room inside NivaDesk: the watches, dials, parts and consumables your business owns, what they cost, where they stand and what they are promised to. A customer's own property can be held and tracked too — it is marked as theirs and never counted as your asset. Envanter NivaDesk içindeki stok odanız: işletmenizin sahip olduğu saatler, kadranlar, parçalar ve sarf malzemeleri — maliyetleri, nerede durdukları ve neye söz verildikleri. Müşterinin kendi malı da tutulup izlenebilir; onun olarak işaretlenir ve asla sizin varlığınız sayılmaz."
+  },
+  {
+   "id": "banking",
+   "title": "Bank Spending",
+   "path": "Bank Spending",
+   "headings": "",
+   "text": "Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. NivaDesk only reads your transactions — it can never move money. Bank access is owner-only unless the owner grants a member the Bank Spending permission.",
+   "search": "Bank Spending Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. NivaDesk only reads your transactions — it can never move money. Bank access is owner-only unless the owner grants a member the Bank Spending permission. Banka Harcamaları İşletme bankanızı Open Banking ile bağlayın ve harcamayı olurken görün: kategoriler, KDV işlemi, hareketlere eşlenmiş fişler ve tekrarlayan ödemeler. NivaDesk hareketlerinizi yalnızca okur — asla para taşıyamaz. Banka erişimi, sahibi bir üyeye Banka Harcamaları iznini vermedikçe yalnız sahibindedir."
+  },
+  {
+   "id": "files",
+   "title": "Files",
+   "path": "Files",
+   "headings": "",
+   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.",
+   "search": "Files A read-only index of every client file across all your orders, so you can find any document without opening each order. Files (Dosyalar) Tüm siparişlerinizdeki müşteri dosyalarının salt-okunur bir indeksi; herhangi bir belgeyi her siparişi açmadan bulun."
+  },
+  {
+   "id": "messages",
+   "title": "Messages",
+   "path": "Messages",
+   "headings": "",
+   "text": "Talk to your team inside NivaDesk: direct messages and group conversations, kept right next to your work.",
+   "search": "Messages Talk to your team inside NivaDesk: direct messages and group conversations, kept right next to your work. Messages (Mesajlar) Ekibinizle NivaDesk içinde konuşun: direkt mesajlar ve grup sohbetleri, tam işinizin yanında."
+  },
+  {
+   "id": "quick-reply",
+   "title": "AI Replies / Quick Reply",
+   "path": "AI Replies / Quick Reply",
+   "headings": "",
+   "text": "Draft polished customer messages in seconds, in your own style.\nChoose the engine and add your OpenAI API key, company knowledge base, products and rules in Settings ▸ Quick Reply Settings.",
+   "search": "AI Replies / Quick Reply Draft polished customer messages in seconds, in your own style.\nChoose the engine and add your OpenAI API key, company knowledge base, products and rules in Settings ▸ Quick Reply Settings. AI Replies / Quick Reply Saniyeler içinde, kendi üslubunuzda özenli müşteri mesajları hazırlayın.\nMotoru seçin ve OpenAI API anahtarınızı, şirket bilgi tabanınızı, ürünlerinizi ve kurallarınızı Settings ▸ Quick Reply Settings altından ekleyin."
+  },
+  {
+   "id": "settings",
+   "title": "Settings",
+   "path": "Settings",
+   "headings": "",
+   "text": "Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls, or type into the search box above the list — searching \"VAT\", \"logo\" or \"password\" jumps straight to the right section. Some settings are protected, so only the owner or admins can change them.",
+   "search": "Settings Where you tailor NivaDesk to your business. Pick a section on the left to see what it controls, or type into the search box above the list — searching \"VAT\", \"logo\" or \"password\" jumps straight to the right section. Some settings are protected, so only the owner or admins can change them. Settings (Ayarlar) NivaDesk'i işinize göre özelleştirdiğiniz yer. Soldan bir bölüm seçin veya listenin üstündeki arama kutusuna yazın — \"KDV\", \"logo\" ya da \"şifre\" yazmak doğru bölüme götürür. Bazı ayarlar korumalıdır; yalnızca owner veya adminler değiştirebilir."
+  },
+  {
+   "id": "set-general",
+   "title": "General",
+   "path": "Settings › General",
+   "headings": "",
+   "text": "Your personal and appearance settings.",
+   "search": "General Your personal and appearance settings. General (Genel) Kişisel ve görünüm ayarlarınız."
+  },
+  {
+   "id": "set-workflow",
+   "title": "Workflow Steps",
+   "path": "Settings › Workflow Steps",
+   "headings": "",
+   "text": "Shape how orders flow for your craft.",
+   "search": "Workflow Steps Shape how orders flow for your craft. Workflow Steps Siparişlerin mesleğinize göre nasıl aktığını şekillendirin."
+  },
+  {
+   "id": "set-pdf",
+   "title": "PDF Export Settings",
+   "path": "Settings › PDF Export Settings",
+   "headings": "",
+   "text": "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export.",
+   "search": "PDF Export Settings Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export. PDF Export Settings Fatura ve sipariş PDF'lerinin görünümünü, işletme bilgileri, logo ve alt not, ve dışa aktarıma neyin dahil edileceğini ayarlayın."
+  },
+  {
+   "id": "set-quickreply",
+   "title": "Quick Reply Settings",
+   "path": "Settings › Quick Reply Settings",
+   "headings": "",
+   "text": "Set up how NivaDesk drafts replies to customers and what it knows about your business.\nYour OpenAI key belongs to you and is stored securely for your workspace; remove it whenever you like.",
+   "search": "Quick Reply Settings Set up how NivaDesk drafts replies to customers and what it knows about your business.\nYour OpenAI key belongs to you and is stored securely for your workspace; remove it whenever you like. Quick Reply Settings NivaDesk'in müşterilere yanıtları nasıl hazırlayacağını ve işiniz hakkında neleri bildiğini ayarlayın.\nOpenAI anahtarınız size aittir ve çalışma alanınız için güvenli biçimde saklanır; istediğiniz zaman kaldırabilirsiniz."
+  },
+  {
+   "id": "set-financial",
+   "title": "Financial Settings",
+   "path": "Settings › Financial Settings",
+   "headings": "",
+   "text": "Set the money rules that drive every order's Financial card.",
+   "search": "Financial Settings Set the money rules that drive every order's Financial card. Financial Settings Her siparişin Financial kartını besleyen para kurallarını ayarlayın."
+  },
+  {
+   "id": "set-woocommerce",
+   "title": "Store & website integrations",
+   "path": "Settings › Store & website integrations",
+   "headings": "",
+   "text": "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow.",
+   "search": "Store & website integrations Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow. Mağaza ve web sitesi entegrasyonları NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür."
+  },
+  {
+   "id": "set-safety",
+   "title": "Safety & Uploads",
+   "path": "Settings › Safety & Uploads",
+   "headings": "",
+   "text": "Protect your workspace when people upload files.",
+   "search": "Safety & Uploads Protect your workspace when people upload files. Safety & Uploads İnsanlar dosya yüklerken çalışma alanınızı koruyun."
+  },
+  {
+   "id": "set-data",
+   "title": "Data Management",
+   "path": "Settings › Data Management",
+   "headings": "",
+   "text": "Import, export and back up your workspace data, and manage data clean-up.",
+   "search": "Data Management Import, export and back up your workspace data, and manage data clean-up. Data Management Çalışma alanı verilerinizi içe/dışa aktarın, yedeğini alın ve veri temizliğini yönetin."
+  },
+  {
+   "id": "set-plan",
+   "title": "Plan & Access",
+   "path": "Settings › Plan & Access",
+   "headings": "",
+   "text": "See your current plan, your usage limits and which features are available, and manage billing. Review the Free/Demo, Lite, Pro and Team options here.",
+   "search": "Plan & Access See your current plan, your usage limits and which features are available, and manage billing. Review the Free/Demo, Lite, Pro and Team options here. Plan & Access Mevcut planınızı, kullanım limitlerinizi ve hangi özelliklerin kullanılabilir olduğunu görün ve faturalandırmayı yönetin. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyin."
+  },
+  {
+   "id": "set-team",
+   "title": "Team Access",
+   "path": "Settings › Team Access",
+   "headings": "",
+   "text": "Invite your team and control exactly what each person can see and do.",
+   "search": "Team Access Invite your team and control exactly what each person can see and do. Team Access Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin."
+  },
+  {
+   "id": "set-client-domain",
+   "title": "Customer Portal Domain",
+   "path": "Settings › Customer Portal Domain",
+   "headings": "",
+   "text": "Put YOUR name on every link your customers see — order tracking, estimates and future customer pages. Owner only, under Settings ▸ Customer Portal Domain.",
+   "search": "Customer Portal Domain Put YOUR name on every link your customers see — order tracking, estimates and future customer pages. Owner only, under Settings ▸ Customer Portal Domain. Müşteri Portalı Alan Adı Müşterilerinizin gördüğü her bağlantıya — sipariş takibi, teklifler ve gelecekteki müşteri sayfaları — SİZİN adınızı koyun. Yalnız sahip görür; Settings ▸ Customer Portal Domain altındadır."
+  },
+  {
+   "id": "set-support",
+   "title": "Support / Tickets",
+   "path": "Settings › Support / Tickets",
+   "headings": "",
+   "text": "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu.",
+   "search": "Support / Tickets Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu. Support / Tickets Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı."
+  },
+  {
+   "id": "language-theme",
+   "title": "Language & appearance",
+   "path": "Language & appearance",
+   "headings": "",
+   "text": "Make NivaDesk look and read the way you prefer. Both live in Settings ▸ General and sync across your devices.",
+   "search": "Language & appearance Make NivaDesk look and read the way you prefer. Both live in Settings ▸ General and sync across your devices. Dil ve Görünüm NivaDesk'in görünüşünü ve dilini istediğiniz gibi yapın. İkisi de Settings ▸ General altındadır ve cihazlarınız arasında senkronlanır."
+  },
+  {
+   "id": "notifications",
+   "title": "Notifications on your phone and computer",
+   "path": "Notifications on your phone and computer",
+   "headings": "",
+   "text": "NivaDesk can tell you something happened without you having to look. Notifications arrive on the devices you are signed in on — Mac, iPhone, iPad, Android and the web app — and each one opens the thing it is about.",
+   "search": "Notifications on your phone and computer NivaDesk can tell you something happened without you having to look. Notifications arrive on the devices you are signed in on — Mac, iPhone, iPad, Android and the web app — and each one opens the thing it is about. Telefonunuzda ve bilgisayarınızda bildirimler NivaDesk, siz bakmak zorunda kalmadan bir şey olduğunu haber verebilir. Bildirimler oturum açtığınız cihazlara gelir — Mac, iPhone, iPad, Android ve web uygulaması — ve her biri ilgili olduğu şeyi açar."
+  }
+ ]
+}
