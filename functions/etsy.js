@@ -197,6 +197,26 @@ function classifyStatus(status) {
   return "invalid";
 }
 
+// OAuth grant failures do NOT arrive as 401.
+//
+// Etsy's token endpoint is a public PKCE client — there is no client secret, so
+// there is no client-authentication path that could produce a 401. RFC 6749
+// §5.2 says an expired or revoked refresh token comes back as HTTP 400 with
+// {"error":"invalid_grant"} in the body. Classifying that by status alone made
+// it "invalid", and the connection then reported itself healthy forever while
+// nothing synced. The body is the only place the truth is.
+const OAUTH_DEAD_GRANT_ERRORS = new Set(["invalid_grant", "invalid_request", "unauthorized_client", "invalid_client"]);
+
+function oauthErrorCode(status, body) {
+  if (status === 401 || status === 403) return "auth_expired";
+  if (status !== 400) return null;
+  try {
+    const parsed = JSON.parse(String(body || "{}"));
+    if (OAUTH_DEAD_GRANT_ERRORS.has(String(parsed?.error || ""))) return "auth_expired";
+  } catch (_error) { /* a body we cannot read stays whatever the status said */ }
+  return null;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
@@ -249,8 +269,12 @@ async function etsyFetch(path, { keystring, accessToken = "", method = "GET", qu
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal
       });
-      clearTimeout(timer);
-
+      // NOTE: the timer is deliberately NOT cleared here. `fetch` resolves when
+      // the response HEADERS arrive; the body is still streaming. Clearing the
+      // abort now leaves both reads below unbounded, and a server that sends
+      // headers and then stalls hangs the call indefinitely — measured at
+      // twelve minutes with timeoutMs set to two seconds. The timer is cleared
+      // in the finally block, after the body has been consumed.
       if (response.ok) {
         const text = await response.text();
         if (!text) return null;
@@ -270,13 +294,14 @@ async function etsyFetch(path, { keystring, accessToken = "", method = "GET", qu
       if (code === "auth_expired" || code === "invalid") throw error;
       lastError = error;
     } catch (error) {
-      clearTimeout(timer);
       if (error instanceof EtsyApiError) {
         if (error.code === "auth_expired" || error.code === "invalid") throw error;
         lastError = error;
       } else {
         lastError = new EtsyApiError("network", "Could not reach Etsy.", { body: error?.message || String(error) });
       }
+    } finally {
+      clearTimeout(timer);
     }
     if (attempt < ETSY_MAX_ATTEMPTS - 1) await sleep(retryDelayMs(attempt, lastError?.retryAfterMs || 0));
   }
@@ -287,30 +312,42 @@ async function etsyFetch(path, { keystring, accessToken = "", method = "GET", qu
 // OAuth token exchange and refresh
 // ---------------------------------------------------------------------------
 
-async function exchangeAuthorizationCode({ keystring, redirectUri, code, codeVerifier }) {
-  return etsyFetch(ETSY_TOKEN_URL, {
-    keystring,
-    method: "POST",
-    body: {
-      grant_type: "authorization_code",
-      client_id: String(keystring),
-      redirect_uri: String(redirectUri),
-      code: String(code),
-      code_verifier: String(codeVerifier)
+/**
+ * Run a token-endpoint call and re-classify a dead grant.
+ *
+ * etsyFetch only sees the status, and a dead refresh token is a 400. Without
+ * this the caller cannot tell "the seller revoked us, ask them to reconnect"
+ * from "malformed request", and the connection sits there reporting a health it does
+ * not have.
+ */
+async function tokenGrant(body, keystring) {
+  try {
+    return await etsyFetch(ETSY_TOKEN_URL, { keystring, method: "POST", body });
+  } catch (error) {
+    if (error instanceof EtsyApiError) {
+      const reclassified = oauthErrorCode(error.status, error.body);
+      if (reclassified) error.code = reclassified;
     }
-  });
+    throw error;
+  }
+}
+
+async function exchangeAuthorizationCode({ keystring, redirectUri, code, codeVerifier }) {
+  return tokenGrant({
+    grant_type: "authorization_code",
+    client_id: String(keystring),
+    redirect_uri: String(redirectUri),
+    code: String(code),
+    code_verifier: String(codeVerifier)
+  }, keystring);
 }
 
 async function refreshAccessToken({ keystring, refreshToken }) {
-  return etsyFetch(ETSY_TOKEN_URL, {
-    keystring,
-    method: "POST",
-    body: {
-      grant_type: "refresh_token",
-      client_id: String(keystring),
-      refresh_token: String(refreshToken)
-    }
-  });
+  return tokenGrant({
+    grant_type: "refresh_token",
+    client_id: String(keystring),
+    refresh_token: String(refreshToken)
+  }, keystring);
 }
 
 // Etsy access tokens are "<userId>.<random>", which is the only place the
@@ -401,6 +438,7 @@ function nivadeskOrderIdFor(shopId, receiptId) {
 }
 
 module.exports = {
+  oauthErrorCode,
   ETSY_AUTHORIZE_URL,
   ETSY_TOKEN_URL,
   ETSY_API_BASE,

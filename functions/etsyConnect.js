@@ -171,14 +171,28 @@ function createEtsyConnectFunctions(deps) {
       }, { merge: true });
       return access;
     } catch (error) {
-      const code = error?.code === "auth_expired" ? "needs_reconnect" : "connected";
-      await connectionRef.set({
-        status: code,
-        lastErrorCode: String(error?.code || "refresh_failed"),
+      // A failure must never write status "connected".
+      //
+      // The old line did (`auth_expired ? needs_reconnect : "connected"`) and it
+      // was wrong twice over. A dead refresh token arrives as 400 invalid_grant,
+      // not 401, so it took the "connected" branch and the one state a seller
+      // has to act on could never be reached. And any transient failure — a
+      // network blip, or a token blob that will not decrypt because the key was
+      // rotated — erased a needs_reconnect that some earlier attempt had set
+      // correctly. So: promote to needs_reconnect on an auth failure, and
+      // otherwise leave `status` exactly as it was and record only the error.
+      const authFailure = error?.code === "auth_expired"
+        // A stored token we cannot read is not a transient problem either: it
+        // will not read on the next attempt, and only reconnecting fixes it.
+        || !error?.code;
+      const patch = {
+        lastErrorCode: String(error?.code || "token_unreadable"),
         lastErrorAt: admin.firestore.FieldValue.serverTimestamp(),
         refreshLockAt: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+      if (authFailure) patch.status = "needs_reconnect";
+      await connectionRef.set(patch, { merge: true });
       await writeSyncEvent(connectionRef, { type: "token_refresh_failed", error: String(error?.code || "") });
       throw error;
     }

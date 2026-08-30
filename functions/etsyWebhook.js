@@ -46,7 +46,9 @@ function createEtsyWebhookFunction(deps) {
       return;
     }
 
-    const secret = signingSecret();
+    // Trimmed: the secret is pasted by a human from Etsy's portal, and a
+    // trailing newline would change the HMAC key and reject every real event.
+    const secret = String(signingSecret() || "").trim();
     if (!secret) {
       // Unconfigured is our problem, not Etsy's. Say so in the log and accept,
       // rather than making Etsy retry an endpoint that will keep failing.

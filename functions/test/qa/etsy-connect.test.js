@@ -118,9 +118,9 @@ const onRequest = (_options, handler) => handler;
 
 const KEY = crypto.randomBytes(32).toString("hex");
 
-function build({ nowRef, refreshImpl, exchangeImpl, fetchImpl, owner = true }) {
+function build({ nowRef, refreshImpl, exchangeImpl, fetchImpl, owner = true, useRealEtsy = false }) {
   const { admin, store } = makeAdmin(nowRef);
-  const etsyStub = {
+  const etsyStub = useRealEtsy ? etsy : {
     ...etsy,
     refreshAccessToken: refreshImpl || (async () => ({ access_token: "1.new", refresh_token: "r.new", expires_in: 3600 })),
     exchangeAuthorizationCode: exchangeImpl || (async () => ({ access_token: "1.acc", refresh_token: "1.ref", expires_in: 3600 })),
@@ -290,24 +290,90 @@ test("the rotated refresh token replaces the old one", async () => {
   assert.strictEqual(etsy.decryptToken(row.accessTokenEncrypted, KEY), "1.acc2");
 });
 
-test("a dead refresh token marks the connection needs_reconnect", async () => {
+// This test used to stub refreshAccessToken to throw EtsyApiError("auth_expired")
+// directly, which skipped etsyFetch and the status classification entirely — it
+// asserted a code path production never produces, and passed while the real one
+// was broken. It now fakes the HTTP layer instead, so the classification runs
+// for real.
+test("a revoked refresh token (400 invalid_grant) marks the connection needs_reconnect", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const realFetch = global.fetch;
+  let tokenCalls = 0;
+  global.fetch = async (url) => {
+    if (String(url).includes("/oauth/token")) {
+      tokenCalls += 1;
+      if (tokenCalls === 1) {
+        // the initial code exchange succeeds
+        return new Response(JSON.stringify({ access_token: "1.acc", refresh_token: "1.ref", expires_in: 3600 }), { status: 200 });
+      }
+      // the refresh: Etsy is a public PKCE client, so a dead grant is a 400,
+      // never a 401 — RFC 6749 section 5.2.
+      return new Response(JSON.stringify({ error: "invalid_grant", error_description: "refresh token expired" }), { status: 400 });
+    }
+    return new Response(JSON.stringify({ results: [{ shop_id: 222, shop_name: "Ada Studio", currency_code: "GBP" }] }), { status: 200 });
+  };
+  const { fns, store } = build({
+    nowRef,
+    refreshImpl: undefined,
+    exchangeImpl: undefined,
+    fetchImpl: undefined,
+    useRealEtsy: true
+  });
+  try {
+    const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+    const state = new URL(begun.authorizeUrl).searchParams.get("state");
+    await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
+
+    const ref = store.docHandle("etsyConnections/c1_222");
+    await ref.set({ tokenExpiresAt: nowRef.value - 1000 }, { merge: true });
+    await assert.rejects(() => fns._internal.accessTokenFor(ref));
+
+    const row = store.docs.get("etsyConnections/c1_222");
+    assert.strictEqual(row.status, "needs_reconnect",
+      "a 400 invalid_grant is the ONLY way a real Etsy refresh token dies");
+    assert.strictEqual(row.lastErrorCode, "auth_expired");
+    assert.ok(!row.refreshLockAt, "the lock must be released even when the refresh fails");
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+test("a transient failure does not erase needs_reconnect", async () => {
   const nowRef = { value: 1_700_000_000_000 };
   const { fns, store } = build({
     nowRef,
-    refreshImpl: async () => { throw new etsy.EtsyApiError("auth_expired", "revoked"); }
+    refreshImpl: async () => { throw new etsy.EtsyApiError("network", "dns blip"); }
   });
   const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
   const state = new URL(begun.authorizeUrl).searchParams.get("state");
   await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
 
   const ref = store.docHandle("etsyConnections/c1_222");
-  await ref.set({ tokenExpiresAt: nowRef.value - 1000 }, { merge: true });
+  // A previous attempt correctly decided the seller must reconnect.
+  await ref.set({ status: "needs_reconnect", tokenExpiresAt: nowRef.value - 1000 }, { merge: true });
   await assert.rejects(() => fns._internal.accessTokenFor(ref));
 
   const row = store.docs.get("etsyConnections/c1_222");
-  assert.strictEqual(row.status, "needs_reconnect");
-  assert.strictEqual(row.lastErrorCode, "auth_expired");
-  assert.ok(!row.refreshLockAt, "the lock must be released even when the refresh fails");
+  assert.strictEqual(row.status, "needs_reconnect",
+    "a network blip must not report the connection healthy again");
+  assert.strictEqual(row.lastErrorCode, "network");
+});
+
+test("a token blob that will not decrypt asks for a reconnect, not a retry forever", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const { fns, store } = build({ nowRef });
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
+
+  const ref = store.docHandle("etsyConnections/c1_222");
+  // As if ETSY_TOKEN_KEY had been rotated without re-linking the shop.
+  await ref.set({
+    tokenExpiresAt: nowRef.value - 1000,
+    refreshTokenEncrypted: { v: 1, iv: "AAAAAAAAAAAAAAAA", tag: "AAAAAAAAAAAAAAAAAAAAAA==", data: "AAAA" }
+  }, { merge: true });
+  await assert.rejects(() => fns._internal.accessTokenFor(ref));
+  assert.strictEqual(store.docs.get("etsyConnections/c1_222").status, "needs_reconnect");
 });
 
 // --- isolation --------------------------------------------------------------
