@@ -27,7 +27,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 ];
 
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy";
 
 export type IntegrationProvider = {
   id: string;
@@ -58,9 +58,9 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     capabilities: ["Orders", "Customers"], manage: "woocommerce",
   },
   {
-    id: "etsy", name: "Etsy", category: "commerce", kind: "webhook", mark: "E",
-    blurb: "Post orders to NivaDesk from Etsy through an automation.",
-    capabilities: ["Orders"], manage: "inbound",
+    id: "etsy", name: "Etsy", category: "commerce", kind: "native", mark: "E",
+    blurb: "Import orders and customers automatically.",
+    capabilities: ["Orders", "Customers"], manage: "etsy",
   },
   {
     id: "wix", name: "Wix", category: "commerce", kind: "webhook", mark: "W",
