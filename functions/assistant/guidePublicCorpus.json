@@ -426,6 +426,14 @@
    "search": "Language & appearance Make NivaDesk look and read the way you prefer. Both live in Settings ▸ General and sync across your devices. Dil ve Görünüm NivaDesk'in görünüşünü ve dilini istediğiniz gibi yapın. İkisi de Settings ▸ General altındadır ve cihazlarınız arasında senkronlanır."
   },
   {
+   "id": "finding-your-way",
+   "title": "Finding your way around, on each app",
+   "path": "Finding your way around, on each app",
+   "headings": "",
+   "text": "NivaDesk is the same workspace on the web, on Mac, on iPhone and iPad, and on Android — but a phone cannot show a row of menus the way a browser can, so the way you reach a section differs. The rest of this guide writes a place as Section ▸ Tab ▸ Button; this chapter is how to walk that path on the app you are holding.",
+   "search": "Finding your way around, on each app NivaDesk is the same workspace on the web, on Mac, on iPhone and iPad, and on Android — but a phone cannot show a row of menus the way a browser can, so the way you reach a section differs. The rest of this guide writes a place as Section ▸ Tab ▸ Button; this chapter is how to walk that path on the app you are holding. Her uygulamada yolunuzu bulmak NivaDesk web'de, Mac'te, iPhone ve iPad'de, Android'de aynı çalışma alanıdır — ama telefon, tarayıcının gösterdiği menü sırasını gösteremez; bu yüzden bir bölüme nasıl gittiğiniz değişir. Kılavuzun geri kalanı bir yeri Bölüm ▸ Sekme ▸ Düğme diye yazar; bu bölüm, o yolu elinizdeki uygulamada nasıl yürüyeceğinizi anlatır."
+  },
+  {
    "id": "notifications",
    "title": "Notifications on your phone and computer",
    "path": "Notifications on your phone and computer",

@@ -1858,7 +1858,7 @@ class StudioFlowRepository(
 
     suspend fun askAppAssistant(companyId: String, question: String, language: String): AppAssistantAnswer {
         val result = functions.getHttpsCallable("askAppAssistant")
-            .call(mapOf("companyId" to companyId, "question" to question, "language" to language))
+            .call(mapOf("companyId" to companyId, "question" to question, "language" to language, "platform" to "android"))
             .await()
         val data = result.data as? Map<*, *> ?: emptyMap<Any, Any>()
         val sources = (data["sources"] as? List<*>).orEmpty().mapNotNull {

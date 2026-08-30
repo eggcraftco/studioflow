@@ -3832,7 +3832,7 @@ async function websiteAssistantReply(ticketData = {}, historyIn = []) {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages,
-        temperature: 0.2,
+        temperature: 0,
         max_tokens: 400,
         response_format: { type: "json_object" }
       })
@@ -4083,7 +4083,24 @@ function appAssistantRelevantSections(question, limit = 4) {
   return all;
 }
 
-function appAssistantSystemPrompt(language, sections) {
+// Which app the question is being asked from. The menus genuinely differ - a
+// path that is right on the web is wrong on a phone - so the guide tags its
+// step lines and the assistant is told which tag to read. An old client that
+// sends nothing is treated as web, which is what it was already getting.
+const APP_ASSISTANT_PLATFORMS = {
+  web: "Web",
+  mac: "Mac",
+  ios: "iPhone/iPad",
+  android: "Android"
+};
+function appAssistantPlatform(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "ipad" || raw === "iphone") return "ios";
+  if (raw === "macos" || raw === "osx") return "mac";
+  return APP_ASSISTANT_PLATFORMS[raw] ? raw : "web";
+}
+
+function appAssistantSystemPrompt(language, sections, platform = "web") {
   const excerpts = sections.length
     ? sections.map((section) => `## ${section.path}\n${section.text}`).join("\n\n")
     : "(no matching guide section)";
@@ -4092,6 +4109,7 @@ function appAssistantSystemPrompt(language, sections) {
     "",
     "Rules:",
     "1. Answer only from the guide excerpts below. Say where to find it in the app (menu, card, button) in plain steps.",
+    `1b. This person is using NivaDesk on ${APP_ASSISTANT_PLATFORMS[platform] || "Web"}. Step lines in the guide are tagged with the app they belong to - [Web], [Mac], [iPhone/iPad], [Android] - and untagged lines are true everywhere. Use the lines for ${APP_ASSISTANT_PLATFORMS[platform] || "Web"} and the untagged ones. Never read a path tagged for a different app back to them, and never mention the tags themselves. If the only steps you have are tagged for another app, say the feature is there on ${APP_ASSISTANT_PLATFORMS[platform] || "Web"} too but that you do not have its exact path, and offer to pass it to NivaDesk Support.`,
     "2. You CANNOT see this person's workspace: no orders, customers, invoices, files or money. Never state or guess any of their data.",
     "3. If they ask about their own data (\"which orders are overdue\", \"how much did I make\"), explain you cannot see workspace data, and tell them the NivaDesk ChatGPT app can answer that from their real workspace. Then set needsChatGPT.",
     "4. If the excerpts do not cover the question, say so plainly and offer to pass it to NivaDesk Support. Do not invent menus, buttons, prices or limits.",
@@ -4140,6 +4158,7 @@ exports.askAppAssistant = onCall({ region: "europe-west2" }, async (request) => 
     }
 
     const question = cleanSupportMultiline(request.data?.question, 1000);
+    const platform = appAssistantPlatform(request.data?.platform);
     if (!question) {
       throw new HttpsError("invalid-argument", "Please write a question.");
     }
@@ -4159,10 +4178,10 @@ exports.askAppAssistant = onCall({ region: "europe-west2" }, async (request) => 
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: appAssistantSystemPrompt(language, sections) },
+          { role: "system", content: appAssistantSystemPrompt(language, sections, platform) },
           { role: "user", content: question }
         ],
-        temperature: 0.2,
+        temperature: 0,
         max_tokens: 400,
         response_format: { type: "json_object" }
       })

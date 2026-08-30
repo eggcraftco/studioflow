@@ -92,10 +92,18 @@ final class AppHelpAssistantModel: ObservableObject {
         draft = ""
 
         #if canImport(FirebaseFunctions)
+        // The Mac and the iPhone share this file and do NOT share menus, so the
+        // platform has to be decided at runtime rather than written down once.
+        #if os(macOS)
+        let platform = "mac"
+        #else
+        let platform = "ios"
+        #endif
         let payload: [String: Any] = [
             "question": clean,
             "companyId": companyId,
-            "language": language
+            "language": language,
+            "platform": platform
         ]
         Functions.functions(region: "europe-west2")
             .httpsCallable("askAppAssistant")

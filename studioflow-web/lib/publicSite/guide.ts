@@ -28,11 +28,19 @@ import type { GuideNode } from "@/lib/publicSite/guideChrome";
 
 // --- English tree ----------------------------------------------------------
 
-// Edited this file? The assistants do not read it - they read
-// functions/assistant/guideCorpus.json, built from here. Run
-//   node functions/assistant/buildGuideCorpus.js
-// and commit what it writes, or the bot keeps answering from the old text.
-// functions/test/qa/guide-corpus-fresh.test.js fails if you forget.
+// Adding something to the chatbot? Read docs/chatbot.md first - it is short.
+//
+// The three rules that catch everyone:
+//   1. The assistants read functions/assistant/guideCorpus.json, NOT this file.
+//      Run `node functions/assistant/buildGuideCorpus.js` and commit the result,
+//      or the bot keeps answering from the old text with no sign anything is
+//      wrong. guide-corpus-fresh.test.js fails if you forget.
+//   2. `para` blocks are PUBLIC - the website assistant shows them to visitors.
+//      `bullets` are members only. Put steps in a para and you have published
+//      the operating manual to the marketing site.
+//   3. Say WHERE, with the real button names, or the model invents a menu path.
+//      Platform-specific lines start with [Web], [Mac], [iPhone/iPad] or
+//      [Android]; untagged lines are true everywhere, and most should be.
 const TREE_EN: GuideNode[] = [
   {
     id: "getting-started",
@@ -1049,6 +1057,20 @@ const TREE_EN: GuideNode[] = [
         "Language: choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
         "Appearance: switch between light and dark mode.",
         "Your choices are saved to your account, so they follow you on Mac, iPhone, iPad, Android and web."
+      ] }
+    ]
+  },
+  {
+    id: "finding-your-way",
+    title: "Finding your way around, on each app",
+    blocks: [
+      { kind: "para", text: "NivaDesk is the same workspace on the web, on Mac, on iPhone and iPad, and on Android — but a phone cannot show a row of menus the way a browser can, so the way you reach a section differs. The rest of this guide writes a place as Section ▸ Tab ▸ Button; this chapter is how to walk that path on the app you are holding." },
+      { kind: "bullets", items: [
+        "[Web] The sections run along the top of the window — Home, Orders, Production, Dashboard, Bank, Schedule, Notes, Customers, Inventory, Files, Messages, AI Replies, Settings. Click one to open it; a section's tabs then sit inside it.",
+        "[Mac] The same row of sections along the top of the window, and the same tabs inside each one.",
+        "[iPhone/iPad] There is no room for the row, so the sections live behind the menu button in the top bar. Tap it, pick the section, and its tabs appear inside.",
+        "[Android] The same: the menu in the top bar lists the sections, and tabs sit inside the section you pick.",
+        "Everything after the first ▸ — the tabs, the buttons, the fields — is named the same on all four, so once you are in the right section the steps read the same."
       ] }
     ]
   },
@@ -2081,6 +2103,20 @@ const TREE_TR: GuideNode[] = [
         "Dil: 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
         "Görünüm: açık ve koyu mod arasında geçiş yapın.",
         "Tercihleriniz hesabınıza kaydedilir; Mac, iPhone, iPad, Android ve web'de sizi takip eder."
+      ] }
+    ]
+  },
+  {
+    id: "finding-your-way",
+    title: "Her uygulamada yolunuzu bulmak",
+    blocks: [
+      { kind: "para", text: "NivaDesk web'de, Mac'te, iPhone ve iPad'de, Android'de aynı çalışma alanıdır — ama telefon, tarayıcının gösterdiği menü sırasını gösteremez; bu yüzden bir bölüme nasıl gittiğiniz değişir. Kılavuzun geri kalanı bir yeri Bölüm ▸ Sekme ▸ Düğme diye yazar; bu bölüm, o yolu elinizdeki uygulamada nasıl yürüyeceğinizi anlatır." },
+      { kind: "bullets", items: [
+        "[Web] Bölümler pencerenin üstünde sıralanır — Ana Sayfa, Siparişler, Üretim, Pano, Banka, Planlama, Notlar, Müşteriler, Envanter, Dosyalar, Mesajlar, AI Yanıtları, Ayarlar. Birine tıklayın; o bölümün sekmeleri içinde durur.",
+        "[Mac] Pencerenin üstünde aynı bölüm sırası, her bölümün içinde aynı sekmeler.",
+        "[iPhone/iPad] Sıra için yer yok; bölümler üst bardaki menü düğmesinin arkasındadır. Dokunun, bölümü seçin, sekmeleri içinde açılır.",
+        "[Android] Aynısı: üst bardaki menü bölümleri listeler, sekmeler seçtiğiniz bölümün içindedir.",
+        "İlk ▸ işaretinden sonrası — sekmeler, düğmeler, alanlar — dört uygulamada da aynı adı taşır; doğru bölüme girdikten sonra adımlar aynı okunur."
       ] }
     ]
   },
