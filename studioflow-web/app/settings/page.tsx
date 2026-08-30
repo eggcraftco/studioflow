@@ -7369,6 +7369,14 @@ function SupportTicketsSection({
   onSupportUnreadChanged: (count: number) => void;
 }) {
   const [ticketMode, setTicketMode] = useState<StudioSupportTicketType>("workspace");
+  // ?support=appSupport was read by nothing, so the assistant's "send this to
+  // support" link landed on Settings and left you to find the tab yourself.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("support");
+    if (requested === "appSupport" || requested === "workspace" || requested === "website") {
+      setTicketMode(requested);
+    }
+  }, []);
   const [category, setCategory] = useState("project");
   const [priority, setPriority] = useState("normal");
   const [title, setTitle] = useState("");
@@ -7664,8 +7672,10 @@ function SupportTicketsSection({
               <small>{t("Goes to your workspace owner, admins and support managers. For internal project, task, customer or approval questions.")}</small>
             </span>
           </button>
+          {/* Not !isWorkspaceMode: that is also true for Website Chats, so
+              picking that tab lit this one up as well. */}
           <button
-            className={!isWorkspaceMode ? "settings-section-button active" : "settings-section-button"}
+            className={ticketMode === "appSupport" ? "settings-section-button active" : "settings-section-button"}
             type="button"
             onClick={() => setTicketMode("appSupport")}
             style={{ textAlign: "left" }}

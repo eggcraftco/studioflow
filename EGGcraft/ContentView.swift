@@ -20316,13 +20316,23 @@ struct ClientFilesHubView: View {
                     items: previewItems,
                     initialItemID: initial,
                     language: seciliDil,
-                    isAvailableOffline: { _ in false },
-                    offlineURLProvider: { _ in nil },
+                    // These were stubs: the Files screen showed a "Make Offline"
+                    // button that did nothing, never reported a file it already
+                    // had, and never previewed from the local copy.
+                    isAvailableOffline: { firebaseManager.isClientFileAvailableOffline($0) },
+                    offlineURLProvider: { firebaseManager.offlineClientFileURL(for: $0) },
                     onDownload: { item in if let url = URL(string: item.downloadURL) { openURL(url) } },
-                    onMakeOffline: { _ in },
+                    onMakeOffline: { item in
+                        firebaseManager.downloadClientFileForOffline(item) { _, _ in }
+                    },
+                    onRemoveOffline: { firebaseManager.removeOfflineClientFile($0) },
                     onOpenExternal: { item in if let url = URL(string: item.downloadURL) { openURL(url) } }
                 )
+                // A phone is not 680pt wide. This forced the sheet wider than the
+                // screen, which is why the image ran off the edge.
+                #if os(macOS)
                 .frame(minWidth: 680, minHeight: 560)
+                #endif
             }
         }
         .confirmationDialog(

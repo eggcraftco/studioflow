@@ -738,7 +738,10 @@ const TREE_EN: GuideNode[] = [
         "Browse and preview files, and open the order a file belongs to.",
         "See who added each file.",
         "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
-        "To add or delete files, open that order's own Client Files card."
+        "To add or delete files, open that order's own Client Files card.",
+        "Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.",
+        "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
+        "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
       ] }
     ]
   },
@@ -954,7 +957,11 @@ const TREE_EN: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu." }
+          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu." },
+          { kind: "bullets", items: [
+            "Three tabs: Internal Workspace Ticket goes to your own owner, admins and support managers; Contact NivaDesk Support goes to us; Website Chats is the NivaDesk team's own inbox for questions sent from the website widget.",
+            "The \"How do I…?\" assistant can file the ticket for you: when a question is outside what the guide covers it offers Send this to NivaDesk Support, and one press opens the ticket with your question as the title and the assistant's own reply attached, so you never retype it."
+          ] }
         ]
       }
     ]
@@ -1672,7 +1679,10 @@ const TREE_TR: GuideNode[] = [
         "Dosyaları tarayıp önizleyin ve bir dosyanın ait olduğu siparişi açın.",
         "Her dosyayı kimin eklediğini görün.",
         "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
-        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın."
+        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın.",
+        "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
+        "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",
+        "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
       ] }
     ]
   },
@@ -1888,7 +1898,11 @@ const TREE_TR: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı." }
+          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı." },
+          { kind: "bullets", items: [
+            "Üç sekme: Internal Workspace Ticket kendi sahibinize, adminlerinize ve destek yöneticilerinize gider; Contact NivaDesk Support bize gelir; Website Chats ise NivaDesk ekibinin web sitesi widget'ından gelen soruları gördüğü kutudur.",
+            "\"How do I…?\" asistanı ticket'ı sizin için açabilir: soru rehberin kapsamı dışındaysa Send this to NivaDesk Support çıkar, tek tuşla sorunuz başlık olarak ve asistanın kendi cevabı ekli şekilde ticket açılır — soruyu tekrar yazmanız gerekmez."
+          ] }
         ]
       }
     ]

@@ -3339,6 +3339,15 @@ class FirebaseManager: ObservableObject {
         return FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// The other half of "Make Offline". Without it the copy stays on the device
+    /// for good and the only way back is deleting the app.
+    @discardableResult
+    func removeOfflineClientFile(_ item: ClientFileItem) -> Bool {
+        guard let url = offlineClientFileURL(for: item),
+              FileManager.default.fileExists(atPath: url.path) else { return false }
+        return (try? FileManager.default.removeItem(at: url)) != nil
+    }
+
     func downloadClientFileForOffline(_ item: ClientFileItem, completion: @escaping (Bool, String) -> Void) {
         if item.isPendingUpload {
             completion(false, "Pending files are already saved locally until upload completes.")

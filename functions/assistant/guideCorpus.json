@@ -251,7 +251,7 @@
    "title": "Files",
    "path": "Files",
    "headings": "",
-   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.\n- Browse and preview files, and open the order a file belongs to.\n- See who added each file.\n- Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.\n- To add or delete files, open that order's own Client Files card."
+   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.\n- Browse and preview files, and open the order a file belongs to.\n- See who added each file.\n- Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.\n- To add or delete files, open that order's own Client Files card.\n- Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.\n- Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.\n- A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
   },
   {
    "id": "messages",
@@ -356,7 +356,7 @@
    "title": "Support / Tickets",
    "path": "Settings › Support / Tickets",
    "headings": "",
-   "text": "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu."
+   "text": "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu.\n- Three tabs: Internal Workspace Ticket goes to your own owner, admins and support managers; Contact NivaDesk Support goes to us; Website Chats is the NivaDesk team's own inbox for questions sent from the website widget.\n- The \"How do I…?\" assistant can file the ticket for you: when a question is outside what the guide covers it offers Send this to NivaDesk Support, and one press opens the ticket with your question as the title and the assistant's own reply attached, so you never retype it."
   },
   {
    "id": "language-theme",

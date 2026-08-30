@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import uk.co.eggcraft.studioflow.data.firebase.AppAssistantAnswer
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.StudioWorkspace
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Color
 
 /**
  * In-app "How do I…?" helper.
@@ -43,17 +46,23 @@ import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
  * at the ChatGPT app, and anything the guide does not cover goes to Contact
  * NivaDesk Support. Paid plans only — the server enforces that too.
  */
-private data class HelpTurn(val question: String, val answer: AppAssistantAnswer)
+/** [ticket] is "" not sent, "sending", "sent", or the error to show. */
+private data class HelpTurn(
+    val question: String,
+    val answer: AppAssistantAnswer,
+    val ticket: String = ""
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppHelpAssistantSheet(
     repository: StudioFlowRepository,
-    companyId: String,
+    workspace: StudioWorkspace?,
     language: String,
     t: (String) -> String,
     onDismiss: () -> Unit
 ) {
+    val companyId = workspace?.id.orEmpty()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var question by remember { mutableStateOf("") }
@@ -80,7 +89,7 @@ fun AppHelpAssistantSheet(
                 )
             }
 
-            turns.forEach { turn ->
+            turns.forEachIndexed { index, turn ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(turn.question, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Text(turn.answer.answer, fontSize = 14.sp)
@@ -93,11 +102,54 @@ fun AppHelpAssistantSheet(
                             fontSize = 12.sp
                         )
                     }
+                    // The question the guide could not answer IS the ticket. This
+                    // used to be a sentence telling people where to go and retype
+                    // it.
                     if (turn.answer.needsSupport) {
-                        Text(
-                            t("Not covered by the guide — send it from Settings ▸ Support / Tickets ▸ Contact NivaDesk Support."),
-                            fontSize = 12.sp
-                        )
+                        if (turn.ticket == "sent") {
+                            Text(t("Sent to NivaDesk Support."), fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold, color = Color(0xFF15803D))
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    val ws = workspace ?: return@TextButton
+                                    val at = index
+                                    turns = turns.mapIndexed { n, item ->
+                                        if (n == at) item.copy(ticket = "sending") else item
+                                    }
+                                    scope.launch {
+                                        val attempted = t("The in-app assistant could not answer this. What it replied:")
+                                        val outcome = runCatching {
+                                            repository.createSupportTicket(
+                                                workspace = ws,
+                                                category = "question",
+                                                priority = "normal",
+                                                title = turn.question.take(120),
+                                                message = "${turn.question}\n\n---\n$attempted\n${turn.answer.answer}"
+                                            )
+                                        }
+                                        turns = turns.mapIndexed { n, item ->
+                                            if (n != at) item
+                                            else item.copy(
+                                                ticket = if (outcome.isSuccess) "sent"
+                                                else outcome.exceptionOrNull()?.message
+                                                    ?: t("The ticket could not be sent.")
+                                            )
+                                        }
+                                    }
+                                },
+                                enabled = workspace != null && turn.ticket != "sending"
+                            ) {
+                                Text(
+                                    if (turn.ticket == "sending") t("Sending...")
+                                    else t("Send this to NivaDesk Support"),
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold
+                                )
+                            }
+                            if (turn.ticket.isNotBlank() && turn.ticket != "sending") {
+                                Text(turn.ticket, fontSize = 11.sp, color = Color(0xFFDC2626))
+                            }
+                        }
                     }
                 }
             }
@@ -149,9 +201,10 @@ fun AppHelpAssistantSheet(
 @Composable
 fun AppHelpAssistantLauncher(
     repository: StudioFlowRepository,
-    companyId: String,
+    workspace: StudioWorkspace?,
     language: String
 ) {
+    val companyId = workspace?.id.orEmpty()
     var available by remember(companyId) { mutableStateOf(false) }
     var open by remember { mutableStateOf(false) }
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, language) }
@@ -181,7 +234,7 @@ fun AppHelpAssistantLauncher(
     if (open) {
         AppHelpAssistantSheet(
             repository = repository,
-            companyId = companyId,
+            workspace = workspace,
             language = language,
             t = t,
             onDismiss = { open = false }

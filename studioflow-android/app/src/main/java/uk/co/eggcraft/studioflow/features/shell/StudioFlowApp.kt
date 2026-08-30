@@ -368,7 +368,9 @@ private fun StudioFlowAppContent(
             Box(Modifier.weight(1f)) {
                 uk.co.eggcraft.studioflow.features.help.AppHelpAssistantLauncher(
                     repository = viewModel.helpRepository,
-                    companyId = state.workspace?.id.orEmpty(),
+                    // The whole workspace, not just its id: a question the guide
+                    // cannot answer files a support ticket from the sheet itself.
+                    workspace = state.workspace,
                     language = state.workspaceSettings.selectedLanguage
                 )
                 StudioFlowMainScreen(

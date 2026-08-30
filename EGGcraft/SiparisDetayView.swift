@@ -186,9 +186,26 @@ struct ClientFilePreviewSheet: View {
     let offlineURLProvider: (ClientFileItem) -> URL?
     let onDownload: (ClientFileItem) -> Void
     let onMakeOffline: (ClientFileItem) -> Void
+    /// Offline copies live on the device forever otherwise: a button that only
+    /// ever adds is a button that quietly fills the phone.
+    let onRemoveOffline: (ClientFileItem) -> Void
     let onOpenExternal: (ClientFileItem) -> Void
 
     @State private var selectedItemID: UUID
+    /// Flipped by the offline buttons so the row redraws — the answer lives on
+    /// disk, not in state, and SwiftUI has no reason to look again otherwise.
+    @State private var offlineTick = 0
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        return sizeClass == .compact
+        #else
+        return false
+        #endif
+    }
 
     init(
         items: [ClientFileItem],
@@ -198,6 +215,7 @@ struct ClientFilePreviewSheet: View {
         offlineURLProvider: @escaping (ClientFileItem) -> URL?,
         onDownload: @escaping (ClientFileItem) -> Void,
         onMakeOffline: @escaping (ClientFileItem) -> Void,
+        onRemoveOffline: @escaping (ClientFileItem) -> Void = { _ in },
         onOpenExternal: @escaping (ClientFileItem) -> Void
     ) {
         self.items = items
@@ -206,6 +224,7 @@ struct ClientFilePreviewSheet: View {
         self.offlineURLProvider = offlineURLProvider
         self.onDownload = onDownload
         self.onMakeOffline = onMakeOffline
+        self.onRemoveOffline = onRemoveOffline
         self.onOpenExternal = onOpenExternal
         _selectedItemID = State(initialValue: initialItemID)
     }
@@ -230,6 +249,32 @@ struct ClientFilePreviewSheet: View {
             return offlineURL
         }
         return URL(string: item.downloadURL)
+    }
+
+    /// Labelled on a Mac, icon-only on a phone — same button, same meaning, and
+    /// the label stays as the accessibility name either way.
+    @ViewBuilder
+    private func previewButton(_ symbol: String, _ label: String,
+                               prominent: Bool, tint: Color? = nil,
+                               action: @escaping () -> Void) -> some View {
+        let content = Button(action: action) {
+            if isCompact {
+                Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
+                    .frame(minWidth: 22)
+            } else {
+                Label(label, systemImage: symbol)
+            }
+        }
+        .accessibilityLabel(label)
+        .help(label)
+
+        if prominent {
+            content.buttonStyle(.borderedProminent)
+        } else if let tint {
+            content.buttonStyle(.bordered).tint(tint)
+        } else {
+            content.buttonStyle(.bordered)
+        }
     }
 
     private func move(_ delta: Int) {
@@ -267,50 +312,44 @@ struct ClientFilePreviewSheet: View {
             }
 
             if let currentItem {
+                // No minimum height on a phone: a 360pt floor plus the header and
+                // the buttons is taller than the sheet, and the image was pushed
+                // off the bottom of the screen.
                 ClientFilePreviewContentView(item: currentItem, url: previewURL(for: currentItem), language: language)
-                    .frame(minHeight: 360)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minHeight: isCompact ? 0 : 360)
+                    .id(offlineTick)
 
+                // Five labelled buttons need about 520pt. A phone has 390, so the
+                // row ran off the side; there the labels become their icons and
+                // the file's own name in the header says what is being acted on.
                 HStack(spacing: 8) {
-                    Button {
-                        move(-1)
-                    } label: {
-                        Label(lt("Previous"), systemImage: "chevron.left")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(currentIndex <= 0)
-
-                    Button {
-                        move(1)
-                    } label: {
-                        Label(lt("Next"), systemImage: "chevron.right")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(currentIndex >= items.count - 1)
+                    previewButton("chevron.left", lt("Previous"), prominent: false) { move(-1) }
+                        .disabled(currentIndex <= 0)
+                    previewButton("chevron.right", lt("Next"), prominent: false) { move(1) }
+                        .disabled(currentIndex >= items.count - 1)
 
                     Spacer(minLength: 0)
 
-                    if !currentItem.isPendingUpload && !isAvailableOffline(currentItem) {
-                        Button {
-                            onMakeOffline(currentItem)
-                        } label: {
-                            Label(lt("Make Offline"), systemImage: "arrow.down.circle")
+                    if !currentItem.isPendingUpload {
+                        // One button, two directions: a file already on the device
+                        // needs a way back off it, or the phone quietly fills up.
+                        let offline = isAvailableOffline(currentItem)
+                        previewButton(offline ? "checkmark.circle.fill" : "arrow.down.circle",
+                                      offline ? lt("Remove offline copy") : lt("Make Offline"),
+                                      prominent: false,
+                                      tint: offline ? .green : nil) {
+                            if offline { onRemoveOffline(currentItem) } else { onMakeOffline(currentItem) }
+                            offlineTick += 1
                         }
-                        .buttonStyle(.bordered)
                     }
 
-                    Button {
+                    previewButton("arrow.up.right.square", lt("Open"), prominent: false) {
                         onOpenExternal(currentItem)
-                    } label: {
-                        Label(lt("Open"), systemImage: "arrow.up.right.square")
                     }
-                    .buttonStyle(.bordered)
-
-                    Button {
+                    previewButton("square.and.arrow.down", lt("Download"), prominent: true) {
                         onDownload(currentItem)
-                    } label: {
-                        Label(lt("Download"), systemImage: "square.and.arrow.down")
                     }
-                    .buttonStyle(.borderedProminent)
                 }
             } else {
                 Spacer()
@@ -2316,6 +2355,7 @@ struct SiparisDetayView: View {
                 offlineURLProvider: { firebaseManager.offlineClientFileURL(for: $0) },
                 onDownload: { downloadClientFileToUserLocation($0) },
                 onMakeOffline: { makeClientFileAvailableOffline($0) },
+                onRemoveOffline: { firebaseManager.removeOfflineClientFile($0) },
                 onOpenExternal: { openClientFileExternally($0) }
             )
         }

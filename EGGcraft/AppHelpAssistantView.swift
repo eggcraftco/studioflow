@@ -21,6 +21,8 @@ struct AppHelpTurn: Identifiable {
     let needsChatGPT: Bool
     let needsSupport: Bool
     let sources: [String]
+    /// "" not sent, "sending", "sent", or the error to show.
+    var ticket: String = ""
 }
 
 @MainActor
@@ -41,6 +43,41 @@ final class AppHelpAssistantModel: ObservableObject {
                 Task { @MainActor in self?.available = isAvailable }
             }
         #endif
+    }
+
+    /// One press files the ticket, with the answer the assistant gave attached so
+    /// support can see what it already tried. It used to be a sentence telling
+    /// people to go to Settings and type their question a second time.
+    func sendToSupport(_ turnId: UUID, companyId: String, companyName: String,
+                       userId: String, userEmail: String, userName: String,
+                       language: String, firebaseManager: FirebaseManager) {
+        guard let index = turns.firstIndex(where: { $0.id == turnId }) else { return }
+        let turn = turns[index]
+        guard turn.ticket.isEmpty else { return }
+        turns[index].ticket = "sending"
+
+        let attempted = t("The in-app assistant could not answer this. What it replied:", lang: language)
+        firebaseManager.submitSupportTicketReturningId(
+            companyId: companyId,
+            companyName: companyName,
+            userId: userId,
+            userEmail: userEmail,
+            userName: userName,
+            title: String(turn.question.prefix(120)),
+            message: "\(turn.question)\n\n---\n\(attempted)\n\(turn.answer)",
+            category: "question",
+            priority: "normal",
+            language: language
+        ) { [weak self] ok, _ in
+            guard let self, let at = self.turns.firstIndex(where: { $0.id == turnId }) else { return }
+            if ok {
+                self.turns[at].ticket = "sent"
+            } else {
+                self.turns[at].ticket = firebaseManager.supportTicketError.isEmpty
+                    ? t("The ticket could not be sent.", lang: language)
+                    : firebaseManager.supportTicketError
+            }
+        }
     }
 
     func askDraft(companyId: String, language: String) {
@@ -93,6 +130,8 @@ struct AppHelpAssistantView: View {
     let lang: String
     @Binding var isPresented: Bool
     @ObservedObject var model: AppHelpAssistantModel
+    @EnvironmentObject var authVM: AuthViewModel
+    @EnvironmentObject var firebaseManager: FirebaseManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -139,7 +178,18 @@ struct AppHelpAssistantView: View {
                 }
 
                 ForEach(model.turns) { turn in
-                    AppHelpTurnRow(turn: turn, lang: lang)
+                    AppHelpTurnRow(turn: turn, lang: lang) {
+                        model.sendToSupport(
+                            turn.id,
+                            companyId: companyId,
+                            companyName: authVM.companyName,
+                            userId: authVM.currentUserId ?? "",
+                            userEmail: authVM.accountEmail,
+                            userName: authVM.accountDisplayName,
+                            language: lang,
+                            firebaseManager: firebaseManager
+                        )
+                    }
                 }
 
                 if model.busy {
@@ -197,6 +247,7 @@ struct AppHelpAssistantView: View {
 private struct AppHelpTurnRow: View {
     let turn: AppHelpTurn
     let lang: String
+    var onSendToSupport: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -225,11 +276,29 @@ private struct AppHelpTurnRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            // The question the guide could not answer IS the ticket. This used
+            // to be a sentence telling people where to go and retype it.
             if turn.needsSupport {
-                Text(t("Not covered by the guide — send it from Settings ▸ Support / Tickets ▸ Contact NivaDesk Support.", lang: lang))
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if turn.ticket == "sent" {
+                    Text(t("Sent to NivaDesk Support.", lang: lang))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(HomeTone.green)
+                } else {
+                    Button {
+                        onSendToSupport()
+                    } label: {
+                        Text(turn.ticket == "sending"
+                             ? t("Sending...", lang: lang)
+                             : t("Send this to NivaDesk Support", lang: lang))
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.accentColor)
+                    .disabled(turn.ticket == "sending")
+                    if !turn.ticket.isEmpty && turn.ticket != "sending" {
+                        Text(turn.ticket).font(.system(size: 11)).foregroundColor(.red)
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
