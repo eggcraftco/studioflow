@@ -28,7 +28,10 @@ export async function getAppAssistantAvailability(): Promise<AppAssistantAvailab
 export async function askAppAssistant(input: { question: string; language: string; companyId: string }) {
   try {
     const callable = httpsCallable<Record<string, unknown>, AppAssistantAnswer>(functions, "askAppAssistant");
-    const result = await callable({ ...input });
+    // Menus differ per app, and the guide tags its steps accordingly. Saying
+    // which app this is stops the assistant reading a phone's path to someone
+    // sitting at a browser.
+    const result = await callable({ ...input, platform: "web" });
     return result.data || {};
   } catch (error) {
     const raw = error instanceof Error ? error.message : "";

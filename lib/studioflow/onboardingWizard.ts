@@ -33,6 +33,9 @@ export type OnboardingStart =
 export type OnboardingAnswers = {
   country: string;
   currency: string;
+  /** The workspace's language. Guessed from the browser, changed here rather
+   *  than hunted for in Settings after the fact. */
+  language: string;
   timeZone: string;
   workKinds: OnboardingWorkKind[];
   workflow: OnboardingWorkflow;
@@ -352,6 +355,7 @@ export async function saveOnboardingAnswers(
       ...presetPayload,
       selectedCountry: answers.country,
       selectedCurrency: answers.currency,
+      selectedLanguage: answers.language,
       selectedTimeZone: answers.timeZone,
       onboardingWorkKinds: answers.workKinds,
       onboardingWorkflow: answers.workflow,

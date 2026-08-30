@@ -125,6 +125,9 @@ export type ProductionOrderLike = {
   status?: string;
   extraStatuses?: Record<string, string>;
   isDelivered?: boolean;
+  /** The record of the job leaving the workshop; it is what turns a finished
+   *  order into a Done one. */
+  isDispatched?: boolean;
   productionStageOverride?: string;
   productionBlocker?: { reason?: string; note?: string } | null;
 };
@@ -190,7 +193,13 @@ export function resolveProductionStage(
   }
 
   if (total === 0) return { ...base, stageId: ready.id, source: "auto", blocker: null };
-  if (doneCount >= total) return { ...base, stageId: shipReady.id, source: "auto", blocker: null };
+  // Two milestones, not one: the work being finished and the job leaving the
+  // workshop. Every step ticked means it is MADE — Ready to Ship. It only
+  // becomes Done once it has actually gone, which dispatch is the record of.
+  if (doneCount >= total) {
+    const gone = order.isDispatched === true;
+    return { ...base, stageId: gone && done ? done.id : shipReady.id, source: "auto", blocker: null };
+  }
   if (values.every(stepIsIdle)) return { ...base, stageId: ready.id, source: "auto", blocker: null };
 
   if (currentStep) {

@@ -88,7 +88,13 @@ const TX_TYPE_META: Record<string, { label: string; color: string; translate: bo
   CREDIT: { label: "Incoming", color: "#16a34a", translate: true },
   DEBIT: { label: "Payment", color: "#6b7280", translate: true }
 };
-type BankRule = { id: string; keyword: string; category: string; vatCode: string; appliesTo: "out" | "in" | "both" };
+type BankRule = {
+  id: string; keyword: string; category: string; vatCode: string;
+  appliesTo: "out" | "in" | "both";
+  /** The owner's own wording. Empty means the heading built from the keyword
+   *  and the category, which is what a rule showed before it could be named. */
+  name: string;
+};
 // A receipt uploaded before its payment reached the bank feed; the server
 // re-scores it after every sync and attaches it when a confident match lands.
 type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
@@ -208,7 +214,11 @@ function BankPageContent() {
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [customCategories, setCustomCategories] = useState<BankCategoryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [view, setView] = useState<"week" | "month" | "year">("month");
+  const [view, setView] = useState<"week" | "month" | "year" | "custom">("month");
+  // Any two dates, not just the three periods the tabs offer. Kept as ISO days so
+  // it compares directly against bookingDate, which is already an ISO day.
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   // Week view: Monday of the selected week (local time).
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   // Transactions table direction filter: everything, spending only, or incoming only.
@@ -248,6 +258,13 @@ function BankPageContent() {
   const [newRuleCategory, setNewRuleCategory] = useState("");
   const [newRuleVat, setNewRuleVat] = useState("");
   const [newRuleAppliesTo, setNewRuleAppliesTo] = useState<BankRule["appliesTo"]>("out");
+  // A rule being edited in place: its id, and the draft of every field it has.
+  // Rules could only be created and deleted before, so getting one wrong meant
+  // deleting it and typing it again.
+  const [editingRuleId, setEditingRuleId] = useState("");
+  const [editRule, setEditRule] = useState<Omit<BankRule, "id">>(
+    { keyword: "", category: "", vatCode: "", appliesTo: "out", name: "" }
+  );
   // Category manager (Rules tab): one shared form for add + edit.
   const [catFormOpen, setCatFormOpen] = useState(false);
   const [catFormId, setCatFormId] = useState("");
@@ -431,6 +448,7 @@ function BankPageContent() {
             keyword: String(data.keyword || ""),
             category: String(data.category || ""),
             vatCode: String(data.vatCode || ""),
+            name: String(data.name || ""),
             appliesTo: (["out", "in", "both"].includes(String(data.appliesTo)) ? String(data.appliesTo) : "out") as BankRule["appliesTo"]
           };
         }));
@@ -938,13 +956,20 @@ function BankPageContent() {
   const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
   const weekStartIso = isoDay(weekStart);
   const weekEndIso = isoDay(addDays(weekStart, 6));
-  const isCurrentPeriod = view === "month"
+  // A custom range is whatever the person picked, in the order they picked it.
+  const customStart = customFrom && customTo ? (customFrom <= customTo ? customFrom : customTo) : "";
+  const customEnd = customFrom && customTo ? (customFrom <= customTo ? customTo : customFrom) : "";
+  const isCurrentPeriod = view === "custom"
+    ? true
+    : view === "month"
     ? selectedYear === now.getFullYear() && selectedMonth === now.getMonth()
     : view === "week"
       ? weekStartIso >= isoDay(startOfWeek(now))
       : selectedYear === now.getFullYear();
 
   function stepPeriod(direction: -1 | 1) {
+    // A range the person chose by hand has no next or previous.
+    if (view === "custom") return;
     if (view === "year") {
       setSelectedYear(year => Math.min(now.getFullYear(), year + direction));
       return;
@@ -979,17 +1004,28 @@ function BankPageContent() {
   // The list follows the selected period; anything older stays reachable by
   // switching the tab back.
   const visibleTransactions = useMemo(() => {
+    if (view === "custom") {
+      if (!customStart || !customEnd) return transactions;
+      return transactions.filter(item => item.bookingDate >= customStart && item.bookingDate <= customEnd);
+    }
     if (view === "week") {
       return transactions.filter(item => item.bookingDate >= weekStartIso && item.bookingDate <= weekEndIso);
     }
     const prefix = view === "month" ? monthPrefix : String(selectedYear);
     return transactions.filter(item => item.bookingDate.startsWith(prefix));
-  }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso]);
+  }, [transactions, view, monthPrefix, selectedYear, weekStartIso, weekEndIso, customStart, customEnd]);
 
   // Previous period spend (week/month/year) for the "vs last …" delta.
   const previousPeriodSpent = useMemo(() => {
     let inRange: (date: string) => boolean;
-    if (view === "week") {
+    if (view === "custom") {
+      // The same number of days again, ending the day before the range starts.
+      if (!customStart || !customEnd) return 0;
+      const days = Math.round((new Date(customEnd).getTime() - new Date(customStart).getTime()) / 86400000) + 1;
+      const previousEnd = isoDay(addDays(new Date(customStart), -1));
+      const previousStart = isoDay(addDays(new Date(customStart), -days));
+      inRange = date => date >= previousStart && date <= previousEnd;
+    } else if (view === "week") {
       const start = isoDay(addDays(weekStart, -7));
       const end = isoDay(addDays(weekStart, -1));
       inRange = date => date >= start && date <= end;
@@ -1001,7 +1037,7 @@ function BankPageContent() {
       inRange = date => date.startsWith(String(selectedYear - 1));
     }
     return transactions.filter(item => item.amount < 0 && inRange(item.bookingDate)).reduce((acc, item) => acc + Math.abs(item.amount), 0);
-  }, [transactions, view, weekStart, selectedYear, selectedMonth]);
+  }, [transactions, view, weekStart, selectedYear, selectedMonth, customStart, customEnd]);
 
   // Spending per effective category for the selected period (Year/Month tab).
   // Every category name present in the feed (presets + custom), for the
@@ -1346,6 +1382,35 @@ function BankPageContent() {
       setBusy(null);
     }
   }
+  function startEditingRule(rule: BankRule) {
+    setEditingRuleId(rule.id);
+    setEditRule({
+      keyword: rule.keyword, category: rule.category, vatCode: rule.vatCode,
+      appliesTo: rule.appliesTo, name: rule.name,
+    });
+  }
+
+  async function saveEditedRule() {
+    const keyword = editRule.keyword.trim().toLowerCase();
+    if (!editingRuleId || keyword.length < 2 || !editRule.category) return;
+    setBusy(`rule-${editingRuleId}`);
+    try {
+      // By id, not by keyword: the keyword is one of the things being changed,
+      // and keying on it would leave the old rule behind.
+      await call("bankSaveRule", {
+        ruleId: editingRuleId, keyword, category: editRule.category,
+        vatCode: editRule.vatCode, appliesTo: editRule.appliesTo,
+        name: editRule.name.trim(),
+      });
+      setStatus(t("Rule saved."));
+      setEditingRuleId("");
+    } catch (ruleError) {
+      setError(ruleError instanceof Error ? ruleError.message : "Could not save the rule.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function createSuggestedRule(item: { keyword: string; category: string }) {
     setBusy(`rule-${item.keyword}`);
     try {
@@ -1424,19 +1489,25 @@ function BankPageContent() {
   const pagedTransactions = sortedTransactions.slice((txPage - 1) * txPageSize, txPage * txPageSize);
   const pageSpendingIds = pagedTransactions.filter(item => item.amount < 0).map(item => item.id);
   const allPageSelected = pageSpendingIds.length > 0 && pageSpendingIds.every(id => selectedIds.has(id));
-  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, txFlow, txAttention, txSearch, txReview]);
+  useEffect(() => { setTxPage(1); setSelectedIds(new Set()); }, [view, selectedYear, selectedMonth, weekStart, customStart, customEnd, txFlow, txAttention, txSearch, txReview]);
 
   const activeRecurring = recurring.filter(item => item.active);
   const cancelledRecurring = recurring.filter(item => !item.active);
-  const periodLabel = view === "month"
+  const periodLabel = view === "custom"
+    ? (customStart && customEnd
+        ? `${new Date(customStart).toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${new Date(customEnd).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
+        : t("Pick two dates"))
+    : view === "month"
     ? new Date(selectedYear, selectedMonth, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : view === "week"
       ? `${weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${addDays(weekStart, 6).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
       : String(selectedYear);
-  const weekTotal = view === "week" ? visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0) : 0;
-  const spentTotal = view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
+  const rangeTotal = visibleTransactions.filter(item => item.amount < 0).reduce((acc, item) => acc + Math.abs(item.amount), 0);
+  const weekTotal = view === "week" ? rangeTotal : 0;
+  const spentTotal = view === "custom" ? rangeTotal : view === "month" ? monthTotal : view === "week" ? weekTotal : yearSeries.total;
   const spentDelta = previousPeriodSpent > 0 ? ((spentTotal - previousPeriodSpent) / previousPeriodSpent) * 100 : null;
-  const deltaLabel = view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
+  const deltaLabel = view === "custom" ? t("vs the same length before")
+    : view === "week" ? t("vs last week") : view === "month" ? t("vs last month") : t("vs last year");
   const incomingCount = visibleTransactions.filter(item => item.amount > 0).length;
   function showIncoming() {
     setTab("transactions");
@@ -1586,19 +1657,37 @@ function BankPageContent() {
               </div>
               <span style={{ flex: 1 }} />
               <div role="tablist" aria-label={t("Spending period")} style={{ display: "inline-flex", gap: 2, background: "rgba(120,120,140,0.12)", borderRadius: 9, padding: 3 }}>
-                {(["week", "month", "year"] as const).map(option => (
+                {(["week", "month", "year", "custom"] as const).map(option => (
                   <button key={option} type="button" role="tab" aria-selected={view === option}
-                    onClick={() => setView(option)}
+                    onClick={() => {
+                      // Opening the range with something in it: the month on show,
+                      // so the figures do not blank while two dates are picked.
+                      if (option === "custom" && !customFrom && !customTo) {
+                        setCustomFrom(`${monthPrefix}-01`);
+                        setCustomTo(isoDay(now));
+                      }
+                      setView(option);
+                    }}
                     style={{ border: 0, cursor: "pointer", fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, background: view === option ? "#2563eb" : "transparent", color: view === option ? "#fff" : "inherit" }}>
-                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : t("Yearly")}
+                    {option === "week" ? t("Weekly") : option === "month" ? t("Monthly") : option === "year" ? t("Yearly") : t("Date range")}
                   </button>
                 ))}
               </div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
-                <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
-                <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
-              </span>
+              {view === "custom" ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, paddingBottom: 2 }}>
+                  <input type="date" value={customFrom} max={isoDay(now)} onChange={event => setCustomFrom(event.target.value)}
+                         aria-label={t("From")} style={bankDateInput} />
+                  <span style={{ opacity: 0.5 }}>–</span>
+                  <input type="date" value={customTo} max={isoDay(now)} onChange={event => setCustomTo(event.target.value)}
+                         aria-label={t("To")} style={bankDateInput} />
+                </span>
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
+                  <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(-1)} aria-label={t("Previous period")}>‹</button>
+                  <strong style={{ fontSize: 13, minWidth: 104, textAlign: "center" }}>{periodLabel}</strong>
+                  <button type="button" className="finance-payments-delete" onClick={() => stepPeriod(1)} disabled={isCurrentPeriod} aria-label={t("Next period")} style={{ opacity: isCurrentPeriod ? 0.3 : 1 }}>›</button>
+                </span>
+              )}
             </div>
 
             {/* ---- Connected account bar ---------------------------------- */}
@@ -2452,7 +2541,7 @@ function BankPageContent() {
                   <div style={bankCard}>
                     <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Receipts matched")}</p>
                     <strong style={tileValue}>{receiptStats.matched}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.total ? Math.round((receiptStats.matched / receiptStats.total) * 100) : 0}% {t("of")} {receiptStats.total} {t("transactions").toLowerCase()}</span>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.total ? Math.round((receiptStats.matched / receiptStats.total) * 100) : 0}% {t("of")} {receiptStats.total} {t("transactions")}</span>
                     <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
                   </div>
                   <div style={bankCard}>
@@ -2477,8 +2566,13 @@ function BankPageContent() {
                     ) : null}
                   </div>
                 </div>
-                {waitingReceipts.length ? (
-                  <div style={{ ...bankCard, borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.05)" }}>
+                {/* Always here, even at zero. A receipt sent from ChatGPT before its
+                    payment reaches the feed is kept in NivaDesk and attached later,
+                    and this is the only place it can be seen — a section that
+                    appears only when something is in it is a place nobody can find
+                    when they go looking for it. */}
+                {true ? (
+                  <div style={{ ...bankCard, borderColor: waitingReceipts.length ? "rgba(245,158,11,0.35)" : "rgba(120,120,140,0.2)", background: waitingReceipts.length ? "rgba(245,158,11,0.05)" : "transparent" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                       <TileBadge bg="rgba(245,158,11,0.16)">⏳</TileBadge>
                       <strong style={{ fontSize: 14.5 }}>{t("Waiting for the bank")} ({waitingReceipts.length})</strong>
@@ -2486,6 +2580,11 @@ function BankPageContent() {
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
                       {isOwner ? <button type="button" style={bankBtnSm} disabled={busy === "waiting-match"} onClick={() => void matchWaitingNow()}>⟳ {busy === "waiting-match" ? t("Matching…") : t("Match now")}</button> : null}
                     </div>
+                    {waitingReceipts.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: 12.5, opacity: 0.7 }}>
+                        {t("Nothing waiting. Receipts sent before their payment reaches the bank feed are held here until it does.")}
+                      </p>
+                    ) : null}
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {waitingReceipts.map(item => {
                         const ageDays = item.createdAt ? Math.floor((Date.now() - item.createdAt.getTime()) / 86400000) : 0;
@@ -2603,7 +2702,8 @@ function BankPageContent() {
             {transactions.length > 0 && tab === "rules" ? (
               <>
                 {(() => {
-                  const ruleName = (rule: BankRule) => `${rule.keyword.charAt(0).toUpperCase()}${rule.keyword.slice(1)} ${t(rule.category)} ${t("Rule")}`;
+                  const ruleName = (rule: BankRule) => rule.name.trim()
+                    || `${rule.keyword.charAt(0).toUpperCase()}${rule.keyword.slice(1)} ${t(rule.category)} ${t("Rule")}`;
                   const appliesTo = (txType: string) => {
                     const meta = TX_TYPE_META[txType];
                     if (!meta) return "—";
@@ -2714,6 +2814,59 @@ function BankPageContent() {
                                 ) : shownRules.map(rule => {
                                   const stat = ruleStats.get(rule.id);
                                   const active = previewRuleId === rule.id;
+                                  if (editingRuleId === rule.id) {
+                                    // The heading and everything under it, in place.
+                                    return (
+                                      <tr key={rule.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: "rgba(37,99,235,0.06)" }}>
+                                        <td style={{ ...rulesTd, paddingLeft: 18 }}>
+                                          <input type="text" value={editRule.name} autoFocus
+                                            placeholder={ruleName(rule)}
+                                            aria-label={t("Rule name")}
+                                            onChange={event => setEditRule(current => ({ ...current, name: event.target.value }))}
+                                            onKeyDown={event => { if (event.key === "Enter") void saveEditedRule(); if (event.key === "Escape") setEditingRuleId(""); }}
+                                            style={{ ...pickerInput, width: "100%", fontWeight: 700 }} />
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <input type="text" value={editRule.keyword}
+                                            aria-label={t("If merchant contains")}
+                                            onChange={event => setEditRule(current => ({ ...current, keyword: event.target.value }))}
+                                            onKeyDown={event => { if (event.key === "Enter") void saveEditedRule(); if (event.key === "Escape") setEditingRuleId(""); }}
+                                            style={{ ...pickerInput, width: "100%" }} />
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.category} aria-label={t("Category")}
+                                            onChange={event => setEditRule(current => ({ ...current, category: event.target.value }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            {categoryOptions.map(name => <option key={name} value={name}>{t(name)}</option>)}
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.vatCode} aria-label={t("VAT / Tax code")}
+                                            onChange={event => setEditRule(current => ({ ...current, vatCode: event.target.value }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            <option value="">{t("Use category default")}</option>
+                                            {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd}>
+                                          <select value={editRule.appliesTo} aria-label={t("Applies to")}
+                                            onChange={event => setEditRule(current => ({ ...current, appliesTo: event.target.value as BankRule["appliesTo"] }))}
+                                            style={{ ...pickerInput, width: "100%" }}>
+                                            <option value="out">{t("Money out")}</option>
+                                            <option value="in">{t("Money in")}</option>
+                                            <option value="both">{t("Money in & out")}</option>
+                                          </select>
+                                        </td>
+                                        <td style={rulesTd} colSpan={2} />
+                                        <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
+                                          <button type="button" style={bankBtnSm} onClick={() => setEditingRuleId("")}>{t("Cancel")}</button>
+                                          <button type="button" style={{ ...bankBtnSm, marginLeft: 6, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}
+                                            disabled={busy === `rule-${rule.id}` || editRule.keyword.trim().length < 2 || !editRule.category}
+                                            onClick={() => void saveEditedRule()}>{t("Save")}</button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
                                   return (
                                     <tr key={rule.id} onClick={() => setPreviewRuleId(active ? null : rule.id)}
                                       style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", cursor: "pointer", background: active ? "rgba(37,99,235,0.08)" : undefined, boxShadow: active ? "inset 3px 0 0 #2563eb" : undefined }}>
@@ -2728,6 +2881,7 @@ function BankPageContent() {
                                       <td style={rulesTd}><span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 9px", background: "rgba(22,163,74,0.12)", color: "#16a34a" }}>{t("Active")}</span></td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", opacity: 0.75 }}>{stat?.lastDate ? new Date(stat.lastDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
                                       <td style={{ ...rulesTd, whiteSpace: "nowrap", textAlign: "right", paddingLeft: 0 }}>
+                                        {isOwner ? <button type="button" style={{ ...bankBtnSm, marginRight: 6 }} onClick={event => { event.stopPropagation(); startEditingRule(rule); }} aria-label={t("Edit")} title={t("Edit")}>✎</button> : null}
                                         {isOwner ? <button type="button" className="finance-payments-delete" disabled={busy === `rule-${rule.id}`} onClick={event => { event.stopPropagation(); void deleteRule(rule); }} aria-label={t("Delete this rule?")} title={t("Delete this rule?")}>✕</button> : null}
                                       </td>
                                     </tr>
@@ -3371,6 +3525,11 @@ const bankBtn: React.CSSProperties = {
   border: "1px solid rgba(120,120,140,0.3)", background: "transparent", color: "inherit",
   borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer"
 };
+const bankDateInput: React.CSSProperties = {
+  border: "1px solid rgba(120,120,140,0.3)", borderRadius: 8, padding: "5px 9px",
+  fontSize: 12.5, background: "transparent", color: "inherit", fontFamily: "inherit"
+};
+
 const bankBtnSm: React.CSSProperties = { ...bankBtn, padding: "5px 12px", fontSize: 12 };
 // Stat tiles share a min height and push their footer link to the bottom so a
 // row of them lines up however much text each one carries.

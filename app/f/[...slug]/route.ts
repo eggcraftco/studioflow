@@ -164,15 +164,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   <title>${safeName}${brandSuffix}</title>
   <link rel="icon" href="/favicon.ico" />
   <style>
+    /* 100vh on a phone is the viewport WITHOUT the browser's own toolbars, so a
+       portrait photo sized to it hangs off the bottom of the screen. dvh is the
+       height actually on show; vh stays as the fallback for older browsers. */
     html, body { height: 100%; margin: 0; background: #0b0b0c; }
-    body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    img, video { max-width: 100vw; max-height: 100vh; object-fit: contain; display: block; }
-    iframe { border: 0; width: 100vw; height: 100vh; background: #1b1b1f; }
+    body {
+      height: 100vh; height: 100dvh;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    img, video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+    iframe { border: 0; width: 100%; height: 100%; background: #1b1b1f; }
     .generic { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .filecard { text-align: center; color: #e6e6e6; padding: 28px 32px; background: #161618; border: 1px solid #2a2a2e; border-radius: 16px; }
     .filecard .name { margin: 0 0 14px; font-weight: 700; font-size: 15px; word-break: break-all; }
     .filecard .dl { display: inline-block; padding: 10px 18px; border-radius: 10px; background: #16a34a; color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; }
-    .dl-fab { position: fixed; right: 16px; bottom: 16px; padding: 9px 14px; border-radius: 999px; background: rgba(22,163,74,0.92); color: #fff; text-decoration: none; font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+    /* Clear of the home indicator and the Safari toolbar. */
+    .dl-fab { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); padding: 9px 14px; border-radius: 999px; background: rgba(22,163,74,0.92); color: #fff; text-decoration: none; font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
   </style>
 </head>
 <body>

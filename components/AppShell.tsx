@@ -36,6 +36,7 @@ import {
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
+import { savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
   businessTypeForWorkKinds,
   saveOnboardingAnswers,
@@ -988,6 +989,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function AppShellFrame({ children }: { children: ReactNode }) {
   const { user, language: personalLanguage, theme: personalTheme } = useAuth();
+  // What the setup wizard just picked. personalLanguage is never empty — it
+  // falls back to the browser — so without this the choice made in the wizard
+  // would be ignored until the auth listener caught up.
+  const [onboardingLanguage, setOnboardingLanguage] = useState("");
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
   const pathname = usePathname();
   const router = useRouter();
@@ -1587,6 +1592,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // No explicit choice yet: follow the browser locale instead of hard-coding
   // English (a stored personal or workspace choice always wins).
   const language =
+    onboardingLanguage ||
     personalLanguage ||
     settings?.selectedLanguage ||
     studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
@@ -1756,6 +1762,27 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);
 
+  /**
+   * The wizard's language choice, applied the moment it is made rather than on
+   * Finish — the rest of the setup should already read in it. Language is
+   * always a personal setting (the Settings screen says so), so it goes the
+   * same way, and the local copy moves first so the switch is instant.
+   */
+  async function applyOnboardingLanguage(chosen: string) {
+    if (!workspace) return;
+    setSettings((current) => {
+      const merged = current ? { ...current, selectedLanguage: chosen } : current;
+      if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+      return merged;
+    });
+    setOnboardingLanguage(chosen);
+    try {
+      await savePersonalInterfaceSettings(workspace, { selectedLanguage: chosen });
+    } catch {
+      /* the wizard has already switched; the next save will carry it too */
+    }
+  }
+
   async function completeOnboardingWizard(answers: OnboardingAnswers) {
     if (!workspace || !user) return;
     setOnboardingSaving(true);
@@ -1867,6 +1894,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             saving={onboardingSaving}
             error={onboardingError}
             onFinish={(answers) => void completeOnboardingWizard(answers)}
+            onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
             onConnect={(answers, href) => void connectFromOnboarding(answers, href)}
           />
         )}

@@ -11,6 +11,30 @@ function browserDefaultLanguage(): string {
   return studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
 }
 
+// The chosen language lives in Firestore, which means there is a window between
+// the app rendering and the snapshot arriving. The shell rides that out because
+// it has its own fallbacks; the screens do not, and someone signing in was left
+// looking at English headings on a Turkish workspace until they reloaded.
+// Remembering the last known language on the device closes the window: the very
+// first paint is already in the right language, and Firestore still has the
+// final word the moment it answers.
+const LANGUAGE_CACHE_KEY = "nv_lang";
+function cachedLanguage(): string {
+  try {
+    const stored = localStorage.getItem(LANGUAGE_CACHE_KEY);
+    return stored && stored.trim() ? stored.trim() : "";
+  } catch {
+    return "";
+  }
+}
+function rememberLanguage(language: string) {
+  try {
+    if (language && language.trim()) localStorage.setItem(LANGUAGE_CACHE_KEY, language.trim());
+  } catch {
+    // A browser that refuses storage simply goes back to waiting for Firestore.
+  }
+}
+
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
@@ -149,7 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // user's active workspace changes server-side (e.g. when the owner approves their
   // join request and the Cloud Function points them at the newly joined workspace).
   useEffect(() => {
-    if (!user) { setLanguage(browserDefaultLanguage()); setTheme("System"); return; }
+    if (!user) { setLanguage(cachedLanguage() || browserDefaultLanguage()); setTheme("System"); return; }
+    // Paint in the language this device last saw, rather than in English, while
+    // the personal settings snapshot is still on its way.
+    const remembered = cachedLanguage();
+    if (remembered) setLanguage(remembered);
 
     let unsubPersonal: (() => void) | null = null;
     let lastSeenActiveCompanyId: string | null = null;
@@ -169,9 +197,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = snap2.exists() ? (snap2.data() as Record<string, unknown>) : {};
         const rawLang = data?.["selectedLanguage"];
         const rawTheme = data?.["appTheme"];
-        setLanguage(typeof rawLang === "string" && rawLang.trim() ? rawLang.trim() : browserDefaultLanguage());
+        const resolved = typeof rawLang === "string" && rawLang.trim()
+          ? rawLang.trim()
+          : (cachedLanguage() || browserDefaultLanguage());
+        rememberLanguage(resolved);
+        setLanguage(resolved);
         setTheme(typeof rawTheme === "string" && rawTheme.trim() ? rawTheme.trim() : "System");
-      }, () => { setLanguage(browserDefaultLanguage()); setTheme("System"); });
+      }, () => { setLanguage(cachedLanguage() || browserDefaultLanguage()); setTheme("System"); });
     });
 
     return () => {

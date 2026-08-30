@@ -84,7 +84,7 @@ const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?
   { id: "order", labelKey: "Create your first order", href: "/orders", auto: "orders" },
   { id: "customer", labelKey: "Add your first customer", href: "/customers", auto: "customers" },
   { id: "chatgpt", labelKey: "Import your old orders with ChatGPT", href: "/chatgpt" },
-  { id: "store", labelKey: "Connect your online store", href: "/settings?section=woocommerce" },
+  { id: "store", labelKey: "Connect your online store", href: "/settings?section=integrations&category=commerce&intent=connect-shop" },
   { id: "domain", labelKey: "Put customer links on your name", href: "/settings?section=client-domain" }
 ];
 

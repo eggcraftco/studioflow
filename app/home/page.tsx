@@ -18,6 +18,7 @@ import {
   QuickActionsCardBody,
   RecentActivityCardBody,
   ScheduleCardBody,
+  homeWeekRangeLabel,
   type CardBodyProps,
   type QuickActionId,
 } from "@/components/home/HomeCardBodies";
@@ -38,15 +39,18 @@ import {
   resetHomeCard,
   resizeHomeCard,
   setHomeCardHeading,
+  homePeriodRange,
+  setHomeCardPeriod,
   setHomeCardTone,
   showHomeCard,
   visibleHomeCards,
   type HomeCardId,
+  type HomeCardPeriod,
   type HomeCardSize,
   type HomeCardTone,
   type HomeLayout,
 } from "@/lib/studioflow/homeCards";
-import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
+import { saveHomeLayout, saveSetupSkipped, subscribeHomeLayout, subscribeSetupSkipped } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 
@@ -74,6 +78,9 @@ function greeting(t: (text: string) => string) {
 
 export default function HomePage() {
   const { user, loading: authLoading, language } = useAuth();
+  // Which checklist steps this member has waved off, live like the layout so a
+  // skip on the phone reaches the desktop.
+  const [setupSkipped, setSetupSkipped] = useState<string[]>([]);
   const router = useRouter();
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const { hideNumbers } = usePricePrivacy();
@@ -87,6 +94,27 @@ export default function HomePage() {
   const [saveError, setSaveError] = useState("");
   // The layout as the server last accepted it, so a failed save can be undone.
   const lastSaved = useRef<HomeLayout | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  // A square 1x1 needs the row to equal the column, and CSS has no way to read
+  // one track's size into the other. The grid measures itself and publishes the
+  // column width; the stylesheet does the rest.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const apply = () => {
+      const styles = getComputedStyle(grid);
+      const columns = styles.gridTemplateColumns.split(" ").filter(Boolean).length;
+      if (columns < 1) return;
+      const gap = parseFloat(styles.columnGap) || 0;
+      const unit = (grid.clientWidth - gap * (columns - 1)) / columns;
+      if (unit > 0) grid.style.setProperty("--home-unit", `${Math.round(unit)}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -113,7 +141,38 @@ export default function HomePage() {
     });
   }, [workspace?.id]);
 
-  const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "");
+  useEffect(() => {
+    if (!workspace?.id) return;
+    return subscribeSetupSkipped(workspace.id, setSetupSkipped);
+  }, [workspace?.id]);
+
+  // Shown at once, saved behind: a step you waved off should not sit there
+  // while a round trip finishes, and the listener above corrects us if it fails.
+  const handleSkipStep = useCallback((stepId: string) => {
+    if (!workspace?.id) return;
+    setSetupSkipped((current) => {
+      if (current.includes(stepId)) return current;
+      const next = [...current, stepId];
+      void saveSetupSkipped(workspace.id, next);
+      return next;
+    });
+  }, [workspace?.id]);
+
+  /** "Skip for now" is only true if a skipped step can come back. */
+  const handleRestoreSkipped = useCallback(() => {
+    if (!workspace?.id) return;
+    setSetupSkipped([]);
+    void saveSetupSkipped(workspace.id, []);
+  }, [workspace?.id]);
+
+  // The 2x2 stock card is the only one that names individual items, and the
+  // list behind it is a 500-row callable — so it is only fetched when that card
+  // is actually on the layout at that size.
+  const wantsInventoryItems = useMemo(
+    () => layout.cards.some((card) => card.id === "inventory" && card.size === "2x2"),
+    [layout],
+  );
+  const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "", wantsInventoryItems);
 
   /**
    * Optimistic layout (§19): the grid moves under the hand immediately and the
@@ -192,9 +251,9 @@ export default function HomePage() {
     return { kind: "ready" };
   }
 
-  function renderBody(id: HomeCardId, size: HomeCardSize) {
+  function renderBody(id: HomeCardId, size: HomeCardSize, period: HomeCardPeriod) {
     const props: CardBodyProps = {
-      size, data, t, moneySettings, hideNumbers, onQuickAction: handleQuickAction,
+      size, period, data, t, moneySettings, hideNumbers, onQuickAction: handleQuickAction,
     };
     switch (id) {
       case "money": return <MoneyCardBody {...props} />;
@@ -207,14 +266,29 @@ export default function HomePage() {
       case "files": return <FilesCardBody {...props} />;
       case "notes": return <NotesCardBody {...props} />;
       case "quickActions": return <QuickActionsCardBody {...props} />;
-      case "gettingStarted": return <GettingStartedCardBody {...props} />;
+      case "gettingStarted":
+        return (
+          <GettingStartedCardBody
+            {...props}
+            skipped={setupSkipped}
+            onSkip={handleSkipStep}
+            onRestoreSkipped={handleRestoreSkipped}
+          />
+        );
       default: return null;
     }
   }
 
-  function isEmpty(id: HomeCardId) {
+  function isEmpty(id: HomeCardId, period: HomeCardPeriod) {
     switch (id) {
-      case "money": return data.financeOrders.length === 0;
+      // Against the period the header is showing, not the whole history: with
+      // orders on file but none this month the body has nothing to draw, and a
+      // card that renders blank is worse than one that says so.
+      case "money": {
+        const { start, end } = homePeriodRange(period);
+        return data.financeOrders.filter((order) =>
+          order.paymentDate !== null && order.paymentDate >= start && order.paymentDate <= end).length === 0;
+      }
       case "banking": return data.bankTransactions.length === 0;
       case "inventory": return !data.inventory;
       // Both read scheduleOrders, so the empty test must ask that list, not the
@@ -262,7 +336,10 @@ export default function HomePage() {
           </div>
         ) : null}
 
-        <div className="home-grid">
+        {/* The row height is the column width, so a 1x1 is a square, a 2x1 is two
+            squares wide and a 2x2 is four squares merged (§2). CSS cannot derive
+            one track from the other, so the grid measures itself. */}
+        <div className="home-grid" ref={gridRef}>
           {cards.map(({ placement, definition }, index) => (
             <HomeCardShell
               key={placement.id}
@@ -270,9 +347,51 @@ export default function HomePage() {
               placement={placement}
               customising={customising}
               t={t}
-              state={cardState(placement.id, isEmpty(placement.id))}
+              state={cardState(placement.id, isEmpty(placement.id, placement.period ?? "month"))}
+              subtitle={
+                // The wide orders card leads with how many are live, beside its
+                // heading, exactly as the sheet reads it.
+                placement.id === "ordersProduction" && placement.size !== "1x1"
+                  ? t("{count} active").replace("{count}",
+                      String(data.scheduleOrders.filter((order) => !order.isDelivered).length))
+                  // The wide stock card names what it is a view of, as the
+                  // sheet does — the figures alone do not say.
+                  : placement.id === "inventory" && placement.size !== "1x1"
+                    ? t("Stock overview")
+                    // How many files there are belongs beside the heading, as
+                    // the sheet reads it.
+                    : placement.id === "files" && placement.size !== "1x1"
+                      ? `${data.files.length} ${t("files")}`
+                      // Both week cards name which week beside the heading; the
+                      // 1x1 has no week to name.
+                      : placement.id === "schedule" && placement.size !== "1x1"
+                        ? homeWeekRangeLabel()
+                        : undefined
+              }
+              subtitleInline={placement.id === "ordersProduction" || placement.id === "files"
+                || placement.id === "schedule"}
               headerSlot={
-                placement.id === "banking" && data.bankTransactions.length > 0 ? (
+                // The sheet puts a + on the notes card, because the thing you
+                // most often want from a wall of notes is one more note.
+                placement.id === "files" ? (
+                  <button
+                    type="button"
+                    className="home-add-button is-wide"
+                    onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                  >
+                    ↑ {t("Upload file")}
+                  </button>
+                ) : placement.id === "notes" ? (
+                  <button
+                    type="button"
+                    className="home-add-button"
+                    aria-label={t("New Note")}
+                    title={t("New Note")}
+                    onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                  >
+                    +
+                  </button>
+                ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
                   // The promise sits beside the title, not in a footnote: this
                   // feed can never move money and the card should lead with that.
                   <span className="home-pill is-warning is-solid">{t("Read-only")}</span>
@@ -284,6 +403,7 @@ export default function HomePage() {
               onReset={() => void commit(resetHomeCard(layout, placement.id))}
               onTone={(tone: HomeCardTone) => void commit(setHomeCardTone(layout, placement.id, tone))}
               onHeading={(heading) => void commit(setHomeCardHeading(layout, placement.id, heading))}
+              onPeriod={(period) => void commit(setHomeCardPeriod(layout, placement.id, period))}
               dragHandlers={{
                 dragging: dragIndex === index,
                 dropTarget: dropIndex === index && dragIndex !== index,
@@ -304,7 +424,7 @@ export default function HomePage() {
                 },
               }}
             >
-              {renderBody(placement.id, placement.size)}
+              {renderBody(placement.id, placement.size, placement.period ?? "month")}
             </HomeCardShell>
           ))}
         </div>

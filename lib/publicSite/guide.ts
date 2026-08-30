@@ -28,6 +28,19 @@ import type { GuideNode } from "@/lib/publicSite/guideChrome";
 
 // --- English tree ----------------------------------------------------------
 
+// Adding something to the chatbot? Read docs/chatbot.md first - it is short.
+//
+// The three rules that catch everyone:
+//   1. The assistants read functions/assistant/guideCorpus.json, NOT this file.
+//      Run `node functions/assistant/buildGuideCorpus.js` and commit the result,
+//      or the bot keeps answering from the old text with no sign anything is
+//      wrong. guide-corpus-fresh.test.js fails if you forget.
+//   2. `para` blocks are PUBLIC - the website assistant shows them to visitors.
+//      `bullets` are members only. Put steps in a para and you have published
+//      the operating manual to the marketing site.
+//   3. Say WHERE, with the real button names, or the model invents a menu path.
+//      Platform-specific lines start with [Web], [Mac], [iPhone/iPad] or
+//      [Android]; untagged lines are true everywhere, and most should be.
 const TREE_EN: GuideNode[] = [
   {
     id: "getting-started",
@@ -104,6 +117,20 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "plan-where-billed",
+        title: "Where your plan is billed, and why you can only buy in one place",
+        blocks: [
+          { kind: "para", text: "A NivaDesk plan can be paid for in four places: by card on the website, through the App Store on Mac and iPhone, through Google Play on Android, or on your Shopify invoice if you installed us from the Shopify App Store. Whichever one you used is the only place that plan can be changed." },
+          { kind: "bullets", items: [
+            "The plan page in every app tells you where your subscription lives, and does not offer to sell you the same plan a second time — buying again somewhere else would mean two companies charging you for one workspace, and neither of them would know about the other.",
+            "To move to a different plan, change it where you already pay: the website Billing portal, your Apple subscriptions, your Google Play subscriptions, or the NivaDesk app inside your Shopify admin.",
+            "To move to a different place, cancel the subscription you have first, then buy again where you want it. Your workspace and everything in it stay exactly as they are.",
+            "Changing tier where you already pay — Lite to Pro, monthly to yearly — is a normal upgrade and works as it always did.",
+            "Extra storage and extra team seats are add-ons, not plans. They are sold wherever you are, whichever place your plan is billed."
+          ] }
+        ]
+      },
+      {
         id: "trial-monthly-yearly",
         title: "Monthly and yearly billing",
         blocks: [
@@ -172,6 +199,14 @@ const TREE_EN: GuideNode[] = [
         "Generate an Invoice: NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
         "You can also print the To Do list and the History log as PDFs.",
         "Customize how all of these look in Settings ▸ PDF Export Settings."
+      ] },
+      { kind: "sub", text: "Merging orders that should have been one" },
+      { kind: "bullets", items: [
+        "The same customer ordering twice in a week, or one job that came in through the website and again by email, leaves two orders where there should be one. Tick them in the Orders list and press Merge Selected.",
+        "Choose which one is the primary order — that is the order that survives, keeping its number, its cards and its history.",
+        "Payments move across: every payment recorded on the other orders is added to the primary one, and the amount paid adds up rather than being retyped.",
+        "The orders merged in go to Trash rather than being destroyed, so a merge done by mistake can be undone from Settings ▸ Data Management within 30 days.",
+        "Merging needs a role that can edit orders."
       ] },
       { kind: "para", text: "Select a card on the left to see exactly what it does and what you can change in it." }
     ],
@@ -582,6 +617,14 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Archive a note to clear it from the board without deleting it; Unarchive to bring it back.",
         "Move a note to Trash, Restore it later, or Delete forever to remove it permanently."
+      ] },
+      { kind: "sub", text: "Notes on your phone's home screen" },
+      { kind: "bullets", items: [
+        "iPhone, iPad and Android can put your notes on the home screen as a widget, so the list is readable without opening anything.",
+        "Add it the way you add any widget — press and hold the home screen, then pick NivaDesk.",
+        "Tapping the widget opens Notes at that note.",
+        "Holding the app icon also offers New note, which opens Notes with the composer already open.",
+        "The widget is cleared when you sign out, so notes never stay on the screen of a device you have signed out of."
       ] }
     ]
   },
@@ -689,6 +732,19 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Locations form a tree — a safe holds a drawer holds a tray. Renaming or moving one renames it on every item standing there; a location with stock or child locations inside cannot be deleted.",
         "Suppliers keep contact details plus the paperwork fields an invoice asks for: your own code for them, address, VAT number and billing currency."
+      ] },
+      { kind: "sub", text: "Printing a QR label for an item" },
+      { kind: "bullets", items: [
+        "Open the item in Inventory and press Label; the label sheet opens with Print label on it. Stick it on the tray, box or bag the item lives in.",
+        "The code is a link, not just a number: scanning it with any phone camera opens that item in NivaDesk, so whoever is standing at the shelf sees the stock figure, the location and the photos without searching for it.",
+        "Scanning works for anyone signed in to the workspace; someone who is not signed in is asked to sign in first."
+      ] },
+      { kind: "sub", text: "Stocktake: counting what is really on the shelf" },
+      { kind: "bullets", items: [
+        "It lives under Inventory ▸ Stocktake. Start a count opens one; each item then has a Count box for what you actually found, beside the figure NivaDesk holds.",
+        "Nothing changes until you finish the count. When you do, every difference is written to the movement ledger as a correction, with who counted it and when — so the stock figure and the audit trail can never disagree.",
+        "You can count part of the shelf: filter to a category or a location and stocktake only that.",
+        "The ledger keeps the old figure too, so a miscount can be traced and corrected rather than argued about."
       ] }
     ]
   },
@@ -704,6 +760,12 @@ const TREE_EN: GuideNode[] = [
         "Open Banking consent lasts 90 days: NivaDesk shows the renewal date, warns when it is close, and Reconnect renews it in a minute.",
         "Disconnect keeps everything already imported; deleting the imported data is a separate, explicit choice. The Activity view shows the connection's own diary — syncs, failures, connects and disconnects."
       ] },
+      { kind: "sub", text: "Choosing the period, and any date range" },
+      { kind: "bullets", items: [
+        "Weekly, Monthly and Yearly step through whole periods with the arrows beside them.",
+        "Date range takes any two dates instead — pick them in either order, and every figure on the screen (spent, incoming, categories, the transaction list) follows that range.",
+        "In a date range the arrows go, because a range you chose by hand has no next or previous, and the 'vs' comparison is against the same number of days ending the day before your range starts."
+      ] },
       { kind: "sub", text: "Transactions, categories and VAT" },
       { kind: "bullets", items: [
         "Every transaction gets a category; rules apply them automatically ('always categorise this keyword as Software') and each automatic change says which rule did it.",
@@ -715,7 +777,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "steps", items: [
         "Open a transaction and attach its receipt: upload a photo or PDF, or Choose from Files to reference an invoice already in your library — nothing is copied twice.",
         "Or snap the receipt first: NivaDesk reads the amount and date and suggests the matching transaction.",
-        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears."
+        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears.",
+        "Everything waiting sits under Receipts in a 'Waiting for the bank' section, which is always there and says so even when it is empty. Receipts sent from the NivaDesk ChatGPT app land here too when their payment has not reached the feed yet. Match now retries the matching, or you can assign one to a transaction by hand — or remove it."
       ] },
       { kind: "sub", text: "Recurring and incoming" },
       { kind: "bullets", items: [
@@ -738,7 +801,13 @@ const TREE_EN: GuideNode[] = [
         "Browse and preview files, and open the order a file belongs to.",
         "See who added each file.",
         "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
-        "To add or delete files, open that order's own Client Files card."
+        "To add or delete files, open that order's own Client Files card.",
+      ] },
+      { kind: "sub", text: "Opening a file, and Make Offline (keeping a file offline)" },
+      { kind: "bullets", items: [
+        "Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.",
+        "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
+        "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
       ] }
     ]
   },
@@ -852,12 +921,14 @@ const TREE_EN: GuideNode[] = [
         id: "set-woocommerce",
         title: "Store & website integrations",
         blocks: [
-          { kind: "para", text: "Connect your online store so live website orders flow into NivaDesk automatically. Each integration screen shows your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
+          { kind: "sub", text: "Connected apps: the Integrations screen" },
+          { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
-            "WooCommerce: create one webhook (Order created) and paste the delivery URL.",
+            "WooCommerce: open its card, press Set up, then create one webhook (Order created) in WooCommerce and paste the delivery URL.",
             "WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.",
             "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
-            "Other platforms: connect Wix, Squarespace, Etsy, BigCommerce or a custom site through the generic order webhook or a no-code tool like Zapier or Make."
+            "Other platforms: Wix, Squarespace, Etsy, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
+            "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
           ] }
         ]
       },
@@ -884,6 +955,14 @@ const TREE_EN: GuideNode[] = [
             "If the file is the exact backup you last downloaded, the preview says so — the SHA-256 noted at download time is checked against the file you picked.",
             "Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.",
             "After importing, Undo this import removes exactly the records that import created. Settings changes are not undone."
+          ] },
+          { kind: "sub", text: "Exporting orders to CSV for your accountant" },
+          { kind: "bullets", items: [
+            "Settings ▸ Data Management ▸ Export, or the Export orders to CSV button on the Orders list, opens the export page. The file is a CSV that opens in Excel, Numbers, Google Sheets or any accounting package.",
+            "Four templates, so you send the shape your accountant asked for: Invoices is one row per invoice with status, dates, contact and totals; Line items is one row per product or service line; Payments is one row per payment received, which is the cash ledger; Finance is one row per invoice with the accountant columns — revenue, cost, VAT and net profit.",
+            "Payments and Finance carry money columns, so they are only offered to people whose role can see Financial Info. The other two templates are available to everyone who can export.",
+            "Pick the period from This month, Last month, This quarter, This year, Last year, All time, or a custom range with your own start and end dates.",
+            "Export is available on every plan, including Free — your figures are yours, and you can take them out at any time."
           ] },
           { kind: "sub", text: "Change history" },
           { kind: "bullets", items: [
@@ -941,6 +1020,13 @@ const TREE_EN: GuideNode[] = [
             "Once a name is set up, the links NivaDesk hands out — the portal link on the order card, estimate links and SMS status updates — use your branded address automatically. Links shared earlier keep working on the old address.",
             "File links follow your name too: opening or sharing a client file uses a clean viewer link on your address (like track.yourdomain.com/f/…) instead of a raw storage URL, and the files a customer opens from their tracking page stay on your domain as well."
           ] },
+          { kind: "sub", text: "The NivaDesk app for ChatGPT" },
+          { kind: "bullets", items: [
+            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language: what is overdue, what a customer has ordered before, how much stock is left of something.",
+            "Connect it from ChatGPT: find NivaDesk in its apps list and sign in with the NivaDesk account you already use. ChatGPT never sees your password — you approve the connection in NivaDesk, and you can withdraw it later the same way.",
+            "It reads the workspace you approved and answers from it. It cannot see other workspaces, and what your role cannot see in the app it cannot see there either.",
+            "You can also send a receipt or an invoice photo to it. If the payment is already in your bank feed the receipt is matched to it; if the payment has not arrived yet the receipt waits in Banking under Receipts until it does, rather than being lost."
+          ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
@@ -953,7 +1039,11 @@ const TREE_EN: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu." }
+          { kind: "para", text: "Contact your workspace owner or admins, or open a support ticket to the NivaDesk team: the same tickets you see in the Messages menu." },
+          { kind: "bullets", items: [
+            "Three tabs: Internal Workspace Ticket goes to your own owner, admins and support managers; Contact NivaDesk Support goes to us; Website Chats is the NivaDesk team's own inbox for questions sent from the website widget.",
+            "The \"How do I…?\" assistant can file the ticket for you: when a question is outside what the guide covers it offers Send this to NivaDesk Support, and one press opens the ticket with your question as the title and the assistant's own reply attached, so you never retype it."
+          ] }
         ]
       }
     ]
@@ -967,6 +1057,42 @@ const TREE_EN: GuideNode[] = [
         "Language: choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
         "Appearance: switch between light and dark mode.",
         "Your choices are saved to your account, so they follow you on Mac, iPhone, iPad, Android and web."
+      ] }
+    ]
+  },
+  {
+    id: "finding-your-way",
+    title: "Finding your way around, on each app",
+    blocks: [
+      { kind: "para", text: "NivaDesk is the same workspace on the web, on Mac, on iPhone and iPad, and on Android — but a phone cannot show a row of menus the way a browser can, so the way you reach a section differs. The rest of this guide writes a place as Section ▸ Tab ▸ Button; this chapter is how to walk that path on the app you are holding." },
+      { kind: "bullets", items: [
+        "[Web] The sections run along the top of the window — Home, Orders, Production, Dashboard, Bank, Schedule, Notes, Customers, Inventory, Files, Messages, AI Replies, Settings. Click one to open it; a section's tabs then sit inside it.",
+        "[Mac] The same row of sections along the top of the window, and the same tabs inside each one.",
+        "[iPhone/iPad] There is no room for the row, so the sections live behind the menu button in the top bar. Tap it, pick the section, and its tabs appear inside.",
+        "[Android] The same: the menu in the top bar lists the sections, and tabs sit inside the section you pick.",
+        "Everything after the first ▸ — the tabs, the buttons, the fields — is named the same on all four, so once you are in the right section the steps read the same."
+      ] }
+    ]
+  },
+  {
+    id: "notifications",
+    title: "Notifications on your phone and computer",
+    blocks: [
+      { kind: "para", text: "NivaDesk can tell you something happened without you having to look. Notifications arrive on the devices you are signed in on — Mac, iPhone, iPad, Android and the web app — and each one opens the thing it is about." },
+      { kind: "bullets", items: [
+        "A new order arriving from your shop or your website.",
+        "A parcel moving: the first tracking scan, and delivery.",
+        "A note shared with you, and an invitation to work on a note together.",
+        "A message from a teammate, and a reply on a support ticket.",
+        "Anything that lands in the activity list is a notification as well, so the list and the alerts never tell different stories."
+      ] },
+      { kind: "sub", text: "Turning them on, and off" },
+      { kind: "bullets", items: [
+        "The first time you open NivaDesk on a device it asks that device for permission. Say no and nothing else changes.",
+        "There is no switch inside NivaDesk: notifications are turned on and off by the device itself, one device at a time. On iPhone and iPad, Settings ▸ Notifications ▸ NivaDesk. On Mac, System Settings ▸ Notifications ▸ NivaDesk. On Android, Settings ▸ Apps ▸ NivaDesk ▸ Notifications. In a browser, the site settings for nivadesk.app.",
+        "Turning them off on your phone leaves them on everywhere else you are signed in, which is usually what people want.",
+        "A device registers itself when you sign in, and is removed when you sign out — so a phone you have signed out of stops receiving anything about that workspace.",
+        "Notifications follow the workspace you are signed in to. They are not sent to people outside it, and a notification meant for particular people is sent only to them."
       ] }
     ]
   }
@@ -1050,6 +1176,20 @@ const TREE_TR: GuideNode[] = [
         ]
       },
       {
+        id: "plan-where-billed",
+        title: "Planınız nerede faturalanıyor ve neden tek yerden satın alınır",
+        blocks: [
+          { kind: "para", text: "Bir NivaDesk planı dört yerden ödenebilir: web sitesinde kartla, Mac ve iPhone'da App Store üzerinden, Android'de Google Play üzerinden, ya da bizi Shopify App Store'dan kurduysanız Shopify faturanızda. Hangisini kullandıysanız, o plan yalnızca orada değiştirilebilir." },
+          { kind: "bullets", items: [
+            "Her uygulamadaki plan sayfası aboneliğinizin nerede olduğunu söyler ve aynı planı ikinci kez satmaya kalkmaz — başka bir yerden tekrar almak, tek bir çalışma alanı için iki şirketin sizden ayrı ayrı ücret alması demek olurdu ve ikisinin de diğerinden haberi olmazdı.",
+            "Farklı bir plana geçmek için, hâlihazırda ödediğiniz yerden değiştirin: web sitesindeki Faturalandırma portalı, Apple abonelikleriniz, Google Play abonelikleriniz veya Shopify yönetim panelinizdeki NivaDesk uygulaması.",
+            "Farklı bir yere taşınmak için önce mevcut aboneliğinizi iptal edin, sonra istediğiniz yerden tekrar satın alın. Çalışma alanınız ve içindeki her şey olduğu gibi kalır.",
+            "Zaten ödediğiniz yerde kademe değiştirmek — Lite'tan Pro'ya, aylıktan yıllığa — normal bir yükseltmedir ve her zamanki gibi çalışır.",
+            "Ek depolama ve ek ekip koltuğu birer eklentidir, plan değildir. Planınız nerede faturalanıyor olursa olsun, bulunduğunuz yerden satın alınabilirler."
+          ] }
+        ]
+      },
+      {
         id: "trial-monthly-yearly",
         title: "Aylık ve yıllık faturalandırma",
         blocks: [
@@ -1118,6 +1258,14 @@ const TREE_TR: GuideNode[] = [
         "Invoice (Fatura) oluşturun: NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
         "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
         "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
+      ] },
+      { kind: "sub", text: "Tek olması gereken siparişleri birleştirme" },
+      { kind: "bullets", items: [
+        "Aynı müşterinin hafta içinde iki kez sipariş vermesi ya da bir işin hem siteden hem e-postayla gelmesi, tek olması gereken yerde iki sipariş bırakır. Siparişler listesinde ikisini işaretleyin ve Seçilenleri Birleştir'e basın.",
+        "Hangisinin birincil sipariş olacağını seçin — yaşamaya devam eden, numarasını, kartlarını ve geçmişini koruyan sipariş odur.",
+        "Ödemeler taşınır: diğer siparişlere kaydedilmiş her ödeme birincil siparişe eklenir, ödenen tutar yeniden yazılmak yerine toplanır.",
+        "Birleştirilen siparişler yok edilmez, çöp kutusuna gider; yanlışlıkla yapılan bir birleştirme 30 gün içinde Settings ▸ Data Management üzerinden geri alınabilir.",
+        "Birleştirme için siparişleri düzenleyebilen bir rol gerekir."
       ] },
       { kind: "para", text: "Soldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün." }
     ],
@@ -1515,6 +1663,14 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Bir notu silmeden panodan kaldırmak için arşivleyin (Archive); geri getirmek için Unarchive.",
         "Bir notu Çöp'e taşıyın, sonra geri alın (Restore) veya kalıcı silmek için Delete forever."
+      ] },
+      { kind: "sub", text: "Telefonunuzun ana ekranında notlar" },
+      { kind: "bullets", items: [
+        "iPhone, iPad ve Android notlarınızı ana ekrana widget olarak koyabilir; liste hiçbir şey açmadan okunur.",
+        "Herhangi bir widget gibi ekleyin — ana ekrana basılı tutun, sonra NivaDesk'i seçin.",
+        "Widget'a dokunmak Notes'u o notta açar.",
+        "Uygulama simgesine basılı tutmak ayrıca New note sunar; Notes'u yazma alanı açık hâlde açar.",
+        "Çıkış yaptığınızda widget temizlenir; notlar, çıkış yaptığınız bir cihazın ekranında asla kalmaz."
       ] }
     ]
   },
@@ -1622,6 +1778,19 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Konumlar ağaç kurar — kasa çekmeceyi, çekmece tepsiyi barındırır. Birini yeniden adlandırmak veya taşımak, orada duran her üründe adını günceller; içinde stok ya da alt konum olan konum silinemez.",
         "Tedarikçiler iletişim bilgisinin yanında faturanın sorduğu evrak alanlarını tutar: sizin verdiğiniz kod, adres, KDV numarası ve para birimi."
+      ] },
+      { kind: "sub", text: "Bir ürün için QR etiketi yazdırma" },
+      { kind: "bullets", items: [
+        "Ürünü Envanter'de açın ve Label (Etiket) düğmesine basın; açılan etiket sayfasında Print label (Etiketi yazdır) vardır. Ürünün durduğu tepsiye, kutuya veya poşete yapıştırın.",
+        "Kod yalnızca bir numara değil, bir bağlantıdır: herhangi bir telefon kamerasıyla okutulduğunda o ürünü NivaDesk'te açar; rafın başındaki kişi aramaya gerek kalmadan stok sayısını, konumu ve fotoğrafları görür.",
+        "Okutma, çalışma alanında oturum açmış herkes için çalışır; oturum açmamış birinden önce giriş yapması istenir."
+      ] },
+      { kind: "sub", text: "Sayım: rafta gerçekte ne olduğunu saymak" },
+      { kind: "bullets", items: [
+        "Envanter ▸ Sayım (Stocktake) altındadır. \"Start a count\" bir sayım açar; her ürünün yanında gerçekte bulduğunuz adedi yazacağınız bir Count kutusu ve NivaDesk'in tuttuğu adet yan yana durur.",
+        "Sayımı bitirene kadar hiçbir şey değişmez. Bitirdiğinizde her fark, kimin ne zaman saydığıyla birlikte hareket defterine bir düzeltme olarak yazılır — böylece stok sayısı ile denetim izi asla birbirini tutmazlık edemez.",
+        "Rafın bir bölümünü sayabilirsiniz: bir kategoriye veya konuma göre süzüp yalnızca onu sayın.",
+        "Defter eski adedi de saklar; yanlış bir sayım tartışılmak yerine izlenip düzeltilebilir."
       ] }
     ]
   },
@@ -1637,6 +1806,12 @@ const TREE_TR: GuideNode[] = [
         "Open Banking rızası 90 gün sürer: NivaDesk yenileme tarihini gösterir, yaklaşınca uyarır; Yeniden bağlan bir dakikada tazeler.",
         "Bağlantıyı kes içe aktarılmış her şeyi korur; veriyi silmek ayrı ve açık bir karardır. Etkinlik görünümü bağlantının kendi günlüğünü gösterir — eşitlemeler, hatalar, bağlanma ve kesilmeler."
       ] },
+      { kind: "sub", text: "Dönem seçimi ve istediğiniz tarih aralığı" },
+      { kind: "bullets", items: [
+        "Haftalık, Aylık ve Yıllık, yanındaki oklarla tam dönemler arasında gezinir.",
+        "Tarih aralığı ise istediğiniz iki tarihi alır — hangi sırayla seçerseniz seçin, ekrandaki her rakam (harcama, gelen, kategoriler, hareket listesi) o aralığa uyar.",
+        "Tarih aralığında oklar kalkar, çünkü elle seçtiğiniz bir aralığın öncesi ya da sonrası yoktur; 'vs' karşılaştırması da aralığınızın başladığı günün bir öncesinde biten, aynı sayıda güne karşı yapılır."
+      ] },
       { kind: "sub", text: "Hareketler, kategoriler ve KDV" },
       { kind: "bullets", items: [
         "Her hareket bir kategori alır; kurallar bunu kendiliğinden uygular ('bu kelimeyi hep Yazılım yap') ve her otomatik değişiklik hangi kuralın yaptığını söyler.",
@@ -1648,7 +1823,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "steps", items: [
         "Hareketi açın ve fişini ekleyin: fotoğraf ya da PDF yükleyin, veya kütüphanenizdeki faturayı Dosyalardan seç ile bağlayın — hiçbir şey ikinci kez kopyalanmaz.",
         "Ya da önce fişi çekin: NivaDesk tutarı ve tarihi okur, eşleşen hareketi önerir.",
-        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir."
+        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir.",
+        "Bekleyen her şey Fişler altındaki 'Bankayı bekleyenler' bölümündedir; bu bölüm hep oradadır ve boşken de bunu söyler. NivaDesk ChatGPT uygulamasından gönderilen, ödemesi henüz akışa düşmemiş fişler de buraya iner. Şimdi eşleştir yeniden dener, ya da elle bir harekete atarsınız — veya kaldırırsınız."
       ] },
       { kind: "sub", text: "Tekrarlayan ve gelen" },
       { kind: "bullets", items: [
@@ -1671,7 +1847,13 @@ const TREE_TR: GuideNode[] = [
         "Dosyaları tarayıp önizleyin ve bir dosyanın ait olduğu siparişi açın.",
         "Her dosyayı kimin eklediğini görün.",
         "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
-        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın."
+        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın.",
+      ] },
+      { kind: "sub", text: "Dosya açma ve Make Offline (dosyayı çevrimdışı tutma)" },
+      { kind: "bullets", items: [
+        "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
+        "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",
+        "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
       ] }
     ]
   },
@@ -1785,12 +1967,14 @@ const TREE_TR: GuideNode[] = [
         id: "set-woocommerce",
         title: "Mağaza ve web sitesi entegrasyonları",
         blocks: [
-          { kind: "para", text: "Online mağazanı bağla; canlı web sitesi siparişleri NivaDesk'e otomatik aksın. Her entegrasyon ekranı, platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'ini gösterir; yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
+          { kind: "sub", text: "Bağlı uygulamalar: Integrations ekranı" },
+          { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
-            "WooCommerce: bir webhook (Order created) oluştur ve delivery URL'ini yapıştır.",
+            "WooCommerce: kartını aç, Set up'a bas, sonra WooCommerce'te bir webhook (Order created) oluşturup delivery URL'ini yapıştır.",
             "WooCommerce imza denetimi (isteğe bağlı, önerilir): WooCommerce webhook'unda bir Secret belirle, aynısını entegrasyon ekranındaki Signature check kartına yapıştır; NivaDesk her teslimatın imzasını doğrular — yanlış imza geçerli URL ile bile reddedilir.",
             "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
-            "Diğer platformlar: Wix, Squarespace, Etsy, BigCommerce veya özel siteyi generic sipariş webhook'u ya da Zapier/Make gibi kodsuz bir araçla bağla."
+            "Diğer platformlar: Wix, Squarespace, Etsy, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
+            "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
           ] }
         ]
       },
@@ -1817,6 +2001,14 @@ const TREE_TR: GuideNode[] = [
             "Dosya, en son indirdiğiniz yedeğin birebir aynısıysa önizleme bunu söyler — indirme sırasında not edilen SHA-256, seçtiğiniz dosyayla karşılaştırılır.",
             "Olası kopyalar varsayılan olarak atlanır; bilerek ikinci kopya istiyorsanız Skip likely duplicates işaretini kaldırın. Bir içe aktarma 500 kayıtla sınırlıdır ve dışarıda kalanları söyler.",
             "İçe aktardıktan sonra Undo this import, tam olarak o içe aktarmanın oluşturduğu kayıtları siler. Ayar değişiklikleri geri alınmaz."
+          ] },
+          { kind: "sub", text: "Siparişleri muhasebeciniz için CSV olarak dışa aktarma" },
+          { kind: "bullets", items: [
+            "Settings ▸ Data Management ▸ Export ya da Siparişler listesindeki \"Siparişleri CSV'ye aktar\" düğmesi dışa aktarma sayfasını açar. Dosya CSV'dir; Excel, Numbers, Google E-Tablolar veya herhangi bir muhasebe programında açılır.",
+            "Dört şablon var, böylece muhasebecinizin istediği biçimi gönderirsiniz: Invoices her fatura için bir satır — durum, tarihler, iletişim ve toplamlar; Line items her ürün veya hizmet kalemi için bir satır; Payments alınan her ödeme için bir satır, yani kasa defteri; Finance her fatura için muhasebe sütunlarıyla bir satır — ciro, maliyet, KDV ve net kâr.",
+            "Payments ve Finance para sütunları taşır; bu yüzden yalnızca rolü Financial Info görebilen kişilere sunulur. Diğer iki şablon, dışa aktarma yetkisi olan herkeste vardır.",
+            "Dönemi seçin: Bu ay, Geçen ay, Bu çeyrek, Bu yıl, Geçen yıl, Tüm zamanlar veya kendi başlangıç ve bitiş tarihinizle özel aralık.",
+            "Dışa aktarma Free dâhil her planda vardır — rakamlar sizindir, istediğiniz zaman dışarı alabilirsiniz."
           ] },
           { kind: "sub", text: "Değişiklik geçmişi" },
           { kind: "bullets", items: [
@@ -1874,6 +2066,13 @@ const TREE_TR: GuideNode[] = [
             "Ad kurulduktan sonra NivaDesk'in verdiği bağlantılar — sipariş kartındaki portal bağlantısı, teklif bağlantıları ve SMS durum güncellemeleri — otomatik olarak markalı adresinizi kullanır. Daha önce paylaşılan bağlantılar eski adreste çalışmaya devam eder.",
             "Dosya bağlantıları da adınızı taşır: bir müşteri dosyasını açmak veya paylaşmak, ham depolama URL'si yerine sizin adresinizde temiz bir görüntüleyici bağlantısı (track.sizinsite.com/f/… gibi) kullanır; müşterinin takip sayfasından açtığı dosyalar da sizin domain'inizde kalır."
           ] },
+          { kind: "sub", text: "ChatGPT için NivaDesk uygulaması" },
+          { kind: "bullets", items: [
+            "NivaDesk'in ChatGPT içinde bir uygulaması var; kendi çalışma alanınızı gündelik dille sorabilirsiniz: neyin gecikmiş olduğunu, bir müşterinin daha önce ne sipariş ettiğini, bir üründen ne kadar stok kaldığını.",
+            "ChatGPT'den bağlayın: uygulama listesinde NivaDesk'i bulun ve zaten kullandığınız NivaDesk hesabınızla giriş yapın. ChatGPT parolanızı asla görmez — bağlantıyı NivaDesk'te onaylarsınız ve daha sonra aynı yerden geri alabilirsiniz.",
+            "Onayladığınız çalışma alanını okur ve oradan yanıtlar. Başka çalışma alanlarını göremez; uygulamada rolünüzün göremediği şeyi orada da göremez.",
+            "Ona bir fiş ya da fatura fotoğrafı da gönderebilirsiniz. Ödeme banka akışınızda zaten varsa fiş onunla eşleştirilir; ödeme henüz gelmediyse fiş kaybolmak yerine Banking'de Receipts altında ödeme gelene kadar bekler."
+          ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
             "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
@@ -1886,7 +2085,11 @@ const TREE_TR: GuideNode[] = [
         id: "set-support",
         title: "Support / Tickets",
         blocks: [
-          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı." }
+          { kind: "para", text: "Çalışma alanı sahibinize/adminlere veya NivaDesk ekibine ulaşın: Messages menüsünde gördüğünüz ticketların aynısı." },
+          { kind: "bullets", items: [
+            "Üç sekme: Internal Workspace Ticket kendi sahibinize, adminlerinize ve destek yöneticilerinize gider; Contact NivaDesk Support bize gelir; Website Chats ise NivaDesk ekibinin web sitesi widget'ından gelen soruları gördüğü kutudur.",
+            "\"How do I…?\" asistanı ticket'ı sizin için açabilir: soru rehberin kapsamı dışındaysa Send this to NivaDesk Support çıkar, tek tuşla sorunuz başlık olarak ve asistanın kendi cevabı ekli şekilde ticket açılır — soruyu tekrar yazmanız gerekmez."
+          ] }
         ]
       }
     ]
@@ -1900,6 +2103,42 @@ const TREE_TR: GuideNode[] = [
         "Dil: 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
         "Görünüm: açık ve koyu mod arasında geçiş yapın.",
         "Tercihleriniz hesabınıza kaydedilir; Mac, iPhone, iPad, Android ve web'de sizi takip eder."
+      ] }
+    ]
+  },
+  {
+    id: "finding-your-way",
+    title: "Her uygulamada yolunuzu bulmak",
+    blocks: [
+      { kind: "para", text: "NivaDesk web'de, Mac'te, iPhone ve iPad'de, Android'de aynı çalışma alanıdır — ama telefon, tarayıcının gösterdiği menü sırasını gösteremez; bu yüzden bir bölüme nasıl gittiğiniz değişir. Kılavuzun geri kalanı bir yeri Bölüm ▸ Sekme ▸ Düğme diye yazar; bu bölüm, o yolu elinizdeki uygulamada nasıl yürüyeceğinizi anlatır." },
+      { kind: "bullets", items: [
+        "[Web] Bölümler pencerenin üstünde sıralanır — Ana Sayfa, Siparişler, Üretim, Pano, Banka, Planlama, Notlar, Müşteriler, Envanter, Dosyalar, Mesajlar, AI Yanıtları, Ayarlar. Birine tıklayın; o bölümün sekmeleri içinde durur.",
+        "[Mac] Pencerenin üstünde aynı bölüm sırası, her bölümün içinde aynı sekmeler.",
+        "[iPhone/iPad] Sıra için yer yok; bölümler üst bardaki menü düğmesinin arkasındadır. Dokunun, bölümü seçin, sekmeleri içinde açılır.",
+        "[Android] Aynısı: üst bardaki menü bölümleri listeler, sekmeler seçtiğiniz bölümün içindedir.",
+        "İlk ▸ işaretinden sonrası — sekmeler, düğmeler, alanlar — dört uygulamada da aynı adı taşır; doğru bölüme girdikten sonra adımlar aynı okunur."
+      ] }
+    ]
+  },
+  {
+    id: "notifications",
+    title: "Telefonunuzda ve bilgisayarınızda bildirimler",
+    blocks: [
+      { kind: "para", text: "NivaDesk, siz bakmak zorunda kalmadan bir şey olduğunu haber verebilir. Bildirimler oturum açtığınız cihazlara gelir — Mac, iPhone, iPad, Android ve web uygulaması — ve her biri ilgili olduğu şeyi açar." },
+      { kind: "bullets", items: [
+        "Mağazanızdan veya sitenizden yeni bir sipariş gelmesi.",
+        "Bir kargonun hareket etmesi: ilk okutma ve teslimat.",
+        "Sizinle paylaşılan bir not ve bir nota birlikte çalışma daveti.",
+        "Ekip arkadaşınızdan mesaj ve destek talebine gelen yanıt.",
+        "Hareket listesine düşen her şey aynı zamanda bir bildirimdir; liste ile uyarılar asla farklı şeyler anlatmaz."
+      ] },
+      { kind: "sub", text: "Açmak ve kapatmak" },
+      { kind: "bullets", items: [
+        "NivaDesk'i bir cihazda ilk açtığınızda o cihazdan izin ister. Hayır derseniz başka hiçbir şey değişmez.",
+        "NivaDesk'in içinde bir anahtar yoktur: bildirimleri cihazın kendisi açar ve kapatır, her cihaz için ayrı ayrı. iPhone ve iPad'de Ayarlar ▸ Bildirimler ▸ NivaDesk. Mac'te Sistem Ayarları ▸ Bildirimler ▸ NivaDesk. Android'de Ayarlar ▸ Uygulamalar ▸ NivaDesk ▸ Bildirimler. Tarayıcıda nivadesk.app için site ayarları.",
+        "Telefonunuzda kapatmanız, oturum açtığınız diğer yerlerde açık kalmasını engellemez; genelde istenen de budur.",
+        "Cihaz, oturum açtığınızda kendini kaydeder ve çıkış yaptığınızda kaydı silinir — çıkış yaptığınız bir telefon o çalışma alanıyla ilgili hiçbir şey almayı bırakır.",
+        "Bildirimler oturum açtığınız çalışma alanını izler. Dışarıdaki kişilere gönderilmez ve belirli kişiler için olan bir bildirim yalnızca onlara gider."
       ] }
     ]
   }

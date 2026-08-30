@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { getInventorySummary, type InventorySummary } from "@/lib/studioflow/inventory";
+import {
+  getInventorySummary,
+  listInventoryItems,
+  type InventoryItem,
+  type InventorySummary,
+} from "@/lib/studioflow/inventory";
 import {
   listenToActivityNotifications,
   type StudioActivityNotification,
@@ -19,6 +24,7 @@ import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
   loadDashboardCounts,
   loadDashboardFinanceOrders,
+  loadWorkspaceSettingsOverview,
   loadRecentOrders,
   loadScheduleOrders,
   loadWorkspaceClientFiles,
@@ -31,6 +37,7 @@ import {
   type DashboardFinanceOrder,
   type OrderListItem,
   type ScheduleOrderItem,
+  type WorkspaceSettingsOverview,
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 
@@ -70,10 +77,15 @@ export type HomeData = {
   status: Record<HomeDomain, HomeDomainStatus>;
   counts: DashboardCounts | null;
   financeOrders: DashboardFinanceOrder[];
+  settings: WorkspaceSettingsOverview | null;
   orders: OrderListItem[];
   scheduleOrders: ScheduleOrderItem[];
   customers: CustomerDirectoryItem[];
+  /** The plan's storage ceiling. A size on its own says nothing without it. */
+  storageLimitMB: number;
   inventory: InventorySummary | null;
+  /** Only populated when a 2x2 stock card asked for it. */
+  inventoryItems: InventoryItem[];
   files: ClientFileListItem[];
   bankTransactions: HomeBankTx[];
   activity: StudioActivityNotification[];
@@ -102,10 +114,22 @@ const EMPTY_STATUS: Record<HomeDomain, HomeDomainStatus> = {
   bank: "loading",
 };
 
-export function useHomeData(workspace: WorkspaceContext | null, uid: string, email = ""): HomeData {
+export function useHomeData(
+  workspace: WorkspaceContext | null,
+  uid: string,
+  email = "",
+  /** The item list is a 500-row callable, and only the 2x2 stock card shows
+   *  individual items. Nobody else pays for it. */
+  wantsInventoryItems = false,
+): HomeData {
   const [status, setStatus] = useState<Record<HomeDomain, HomeDomainStatus>>(EMPTY_STATUS);
   const [counts, setCounts] = useState<DashboardCounts | null>(null);
   const [financeOrders, setFinanceOrders] = useState<DashboardFinanceOrder[]>([]);
+  // Profit is the Dashboard's rule, and that rule reads the workspace's own
+  // finance settings — whether base cost counts, which extra expense lines
+  // exist. Without them Home would be quietly reporting a different profit.
+  const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [scheduleOrders, setScheduleOrders] = useState<ScheduleOrderItem[]>([]);
   const [customers, setCustomers] = useState<CustomerDirectoryItem[]>([]);
@@ -152,15 +176,17 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     (async () => {
       setDomain("orders", "loading");
       try {
-        const [nextCounts, nextFinance, nextOrders, nextSchedule] = await Promise.all([
+        const [nextCounts, nextFinance, nextOrders, nextSchedule, nextSettings] = await Promise.all([
           loadDashboardCounts(workspaceId),
           loadDashboardFinanceOrders(workspaceId),
           loadRecentOrders(workspaceId, workspace, uid),
           loadScheduleOrders(workspaceId, workspace, uid),
+          loadWorkspaceSettingsOverview(workspaceId).catch(() => null),
         ]);
         if (cancelled.current) return;
         setCounts(nextCounts);
         setFinanceOrders(nextFinance);
+        setSettings(nextSettings);
         setOrders(nextOrders);
         setScheduleOrders(nextSchedule);
         setLastLoadedAtMs(Date.now());
@@ -211,6 +237,17 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
         if (cancelled.current) return;
         setInventory(response.summary ?? null);
         setDomain("inventory", "ready");
+        // Only the 2x2 card names individual items, and this is the expensive
+        // half of the two calls — a failure here must not take the summary with
+        // it, so the card keeps its figures and simply lists nothing.
+        if (wantsInventoryItems) {
+          try {
+            const listed = await listInventoryItems(workspace);
+            if (!cancelled.current) setInventoryItems(listed.items ?? []);
+          } catch {
+            if (!cancelled.current) setInventoryItems([]);
+          }
+        }
       } catch {
         if (!cancelled.current) setDomain("inventory", "error");
       }
@@ -233,7 +270,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     })();
 
     return () => { cancelled.current = true; };
-  }, [workspaceId, workspace, uid, reloadKey, setDomain]);
+  }, [workspaceId, workspace, uid, reloadKey, setDomain, wantsInventoryItems]);
 
   // Bank is live rather than fetched: the review queue is the whole point of the
   // card, and a stale count is the one number nobody should act on. Rules deny
@@ -355,10 +392,13 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
       status,
       counts,
       financeOrders,
+      settings,
       orders,
       scheduleOrders,
       customers,
+      storageLimitMB: workspace?.billingStorageLimitMB ?? 0,
       inventory,
+      inventoryItems,
       files,
       bankTransactions,
       activity,
@@ -374,7 +414,7 @@ export function useHomeData(workspace: WorkspaceContext | null, uid: string, ema
     }),
     [
       status, counts, financeOrders, orders, scheduleOrders, customers,
-      inventory, files, bankTransactions, activity, productionStages, productionSteps, notes,
+      workspace, inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
       bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],
   );

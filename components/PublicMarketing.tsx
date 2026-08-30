@@ -3438,7 +3438,7 @@ function signupErrorMessage(error: unknown, t: (key: PublicSiteTranslationKey) =
 function PublicSignupPageContent() {
   const router = useRouter();
   const { user } = useAuth();
-  const { t } = usePublicSiteLanguage();
+  const { t, language: signupLanguage } = usePublicSiteLanguage();
   const [signupStarted, setSignupStarted] = useState(false);
   const [fullName, setFullName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
@@ -3512,7 +3512,10 @@ function PublicSignupPageContent() {
       );
       await initialiseWorkspace({
         fullName: cleanFullName,
-        workspaceName: cleanWorkspaceName
+        workspaceName: cleanWorkspaceName,
+        // Carry the language they signed up in into the workspace, so the app
+        // opens in the language the form was written in.
+        language: signupLanguage
       });
       // Credit the completed signup to the landing page if this visitor came
       // from it, then clear the marker so it is counted at most once.

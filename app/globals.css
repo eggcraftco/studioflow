@@ -20825,7 +20825,16 @@ html[dir="rtl"] .login-public-shell {
   font-weight: 700;
   color: var(--accent, #2f6f6d);
   text-decoration: none;
+  /* It is a button now, not a link: one press files the ticket. */
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
+.app-help-action:disabled { opacity: 0.6; cursor: default; }
+.app-help-sent { margin: 8px 0 0; font-size: 12.5px; color: #15803d; font-weight: 600; }
+.app-help-sent a { color: var(--accent, #2f6f6d); font-weight: 700; }
 
 .app-help-form {
   display: flex;
@@ -24647,6 +24656,35 @@ body[data-studio-theme="dark"] .order-list-card.state-done {
   border-color: rgba(76, 195, 138, 0.35);
 }
 
+/* Selection has to beat the state tint. These carry the same weight as the
+   state colours above and are declared after them, so they win on order rather
+   than on !important — without this a done card kept its green and a cancelled
+   one kept its fade, and clicking either changed nothing the reader could see.
+   Cancelled also gets its opacity back: you cannot read what you selected
+   through 55% of it. */
+.order-list-card.selected {
+  background: rgba(0, 122, 255, 0.15);
+  border-color: rgba(0, 122, 255, 0.5);
+  box-shadow: none;
+  opacity: 1;
+}
+.order-list-card.multi-selected {
+  border-color: rgba(0, 122, 255, 0.55);
+  background: rgba(0, 122, 255, 0.08);
+  opacity: 1;
+}
+.order-list-card.multi-selected.selected { background: rgba(0, 122, 255, 0.18); }
+body[data-studio-theme="dark"] .order-list-card.selected {
+  background: rgba(10, 132, 255, 0.22);
+  border-color: rgba(10, 132, 255, 0.6);
+  opacity: 1;
+}
+body[data-studio-theme="dark"] .order-list-card.multi-selected {
+  background: rgba(10, 132, 255, 0.14);
+  border-color: rgba(10, 132, 255, 0.5);
+  opacity: 1;
+}
+
 /* ---- Decision 3B: color meanings — the chip on a colored card. ---- */
 .order-card-meaning-chip {
   position: absolute;
@@ -27119,7 +27157,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .shell-container:has(> * > .home-screen),
 .shell-container:has(.home-screen) { max-width: none; }
 
-.home-screen { display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px; }
+/* The row is the column width, so the only way to keep a 1x1 a *small* square
+   is to stop the column growing with the window: four columns in 1000px is a
+   238px square — the height the cards always had, now with a width to match
+   instead of a letterbox twice as wide. */
+.home-screen {
+  display: flex; flex-direction: column; gap: 18px; padding: 0 8px 40px;
+  width: 100%; max-width: 1016px; margin-inline: auto;
+}
 
 .home-header {
   display: flex; align-items: flex-start; justify-content: space-between;
@@ -27156,14 +27201,24 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-grid {
   display: grid; gap: 16px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  /* Rows grow, so a card can never paint over its neighbour here. The minimum
-     matches the fixed row the native grids use, so the same layout reads the
-     same on all four platforms. */
-  grid-auto-rows: minmax(236px, auto);
+  /* The row IS the column width, so a 1x1 is a square, a 2x1 is two squares
+     wide and a 2x2 is four squares merged (§2). --home-unit is published by the
+     grid itself, because CSS cannot derive one track from the other; the 236px
+     is only what the first paint uses before the measurement lands. A fixed row
+     against a much wider column is what made the desktop cards read as squat
+     letterboxes. Rows still grow rather than let a card paint over its
+     neighbour. */
+  /* Fixed, not minmax(...,auto): a row that grows for one tall card takes every
+     card beside it with it, and they stop being squares. The native grids clip
+     at the cell for exactly this reason, and web has to agree with them. */
+  grid-auto-rows: var(--home-unit, 236px);
 }
 
 .home-card {
-  display: flex; flex-direction: column; min-width: 0;
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  /* Width-only containment, so a body can ask how wide its card is without the
+     card's height starting to depend on its contents. */
+  container-type: inline-size;
   border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
   box-shadow: 0 10px 30px rgba(23, 25, 35, 0.05);
   /* Deliberately NOT overflow:hidden. The card menu is positioned against this
@@ -27211,6 +27266,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 
 .home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+/* "10 active" belongs beside the heading, not under it — the wide card has the
+   width and the sheet reads it as one line. */
+.home-card-titles.is-inline { flex-direction: row; align-items: baseline; gap: 9px; }
+.home-card-titles.is-inline .home-card-subtitle { flex: 0 0 auto; }
 .home-card-title {
   margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -27221,6 +27280,27 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: var(--surface);
 }
 .home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+/* The range the card's totals cover. A native select, so it opens the way the
+   platform expects and stays reachable by keyboard; the chevron is drawn on the
+   wrapper because a select cannot be styled reliably across engines. */
+.home-period { margin-left: auto; position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; }
+.home-period select {
+  appearance: none; -webkit-appearance: none;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: inherit;
+  background: transparent; border: 1px solid var(--border); border-radius: 9px;
+  padding: 5px 26px 5px 10px; cursor: pointer; max-width: 130px;
+}
+.home-period select:hover { border-color: rgba(37, 99, 235, 0.45); }
+.home-period select:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.home-period::after {
+  content: ""; position: absolute; right: 10px; width: 7px; height: 7px;
+  border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px); opacity: 0.5; pointer-events: none;
+}
+/* A 1x1 header has one column's width for five things — the range keeps its
+   words but gives up its box. */
+.home-card-1x1 .home-period select { border-color: transparent; padding: 3px 22px 3px 4px; font-size: 11.5px; }
+.home-card-1x1 .home-period::after { right: 6px; width: 6px; height: 6px; }
 .home-card-menu-wrap { position: relative; flex: 0 0 auto; }
 .home-card-menu-button {
   width: 30px; height: 30px; border: 0; background: transparent; cursor: pointer;
@@ -27294,63 +27374,199 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-flow-node { width: 26px; height: 26px; border-radius: 999px; position: relative; z-index: 1; }
 .home-flow em { font-style: normal; font-size: 10.5px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .home-flow b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.home-flow-node.tone-green, .home-flow b.tone-green { background: rgba(22, 163, 74, 0.16); color: #15803d; }
-.home-flow-node.tone-blue, .home-flow b.tone-blue { background: rgba(37, 99, 235, 0.16); color: #1d4ed8; }
+/* The bare .tone-green / .tone-blue / .tone-positive / .tone-negative classes
+   have a global `color: … !important` earlier in this file, and !important is
+   the only thing that beats !important. Without these the lanes, the flow
+   figures and the chips all painted that global's green and blue instead of
+   their own — close enough to look right and wrong everywhere it mattered. */
+.home-flow-node.tone-green, .home-flow b.tone-green { background: rgba(22, 163, 74, 0.16); color: #15803d !important; }
+.home-flow-node.tone-blue, .home-flow b.tone-blue { background: rgba(37, 99, 235, 0.16); color: #1d4ed8 !important; }
 .home-flow-node.tone-red, .home-flow b.tone-red { background: rgba(220, 38, 38, 0.14); color: #dc2626; }
 .home-flow-node.tone-purple, .home-flow b.tone-purple { background: rgba(124, 58, 237, 0.14); color: #6d28d9; }
 .home-flow-node.tone-slate, .home-flow b.tone-slate { background: rgba(100, 116, 139, 0.16); color: #475569; }
 .home-flow b { background: none; }
 
 .home-chip.is-late { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
-.home-chip.tone-green { background: rgba(22, 163, 74, 0.12); color: #15803d; }
-.home-chip.tone-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+.home-chip.tone-green { background: rgba(22, 163, 74, 0.12); color: #15803d !important; }
+.home-chip.tone-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8 !important; }
 .home-chip.tone-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
 .home-chip.tone-purple { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
 .home-chip.tone-slate { background: rgba(100, 116, 139, 0.14); color: #475569; }
 
 /* Schedule */
-.home-week-strip { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 6px 0 0; padding: 0; }
-.home-week-strip li { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 0; border-radius: 9px; }
-.home-week-strip li.is-today { background: rgba(37, 99, 235, 0.09); }
-.home-week-strip em { font-style: normal; font-size: 10px; opacity: 0.6; }
-.home-week-strip b { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.home-week-strip i { font-style: normal; font-size: 10.5px; min-height: 14px; opacity: 0.75; }
-.home-week-strip i.has-work { color: #1d4ed8; font-weight: 800; }
 
-.home-deadline-row { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
-.home-deadline-row li { display: flex; align-items: center; gap: 8px; padding: 0 10px; min-width: 0; }
-.home-deadline-row li + li { border-left: 1px solid var(--border); }
-.home-deadline-row li:first-child { padding-left: 0; }
-.home-deadline-dot { width: 24px; height: 24px; border-radius: 999px; flex: 0 0 auto; }
-.home-deadline-dot.tone-red { background: rgba(220, 38, 38, 0.14); }
-.home-deadline-dot.tone-blue { background: rgba(37, 99, 235, 0.14); }
-.home-deadline-dot.tone-green { background: rgba(22, 163, 74, 0.14); }
-.home-deadline-row em { display: block; font-style: normal; font-size: 11.5px; font-weight: 700; }
-.home-deadline-row em.tone-red { color: #dc2626; }
-.home-deadline-row em.tone-blue { color: #1d4ed8; }
-.home-deadline-row em.tone-green { color: #15803d; }
-.home-deadline-row a { display: block; color: inherit; text-decoration: none; font-size: 11.5px; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Schedule's small card is a deadline list: which order, and when (§10). The
+   sheet sets the reference, the customer and the chip on one line; a phone
+   column is 162px wide, which fits two of the three, so the customer drops to
+   a second line rather than pushing the chip off the card. */
+.home-due-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.home-due-list li { border-bottom: 1px solid var(--border); }
+.home-due-list li:last-child { border-bottom: 0; }
+.home-due-list a { display: block; color: inherit; text-decoration: none; padding: 7px 0; }
+.home-due-list a:hover .home-due-head b { text-decoration: underline; }
+.home-due-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.home-due-head b {
+  font-size: 12.5px; font-weight: 700; flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.home-due-head b i { font-style: normal; margin-right: 4px; }
+.home-due-head .home-chip { flex: 0 0 auto; }
+.home-due-list em {
+  display: block; font-style: normal; font-size: 11.5px; opacity: 0.62;
+  margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A 1x1 on a phone is a 174px square with a header on top: three deadlines fit
+   only if both lines are set tight. The sheet's roomier row is what a card four
+   times this size can afford. */
+@container (max-width: 220px) {
+  /* The word "Order" costs 38px of the row, and "#1094" beside it says the same
+     thing on a card already headed Schedule. */
+  .home-due-head b i { display: none; }
+  .home-due-list { margin-top: 0; }
+  .home-due-list a { padding: 4px 0; }
+  /* The card already has a bottom padding of its own. */
+  .home-due-list li:last-child a { padding-bottom: 0; }
+  .home-due-head b { font-size: 12px; line-height: 1.1; }
+  .home-due-list em { font-size: 10px; line-height: 1.15; margin-top: 0; }
+  .home-due-head .home-chip { padding: 2px 6px; font-size: 10px; }
+}
+.home-chip.hue-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.home-chip.hue-amber { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+.home-chip.hue-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+.home-chip.hue-slate { background: rgba(100, 116, 139, 0.14); color: #475569; }
+
+.home-week {
+  display: grid;
+  /* The name column takes a share of the card, not a fixed width, so the same
+     grid reads on a 359px phone card and a 488px desktop one. */
+  grid-template-columns: clamp(84px, 30%, 200px) repeat(7, minmax(0, 1fr));
+  /* The rows share whatever the header leaves, so three deadlines always fit
+     rather than the third falling off the bottom. */
+  grid-template-rows: auto repeat(3, minmax(0, 1fr));
+  height: 100%;
+  align-items: center;
+  column-gap: 0; row-gap: 2px;
+}
+.home-week-day {
+  grid-row: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+  font-size: 9.5px; line-height: 1.15; padding: 2px 0 4px;
+  border-bottom: 1px solid var(--border);
+  align-self: stretch; justify-content: flex-end;
+}
+.home-week-day em { font-style: normal; opacity: 0.6; }
+.home-week-day b { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.home-week-day.is-today { color: #1d4ed8; }
+.home-week-day.is-today em { opacity: 0.85; font-weight: 700; }
+/* The band sits behind everything and spans the card, which is what makes
+   "before today" and "after today" readable at a glance. */
+.home-week-today {
+  grid-row: 1 / -1; align-self: stretch;
+  background: rgba(37, 99, 235, 0.07);
+  border-radius: 8px;
+}
+.home-week-name {
+  grid-column: 1;
+  font-size: 10.5px; color: inherit; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-right: 8px; opacity: 0.75;
+}
+.home-week-name b { font-weight: 700; opacity: 1; font-variant-numeric: tabular-nums; }
+.home-week-name:hover { text-decoration: underline; }
+.home-week-bar {
+  height: 18px; border-radius: 7px; border: 1px solid;
+  display: flex; align-items: center; justify-content: flex-end;
+  /* A bar narrower than its own chip says nothing, so it grows to fit the word
+     and gives up a little day accuracy — the word is the point. */
+  min-width: 54px;
+  padding: 0 6px; overflow: hidden;
+}
+
+.home-week-bar em {
+  font-style: normal; font-size: 9.5px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* A deadline that fell before this week has no span to draw: the chip stands
+   on its own so the row still says the order is late. */
+.home-week-bar.is-off-week { border-style: dashed; background: transparent !important; }
+.home-week-bar.hue-red { background: rgba(220, 38, 38, 0.10); border-color: rgba(220, 38, 38, 0.5); color: #dc2626; }
+.home-week-bar.hue-amber { background: rgba(249, 115, 22, 0.12); border-color: rgba(234, 88, 12, 0.5); color: #c2410c; }
+.home-week-bar.hue-purple { background: rgba(124, 58, 237, 0.10); border-color: rgba(124, 58, 237, 0.45); color: #6d28d9; }
+.home-week-bar.hue-blue { background: rgba(37, 99, 235, 0.10); border-color: rgba(37, 99, 235, 0.45); color: #1d4ed8; }
+
+/* The big card is the same week with room to breathe: the day it is read
+   against gets a solid mark and a word, the bars get guide lines to sit on,
+   and the dates move to their own section underneath. */
+.home-week.is-large { row-gap: 0; }
+.home-week.is-large .home-week-day { padding: 0 0 6px; border-bottom: 0; font-size: 10.5px; }
+.home-week.is-large .home-week-day b { font-size: 13px; }
+.home-week.is-large .home-week-day.is-today {
+  color: inherit;
+}
+.home-week.is-large .home-week-day.is-today em,
+.home-week.is-large .home-week-day.is-today b {
+  background: #2563eb; color: #fff;
+}
+.home-week.is-large .home-week-day.is-today em { padding: 3px 9px 0; border-radius: 9px 9px 0 0; opacity: 1; font-weight: 700; }
+.home-week.is-large .home-week-day.is-today b { padding: 0 9px 3px; border-radius: 0 0 9px 9px; }
+.home-week.is-large .home-week-day i { font-style: normal; font-size: 9.5px; color: #1d4ed8; margin-top: 2px; }
+
+.home-week-eyebrow {
+  grid-column: 1 / -1; margin: 0; padding: 8px 0 6px;
+  font-size: 12px; font-weight: 700; color: inherit; opacity: 0.85;
+  /* The rule belongs to the section it opens: it is what separates the week
+     from the day strip above it, and the dates from the week. */
+  border-top: 1px solid var(--border);
+}
+.home-week-eyebrow.is-ruled { margin-top: 6px; }
+
+/* One element draws all of them: seven column lines and a line under every
+   row but the last, as a pair of repeating gradients. */
+.home-week-guides {
+  grid-column: 2 / -1; align-self: stretch; pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right,
+      var(--border) 0 1px, transparent 1px calc(100% / 7)),
+    repeating-linear-gradient(to bottom,
+      transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%);
+  opacity: 0.4;
+}
+
+.home-upcoming {
+  grid-column: 1 / -1; list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.home-upcoming li { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 2px 10px 0; }
+.home-upcoming li + li { border-left: 1px solid var(--border); }
+.home-upcoming li:first-child { padding-left: 0; }
+.home-upcoming li > span { min-width: 0; }
+.home-upcoming-mark {
+  width: 30px; height: 30px; border-radius: 999px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+}
+.home-upcoming-mark svg { width: 16px; height: 16px; }
+.home-upcoming-mark.hue-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.home-upcoming-mark.hue-amber { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+.home-upcoming-mark.hue-purple { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
+.home-upcoming-mark.hue-blue { background: rgba(37, 99, 235, 0.12); color: #1d4ed8; }
+.home-upcoming em {
+  display: block; font-style: normal; font-size: 12px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-upcoming em.hue-red { color: #dc2626; }
+.home-upcoming em.hue-amber { color: #c2410c; }
+.home-upcoming em.hue-purple { color: #6d28d9; }
+.home-upcoming em.hue-blue { color: #1d4ed8; }
+.home-upcoming a {
+  display: block; color: inherit; text-decoration: none; font-size: 11.5px; opacity: 0.75;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-upcoming a:hover { text-decoration: underline; }
+
 
 /* The bars are deliberately read-only: dragging a date here would fight the
    gesture that moves the card itself (§10). */
-.home-timeline { border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
-.home-timeline-head { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0 0 4px; padding: 0 0 0 96px; }
-.home-timeline-head li { font-size: 10px; opacity: 0.6; text-align: center; }
-.home-timeline-head li.is-today { color: #1d4ed8; font-weight: 800; opacity: 1; }
-.home-timeline-rows { list-style: none; margin: 0; padding: 0; }
-.home-timeline-rows li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-.home-timeline-name { width: 88px; flex: 0 0 auto; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-timeline-track { position: relative; flex: 1 1 auto; height: 18px; border-radius: 6px; background: linear-gradient(to right, var(--border) 1px, transparent 1px) repeat-x; background-size: calc(100% / 7) 100%; }
-.home-timeline-track i {
-  position: absolute; top: 1px; bottom: 1px; border-radius: 6px; font-style: normal;
-  font-size: 10px; display: flex; align-items: center; justify-content: center; min-width: 8px;
-}
-.home-timeline-track i.tone-blue { background: rgba(37, 99, 235, 0.20); border: 1px solid #2563eb; }
-.home-timeline-track i.tone-green { background: rgba(22, 163, 74, 0.18); border: 1px solid #16a34a; }
-.home-timeline-track i.tone-purple { background: rgba(124, 58, 237, 0.18); border: 1px solid #7c3aed; }
-.home-timeline-track i.tone-amber { background: rgba(245, 158, 11, 0.20); border: 1px solid #f59e0b; }
-.home-timeline-track i.tone-teal { background: rgba(20, 184, 166, 0.18); border: 1px solid #14b8a6; }
-.home-timeline-track i.tone-red { background: rgba(220, 38, 38, 0.14); border: 1px solid #dc2626; color: #dc2626; }
 
 /* Files */
 .home-file-mark { width: 18px; height: 22px; border-radius: 3px; flex: 0 0 auto; }
@@ -27370,16 +27586,139 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-note:hover { box-shadow: 0 6px 18px rgba(23, 25, 35, 0.08); }
 .home-note strong { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-note p { margin: 0; font-size: 11.5px; opacity: 0.75; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.home-note { position: relative; }
+.home-note-pin { position: absolute; top: 6px; right: 8px; font-size: 11px; line-height: 1; }
+/* Only a pinned note pays for the pin's corner: reserving it on every note
+   would cost the unpinned ones a word of their title for nothing. */
+.home-note.is-pinned strong { padding-right: 19px; }
+
+/* Somewhere to start typing, as the sheet opens this card. A button, not a
+   field: the composer lives on the Notes screen. */
+/* How full the workspace is, not how many bytes it holds — a size on its own
+   says nothing without the plan's ceiling. */
+.home-quota { display: flex; flex-direction: column; gap: 5px; }
+.home-quota-line { display: flex; align-items: baseline; gap: 10px; }
+.home-quota-line em { font-style: normal; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.home-quota-line b { font-size: 12.5px; font-weight: 800; color: #2563eb; margin-left: auto; }
+.home-quota-line b.is-full { color: #dc2626; }
+.home-quota-bar { display: block; height: 7px; border-radius: 999px; background: rgba(120, 130, 150, 0.18); overflow: hidden; }
+.home-quota-bar i { display: block; height: 100%; border-radius: 999px; background: #2563eb; }
+.home-quota-bar i.is-full { background: #dc2626; }
+
+/* The file row: what kind it is, its name, what it is attached to, when it
+   arrived. */
+.home-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.home-file-list li + li { border-top: 1px solid var(--border); }
+.home-file-list a {
+  display: grid; align-items: center; gap: 10px; padding: 6px 0; min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  text-decoration: none; color: inherit;
+}
+.home-file-list a:hover strong { text-decoration: underline; }
+.home-file-icon {
+  width: 28px; height: 28px; border-radius: 7px; display: inline-flex;
+  align-items: center; justify-content: center; font-size: 8px; font-weight: 800;
+  background: rgba(120, 130, 150, 0.14); color: #475569; letter-spacing: 0.02em;
+}
+.home-file-icon.is-pdf { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.home-file-icon.is-image { background: rgba(22, 163, 74, 0.14); color: #15803d; }
+.home-file-icon.is-doc { background: rgba(37, 99, 235, 0.12); color: #2563eb; }
+.home-file-list strong { font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-file-list em { font-style: normal; font-size: 11.5px; opacity: 0.6; white-space: nowrap; }
+.home-chip.is-link { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+
+/* The one figure on this card that asks for something to be done, with the way
+   to do it beside it. */
+.home-linking-banner {
+  display: flex; align-items: center; gap: 9px; text-decoration: none; margin-top: auto;
+  border-radius: 11px; padding: 8px 12px; background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28); color: #92400e;
+}
+.home-linking-banner strong { font-size: 12px; font-weight: 700; flex: 1 1 auto; min-width: 0; }
+.home-linking-banner em {
+  font-style: normal; font-size: 11.5px; font-weight: 800; white-space: nowrap;
+  border: 1px solid rgba(245, 158, 11, 0.5); border-radius: 999px; padding: 2px 10px;
+}
+
+.home-note-composer {
+  width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 11px; background: transparent;
+  padding: 9px 12px; font: inherit; font-size: 12.5px; color: inherit; opacity: 0.6;
+}
+.home-note-composer:hover { border-color: rgba(37, 99, 235, 0.45); opacity: 0.85; }
+
+/* Recent as rows rather than tiles: at this size the title and the one fact
+   beside it are what fit, and a row fits three where a tile fits two. */
+.home-note-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.home-note-row a {
+  display: flex; align-items: center; gap: 10px; min-width: 0; text-decoration: none; color: inherit;
+  border-radius: 10px; padding: 7px 10px; background: rgba(120, 130, 150, 0.07);
+}
+.home-note-row strong {
+  font-size: 12.5px; font-weight: 700; flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-note-row em {
+  font-style: normal; font-size: 11.5px; font-weight: 650; white-space: nowrap; flex: 0 0 auto;
+}
+.home-note-row em.is-due { color: #dc2626; }
+.home-note-row-badge {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(120, 130, 150, 0.16);
+}
+.home-note-row-badge svg { width: 14px; height: 14px; }
+.home-note-row.hue-yellow a { background: #fef7e0; }
+.home-note-row.hue-yellow .home-note-row-badge { background: rgba(217, 155, 12, 0.18); color: #8a6100; }
+.home-note-row.hue-yellow em { color: #8a6100; }
+.home-note-row.hue-orange a { background: #fdeee0; }
+.home-note-row.hue-orange .home-note-row-badge { background: rgba(234, 88, 12, 0.16); color: #9a3412; }
+.home-note-row.hue-orange em { color: #9a3412; }
+.home-note-row.hue-blue a { background: #e5f0fd; }
+.home-note-row.hue-blue .home-note-row-badge { background: rgba(37, 99, 235, 0.14); color: #1d4ed8; }
+.home-note-row.hue-blue em { color: #1d4ed8; }
+.home-note-row.hue-green a { background: #e7f6ec; }
+.home-note-row.hue-green .home-note-row-badge { background: rgba(22, 163, 74, 0.16); color: #15803d; }
+.home-note-row.hue-green em { color: #15803d; }
+.home-note-row.hue-red a { background: #fdeaea; }
+.home-note-row.hue-red .home-note-row-badge { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+.home-note-row.hue-red em { color: #b91c1c; }
+.home-note-row.hue-purple a { background: #f1ecfd; }
+.home-note-row.hue-purple .home-note-row-badge { background: rgba(124, 58, 237, 0.14); color: #6d28d9; }
+.home-note-row.hue-purple em { color: #6d28d9; }
+/* Three notes across the wide card, as the sheet lays them out. */
+.home-note-grid[data-size="2x1"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* A chip on a coloured note takes that note's colour: grey on a tinted ground
+   reads as disabled. */
+.home-chip.is-note { background: rgba(23, 25, 35, 0.07); color: inherit; }
+.home-note.hue-yellow .home-chip.is-note { background: rgba(217, 155, 12, 0.18); color: #8a6100; }
+.home-note.hue-orange .home-chip.is-note { background: rgba(234, 88, 12, 0.16); color: #9a3412; }
+.home-note.hue-blue .home-chip.is-note { background: rgba(37, 99, 235, 0.14); color: #1d4ed8; }
+.home-note.hue-green .home-chip.is-note { background: rgba(22, 163, 74, 0.16); color: #15803d; }
+.home-note.hue-red .home-chip.is-note { background: rgba(220, 38, 38, 0.14); color: #b91c1c; }
+.home-note.hue-purple .home-chip.is-note { background: rgba(124, 58, 237, 0.14); color: #6d28d9; }
+/* The + the sheet puts on the notes card: the thing you most often want from a
+   wall of notes is one more note. */
+.home-add-button {
+  width: 28px; height: 28px; border-radius: 9px; border: 0; cursor: pointer;
+  background: #2563eb; color: #fff; font-size: 18px; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.home-add-button:hover { background: #1d4ed8; }
+/* The files card names its action rather than showing a bare +: "upload" is
+   not the obvious reading of a plus on a card full of documents. */
+.home-add-button.is-wide { width: auto; padding: 0 11px; font-size: 12px; font-weight: 700; gap: 5px; }
+.home-add-button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .home-note-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; flex-wrap: wrap; }
 .home-note-foot em { font-style: normal; font-size: 10.5px; opacity: 0.7; }
 .home-note-foot em.is-due { color: #dc2626; font-weight: 700; opacity: 1; }
 .home-note-foot em.is-soon { color: #15803d; font-weight: 700; opacity: 1; }
-.home-note.tone-yellow { background: #fef7e0; border-color: #f7e3a1; }
-.home-note.tone-blue { background: #e5f0fd; border-color: #bcd8f7; }
-.home-note.tone-green { background: #e7f6ec; border-color: #bde5c8; }
-.home-note.tone-red { background: #fdeaea; border-color: #f6c6c6; }
-.home-note.tone-purple { background: #f1ecfd; border-color: #dbcdf8; }
-.home-note.tone-orange { background: #fdeee0; border-color: #f7d3b0; }
+.home-note.hue-yellow { background: #fef7e0; border-color: #f7e3a1; }
+.home-note.hue-blue { background: #e5f0fd; border-color: #bcd8f7; }
+.home-note.hue-green { background: #e7f6ec; border-color: #bde5c8; }
+.home-note.hue-red { background: #fdeaea; border-color: #f6c6c6; }
+.home-note.hue-purple { background: #f1ecfd; border-color: #dbcdf8; }
+.home-note.hue-orange { background: #fdeee0; border-color: #f7d3b0; }
 
 /* Activity */
 .home-activity-list { list-style: none; margin: 4px 0 0; padding: 0; }
@@ -27424,11 +27763,48 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* Customer mix: one bar, three segments, and a key that names each one — the
    proportions are never carried by colour alone (§20). */
 .home-mix { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-.home-mix-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
+/* The 1x1 square: the count, then the four production figures, then the split
+   as one bar. The square gives each figure room for its name — the reference
+   sheet's 1x1 is a square, not a letterbox. */
+.home-money.is-square { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
+.home-lede { display: flex; align-items: baseline; gap: 8px; margin: 0; min-width: 0; }
+.home-lede strong { font-size: 34px; font-weight: 850; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.home-lede span { font-size: 14px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-count-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
+.home-count {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 4px;
+}
+.home-count em { color: var(--foreground); }
+.home-count em {
+  font-style: normal; font-size: 10.5px; opacity: 0.62; text-align: center;
+  /* Four names across a real 336px square is ~76px each — "In production" only
+     survives on two lines, and a truncated name is not a name. */
+  line-height: 1.2; max-width: 100%;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-count b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-count-icon { display: inline-flex; }
+.home-count-icon svg { width: 17px; height: 17px; }
+.home-count.tone-green b, .home-count.tone-green .home-count-icon { color: #15803d; }
+.home-count.tone-blue b, .home-count.tone-blue .home-count-icon { color: #2563eb; }
+.home-count.tone-red b, .home-count.tone-red .home-count-icon { color: #dc2626; }
+.home-count.tone-slate b, .home-count.tone-slate .home-count-icon { color: #64748b; }
+
+/* flex: 0 0 auto, or a full column shrinks it to nothing instead of overflowing
+   — which reads as "the bar was never drawn" rather than "it did not fit". */
+.home-mix-bar { display: flex; flex: 0 0 auto; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
 .home-mix-bar i { display: block; border-radius: 999px; }
 .home-mix-bar i.tone-new { background: #16a34a; }
 .home-mix-bar i.tone-returning { background: #7c3aed; }
 .home-mix-bar i.tone-existing { background: #14b8a6; }
+/* Stage kinds, so the orders square's bar reads the same as its flow lanes. */
+.home-mix-bar i.tone-green { background: #16a34a; }
+.home-mix-bar i.tone-blue { background: #2563eb; }
+.home-mix-bar i.tone-red { background: #dc2626; }
+.home-mix-bar i.tone-purple { background: #7c3aed; }
+.home-mix-bar i.tone-slate { background: #94a3b8; }
+.home-mix-bar i.tone-orange { background: #f59e0b; }
 .home-mix-key { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .home-mix-key li { display: flex; flex-direction: column; gap: 1px; padding: 0 10px; min-width: 0; }
 .home-mix-key li + li { border-left: 1px solid var(--border); }
@@ -27488,6 +27864,95 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-figure-row b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .home-figure-row b.is-negative { color: #dc2626; }
 .home-figure-row b.is-warning { color: #ea580c; }
+/* The square version: a rule above the counts, the way the sheet separates the
+   headline figure from the three that qualify it, and the bar on the floor. */
+.home-money.is-stock { gap: 4px; }
+.home-money.is-stock .home-metric-value { color: #4338ca; }
+/* The sheet capitalises this label. Done here rather than as a second
+   dictionary entry beside "total value" — ::first-letter is a no-op in the
+   scripts that have no case, and correct in the ones that do. */
+.home-money.is-stock .home-metric-label::first-letter { text-transform: uppercase; }
+.home-figure-row.is-ruled { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.home-figure-row.is-ruled > span { align-items: flex-start; text-align: left; }
+.home-money.is-stock .home-mix-bar { margin-top: 12px; }
+
+/* The wide stock card: four figures ruled apart, then the two holdings that are
+   not free shelf. Each holding carries its count AND its value — a bare amount
+   does not say how much of the shelf it is. */
+.home-figure-row.is-quad { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.home-figure-row.is-quad i {
+  font-style: normal; font-size: 10.5px; opacity: 0.55; font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-figure-row b.is-total { color: #4338ca; }
+
+.home-holding-row {
+  list-style: none; margin: 0; padding: 12px 0 0; display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--border); margin-top: auto;
+}
+.home-holding-row li {
+  display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 14px;
+}
+.home-holding-row li + li { border-left: 1px solid var(--border); }
+.home-holding-row li:first-child { padding-left: 0; }
+.home-holding-badge {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.home-holding-badge svg { width: 16px; height: 16px; }
+.home-holding-name { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.home-holding-name strong {
+  font-size: 12.5px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-holding-name em { font-style: normal; font-size: 11px; white-space: nowrap; }
+.home-holding-row b {
+  font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.home-holding-row li.is-reserved .home-holding-badge { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.home-holding-row li.is-reserved .home-holding-name em,
+.home-holding-row li.is-reserved b { color: #c2410c; }
+.home-holding-row li.is-incoming .home-holding-badge { background: rgba(22, 163, 74, 0.14); color: #15803d; }
+.home-holding-row li.is-incoming .home-holding-name em,
+.home-holding-row li.is-incoming b { color: #15803d; }
+
+/* The 2x2's split: the ring and its two amounts side by side, ruled apart. The
+   percentages that used to sit under each amount are what the ring already
+   says, and on a phone they wrapped a currency symbol onto its own line. */
+.home-donut-panel { flex-direction: row; align-items: center; gap: 16px; }
+.home-donut-key { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; flex: 1 1 auto; min-width: 0; }
+.home-donut-key li { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0 12px; }
+.home-donut-key li + li { border-left: 1px solid var(--border); }
+.home-donut-key li:first-child { padding-left: 0; }
+.home-donut-key em {
+  font-style: normal; font-size: 12px; opacity: 0.7;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-donut-key b { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.home-donut-key .home-cost-dot { position: absolute; opacity: 0; }
+
+/* What actually needs a decision, one row each: the thing, what is wrong with
+   it, and where it is. */
+.home-attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.home-attention-list li {
+  display: grid; align-items: center; gap: 10px; padding: 6px 0; min-width: 0;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+}
+.home-attention-list li + li { border-top: 1px solid var(--border); }
+.home-attention-thumb { width: 28px; height: 28px; border-radius: 7px; object-fit: cover; background: rgba(120, 130, 150, 0.12); }
+.home-attention-thumb.is-blank {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 12px; opacity: 0.45; text-transform: uppercase;
+}
+.home-attention-list strong { font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-attention-chip {
+  font-size: 10.5px; font-weight: 750; border-radius: 999px; padding: 3px 9px; white-space: nowrap;
+}
+.home-attention-chip.is-low { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.home-attention-chip.is-reserved { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.home-attention-chip.is-incoming { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.home-attention-where { font-size: 11.5px; opacity: 0.6; white-space: nowrap; max-width: 84px; overflow: hidden; text-overflow: ellipsis; }
 
 .home-bank-split {
   display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px;
@@ -27570,6 +28035,23 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* Green is money in, blue is money still owed, orange is money out. The label
    always names the figure, so the colours are reinforcement, not the message. */
 .home-money { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+/* A 1x1 is a square now, not a 236px letterbox, so the figures spread down it
+   the way the reference sheet draws them: the headline stays under the top
+   line and the pair beneath it sits on the floor of the card. Bunched at the
+   top with the bottom half empty is what a card built for the old row looks
+   like in a square. */
+/* A 1x1 header carries the same five parts in a single column's width, so the
+   title runs out of room by a hair and picks up an ellipsis it does not need. */
+.home-card-1x1 .home-card-head { gap: 10px; }
+.home-card-1x1 .home-card-title { font-size: 16px; }
+.home-card-1x1 .home-money { gap: 14px; }
+.home-card-1x1 .home-money > .home-split-pair:last-child,
+.home-card-1x1 .home-money > .home-count-pair:last-child { margin-top: auto; }
+.home-card-1x1 .home-metric-label { font-size: 13px; }
+.home-card-1x1 .home-metric-value { font-size: 36px; }
+.home-card-1x1 .home-split-pair em { font-size: 12.5px; }
+.home-card-1x1 .home-split-pair b { font-size: 19px; }
+.home-card-1x1 .home-split-pair b.is-plain { font-size: 14px; }
 .home-metric-value { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .home-metric-value.is-positive { color: #15803d; }
 .home-metric-value.is-negative { color: #dc2626; }
@@ -27714,7 +28196,68 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* ---- Getting started ------------------------------------------------- */
 .home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+/* Six rows, a heading, the count, the bar and a panel share 283px. */
+.home-setup.is-large { gap: 5px; }
+.home-setup.is-large .home-eyebrow.is-strong { font-size: 12px; }
+.home-setup.is-large .home-progress { margin: 0; }
+.home-setup.is-large .home-next-panel.is-large { padding: 9px 12px; }
+.home-setup.is-large .home-next-body p { font-size: 11.5px; line-height: 1.3; }
+.home-setup.is-large .home-next-button { padding: 6px 14px; font-size: 12px; }
+.home-setup.is-large .home-setup-skip { margin-top: 4px; align-self: center; }
 .home-setup-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
+/* The rule between the panel and what is left after it, as the sheet draws it. */
+.home-setup-columns > .home-check-list.is-ruled { border-left: 1px solid var(--border); padding-left: 16px; margin-top: 0; }
+.home-setup-next { display: flex; flex-direction: column; min-width: 0; }
+.home-setup-next .home-next-panel { flex: 1 1 auto; }
+/* The panel stacks here, as the sheet draws it: side by side the step's own
+   name and its blurb share about 150px and both wrap to four lines. */
+.home-setup-next .home-next-body { flex-direction: column; align-items: stretch; gap: 7px; }
+.home-setup-next .home-next-button { align-self: stretch; text-align: center; padding: 7px 14px; }
+/* Two lines and no more: the sentence is a hint, and a third line in German
+   pushes the button off the bottom of a card whose height is fixed. */
+.home-setup-next .home-next-body p {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.home-setup-next .home-next-panel.is-inline { padding: 8px 12px; }
+/* Three things share a 240px card: the count, the bar and the columns. */
+.home-setup.is-split { gap: 7px; }
+.home-setup.is-split .home-setup-skip { margin-top: 3px; }
+/* The "Up next" label goes. A single tinted panel under a progress bar does not
+   need to be told it is what comes next, and the line that says why — which the
+   card measured at 240px tall has no room for otherwise — earns the space. */
+.home-setup-next .home-next-panel .home-eyebrow.is-accent { display: none; }
+.home-setup-allset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+
+/* A 2x1 on a phone is 359x174 with a 46px header — the sheet's card is drawn
+   nearly five times that wide. Measured, the panel as drawn overshoots the
+   bottom by 114px, so on a narrow card it gives up the label above it and the
+   line that explains why, and keeps the step, the button and the way past it. */
+@container (max-width: 420px) {
+  .home-setup.is-split { gap: 6px; }
+  .home-setup.is-split .home-metric-label { font-size: 10.5px; }
+  .home-setup.is-split .home-progress { margin: 0; }
+  .home-setup-columns { gap: 10px; }
+  .home-setup-columns > .home-check-list.is-ruled { padding-left: 10px; }
+  /* Scoped to the wide card: a phone 2x2 is also under 420px, and it is the
+     card that has room for the line these rules take away. */
+  .home-setup.is-split .home-next-panel.is-inline { padding: 8px 10px; }
+  .home-setup.is-split .home-next-body { gap: 6px; }
+  .home-setup.is-split .home-next-body strong { font-size: 12.5px; line-height: 1.15; }
+  .home-setup.is-split .home-next-body p { display: none; }
+  .home-setup.is-split .home-next-button { align-self: stretch; text-align: center; padding: 4px 10px; font-size: 11px; }
+
+  /* The big card on a phone: six rows, the panel and the way past it share
+     283px. The "Your checklist" heading goes rather than the rows getting
+     tighter — the card is already titled "Getting started", and six rows you
+     can read is the whole point of the single column. */
+  .home-setup.is-large .home-eyebrow.is-strong { display: none; }
+  .home-setup.is-large .home-check-list.is-full { gap: 2px; }
+  .home-setup.is-large .home-next-panel.is-large { padding: 7px 11px; }
+  .home-setup.is-large .home-next-button { padding: 5px 12px; }
+  .home-setup.is-split .home-setup-skip { margin-top: 4px; font-size: 11px; }
+  .home-setup-columns .home-check-list li { padding: 4px 0; font-size: 11px; gap: 7px; }
+  .home-setup-columns .home-check { width: 14px; height: 14px; }
+}
 .home-setup.is-large .home-setup-columns { gap: 14px; }
 .home-setup-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 
@@ -27734,11 +28277,25 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border-bottom: 1px solid var(--border); min-width: 0;
 }
 .home-check-list li:last-child { border-bottom: 0; }
-.home-check-list.is-full li { padding: 8px 0; }
+/* Every step is its own bordered row, as the sheet draws it: a list of six
+   divided by hairlines reads as one block, and the current step has nothing to
+   stand out against. */
+/* Never 0 1 auto: a list that shrinks below its own rows does not clip them, it
+   lets them paint over whatever is underneath — and nothing reports it as
+   overflow. It keeps its height and the card is sized to hold it. */
+.home-check-list.is-full {
+  display: flex; flex-direction: column; gap: 3px; margin-top: 2px;
+  flex: 0 0 auto;
+}
+.home-check-list.is-full li {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 9px;
+  font-size: 12px; flex: 0 0 auto;
+}
 .home-check-list li.is-current {
   color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.07);
-  border-radius: 8px; padding-left: 8px; padding-right: 8px; border-bottom-color: transparent;
+  border-radius: 10px; border-color: rgba(37, 99, 235, 0.45);
 }
+
 .home-check { width: 17px; height: 17px; border-radius: 999px; flex: 0 0 auto; position: relative; }
 .home-check.is-done { background: #16a34a; }
 .home-check.is-done::after {
@@ -27754,8 +28311,35 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* The recommendation panel. Blue enough to be the obvious next thing, calm
    enough that it is not a payment prompt (§15). */
+/* The way out of a step that is not for this workshop. Quiet, under the panel,
+   never competing with the one thing the card is asking for. */
+.home-setup-skip {
+  align-self: flex-start; margin-top: 6px; padding: 0;
+  background: none; border: 0; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: #2563eb;
+}
+.home-setup-skip:hover { text-decoration: underline; }
+
 .home-next-panel { background: rgba(37, 99, 235, 0.07); border-radius: 12px; padding: 12px 14px; }
 .home-next-panel.is-large { display: flex; flex-direction: column; gap: 4px; }
+/* On the square the button goes under the words, not beside them: side by side
+   leaves the step's own name about 90px, which truncates every one of them. */
+.home-next-panel.is-stacked { padding: 7px 10px; }
+.home-next-panel.is-stacked .home-next-body { flex-direction: column; align-items: flex-start; gap: 5px; }
+.home-next-panel.is-stacked .home-next-body strong { font-size: 12.5px; line-height: 1.2; }
+.home-next-panel.is-stacked .home-next-body p { font-size: 10.5px; margin-top: 2px; line-height: 1.25; }
+.home-next-panel.is-stacked .home-next-button { align-self: flex-start; padding: 4px 11px; font-size: 11px; }
+
+/* A 174px square holds the count, the bar, the step and the way past it — and
+   only just. The sheet's "Up next" label goes: a single panel under a progress
+   bar does not need to be told it is what comes next. */
+.home-setup.is-square { gap: 4px; }
+.home-setup.is-square .home-metric-label { font-size: 10.5px; }
+.home-setup.is-square .home-progress { margin: 0; }
+/* The card is a fixed square: pin the way out to the bottom so the space the
+   dropped blurb left shows as air under the panel, not as a card that stops
+   half way down. */
+.home-setup.is-square .home-setup-skip { margin-top: auto; font-size: 11.5px; }
 .home-next-body { display: flex; align-items: flex-start; gap: 12px; }
 .home-next-panel.is-large .home-next-body { flex-direction: column; align-items: stretch; gap: 10px; }
 .home-next-body strong { display: block; font-size: 14.5px; font-weight: 800; }
@@ -27848,6 +28432,63 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .home-chip.is-muted { background: rgba(120, 120, 140, 0.14); color: inherit; opacity: 0.7; }
 
+/* The wide orders card: the stages as figures ruled apart, then the orders that
+   need a decision. A row of names with a number under each reads faster than a
+   line of circles, which is what the sheet draws. */
+.home-lane-row { list-style: none; margin: 0; padding: 0; display: flex; }
+.home-lane-row li {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  padding: 0 12px; border-left: 1px solid var(--border);
+}
+.home-lane-row li:first-child { border-left: 0; padding-left: 0; }
+/* Two lines' worth whether the name needs them or not, so every figure below
+   sits on the same line — a wrapped name must not drop its own number. */
+.home-lane-head { display: flex; align-items: flex-start; gap: 7px; min-width: 0; min-height: 30px; }
+.home-lane-dot { width: 8px; height: 8px; border-radius: 999px; flex: 0 0 auto; background: currentColor; margin-top: 4px; }
+.home-lane-row em {
+  font-style: normal; font-size: 12.5px; color: var(--foreground); opacity: 0.75;
+  /* Stage names are the workspace's own words — "Waiting / Blocked" is longer
+     than the sheet's "Waiting" and must wrap rather than lose its second half. */
+  line-height: 1.2; min-width: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-lane-row b { font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.home-lane-row li.tone-green { color: #16a34a !important; }
+.home-lane-row li.tone-blue { color: #2563eb !important; }
+.home-lane-row li.tone-red { color: #dc2626; }
+.home-lane-row li.tone-purple { color: #7c3aed; }
+.home-lane-row li.tone-slate { color: #64748b; }
+.home-lane-row b { color: currentColor; }
+
+.home-order-list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0;
+  /* The rule the sheet draws between the figures and the orders. */
+  border-top: 1px solid var(--border); padding-top: 2px;
+}
+.home-order-list li + li { border-top: 1px solid var(--border); }
+.home-order-list a {
+  display: grid; align-items: center; gap: 12px; padding: 8px 0; min-width: 0;
+  grid-template-columns: 40px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px;
+  color: inherit; text-decoration: none;
+}
+.home-order-list a:hover strong { text-decoration: underline; }
+.home-order-thumb { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; background: var(--surface-muted, rgba(120,130,150,0.12)); }
+.home-order-thumb.is-blank {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px; opacity: 0.45; text-transform: uppercase;
+}
+.home-order-list strong { font-size: 13.5px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-order-design { font-size: 13px; opacity: 0.62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-order-chevron { opacity: 0.35; font-size: 17px; line-height: 1; }
+/* How many orders fit is the card's business, not a guess: a 2x1 is two squares
+   wide by ONE tall, and that one square is as short as 185px in a half-width
+   window. The lanes are the card's job; the list gives up rows until it fits.
+   The card's width gives its height away — a 2x1 is 2*unit + gap across, and
+   the row is the unit. */
+@container (max-width: 685px) { .home-order-list li:nth-child(n + 3) { display: none; } }
+@container (max-width: 573px) { .home-order-list li:nth-child(n + 2) { display: none; } }
+@container (max-width: 461px) { .home-order-list { display: none; } }
+
 .home-flow-row { list-style: none; margin: 6px 0 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .home-flow-row li { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1 1 90px; }
 .home-flow-row strong { margin-left: auto; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -27875,7 +28516,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-next-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; }
 .home-check-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
 .home-check-list li { display: flex; align-items: center; gap: 8px; }
-.home-check-list li.is-done { opacity: 0.6; text-decoration: line-through; }
+/* Ticked, not crossed out: six struck-through lines read as a list of
+   mistakes rather than a list of things done. */
+.home-check-list li.is-done { opacity: 0.65; }
 
 .home-notes { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
 .home-note {
@@ -27898,8 +28541,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .is-info { color: #2563eb; }
 
 /* Responsive (§17): four, three, two, one — never a shrunken desktop card. */
-@media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 1000px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* No column-dropping on the way down any more. The row is the column width, so
+   fewer columns means BIGGER cards — the opposite of what a narrower window
+   wants. Four columns hold from the phone breakpoint up, and the cards simply
+   scale between about 145px and the capped 238px. */
 @media (max-width: 640px) {
   /* Two columns on a phone, so a pair of 1x1 cards sits side by side instead of
      each one eating a whole screen. A 2x1 or 2x2 still takes the full width —
@@ -27912,6 +28557,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
      — and two square rows tall, which is the same square. The content fits the
      square rather than the square stretching to the content. */
   .home-card.is-square { aspect-ratio: 1; }
+  /* Two squares wide by ONE tall, like everywhere else. Without this the phone
+     2x1 was the only card whose height came from its contents, so a card with
+     one note more than the others stretched its whole grid row. */
+  .home-card-2x1 { height: var(--home-unit, 236px); }
   .home-card-2x2 { aspect-ratio: 1; }
   .home-card-2x2 .home-money-panels { grid-template-rows: 1fr; min-height: 0; }
   .home-card-2x2 .home-panel { min-height: 0; overflow: hidden; }
@@ -27919,9 +28568,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-card.is-square .home-card-foot { display: none; }
   .home-card.is-square .home-card-body { padding-bottom: 14px; }
   .home-card.is-square { cursor: pointer; }
-  .home-card.is-square .home-card-badge { width: 32px; height: 32px; }
-  .home-card.is-square .home-card-badge svg { width: 16px; height: 16px; }
-  .home-card.is-square .home-card-title { font-size: 14px; }
+  /* gap applies between every flex item, including the ones that are empty, so
+     an unused header slot was costing the heading 8px of a 120px header. */
+  .home-card-head-slot:empty { display: none; }
+  .home-card.is-square .home-card-head { gap: 8px; padding-left: 14px; padding-right: 14px; }
+  .home-card.is-square .home-card-badge { width: 28px; height: 28px; }
+  .home-card.is-square .home-card-badge svg { width: 15px; height: 15px; }
+  .home-card.is-square .home-card-title { font-size: 13.5px; }
+  /* Customising puts the grip and the menu back on a header that is one phone
+     column wide. The badge is decoration and the heading is the card's name, so
+     the badge is what stands down. */
+  .home-screen.is-customising .home-card.is-square .home-card-badge { display: none; }
   /* Half a phone turns the chart into a spike and truncates every cost, so the
      panels take the full width and stack. */
   .home-money-panels { grid-template-columns: minmax(0, 1fr); }
@@ -27949,6 +28606,171 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
      gives the title its width back. */
   .home-screen.is-customising .home-card .home-pill { display: none; }
 
+  /* A 2x2 is a square, so its content has to fit one — the body clips, which
+     means anything that does not fit is not "a bit tall", it is missing. The
+     tile lies down, the panels lose their padding, and the longest list gives
+     up its last row. */
+  .home-card-2x2 .home-money-tile {
+    flex-direction: row; align-items: center; gap: 7px; padding: 5px 9px;
+  }
+  .home-card-2x2 .home-money-tile-dot { flex: 0 0 auto; width: 20px; height: 20px; }
+  .home-card-2x2 .home-money-tile em { flex: 1 1 auto; min-width: 0; font-size: 10px; }
+  .home-card-2x2 .home-money-tile b { flex: 0 0 auto; font-size: 14px; }
+  .home-card-2x2 .home-money-tile i { display: none; }
+  .home-card-2x2 .home-panel { padding: 6px 9px; gap: 2px; }
+  .home-card-2x2 .home-flow-node { width: 22px; height: 22px; }
+  .home-card-2x2 .home-flow b { font-size: 14px; }
+  .home-card-2x2 .home-flow em { font-size: 9.5px; }
+  /* Only the production card stacks three blocks; the rest of the 2x2s were
+     already reviewed at three rows and must keep them. */
+  .home-card-2x2 .home-money.is-production .home-record-list li:nth-child(n + 3) { display: none; }
+
+  /* The phone header has no width for a second thing on the title's line, so
+     the note goes back under it. */
+  .home-card-titles.is-inline { flex-direction: column; align-items: flex-start; gap: 0; }
+
+  /* Three ruled figures on a 170px square give each label about 45px. The
+     sheet draws this card far larger than a phone ever renders it, so the
+     labels wrap rather than truncate and everything else gives up a little
+     height to pay for it. */
+  .home-money.is-stock { gap: 2px; }
+  .home-money.is-stock .home-metric-label { font-size: 10.5px; }
+  .home-money.is-stock .home-metric-value { font-size: 20px; }
+  .home-figure-row.is-ruled { padding-top: 6px; }
+  .home-figure-row.is-ruled > span { padding: 0 6px; }
+  .home-figure-row.is-ruled em {
+    font-size: 9.5px; line-height: 1.15; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 22px;
+  }
+  .home-figure-row.is-ruled b { font-size: 15px; }
+  .home-money.is-stock .home-mix-bar { margin-top: 6px; height: 6px; }
+  /* Four labels across a 335px phone card get about 77px each — "Quantity
+     stock" does not fit on one line in most languages, so they wrap. */
+  /* The headline is the widest thing on the row and "Low stock" is one digit,
+     so the columns are not equal — the sheet draws them the same way. */
+  .home-figure-row.is-quad { grid-template-columns: 1.4fr 1fr 1fr 0.7fr; }
+  .home-figure-row.is-quad > span { padding: 0 7px; }
+  .home-figure-row.is-quad em {
+    font-size: 9.5px; line-height: 1.15; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 22px;
+  }
+  .home-figure-row.is-quad b { font-size: 14px; }
+  .home-figure-row.is-quad b.is-total { font-size: 13px; }
+  .home-figure-row.is-quad i { font-size: 9px; }
+  .home-holding-row { padding-top: 9px; }
+  .home-holding-row li { gap: 7px; padding: 0 8px; }
+  .home-holding-badge { width: 26px; height: 26px; }
+  .home-holding-badge svg { width: 14px; height: 14px; }
+  .home-holding-name strong { font-size: 11px; }
+  .home-holding-name em { font-size: 9.5px; }
+  .home-holding-row b { font-size: 11.5px; }
+
+  /* The 2x2 stock square: 277px of body against 360px of content, so the ring
+     shrinks, the attention list keeps the two rows that matter most (worst
+     first, so it is the incoming one that goes), and the tile labels wrap
+     instead of collapsing to "t…". */
+  /* Four across in one row, label above value — the way the sheet draws them.
+     Side by side in a 150px tile, "toplam değer" and "£18,650.00" cannot both
+     fit and the label was collapsing to "t… d…". */
+  .home-money.is-stock .home-tile-row, .home-money.is-files .home-tile-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .home-money.is-stock .home-money-tile, .home-money.is-files .home-money-tile {
+    flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 5px;
+  }
+  .home-money.is-stock .home-money-tile-dot, .home-money.is-files .home-money-tile-dot { display: none; }
+  .home-money.is-stock .home-money-tile em, .home-money.is-files .home-money-tile em {
+    white-space: normal; font-size: 8.5px; line-height: 1.15;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 20px;
+  }
+  .home-money.is-stock .home-money-tile b, .home-money.is-files .home-money-tile b { font-size: 12px; }
+  /* The storage tile's sub carries the actual numbers behind the percentage,
+     so it is the one sub worth keeping on a phone. */
+  .home-money.is-files .home-money-tile i { display: block; font-size: 8px; }
+  .home-money.is-stock .home-donut { width: 46px; height: 46px; }
+  .home-donut-panel { gap: 10px; }
+  .home-donut-key li { padding: 0 8px; }
+  .home-donut-key em { font-size: 10px; }
+  .home-donut-key b { font-size: 12px; }
+  .home-attention-list li { grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 7px; padding: 2px 0; }
+  /* Three rows fit now that the tiles are one row rather than two — the sheet
+     shows three, so three it is. */
+  .home-attention-thumb { width: 22px; height: 22px; border-radius: 6px; }
+  .home-attention-list strong { font-size: 11px; }
+  .home-attention-chip { font-size: 9.5px; padding: 2px 7px; }
+  .home-attention-where { font-size: 10px; max-width: 58px; }
+
+  /* Two notes in a 162px square leave about 46px each. The sheet draws this
+     card far larger, so here the body is one line rather than two and the
+     type comes down — the title and whatever the note is attached to are what
+     survive, because those are the parts you act on. */
+  /* The 2x2 square: 277px of body against 325px of content. The composer and
+     the rows give up their padding, and a pinned tile's body drops to one
+     line — the title and what the note is attached to are what you act on. */
+  .home-note-composer { padding: 6px 10px; font-size: 11px; border-radius: 9px; }
+  .home-notes-large .home-note-grid .home-note { padding: 5px 8px; gap: 1px; }
+  .home-notes-large .home-note-grid .home-note strong { font-size: 11px; }
+  .home-notes-large .home-note-grid .home-note p { font-size: 9px; line-height: 1.25; -webkit-line-clamp: 1; }
+  .home-notes-large .home-note-grid .home-chip { font-size: 8.5px; padding: 0 5px; line-height: 1.5; }
+  .home-note-rows { gap: 4px; }
+  .home-note-row a { padding: 4px 8px; gap: 7px; border-radius: 9px; }
+  .home-note-row strong { font-size: 11px; }
+  .home-note-row em { font-size: 10px; }
+  .home-note-row-badge { width: 22px; height: 22px; }
+  .home-note-row-badge svg { width: 12px; height: 12px; }
+
+  /* The files 2x1 has 104px of body against 163px of content. The eyebrow goes
+     first — the card is called Files and the rows are plainly the recent ones,
+     so it was the line carrying the least. Everything else just tightens. */
+  /* The eyebrow goes at both phone sizes: the card is called Files and the
+     rows are plainly the recent ones, so it is the line carrying the least —
+     and at 162px it costs a row. */
+  .home-money.is-files > .home-eyebrow { display: none; }
+  /* On the square the name and the chip cannot share a line — 162px leaves the
+     name about 55px beside a chip, which is not a filename any more. The chip
+     goes under it and both stay readable. */
+  .home-card-1x1 .home-file-list a {
+    grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: auto auto;
+    row-gap: 0; padding: 2px 0; gap: 6px;
+  }
+  /* 107px of name column against a 22-character filename: it ellipsises either
+     way, so the type comes down to show as much of it as possible. The
+     extension is already the icon, so the tail is not the part that matters. */
+  .home-card-1x1 .home-file-list strong { font-size: 9.5px; }
+  .home-card-1x1 .home-file-icon { width: 18px; height: 18px; font-size: 6px; }
+  .home-card-1x1 .home-file-list .home-file-icon { grid-row: 1 / span 2; align-self: center; }
+  .home-card-1x1 .home-file-list em { display: none; }
+  .home-card-1x1 .home-money.is-files .home-chip { justify-self: start; }
+  .home-money.is-files { gap: 5px; }
+  .home-quota { gap: 3px; }
+  .home-quota-line em, .home-quota-line b { font-size: 10.5px; }
+  .home-quota-bar { height: 5px; }
+  .home-file-list a { grid-template-columns: 20px minmax(0, 1fr) auto auto; gap: 7px; padding: 2px 0; }
+  .home-file-icon { width: 20px; height: 20px; border-radius: 5px; font-size: 6.5px; }
+  .home-file-list strong { font-size: 10.5px; }
+  .home-file-list em { font-size: 9.5px; }
+  .home-money.is-files .home-chip { font-size: 8.5px; padding: 0 5px; line-height: 1.5; }
+  /* A bare + on the phone: the words do not fit beside a title and a menu in
+     one column's width, and the icon is the same action. */
+  .home-add-button.is-wide { width: 24px; padding: 0; font-size: 0; }
+  .home-add-button.is-wide::before { content: "+"; font-size: 16px; }
+
+  /* Three across on the wide card, as the sheet lays them out. */
+  .home-note-grid[data-size="2x1"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+  .home-note-grid[data-size="2x1"] .home-note { padding: 5px 7px; gap: 1px; border-radius: 10px; }
+  .home-note-grid[data-size="2x1"] .home-note strong { font-size: 10.5px; }
+  .home-note-grid[data-size="2x1"] .home-note p { font-size: 9px; line-height: 1.25; -webkit-line-clamp: 2; }
+  .home-note-grid[data-size="2x1"] .home-chip { font-size: 8.5px; padding: 0 5px; line-height: 1.5; }
+  .home-note-grid[data-size="1x1"] { gap: 5px; }
+  .home-note-grid[data-size="1x1"] .home-note { padding: 4px 8px; gap: 1px; border-radius: 10px; }
+  .home-note-grid[data-size="1x1"] .home-note strong { font-size: 11px; }
+  .home-note-grid[data-size="1x1"] .home-note p { font-size: 9px; line-height: 1.25; -webkit-line-clamp: 1; }
+  .home-note-grid[data-size="1x1"] .home-note-foot { gap: 4px; }
+  .home-note-grid[data-size="1x1"] .home-chip { font-size: 9px; padding: 0 6px; line-height: 1.5; }
+  .home-note-grid[data-size="1x1"] .home-note-foot em { font-size: 9px; }
+  .home-note-pin { font-size: 9px; margin-right: 4px; }
+
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }
   .home-card .home-card-body { padding-bottom: 14px; }
@@ -27962,4 +28784,93 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 @media (prefers-reduced-motion: reduce) {
   .home-card, .home-card.is-dragging { transition: none; transform: none; }
   .home-card-skeleton span { animation: none; }
+}
+
+/* ---- Integrations hub -------------------------------------------------- */
+/* One screen for everything NivaDesk connects to. Cards, not menu entries:
+   the menu used to grow by one every time a provider did. */
+.integrations-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.integrations-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px; }
+.integrations-crumb button { background: none; border: 0; padding: 0; cursor: pointer; color: #2563eb; font: inherit; font-weight: 600; }
+.integrations-crumb button:hover { text-decoration: underline; }
+.integrations-crumb span { opacity: 0.45; }
+
+/* The Getting started card sent them here; the way back has to be visible. */
+.integrations-intent {
+  display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;
+  background: rgba(37, 99, 235, 0.07); border-radius: 14px; padding: 14px 18px;
+}
+.integrations-intent > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+.integrations-intent em { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; color: #1d4ed8; background: rgba(37, 99, 235, 0.12); padding: 2px 8px; border-radius: 999px; }
+.integrations-intent strong { display: block; font-size: 16px; font-weight: 800; margin-top: 4px; }
+.integrations-intent small { display: block; font-size: 12.5px; opacity: 0.7; margin-top: 2px; }
+.integrations-intent-back { flex: 0 0 auto; color: #2563eb; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.integrations-intent-mark {
+  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 12px; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: #2563eb;
+}
+.integrations-intent-mark svg { width: 24px; height: 24px; }
+
+.integrations-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.integrations-search { flex: 1 1 240px; min-width: 0; }
+.integrations-search input {
+  width: 100%; padding: 9px 13px; border-radius: 10px;
+  border: 1px solid var(--border); background: transparent; color: inherit; font-size: 13.5px;
+}
+.integrations-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.integrations-chips button {
+  border: 1px solid var(--border); background: transparent; color: inherit;
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.integrations-chips button.is-active { background: rgba(37, 99, 235, 0.10); border-color: transparent; color: #1d4ed8; }
+.integrations-count { margin: 0 0 0 auto; font-size: 13px; display: flex; gap: 12px; align-items: center; }
+.integrations-count em { font-style: normal; color: #15803d; font-weight: 600; }
+.integrations-count b { color: #c2410c; font-weight: 600; }
+
+.integrations-group { margin: 0 0 12px; font-size: 15px; font-weight: 800; }
+.integrations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+
+.integration-card {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 14px; padding: 14px;
+}
+/* The link that sent them here says "connect a shop"; the two cards that can
+   answer that are the ones to look at first. */
+.integration-card.is-highlighted { border-color: rgba(37, 99, 235, 0.5); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10); }
+.integration-card-head { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.integration-card-head > div { min-width: 0; }
+.integration-card-head strong { display: block; font-size: 14.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration-logo {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 11px;
+  border: 1px solid var(--border); background: #fff;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.integration-logo img { width: 28px; height: 28px; object-fit: contain; }
+.integration-logo b { font-size: 16px; font-weight: 800; color: #475569; }
+
+.integration-state {
+  display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+}
+.integration-state.is-connected { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.integration-state.is-attention { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
+.integration-state.is-available { background: rgba(100, 116, 139, 0.14); color: #475569; }
+.integration-state.is-webhook { background: rgba(249, 115, 22, 0.14); color: #c2410c; }
+.integration-state.is-planned { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+
+.integration-detail { margin: 0; font-size: 12.5px; font-weight: 600; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration-blurb { margin: 0; font-size: 12.5px; opacity: 0.7; line-height: 1.4; }
+.integration-caps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.integration-caps li {
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 7px;
+  border: 1px solid var(--border); opacity: 0.75;
+}
+.integration-card .secondary-button { margin-top: auto; width: 100%; text-align: center; }
+/* A card with nothing under its name still holds its place in the row. */
+.integration-card.is-planned { opacity: 0.72; }
+
+@media (max-width: 640px) {
+  .integrations-count { margin-left: 0; }
+  .integrations-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 }

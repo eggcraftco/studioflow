@@ -37,6 +37,7 @@ import {
   createOrderFromWeb,
   deleteOrderFromWeb,
   mergeOrders,
+  purgeOrdersFromWeb,
   restoreOrderFromWeb,
   requestWorkflowOrderDeletionFromWeb,
   updateOrderFromWeb,
@@ -476,6 +477,33 @@ export default function OrdersPage() {
     setSelectedOrderId(order.id);
   }
 
+  /** Trash's own bulk action: gone for good, all of them, in one go. */
+  async function purgeSelectedOrders() {
+    if (!workspace || !canDeleteOrders) return;
+    const idSet = new Set(selectedOrderIds);
+    const targets = deletedOrders.filter(order => idSet.has(order.id));
+    if (targets.length === 0) { clearOrderSelection(); return; }
+    const confirmed = window.confirm(
+      `Permanently delete ${targets.length} order${targets.length === 1 ? "" : "s"}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setOrderContextMenu(null);
+    setOrderActionError(null);
+    setOrderActionStatus(`Deleting ${targets.length} order${targets.length === 1 ? "" : "s"} permanently...`);
+    const remaining = deletedOrders.filter(order => !idSet.has(order.id));
+    setDeletedOrders(remaining);
+    clearOrderSelection();
+    try {
+      await purgeOrdersFromWeb(workspace, targets.map(order => order.id));
+      setOrderActionStatus(`${targets.length} order${targets.length === 1 ? "" : "s"} deleted permanently.`);
+    } catch (purgeError) {
+      setOrderActionStatus(null);
+      setOrderActionError(purgeError instanceof Error ? purgeError.message : "Could not delete these orders.");
+      loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
+    }
+  }
+
   async function deleteSelectedOrders() {
     if (!workspace || !user) return;
     const uid = user.uid;
@@ -733,7 +761,15 @@ export default function OrdersPage() {
     }
   }
 
-  const contextOrder = orderContextMenu ? orders.find(order => order.id === orderContextMenu.orderId) ?? null : null;
+  // Look in the list that is actually on screen: Trash renders deletedOrders,
+  // and searching only the live list left the menu with nothing to show, which
+  // is why a right-click in Trash appeared to do nothing at all.
+  const contextOrder = orderContextMenu
+    ? (orders.find(order => order.id === orderContextMenu.orderId)
+      ?? deletedOrders.find(order => order.id === orderContextMenu.orderId)
+      ?? null)
+    : null;
+  const inTrash = orderFilter === "trash";
   const selectionActive = selectedOrderIds.size > 0;
   const contextOrderSelected = contextOrder ? selectedOrderIds.has(contextOrder.id) : false;
   const mergeCandidates = mergeModalOpen ? orders.filter(order => selectedOrderIds.has(order.id)) : [];
@@ -931,8 +967,12 @@ export default function OrdersPage() {
                   </button>
                 ) : null}
                 {canDeleteOrders ? (
-                  <button type="button" className="danger" onClick={() => void deleteSelectedOrders()}>
-                    {`${t("Delete")} (${selectedOrderIds.size})`}
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => void (inTrash ? purgeSelectedOrders() : deleteSelectedOrders())}
+                  >
+                    {`${inTrash ? t("Delete permanently") : t("Delete")} (${selectedOrderIds.size})`}
                   </button>
                 ) : null}
               </div>
@@ -977,6 +1017,50 @@ export default function OrdersPage() {
               role="menu"
               onClick={event => event.stopPropagation()}
             >
+              {/* In Trash the live actions are meaningless — a deleted order has
+                  no assignee to change and no status to mark. What it needs is
+                  the way back and the way out. */}
+              {inTrash ? (
+                <>
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row"
+                    onClick={() => (contextOrderSelected ? deselectOrderForBulk(contextOrder.id) : selectOrderForBulk(contextOrder.id))}
+                  >
+                    <span aria-hidden="true">{contextOrderSelected ? "−" : "☑"}</span>
+                    {contextOrderSelected ? t("Deselect") : t("Select")}
+                  </button>
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row"
+                    onClick={() => { setOrderContextMenu(null); void handleRestoreOrder(contextOrder); }}
+                  >
+                    <span aria-hidden="true">↩</span>
+                    {t("Restore")}
+                  </button>
+                  <div className="order-list-context-divider" />
+                  <button
+                    role="menuitem"
+                    type="button"
+                    className="order-list-context-row danger"
+                    disabled={!canDeleteOrders}
+                    onClick={() => {
+                      setOrderContextMenu(null);
+                      const ids = selectedOrderIds.has(contextOrder.id) && selectedOrderIds.size > 0
+                        ? selectedOrderIds
+                        : new Set([contextOrder.id]);
+                      setSelectedOrderIds(ids);
+                      window.requestAnimationFrame(() => void purgeSelectedOrders());
+                    }}
+                  >
+                    <span aria-hidden="true">🗑</span>
+                    {t("Delete permanently")}
+                  </button>
+                </>
+              ) : null}
+              {!inTrash ? (<>
               {contextOrder.customerName.trim() ? (
                 <a
                   role="menuitem"
@@ -1100,6 +1184,7 @@ export default function OrdersPage() {
                 <span aria-hidden="true">⌫</span>
                 {canRequestOrderDeletion ? "Request Deletion" : t("Delete")}
               </button>
+              </>) : null}
             </div>
           ) : null}
 

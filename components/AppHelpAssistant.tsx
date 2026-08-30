@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAnswer } from "@/lib/studioflow/appAssistant";
+import { createNivaDeskSupportTicket } from "@/lib/studioflow/supportTickets";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 
-type HelpTurn = { question: string; answer: AppAssistantAnswer };
+type HelpTurn = { question: string; answer: AppAssistantAnswer; ticket?: "sending" | "sent" | string };
 
 // In-app "how do I…?" helper. It answers from the user guide only: it has no
 // access to workspace data, and points at the ChatGPT app or at support when a
@@ -35,6 +36,36 @@ export default function AppHelpAssistant({
     })();
     return () => { cancelled = true; };
   }, [workspace?.id]);
+
+  /**
+   * The question the guide could not answer IS the ticket.
+   *
+   * This used to be a link to Settings, and ?support= was read by nothing, so
+   * it landed on whatever section happened to be first — the person then had to
+   * find the support screen, pick a tab, pick a category and type their question
+   * again. One press sends it, with the answer the assistant gave attached so
+   * support can see what it already tried.
+   */
+  async function sendToSupport(index: number) {
+    if (!workspace) return;
+    const turn = turns[index];
+    if (!turn || turn.ticket === "sending" || turn.ticket === "sent") return;
+    setTurns(previous => previous.map((item, n) => n === index ? { ...item, ticket: "sending" } : item));
+    try {
+      await createNivaDeskSupportTicket(workspace, {
+        title: turn.question.trim().slice(0, 120),
+        message: `${turn.question.trim()}\n\n---\n${t("The in-app assistant could not answer this. What it replied:")}\n${turn.answer.answer}`,
+        category: "question",
+        priority: "normal",
+        language
+      });
+      setTurns(previous => previous.map((item, n) => n === index ? { ...item, ticket: "sent" } : item));
+    } catch (sendError) {
+      setTurns(previous => previous.map((item, n) => n === index
+        ? { ...item, ticket: sendError instanceof Error ? sendError.message : t("The ticket could not be sent.") }
+        : item));
+    }
+  }
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -109,9 +140,24 @@ export default function AppHelpAssistant({
                     </Link>
                   ) : null}
                   {turn.answer.needsSupport ? (
-                    <Link className="app-help-action" href="/settings?support=appSupport">
-                      {t("Send this to NivaDesk Support")} →
-                    </Link>
+                    turn.ticket === "sent" ? (
+                      <p className="app-help-sent">
+                        {t("Sent to NivaDesk Support.")}{" "}
+                        <Link href="/settings?section=support-tickets&support=appSupport">
+                          {t("See your tickets")} →
+                        </Link>
+                      </p>
+                    ) : (
+                      <>
+                        <button type="button" className="app-help-action" disabled={!workspace || turn.ticket === "sending"}
+                                onClick={() => void sendToSupport(index)}>
+                          {turn.ticket === "sending" ? t("Sending...") : t("Send this to NivaDesk Support")} →
+                        </button>
+                        {typeof turn.ticket === "string" && turn.ticket !== "sending" ? (
+                          <p className="app-help-error">{turn.ticket}</p>
+                        ) : null}
+                      </>
+                    )
                   ) : null}
                 </div>
               </div>

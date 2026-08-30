@@ -1,10 +1,19 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
-import type { HomeCardSize } from "@/lib/studioflow/homeCards";
+import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
+import {
+  adjustedDashboardNetProfit,
+  baseCostTotal,
+  customExpenseTotal,
+  orderSalesTotal,
+} from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
+import type { ScheduleOrderItem } from "@/lib/studioflow/firestore";
+import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney } from "@/lib/studioflow/money";
 
@@ -20,6 +29,8 @@ import { formatStudioMoney } from "@/lib/studioflow/money";
 
 export type CardBodyProps = {
   size: HomeCardSize;
+  /** The range the card's totals cover; only the money cards read it. */
+  period: HomeCardPeriod;
   data: HomeData;
   t: (text: string) => string;
   moneySettings: StudioMoneySettings;
@@ -38,19 +49,28 @@ function cash(value: number, hide: boolean, settings: StudioMoneySettings) {
 
 /* ------------------------------------------------------------------ Money */
 
-export function MoneyCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
-  const orders = data.financeOrders.filter((order) => order.countsTowardBalance !== false);
+export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+  // The header says which window these totals cover, so they have to actually
+  // cover it — same rule the Dashboard applies, against the payment date.
+  const { start, end } = homePeriodRange(period);
+  const orders = data.financeOrders.filter((order) =>
+    order.countsTowardBalance !== false &&
+    order.paymentDate !== null && order.paymentDate >= start && order.paymentDate <= end);
   if (orders.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
-  const revenue = orders.reduce((sum, o) => sum + o.paidAmount + o.remainingAmount, 0);
+  const revenue = orders.reduce((sum, o) => sum + orderSalesTotal(o), 0);
   const received = orders.reduce((sum, o) => sum + o.paidAmount, 0);
   const outstanding = orders.reduce((sum, o) => sum + o.remainingAmount, 0);
-  const costs = orders.reduce((sum, o) => sum + o.watchPurchasePrice, 0);
+  // The Dashboard's rule, not a second one: base cost only when the workspace
+  // counts it, plus its own extra expense lines, then fee, shipping and VAT.
+  // Home was leaving the extra spending out and reporting a higher profit than
+  // the Dashboard for the same orders.
+  const costs = orders.reduce((sum, o) => sum + baseCostTotal(o, data.settings) + customExpenseTotal(o, data.settings), 0);
   const fees = orders.reduce((sum, o) => sum + o.paymentFee, 0);
   const shipping = orders.reduce((sum, o) => sum + o.deliveryCost, 0);
   const vat = orders.reduce((sum, o) => sum + o.taxAmount, 0);
-  const profit = revenue - costs - fees - shipping - vat;
+  const profit = orders.reduce((sum, o) => sum + adjustedDashboardNetProfit(o, data.settings), 0);
 
   // 1x1: the one number, the two that qualify it, and how much of revenue the
   // costs eat — never the bank feed's transactions (§7).
@@ -454,14 +474,38 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
 
   if (size === "1x1") {
+    // The sheet reads: what the stock is worth, then the three counts that say
+    // whether it needs attention, then the mix as one bar. Reserved is the third
+    // — stock that is spoken for is not stock you can sell.
+    const items = summary.uniqueCount + summary.quantityCount;
+    const healthy = Math.max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount);
+    const share = (value: number) => (items > 0 ? value / items : 0);
     return (
-      <div className="home-money">
+      <div className="home-money is-stock">
         <p className="home-metric-label">{t("total value")}</p>
-        <strong className="home-metric-value">{money(summary.totalValue)}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("low stock")}</em><b className={summary.lowStockCount > 0 ? "is-warning" : ""}>{summary.lowStockCount}</b></span>
-          <span><em>{t("incoming")}</em><b className="is-positive">{summary.incomingCount}</b></span>
+        <strong className="home-metric-value is-info">{money(summary.totalValue)}</strong>
+        <div className="home-figure-row is-ruled">
+          <span>
+            <em>{t("low stock")}</em>
+            <b className={summary.lowStockCount > 0 ? "is-negative" : ""}>{summary.lowStockCount}</b>
+          </span>
+          <span>
+            <em>{t("incoming")}</em>
+            <b className={summary.incomingCount > 0 ? "is-warning" : ""}>{summary.incomingCount}</b>
+          </span>
+          <span>
+            <em>{t("Reserved")}</em>
+            <b className={summary.reservedCount > 0 ? "is-warning" : ""}>{summary.reservedCount}</b>
+          </span>
         </div>
+        {items > 0 ? (
+          <span className="home-mix-bar" aria-hidden="true">
+            <i className="tone-green" style={{ flex: `${share(healthy)} 1 0` }} />
+            <i className="tone-orange" style={{ flex: `${share(summary.incomingCount)} 1 0` }} />
+            <i className="tone-red" style={{ flex: `${share(summary.lowStockCount)} 1 0` }} />
+            <i className="tone-slate" style={{ flex: `${share(summary.reservedCount)} 1 0` }} />
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -476,13 +520,49 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   );
 
   if (size === "2x1") {
+    // The sheet's wide card: what the stock is worth and how it splits, ruled
+    // apart, then the two holdings that are not free stock — reserved against
+    // orders, and what is still on its way. Both carry their count AND their
+    // value; a bare amount does not say how much of the shelf it is.
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <ul className="home-cost-list is-compact">
-          <li><span className="home-cost-dot tone-0" aria-hidden="true" /><em>{t("Reserved")}</em><b>{money(summary.reservedValue)}</b></li>
-          <li><span className="home-cost-dot tone-2" aria-hidden="true" /><em>{t("incoming")}</em><b>{money(summary.incomingValue)}</b></li>
-          <li><span className="home-cost-dot tone-3" aria-hidden="true" /><em>{t("Customer owned")}</em><b>{summary.customerOwnedCount}</b></li>
+      <div className="home-money is-wide is-stock">
+        <div className="home-figure-row is-quad">
+          <span>
+            <em>{t("total value")}</em>
+            <b className="is-total">{money(summary.totalValue)}</b>
+          </span>
+          <span>
+            <em>{t("Unique items")}</em>
+            <b>{summary.uniqueCount}</b>
+            <i>{money(summary.uniqueValue)}</i>
+          </span>
+          <span>
+            <em>{t("Quantity stock")}</em>
+            <b>{summary.quantityCount}</b>
+            <i>{money(summary.quantityValue)}</i>
+          </span>
+          <span>
+            <em>{t("low stock")}</em>
+            <b className={summary.lowStockCount > 0 ? "is-negative" : ""}>{summary.lowStockCount}</b>
+          </span>
+        </div>
+        <ul className="home-holding-row">
+          <li className="is-reserved">
+            <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="reserved" /></span>
+            <span className="home-holding-name">
+              <strong>{t("Reserved")}</strong>
+              <em>{summary.reservedCount} {t("items")}</em>
+            </span>
+            <b>{money(summary.reservedValue)}</b>
+          </li>
+          <li className="is-incoming">
+            <span className="home-holding-badge" aria-hidden="true"><HomeTileIcon name="incomingStock" /></span>
+            <span className="home-holding-name">
+              <strong>{t("incoming")}</strong>
+              <em>{summary.incomingCount} {t("items")}</em>
+            </span>
+            <b>{money(summary.incomingValue)}</b>
+          </li>
         </ul>
       </div>
     );
@@ -491,48 +571,68 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
   // Unique and quantity are different things and the split is the point (§8).
   const total = summary.uniqueValue + summary.quantityValue;
   const uniqueShare = total > 0 ? (summary.uniqueValue / total) * 100 : 0;
+  // What actually needs a decision, worst first: nothing on the shelf, then
+  // spoken for, then still on its way. The counts above say how many; this says
+  // which — a card that only counts problems cannot be acted on.
+  const attention = data.inventoryItems
+    .map((item) => {
+      const onHand = item.quantity?.onHand ?? 0;
+      const reserved = item.quantity?.reserved ?? 0;
+      const incoming = item.quantity?.incoming ?? 0;
+      const low = item.lowStockAt > 0 && onHand <= item.lowStockAt;
+      if (low) return { item, kind: "low" as const, rank: 0 };
+      if (reserved > 0) return { item, kind: "reserved" as const, rank: 1 };
+      if (incoming > 0) return { item, kind: "incoming" as const, rank: 2 };
+      return null;
+    })
+    .filter((entry): entry is { item: InventoryItem; kind: "low" | "reserved" | "incoming"; rank: number } => entry !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 3);
+  const kindLabel = { low: t("Low stock"), reserved: t("Reserved"), incoming: t("Incoming") };
   return (
-    <div className="home-money is-large">
-      {tiles}
-      <div className="home-money-panels">
-        <div className="home-panel">
-          <p className="home-eyebrow is-strong">{t("Inventory value")}</p>
-          <div className="home-donut-row">
-            <Donut share={uniqueShare} />
-            <ul className="home-donut-key">
-              <li>
-                <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
-                <em>{t("Unique items")}</em><b>{money(summary.uniqueValue)}</b>
-                <i>{uniqueShare.toFixed(1)}%</i>
+    <div className="home-money is-large is-stock">
+      <div className="home-tile-row">
+        <MoneyTile label={t("total value")} value={money(summary.totalValue)} tone="blue" />
+        <MoneyTile label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
+        <MoneyTile label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
+        <MoneyTile label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
+      </div>
+      <div className="home-panel home-donut-panel">
+        <Donut share={uniqueShare} />
+        <ul className="home-donut-key">
+          <li>
+            <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
+            <em>{t("Unique items")}</em>
+            <b>{money(summary.uniqueValue)}</b>
+          </li>
+          <li>
+            <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
+            <em>{t("Quantity stock")}</em>
+            <b>{money(summary.quantityValue)}</b>
+          </li>
+        </ul>
+      </div>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Needs attention")}</p>
+        {attention.length === 0 ? (
+          <p className="home-card-note">{t("Nothing here yet.")}</p>
+        ) : (
+          <ul className="home-attention-list">
+            {attention.map(({ item, kind }) => (
+              <li key={item.id}>
+                {item.photos?.[0] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="home-attention-thumb" src={item.photos[0]} alt="" loading="lazy" />
+                ) : (
+                  <span className="home-attention-thumb is-blank" aria-hidden="true">{item.name.slice(0, 1)}</span>
+                )}
+                <strong>{item.name}</strong>
+                <span className={`home-attention-chip is-${kind}`}>{kindLabel[kind]}</span>
+                <span className="home-attention-where">{item.location || "—"}</span>
               </li>
-              <li>
-                <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
-                <em>{t("Quantity stock")}</em><b>{money(summary.quantityValue)}</b>
-                <i>{(100 - uniqueShare).toFixed(1)}%</i>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div className="home-panel">
-          <p className="home-eyebrow is-strong">{t("Stock status")}</p>
-          <ul className="home-cost-list">
-            <li>
-              <span className="home-cost-dot tone-0" aria-hidden="true" />
-              <em>{t("Reserved")}<i>{summary.reservedCount} {t("items")}</i></em>
-              <b>{money(summary.reservedValue)}</b>
-            </li>
-            <li>
-              <span className="home-cost-dot tone-2" aria-hidden="true" />
-              <em>{t("incoming")}<i>{summary.incomingCount} {t("items")}</i></em>
-              <b>{money(summary.incomingValue)}</b>
-            </li>
-            <li>
-              <span className="home-cost-dot tone-low" aria-hidden="true" />
-              <em>{t("low stock")}<i>{summary.lowStockCount} {t("items")}</i></em>
-              <b />
-            </li>
+            ))}
           </ul>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -581,16 +681,42 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
 
   if (size === "1x1") {
+    // The square reads top to bottom: how many are live, how they are split,
+    // then the split as one bar. The counts come from the workspace's own stage
+    // kinds — never a fixed list of stage names.
+    const byKind = (kind: string) =>
+      byStage.filter((stage) => stage.kind === kind).reduce((sum, stage) => sum + stage.count, 0);
+    const counts: { label: string; value: number; tone: string; icon: HomeTileIconName }[] = [
+      { label: t("Ready"), value: byKind("ready"), tone: "green", icon: "ready" },
+      { label: t("In production"), value: byKind("active"), tone: "blue", icon: "inProduction" },
+      { label: t("Ready to ship"), value: byKind("shipready"), tone: "green", icon: "readyToShip" },
+      { label: t("Overdue"), value: late.length, tone: late.length > 0 ? "red" : "slate", icon: "overdue" },
+    ];
+    const total = byStage.reduce((sum, stage) => sum + stage.count, 0);
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("active orders")}</p>
-        <strong className="home-metric-value is-info">{open.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("Overdue")}</em><b className={late.length > 0 ? "is-warning" : ""}>{late.length}</b></span>
-          <span><em>{t("Ready to ship")}</em><b className="is-positive">
-            {byStage.filter((s) => s.kind === "shipready").reduce((sum, s) => sum + s.count, 0)}
-          </b></span>
+      <div className="home-money is-square">
+        <p className="home-lede">
+          <strong>{open.length}</strong>
+          <span>{t("active orders")}</span>
+        </p>
+        <div className="home-count-row">
+          {counts.map((count) => (
+            <div key={count.label} className={`home-count tone-${count.tone}`}>
+              <em>{count.label}</em>
+              <b>{count.value}</b>
+              <span className="home-count-icon" aria-hidden="true"><HomeTileIcon name={count.icon} /></span>
+            </div>
+          ))}
         </div>
+        <span className="home-mix-bar" aria-hidden="true">
+          {byStage.filter((stage) => stage.count > 0).map((stage) => (
+            <i
+              key={stage.id}
+              className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}
+              style={{ flex: `${total > 0 ? stage.count / total : 0} 1 0` }}
+            />
+          ))}
+        </span>
       </div>
     );
   }
@@ -608,12 +734,65 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   );
 
   if (size === "2x1") {
-    return <div className="home-money is-wide"><p className="home-eyebrow is-strong">{t("Production flow")}</p>{flow}</div>;
+    // The sheet's wide card: the stages as figures across the top, then the
+    // orders that actually need a decision. Done is left out — finished work is
+    // not a bottleneck, and its lane only narrowed the five that are.
+    const lanes = byStage.filter((stage) => stage.kind !== "done");
+    const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);
+    return (
+      <div className="home-money is-wide">
+        <ol className="home-lane-row">
+          {lanes.map((stage) => (
+            <li key={stage.id} className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>
+              <span className="home-lane-head">
+                <i className="home-lane-dot" aria-hidden="true" />
+                <em>{t(stage.title)}</em>
+              </span>
+              <b>{stage.count}</b>
+            </li>
+          ))}
+        </ol>
+        <ul className="home-order-list">
+          {priority.map((order) => {
+            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
+            const days = order.dueDate
+              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
+              : 0;
+            const stage = byStage.find((entry) =>
+              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
+            const name = order.customerName || order.designName || order.watchRef;
+            return (
+              <li key={order.id}>
+                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                  {order.previewImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
+                  )}
+                  <strong>{name}</strong>
+                  <span className="home-order-design">{order.designName}</span>
+                  {overdue ? (
+                    <span className="home-chip is-late">
+                      {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
+                    </span>
+                  ) : <span />}
+                  {stage ? (
+                    <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
+                  ) : <span />}
+                  <span className="home-order-chevron" aria-hidden="true">›</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   }
 
   const priority = [...late, ...open.filter((o) => !late.includes(o))].slice(0, 3);
   return (
-    <div className="home-money is-large">
+    <div className="home-money is-large is-production">
       <div className="home-tile-row is-pair">
         <MoneyTile label={t("active orders")} value={String(open.length)} tone="blue" />
         <MoneyTile label={t("Overdue")} value={String(late.length)} tone={late.length > 0 ? "orange" : "blue"} />
@@ -654,6 +833,21 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 
 /* --------------------------------------------------------------- Schedule */
 
+/// "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months.
+export function homeWeekRangeLabel() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const sameMonth = start.getMonth() === end.getMonth();
+  const endLabel = end.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const startLabel = sameMonth
+    ? String(start.getDate())
+    : start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return sameMonth ? `${startLabel}–${endLabel}` : `${startLabel} – ${endLabel}`;
+}
+
 export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   // Dates and deadlines only — never production status again (§10).
   const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
@@ -662,27 +856,53 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayLabel = (date: Date) => {
-    const days = Math.round((new Date(date).setHours(0, 0, 0, 0) - today.getTime()) / 86400000);
-    if (days === 0) return t("Today");
-    if (days === 1) return t("Tomorrow");
-    if (days < 0) return t("Overdue");
-    return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  // The chip answers "when", never "how far along" — production status stays
+  // out of this card (§10). A start still ahead of us beats the deadline,
+  // because nothing is late on an order that has not begun yet. A weekday on
+  // its own only reads unambiguously inside the coming week; past that it
+  // takes a date.
+  const startOfDayOf = (date: Date) => new Date(new Date(date).setHours(0, 0, 0, 0));
+  const daysFromToday = (date: Date) => Math.round((startOfDayOf(date).getTime() - today.getTime()) / 86400000);
+  const dueChip = (order: ScheduleOrderItem) => {
+    const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
+    if (startsIn > 0 && startsIn < 7) {
+      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(undefined, { weekday: "short" });
+      return { label: t("Starts {day}").replace("{day}", day), hue: "hue-purple" };
+    }
+    const days = daysFromToday(order.dueDate!);
+    if (days < 0) return { label: t("Overdue"), hue: "hue-red" };
+    if (days === 0) return { label: t("Due today"), hue: "hue-red" };
+    if (days === 1) return { label: t("Tomorrow"), hue: "hue-amber" };
+    return {
+      label: order.dueDate!.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+      hue: "hue-blue",
+    };
   };
 
   if (size === "1x1") {
     return (
-      <ul className="home-record-list">
-        {upcoming.slice(0, 3).map((order) => (
-          <li key={order.id}>
-            <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-              {order.customerName || order.designName}
-            </Link>
-            <span className={order.dueDate! < today ? "home-chip is-late" : "home-chip is-muted"}>
-              {dayLabel(order.dueDate!)}
-            </span>
-          </li>
-        ))}
+      <ul className="home-due-list">
+        {upcoming.slice(0, 3).map((order) => {
+          const chip = dueChip(order);
+          const ref = order.watchRef.trim();
+          const name = order.customerName || order.designName;
+          return (
+            <li key={order.id}>
+              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                <span className="home-due-head">
+                  {/* The sheet names the row after the order. A workspace that
+                      never gave the order a reference has only the customer,
+                      and then that is the name. */}
+                  <b>
+                    {ref ? <><i>{t("Order")}</i>{ref.startsWith("#") ? ref : `#${ref}`}</> : name}
+                  </b>
+                  <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
+                </span>
+                {ref && name ? <em>{name}</em> : null}
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     );
   }
@@ -696,92 +916,139 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     return date;
   });
 
-  const deadlines = (
-    <ul className="home-deadline-row">
-      {upcoming.slice(0, 3).map((order) => {
-        const overdue = order.dueDate! < today;
-        const tone = overdue ? "red" : dayLabel(order.dueDate!) === t("Tomorrow") ? "blue" : "green";
-        return (
-          <li key={order.id}>
-            <span className={`home-deadline-dot tone-${tone}`} aria-hidden="true" />
-            <span>
-              <em className={`tone-${tone}`}>{dayLabel(order.dueDate!)}</em>
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                {order.customerName || order.designName}
-              </Link>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
 
   if (size === "2x1") {
+    const weekEndDay = new Date(days[6]);
+    weekEndDay.setHours(23, 59, 59, 999);
+    const columnOf = (date: Date) =>
+      Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
+    const todayColumn = columnOf(today);
+
     return (
-      <div className="home-money is-wide">
-        <ol className="home-week-strip">
-          {days.map((date) => {
-            const count = open.filter((order) => order.dueDate!.toDateString() === date.toDateString()).length;
-            const isToday = date.getTime() === today.getTime();
-            return (
-              <li key={date.toISOString()} className={isToday ? "is-today" : ""}>
-                <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
-                <b>{date.getDate()}</b>
-                <i className={count > 0 ? "has-work" : ""}>{count > 0 ? count : ""}</i>
-              </li>
-            );
-          })}
-        </ol>
-        {deadlines}
+      <div className="home-week">
+        {/* Today's column runs the height of the card, as the sheet draws it —
+            it is what every bar is read against. */}
+        {todayColumn >= 0 && todayColumn <= 6 ? (
+          <span className="home-week-today" style={{ gridColumn: todayColumn + 2 }} aria-hidden="true" />
+        ) : null}
+        {days.map((date, index) => {
+          const isToday = index === todayColumn;
+          return (
+            <span key={date.toISOString()} className={`home-week-day${isToday ? " is-today" : ""}`}
+                  style={{ gridColumn: index + 2 }}>
+              <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+              <b>{date.getDate()}</b>
+            </span>
+          );
+        })}
+        {upcoming.slice(0, 3).map((order, row) => {
+          const chip = dueChip(order);
+          const name = order.customerName || order.designName;
+          const ref = order.watchRef.trim();
+          // A deadline that fell before this week has no bar to draw — the row
+          // still has to say the order is late, so the chip stands on its own.
+          const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
+          const to = columnOf(order.dueDate!);
+          const offWeek = to < 0;
+          // A bar narrower than its own chip has to borrow a column, and it
+          // borrows to the left: borrowing to the right runs off the card.
+          const end = Math.min(Math.max(to, from), 6);
+          const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+          // The name and the bar are grid items of the card's own grid, not of a
+          // row box: that is what makes a bar land exactly on its days.
+          return (
+            <Fragment key={order.id}>
+              <Link className="home-week-name" style={{ gridRow: row + 2 }}
+                    href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                {ref ? <><b>{ref.startsWith("#") ? ref : `#${ref}`}</b> {name}</> : name}
+              </Link>
+              <span className={`home-week-bar ${chip.hue}${offWeek ? " is-off-week" : ""}`}
+                    style={{ gridRow: row + 2, gridColumn: `${start + 2} / ${end + 3}` }}>
+                <em>{chip.label}</em>
+              </span>
+            </Fragment>
+          );
+        })}
       </div>
     );
   }
 
-  // A read-only bar per order across the week. Read-only on purpose: dragging a
-  // date here would fight the gesture that moves the card itself (§10).
-  const weekEnd = new Date(days[6]);
-  weekEnd.setHours(23, 59, 59, 999);
-  const bars = upcoming
-    .filter((order) => order.dueDate! >= weekStart && (order.paymentDate ?? order.dueDate!) <= weekEnd)
-    .slice(0, 5);
-  const span = weekEnd.getTime() - weekStart.getTime();
-  const pct = (date: Date) =>
-    Math.max(0, Math.min(100, ((date.getTime() - weekStart.getTime()) / span) * 100));
+  // The big card is the same week, with room for the day it is read against,
+  // four bars instead of three, and the next deadlines spelled out under it.
+  // Read-only on purpose: dragging a date here would fight the gesture that
+  // moves the card itself (§10).
+  const columnOf = (date: Date) =>
+    Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
+  const todayColumn = columnOf(today);
+  const bars = upcoming.slice(0, 4);
+  // "Upcoming" is what is still ahead. The timeline above already carries the
+  // late ones, and repeating them here would spend the section on old news.
+  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 2);
 
   return (
-    <div className="home-money is-large">
-      <p className="home-eyebrow is-strong">{t("Weekly timeline")}</p>
-      <div className="home-timeline">
-        <ol className="home-timeline-head">
-          {days.map((date) => (
-            <li key={date.toISOString()} className={date.getTime() === today.getTime() ? "is-today" : ""}>
-              {date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
-            </li>
-          ))}
-        </ol>
-        <ul className="home-timeline-rows">
-          {bars.map((order, index) => {
-            const from = pct(order.paymentDate ?? weekStart);
-            const to = pct(order.dueDate!);
-            const overdue = order.dueDate! < today;
-            return (
-              <li key={order.id}>
-                <span className="home-timeline-name">{order.customerName || order.designName}</span>
-                <span className="home-timeline-track">
-                  <i
-                    className={overdue ? "tone-red" : `tone-${["blue", "green", "purple", "amber", "teal"][index % 5]}`}
-                    style={{ left: `${Math.min(from, to)}%`, width: `${Math.max(4, Math.abs(to - from))}%` }}
-                  >
-                    {overdue ? t("Overdue") : ""}
-                  </i>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <p className="home-eyebrow is-strong">{t("Upcoming deadlines")}</p>
-      {deadlines}
+    <div className="home-week is-large" style={{ gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto` }}>
+      {days.map((date, index) => (
+        <span key={date.toISOString()} className={`home-week-day${index === todayColumn ? " is-today" : ""}`}
+              style={{ gridColumn: index + 2 }}>
+          <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+          <b>{date.getDate()}</b>
+          {index === todayColumn ? <i>{t("Today")}</i> : null}
+        </span>
+      ))}
+      <p className="home-week-eyebrow" style={{ gridRow: 2 }}>{t("Weekly timeline")}</p>
+      {/* One element draws every day line and row line: seven spans and four
+          more would say the same thing and cost eleven DOM nodes. */}
+      <span className="home-week-guides" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      {bars.map((order, row) => {
+        const chip = dueChip(order);
+        const name = order.customerName || order.designName;
+        const ref = order.watchRef.trim();
+        const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
+        const to = columnOf(order.dueDate!);
+        const offWeek = to < 0;
+        const end = Math.min(Math.max(to, from), 6);
+        const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+        // The section below spells out the dates, so up here only the bars that
+        // need doing something about carry a word.
+        const urgent = offWeek || columnOf(order.dueDate!) <= todayColumn + 1;
+        return (
+          <Fragment key={order.id}>
+            <Link className="home-week-name" style={{ gridRow: row + 3 }}
+                  href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+              {ref ? <><b>{ref.startsWith("#") ? ref : `#${ref}`}</b> {name}</> : name}
+            </Link>
+            <span className={`home-week-bar ${chip.hue}${offWeek ? " is-off-week" : ""}`}
+                  style={{ gridRow: row + 3, gridColumn: `${start + 2} / ${end + 3}` }}>
+              {urgent ? <em>{chip.label}</em> : null}
+            </span>
+          </Fragment>
+        );
+      })}
+      {ahead.length > 0 ? (
+        <>
+          <p className="home-week-eyebrow is-ruled" style={{ gridRow: bars.length + 3 }}>{t("Upcoming")}</p>
+          <ul className="home-upcoming" style={{ gridRow: bars.length + 4 }}>
+            {ahead.map((order) => {
+              const chip = dueChip(order);
+              const name = order.customerName || order.designName;
+              const ref = order.watchRef.trim();
+              return (
+                <li key={order.id}>
+                  <span className={`home-upcoming-mark ${chip.hue}`} aria-hidden="true">
+                    <HomeTileIcon name="reminder" />
+                  </span>
+                  <span>
+                    <em className={chip.hue}>{chip.label}</em>
+                    <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                      {ref ? `${ref.startsWith("#") ? ref : `#${ref}`} ${name}` : name}
+                    </Link>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -984,6 +1251,20 @@ function humanSize(bytes: number) {
   return `${bytes} B`;
 }
 
+/** "2 min ago" / "Today" / "Yesterday" / the date — what the sheet shows beside
+ *  a file, and what a person actually asks about a recent upload. */
+function homeAgo(when: Date, t: (text: string) => string) {
+  const mins = Math.round((Date.now() - when.getTime()) / 60000);
+  if (mins < 1) return t("Just now");
+  if (mins < 60) return `${mins} ${t("min ago")}`;
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const days = Math.floor((startOfDay.getTime() - when.getTime()) / 86400000);
+  if (days < 0) return t("Today");
+  if (days === 0) return t("Yesterday");
+  return when.toLocaleDateString();
+}
+
 export function FilesCardBody({ size, data, t }: CardBodyProps) {
   const files = data.files;
   if (files.length === 0) return null;
@@ -992,6 +1273,25 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   // files, never copies (§14).
   const unlinked = files.filter((file) => !file.orderId);
   const used = files.reduce((sum, file) => sum + (file.fileSize || 0), 0);
+
+  /** The sheet's row: what kind of file it is, its name, what it is attached to,
+   *  and when it arrived. */
+  const fileRow = (file: (typeof files)[number]) => {
+    const kind = fileKind(file.fileName, file.contentType);
+    const ext = (file.fileName.split(".").pop() || "").slice(0, 4).toUpperCase();
+    return (
+      <li key={file.fileId || file.id}>
+        <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
+          <span className={`home-file-icon is-${kind}`} aria-hidden="true">{ext}</span>
+          <strong>{file.fileName}</strong>
+          {file.orderId ? (
+            <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+          ) : null}
+          <em>{file.uploadedAt ? homeAgo(file.uploadedAt, t) : ""}</em>
+        </Link>
+      </li>
+    );
+  };
 
   const row = (file: (typeof files)[number]) => (
     <li key={file.fileId || file.id}>
@@ -1007,66 +1307,71 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     </li>
   );
 
+  const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
+  const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
+  const quota = limitBytes > 0 ? (
+    <div className="home-quota">
+      <span className="home-quota-line">
+        <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
+        <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
+      </span>
+      <span className="home-quota-bar" aria-hidden="true">
+        <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
+      </span>
+    </div>
+  ) : null;
+
   if (size === "1x1") {
+    // The square asks the same question as the wide card — how full is this
+    // workspace, and what landed recently. "File library" was the file count
+    // again under a second name.
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("Total files")}</p>
-        <strong className="home-metric-value is-info">{files.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("Storage")}</em><b className="is-plain">{humanSize(used)}</b></span>
-          <span><em>{t("Unlinked")}</em><b className={unlinked.length > 0 ? "is-warning" : ""}>{unlinked.length}</b></span>
-        </div>
+      <div className="home-money is-files">
+        {quota}
+        <p className="home-eyebrow is-strong">{t("Recent")}</p>
+        <ul className="home-file-list">{files.slice(0, 2).map(fileRow)}</ul>
       </div>
     );
   }
-
-  const tiles = (
-    <div className="home-tile-row is-triple">
-      <MoneyTile label={t("Total files")} value={String(files.length)} tone="blue" />
-      <MoneyTile label={t("Storage")} value={humanSize(used)} tone="green" />
-      <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
-    </div>
-  );
 
   if (size === "2x1") {
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <ul className="home-record-list">{files.slice(0, 3).map(row)}</ul>
+      <div className="home-money is-wide is-files">
+        {quota}
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list">{files.slice(0, 3).map(fileRow)}</ul>
       </div>
     );
   }
 
+  // The sheet's three figures: how many, how full, and how many are floating
+  // free. The last is the only one that asks for anything to be done.
   return (
-    <div className="home-money is-large">
-      {tiles}
-      <div className="home-money-panels">
-        <div className="home-panel is-flush">
-          <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-          <ul className="home-record-list">{files.slice(0, 5).map(row)}</ul>
-        </div>
-        <div className="home-panel is-flush">
-          <p className="home-eyebrow is-strong">{t("Needs linking")}</p>
-          {unlinked.length === 0 ? (
-            <p className="home-card-note">{t("All set — nice work.")}</p>
-          ) : (
-            <>
-              <p className="home-card-note">
-                {t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}
-              </p>
-              <ul className="home-record-list">{unlinked.slice(0, 3).map(row)}</ul>
-            </>
-          )}
-        </div>
+    <div className="home-money is-large is-files">
+      <div className="home-tile-row is-triple">
+        <MoneyTile label={t("files")} value={String(files.length)} tone="blue" />
+        <MoneyTile label={t("Storage")} value={pct !== null ? `${pct}%` : humanSize(used)}
+                   tone="green" sub={limitBytes > 0 ? `${humanSize(used)} ${t("of")} ${humanSize(limitBytes)}` : undefined} />
+        <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
       </div>
-      <p className="home-action-note">{t("One file, multiple links — no duplicates.")}</p>
+      <div className="home-panel is-flush">
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list">{files.slice(0, 4).map(fileRow)}</ul>
+      </div>
+      {unlinked.length > 0 ? (
+        <Link className="home-linking-banner" href="/files">
+          <span aria-hidden="true">🔗</span>
+          <strong>{t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}</strong>
+          <em>{t("Review")}</em>
+        </Link>
+      ) : null}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ Notes */
 
-export function NotesCardBody({ size, data, t }: CardBodyProps) {
+export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
   // Notes only — not files, not AI replies (§13). Pinned first, then recent.
   const live = data.notes.filter((note) => !note.isDeleted && !note.isArchived);
   if (live.length === 0) return null;
@@ -1088,6 +1393,16 @@ export function NotesCardBody({ size, data, t }: CardBodyProps) {
 
   return (
     <div className="home-notes-large">
+      {/* The sheet opens this card with somewhere to start typing. It is a
+          button, not a field: the composer lives on the Notes screen and two
+          places to draft the same note is one too many. */}
+      <button
+        type="button"
+        className="home-note-composer"
+        onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
+      >
+        {t("Take a note…")}
+      </button>
       {pinned.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Pinned")}</p>
@@ -1097,10 +1412,45 @@ export function NotesCardBody({ size, data, t }: CardBodyProps) {
         </>
       ) : null}
       <p className="home-eyebrow is-strong">{t("Recent")}</p>
-      <div className="home-note-grid">
-        {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => <NoteTile key={note.id} note={note} t={t} />)}
-      </div>
+      <ul className="home-note-rows">
+        {recent.slice(0, pinned.length > 0 ? 3 : 5).map((note) => (
+          <NoteRow key={note.id} note={note} t={t} />
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/** What a note is about, and the one fact worth showing beside it: when it is
+ *  due, or what it is attached to. Derived from the note — never invented. */
+function noteMeta(note: HomeData["notes"][number], t: (text: string) => string) {
+  if (note.reminderDateMillis) {
+    const due = new Date(note.reminderDateMillis);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const days = Math.round((due.getTime() - startOfDay.getTime()) / 86400000);
+    return {
+      icon: "reminder" as const,
+      text: days === 0 ? t("Today") : days === 1 ? t("Tomorrow") : due.toLocaleDateString(),
+      overdue: days < 0,
+    };
+  }
+  if (note.linkedOrderLabel) return { icon: "order" as const, text: note.linkedOrderLabel, overdue: false };
+  if (note.linkedCustomerName) return { icon: "customer" as const, text: note.linkedCustomerName, overdue: false };
+  return { icon: "note" as const, text: "", overdue: false };
+}
+
+function NoteRow({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
+  const meta = noteMeta(note, t);
+  const hue = note.colorName || "default";
+  return (
+    <li className={`home-note-row hue-${hue}`}>
+      <Link href={`/notes?note=${encodeURIComponent(note.id)}`}>
+        <span className="home-note-row-badge" aria-hidden="true"><HomeTileIcon name={meta.icon} /></span>
+        <strong>{note.title || t("Untitled note")}</strong>
+        {meta.text ? <em className={meta.overdue ? "is-due" : ""}>{meta.text}</em> : null}
+      </Link>
+    </li>
   );
 }
 
@@ -1112,11 +1462,21 @@ function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: stri
   startOfDay.setHours(0, 0, 0, 0);
   const days = reminder ? Math.round((reminder.getTime() - startOfDay.getTime()) / 86400000) : null;
   return (
-    <Link className={`home-note tone-${note.colorName || "default"}`} href={`/notes?note=${encodeURIComponent(note.id)}`}>
+    // hue-, not tone-: a global `.tone-green { color: … !important }` earlier in
+    // the stylesheet would repaint a green note's text its own green.
+    <Link
+      className={`home-note hue-${note.colorName || "default"}${note.isPinned ? " is-pinned" : ""}`}
+      href={`/notes?note=${encodeURIComponent(note.id)}`}
+    >
+      {/* Top right, out of the title's way — the sheet marks the corner rather
+          than pushing the heading along. */}
+      {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
       <strong>{note.title || t("Untitled note")}</strong>
       {note.text ? <p>{note.text}</p> : null}
       <span className="home-note-foot">
-        {chip ? <span className="home-chip is-muted">{chip}</span> : null}
+        {/* The chip takes the note's own colour, not a grey one — it belongs to
+            the note, and on a coloured ground grey reads as disabled. */}
+        {chip ? <span className="home-chip is-note">{chip}</span> : null}
         {days !== null ? (
           <em className={days <= 0 ? "is-due" : days === 1 ? "is-soon" : ""}>
             {days === 0 ? t("Today") : days === 1 ? t("Tomorrow") : reminder?.toLocaleDateString()}
@@ -1234,13 +1594,19 @@ const SETUP_STEPS = [
   { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
   { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
   { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
-  { id: "shop", label: "Connect your shop", blurb: "Bring Shopify or WooCommerce orders in automatically.", href: "/settings?section=integrations", cta: "Connect shop" },
+  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically from Shopify or WooCommerce.", href: "/settings?section=integrations&category=commerce&intent=connect-shop", cta: "Connect shop" },
   { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
   { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
 ] as const;
 
-export function GettingStartedCardBody({ size, data, t }: CardBodyProps) {
-  const steps = SETUP_STEPS.map((step) => ({
+export function GettingStartedCardBody({
+  size, data, t, skipped = [], onSkip, onRestoreSkipped,
+}: CardBodyProps & {
+  skipped?: string[];
+  onSkip?: (stepId: string) => void;
+  onRestoreSkipped?: () => void;
+}) {
+  const steps = SETUP_STEPS.filter((step) => !skipped.includes(step.id)).map((step) => ({
     ...step,
     done:
       step.id === "profile" ? true :
@@ -1258,88 +1624,98 @@ export function GettingStartedCardBody({ size, data, t }: CardBodyProps) {
   const done = steps.filter((step) => step.done);
   const todo = steps.filter((step) => !step.done && step.id !== next?.id);
 
-  // 1x1 has no room for the completed list, so it leads with the next step and
-  // shows what is still open underneath.
+  // 1x1 has no room for the completed list. The sheet spends the square on the
+  // one thing to do next and the way out of it, rather than on a list of what
+  // is still open — that list is the wall §15 says never to put here.
   if (size === "1x1") {
     return (
-      <div className="home-setup">
+      <div className="home-setup is-square">
         <HomeProgress complete={complete} total={steps.length} t={t} />
         {next ? (
           <>
-            <p className="home-eyebrow">{t("Next step")}</p>
             <NextStepPanel step={next} t={t} compact />
+            {onSkip ? (
+              <button type="button" className="home-setup-skip"
+                      onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                {t("Skip for now")}
+              </button>
+            ) : null}
           </>
         ) : (
-          <p className="home-card-note">{t("All set — nice work.")}</p>
+          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
         )}
-        <ul className="home-check-list">
-          {todo.slice(0, 2).map((step) => (
-            <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-          ))}
-        </ul>
       </div>
     );
   }
 
-  // 2x1: what is done on the left, what is next on the right (§15 — never a
-  // blocking wall, always one obvious continue).
+  // 2x1: the one thing to do next on the left, what is left after it on the
+  // right (§15 — never a blocking wall, always one obvious continue). The
+  // Completed list that used to hold the left column is gone: a card whose job
+  // is to move you forward spent half itself on work already finished.
   if (size === "2x1") {
     return (
       <div className="home-setup is-split">
-        <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
+        <HomeProgress complete={complete} total={steps.length} t={t} />
         <div className="home-setup-columns">
-          <div>
-            <p className="home-eyebrow is-strong">{t("Completed")}</p>
-            <ul className="home-check-list">
-              {done.slice(0, 3).map((step) => (
-                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
-              ))}
-            </ul>
+          <div className="home-setup-next">
+            {next ? (
+              <>
+                <NextStepPanel step={next} t={t} inline />
+                {onSkip ? (
+                  <button type="button" className="home-setup-skip"
+                          onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                    {t("Skip for now")}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            )}
           </div>
-          <div>
-            {next ? <NextStepPanel step={next} t={t} inline /> : <p className="home-card-note">{t("All set — nice work.")}</p>}
-            <ul className="home-check-list">
-              {todo.slice(0, 2).map((step) => (
-                <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-              ))}
-            </ul>
-          </div>
+          <ul className="home-check-list is-ruled">
+            {todo.slice(0, 3).map((step) => (
+              <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
+            ))}
+          </ul>
         </div>
       </div>
     );
   }
 
-  // 2x2: the whole checklist with the current step called out, beside the
-  // recommendation, and a note that the list adapts to the workspace.
+  // 2x2: the whole checklist down the card and the current step's panel under
+  // it. One column, not two: side by side the list had about half the width and
+  // every label was cut to "Set up business pro…" — a checklist you cannot read
+  // is not a checklist.
   return (
     <div className="home-setup is-large">
-      <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
-      <div className="home-setup-columns">
-        <div className="home-setup-panel">
-          <p className="home-eyebrow is-strong">{t("Your checklist")}</p>
-          <ul className="home-check-list is-full">
-            {steps.map((step) => (
-              <li key={step.id} className={step.id === next?.id ? "is-current" : ""}>
-                <span
-                  className={step.done ? "home-check is-done" : step.id === next?.id ? "home-check is-current" : "home-check is-todo"}
-                  aria-hidden="true"
-                />
-                {t(step.label)}
-              </li>
-            ))}
-          </ul>
+      <HomeProgress complete={complete} total={steps.length} t={t} />
+      <p className="home-eyebrow is-strong">{t("Your checklist")}</p>
+      <ul className="home-check-list is-full">
+        {steps.map((step) => (
+          <li key={step.id} className={step.id === next?.id ? "is-current" : step.done ? "is-done" : ""}>
+            <span
+              className={step.done ? "home-check is-done" : step.id === next?.id ? "home-check is-current" : "home-check is-todo"}
+              aria-hidden="true"
+            />
+            {t(step.label)}
+          </li>
+        ))}
+      </ul>
+      {next ? (
+        <div className="home-setup-next">
+          <NextStepPanel step={next} t={t} large />
+          {onSkip ? (
+            <button type="button" className="home-setup-skip"
+                    onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+              {t("Skip for now")}
+            </button>
+          ) : null}
         </div>
-        {next ? <NextStepPanel step={next} t={t} large /> : (
-          <div className="home-next-panel"><p className="home-card-note">{t("All set — nice work.")}</p></div>
-        )}
-      </div>
-      <div className="home-tip">
-        <span className="home-tip-icon" aria-hidden="true">💡</span>
-        <span>
-          <strong>{t("Your setup adapts to you")}</strong>
-          <em>{t("Steps change with your plan, permissions and workflow.")}</em>
-        </span>
-      </div>
+      ) : (
+        <div className="home-next-panel">
+          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1359,6 +1735,33 @@ function HomeProgress({ complete, total, t, hideLabel }: { complete: number; tot
   );
 }
 
+/**
+ * The end of the checklist, and the way back into it.
+ *
+ * "Skip for now" has to be true: without a way to bring a skipped step back,
+ * the word "now" is a promise the card does not keep. There is nothing left to
+ * do here, so this is where the offer belongs.
+ */
+function AllSetNote({
+  skipped, onRestore, t,
+}: {
+  skipped: string[];
+  onRestore?: () => void;
+  t: (text: string) => string;
+}) {
+  return (
+    <div className="home-setup-allset">
+      <p className="home-card-note">{t("All set — nice work.")}</p>
+      {skipped.length > 0 && onRestore ? (
+        <button type="button" className="home-setup-skip"
+                onClick={(event) => { event.stopPropagation(); onRestore(); }}>
+          {t("{count} skipped").replace("{count}", String(skipped.length))}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function NextStepPanel({
   step, t, compact, inline, large,
 }: {
@@ -1367,16 +1770,22 @@ function NextStepPanel({
   compact?: boolean; inline?: boolean; large?: boolean;
 }) {
   return (
-    <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}`}>
-      {large ? <p className="home-eyebrow is-accent">{t("Recommended next")}</p> : null}
-      {inline ? <p className="home-eyebrow is-accent">{t("Up next")}</p> : null}
+    <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}${compact ? " is-stacked" : ""}`}>
       <div className="home-next-body">
         <div>
-          <strong>{t(step.label)}</strong>
-          <p>{t(step.blurb)}</p>
+          {/* The big card's list above already names this step and colours it
+              blue; the panel repeating it was the same words twice. */}
+          {large ? null : <strong>{t(step.label)}</strong>}
+          {/* The square keeps the step and the way past it and gives up the
+              line that explains why: measured, "Verbinde deinen Shop" plus its
+              own blurb runs 17px past the bottom of a 174px card. The page the
+              button opens explains itself. */}
+          {compact ? null : <p>{t(step.blurb)}</p>}
         </div>
+        {/* The square has no width for "Connect your shop" twice — the panel's
+            heading already named the step, so the button just moves. */}
         <Link className="home-next-button" href={step.href}>
-          {t(inline ? "Continue" : step.cta)}
+          {t(inline || compact ? "Continue" : step.cta)}
         </Link>
       </div>
     </div>

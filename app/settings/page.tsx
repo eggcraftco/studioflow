@@ -15,7 +15,18 @@ import type { FinancialRecalculationPreview, ClearTaxPreview, ImportBackupPrevie
 import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studioflow/planActions";
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { auth, functions } from "@/lib/firebase/client";
+import { auth, db, functions } from "@/lib/firebase/client";
+import { collection, getDocs } from "firebase/firestore";
+import {
+  INTEGRATION_CATEGORIES,
+  INTEGRATION_PROVIDERS,
+  INTEGRATION_STATE_LABELS,
+  resolveIntegrationState,
+  type IntegrationLiveState,
+  type IntegrationManageTarget,
+  type IntegrationProvider,
+  type IntegrationSignals,
+} from "@/lib/studioflow/integrations";
 import { httpsCallable } from "firebase/functions";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
@@ -101,9 +112,7 @@ type SettingsSectionId =
   | "pdf"
   | "quick-reply"
   | "financial"
-  | "woocommerce"
-  | "shopify"
-  | "inbound"
+  | "integrations"
   | "safety-uploads"
   | "data"
   | "plan-access"
@@ -137,6 +146,9 @@ type SettingsSection = {
 // section ids; map them onto the new Account / Workspace structure so existing
 // `?section=...` links and the avatar menu keep landing on the right screen.
 const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
+  woocommerce: "integrations",
+  shopify: "integrations",
+  inbound: "integrations",
   general: "profile-security",
   account: "profile-security",
   appearance: "preferences",
@@ -182,9 +194,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "safety-uploads", title: "Safety & Uploads", appKey: "Upload Safety", description: "Upload rules, file limits and audit protection.", icon: "shield", group: "files" },
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "files" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
-  { id: "woocommerce", title: "WooCommerce Integration", appKey: "WooCommerce", description: "Live website orders and webhook setup.", icon: "cart", group: "integrations" },
-  { id: "shopify", title: "Shopify Integration", appKey: "Shopify", description: "Live Shopify orders and webhook setup.", icon: "cart", group: "integrations" },
-  { id: "inbound", title: "Other Platforms", appKey: "Webhook", description: "Connect any store via Zapier, Make or a custom webhook.", icon: "cart", group: "integrations" },
+  { id: "integrations", title: "Integrations", appKey: "Integrations", description: "Connect the tools you use to run your business.", icon: "cart", group: "integrations" },
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" }
 ];
 
@@ -205,9 +215,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   "safety-uploads": "upload file size limit policy zip audit virus",
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
-  woocommerce: "webhook woocommerce store website orders",
-  shopify: "shopify store sync app orders",
-  inbound: "zapier make webhook custom api platforms",
+  integrations: "integration connect webhook woocommerce shopify etsy wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api",
   "support-tickets": "ticket help support contact"
 };
 
@@ -426,9 +434,7 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (sectionId === "pdf") return allowed("settingsPdf");
   if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
   if (sectionId === "data") return allowed("settingsData");
-  if (sectionId === "woocommerce") return allowed("settingsWorkflow");
-  if (sectionId === "shopify") return allowed("settingsWorkflow");
-  if (sectionId === "inbound") return allowed("settingsWorkflow");
+  if (sectionId === "integrations") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -474,9 +480,21 @@ export default function SettingsPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
 
+  // The Integrations hub reads three things out of the URL: which provider an
+  // old ?section=shopify link meant, which category to lead with, and whether
+  // the Getting started card sent this person here to connect a shop.
+  const [integrationIntent, setIntegrationIntent] = useState("");
+  const [integrationCategory, setIntegrationCategory] = useState("");
+  const [integrationProvider, setIntegrationProvider] = useState<IntegrationManageTarget>("");
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const rawRequested = params.get("section");
+    setIntegrationIntent(params.get("intent") ?? "");
+    setIntegrationCategory(params.get("category") ?? "");
+    if (rawRequested === "shopify" || rawRequested === "woocommerce" || rawRequested === "inbound") {
+      setIntegrationProvider(rawRequested);
+    }
     if (!rawRequested) return;
     const requested = (SETTINGS_SECTION_ALIASES[rawRequested] ?? rawRequested) as SettingsSectionId;
     if (SETTINGS_SECTIONS.some(section => section.id === requested)) {
@@ -799,7 +817,11 @@ export default function SettingsPage() {
             onSupportUnreadChanged: setSupportUnreadCount,
             storagePercent,
             userEmail: user.email ?? "Signed in",
-            onDataImported: refreshSettingsAfterImport
+            onDataImported: refreshSettingsAfterImport,
+            integrationIntent,
+            integrationCategory,
+            integrationProvider,
+            onOpenSupport: () => setActiveSection("support-tickets")
           }) : null}
 
           <div className="settings-dirty-bar" data-dirty={settingsDirty.dirtySections[selectedSection.id] ? "true" : "false"}>
@@ -830,7 +852,11 @@ function renderSettingsSection({
   onSupportUnreadChanged,
   storagePercent,
   userEmail,
-  onDataImported
+  onDataImported,
+  integrationIntent,
+  integrationCategory,
+  integrationProvider,
+  onOpenSupport
 }: {
   sectionId: SettingsSectionId;
   workspace: WorkspaceContext;
@@ -848,6 +874,11 @@ function renderSettingsSection({
   storagePercent: number;
   userEmail: string;
   onDataImported: () => Promise<void>;
+  /** From ?intent= / ?category= / an aliased ?section=shopify deep link. */
+  integrationIntent: string;
+  integrationCategory: string;
+  integrationProvider: IntegrationManageTarget;
+  onOpenSupport: () => void;
 }) {
   switch (sectionId) {
     case "profile-security":
@@ -874,12 +905,17 @@ function renderSettingsSection({
       return <QuickReplySettingsSection workspace={workspace} settings={quickReplySettings} onSaved={onQuickReplySettingsChange} language={language} />;
     case "financial":
       return <FinancialSettingsSection workspace={workspace} settings={settings} language={language} onSaved={onWorkspaceSettingsChange} />;
-    case "woocommerce":
-      return <WooCommerceIntegrationSection workspace={workspace} language={language} />;
-    case "shopify":
-      return <ShopifyIntegrationSection workspace={workspace} language={language} />;
-    case "inbound":
-      return <InboundWebhookSection workspace={workspace} language={language} />;
+    case "integrations":
+      return (
+        <IntegrationsSection
+          workspace={workspace}
+          language={language}
+          intent={integrationIntent}
+          category={integrationCategory}
+          openProvider={integrationProvider}
+          onOpenSupport={onOpenSupport}
+        />
+      );
     case "safety-uploads":
       return <SafetyUploadsSection workspace={workspace} settings={settings} onSaved={onWorkspaceSettingsChange} language={language} />;
     case "data":
@@ -4893,6 +4929,244 @@ function IntegrationCustomerSyncCard({ workspace, language = "English" }: { work
   );
 }
 
+/**
+ * One place for everything NivaDesk connects to.
+ *
+ * The three integration screens used to be three menu entries, which meant the
+ * menu grew by one every time a provider did, and a workshop looking for "where
+ * do I connect my shop" had to already know which shop platform we called it.
+ * The menu now carries Integrations and nothing else; each provider is a card,
+ * and its setup, sync, webhook and security detail is what Manage opens.
+ *
+ * Every status here is resolved from the workspace, never written down — see
+ * lib/studioflow/integrations.ts for which signal each one reads.
+ */
+function IntegrationsSection({
+  workspace, language = "English", intent, category, openProvider, onOpenSupport,
+}: {
+  workspace: WorkspaceContext;
+  language?: string;
+  /** From the Getting started card: lead with the shop platforms. */
+  intent?: string;
+  category?: string;
+  /** An old ?section=shopify link opens that provider's screen directly. */
+  openProvider?: IntegrationManageTarget;
+  onOpenSupport: () => void;
+}) {
+  const t = (text: string) => studioT(text, language);
+  const companyId = workspace.id.trim();
+  const [managing, setManaging] = useState<IntegrationManageTarget>(openProvider ?? "");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
+  const [signals, setSignals] = useState<IntegrationSignals>({
+    shopifyStores: [], channels: {}, bankConnections: 0,
+  });
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let active = true;
+    (async () => {
+      // Four independent reads: one slow or refused answer must not blank the
+      // other three cards, so each settles on its own.
+      const [stores, woo, inbound, banks] = await Promise.allSettled([
+        httpsCallable<{ companyId: string }, { stores: ShopifyStoreView[] }>(
+          functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
+        getIntegrationWebhookInfo("woocommerce", companyId),
+        getIntegrationWebhookInfo("inbound", companyId),
+        getDocs(collection(db, "companies", companyId, "bankConnections")),
+      ]);
+      if (!active) return;
+      const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
+        result.status === "fulfilled"
+          ? {
+              lastDeliveryAtMs: result.value.lastDeliveryAtMs,
+              lastDeliveryOk: result.value.lastDeliveryOk,
+              lastDeliveryWasTest: result.value.lastDeliveryWasTest,
+            }
+          : { lastDeliveryAtMs: 0, lastDeliveryOk: false, lastDeliveryWasTest: false };
+      setSignals({
+        shopifyStores: stores.status === "fulfilled" ? (stores.value.data?.stores ?? []) : [],
+        channels: { woocommerce: channel(woo), inbound: channel(inbound) },
+        bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
+      });
+      setLoaded(true);
+    })();
+    return () => { active = false; };
+  }, [companyId]);
+
+  const resolved = useMemo(
+    () => INTEGRATION_PROVIDERS.map((provider) => ({
+      provider, live: resolveIntegrationState(provider, signals),
+    })),
+    [signals],
+  );
+
+  if (managing) {
+    return (
+      <div className="settings-card-stack">
+        <nav className="integrations-crumb">
+          <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
+          <span aria-hidden="true">/</span>
+          <strong>{INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? t("Setup")}</strong>
+        </nav>
+        {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
+      </div>
+    );
+  }
+
+  const connected = resolved.filter((row) => row.live.state === "connected").length;
+  const attention = resolved.filter((row) => row.live.state === "attention").length;
+  const needle = query.trim().toLowerCase();
+  const matches = (row: (typeof resolved)[number]) => {
+    if (needle && !row.provider.name.toLowerCase().includes(needle)) return false;
+    if (filter === "connected") return row.live.state === "connected" || row.live.state === "attention";
+    if (filter === "available") return row.live.state === "available" || row.live.state === "webhook";
+    if (filter === "planned") return row.live.state === "planned";
+    return true;
+  };
+  const shown = resolved.filter(matches);
+  // The Getting started card sends people here to connect a shop. Leading with
+  // the two platforms NivaDesk talks to itself is the whole point of the link.
+  const shopFirst = intent === "connect-shop";
+  const highlighted = new Set(shopFirst ? ["shopify", "woocommerce"] : []);
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card integrations-head">
+        <div>
+          <CardTitle icon="orders" eyebrow={t("Integrations")} title={t("Connect the tools you use to run your business.")} />
+        </div>
+        <button type="button" className="secondary-button" onClick={onOpenSupport}>
+          {t("Request an integration")}
+        </button>
+      </section>
+
+      {shopFirst ? (
+        <Link className="integrations-intent" href="/home">
+          <span className="integrations-intent-mark" aria-hidden="true">
+            <SettingsSectionIcon icon="cart" />
+          </span>
+          <span>
+            <em>{t("Getting started")}</em>
+            <strong>{t("Connect your shop")}</strong>
+            <small>{t("Choose where you sell. Orders and customers will import automatically.")}</small>
+          </span>
+          <span className="integrations-intent-back">{t("Back to checklist")} →</span>
+        </Link>
+      ) : null}
+
+      <section className="card app-card integrations-filters">
+        <label className="integrations-search">
+          <span className="sr-only">{t("Search integrations...")}</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)}
+                 placeholder={t("Search integrations...")} />
+        </label>
+        <div className="integrations-chips" role="group">
+          {([["all", "All"], ["connected", "Connected"], ["available", "Available"], ["planned", "Coming soon"]] as const)
+            .map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={filter === id}
+                      className={filter === id ? "is-active" : ""}
+                      onClick={() => setFilter(id)}>{t(label)}</button>
+            ))}
+        </div>
+        <p className="integrations-count">
+          {/* Only once the reads have landed: "0 connected" while they are in
+              flight is a statement about the network, not the workspace. */}
+          {loaded ? (
+            <>
+              <em>{t("{count} connected").replace("{count}", String(connected))}</em>
+              {attention > 0 ? <b>{t("{count} needs attention").replace("{count}", String(attention))}</b> : null}
+            </>
+          ) : <span className="muted-copy">{t("Loading...")}</span>}
+        </p>
+      </section>
+
+      {INTEGRATION_CATEGORIES
+        .filter((group) => !category || category === group.id || shopFirst)
+        .map((group) => {
+          const rows = shown.filter((row) => row.provider.category === group.id);
+          if (rows.length === 0) return null;
+          const ordered = shopFirst
+            ? [...rows].sort((a, b) => Number(highlighted.has(b.provider.id)) - Number(highlighted.has(a.provider.id)))
+            : rows;
+          return (
+            <section key={group.id} className="card app-card">
+              <h3 className="integrations-group">{t(group.title)}</h3>
+              <div className="integrations-grid">
+                {ordered.map(({ provider, live }) => (
+                  <IntegrationCard key={provider.id} provider={provider} live={live} t={t}
+                                   highlighted={highlighted.has(provider.id)}
+                                   onManage={() => setManaging(provider.manage)} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+
+      {shown.length === 0 ? (
+        <section className="card app-card">
+          <p className="muted-copy">{t("Nothing here yet.")}</p>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function IntegrationCard({
+  provider, live, t, highlighted, onManage,
+}: {
+  provider: IntegrationProvider;
+  live: IntegrationLiveState;
+  t: (text: string) => string;
+  highlighted: boolean;
+  onManage: () => void;
+}) {
+  const label = INTEGRATION_STATE_LABELS[live.state];
+  return (
+    <article className={`integration-card is-${live.state}${highlighted ? " is-highlighted" : ""}`}>
+      <div className="integration-card-head">
+        {/* The brand's own file where we have one we are allowed to use, and its
+            initial where we do not — never a drawing of someone's logo. */}
+        <span className="integration-logo" aria-hidden="true">
+          {provider.logo
+            ? <img src={provider.logo} alt="" width={28} height={28} />
+            : <b>{provider.mark ?? provider.name.slice(0, 1)}</b>}
+        </span>
+        <div>
+          <strong>{provider.name}</strong>
+          <span className={`integration-state is-${live.state}`}>{t(label)}</span>
+        </div>
+      </div>
+      {/* A card for something that does not exist yet is the name and the word
+          "Coming soon", once. A blurb and a second "Coming soon" under it were
+          the same sentence three times. */}
+      {live.state === "planned" ? null : (
+        <>
+          {live.detail ? <p className="integration-detail">{live.detail}</p> : null}
+          <p className="integration-blurb">{t(provider.blurb)}</p>
+          {provider.capabilities.length > 0 ? (
+            <ul className="integration-caps">
+              {provider.capabilities.map((cap) => <li key={cap}>{t(cap)}</li>)}
+            </ul>
+          ) : null}
+          {provider.manage ? (
+            <button type="button" className="secondary-button" onClick={onManage}>
+              {t(live.state === "connected" || live.state === "attention" ? "Manage" : "Set up")}
+            </button>
+          ) : provider.id === "openbanking" ? (
+            <Link className="secondary-button" href="/bank">
+              {t(live.state === "connected" ? "Manage" : "Set up")}
+            </Link>
+          ) : null}
+        </>
+      )}
+    </article>
+  );
+}
+
 function WooCommerceIntegrationSection({ workspace, language = "English" }: { workspace: WorkspaceContext; language?: string }) {
   const t = (text: string) => studioT(text, language);
   const [copyStatus, setCopyStatus] = useState("");
@@ -7095,6 +7369,14 @@ function SupportTicketsSection({
   onSupportUnreadChanged: (count: number) => void;
 }) {
   const [ticketMode, setTicketMode] = useState<StudioSupportTicketType>("workspace");
+  // ?support=appSupport was read by nothing, so the assistant's "send this to
+  // support" link landed on Settings and left you to find the tab yourself.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("support");
+    if (requested === "appSupport" || requested === "workspace" || requested === "website") {
+      setTicketMode(requested);
+    }
+  }, []);
   const [category, setCategory] = useState("project");
   const [priority, setPriority] = useState("normal");
   const [title, setTitle] = useState("");
@@ -7390,8 +7672,10 @@ function SupportTicketsSection({
               <small>{t("Goes to your workspace owner, admins and support managers. For internal project, task, customer or approval questions.")}</small>
             </span>
           </button>
+          {/* Not !isWorkspaceMode: that is also true for Website Chats, so
+              picking that tab lit this one up as well. */}
           <button
-            className={!isWorkspaceMode ? "settings-section-button active" : "settings-section-button"}
+            className={ticketMode === "appSupport" ? "settings-section-button active" : "settings-section-button"}
             type="button"
             onClick={() => setTicketMode("appSupport")}
             style={{ textAlign: "left" }}

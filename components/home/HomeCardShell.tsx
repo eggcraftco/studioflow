@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
+  HOME_CARD_PERIODS,
   HOME_CARD_SIZES,
+  HOME_PERIOD_LABELS,
   homeCardColumns,
   homeCardRows,
   type HomeCardDefinition,
   type HomeCardPlacement,
+  type HomeCardPeriod,
   type HomeCardSize,
   type HomeCardTone,
 } from "@/lib/studioflow/homeCards";
@@ -72,6 +75,7 @@ export function HomeCardShell({
   t,
   headerSlot,
   subtitle,
+  subtitleInline,
   children,
   onMove,
   onResize,
@@ -79,6 +83,7 @@ export function HomeCardShell({
   onReset,
   onTone,
   onHeading,
+  onPeriod,
   dragHandlers,
   lastUpdatedLabel,
 }: {
@@ -90,6 +95,8 @@ export function HomeCardShell({
   headerSlot?: ReactNode;
   /** Small line under the title — "3 of 6 complete", a date range. */
   subtitle?: string;
+  /** Beside the title rather than under it — "10 active" on the wide cards. */
+  subtitleInline?: boolean;
   children: ReactNode;
   onMove: (direction: -1 | 1) => void;
   onResize: (size: HomeCardSize) => void;
@@ -97,6 +104,7 @@ export function HomeCardShell({
   onReset: () => void;
   onTone: (tone: HomeCardTone) => void;
   onHeading: (heading: string) => void;
+  onPeriod: (period: HomeCardPeriod) => void;
   dragHandlers: {
     onDragStart: (event: React.DragEvent) => void;
     onDragEnd: (event: React.DragEvent) => void;
@@ -219,11 +227,28 @@ export function HomeCardShell({
             aria-label={t("Edit heading")}
           />
         ) : (
-          <span className="home-card-titles">
+          <span className={`home-card-titles${subtitleInline ? " is-inline" : ""}`}>
             <h2 className="home-card-title">{heading}</h2>
             {subtitle ? <span className="home-card-subtitle">{subtitle}</span> : null}
           </span>
         )}
+        {/* The range the card's totals cover. It sits in the header because a
+            figure without its period is not an answer — §4 puts the filter
+            here, beside the heading, not in a footnote. */}
+        {definition.periods ? (
+          <label className="home-period">
+            <span className="sr-only">{`${heading} — ${t("Date range")}`}</span>
+            <select
+              value={placement.period ?? "month"}
+              onChange={(event) => onPeriod(event.target.value as HomeCardPeriod)}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {HOME_CARD_PERIODS.map((period) => (
+                <option key={period} value={period}>{t(HOME_PERIOD_LABELS[period])}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <span className="home-card-head-slot">{headerSlot}</span>
         <div className="home-card-menu-wrap" ref={menuRef}>
           <button
