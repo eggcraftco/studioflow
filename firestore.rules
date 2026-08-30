@@ -866,6 +866,28 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Etsy integration. Every one of these is written and read by Cloud
+    // Functions only: the connections hold OAuth tokens (encrypted, but still
+    // never a client's business), the OAuth states are single-use CSRF
+    // defences, and the rest are the sync engine's own bookkeeping. A
+    // workspace member reaches all of it through callables, which is what
+    // lets us check their role first.
+    match /etsyConnections/{document=**} {
+      allow read, write: if false;
+    }
+    match /etsyOAuthStates/{document=**} {
+      allow read, write: if false;
+    }
+    match /etsyExternalOrders/{document=**} {
+      allow read, write: if false;
+    }
+    match /etsyCustomerLinks/{document=**} {
+      allow read, write: if false;
+    }
+    match /etsyWebhookEvents/{document=**} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
