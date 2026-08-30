@@ -389,8 +389,8 @@ function planNotice(workspace: WorkspaceContext | null) {
   if (!workspace) return "";
   if (workspace.billingPlan === "team_monthly") return "Team includes shared schedule planning for the whole workspace.";
   if (workspace.billingPlan === "pro_monthly") return "";
-  if (workspace.billingPlan === "lifetime_lite") return "Lite includes weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.";
-  return "Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Lite.";
+  if (workspace.billingPlan === "lifetime_lite") return "Starter includes weekly/monthly scheduling. Advanced filters and long-range planning are available on Pro and Team.";
+  return "Demo schedule shows your limited demo orders. Apple Calendar and Reminders are available from NivaDesk Starter.";
 }
 
 export default function SchedulePage() {
@@ -851,7 +851,7 @@ export default function SchedulePage() {
     }
 
     if (!canUseCalendarExport) {
-      setScheduleError("Apple Calendar export is available from NivaDesk Lite.");
+      setScheduleError("Apple Calendar export is available from NivaDesk Starter.");
       return;
     }
 
@@ -1067,7 +1067,7 @@ export default function SchedulePage() {
                 type="button"
                 disabled={!selectedOrder || !canUseCalendarExport}
                 onClick={downloadSelectedCalendarFile}
-                title={canUseCalendarExport ? t("Download an all-day calendar file") : t("Available from NivaDesk Lite")}
+                title={canUseCalendarExport ? t("Download an all-day calendar file") : t("Available from NivaDesk Starter")}
               >
                 {t("Calendar File")}
               </button>
@@ -1208,7 +1208,7 @@ export default function SchedulePage() {
             <div className="schedule-plan-notice">
               {notice ? (
                 <>
-                  <span aria-hidden="true">{workspace?.billingPlan === "team_monthly" ? "Team" : "Lite"}</span>
+                  <span aria-hidden="true">{workspace?.billingPlan === "team_monthly" ? "Team" : "Starter"}</span>
                   <p>{t(notice)}</p>
                 </>
               ) : null}
@@ -1220,8 +1220,8 @@ export default function SchedulePage() {
             </div>
           ) : null}
 
-          {scheduleStatus ? <p className="layout-status schedule-action-message">{scheduleStatus}</p> : null}
-          {scheduleError ? <p className="layout-error schedule-action-message">{scheduleError}</p> : null}
+          {scheduleStatus ? <p className="layout-status schedule-action-message">{t(scheduleStatus)}</p> : null}
+          {scheduleError ? <p className="layout-error schedule-action-message">{t(scheduleError)}</p> : null}
 
           {!teamMode && showScheduleGuide && canEditSchedule && scheduleGuideOpen ? (
             <div className="schedule-first-use-guide" role="note">
@@ -1491,7 +1491,7 @@ export default function SchedulePage() {
           ) : error ? (
             <section className="card app-card schedule-empty-card">
               <CardTitle icon="lock" eyebrow={t("Schedule error")} title={t("Could not load schedule")} />
-              <p className="layout-error">{error}</p>
+              <p className="layout-error">{t(error)}</p>
             </section>
           ) : visibleOrders.length === 0 && !loadingSchedule ? (
             <section className="card app-card schedule-empty-card">
@@ -1810,7 +1810,7 @@ function ScheduleTimelineRow({
           <strong>{titleForOrder(order)}</strong>
           <small>{designForOrder(order)}</small>
           <span className="schedule-order-meta">
-            <span className={statusClass}>{status}</span>
+            <span className={statusClass}>{t(status)}</span>
             <span>{shortDate(orderStartDate(order))} - {shortDate(orderDueDate(order))}</span>
             {countdown ? <span>{countdown}</span> : null}
           </span>

@@ -269,8 +269,8 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
       <p style={{ margin: "6px 0 0", fontSize: 12, opacity: 0.65 }}>
         {t("Send the categories you set here into Pandle's Check queue, so you don't categorise every payment twice.")}
       </p>
-      {status ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{status}</p> : null}
-      {error ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{error}</p> : null}
+      {status ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{t(status)}</p> : null}
+      {error ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{t(error)}</p> : null}
 
       {linked && connection ? (
         <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>

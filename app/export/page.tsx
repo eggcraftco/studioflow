@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { appCompatibleBackupJson, customersToCsv, downloadTextFile, fullBackupJson, safeFileDate } from "@/lib/studioflow/export";
 import { loadWorkspaceContext, loadWorkspaceExportData, workspaceAccessAllows, type WorkspaceContext, type WorkspaceExportData } from "@/lib/studioflow/firestore";
 import { ExportOrdersPanel } from "@/components/ExportOrdersPanel";
+import { studioT } from "@/lib/studioflow/language";
 
 function filePrefix(workspace: WorkspaceContext | null) {
   const base = workspace?.name || "studioflow";
@@ -19,7 +20,8 @@ function filePrefix(workspace: WorkspaceContext | null) {
 
 export default function ExportPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [exportData, setExportData] = useState<WorkspaceExportData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +113,7 @@ export default function ExportPage() {
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
           <div className="pill">Export error</div>
           <h2 style={{ margin: "12px 0 6px" }}>Could not prepare export</h2>
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 
@@ -158,7 +160,7 @@ export default function ExportPage() {
 
       {status ? (
         <section className="card" style={{ padding: 18, marginTop: 18 }}>
-          <p style={{ margin: 0, color: "var(--muted)", fontWeight: 800 }}>{status}</p>
+          <p style={{ margin: 0, color: "var(--muted)", fontWeight: 800 }}>{t(status)}</p>
         </section>
       ) : null}
     </AppShell>

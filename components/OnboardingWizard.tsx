@@ -455,7 +455,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {error ? <p className="onboard-error">{error}</p> : null}
+        {error ? <p className="onboard-error">{t(error)}</p> : null}
 
         <footer className="onboard-foot">
           <span className="onboard-saved">{t("You can change all of this later in Settings.")}</span>

@@ -185,8 +185,8 @@ export function StocktakePanel({
         </div>
       </div>
 
-      {notice ? <p className="inventory-note">{notice}</p> : null}
-      {error ? <p className="inventory-notice">{error}</p> : null}
+      {notice ? <p className="inventory-note">{t(notice)}</p> : null}
+      {error ? <p className="inventory-notice">{t(error)}</p> : null}
 
       {result ? (
         <div className="inventory-totals">

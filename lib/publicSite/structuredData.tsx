@@ -37,7 +37,7 @@ const softwareApplication = {
   publisher: { "@id": `${BASE_URL}/#organization` },
   offers: [
     { "@type": "Offer", name: "Free", price: "0", priceCurrency: "GBP" },
-    { "@type": "Offer", name: "NivaDesk Lite", price: "9", priceCurrency: "GBP", description: "£9/month or £90/year" },
+    { "@type": "Offer", name: "NivaDesk Starter", price: "9", priceCurrency: "GBP", description: "£9/month or £90/year" },
     { "@type": "Offer", name: "NivaDesk Pro", price: "19", priceCurrency: "GBP", description: "£19/month or £190/year, includes Client Files with 10 GB storage" },
     { "@type": "Offer", name: "NivaDesk Team", price: "49", priceCurrency: "GBP", description: "£49/month or £490/year, 5 seats included" }
   ],

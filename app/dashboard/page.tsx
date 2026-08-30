@@ -786,7 +786,7 @@ export default function DashboardPage() {
       {error ? (
         <section className="card app-card dashboard-error-card">
           <CardTitle icon="lock" eyebrow={t("Workspace error")} title={t("Could not load your workspace")} />
-          <p className="layout-error">{error}</p>
+          <p className="layout-error">{t(error)}</p>
         </section>
       ) : null}
 
@@ -1195,8 +1195,8 @@ export default function DashboardPage() {
                     </label>
                   ))}
                 </div>
-                {customizeStatus ? <p className="settings-status">{customizeStatus}</p> : null}
-                {customizeError ? <p className="layout-error">{customizeError}</p> : null}
+                {customizeStatus ? <p className="settings-status">{t(customizeStatus)}</p> : null}
+                {customizeError ? <p className="layout-error">{t(customizeError)}</p> : null}
               </section>
             </div>
           ) : null}

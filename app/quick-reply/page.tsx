@@ -270,7 +270,7 @@ export default function QuickReplyPage() {
           {error ? (
             <section className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Quick Reply error")} title={t("Could not load Quick Reply")} />
-              <p className="layout-error">{error}</p>
+              <p className="layout-error">{t(error)}</p>
             </section>
           ) : null}
 
@@ -295,7 +295,7 @@ export default function QuickReplyPage() {
             </div>
             <p className="muted-copy">{canSaveReplyStyle ? t("These controls sync with Quick Reply Settings across web, Mac, iPad and iPhone.") : t("These controls change this draft only for your current workspace role.")}</p>
             {styleStatus ? <p className="success-copy">{t(styleStatus)}</p> : null}
-            {styleError ? <p className="layout-error">{styleError}</p> : null}
+            {styleError ? <p className="layout-error">{t(styleError)}</p> : null}
           </section>
 
           <div className="quick-reply-grid">
@@ -312,7 +312,7 @@ export default function QuickReplyPage() {
                   </div>
                   <textarea
                     className="quick-reply-textarea"
-                    value={customerMessage}
+                    value={t(customerMessage)}
                     onChange={event => setCustomerMessage(event.target.value)}
                     placeholder={t("Paste the customer's email or message here...")}
                   />
@@ -320,7 +320,7 @@ export default function QuickReplyPage() {
                   <button className="button" type="button" disabled={isGenerating || !customerMessage.trim()} onClick={generateEngineReply}>
                     {isGenerating ? t("AI is reading the Knowledge Base...") : replyMode === "Apple" ? t("Generate Apple AI Reply") : t("Generate AI Reply")}
                   </button>
-                  {replyError ? <p className="layout-error">{replyError}</p> : null}
+                  {replyError ? <p className="layout-error">{t(replyError)}</p> : null}
                 </section>
               ) : null}
 

@@ -4,6 +4,8 @@
 // Hosts the cross-workspace insight pages and the public-site Global Statistics.
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
@@ -391,6 +393,8 @@ function LandingMetricTile({ label, value, sub }: { label: string; value: string
 }
 
 function AdminCustomOrderLandingSection() {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [rangeKey, setRangeKey] = useState<LandingRangeKey>("30");
   const [customStart, setCustomStart] = useState<string>(() => landingDayStr(6));
   const [customEnd, setCustomEnd] = useState<string>(() => landingDayStr(0));
@@ -551,7 +555,7 @@ function AdminCustomOrderLandingSection() {
         </div>
 
         {loading ? <p className="muted-copy" style={{ marginTop: 8 }}>Loading…</p> : null}
-        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{t(error)}</p> : null}
       </section>
 
       {!loading && !error ? (
@@ -760,6 +764,8 @@ function AdminCustomOrderLandingSection() {
 }
 
 function AdminSiteStatsSection() {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const todayKey = new Date().toISOString().slice(0, 10);
   const [rangeMode, setRangeMode] = useState<number>(30); // 7 / 30 / 90, -1 = custom
   const [customStart, setCustomStart] = useState(() => new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10));
@@ -862,7 +868,7 @@ function AdminSiteStatsSection() {
           </div>
         ) : null}
         {loading ? <p className="muted-copy">Loading statistics...</p> : null}
-        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p> : null}
       </section>
 
       <LiveOnSiteCard />
@@ -1066,6 +1072,8 @@ function PositionDeltaBadge({ delta, isNew }: { delta: number | null; isNew?: bo
 }
 
 function AdminSearchConsoleSection() {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [rangeDays, setRangeDays] = useState<number>(28); // 7 / 28 / 90
   const [result, setResult] = useState<SearchConsoleResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1138,7 +1146,7 @@ function AdminSearchConsoleSection() {
         </div>
         {result?.property ? <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>Property: <strong>{result.property}</strong></p> : null}
         {loading ? <p className="muted-copy">Loading search rankings…</p> : null}
-        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p> : null}
       </section>
 
       {!loading && result && result.ok === false ? (
@@ -1344,7 +1352,7 @@ type AdminInsights = {
 
 const ADMIN_PLAN_LABELS: Record<string, string> = {
   demo: "Free",
-  lifetime_lite: "Lite",
+  lifetime_lite: "Starter",
   pro_monthly: "Pro",
   team_monthly: "Team"
 };
@@ -2461,6 +2469,8 @@ type AdminLookupUser = { uid: string; email: string; displayName: string; create
 type AdminLookupWorkspace = { id: string; name: string; ownerEmail: string; plan: string };
 
 function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
@@ -2604,7 +2614,7 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
             {searching ? "Searching..." : "Search"}
           </button>
         </div>
-        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{error}</p> : null}
+        {error ? <p style={{ color: "var(--danger)", margin: "8px 0 0" }}>{t(error)}</p> : null}
       </section>
 
       {searched && !detailKind ? (

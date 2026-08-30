@@ -326,7 +326,7 @@ export function ItemDetailPanel({
         ))}
       </div>
 
-      {error ? <p className="inventory-notice">{error}</p> : null}
+      {error ? <p className="inventory-notice">{t(error)}</p> : null}
 
       {tab === "details" ? (
         <div className="inventory-panel-body">
@@ -799,7 +799,7 @@ function ReserveForOrderModal({
             />
           </label>
         ) : null}
-        {error ? <p className="inventory-notice">{error}</p> : null}
+        {error ? <p className="inventory-notice">{t(error)}</p> : null}
         <div className="inventory-modal-actions">
           <button type="button" onClick={onClose}>{t("Cancel")}</button>
           <button type="button" className="inventory-primary" disabled={busy || !orderId} onClick={() => void submit()}>

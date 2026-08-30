@@ -5,6 +5,7 @@ import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, getDocs, limit, query, where, collection } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 type WorkspaceOption = {
   id: string;
@@ -115,7 +116,8 @@ async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user
 }
 
 export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOAuthParams: OAuthParams }) {
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [oauthParams, setOauthParams] = useState<OAuthParams>(initialOAuthParams);
 
   useEffect(() => {
@@ -356,7 +358,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
 
         {error ? (
           <div style={{ marginTop: 16, background: "#fff2f2", color: "#a11", borderRadius: 16, padding: 14, fontWeight: 700 }}>
-            {error}
+            {t(error)}
           </div>
         ) : null}
       </section>

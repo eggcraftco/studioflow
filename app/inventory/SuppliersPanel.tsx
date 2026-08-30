@@ -66,7 +66,7 @@ export function SuppliersPanel({
         ) : null}
       </div>
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       {loading ? (
         <p className="inventory-note">{t("Loading suppliers…")}</p>
@@ -237,7 +237,7 @@ function SupplierModal({
             <span>{t("Notes")}</span>
             <textarea className="input" rows={3} value={notes} onChange={e => setNotes(e.target.value)} />
           </label>
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
         <div className="inventory-modal-foot">
           <span />

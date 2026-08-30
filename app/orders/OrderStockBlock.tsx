@@ -187,7 +187,7 @@ export function OrderStockBlock({
         </>
       )}
 
-      {notice ? <p className="app-inline-error">{notice}</p> : null}
+      {notice ? <p className="app-inline-error">{t(notice)}</p> : null}
 
       {recipePicking ? (
         <ApplyRecipeModal
@@ -361,7 +361,7 @@ function ReserveStockModal({
               })}
             </div>
           )}
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
         <div className="inventory-modal-foot">
           <span />
@@ -458,7 +458,7 @@ function ApplyRecipeModal({
               </label>
             </div>
           )}
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
         <div className="inventory-modal-foot">
           <span />

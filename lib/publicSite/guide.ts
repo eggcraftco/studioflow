@@ -385,7 +385,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Created Date and Delivery Due, shown as two clear date cards.",
             "Time Remaining: the days left until delivery, color-coded so a tight or overdue deadline stands out.",
-            "Add to Calendar: downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Lite)."
+            "Add to Calendar: downloads an all-day calendar file spanning the created date to the delivery date, so the order appears in your calendar app (available from NivaDesk Starter)."
           ] },
           { kind: "sub", text: "What you can edit" },
           { kind: "bullets", items: [
@@ -548,7 +548,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "Good to know" },
           { kind: "bullets", items: [
             "The log is read-only; it fills in automatically as people edit the order.",
-            "History cards are available from NivaDesk Lite."
+            "History cards are available from NivaDesk Starter."
           ] }
         ]
       }
@@ -562,7 +562,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Move through date ranges with Previous and Next, and filter by status.",
         "Create a new scheduled project right from the calendar.",
-        "Download an all-day calendar file for an order to add it to your own calendar app (available from NivaDesk Lite).",
+        "Download an all-day calendar file for an order to add it to your own calendar app (available from NivaDesk Starter).",
         "Open any order in the range to work on it."
       ] }
     ]
@@ -1444,7 +1444,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Created Date (Oluşturulma) ve Delivery Due (Teslim Tarihi); iki net tarih kartı olarak.",
             "Time Remaining (Kalan Süre): teslime kalan gün sayısı; sıkışık veya geçmiş bir son tarih öne çıksın diye renk kodlu.",
-            "Add to Calendar: oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Lite'tan itibaren)."
+            "Add to Calendar: oluşturulma tarihinden teslim tarihine kadar uzanan tüm-gün bir takvim dosyası indirir; böylece sipariş takvim uygulamanızda görünür (NivaDesk Starter'tan itibaren)."
           ] },
           { kind: "sub", text: "Neleri düzenleyebilirsiniz" },
           { kind: "bullets", items: [
@@ -1607,7 +1607,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Bilmekte fayda var" },
           { kind: "bullets", items: [
             "Kayıt salt-okunurdur; insanlar siparişi düzenledikçe otomatik dolar.",
-            "History kartları NivaDesk Lite'tan itibaren kullanılabilir."
+            "History kartları NivaDesk Starter'tan itibaren kullanılabilir."
           ] }
         ]
       }
@@ -1621,7 +1621,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Previous ve Next ile tarih aralıkları arasında gezin, duruma göre filtreleyin.",
         "Doğrudan takvimden yeni bir planlı proje oluşturun.",
-        "Bir sipariş için tüm-gün takvim dosyası indirip kendi takvim uygulamanıza ekleyin (NivaDesk Lite'tan itibaren).",
+        "Bir sipariş için tüm-gün takvim dosyası indirip kendi takvim uygulamanıza ekleyin (NivaDesk Starter'tan itibaren).",
         "Aralıktaki herhangi bir siparişi açıp üzerinde çalışın."
       ] }
     ]

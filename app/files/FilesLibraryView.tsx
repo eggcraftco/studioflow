@@ -201,7 +201,7 @@ export function FilesLibraryView({
           ) : null}
         </div>
 
-        {notice ? <p className="inventory-notice">{notice}</p> : null}
+        {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
         {files === null ? (
           <p className="inventory-sub">{t("Loading…")}</p>

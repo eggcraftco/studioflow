@@ -797,7 +797,7 @@ export default function SettingsPage() {
           {error ? (
             <div className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Settings error")} title={t("Could not load workspace settings")} />
-              <p className="layout-error">{error}</p>
+              <p className="layout-error">{t(error)}</p>
             </div>
           ) : null}
 
@@ -1071,7 +1071,7 @@ function MessageSettingsSection({ workspace, language = "English" }: { workspace
         <p className="muted-copy">{t("Reload re-fetches what is saved for the workspace and discards unsaved edits. Save applies your changes to everyone.")}</p>
         {!canEdit ? <p className="muted-copy">{t("Only workspace owners or admins can change these settings.")}</p> : null}
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
     </div>
   );
@@ -1227,7 +1227,7 @@ function AppearanceSection({
           </button>
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
     </div>
   );
@@ -1449,7 +1449,7 @@ function WorkspaceBrandingSection({
           </button>
         </div>
         {identityStatus ? <p className="success-copy">{studioT(identityStatus, language)}</p> : null}
-        {identityError ? <p className="layout-error">{identityError}</p> : null}
+        {identityError ? <p className="layout-error">{t(identityError)}</p> : null}
       </section>
 
       <section className="card app-card">
@@ -1511,7 +1511,7 @@ function WorkspaceBrandingSection({
             {!canUploadLogo ? <p className="muted-copy">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
             {!canEditLogo ? <p className="muted-copy">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
             {logoStatus ? <p className="success-copy">{studioT(logoStatus, language)}</p> : null}
-            {logoError ? <p className="layout-error">{logoError}</p> : null}
+            {logoError ? <p className="layout-error">{t(logoError)}</p> : null}
           </div>
         </div>
         {pendingLogoFile ? (
@@ -1610,8 +1610,8 @@ function LanguageLabelsSection({
             {saving ? t("Saving...") : t("Save Language Settings")}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {status ? <p className="success-copy">{t(status)}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
         <p className="muted-copy">{t("This language is personal to your account and synchronises across your devices.")}</p>
         <p className="muted-copy">{t("The new language applies immediately after you save — no reload needed.")}</p>
       </section>
@@ -2104,9 +2104,9 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
       ) : null}
       {!canEdit ? (
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Lite") : t("Workflow settings are read-only")} />
+          <CardTitle icon="lock" eyebrow={t("Locked")} title={canEditRole ? t("Workflow customization starts with NivaDesk Starter") : t("Workflow settings are read-only")} />
           <p className="muted-copy">
-            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Lite.") : t("Your current workspace role cannot edit workflow settings.")}
+            {canEditRole ? t("Demo / Free workspaces can view these settings, but saving workflow block changes is available from NivaDesk Starter.") : t("Your current workspace role cannot edit workflow settings.")}
           </p>
         </section>
       ) : null}
@@ -2262,7 +2262,7 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
           </button>
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
     </div>
   );
@@ -2658,7 +2658,7 @@ function PdfExportSettingsSection({
         </div>
         <p className="muted-copy">{t("The preview uses a sample order and your current unsaved choices, rendered by the same template the real print buttons use.")}</p>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
     </div>
   );
@@ -3090,7 +3090,7 @@ function QuickReplySettingsSection({
                         {assistantBusy ? t("Saving...") : (assistant.enabled ? t("Turn off") : t("Turn on"))}
                       </button>
                     </div>
-                    {assistantError ? <p className="layout-error">{assistantError}</p> : null}
+                    {assistantError ? <p className="layout-error">{t(assistantError)}</p> : null}
                   </div>
                 ) : null}
                 <div className="quick-reply-key-row">
@@ -3186,7 +3186,7 @@ function QuickReplySettingsSection({
           </button>
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
     </div>
   );
@@ -3475,7 +3475,7 @@ function SafetyUploadsSection({
           </button>
         </div>
         {status ? <p className="success-copy">{studioT(status, language)}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
         <p className="muted-copy">{t("Allowed Client Files types remain PDF, JPG, PNG, HEIC, HEIF, WEBP, PSD, PSB and ZIP. Plan guards still keep cloud file upload on Pro and Team.")}</p>
         <p className="muted-copy">{t("This per-file limit is separate from your plan's total storage, which is counted across Client Files and enforced on every upload.")}</p>
       </section>
@@ -3971,8 +3971,8 @@ function AccountSection({
             {savingProfile ? t("Saving...") : t("Save Profile")}
           </button>
         </div>
-        {profileStatus ? <p className="success-copy">{profileStatus}</p> : null}
-        {profileError ? <p className="layout-error">{profileError}</p> : null}
+        {profileStatus ? <p className="success-copy">{t(profileStatus)}</p> : null}
+        {profileError ? <p className="layout-error">{t(profileError)}</p> : null}
       </section>
 
       <section className="card app-card account-security-card">
@@ -4056,7 +4056,7 @@ function AccountSection({
             {!canUploadLogo ? <p className="muted-copy">{t("Workspace logo upload is checked when you choose a file. Monthly Pro or Team is required.")}</p> : null}
             {!canEditLogo ? <p className="muted-copy">{t("Your current workspace role cannot edit Workspace Logo.")}</p> : null}
             {status ? <p className="success-copy">{studioT(status, accountLanguage)}</p> : null}
-            {error ? <p className="layout-error">{error}</p> : null}
+            {error ? <p className="layout-error">{t(error)}</p> : null}
           </div>
         </div>
         {pendingLogoFile ? (
@@ -4139,7 +4139,7 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
           {busy ? t("Deleting…") : t("Delete my account")}
         </button>
       </div>
-      {error ? <p style={{ color: "var(--danger)", marginTop: 8 }}>{error}</p> : null}
+      {error ? <p style={{ color: "var(--danger)", marginTop: 8 }}>{t(error)}</p> : null}
     </section>
   );
 }
@@ -4551,8 +4551,8 @@ function FinancialSettingsSection({
             {saving ? t("Saving...") : t("Save changes")}
           </button>
         </div>
-        {status ? <p className="success-copy settings-page-header-note">{status}</p> : null}
-        {error ? <p className="layout-error settings-page-header-note">{error}</p> : null}
+        {status ? <p className="success-copy settings-page-header-note">{t(status)}</p> : null}
+        {error ? <p className="layout-error settings-page-header-note">{t(error)}</p> : null}
       </header>
 
       <div className="financial-two-col">
@@ -4924,7 +4924,7 @@ function IntegrationCustomerSyncCard({ workspace, language = "English" }: { work
         <option value="store">{t("Store updates contact details (default)")}</option>
         <option value="nivadesk">{t("NivaDesk edits win — stores only fill blanks")}</option>
       </select>
-      {status ? <p className="muted-copy" style={{ margin: "8px 0 0" }}>{status}</p> : null}
+      {status ? <p className="muted-copy" style={{ margin: "8px 0 0" }}>{t(status)}</p> : null}
     </section>
   );
 }
@@ -5292,7 +5292,7 @@ function WooCommerceIntegrationSection({ workspace, language = "English" }: { wo
             <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
           </SettingsDialog>
         ) : null}
-        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+        {copyStatus ? <p className="success-copy">{t(copyStatus)}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
@@ -5569,7 +5569,7 @@ function ShopifyConnectedStoresCard({ workspace, language = "English" }: { works
           })}
         </div>
       )}
-      {error ? <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{error}</p> : null}
+      {error ? <p style={{ color: "var(--danger)", fontSize: 13, marginTop: 8 }}>{t(error)}</p> : null}
     </section>
   );
 }
@@ -5698,7 +5698,7 @@ function ShopifyIntegrationSection({ workspace, language = "English" }: { worksp
             <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
           </SettingsDialog>
         ) : null}
-        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+        {copyStatus ? <p className="success-copy">{t(copyStatus)}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
@@ -5867,7 +5867,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
             <p>{t("The current URL stops working straight away. Orders will not arrive until you paste the new URL into your shop.")}</p>
           </SettingsDialog>
         ) : null}
-        {copyStatus ? <p className="success-copy">{copyStatus}</p> : null}
+        {copyStatus ? <p className="success-copy">{t(copyStatus)}</p> : null}
       </section>
 
       <section className="card app-card quick-reply-settings-card">
@@ -5938,7 +5938,7 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
               </div>
             ) : null}
             {(payloadCheck.warnings ?? []).map(warning => (
-              <p className="layout-error" key={warning}>{warning}</p>
+              <p className="layout-error" key={t(warning)}>{t(warning)}</p>
             ))}
             {payloadCheck.ok ? <p className="success-copy">{t("This payload reads cleanly.")}</p> : null}
           </div>
@@ -6436,7 +6436,7 @@ function DataManagementSection({
             <span className="muted-copy">{t("Removes exactly the records this import created. Settings changes are not undone.")}</span>
           </div>
         ) : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
 
       {isWorkspaceOwner ? (
@@ -6482,7 +6482,7 @@ function DataManagementSection({
               </div>
             </>
           )}
-          {auditError ? <p className="layout-error">{auditError}</p> : null}
+          {auditError ? <p className="layout-error">{t(auditError)}</p> : null}
         </section>
       ) : null}
 
@@ -6904,7 +6904,7 @@ function TeamAccessSection({
           </CardTitle>
           <p className="layout-error">{t("Team data could not be loaded.")}</p>
           <p className="muted-copy">{t("Check your connection and try again. If the problem continues, contact support.")}</p>
-          {error ? <p className="layout-error">{error}</p> : null}
+          {error ? <p className="layout-error">{t(error)}</p> : null}
           <button
             className="button secondary"
             type="button"
@@ -6931,8 +6931,8 @@ function TeamAccessSection({
           <p className="muted-copy">
             {t("Requesting access is available on every plan. Team management remains available only inside a Team workspace with permission.")}
           </p>
-          {status ? <p className="layout-status">{status}</p> : null}
-          {error ? <p className="layout-error">{error}</p> : null}
+          {status ? <p className="layout-status">{t(status)}</p> : null}
+          {error ? <p className="layout-error">{t(error)}</p> : null}
         </section>
 
         {workspaceSwitchPanel}
@@ -6980,8 +6980,8 @@ function TeamAccessSection({
           <p className="muted-copy">
             {t("You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.")}
           </p>
-          {status ? <p className="layout-status">{status}</p> : null}
-          {error ? <p className="layout-error">{error}</p> : null}
+          {status ? <p className="layout-status">{t(status)}</p> : null}
+          {error ? <p className="layout-error">{t(error)}</p> : null}
         </section>
 
         {workspaceSwitchPanel}
@@ -7032,8 +7032,8 @@ function TeamAccessSection({
         {!isOwner ? (
           <p className="muted-copy">{t("Only workspace owners can approve join requests, change roles or remove members.")}</p>
         ) : null}
-        {status ? <p className="layout-status">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {status ? <p className="layout-status">{t(status)}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
         {copied ? <span className="studio-pill">{copied}</span> : null}
       </section>
 
@@ -7767,8 +7767,8 @@ function SupportTicketsSection({
             {loadingTickets ? t("Refreshing...") : t("Refresh Tickets")}
           </button>
         </div>
-        {status ? <p className="success-copy">{status}</p> : null}
-        {error ? <p className="layout-error">{error}</p> : null}
+        {status ? <p className="success-copy">{t(status)}</p> : null}
+        {error ? <p className="layout-error">{t(error)}</p> : null}
       </section>
       )}
 
@@ -8162,7 +8162,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
             {t("Copy diagnostic info")}
           </button>
         </div>
-        {diagStatus ? <p className="success-copy">{diagStatus}</p> : null}
+        {diagStatus ? <p className="success-copy">{t(diagStatus)}</p> : null}
       </section>
     </div>
   );

@@ -13,6 +13,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { studioT } from "@/lib/studioflow/language";
 
 type WorkspaceOption = { id: string; name: string; isOwner: boolean };
 
@@ -60,7 +61,8 @@ const buttonGhost: React.CSSProperties = {
 };
 
 export default function ConnectShopifyPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, language } = useAuth();
+  const t = (text: string) => studioT(text, language);
   const [shop, setShop] = useState("");
   const [nonce, setNonce] = useState("");
   const [ready, setReady] = useState(false);
@@ -254,7 +256,7 @@ export default function ConnectShopifyPage() {
         )}
         {error ? (
           <p style={{ color: "#b91c1c", fontSize: 13.5, fontWeight: 600, margin: "0 0 12px" }}>
-            {error}
+            {t(error)}
           </p>
         ) : null}
         <button

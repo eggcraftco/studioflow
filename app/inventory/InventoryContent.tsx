@@ -625,7 +625,7 @@ export function InventoryContent({
         </div>
       ) : null}
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       <div className={selectedItem ? "inventory-body has-panel" : "inventory-body"}>
       <div className="inventory-table-wrap">
@@ -1212,7 +1212,7 @@ function NewItemModal({
           </div>
         </div>
 
-        {error ? <p className="inventory-notice">{error}</p> : null}
+        {error ? <p className="inventory-notice">{t(error)}</p> : null}
 
         <div className="inventory-modal-actions">
           <button type="button" onClick={onClose}>{t("Cancel")}</button>

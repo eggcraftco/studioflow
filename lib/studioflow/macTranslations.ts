@@ -275,7 +275,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "अपने वर्कस्पेस स्वामी या एडमिन को अनुरोध भेजें।"
   },
   "My Workspace Tickets": {
-    "Türkçe": "Workspace Ticketlarım",
+    "Türkçe": "Çalışma Alanı Taleplerim",
     "Deutsch": "Meine Workspace-Tickets",
     "Français": "Mes tickets d'espace",
     "Italiano": "I miei ticket dello spazio",
@@ -692,7 +692,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "No orders in this schedule range.": {
     "Türkçe": "Bu plan aralığında sipariş yok.",
-    "Deutsch": "Keine Bestellungen in diesem Zeitraum.",
+    "Deutsch": "Keine Aufträge in diesem Zeitraum.",
     "Français": "Aucune commande dans cette période.",
     "Italiano": "Nessun ordine in questo intervallo.",
     "Español (Spanish)": "No hay pedidos en este rango.",
@@ -1201,7 +1201,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Most Orders": {
     "Türkçe": "En Çok Sipariş",
-    "Deutsch": "Meiste Bestellungen",
+    "Deutsch": "Meiste Aufträge",
     "Français": "Plus de commandes",
     "Italiano": "Più Ordini",
     "Español (Spanish)": "Más Pedidos",
@@ -1240,7 +1240,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Orders": {
     "Türkçe": "Siparişler",
-    "Deutsch": "Bestellungen",
+    "Deutsch": "Aufträge",
     "Français": "Commandes",
     "Italiano": "Ordini",
     "Español (Spanish)": "Pedidos",
@@ -3675,8 +3675,8 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   "Locked": {
     "Türkçe": "Kilitli", "Deutsch": "Gesperrt", "Français": "Verrouillé", "Italiano": "Bloccato", "Español (Spanish)": "Bloqueado", "Português": "Bloqueado", "Русский (Russian)": "Заблокировано", "日本語 (Japanese)": "ロック中", "中文 (Chinese)": "已锁定", "العربية (Arabic)": "مقفل", "हिन्दी (Hindi)": "लॉक"
   },
-  "Workflow customization starts with NivaDesk Lite": {
-    "Türkçe": "İş akışı özelleştirmesi NivaDesk Lite ile başlar", "Deutsch": "Workflow-Anpassung beginnt mit NivaDesk Lite", "Français": "La personnalisation du workflow commence avec NivaDesk Lite", "Italiano": "La personalizzazione del workflow inizia con NivaDesk Lite", "Español (Spanish)": "La personalización del flujo de trabajo comienza con NivaDesk Lite", "Português": "A personalização do fluxo de trabalho começa com o NivaDesk Lite", "Русский (Russian)": "Настройка рабочего процесса доступна с NivaDesk Lite", "日本語 (Japanese)": "ワークフローのカスタマイズは NivaDesk Lite から", "中文 (Chinese)": "工作流自定义从 NivaDesk Lite 开始", "العربية (Arabic)": "يبدأ تخصيص سير العمل مع NivaDesk Lite", "हिन्दी (Hindi)": "वर्कफ़्लो कस्टमाइज़ेशन NivaDesk Lite के साथ शुरू होता है"
+  "Workflow customization starts with NivaDesk Starter": {
+    "Türkçe": "İş akışı özelleştirmesi NivaDesk Starter ile başlar", "Deutsch": "Workflow-Anpassung beginnt mit NivaDesk Starter", "Français": "La personnalisation du workflow commence avec NivaDesk Starter", "Italiano": "La personalizzazione del workflow inizia con NivaDesk Starter", "Español (Spanish)": "La personalización del flujo de trabajo comienza con NivaDesk Starter", "Português": "A personalização do fluxo de trabalho começa com o NivaDesk Starter", "Русский (Russian)": "Настройка рабочего процесса доступна с NivaDesk Starter", "日本語 (Japanese)": "ワークフローのカスタマイズは NivaDesk Starter から", "中文 (Chinese)": "工作流自定义从 NivaDesk Starter 开始", "العربية (Arabic)": "يبدأ تخصيص سير العمل مع NivaDesk Starter", "हिन्दी (Hindi)": "वर्कफ़्लो कस्टमाइज़ेशन NivaDesk Starter के साथ शुरू होता है"
   },
   "Workflow settings are read-only": {
     "Türkçe": "İş akışı ayarları salt okunur", "Deutsch": "Workflow-Einstellungen sind schreibgeschützt", "Français": "Les paramètres du workflow sont en lecture seule", "Italiano": "Le impostazioni del workflow sono di sola lettura", "Español (Spanish)": "Los ajustes del flujo de trabajo son de solo lectura", "Português": "As definições do fluxo de trabalho são apenas de leitura", "Русский (Russian)": "Настройки рабочего процесса доступны только для чтения", "日本語 (Japanese)": "ワークフロー設定は読み取り専用です", "中文 (Chinese)": "工作流设置为只读", "العربية (Arabic)": "إعدادات سير العمل للقراءة فقط", "हिन्दी (Hindi)": "वर्कफ़्लो सेटिंग्स केवल पढ़ने के लिए हैं"
@@ -6366,7 +6366,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "जानकारी"
   },
   "Workspace conversation": {
-    "Türkçe": "Workspace sohbeti",
+    "Türkçe": "Çalışma alanı sohbeti",
     "Deutsch": "Workspace-Unterhaltung",
     "Français": "Conversation Workspace",
     "Italiano": "Conversazione del workspace",
@@ -6379,7 +6379,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "वर्कस्पेस बातचीत"
   },
   "Workspace broadcast channel": {
-    "Türkçe": "Workspace duyuru kanalı",
+    "Türkçe": "Çalışma alanı duyuru kanalı",
     "Deutsch": "Workspace-Broadcastkanal",
     "Français": "Canal de diffusion Workspace",
     "Italiano": "Canale broadcast workspace",
@@ -8927,7 +8927,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "उपलब्ध नहीं"
   },
   "Current Workspace": {
-    "Türkçe": "Geçerli Workspace",
+    "Türkçe": "Geçerli Çalışma Alanı",
     "Deutsch": "Aktueller Arbeitsbereich",
     "Français": "Espace de travail actuel",
     "Italiano": "Workspace attuale",
@@ -8953,7 +8953,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "लोगों को आमंत्रित करें"
   },
   "Workspaces": {
-    "Türkçe": "Workspace’ler",
+    "Türkçe": "Çalışma alanları",
     "Deutsch": "Arbeitsbereiche",
     "Français": "Espaces de travail",
     "Italiano": "Workspace",
@@ -9304,7 +9304,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "पहला ऑर्डर बनाएँ"
   },
   "Set up your workspace": {
-    "Türkçe": "Workspace’i Kur",
+    "Türkçe": "Çalışma Alanını Kur",
     "Deutsch": "Arbeitsbereich einrichten",
     "Français": "Configurer l’espace",
     "Italiano": "Configura workspace",
@@ -9850,7 +9850,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "सदस्य हटाया गया."
   },
   "Access request sent. The workspace owner can approve it from Team Access.": {
-    "Türkçe": "Erişim isteği gönderildi. Workspace sahibi Team Access ekranından onaylayabilir.",
+    "Türkçe": "Erişim isteği gönderildi. Çalışma alanı sahibi Team Access ekranından onaylayabilir.",
     "Deutsch": "Anfrage gesendet. Der Besitzer kann sie unter Team Access genehmigen.",
     "Français": "Demande envoyée. Le propriétaire peut l’approuver depuis Team Access.",
     "Italiano": "Richiesta inviata. Il proprietario può approvarla da Team Access.",
@@ -11852,7 +11852,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "हिन्दी (Hindi)": "ब्रांड उपशीर्षक"
   },
   "Workspace Logo": {
-    "Türkçe": "Workspace Logosu",
+    "Türkçe": "Çalışma Alanı Logosu",
     "Deutsch": "Workspace-Logo",
     "Français": "Logo de l’espace de travail",
     "Italiano": "Logo workspace",
@@ -16182,7 +16182,7 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
   },
   "Cancel Order": {
     "Türkçe": "Siparişi İptal Et",
-    "Deutsch": "Bestellung stornieren",
+    "Deutsch": "Auftrag stornieren",
     "Français": "Annuler la commande",
     "Italiano": "Annulla ordine",
     "Español (Spanish)": "Cancelar pedido",
@@ -16947,18 +16947,18 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "تمت استعادة الشراء. خطتك نشطة.",
     "हिन्दी (Hindi)": "खरीद बहाल हुई। आपकी योजना सक्रिय है।"
   },
-  "Apple Calendar and Reminders are available from NivaDesk Lite.": {
-    "Türkçe": "Apple Calendar ve Reminders NivaDesk Lite'tan itibaren kullanılabilir.",
-    "Deutsch": "Apple Kalender und Erinnerungen ab NivaDesk Lite.",
-    "Français": "Apple Calendrier et Rappels dès NivaDesk Lite.",
-    "Italiano": "Apple Calendar e Promemoria da NivaDesk Lite.",
-    "Español (Spanish)": "Apple Calendario y Recordatorios desde NivaDesk Lite.",
-    "Português": "Apple Calendário e Lembretes a partir do NivaDesk Lite.",
-    "Русский (Russian)": "Apple Calendar и Напоминания доступны в NivaDesk Lite.",
-    "日本語 (Japanese)": "Apple カレンダーとリマインダーはNivaDesk Liteから利用可能。",
-    "中文 (Chinese)": "Apple 日历和提醒事项自 NivaDesk Lite 起可用。",
-    "العربية (Arabic)": "Apple Calendar وRemindersمتاح من NivaDesk Lite.",
-    "हिन्दी (Hindi)": "Apple Calendar और Reminders NivaDesk Lite से उपलब्ध।"
+  "Apple Calendar and Reminders are available from NivaDesk Starter.": {
+    "Türkçe": "Apple Calendar ve Reminders NivaDesk Starter'tan itibaren kullanılabilir.",
+    "Deutsch": "Apple Kalender und Erinnerungen ab NivaDesk Starter.",
+    "Français": "Apple Calendrier et Rappels dès NivaDesk Starter.",
+    "Italiano": "Apple Calendar e Promemoria da NivaDesk Starter.",
+    "Español (Spanish)": "Apple Calendario y Recordatorios desde NivaDesk Starter.",
+    "Português": "Apple Calendário e Lembretes a partir do NivaDesk Starter.",
+    "Русский (Russian)": "Apple Calendar и Напоминания доступны в NivaDesk Starter.",
+    "日本語 (Japanese)": "Apple カレンダーとリマインダーはNivaDesk Starterから利用可能。",
+    "中文 (Chinese)": "Apple 日历和提醒事项自 NivaDesk Starter 起可用。",
+    "العربية (Arabic)": "Apple Calendar وRemindersمتاح من NivaDesk Starter.",
+    "हिन्दी (Hindi)": "Apple Calendar और Reminders NivaDesk Starter से उपलब्ध।"
   },
   "Plan changes are protected and will be managed through verified subscriptions.": {
     "Türkçe": "Plan değişiklikleri korunur ve doğrulanmış abonelikler üzerinden yönetilecektir.",
@@ -17116,18 +17116,18 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "متاح من",
     "हिन्दी (Hindi)": "उपलब्ध से"
   },
-  "Card moving, resizing and colours are available from NivaDesk Lite.": {
-    "Türkçe": "Kart taşıma, yeniden boyutlandırma ve renkler NivaDesk Lite'tan itibaren mevcuttur.",
-    "Deutsch": "Kartenverschiebung, -größe und Farben ab NivaDesk Lite verfügbar.",
-    "Français": "Déplacement, redimensionnement et couleurs des cartes depuis NivaDesk Lite.",
-    "Italiano": "Spostamento, ridimensionamento e colori delle schede da NivaDesk Lite.",
-    "Español (Spanish)": "Mover, redimensionar y colorear tarjetas desde NivaDesk Lite.",
-    "Português": "Movimentar, redimensionar e cores dos cartões desde o NivaDesk Lite.",
-    "Русский (Russian)": "Перемещение, размер и цвета карточек доступны с NivaDesk Lite.",
-    "日本語 (Japanese)": "カードの移動、サイズ変更、色はNivaDesk Liteから利用可能。",
-    "中文 (Chinese)": "卡片移动、调整大小和颜色自 NivaDesk Lite 起可用。",
-    "العربية (Arabic)": "نقل البطاقات وتغيير حجمها وألوانها متاح من NivaDesk Lite.",
-    "हिन्दी (Hindi)": "कार्ड स्थानांतरण, आकार और रंग NivaDesk Lite से उपलब्ध।"
+  "Card moving, resizing and colours are available from NivaDesk Starter.": {
+    "Türkçe": "Kart taşıma, yeniden boyutlandırma ve renkler NivaDesk Starter'tan itibaren mevcuttur.",
+    "Deutsch": "Kartenverschiebung, -größe und Farben ab NivaDesk Starter verfügbar.",
+    "Français": "Déplacement, redimensionnement et couleurs des cartes depuis NivaDesk Starter.",
+    "Italiano": "Spostamento, ridimensionamento e colori delle schede da NivaDesk Starter.",
+    "Español (Spanish)": "Mover, redimensionar y colorear tarjetas desde NivaDesk Starter.",
+    "Português": "Movimentar, redimensionar e cores dos cartões desde o NivaDesk Starter.",
+    "Русский (Russian)": "Перемещение, размер и цвета карточек доступны с NivaDesk Starter.",
+    "日本語 (Japanese)": "カードの移動、サイズ変更、色はNivaDesk Starterから利用可能。",
+    "中文 (Chinese)": "卡片移动、调整大小和颜色自 NivaDesk Starter 起可用。",
+    "العربية (Arabic)": "نقل البطاقات وتغيير حجمها وألوانها متاح من NivaDesk Starter.",
+    "हिन्दी (Hindi)": "कार्ड स्थानांतरण, आकार और रंग NivaDesk Starter से उपलब्ध।"
   },
   "Cards are locked": {
     "Türkçe": "Kartlar kilitli",

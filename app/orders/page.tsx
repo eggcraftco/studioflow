@@ -924,12 +924,12 @@ export default function OrdersPage() {
           {error ? (
             <div className="mini-panel compact-mini-panel">
               <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load orders")} />
-              <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+              <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
             </div>
           ) : null}
 
-          {orderActionStatus ? <p className="orders-sidebar-message">{orderActionStatus}</p> : null}
-          {orderActionError ? <p className="orders-sidebar-error">{orderActionError}</p> : null}
+          {orderActionStatus ? <p className="orders-sidebar-message">{t(orderActionStatus)}</p> : null}
+          {orderActionError ? <p className="orders-sidebar-error">{t(orderActionError)}</p> : null}
 
           {workspaceHasNoOrders ? (
             <div className="orders-first-run">
@@ -947,7 +947,7 @@ export default function OrdersPage() {
                   {creatingFirstOrder ? t("Creating...") : t("Create your first order")}
                 </button>
               ) : null}
-              {firstOrderError ? <p className="orders-sidebar-error">{firstOrderError}</p> : null}
+              {firstOrderError ? <p className="orders-sidebar-error">{t(firstOrderError)}</p> : null}
             </div>
           ) : filteredOrders.length === 0 && !loadingOrders ? (
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
@@ -1250,7 +1250,7 @@ export default function OrdersPage() {
                   })}
                 </div>
 
-                {orderActionError ? <p className="orders-sidebar-error" style={{ margin: 0 }}>{orderActionError}</p> : null}
+                {orderActionError ? <p className="orders-sidebar-error" style={{ margin: 0 }}>{t(orderActionError)}</p> : null}
 
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
                   <button type="button" className="button secondary" disabled={mergingOrders} onClick={() => setMergeModalOpen(false)}>{t("Cancel")}</button>
@@ -1278,7 +1278,7 @@ export default function OrdersPage() {
           {detailError ? (
             <section className="card order-error-card">
               <CardTitle icon="lock" eyebrow={t("Order error")} title={t("Could not load order")} />
-              <p style={{ color: "var(--danger)", margin: 0 }}>{detailError}</p>
+              <p style={{ color: "var(--danger)", margin: 0 }}>{t(detailError)}</p>
             </section>
           ) : null}
 

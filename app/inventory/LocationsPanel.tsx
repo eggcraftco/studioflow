@@ -114,7 +114,7 @@ export function LocationsPanel({
         </div>
       </div>
 
-      {notice ? <p className="inventory-notice">{notice}</p> : null}
+      {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
 
       {canEdit ? (
         <div className="inventory-form" style={{ alignItems: "end" }}>

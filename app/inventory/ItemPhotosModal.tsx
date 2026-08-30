@@ -194,7 +194,7 @@ export function ItemPhotosModal({
             </>
           )}
 
-          {error ? <p className="inventory-error">{error}</p> : null}
+          {error ? <p className="inventory-error">{t(error)}</p> : null}
         </div>
       </div>
     </div>
