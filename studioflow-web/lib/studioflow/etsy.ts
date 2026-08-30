@@ -38,7 +38,6 @@ export type EtsyConnection = {
   needsReconnect: boolean;
   importState: "none" | "running" | "done" | string;
   importedOrders: number;
-  pendingReview: number;
   recentEvents?: EtsySyncEvent[];
 };
 

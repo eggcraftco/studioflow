@@ -5691,12 +5691,14 @@ const etsySyncExports = createEtsySyncFunctions({
   resolveDefaultDeliveryTime,
   companySettingsDocRef,
   customersOfCompany: (companyId) => admin.firestore().collection("musteriler").where("companyId", "==", companyId),
-  sendPushNotificationToCompany
+  sendPushNotificationToCompany,
+  onSchedule
 });
 exports.previewEtsyImport = etsySyncExports.previewEtsyImport;
 exports.runEtsyImport = etsySyncExports.runEtsyImport;
 exports.syncEtsyNow = etsySyncExports.syncEtsyNow;
 exports.resolveEtsyCustomerMatch = etsySyncExports.resolveEtsyCustomerMatch;
+exports.reconcileEtsyConnections = etsySyncExports.reconcileEtsyConnections;
 
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({

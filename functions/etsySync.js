@@ -23,6 +23,9 @@
 const RECEIPT_PAGE_SIZE = 100;          // Etsy's maximum for getShopReceipts
 const MAX_PREVIEW_RECEIPTS = 500;       // one preview should not eat the daily quota
 const RECONCILE_OVERLAP_MS = 10 * 60 * 1000;  // re-ask a small window either side of the watermark
+// One sweep must not be able to spend the whole app-wide daily quota. Oldest
+// watermark first, so a shop skipped this run is first in line on the next.
+const MAX_CONNECTIONS_PER_SWEEP = 25;
 
 function createEtsySyncFunctions(deps) {
   const {
@@ -46,6 +49,7 @@ function createEtsySyncFunctions(deps) {
     companySettingsDocRef,
     customersOfCompany,         // (companyId) => query
     sendPushNotificationToCompany = async () => {},
+    onSchedule = null,
     now = () => Date.now()
   } = deps;
 
@@ -527,11 +531,54 @@ function createEtsySyncFunctions(deps) {
     return { ok: true, remembered: true };
   });
 
+  /**
+   * The safety net under webhooks.
+   *
+   * Etsy's webhooks are good but not a guarantee: a delivery can be missed, a
+   * function can be cold, an event can arrive out of order. Without a sweep
+   * that asks "what changed since the watermark?", a missed order is missed
+   * for good — and the seller would never know, because nothing failed
+   * visibly.
+   *
+   * The daily API quota is 5,000 calls shared across EVERY NivaDesk seller, so
+   * this is deliberately frugal: one call per shop per sweep (min_last_modified,
+   * not a walk), a cap on how many shops one run touches, and oldest-first so
+   * no connection can be starved by a busier one.
+   */
+  const reconcileEtsyConnections = onSchedule
+    ? onSchedule(
+        { schedule: "every 15 minutes", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 540 },
+        async () => {
+          const snap = await db().collection(etsy.CONNECTION_COLLECTION)
+            .where("status", "==", "connected")
+            .get();
+          const due = snap.docs
+            .map((docSnap) => ({ ref: docSnap.ref, data: docSnap.data() || {} }))
+            .filter((row) => String(row.data.companyId || ""))
+            .sort((a, b) => Number(a.data.reconcileWatermarkMs || 0) - Number(b.data.reconcileWatermarkMs || 0))
+            .slice(0, MAX_CONNECTIONS_PER_SWEEP);
+
+          let swept = 0; let failed = 0;
+          for (const row of due) {
+            try {
+              await reconcileConnection(row.ref, row.data, { companyId: String(row.data.companyId) });
+              swept += 1;
+            } catch (error) {
+              failed += 1;
+              console.warn("etsy reconcile failed:", row.ref.id, error?.code || error?.message || error);
+            }
+          }
+          console.log(`etsy reconcile sweep: ${swept} shop(s), ${failed} failed, ${snap.size} connected`);
+        }
+      )
+    : null;
+
   return {
     previewEtsyImport,
     runEtsyImport,
     syncEtsyNow,
     resolveEtsyCustomerMatch,
+    reconcileEtsyConnections,
     _internal: { fetchReceipts, applyReceipt, reconcileConnection, classify, normaliseRules, loadCustomerCandidates }
   };
 }
@@ -540,5 +587,6 @@ module.exports = {
   createEtsySyncFunctions,
   RECEIPT_PAGE_SIZE,
   MAX_PREVIEW_RECEIPTS,
-  RECONCILE_OVERLAP_MS
+  RECONCILE_OVERLAP_MS,
+  MAX_CONNECTIONS_PER_SWEEP
 };

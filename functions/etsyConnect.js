@@ -70,8 +70,7 @@ function createEtsyConnectFunctions(deps) {
       // on, so it is surfaced as its own flag rather than buried in a code.
       needsReconnect: String(row.status || "") === "needs_reconnect",
       importState: String(row.importState || "none"),
-      importedOrders: Number(row.importedOrders || 0),
-      pendingReview: Number(row.pendingReview || 0)
+      importedOrders: Number(row.importedOrders || 0)
     };
   }
 
