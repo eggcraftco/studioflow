@@ -278,36 +278,32 @@ struct HomeGettingStartedBody: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                HStack(alignment: .top, spacing: 12) {
-                    HomePanel {
-                        HomeEyebrow(text: t("Your checklist", lang: lang))
-                        ForEach(all, id: \.id) { step in
-                            HomeCheckRow(
-                                label: t(step.label, lang: lang),
-                                state: step.done ? .done : (step.id == next?.id ? .current : .todo)
-                            )
-                        }
-                    }
-                    if let step = next {
-                        HomeNextPanel(step: step, lang: lang, style: .large)
-                    } else {
-                        HomePanel { HomeCardNote(text: t("All set — nice work.", lang: lang)) }
+                // One column, not two: side by side the list had about half the
+                // width and every label was cut to "Set up business pro…" — a
+                // checklist you cannot read is not a checklist. The heading goes
+                // on a phone, where six readable rows matter more; the card is
+                // already titled "Getting started".
+                if !compact {
+                    HomeEyebrow(text: t("Your checklist", lang: lang))
+                }
+                VStack(alignment: .leading, spacing: compact ? 2 : 3) {
+                    ForEach(all, id: \.id) { step in
+                        HomeCheckRow(
+                            label: t(step.label, lang: lang),
+                            state: step.done ? .done : (step.id == next?.id ? .current : .todo),
+                            boxed: true
+                        )
                     }
                 }
-                HStack(spacing: 10) {
-                    Image(systemName: "lightbulb.fill")
-                        .foregroundColor(HomeTone.accent)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(HomeTone.accent.opacity(0.10)))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(t("Your setup adapts to you", lang: lang)).font(.system(size: 12.5, weight: .bold))
-                        Text(t("Steps change with your plan, permissions and workflow.", lang: lang))
-                            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+                if let step = next {
+                    HomeNextPanel(step: step, lang: lang, style: .large, compact: compact)
+                    if let onSkip {
+                        HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
+                            .frame(maxWidth: .infinity)
                     }
-                    Spacer()
+                } else {
+                    HomePanel { HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang) }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 9)
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
             }
             Spacer(minLength: 0)
         }
@@ -320,6 +316,10 @@ struct HomeCheckRow: View {
     enum State { case done, current, todo }
     let label: String
     let state: State
+    /// The big card draws each step as its own bordered row, as the sheet does:
+    /// six lines divided by hairlines read as one block, and the current step
+    /// has nothing to stand out against.
+    var boxed: Bool = false
 
     var body: some View {
         HStack(spacing: 9) {
@@ -327,16 +327,23 @@ struct HomeCheckRow: View {
             Text(label)
                 .font(.system(size: 12, weight: state == .current ? .bold : .regular))
                 .foregroundColor(state == .done ? .secondary : (state == .current ? HomeTone.accent : .primary))
-                .strikethrough(state == .done, color: .secondary)
+                // Six struck-through lines read as a list of mistakes rather
+                // than a list of things done.
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, state == .current ? 8 : 0)
+        .padding(.vertical, boxed ? 3 : 4)
+        .padding(.horizontal, boxed ? 10 : (state == .current ? 8 : 0))
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: boxed ? 9 : 8)
                 .fill(state == .current ? HomeTone.accent.opacity(0.07) : .clear)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(state == .current ? HomeTone.accent.opacity(0.45) : Color.primary.opacity(0.12))
+                .opacity(boxed ? 1 : 0)
+        )
+        .opacity(state == .done ? 0.65 : 1)
     }
 
     @ViewBuilder private var mark: some View {
@@ -395,7 +402,9 @@ struct HomeNextPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: style == .compact ? 5 : 7) {
-            if style == .large { eyebrow(t("Recommended next", lang: lang)) }
+            // No heading here: the big card's list above already names this step
+            // and colours it blue, so the panel repeating it was the same words
+            // twice.
             // The wide card's "Up next" label goes: a single tinted panel under a
             // progress bar does not need to be told it is what comes next, and
             // the line that says why earns the space instead.
@@ -420,9 +429,11 @@ struct HomeNextPanel: View {
 
     private var title: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(t(step.label, lang: lang))
-                .font(.system(size: style == .compact ? 12.5 : 14, weight: .heavy))
-                .lineLimit(2)
+            if style != .large {
+                Text(t(step.label, lang: lang))
+                    .font(.system(size: style == .compact ? 12.5 : 14, weight: .heavy))
+                    .lineLimit(2)
+            }
             // The square gives up the line that explains why: measured, the
             // step's own name plus its blurb runs past the bottom of a 174pt
             // card in German. The page the button opens explains itself.

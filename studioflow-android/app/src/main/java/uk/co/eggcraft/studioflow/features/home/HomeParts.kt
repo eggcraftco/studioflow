@@ -2,6 +2,7 @@ package uk.co.eggcraft.studioflow.features.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -202,17 +203,33 @@ fun HomePanel(compact: Boolean = false, content: @Composable () -> Unit) {
 /** A filled tick for done, an arrow for the step you are on, a hollow ring for
  *  the rest — the shape carries the state, not the colour alone (§20). */
 @Composable
-fun HomeCheckRow(label: String, state: String) {
+fun HomeCheckRow(label: String, state: String, boxed: Boolean = false) {
     Row(
         Modifier
             .fillMaxWidth()
+            .alpha(if (state == "done") 0.65f else 1f)
             .then(
-                if (state == "current") Modifier
+                // The big card draws each step as its own bordered row, as the
+                // sheet does: six lines divided by hairlines read as one block,
+                // and the current step has nothing to stand out against.
+                if (boxed) Modifier
+                    .background(
+                        if (state == "current") HomeTone.accent.copy(alpha = 0.07f) else Color.Transparent,
+                        RoundedCornerShape(9.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (state == "current") HomeTone.accent.copy(alpha = 0.45f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                        RoundedCornerShape(9.dp)
+                    )
+                    .padding(horizontal = 10.dp)
+                else if (state == "current") Modifier
                     .background(HomeTone.accent.copy(alpha = 0.07f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp)
                 else Modifier
             )
-            .padding(vertical = 4.dp),
+            .padding(vertical = if (boxed) 3.dp else 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
@@ -231,7 +248,8 @@ fun HomeCheckRow(label: String, state: String) {
                 "current" -> HomeTone.accent
                 else -> MaterialTheme.colorScheme.onSurface
             },
-            textDecoration = if (state == "done") TextDecoration.LineThrough else TextDecoration.None,
+            // Ticked, not crossed out: six struck-through lines read as a list of
+            // mistakes rather than a list of things done.
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

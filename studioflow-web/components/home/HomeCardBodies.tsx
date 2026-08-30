@@ -1682,37 +1682,40 @@ export function GettingStartedCardBody({
     );
   }
 
-  // 2x2: the whole checklist with the current step called out, beside the
-  // recommendation, and a note that the list adapts to the workspace.
+  // 2x2: the whole checklist down the card and the current step's panel under
+  // it. One column, not two: side by side the list had about half the width and
+  // every label was cut to "Set up business pro…" — a checklist you cannot read
+  // is not a checklist.
   return (
     <div className="home-setup is-large">
-      <HomeProgress complete={complete} total={steps.length} t={t} hideLabel />
-      <div className="home-setup-columns">
-        <div className="home-setup-panel">
-          <p className="home-eyebrow is-strong">{t("Your checklist")}</p>
-          <ul className="home-check-list is-full">
-            {steps.map((step) => (
-              <li key={step.id} className={step.id === next?.id ? "is-current" : ""}>
-                <span
-                  className={step.done ? "home-check is-done" : step.id === next?.id ? "home-check is-current" : "home-check is-todo"}
-                  aria-hidden="true"
-                />
-                {t(step.label)}
-              </li>
-            ))}
-          </ul>
+      <HomeProgress complete={complete} total={steps.length} t={t} />
+      <p className="home-eyebrow is-strong">{t("Your checklist")}</p>
+      <ul className="home-check-list is-full">
+        {steps.map((step) => (
+          <li key={step.id} className={step.id === next?.id ? "is-current" : step.done ? "is-done" : ""}>
+            <span
+              className={step.done ? "home-check is-done" : step.id === next?.id ? "home-check is-current" : "home-check is-todo"}
+              aria-hidden="true"
+            />
+            {t(step.label)}
+          </li>
+        ))}
+      </ul>
+      {next ? (
+        <div className="home-setup-next">
+          <NextStepPanel step={next} t={t} large />
+          {onSkip ? (
+            <button type="button" className="home-setup-skip"
+                    onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+              {t("Skip for now")}
+            </button>
+          ) : null}
         </div>
-        {next ? <NextStepPanel step={next} t={t} large /> : (
-          <div className="home-next-panel"><p className="home-card-note">{t("All set — nice work.")}</p></div>
-        )}
-      </div>
-      <div className="home-tip">
-        <span className="home-tip-icon" aria-hidden="true">💡</span>
-        <span>
-          <strong>{t("Your setup adapts to you")}</strong>
-          <em>{t("Steps change with your plan, permissions and workflow.")}</em>
-        </span>
-      </div>
+      ) : (
+        <div className="home-next-panel">
+          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1768,11 +1771,11 @@ function NextStepPanel({
 }) {
   return (
     <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}${compact ? " is-stacked" : ""}`}>
-      {large ? <p className="home-eyebrow is-accent">{t("Recommended next")}</p> : null}
-      {inline ? <p className="home-eyebrow is-accent">{t("Up next")}</p> : null}
       <div className="home-next-body">
         <div>
-          <strong>{t(step.label)}</strong>
+          {/* The big card's list above already names this step and colours it
+              blue; the panel repeating it was the same words twice. */}
+          {large ? null : <strong>{t(step.label)}</strong>}
           {/* The square keeps the step and the way past it and gives up the
               line that explains why: measured, "Verbinde deinen Shop" plus its
               own blurb runs 17px past the bottom of a 174px card. The page the

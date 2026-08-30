@@ -28187,6 +28187,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* ---- Getting started ------------------------------------------------- */
 .home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+/* Six rows, a heading, the count, the bar and a panel share 283px. */
+.home-setup.is-large { gap: 5px; }
+.home-setup.is-large .home-eyebrow.is-strong { font-size: 12px; }
+.home-setup.is-large .home-progress { margin: 0; }
+.home-setup.is-large .home-next-panel.is-large { padding: 9px 12px; }
+.home-setup.is-large .home-next-body p { font-size: 11.5px; line-height: 1.3; }
+.home-setup.is-large .home-next-button { padding: 6px 14px; font-size: 12px; }
+.home-setup.is-large .home-setup-skip { margin-top: 4px; align-self: center; }
 .home-setup-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
 /* The rule between the panel and what is left after it, as the sheet draws it. */
 .home-setup-columns > .home-check-list.is-ruled { border-left: 1px solid var(--border); padding-left: 16px; margin-top: 0; }
@@ -28221,11 +28229,22 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   .home-setup.is-split .home-progress { margin: 0; }
   .home-setup-columns { gap: 10px; }
   .home-setup-columns > .home-check-list.is-ruled { padding-left: 10px; }
-  .home-setup-next .home-next-panel.is-inline { padding: 8px 10px; }
-  .home-setup-next .home-next-body { gap: 6px; }
-  .home-setup-next .home-next-body strong { font-size: 12.5px; line-height: 1.15; }
-  .home-setup-next .home-next-body p { display: none; }
-  .home-setup-next .home-next-button { align-self: stretch; text-align: center; padding: 4px 10px; font-size: 11px; }
+  /* Scoped to the wide card: a phone 2x2 is also under 420px, and it is the
+     card that has room for the line these rules take away. */
+  .home-setup.is-split .home-next-panel.is-inline { padding: 8px 10px; }
+  .home-setup.is-split .home-next-body { gap: 6px; }
+  .home-setup.is-split .home-next-body strong { font-size: 12.5px; line-height: 1.15; }
+  .home-setup.is-split .home-next-body p { display: none; }
+  .home-setup.is-split .home-next-button { align-self: stretch; text-align: center; padding: 4px 10px; font-size: 11px; }
+
+  /* The big card on a phone: six rows, the panel and the way past it share
+     283px. The "Your checklist" heading goes rather than the rows getting
+     tighter — the card is already titled "Getting started", and six rows you
+     can read is the whole point of the single column. */
+  .home-setup.is-large .home-eyebrow.is-strong { display: none; }
+  .home-setup.is-large .home-check-list.is-full { gap: 2px; }
+  .home-setup.is-large .home-next-panel.is-large { padding: 7px 11px; }
+  .home-setup.is-large .home-next-button { padding: 5px 12px; }
   .home-setup.is-split .home-setup-skip { margin-top: 4px; font-size: 11px; }
   .home-setup-columns .home-check-list li { padding: 4px 0; font-size: 11px; gap: 7px; }
   .home-setup-columns .home-check { width: 14px; height: 14px; }
@@ -28249,11 +28268,25 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border-bottom: 1px solid var(--border); min-width: 0;
 }
 .home-check-list li:last-child { border-bottom: 0; }
-.home-check-list.is-full li { padding: 8px 0; }
+/* Every step is its own bordered row, as the sheet draws it: a list of six
+   divided by hairlines reads as one block, and the current step has nothing to
+   stand out against. */
+/* Never 0 1 auto: a list that shrinks below its own rows does not clip them, it
+   lets them paint over whatever is underneath — and nothing reports it as
+   overflow. It keeps its height and the card is sized to hold it. */
+.home-check-list.is-full {
+  display: flex; flex-direction: column; gap: 3px; margin-top: 2px;
+  flex: 0 0 auto;
+}
+.home-check-list.is-full li {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 9px;
+  font-size: 12px; flex: 0 0 auto;
+}
 .home-check-list li.is-current {
   color: #2563eb; font-weight: 700; background: rgba(37, 99, 235, 0.07);
-  border-radius: 8px; padding-left: 8px; padding-right: 8px; border-bottom-color: transparent;
+  border-radius: 10px; border-color: rgba(37, 99, 235, 0.45);
 }
+
 .home-check { width: 17px; height: 17px; border-radius: 999px; flex: 0 0 auto; position: relative; }
 .home-check.is-done { background: #16a34a; }
 .home-check.is-done::after {
@@ -28474,7 +28507,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-next-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #1d4ed8; }
 .home-check-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
 .home-check-list li { display: flex; align-items: center; gap: 8px; }
-.home-check-list li.is-done { opacity: 0.6; text-decoration: line-through; }
+/* Ticked, not crossed out: six struck-through lines read as a list of
+   mistakes rather than a list of things done. */
+.home-check-list li.is-done { opacity: 0.65; }
 
 .home-notes { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
 .home-note {

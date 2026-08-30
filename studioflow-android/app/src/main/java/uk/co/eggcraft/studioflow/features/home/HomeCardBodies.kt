@@ -543,38 +543,32 @@ private fun HomeGettingStartedBody(
                 }
             }
             HomeCardSize.TwoByTwo -> {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.weight(1f)) {
-                        HomePanel {
-                            HomeEyebrow(t("Your checklist"))
+                // One column, not two: side by side the list had about half the
+                // width and every label was cut to "Set up business pro…" — a
+                // checklist you cannot read is not a checklist. The heading goes
+                // on a phone, where six readable rows matter more; the card is
+                // already titled "Getting started".
+                BoxWithConstraints {
+                    val roomForHeading = maxWidth > 420.dp
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        if (roomForHeading) HomeEyebrow(t("Your checklist"))
+                        Column(verticalArrangement = Arrangement.spacedBy(if (roomForHeading) 3.dp else 2.dp)) {
                             steps.forEach {
-                                HomeCheckRow(t(it.label),
-                                    if (it.done) "done" else if (it.id == next?.id) "current" else "todo")
+                                HomeCheckRow(
+                                    t(it.label),
+                                    if (it.done) "done" else if (it.id == next?.id) "current" else "todo",
+                                    boxed = true
+                                )
                             }
                         }
-                    }
-                    Box(Modifier.weight(1f)) {
-                        if (next != null) HomeNextPanel(next, t, "large")
-                        else HomePanel { Text(t("All set — nice work."), fontSize = 12.sp) }
-                    }
-                }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 11.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(Modifier.size(30.dp).background(HomeTone.accent.copy(alpha = 0.10f), CircleShape),
-                        contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Lightbulb, null, Modifier.size(16.dp), HomeTone.accent)
-                    }
-                    Column {
-                        Text(t("Your setup adapts to you"), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(t("Steps change with your plan, permissions and workflow."),
-                            fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (next != null) {
+                            HomeNextPanel(next, t, "large")
+                            if (onSkip != null) {
+                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    HomeSkipText(t("Skip for now")) { onSkip(next.id) }
+                                }
+                            }
+                        } else HomePanel { HomeAllSetNote(skipped, onRestoreSkipped, t) }
                     }
                 }
             }
@@ -617,14 +611,16 @@ private fun HomeNextPanel(step: SetupStep, t: (String) -> String, style: String)
             ),
         verticalArrangement = Arrangement.spacedBy(if (style == "compact") 5.dp else 6.dp)
     ) {
-        if (style == "large") Text(t("Recommended next"), fontSize = 11.sp,
-            fontWeight = FontWeight.Bold, color = HomeTone.accent)
+        // No heading here: the big card's list above already names this step and
+        // colours it blue, so the panel repeating it was the same words twice.
         // The wide card's "Up next" label goes: a single tinted panel under a
         // progress bar does not need to be told it is what comes next, and the
         // line that says why earns the space instead.
-        Text(t(step.label), fontSize = if (style == "compact") 12.5.sp else 13.5.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (style != "large") {
+            Text(t(step.label), fontSize = if (style == "compact") 12.5.sp else 13.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         // The square gives up the line that explains why: measured, the step's
         // own name plus its blurb runs past the bottom of a 174dp card in
         // German. The page the button opens explains itself.
