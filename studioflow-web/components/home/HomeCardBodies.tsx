@@ -3,7 +3,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
-import { HomeActionIcon, HomeTileIcon, type HomeActionIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
+import { HomeActionIcon, HomeActivityIcon, HomeTileIcon, type HomeActionIconName, type HomeActivityIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
 import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
 import {
   adjustedDashboardNetProfit,
@@ -15,7 +15,7 @@ import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { ScheduleOrderItem } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
-import { formatStudioMoney } from "@/lib/studioflow/money";
+import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
 
 /**
  * The eleven card bodies.
@@ -1179,7 +1179,21 @@ function activityTone(type: string) {
   return "slate";
 }
 
-export function RecentActivityCardBody({ size, data, t }: CardBodyProps) {
+/** The glyph, decided from the same key as the tone so the two cannot drift
+ *  apart — a green disc with a cart in it would be worse than no glyph. */
+function activityGlyph(type: string): HomeActivityIconName {
+  const key = type.toLowerCase();
+  if (key.includes("payment")) return "payment";
+  if (key.includes("order")) return "order";
+  if (key.includes("production") || key.includes("status")) return "production";
+  if (key.includes("file")) return "file";
+  if (key.includes("inventory")) return "inventory";
+  if (key.includes("customer")) return "customer";
+  if (key.includes("schedule")) return "schedule";
+  return "update";
+}
+
+export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBodyProps) {
   // The workspace's own stream, already filtered to what this user is a
   // recipient of — activity never widens what someone can see (§12).
   const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
@@ -1193,23 +1207,39 @@ export function RecentActivityCardBody({ size, data, t }: CardBodyProps) {
   const relative = (millis: number) => {
     if (!millis) return "";
     const minutes = Math.max(1, Math.round((Date.now() - millis) / 60000));
-    if (minutes < 60) return `${minutes} ${t("min ago")}`;
+    // A square has no room for "ago" beside a title; the reference sheet drops
+    // it there and keeps it on the wider cards.
+    if (minutes < 60) return size === "1x1" ? `${minutes} ${t("min")}` : `${minutes} ${t("min ago")}`;
     if (millis >= startOfToday.getTime()) return `${Math.round(minutes / 60)}h`;
     if (millis >= startOfYesterday.getTime()) return t("Yesterday");
     return new Date(millis).toLocaleDateString();
   };
 
-  const row = (item: (typeof rows)[number]) => (
+  const symbol = moneySymbol(moneySettings);
+  const row = (item: (typeof rows)[number]) => {
+    const glyph = activityGlyph(item.type);
+    return (
     <li key={item.id}>
-      <span className={`home-activity-mark tone-${activityTone(item.type)}`} aria-hidden="true" />
+      <span className={`home-activity-mark tone-${activityTone(item.type)}`} aria-hidden="true">
+        {/* Money is the one row that shows a character rather than a drawing:
+            the workspace's own currency, so a euro shop is never shown a
+            pound. Everything else is a glyph. */}
+        {glyph === "payment"
+          ? <b className="home-activity-symbol">{symbol}</b>
+          : <HomeActivityIcon name={glyph} />}
+      </span>
       <span className="home-activity-text">
         <strong>{item.title || t("Update")}</strong>
-        {size !== "1x1" && item.message ? <em>{item.message}</em> : null}
+        {/* The second line used to be dropped in a square, which left the
+            title stranded and the row taller than it needed to be. A 1x1 has
+            the height for it; what it lacks is width, and that is a clamp. */}
+        {item.message ? <em>{item.message}</em> : null}
       </span>
       {size === "2x2" && item.senderName ? <span className="home-chip is-muted">{item.senderName}</span> : null}
       <span className="home-activity-when">{relative(item.createdAtMillis)}</span>
     </li>
-  );
+    );
+  };
 
   if (size !== "2x2") {
     return <ul className="home-activity-list">{rows.map(row)}</ul>;

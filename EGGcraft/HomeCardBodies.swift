@@ -629,6 +629,22 @@ func homeActivityTone(_ type: String) -> Color {
     return HomeTone.slate
 }
 
+/// The glyph inside the disc, decided from the same key as the tone above so a
+/// green disc can never end up carrying a cart. Every name here is a symbol
+/// that ships with macOS 14 — an invented name draws nothing at all and the
+/// disc silently goes back to being an empty circle.
+func homeActivityGlyph(_ type: String) -> String {
+    let key = type.lowercased()
+    if key.contains("payment") { return "creditcard.fill" }
+    if key.contains("order") { return "cart.fill" }
+    if key.contains("production") || key.contains("status") { return "gearshape.fill" }
+    if key.contains("file") { return "doc.fill" }
+    if key.contains("inventory") { return "shippingbox.fill" }
+    if key.contains("customer") { return "person.fill" }
+    if key.contains("schedule") { return "calendar" }
+    return "clock.fill"
+}
+
 struct HomeRecentActivityBody: View {
     let size: HomeCardSize
     let lang: String
@@ -659,7 +675,7 @@ struct HomeRecentActivityBody: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(rows, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false) }
+                ForEach(rows, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false, size: size) }
                 Spacer(minLength: 0)
             }
         }
@@ -670,31 +686,86 @@ struct HomeActivityRow: View {
     let item: StudioActivityNotification
     let lang: String
     let showActor: Bool
+    /// Only the square needs to know: it is the one with no room for a title
+    /// and a timestamp side by side.
+    var size: HomeCardSize = .twoByOne
+
+    private var disc: some View {
+        ZStack {
+            Circle().fill(homeActivityTone(item.type))
+            Image(systemName: homeActivityGlyph(item.type))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+        }
+        .frame(width: 28, height: 28)
+    }
+
+    private var title: some View {
+        Text(item.title.isEmpty ? t("Update", lang: lang) : item.title)
+            .font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+    }
+
+    private var detail: some View {
+        Group {
+            if !item.message.isEmpty {
+                Text(item.message).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+            }
+        }
+    }
+
+    private var when: some View {
+        Text(homeRelative(item.createdAt, lang: lang, compact: size == .oneByOne))
+            .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(homeActivityTone(item.type)).frame(width: 24, height: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title.isEmpty ? t("Update", lang: lang) : item.title)
-                    .font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                if !item.message.isEmpty {
-                    Text(item.message).font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+#if os(macOS)
+        if size == .oneByOne {
+            // A square column leaves the title about 120pt beside a timestamp,
+            // which turned "Order #10234 created" into "Order #…". Two rows:
+            // the title takes the full width, the detail and the time share
+            // the line under it.
+            HStack(alignment: .center, spacing: 10) {
+                disc
+                VStack(alignment: .leading, spacing: 1) {
+                    title
+                    HStack(spacing: 6) {
+                        detail
+                        Spacer(minLength: 4)
+                        when
+                    }
                 }
+            }
+            .padding(.vertical, 6)
+        } else {
+            wideRow
+        }
+#else
+        wideRow
+#endif
+    }
+
+    private var wideRow: some View {
+        HStack(spacing: 10) {
+            disc
+            VStack(alignment: .leading, spacing: 1) {
+                title
+                detail
             }
             Spacer(minLength: 6)
             if showActor, !item.senderName.isEmpty {
                 HomeChip(text: item.senderName, tone: HomeTone.slate)
             }
-            Text(homeRelative(item.createdAt, lang: lang))
-                .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
+            when
         }
         .padding(.vertical, 6)
     }
 }
 
-func homeRelative(_ date: Date, lang: String) -> String {
+func homeRelative(_ date: Date, lang: String, compact: Bool = false) -> String {
     let minutes = max(1, Int(Date().timeIntervalSince(date) / 60))
-    if minutes < 60 { return "\(minutes) \(t("min ago", lang: lang))" }
+    // A square drops "ago" — there is no width for it beside a title.
+    if minutes < 60 { return compact ? "\(minutes) \(t("min", lang: lang))" : "\(minutes) \(t("min ago", lang: lang))" }
     if date >= homeStartOfToday() { return "\(minutes / 60)h" }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
