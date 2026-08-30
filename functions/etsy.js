@@ -792,3 +792,66 @@ module.exports.etsyTimestampToDate = etsyTimestampToDate;
 module.exports.splitVariations = splitVariations;
 module.exports.transactionLabel = transactionLabel;
 module.exports.normalizeEtsyReceipt = normalizeEtsyReceipt;
+
+/**
+ * Why did a signature fail?
+ *
+ * Standard Webhooks is a small spec with several plausible readings, and our
+ * own tests could not tell them apart because the same code signed and
+ * verified. This tries each reading against a real delivery and reports which
+ * one — if any — Etsy actually used.
+ *
+ * It returns NAMES ONLY. No secret, no signature, no body ever leaves here:
+ * this runs on a production log line.
+ */
+function diagnoseWebhookSignature({ rawBody, webhookId, webhookTimestamp, webhookSignature, signingSecret }) {
+  const secret = String(signingSecret || "");
+  const id = String(webhookId || "");
+  const ts = String(webhookTimestamp || "");
+  const bodyText = Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : String(rawBody || "");
+
+  const keys = {
+    "b64(no-prefix)": (() => { try { return Buffer.from(secret.replace(/^whsec_/, ""), "base64"); } catch { return null; } })(),
+    "utf8(no-prefix)": Buffer.from(secret.replace(/^whsec_/, ""), "utf8"),
+    "utf8(full)": Buffer.from(secret, "utf8"),
+    "b64(full)": (() => { try { return Buffer.from(secret, "base64"); } catch { return null; } })(),
+    "hex(no-prefix)": (() => { try { return Buffer.from(secret.replace(/^whsec_/, ""), "hex"); } catch { return null; } })()
+  };
+  const contents = {
+    "id.ts.body": `${id}.${ts}.${bodyText}`,
+    "ts.body": `${ts}.${bodyText}`,
+    "body": bodyText,
+    "id.ts.body(compact)": `${id}.${ts}.${(() => { try { return JSON.stringify(JSON.parse(bodyText)); } catch { return bodyText; } })()}`
+  };
+
+  const received = String(webhookSignature || "")
+    .split(/\s+/)
+    .map((part) => (part.includes(",") ? part.slice(part.indexOf(",") + 1) : part))
+    .filter(Boolean);
+
+  const matches = [];
+  for (const [keyName, key] of Object.entries(keys)) {
+    if (!key || !key.length) continue;
+    for (const [contentName, content] of Object.entries(contents)) {
+      for (const encoding of ["base64", "hex"]) {
+        const computed = crypto.createHmac("sha256", key).update(content, "utf8").digest(encoding);
+        if (received.some((candidate) => candidate === computed)) {
+          matches.push(`${keyName} | ${contentName} | ${encoding}`);
+        }
+      }
+    }
+  }
+
+  return {
+    matches,
+    // Shape only — enough to spot a truncated or mis-pasted secret without
+    // revealing any of it.
+    secretLength: secret.length,
+    secretHasPrefix: secret.startsWith("whsec_"),
+    bodyBytes: bodyText.length,
+    signatureCount: received.length,
+    headerHadComma: String(webhookSignature || "").includes(",")
+  };
+}
+
+module.exports.diagnoseWebhookSignature = diagnoseWebhookSignature;

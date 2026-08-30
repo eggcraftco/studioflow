@@ -69,6 +69,20 @@ function createEtsyWebhookFunction(deps) {
       // An unverified request is not from Etsy as far as we are concerned.
       // 401 and no detail: telling a prober which check failed helps them.
       console.warn("etsyWebhook rejected:", verdict.reason);
+      if (verdict.reason === "signature_mismatch" && typeof etsy.diagnoseWebhookSignature === "function") {
+        // Names and lengths only — never a secret, a signature or a body.
+        try {
+          console.warn("etsyWebhook signature diagnosis:", JSON.stringify(etsy.diagnoseWebhookSignature({
+            rawBody: req.rawBody,
+            webhookId: req.get("webhook-id"),
+            webhookTimestamp: req.get("webhook-timestamp"),
+            webhookSignature: req.get("webhook-signature"),
+            signingSecret: secret
+          })));
+        } catch (error) {
+          console.warn("etsyWebhook diagnosis failed:", error?.message || error);
+        }
+      }
       res.status(401).json({ ok: false });
       return;
     }
