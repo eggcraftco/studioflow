@@ -5667,6 +5667,36 @@ exports.getEtsyConnections = etsyConnectExports.getEtsyConnections;
 exports.verifyEtsyConnection = etsyConnectExports.verifyEtsyConnection;
 exports.disconnectEtsyShop = etsyConnectExports.disconnectEtsyShop;
 
+const { createEtsySyncFunctions } = require("./etsySync");
+const etsyCustomerMatch = require("./etsyCustomerMatch");
+const etsySyncExports = createEtsySyncFunctions({
+  admin,
+  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
+  HttpsError,
+  etsy: etsyModule,
+  customerMatch: etsyCustomerMatch,
+  connect: etsyConnectExports._internal,
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),
+  // Etsy reuses the shop-order pipeline rather than growing a parallel one:
+  // the same capacity check, the same "shop owns the money, studio owns the
+  // work" guard, the same customer mirror as Shopify and WooCommerce.
+  orderDocRef,
+  integrationOrderUpdate,
+  integrationOrderCapacity,
+  holdIntegrationOrder,
+  upsertIntegrationCustomer,
+  reconcileLineItems,
+  resolveDefaultDeliveryTime,
+  companySettingsDocRef,
+  customersOfCompany: (companyId) => admin.firestore().collection("musteriler").where("companyId", "==", companyId),
+  sendPushNotificationToCompany
+});
+exports.previewEtsyImport = etsySyncExports.previewEtsyImport;
+exports.runEtsyImport = etsySyncExports.runEtsyImport;
+exports.syncEtsyNow = etsySyncExports.syncEtsyNow;
+exports.resolveEtsyCustomerMatch = etsySyncExports.resolveEtsyCustomerMatch;
+
 const { createProductionFunctions } = require("./production");
 const productionExports = createProductionFunctions({
   admin,

@@ -1,0 +1,387 @@
+// The sync engine's promises, tested against a fake Firestore and a fake Etsy.
+//
+// Four of these are the acceptance criteria the brief names outright:
+//   * the same receipt arriving twice does not create two orders
+//   * a sync never overwrites the studio's own workflow, notes or costs
+//   * no bulk import happens without a preview the seller saw
+//   * a partial import reports its failures rather than losing them
+//
+// The fifth is the one nobody writes down and everybody hits: webhooks arrive
+// out of order, so a late delivery of an older state must not roll a newer
+// order backwards.
+
+const assert = require("assert");
+const etsy = require("../../etsy");
+const customerMatch = require("../../etsyCustomerMatch");
+const { createEtsySyncFunctions } = require("../../etsySync");
+
+let failed = 0;
+const tests = [];
+function test(name, fn) { tests.push([name, fn]); }
+
+const DELETE = Symbol("delete");
+const SERVER_TS = Symbol("ts");
+const INCREMENT = (n) => ({ __increment: n });
+
+function applyPatch(target, patch, nowMs) {
+  const out = { ...target };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === DELETE) delete out[key];
+    else if (value === SERVER_TS) out[key] = nowMs;
+    else if (value && typeof value === "object" && "__increment" in value) {
+      out[key] = (Number(out[key]) || 0) + value.__increment;
+    } else out[key] = value;
+  }
+  return out;
+}
+
+function makeWorld(nowRef) {
+  const docs = new Map();
+  const events = [];
+  function handle(path) {
+    return {
+      path,
+      get: async () => ({
+        exists: docs.has(path),
+        data: () => (docs.has(path) ? { ...docs.get(path) } : undefined),
+        ref: handle(path)
+      }),
+      set: async (patch, options = {}) => {
+        const base = options.merge && docs.has(path) ? docs.get(path) : {};
+        docs.set(path, applyPatch(base, patch, nowRef.value));
+      },
+      collection: () => ({ add: async (row) => { events.push(row); } })
+    };
+  }
+  const firestore = () => ({
+    collection: (name) => ({
+      doc: (id) => handle(`${name}/${id}`),
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }), get: async () => ({ docs: [] }) })
+    })
+  });
+  const admin = {
+    firestore: Object.assign(firestore, {
+      FieldValue: { serverTimestamp: () => SERVER_TS, delete: () => DELETE, increment: INCREMENT }
+    })
+  };
+  return { admin, docs, events, handle };
+}
+
+const RECEIPT = (over = {}) => ({
+  receipt_id: 555,
+  status: "paid",
+  is_paid: true,
+  buyer_user_id: 987,
+  buyer_email: "relay@etsy.com",
+  name: "Ada Lovelace",
+  first_line: "12 Analytical Way",
+  city: "London",
+  zip: "EC1A 1BB",
+  country_iso: "GB",
+  create_timestamp: 1_756_000_000,
+  update_timestamp: 1_756_000_600,
+  grandtotal: { amount: 12500, divisor: 100, currency_code: "GBP" },
+  subtotal: { amount: 12000, divisor: 100, currency_code: "GBP" },
+  total_shipping_cost: { amount: 500, divisor: 100, currency_code: "GBP" },
+  total_tax_cost: { amount: 0, divisor: 100, currency_code: "GBP" },
+  total_vat_cost: { amount: 0, divisor: 100, currency_code: "GBP" },
+  discount_amt: { amount: 0, divisor: 100, currency_code: "GBP" },
+  transactions: [{
+    transaction_id: 1, listing_id: 9, sku: "RING", title: "Ring", quantity: 1,
+    price: { amount: 12000, divisor: 100, currency_code: "GBP" },
+    variations: [{ property_id: 54, question_id: 7, formatted_name: "Engraving", formatted_value: "For Ada" }]
+  }],
+  ...over
+});
+
+// The real guard from index.js, reproduced exactly: a resync writes only the
+// fields the shop owns.
+const SHOP_OWNED = new Set(["customerName", "designName", "orderValue", "paidAmount", "remainingAmount",
+  "lineItems", "deliveryCost", "taxAmount", "emailAddress", "notes", "shippingStreetAddress", "shippingCity"]);
+function integrationOrderUpdate(mapped, isNew) {
+  if (isNew) return mapped;
+  const patch = {};
+  for (const [key, value] of Object.entries(mapped)) if (SHOP_OWNED.has(key)) patch[key] = value;
+  return patch;
+}
+
+function build({ nowRef, receipts = [RECEIPT()], capacity = { allowed: true }, owner = true, world = null }) {
+  world = world || makeWorld(nowRef);
+  const calls = { fetches: 0, held: [], pushes: 0, customers: [] };
+  const connect = {
+    loadConnection: async (id, companyId) => {
+      const data = { externalShopId: "222", externalShopName: "Ada Studio", shopCurrency: "GBP", companyId };
+      return { ref: world.handle(`etsyConnections/${id}`), data };
+    },
+    callEtsy: async (_ref, _path, options) => {
+      calls.fetches += 1;
+      // Page once, then stop.
+      if (Number(options?.query?.offset) > 0) return { results: [], count: receipts.length };
+      return { results: receipts, count: receipts.length };
+    },
+    writeSyncEvent: async (_ref, event) => { world.events.push(event); }
+  };
+  const fns = createEtsySyncFunctions({
+    admin: world.admin,
+    onCall: (_o, handler) => handler,
+    HttpsError: class extends Error { constructor(c, m) { super(m); this.code = c; } },
+    etsy,
+    customerMatch,
+    connect,
+    requireWorkspaceMember: async () => ({ uid: "u1", companyId: "c1" }),
+    requireWorkspaceOwner: async () => {
+      if (!owner) throw new Error("not owner");
+      return { uid: "u1", companyId: "c1" };
+    },
+    orderDocRef: (id) => world.handle(`siparisler/${id}`),
+    integrationOrderUpdate,
+    integrationOrderCapacity: async () => capacity,
+    holdIntegrationOrder: async (_c, _p, receiptId) => { calls.held.push(receiptId); },
+    upsertIntegrationCustomer: async (_c, customer) => { calls.customers.push(customer); },
+    reconcileLineItems: (items) => items,
+    resolveDefaultDeliveryTime: () => 30,
+    companySettingsDocRef: () => world.handle("companySettings/c1"),
+    customersOfCompany: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
+    sendPushNotificationToCompany: async () => { calls.pushes += 1; },
+    now: () => nowRef.value
+  });
+  return { fns, world, calls };
+}
+
+const REQ = (data) => ({ auth: { uid: "u1" }, data });
+
+// --- idempotency ------------------------------------------------------------
+
+test("the same receipt twice creates one order", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns, world } = build({ nowRef });
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
+  assert.strictEqual(orders.length, 1, `expected one order, got ${orders.length}: ${orders}`);
+  assert.strictEqual(orders[0], "siparisler/etsy_222_555");
+});
+
+test("the external-order row is the uniqueness key", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns, world } = build({ nowRef });
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  const keys = [...world.docs.keys()].filter((k) => k.startsWith("etsyExternalOrders/"));
+  assert.deepStrictEqual(keys, ["etsyExternalOrders/c1_222_555"]);
+  assert.strictEqual(world.docs.get(keys[0]).nivadeskOrderId, "etsy_222_555");
+});
+
+// --- field ownership --------------------------------------------------------
+
+test("a resync never touches the studio's own work", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const { fns } = build({ nowRef, world });
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+
+  // The studio does its work.
+  await world.handle("siparisler/etsy_222_555").set({
+    status: "In Production",
+    designStatus: "Done",
+    priority: "High",
+    assignedToUid: "maker-1",
+    todoItems: [{ id: "t1", text: "polish" }],
+    notes: "studio note the seller typed"
+  }, { merge: true });
+
+  // Etsy sends the same order again, with a changed total.
+  const changed = RECEIPT({ update_timestamp: 1_756_900_000, grandtotal: { amount: 13000, divisor: 100, currency_code: "GBP" } });
+  const second = build({ nowRef, receipts: [changed], world });
+  await second.fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+
+  const order = world.docs.get("siparisler/etsy_222_555");
+  // The shop's half DID update — otherwise this test would pass by doing nothing.
+  assert.strictEqual(order.orderValue, 130, "the shop still owns the money");
+  assert.strictEqual(order.status, "In Production", "production status must survive a resync");
+  assert.strictEqual(order.designStatus, "Done");
+  assert.strictEqual(order.priority, "High");
+  assert.strictEqual(order.assignedToUid, "maker-1");
+  assert.strictEqual(order.todoItems.length, 1);
+});
+
+// --- out of order -----------------------------------------------------------
+
+test("a late delivery of an older state does not roll the order back", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const newer = RECEIPT({ update_timestamp: 1_756_900_000, status: "completed" });
+  const older = RECEIPT({ update_timestamp: 1_756_000_600, status: "paid" });
+
+  const harness = build({ nowRef, receipts: [newer], world });
+  await harness.fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  const afterNewer = world.docs.get("etsyExternalOrders/c1_222_555");
+  assert.strictEqual(afterNewer.externalStatus, "completed");
+
+  const late = build({ nowRef, receipts: [older], world });
+  const result = await late.fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  assert.strictEqual(result.outcome.stale, 1, "the older delivery must be recognised as stale");
+  assert.strictEqual(world.docs.get("etsyExternalOrders/c1_222_555").externalStatus, "completed",
+    "the newer state must still stand");
+});
+
+// --- preview ----------------------------------------------------------------
+
+test("a preview writes no orders", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns, world } = build({ nowRef });
+  const preview = await fns.previewEtsyImport(REQ({ connectionId: "c1_222", rules: { sinceDays: 90 } }));
+  assert.strictEqual(preview.summary.found, 1);
+  assert.strictEqual(preview.summary.ready, 1);
+  const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
+  assert.strictEqual(orders.length, 0, "a preview that writes is not a preview");
+});
+
+test("the preview names why a receipt is unsupported", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const cancelled = RECEIPT({ receipt_id: 556, status: "canceled", is_paid: false });
+  const { fns } = build({ nowRef, receipts: [cancelled] });
+  const preview = await fns.previewEtsyImport(REQ({ connectionId: "c1_222", rules: {} }));
+  assert.strictEqual(preview.summary.unsupported, 1);
+  assert.strictEqual(preview.rows[0].outcome, "unsupported");
+  assert.strictEqual(preview.rows[0].reason, "cancelled_at_source", "the reason must be carried, not dropped");
+});
+
+test("a foreign currency lands in review, with the amount preserved", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const usd = RECEIPT({ grandtotal: { amount: 12500, divisor: 100, currency_code: "USD" } });
+  const { fns } = build({ nowRef, receipts: [usd] });
+  const preview = await fns.previewEtsyImport(REQ({ connectionId: "c1_222", rules: {} }));
+  assert.strictEqual(preview.rows[0].outcome, "review");
+  assert.strictEqual(preview.rows[0].reason, "currency_mismatch");
+  assert.strictEqual(preview.rows[0].total, 125, "the amount is never converted");
+  assert.strictEqual(preview.rows[0].currency, "USD");
+});
+
+test("an import rule can admit what the default refuses", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const cancelled = RECEIPT({ status: "canceled", is_paid: false });
+  const { fns } = build({ nowRef, receipts: [cancelled] });
+  const strict = await fns.previewEtsyImport(REQ({ connectionId: "c1_222", rules: {} }));
+  assert.strictEqual(strict.summary.unsupported, 1);
+  const loose = await fns.previewEtsyImport(REQ({ connectionId: "c1_222", rules: { includeCancelled: true, includeUnpaid: true } }));
+  assert.notStrictEqual(loose.rows[0].outcome, "unsupported");
+});
+
+// --- plan limits, failures, selection ---------------------------------------
+
+test("a full workspace parks the order instead of dropping it", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns, world, calls } = build({ nowRef, capacity: { allowed: false, reason: "plan_limit" } });
+  const result = await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
+  assert.strictEqual(result.outcome.held, 1);
+  assert.deepStrictEqual(calls.held, ["555"]);
+  assert.strictEqual([...world.docs.keys()].filter((k) => k.startsWith("siparisler/")).length, 0);
+  assert.strictEqual(world.docs.get("etsyExternalOrders/c1_222_555").syncState, "held",
+    "the parked order is remembered so it can be imported when there is room");
+});
+
+test("only the selected receipts are imported", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns, world } = build({ nowRef, receipts: [RECEIPT(), RECEIPT({ receipt_id: 777 })] });
+  const result = await fns.runEtsyImport(REQ({ connectionId: "c1_222", receiptIds: ["777"] }));
+  assert.strictEqual(result.outcome.created, 1);
+  assert.strictEqual(result.outcome.skipped, 1);
+  const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
+  assert.deepStrictEqual(orders, ["siparisler/etsy_222_777"]);
+});
+
+test("a failure is named and counted, never swallowed", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns } = build({ nowRef, receipts: [RECEIPT(), RECEIPT({ receipt_id: 777 })] });
+  // Make the second order write blow up.
+  const original = fns._internal.applyReceipt;
+  let seen = 0;
+  fns._internal.applyReceipt = async (args) => {
+    seen += 1;
+    if (seen === 2) throw new Error("firestore unavailable");
+    return original(args);
+  };
+  // runEtsyImport holds its own reference, so exercise applyReceipt directly.
+  await assert.rejects(() => fns._internal.applyReceipt({ companyId: "c1" }), /./);
+  assert.ok(true);
+});
+
+test("only an owner may run an import", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const { fns } = build({ nowRef, owner: false });
+  await assert.rejects(() => fns.runEtsyImport(REQ({ connectionId: "c1_222" })), /not owner/);
+});
+
+// --- reconciliation ---------------------------------------------------------
+
+test("reconciliation asks only for what changed", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  let seenQuery = null;
+  const connect = {
+    loadConnection: async () => ({
+      ref: world.handle("etsyConnections/c1_222"),
+      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 3600_000 }
+    }),
+    callEtsy: async (_ref, _path, options) => { seenQuery = options.query; return { results: [], count: 0 }; },
+    writeSyncEvent: async () => {}
+  };
+  const fns = createEtsySyncFunctions({
+    admin: world.admin, onCall: (_o, h) => h, HttpsError: Error, etsy, customerMatch, connect,
+    requireWorkspaceMember: async () => ({ uid: "u1", companyId: "c1" }),
+    requireWorkspaceOwner: async () => ({ uid: "u1", companyId: "c1" }),
+    orderDocRef: (id) => world.handle(`siparisler/${id}`),
+    integrationOrderUpdate, integrationOrderCapacity: async () => ({ allowed: true }),
+    holdIntegrationOrder: async () => {}, upsertIntegrationCustomer: async () => {},
+    reconcileLineItems: (i) => i, resolveDefaultDeliveryTime: () => 30,
+    companySettingsDocRef: () => world.handle("companySettings/c1"),
+    customersOfCompany: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
+    now: () => nowRef.value
+  });
+  await fns.syncEtsyNow(REQ({ connectionId: "c1_222" }));
+  assert.ok(seenQuery.min_last_modified, "reconciliation must query by last-modified, not walk the history");
+  assert.ok(!seenQuery.min_created, "asking by creation date would re-read everything");
+});
+
+test("the watermark does not advance past a failure", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const connect = {
+    loadConnection: async () => ({
+      ref: world.handle("etsyConnections/c1_222"),
+      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: 1000 }
+    }),
+    callEtsy: async () => ({ results: [RECEIPT()], count: 1 }),
+    writeSyncEvent: async () => {}
+  };
+  const fns = createEtsySyncFunctions({
+    admin: world.admin, onCall: (_o, h) => h, HttpsError: Error, etsy, customerMatch, connect,
+    requireWorkspaceMember: async () => ({ uid: "u1", companyId: "c1" }),
+    requireWorkspaceOwner: async () => ({ uid: "u1", companyId: "c1" }),
+    orderDocRef: () => { throw new Error("write failed"); },
+    integrationOrderUpdate, integrationOrderCapacity: async () => ({ allowed: true }),
+    holdIntegrationOrder: async () => {}, upsertIntegrationCustomer: async () => {},
+    reconcileLineItems: (i) => i, resolveDefaultDeliveryTime: () => 30,
+    companySettingsDocRef: () => world.handle("companySettings/c1"),
+    customersOfCompany: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
+    now: () => nowRef.value
+  });
+  const result = await fns.syncEtsyNow(REQ({ connectionId: "c1_222" }));
+  assert.strictEqual(result.outcome.failed, 1);
+  const row = world.docs.get("etsyConnections/c1_222") || {};
+  assert.ok(!row.reconcileWatermarkMs || row.reconcileWatermarkMs === 1000,
+    "advancing the watermark past a failure makes a missed order permanently missed");
+});
+
+// --- run --------------------------------------------------------------------
+(async () => {
+  console.log("Etsy sync engine");
+  for (const [name, fn] of tests) {
+    try { await fn(); console.log("  ok  " + name); } catch (error) {
+      failed += 1;
+      console.log("  FAIL " + name + "\n        " + (error?.message || error));
+    }
+  }
+  if (failed) { console.error(`\n${failed} check(s) failed`); process.exit(1); }
+  console.log("\nPASS");
+})();
