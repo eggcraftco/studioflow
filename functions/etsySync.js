@@ -241,6 +241,9 @@ function createEtsySyncFunctions(deps) {
 
       rows.push({
         receiptId: normalised.source.receiptId,
+        // The buyer id, not the receipt id, is the identity a remembered match
+        // is keyed on — the client needs it to resolve one.
+        buyerId: normalised.source.buyerUserId,
         alreadyImported: already,
         outcome,
         reason: verdict.reason || (proposal.decision === "review" ? "customer_review" : ""),

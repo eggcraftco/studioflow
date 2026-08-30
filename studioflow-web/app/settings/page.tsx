@@ -28,6 +28,7 @@ import {
   type IntegrationSignals,
 } from "@/lib/studioflow/integrations";
 import { httpsCallable } from "firebase/functions";
+import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
@@ -5011,6 +5012,7 @@ function IntegrationsSection({
           <strong>{INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? t("Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "woocommerce" ? <WooCommerceIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
