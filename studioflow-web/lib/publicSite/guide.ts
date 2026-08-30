@@ -704,6 +704,12 @@ const TREE_EN: GuideNode[] = [
         "Open Banking consent lasts 90 days: NivaDesk shows the renewal date, warns when it is close, and Reconnect renews it in a minute.",
         "Disconnect keeps everything already imported; deleting the imported data is a separate, explicit choice. The Activity view shows the connection's own diary — syncs, failures, connects and disconnects."
       ] },
+      { kind: "sub", text: "Choosing the period, and any date range" },
+      { kind: "bullets", items: [
+        "Weekly, Monthly and Yearly step through whole periods with the arrows beside them.",
+        "Date range takes any two dates instead — pick them in either order, and every figure on the screen (spent, incoming, categories, the transaction list) follows that range.",
+        "In a date range the arrows go, because a range you chose by hand has no next or previous, and the 'vs' comparison is against the same number of days ending the day before your range starts."
+      ] },
       { kind: "sub", text: "Transactions, categories and VAT" },
       { kind: "bullets", items: [
         "Every transaction gets a category; rules apply them automatically ('always categorise this keyword as Software') and each automatic change says which rule did it.",
@@ -715,7 +721,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "steps", items: [
         "Open a transaction and attach its receipt: upload a photo or PDF, or Choose from Files to reference an invoice already in your library — nothing is copied twice.",
         "Or snap the receipt first: NivaDesk reads the amount and date and suggests the matching transaction.",
-        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears."
+        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears.",
+        "Everything waiting sits under Receipts in a 'Waiting for the bank' section, which is always there and says so even when it is empty. Receipts sent from the NivaDesk ChatGPT app land here too when their payment has not reached the feed yet. Match now retries the matching, or you can assign one to a transaction by hand — or remove it."
       ] },
       { kind: "sub", text: "Recurring and incoming" },
       { kind: "bullets", items: [
@@ -739,6 +746,9 @@ const TREE_EN: GuideNode[] = [
         "See who added each file.",
         "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
         "To add or delete files, open that order's own Client Files card.",
+      ] },
+      { kind: "sub", text: "Opening a file, and keeping it offline" },
+      { kind: "bullets", items: [
         "Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.",
         "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
         "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
@@ -855,6 +865,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-woocommerce",
         title: "Store & website integrations",
         blocks: [
+          { kind: "sub", text: "Connected apps: the Integrations screen" },
           { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
           { kind: "bullets", items: [
             "WooCommerce: open its card, press Set up, then create one webhook (Order created) in WooCommerce and paste the delivery URL.",
@@ -1645,6 +1656,12 @@ const TREE_TR: GuideNode[] = [
         "Open Banking rızası 90 gün sürer: NivaDesk yenileme tarihini gösterir, yaklaşınca uyarır; Yeniden bağlan bir dakikada tazeler.",
         "Bağlantıyı kes içe aktarılmış her şeyi korur; veriyi silmek ayrı ve açık bir karardır. Etkinlik görünümü bağlantının kendi günlüğünü gösterir — eşitlemeler, hatalar, bağlanma ve kesilmeler."
       ] },
+      { kind: "sub", text: "Dönem seçimi ve istediğiniz tarih aralığı" },
+      { kind: "bullets", items: [
+        "Haftalık, Aylık ve Yıllık, yanındaki oklarla tam dönemler arasında gezinir.",
+        "Tarih aralığı ise istediğiniz iki tarihi alır — hangi sırayla seçerseniz seçin, ekrandaki her rakam (harcama, gelen, kategoriler, hareket listesi) o aralığa uyar.",
+        "Tarih aralığında oklar kalkar, çünkü elle seçtiğiniz bir aralığın öncesi ya da sonrası yoktur; 'vs' karşılaştırması da aralığınızın başladığı günün bir öncesinde biten, aynı sayıda güne karşı yapılır."
+      ] },
       { kind: "sub", text: "Hareketler, kategoriler ve KDV" },
       { kind: "bullets", items: [
         "Her hareket bir kategori alır; kurallar bunu kendiliğinden uygular ('bu kelimeyi hep Yazılım yap') ve her otomatik değişiklik hangi kuralın yaptığını söyler.",
@@ -1656,7 +1673,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "steps", items: [
         "Hareketi açın ve fişini ekleyin: fotoğraf ya da PDF yükleyin, veya kütüphanenizdeki faturayı Dosyalardan seç ile bağlayın — hiçbir şey ikinci kez kopyalanmaz.",
         "Ya da önce fişi çekin: NivaDesk tutarı ve tarihi okur, eşleşen hareketi önerir.",
-        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir."
+        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir.",
+        "Bekleyen her şey Fişler altındaki 'Bankayı bekleyenler' bölümündedir; bu bölüm hep oradadır ve boşken de bunu söyler. NivaDesk ChatGPT uygulamasından gönderilen, ödemesi henüz akışa düşmemiş fişler de buraya iner. Şimdi eşleştir yeniden dener, ya da elle bir harekete atarsınız — veya kaldırırsınız."
       ] },
       { kind: "sub", text: "Tekrarlayan ve gelen" },
       { kind: "bullets", items: [
@@ -1680,6 +1698,9 @@ const TREE_TR: GuideNode[] = [
         "Her dosyayı kimin eklediğini görün.",
         "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
         "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın.",
+      ] },
+      { kind: "sub", text: "Dosya açma ve çevrimdışı tutma" },
+      { kind: "bullets", items: [
         "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
         "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",
         "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
@@ -1796,6 +1817,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-woocommerce",
         title: "Mağaza ve web sitesi entegrasyonları",
         blocks: [
+          { kind: "sub", text: "Bağlı uygulamalar: Integrations ekranı" },
           { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
           { kind: "bullets", items: [
             "WooCommerce: kartını aç, Set up'a bas, sonra WooCommerce'te bir webhook (Order created) oluşturup delivery URL'ini yapıştır.",
