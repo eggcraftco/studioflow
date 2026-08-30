@@ -3669,18 +3669,25 @@ function websiteAssistantGuideBlock(question) {
       // Same reasoning as the in-app assistant: keyword overlap cannot match
       // a Turkish question against an English guide, and a wrong "not
       // covered" is worse than a few thousand extra tokens.
+      // Skip a chapter that will not fit rather than stopping at it: stopping
+      // drops everything after it, and "after it" is always whatever was
+      // written most recently, so a newly documented feature would be invisible
+      // here on the day it shipped.
       let budget = APP_ASSISTANT_FULL_CORPUS_BUDGET;
       const all = [];
       for (const section of sections) {
         const chunk = `## ${String(section.title || "")}\n${String(section.text || "")}`;
-        if (budget - chunk.length < 0) break;
+        if (budget - chunk.length < 0) continue;
         budget -= chunk.length;
         all.push(chunk);
       }
       return all.join("\n\n");
     }
+    // A chapter cut at 2000 characters loses its end, and the end is where the
+    // newest sub-sections live - the stocktake answer sat just past the cut.
+    // Three chapters at 6000 still leave room inside the same budget.
     return scored
-      .map((row) => `## ${String(row.section.title || "")}\n${String(row.section.text || "").slice(0, 2000)}`)
+      .map((row) => `## ${String(row.section.title || "")}\n${String(row.section.text || "").slice(0, 6000)}`)
       .join("\n\n");
   } catch (error) {
     console.warn("websiteAssistant guide grounding failed:", error?.message || error);
@@ -3702,6 +3709,7 @@ function websiteAssistantSystemPrompt(language, guideBlock = "") {
     "4b. HOW-TO questions (which button, which menu, step by step): answer ONLY from the guide excerpts below. If no excerpt covers those steps, that is an unconfident case — never improvise steps, screens or menu paths, and never answer a how-to question by pointing at the ChatGPT app.",
     "5. Keep confident replies short: two or three sentences, no bullet lists unless the visitor asks for a comparison.",
     `6. Reply in the visitor's language. Their site language is "${language || "English"}", but follow the language they actually write in.`,
+    "6b. A visitor may switch language mid-conversation, or ask you to answer in another language. Do that, and answer the question in the same turn. Switching language is never a reason to be unsure: the facts do not change with the language they are written in, so judge confidence on the facts alone and then write the answer in the language asked for.",
     "7. Never ask for passwords, card details or API keys.",
     "8. You cannot look inside anyone's workspace or account, and you cannot change anything. Say so plainly if asked.",
     "",
@@ -3877,7 +3885,15 @@ function appAssistantCorpus() {
 const APP_ASSISTANT_STOPWORDS = new Set([
   "the", "and", "for", "with", "how", "what", "where", "when", "does", "can", "you",
   "your", "this", "that", "from", "into", "have", "has", "are", "was", "will", "would",
-  "there", "their", "about", "which", "who", "why", "not", "but", "all", "any", "get"
+  "there", "their", "about", "which", "who", "why", "not", "but", "all", "any", "get",
+  // Politeness and instructions are addressed to the assistant, not to the
+  // guide, and they were actively making answers worse: "answer" stuck to the
+  // heading "What your setup answers change" and "now" to the middle of
+  // "known", so a question that asked nicely was handed four irrelevant
+  // chapters instead of the one that had the answer.
+  "please", "answer", "answers", "reply", "explain", "tell", "show", "give",
+  "now", "again", "also", "just", "some", "need", "want", "would", "could",
+  "should", "help", "thanks", "thank", "hello", "lütfen", "bana", "biraz"
 ]);
 
 function appAssistantTokens(text) {
@@ -3928,7 +3944,11 @@ function appAssistantRelevantSections(question, limit = 4) {
   // perfectly; the old rule read that as failure and posted the whole guide.
   // A lone match is now kept when it is strong enough to have matched a title
   // or a heading, not merely a word in the prose.
-  if (matched.length >= 2 || (ranked[0] && ranked[0].score >= 4)) return matched;
+  // A token found in a title or a sub-heading scores 3 (one for the match, two
+  // for where it landed). Requiring 4 asked for a title AND a heading, which is
+  // not what the paragraph above promises and is not what a one-word question
+  // like "stocktake" can ever produce.
+  if (matched.length >= 2 || (ranked[0] && ranked[0].score >= 3)) return matched;
 
   // The fallback used to walk the guide in document order and stop at the first
   // chapter that overflowed the budget - which meant the chapters it dropped
