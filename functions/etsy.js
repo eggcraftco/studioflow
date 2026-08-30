@@ -43,10 +43,16 @@ const ETSY_API_BASE = "https://openapi.etsy.com/v3/application";
 // of dishonesty on the consent screen the seller reads.
 const ETSY_SCOPES = ["transactions_r", "email_r", "shops_r"];
 
-// Etsy allows 10 requests/second and 10,000/day per app. We stay well under the
-// per-second ceiling by serialising each connection's calls with a small delay
-// rather than by bursting and handling 429s — a 429 costs a whole retry cycle.
-const ETSY_MIN_CALL_GAP_MS = 120;
+// The NivaDesk app's actual limit, read off the Etsy developer dashboard rather
+// than assumed: 5 requests/second and 5,000/day. That daily figure is the one
+// that shapes the sync engine — a full re-import of a busy shop can spend a
+// meaningful slice of it, which is why reconciliation queries by
+// min_last_modified instead of walking the whole history again.
+// 220ms between calls keeps us under 5/s with room to spare; bursting into a
+// 429 costs a whole retry cycle and buys nothing.
+const ETSY_REQUESTS_PER_SECOND = 5;
+const ETSY_REQUESTS_PER_DAY = 5000;
+const ETSY_MIN_CALL_GAP_MS = 220;
 const ETSY_MAX_ATTEMPTS = 4;
 
 // Standard Webhooks: reject anything whose timestamp is outside this window so
@@ -400,6 +406,8 @@ module.exports = {
   ETSY_API_BASE,
   ETSY_SCOPES,
   ETSY_MIN_CALL_GAP_MS,
+  ETSY_REQUESTS_PER_SECOND,
+  ETSY_REQUESTS_PER_DAY,
   WEBHOOK_TOLERANCE_SECONDS,
   OAUTH_STATE_TTL_MS,
   CONNECTION_COLLECTION,

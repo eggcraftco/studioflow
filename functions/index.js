@@ -28,6 +28,8 @@ const TRACK17_TOKEN = defineSecret("TRACK17_TOKEN");
 const ROYALMAIL_CLIENT_ID = defineSecret("ROYALMAIL_CLIENT_ID");
 const ROYALMAIL_CLIENT_SECRET = defineSecret("ROYALMAIL_CLIENT_SECRET");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
+const ETSY_KEYSTRING = defineSecret("ETSY_KEYSTRING");
+const ETSY_TOKEN_KEY = defineSecret("ETSY_TOKEN_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
@@ -5639,6 +5641,32 @@ Object.assign(exports, inventoryCallables);
 // Schedule ("when is it due"). It answers "where is this on the bench right
 // now" and deliberately keeps that answer apart from order, payment and
 // delivery status — see the header of production.js for the reasoning.
+const etsyModule = require("./etsy");
+const { createEtsyConnectFunctions } = require("./etsyConnect");
+// Etsy's callback URL is registered with Etsy itself and cannot drift: it is
+// the one address their consent screen is allowed to return the seller to.
+const ETSY_REDIRECT_URI = "https://europe-west2-eggcraft-studio.cloudfunctions.net/etsyOAuthCallback";
+const etsyConnectExports = createEtsyConnectFunctions({
+  admin,
+  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
+  HttpsError,
+  etsy: etsyModule,
+  keystring: () => ETSY_KEYSTRING.value(),
+  tokenKey: () => ETSY_TOKEN_KEY.value(),
+  redirectUri: () => ETSY_REDIRECT_URI,
+  // Connecting or cutting a shop loose is an owner/admin act: it changes what
+  // data flows into the workspace, which a viewer must not be able to do.
+  requireWorkspaceOwner: (request) => requireWorkspaceForBilling(request, true),
+  requireWorkspaceMember: (request) => requireWorkspaceForBilling(request, false),
+  appReturnUrl: () => "https://nivadesk.app/settings"
+});
+exports.beginEtsyConnect = etsyConnectExports.beginEtsyConnect;
+exports.etsyOAuthCallback = etsyConnectExports.etsyOAuthCallback;
+exports.getEtsyConnections = etsyConnectExports.getEtsyConnections;
+exports.verifyEtsyConnection = etsyConnectExports.verifyEtsyConnection;
+exports.disconnectEtsyShop = etsyConnectExports.disconnectEtsyShop;
+
 const { createProductionFunctions } = require("./production");
 const productionExports = createProductionFunctions({
   admin,
