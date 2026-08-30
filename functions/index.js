@@ -3916,13 +3916,19 @@ function appAssistantRelevantSections(question, limit = 4) {
     return { section, score };
   });
 
-  const matched = scored
+  const ranked = scored
     .filter((item) => item.score >= 2)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.section);
+    .slice(0, limit);
+  const matched = ranked.map((item) => item.section);
 
-  if (matched.length >= 2) return matched;
+  // Two weak matches were trusted while one decisive match was thrown away.
+  // "What does Make Offline do?" scores 6 on Files - title, heading and body
+  // all say it - and nothing else scores at all, which is retrieval working
+  // perfectly; the old rule read that as failure and posted the whole guide.
+  // A lone match is now kept when it is strong enough to have matched a title
+  // or a heading, not merely a word in the prose.
+  if (matched.length >= 2 || (ranked[0] && ranked[0].score >= 4)) return matched;
 
   let used = 0;
   const all = [];
@@ -9365,8 +9371,13 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
   // who never picked a theme is running on — moving it would take them off the
   // system setting they chose by not choosing. This only touches accounts being
   // created right now, and Settings can move it to Dark or System afterwards.
+  // The language they signed up in is the language they get. Someone who read
+  // the Turkish page, filled in a Turkish form and pressed a Turkish button has
+  // already said which language they want; opening the app in English asks them
+  // to say it again. Anything we do not recognise falls back to English.
   batch.set(personalInterfaceSettingsDocRef(uid, uid), {
     appTheme: "Light",
+    selectedLanguage: cleanStudioLanguage(request.data?.language),
     updatedAt: timestamp
   }, { merge: true });
 

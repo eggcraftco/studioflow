@@ -104,6 +104,20 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "plan-where-billed",
+        title: "Where your plan is billed, and why you can only buy in one place",
+        blocks: [
+          { kind: "para", text: "A NivaDesk plan can be paid for in four places: by card on the website, through the App Store on Mac and iPhone, through Google Play on Android, or on your Shopify invoice if you installed us from the Shopify App Store. Whichever one you used is the only place that plan can be changed." },
+          { kind: "bullets", items: [
+            "The plan page in every app tells you where your subscription lives, and does not offer to sell you the same plan a second time — buying again somewhere else would mean two companies charging you for one workspace, and neither of them would know about the other.",
+            "To move to a different plan, change it where you already pay: the website Billing portal, your Apple subscriptions, your Google Play subscriptions, or the NivaDesk app inside your Shopify admin.",
+            "To move to a different place, cancel the subscription you have first, then buy again where you want it. Your workspace and everything in it stay exactly as they are.",
+            "Changing tier where you already pay — Lite to Pro, monthly to yearly — is a normal upgrade and works as it always did.",
+            "Extra storage and extra team seats are add-ons, not plans. They are sold wherever you are, whichever place your plan is billed."
+          ] }
+        ]
+      },
+      {
         id: "trial-monthly-yearly",
         title: "Monthly and yearly billing",
         blocks: [
@@ -747,7 +761,7 @@ const TREE_EN: GuideNode[] = [
         "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
         "To add or delete files, open that order's own Client Files card.",
       ] },
-      { kind: "sub", text: "Opening a file, and keeping it offline" },
+      { kind: "sub", text: "Opening a file, and Make Offline (keeping a file offline)" },
       { kind: "bullets", items: [
         "Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.",
         "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
@@ -1066,6 +1080,20 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Çalışma alanı Free'ye döner ve bir bildirim bunu açıkça söyler; \"Free ile devam et\" ile \"Bir plan seç\" yan yana durur. Hiçbir şey silinmez: bütün siparişler, müşteriler, dosyalar ve notlar görünür ve dışa aktarılabilir kalır." },
           { kind: "para", text: "Duran şeyler ücretli plan özellikleridir — Client Files, gelişmiş finans, ekip mesajlaşması — ve Free'nin 10 aktif sipariş sınırının üstünde yeni sipariş açmak. Biten siparişleri arşivlemek sizi sınırın altına döndürür. NivaDesk hangi siparişlerinizin kalacağına asla kendisi karar vermez." },
           { kind: "para", text: "Sonradan yükseltmek her şeyi kaldığı yerden devam ettirir." }
+        ]
+      },
+      {
+        id: "plan-where-billed",
+        title: "Planınız nerede faturalanıyor ve neden tek yerden satın alınır",
+        blocks: [
+          { kind: "para", text: "Bir NivaDesk planı dört yerden ödenebilir: web sitesinde kartla, Mac ve iPhone'da App Store üzerinden, Android'de Google Play üzerinden, ya da bizi Shopify App Store'dan kurduysanız Shopify faturanızda. Hangisini kullandıysanız, o plan yalnızca orada değiştirilebilir." },
+          { kind: "bullets", items: [
+            "Her uygulamadaki plan sayfası aboneliğinizin nerede olduğunu söyler ve aynı planı ikinci kez satmaya kalkmaz — başka bir yerden tekrar almak, tek bir çalışma alanı için iki şirketin sizden ayrı ayrı ücret alması demek olurdu ve ikisinin de diğerinden haberi olmazdı.",
+            "Farklı bir plana geçmek için, hâlihazırda ödediğiniz yerden değiştirin: web sitesindeki Faturalandırma portalı, Apple abonelikleriniz, Google Play abonelikleriniz veya Shopify yönetim panelinizdeki NivaDesk uygulaması.",
+            "Farklı bir yere taşınmak için önce mevcut aboneliğinizi iptal edin, sonra istediğiniz yerden tekrar satın alın. Çalışma alanınız ve içindeki her şey olduğu gibi kalır.",
+            "Zaten ödediğiniz yerde kademe değiştirmek — Lite'tan Pro'ya, aylıktan yıllığa — normal bir yükseltmedir ve her zamanki gibi çalışır.",
+            "Ek depolama ve ek ekip koltuğu birer eklentidir, plan değildir. Planınız nerede faturalanıyor olursa olsun, bulunduğunuz yerden satın alınabilirler."
+          ] }
         ]
       },
       {
@@ -1699,7 +1727,7 @@ const TREE_TR: GuideNode[] = [
         "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
         "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın.",
       ] },
-      { kind: "sub", text: "Dosya açma ve çevrimdışı tutma" },
+      { kind: "sub", text: "Dosya açma ve Make Offline (dosyayı çevrimdışı tutma)" },
       { kind: "bullets", items: [
         "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
         "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",

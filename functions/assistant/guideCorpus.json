@@ -51,6 +51,13 @@
    "text": "The workspace goes back to Free, and a notice says so plainly with \"Continue on Free\" and \"Choose a plan\" side by side. Nothing is deleted: every order, customer, file and note stays visible and exportable.\nWhat stops is the paid-plan features — Client Files, advanced finance, team messaging — and creating new orders beyond the Free limit of 10 active ones. Archiving finished orders brings you back under the limit. NivaDesk never decides which of your orders to keep.\nUpgrading later picks everything up exactly where it stopped."
   },
   {
+   "id": "plan-where-billed",
+   "title": "Where your plan is billed, and why you can only buy in one place",
+   "path": "Your free trial and plans › Where your plan is billed, and why you can only buy in one place",
+   "headings": "",
+   "text": "A NivaDesk plan can be paid for in four places: by card on the website, through the App Store on Mac and iPhone, through Google Play on Android, or on your Shopify invoice if you installed us from the Shopify App Store. Whichever one you used is the only place that plan can be changed.\n- The plan page in every app tells you where your subscription lives, and does not offer to sell you the same plan a second time — buying again somewhere else would mean two companies charging you for one workspace, and neither of them would know about the other.\n- To move to a different plan, change it where you already pay: the website Billing portal, your Apple subscriptions, your Google Play subscriptions, or the NivaDesk app inside your Shopify admin.\n- To move to a different place, cancel the subscription you have first, then buy again where you want it. Your workspace and everything in it stay exactly as they are.\n- Changing tier where you already pay — Lite to Pro, monthly to yearly — is a normal upgrade and works as it always did.\n- Extra storage and extra team seats are add-ons, not plans. They are sold wherever you are, whichever place your plan is billed."
+  },
+  {
    "id": "trial-monthly-yearly",
    "title": "Monthly and yearly billing",
    "path": "Your free trial and plans › Monthly and yearly billing",
@@ -250,8 +257,8 @@
    "id": "files",
    "title": "Files",
    "path": "Files",
-   "headings": "Opening a file, and keeping it offline",
-   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.\n- Browse and preview files, and open the order a file belongs to.\n- See who added each file.\n- Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.\n- To add or delete files, open that order's own Client Files card.\nOpening a file, and keeping it offline\n- Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.\n- Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.\n- A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
+   "headings": "Opening a file, and Make Offline (keeping a file offline)",
+   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.\n- Browse and preview files, and open the order a file belongs to.\n- See who added each file.\n- Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.\n- To add or delete files, open that order's own Client Files card.\nOpening a file, and Make Offline (keeping a file offline)\n- Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.\n- Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.\n- A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
   },
   {
    "id": "messages",
