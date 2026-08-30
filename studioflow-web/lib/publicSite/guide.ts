@@ -187,6 +187,14 @@ const TREE_EN: GuideNode[] = [
         "You can also print the To Do list and the History log as PDFs.",
         "Customize how all of these look in Settings ▸ PDF Export Settings."
       ] },
+      { kind: "sub", text: "Merging orders that should have been one" },
+      { kind: "bullets", items: [
+        "The same customer ordering twice in a week, or one job that came in through the website and again by email, leaves two orders where there should be one. Tick them in the Orders list and press Merge Selected.",
+        "Choose which one is the primary order — that is the order that survives, keeping its number, its cards and its history.",
+        "Payments move across: every payment recorded on the other orders is added to the primary one, and the amount paid adds up rather than being retyped.",
+        "The orders merged in go to Trash rather than being destroyed, so a merge done by mistake can be undone from Settings ▸ Data Management within 30 days.",
+        "Merging needs a role that can edit orders."
+      ] },
       { kind: "para", text: "Select a card on the left to see exactly what it does and what you can change in it." }
     ],
     children: [
@@ -596,6 +604,14 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Archive a note to clear it from the board without deleting it; Unarchive to bring it back.",
         "Move a note to Trash, Restore it later, or Delete forever to remove it permanently."
+      ] },
+      { kind: "sub", text: "Notes on your phone's home screen" },
+      { kind: "bullets", items: [
+        "iPhone, iPad and Android can put your notes on the home screen as a widget, so the list is readable without opening anything.",
+        "Add it the way you add any widget — press and hold the home screen, then pick NivaDesk.",
+        "Tapping the widget opens Notes at that note.",
+        "Holding the app icon also offers New note, which opens Notes with the composer already open.",
+        "The widget is cleared when you sign out, so notes never stay on the screen of a device you have signed out of."
       ] }
     ]
   },
@@ -703,6 +719,19 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Locations form a tree — a safe holds a drawer holds a tray. Renaming or moving one renames it on every item standing there; a location with stock or child locations inside cannot be deleted.",
         "Suppliers keep contact details plus the paperwork fields an invoice asks for: your own code for them, address, VAT number and billing currency."
+      ] },
+      { kind: "sub", text: "Printing a QR label for an item" },
+      { kind: "bullets", items: [
+        "Every item can print a QR label to stick on the tray, box or bag it lives in.",
+        "The code is a link, not just a number: scanning it with any phone camera opens that item in NivaDesk, so whoever is standing at the shelf sees the stock figure, the location and the photos without searching for it.",
+        "Scanning works for anyone signed in to the workspace; someone who is not signed in is asked to sign in first."
+      ] },
+      { kind: "sub", text: "Stocktake: counting what is really on the shelf" },
+      { kind: "bullets", items: [
+        "A stocktake walks you through counting, one item at a time, and shows the counted figure beside the figure NivaDesk holds.",
+        "Nothing changes until you finish the count. When you do, every difference is written to the movement ledger as a correction, with who counted it and when — so the stock figure and the audit trail can never disagree.",
+        "You can count part of the shelf: filter to a category or a location and stocktake only that.",
+        "The ledger keeps the old figure too, so a miscount can be traced and corrected rather than argued about."
       ] }
     ]
   },
@@ -914,6 +943,14 @@ const TREE_EN: GuideNode[] = [
             "Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.",
             "After importing, Undo this import removes exactly the records that import created. Settings changes are not undone."
           ] },
+          { kind: "sub", text: "Exporting orders to CSV for your accountant" },
+          { kind: "bullets", items: [
+            "Settings ▸ Data Management ▸ Export, or the Export orders to CSV button on the Orders list, opens the export page. The file is a CSV that opens in Excel, Numbers, Google Sheets or any accounting package.",
+            "Four templates, so you send the shape your accountant asked for: Invoices is one row per invoice with status, dates, contact and totals; Line items is one row per product or service line; Payments is one row per payment received, which is the cash ledger; Finance is one row per invoice with the accountant columns — revenue, cost, VAT and net profit.",
+            "Payments and Finance carry money columns, so they are only offered to people whose role can see Financial Info. The other two templates are available to everyone who can export.",
+            "Pick the period from This month, Last month, This quarter, This year, Last year, All time, or a custom range with your own start and end dates.",
+            "Export is available on every plan, including Free — your figures are yours, and you can take them out at any time."
+          ] },
           { kind: "sub", text: "Change history" },
           { kind: "bullets", items: [
             "Every workspace settings save — from web, Mac, iPhone or Android — is recorded as a change entry: which fields changed, when, and by whom. Entries are kept for 90 days.",
@@ -970,6 +1007,13 @@ const TREE_EN: GuideNode[] = [
             "Once a name is set up, the links NivaDesk hands out — the portal link on the order card, estimate links and SMS status updates — use your branded address automatically. Links shared earlier keep working on the old address.",
             "File links follow your name too: opening or sharing a client file uses a clean viewer link on your address (like track.yourdomain.com/f/…) instead of a raw storage URL, and the files a customer opens from their tracking page stay on your domain as well."
           ] },
+          { kind: "sub", text: "The NivaDesk app for ChatGPT" },
+          { kind: "bullets", items: [
+            "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language: what is overdue, what a customer has ordered before, how much stock is left of something.",
+            "Connect it from ChatGPT: find NivaDesk in its apps list and sign in with the NivaDesk account you already use. ChatGPT never sees your password — you approve the connection in NivaDesk, and you can withdraw it later the same way.",
+            "It reads the workspace you approved and answers from it. It cannot see other workspaces, and what your role cannot see in the app it cannot see there either.",
+            "You can also send a receipt or an invoice photo to it. If the payment is already in your bank feed the receipt is matched to it; if the payment has not arrived yet the receipt waits in Banking under Receipts until it does, rather than being lost."
+          ] },
           { kind: "sub", text: "Customer page branding" },
           { kind: "bullets", items: [
             "In the same section, pick an accent colour for the order tracking page — it colours the status and progress dots. Use the default colour button clears it.",
@@ -1000,6 +1044,26 @@ const TREE_EN: GuideNode[] = [
         "Language: choose any of 12 languages; the whole app, including menus and labels, switches instantly.",
         "Appearance: switch between light and dark mode.",
         "Your choices are saved to your account, so they follow you on Mac, iPhone, iPad, Android and web."
+      ] }
+    ]
+  },
+  {
+    id: "notifications",
+    title: "Notifications on your phone and computer",
+    blocks: [
+      { kind: "para", text: "NivaDesk can tell you something happened without you having to look. Notifications arrive on the devices you are signed in on — Mac, iPhone, iPad, Android and the web app — and each one opens the thing it is about." },
+      { kind: "bullets", items: [
+        "A new order arriving from your shop or your website.",
+        "A parcel moving: the first tracking scan, and delivery.",
+        "A note shared with you, and an invitation to work on a note together.",
+        "A message from a teammate, and a reply on a support ticket.",
+        "Anything that lands in the activity list is a notification as well, so the list and the alerts never tell different stories."
+      ] },
+      { kind: "sub", text: "Turning them on, and off" },
+      { kind: "bullets", items: [
+        "The first time you open NivaDesk on a device it asks that device for permission. Say no and nothing else changes; say yes later from the operating system's own notification settings for NivaDesk.",
+        "A device registers itself when you sign in, and is removed when you sign out — so a phone you have signed out of stops receiving anything about that workspace.",
+        "Notifications follow the workspace you are signed in to. They are not sent to people outside it, and a notification meant for particular people is sent only to them."
       ] }
     ]
   }
@@ -1165,6 +1229,14 @@ const TREE_TR: GuideNode[] = [
         "Invoice (Fatura) oluşturun: NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
         "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
         "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
+      ] },
+      { kind: "sub", text: "Tek olması gereken siparişleri birleştirme" },
+      { kind: "bullets", items: [
+        "Aynı müşterinin hafta içinde iki kez sipariş vermesi ya da bir işin hem siteden hem e-postayla gelmesi, tek olması gereken yerde iki sipariş bırakır. Siparişler listesinde ikisini işaretleyin ve Seçilenleri Birleştir'e basın.",
+        "Hangisinin birincil sipariş olacağını seçin — yaşamaya devam eden, numarasını, kartlarını ve geçmişini koruyan sipariş odur.",
+        "Ödemeler taşınır: diğer siparişlere kaydedilmiş her ödeme birincil siparişe eklenir, ödenen tutar yeniden yazılmak yerine toplanır.",
+        "Birleştirilen siparişler yok edilmez, çöp kutusuna gider; yanlışlıkla yapılan bir birleştirme 30 gün içinde Settings ▸ Data Management üzerinden geri alınabilir.",
+        "Birleştirme için siparişleri düzenleyebilen bir rol gerekir."
       ] },
       { kind: "para", text: "Soldan bir kart seçin; tam olarak ne işe yaradığını ve içinde neleri değiştirebileceğinizi görün." }
     ],
@@ -1562,6 +1634,14 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Bir notu silmeden panodan kaldırmak için arşivleyin (Archive); geri getirmek için Unarchive.",
         "Bir notu Çöp'e taşıyın, sonra geri alın (Restore) veya kalıcı silmek için Delete forever."
+      ] },
+      { kind: "sub", text: "Telefonunuzun ana ekranında notlar" },
+      { kind: "bullets", items: [
+        "iPhone, iPad ve Android notlarınızı ana ekrana widget olarak koyabilir; liste hiçbir şey açmadan okunur.",
+        "Herhangi bir widget gibi ekleyin — ana ekrana basılı tutun, sonra NivaDesk'i seçin.",
+        "Widget'a dokunmak Notes'u o notta açar.",
+        "Uygulama simgesine basılı tutmak ayrıca New note sunar; Notes'u yazma alanı açık hâlde açar.",
+        "Çıkış yaptığınızda widget temizlenir; notlar, çıkış yaptığınız bir cihazın ekranında asla kalmaz."
       ] }
     ]
   },
@@ -1669,6 +1749,19 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Konumlar ağaç kurar — kasa çekmeceyi, çekmece tepsiyi barındırır. Birini yeniden adlandırmak veya taşımak, orada duran her üründe adını günceller; içinde stok ya da alt konum olan konum silinemez.",
         "Tedarikçiler iletişim bilgisinin yanında faturanın sorduğu evrak alanlarını tutar: sizin verdiğiniz kod, adres, KDV numarası ve para birimi."
+      ] },
+      { kind: "sub", text: "Bir ürün için QR etiketi yazdırma" },
+      { kind: "bullets", items: [
+        "Her ürün için, durduğu tepsiye, kutuya veya poşete yapıştırılacak bir QR etiketi yazdırılabilir.",
+        "Kod yalnızca bir numara değil, bir bağlantıdır: herhangi bir telefon kamerasıyla okutulduğunda o ürünü NivaDesk'te açar; rafın başındaki kişi aramaya gerek kalmadan stok sayısını, konumu ve fotoğrafları görür.",
+        "Okutma, çalışma alanında oturum açmış herkes için çalışır; oturum açmamış birinden önce giriş yapması istenir."
+      ] },
+      { kind: "sub", text: "Sayım: rafta gerçekte ne olduğunu saymak" },
+      { kind: "bullets", items: [
+        "Sayım sizi ürün ürün ilerletir ve saydığınız adedi NivaDesk'in tuttuğu adedin yanında gösterir.",
+        "Sayımı bitirene kadar hiçbir şey değişmez. Bitirdiğinizde her fark, kimin ne zaman saydığıyla birlikte hareket defterine bir düzeltme olarak yazılır — böylece stok sayısı ile denetim izi asla birbirini tutmazlık edemez.",
+        "Rafın bir bölümünü sayabilirsiniz: bir kategoriye veya konuma göre süzüp yalnızca onu sayın.",
+        "Defter eski adedi de saklar; yanlış bir sayım tartışılmak yerine izlenip düzeltilebilir."
       ] }
     ]
   },
@@ -1880,6 +1973,14 @@ const TREE_TR: GuideNode[] = [
             "Olası kopyalar varsayılan olarak atlanır; bilerek ikinci kopya istiyorsanız Skip likely duplicates işaretini kaldırın. Bir içe aktarma 500 kayıtla sınırlıdır ve dışarıda kalanları söyler.",
             "İçe aktardıktan sonra Undo this import, tam olarak o içe aktarmanın oluşturduğu kayıtları siler. Ayar değişiklikleri geri alınmaz."
           ] },
+          { kind: "sub", text: "Siparişleri muhasebeciniz için CSV olarak dışa aktarma" },
+          { kind: "bullets", items: [
+            "Settings ▸ Data Management ▸ Export ya da Siparişler listesindeki \"Siparişleri CSV'ye aktar\" düğmesi dışa aktarma sayfasını açar. Dosya CSV'dir; Excel, Numbers, Google E-Tablolar veya herhangi bir muhasebe programında açılır.",
+            "Dört şablon var, böylece muhasebecinizin istediği biçimi gönderirsiniz: Invoices her fatura için bir satır — durum, tarihler, iletişim ve toplamlar; Line items her ürün veya hizmet kalemi için bir satır; Payments alınan her ödeme için bir satır, yani kasa defteri; Finance her fatura için muhasebe sütunlarıyla bir satır — ciro, maliyet, KDV ve net kâr.",
+            "Payments ve Finance para sütunları taşır; bu yüzden yalnızca rolü Financial Info görebilen kişilere sunulur. Diğer iki şablon, dışa aktarma yetkisi olan herkeste vardır.",
+            "Dönemi seçin: Bu ay, Geçen ay, Bu çeyrek, Bu yıl, Geçen yıl, Tüm zamanlar veya kendi başlangıç ve bitiş tarihinizle özel aralık.",
+            "Dışa aktarma Free dâhil her planda vardır — rakamlar sizindir, istediğiniz zaman dışarı alabilirsiniz."
+          ] },
           { kind: "sub", text: "Değişiklik geçmişi" },
           { kind: "bullets", items: [
             "Her çalışma alanı ayar kaydı — web, Mac, iPhone veya Android'den — bir değişiklik girdisi olarak kaydedilir: hangi alanlar, ne zaman ve kim tarafından. Girdiler 90 gün tutulur.",
@@ -1936,6 +2037,13 @@ const TREE_TR: GuideNode[] = [
             "Ad kurulduktan sonra NivaDesk'in verdiği bağlantılar — sipariş kartındaki portal bağlantısı, teklif bağlantıları ve SMS durum güncellemeleri — otomatik olarak markalı adresinizi kullanır. Daha önce paylaşılan bağlantılar eski adreste çalışmaya devam eder.",
             "Dosya bağlantıları da adınızı taşır: bir müşteri dosyasını açmak veya paylaşmak, ham depolama URL'si yerine sizin adresinizde temiz bir görüntüleyici bağlantısı (track.sizinsite.com/f/… gibi) kullanır; müşterinin takip sayfasından açtığı dosyalar da sizin domain'inizde kalır."
           ] },
+          { kind: "sub", text: "ChatGPT için NivaDesk uygulaması" },
+          { kind: "bullets", items: [
+            "NivaDesk'in ChatGPT içinde bir uygulaması var; kendi çalışma alanınızı gündelik dille sorabilirsiniz: neyin gecikmiş olduğunu, bir müşterinin daha önce ne sipariş ettiğini, bir üründen ne kadar stok kaldığını.",
+            "ChatGPT'den bağlayın: uygulama listesinde NivaDesk'i bulun ve zaten kullandığınız NivaDesk hesabınızla giriş yapın. ChatGPT parolanızı asla görmez — bağlantıyı NivaDesk'te onaylarsınız ve daha sonra aynı yerden geri alabilirsiniz.",
+            "Onayladığınız çalışma alanını okur ve oradan yanıtlar. Başka çalışma alanlarını göremez; uygulamada rolünüzün göremediği şeyi orada da göremez.",
+            "Ona bir fiş ya da fatura fotoğrafı da gönderebilirsiniz. Ödeme banka akışınızda zaten varsa fiş onunla eşleştirilir; ödeme henüz gelmediyse fiş kaybolmak yerine Banking'de Receipts altında ödeme gelene kadar bekler."
+          ] },
           { kind: "sub", text: "Müşteri sayfası markalama" },
           { kind: "bullets", items: [
             "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
@@ -1966,6 +2074,26 @@ const TREE_TR: GuideNode[] = [
         "Dil: 12 dilden birini seçin; menüler ve etiketler dahil tüm uygulama anında değişir.",
         "Görünüm: açık ve koyu mod arasında geçiş yapın.",
         "Tercihleriniz hesabınıza kaydedilir; Mac, iPhone, iPad, Android ve web'de sizi takip eder."
+      ] }
+    ]
+  },
+  {
+    id: "notifications",
+    title: "Telefonunuzda ve bilgisayarınızda bildirimler",
+    blocks: [
+      { kind: "para", text: "NivaDesk, siz bakmak zorunda kalmadan bir şey olduğunu haber verebilir. Bildirimler oturum açtığınız cihazlara gelir — Mac, iPhone, iPad, Android ve web uygulaması — ve her biri ilgili olduğu şeyi açar." },
+      { kind: "bullets", items: [
+        "Mağazanızdan veya sitenizden yeni bir sipariş gelmesi.",
+        "Bir kargonun hareket etmesi: ilk okutma ve teslimat.",
+        "Sizinle paylaşılan bir not ve bir nota birlikte çalışma daveti.",
+        "Ekip arkadaşınızdan mesaj ve destek talebine gelen yanıt.",
+        "Hareket listesine düşen her şey aynı zamanda bir bildirimdir; liste ile uyarılar asla farklı şeyler anlatmaz."
+      ] },
+      { kind: "sub", text: "Açmak ve kapatmak" },
+      { kind: "bullets", items: [
+        "NivaDesk'i bir cihazda ilk açtığınızda o cihazdan izin ister. Hayır derseniz başka hiçbir şey değişmez; sonra açmak isterseniz işletim sisteminin NivaDesk için kendi bildirim ayarlarından açarsınız.",
+        "Cihaz, oturum açtığınızda kendini kaydeder ve çıkış yaptığınızda kaydı silinir — çıkış yaptığınız bir telefon o çalışma alanıyla ilgili hiçbir şey almayı bırakır.",
+        "Bildirimler oturum açtığınız çalışma alanını izler. Dışarıdaki kişilere gönderilmez ve belirli kişiler için olan bir bildirim yalnızca onlara gider."
       ] }
     ]
   }

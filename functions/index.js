@@ -3930,13 +3930,21 @@ function appAssistantRelevantSections(question, limit = 4) {
   // or a heading, not merely a word in the prose.
   if (matched.length >= 2 || (ranked[0] && ranked[0].score >= 4)) return matched;
 
+  // The fallback used to walk the guide in document order and stop at the first
+  // chapter that overflowed the budget - which meant the chapters it dropped
+  // were always the last ones written, i.e. whatever we shipped most recently.
+  // A new feature could be documented and still be invisible here. Fill the
+  // budget by relevance instead, then hand them over in document order so the
+  // guide still reads in the order it was written.
+  const byRelevance = scored.slice().sort((a, b) => b.score - a.score);
+  const chosen = new Set();
   let used = 0;
-  const all = [];
-  for (const section of corpus) {
-    used += section.text.length;
-    if (used > APP_ASSISTANT_FULL_CORPUS_BUDGET) break;
-    all.push(section);
+  for (const item of byRelevance) {
+    if (used + item.section.text.length > APP_ASSISTANT_FULL_CORPUS_BUDGET) continue;
+    used += item.section.text.length;
+    chosen.add(item.section);
   }
+  const all = corpus.filter((section) => chosen.has(section));
   return all;
 }
 
