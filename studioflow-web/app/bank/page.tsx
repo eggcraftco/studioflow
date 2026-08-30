@@ -2541,7 +2541,7 @@ function BankPageContent() {
                   <div style={bankCard}>
                     <p style={{ ...tileLabel, color: "#16a34a" }}>{t("Receipts matched")}</p>
                     <strong style={tileValue}>{receiptStats.matched}</strong>
-                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.total ? Math.round((receiptStats.matched / receiptStats.total) * 100) : 0}% {t("of")} {receiptStats.total} {t("transactions").toLowerCase()}</span>
+                    <span style={{ fontSize: 11.5, opacity: 0.65 }}>{receiptStats.total ? Math.round((receiptStats.matched / receiptStats.total) * 100) : 0}% {t("of")} {receiptStats.total} {t("transactions")}</span>
                     <TileIcon bg="rgba(22,163,74,0.12)">✓</TileIcon>
                   </div>
                   <div style={bankCard}>
