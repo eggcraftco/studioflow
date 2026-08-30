@@ -527,6 +527,27 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The connection trail. Every sibling bank collection was already excluded
+    // from the wildcard above; this one was missed, which left an audit log any
+    // member could rewrite. Android reads it in the Banking screen, so it stays
+    // readable to whoever can read the feed - and writable to nobody.
+    match /companies/{companyId}/bankAuditLog/{document=**} {
+      allow read: if canReadBankFeed(companyId);
+      allow write: if false;
+    }
+
+    // Stock locations and build recipes: same rule as the rest of inventory,
+    // server-written so a recipe cannot quietly change what a build consumes.
+    match /companies/{companyId}/inventoryLocations/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
+    match /companies/{companyId}/inventoryRecipes/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     // Vendor grouping / manual "this repeats" marks — owner-readable, server-written.
     match /companies/{companyId}/bankVendors/{document=**} {
       allow read: if canReadBankFeed(companyId);
@@ -658,6 +679,9 @@ service cloud.firestore {
         && collectionId != 'customerMergeLog'
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
+        && collectionId != 'bankAuditLog'
+        && collectionId != 'inventoryLocations'
+        && collectionId != 'inventoryRecipes'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -692,6 +716,9 @@ service cloud.firestore {
         && collectionId != 'customerMergeLog'
         && collectionId != 'settingsAuditLog'
         && collectionId != 'heldIntegrationOrders'
+        && collectionId != 'bankAuditLog'
+        && collectionId != 'inventoryLocations'
+        && collectionId != 'inventoryRecipes'
         && canWriteCompanyData(companyId);
     }
 

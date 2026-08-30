@@ -16765,8 +16765,25 @@ async function refreshTrackingCore({ companyId, orderId, trackingNumber, courier
 }
 
 exports.registerTracking = onCall({ secrets: [TRACK17_TOKEN, ROYALMAIL_CLIENT_ID, ROYALMAIL_CLIENT_SECRET], region: "europe-west2" }, async (request) => {
-  const companyId = String(request.data?.companyId || "").trim();
+  // This call spends paid courier-API quota, writes into the workspace and
+  // claims a row in the global trackingLookup collection - the table a courier
+  // webhook reads to find its way back to an order. Without the two checks
+  // below, anyone could register any tracking number against any order and
+  // take over that routing, so prove membership and order ownership first.
+  const { uid, companyId } = await requireNotificationWorkspaceAccess(request);
   const orderId = String(request.data?.orderId || "").trim();
+  if (!orderId) {
+    throw new HttpsError("invalid-argument", "orderId is required.");
+  }
+  const orderOwnerSnap = await orderDocRef(orderId).get();
+  if (!orderOwnerSnap.exists) {
+    throw new HttpsError("not-found", "Order not found.");
+  }
+  if (orderCompanyId(orderOwnerSnap.data() || {}) !== companyId) {
+    throw new HttpsError("permission-denied", "This order does not belong to the active workspace.");
+  }
+  await websiteChatCheckRate("registerTracking", uid, 60);
+
   const trackingNumber = cleanTrackingNumber(request.data?.trackingNumber);
   const courier = String(request.data?.courier || "").trim();
   const language = String(request.data?.language || "English").trim() || "English";
@@ -27850,77 +27867,6 @@ exports.getAdminLookup = onCall({ region: "europe-west2", timeoutSeconds: 120 },
 
 // TEMPORARY one-off: set the Auth email action URL via Identity Toolkit Admin
 // API (console UI was erroring). Remove after use.
-exports.nvOneOffSetActionUrl = onRequest({ region: "europe-west2" }, async (req, res) => {
-  if (String(req.query.key || "") !== "1521c47c82210b1dd8b98ffdd444168b5ffe9d589cf42436") {
-    res.status(403).json({ ok: false });
-    return;
-  }
-  try {
-    const { GoogleAuth } = require("google-auth-library");
-    const authClient = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
-    const client = await authClient.getClient();
-    if (req.query.get === "1") {
-      const current = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
-        method: "GET"
-      });
-      res.status(200).json({
-        ok: true,
-        authorizedDomains: current.data?.authorizedDomains || [],
-        notification: current.data?.notification || null
-      });
-      return;
-    }
-    if (req.query.dns === "1") {
-      const response = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail.dnsInfo.useCustomDomain,notification.sendEmail.dnsInfo.pendingCustomDomain",
-        method: "PATCH",
-        data: { notification: { sendEmail: { dnsInfo: { useCustomDomain: true, pendingCustomDomain: "nivadesk.app" } } } }
-      });
-      res.status(200).json({ ok: true, dnsInfo: response.data?.notification?.sendEmail?.dnsInfo || null });
-      return;
-    }
-    if (req.query.wide === "1") {
-      const current = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
-        method: "GET"
-      });
-      const sendEmail = current.data?.notification?.sendEmail || {};
-      sendEmail.callbackUri = "https://nivadesk.app/auth/action";
-      const response = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail",
-        method: "PATCH",
-        data: { notification: { sendEmail } }
-      });
-      res.status(200).json({ ok: true, callbackUri: response.data?.notification?.sendEmail?.callbackUri || null });
-      return;
-    }
-    if (req.query.addDomain === "1") {
-      const current = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config",
-        method: "GET"
-      });
-      const domains = new Set(current.data?.authorizedDomains || []);
-      domains.add("nivadesk.app");
-      const response = await client.request({
-        url: "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=authorizedDomains",
-        method: "PATCH",
-        data: { authorizedDomains: Array.from(domains) }
-      });
-      res.status(200).json({ ok: true, authorizedDomains: response.data?.authorizedDomains || [] });
-      return;
-    }
-    const url = "https://identitytoolkit.googleapis.com/admin/v2/projects/eggcraft-studio/config?updateMask=notification.sendEmail.callbackUri";
-    const response = await client.request({
-      url,
-      method: "PATCH",
-      data: { notification: { sendEmail: { callbackUri: "https://nivadesk.app/auth/action" } } }
-    });
-    res.status(200).json({ ok: true, callbackUri: response.data?.notification?.sendEmail?.callbackUri || null });
-  } catch (error) {
-    res.status(200).json({ ok: false, error: error?.message || String(error) });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // In-app account deletion (App Store guideline 5.1.1(v) compliance).
