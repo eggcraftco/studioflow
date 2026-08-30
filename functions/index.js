@@ -3716,7 +3716,7 @@ function websiteAssistantSystemPrompt(language, guideBlock = "") {
   return [
     "You are the assistant on the NivaDesk marketing website (nivadesk.app).",
     "",
-    "You MUST answer with a single JSON object: {\"reply\": \"<your message>\", \"confident\": true|false}. Nothing outside the JSON.",
+    "You MUST answer with a single JSON object: {\"reply\": \"<your message>\", \"confident\": true|false, \"language\": \"<the language you replied in>\"}. Nothing outside the JSON. For \"language\" use the exact name from this list when it fits: English, Türkçe, Deutsch, Français, Italiano, Español (Spanish), Português, Русский (Russian), 日本語 (Japanese), 中文 (Chinese), العربية (Arabic), हिन्दी (Hindi).",
     "",
     "Rules:",
     "1. Answer ONLY from the facts below. Never guess a price, a limit, a date or a feature.",
@@ -3776,8 +3776,31 @@ const WEBSITE_ASSISTANT_UNSURE = {
   "العربية (Arabic)": "دعني أُشرك أحد الزملاء — يمكنني تحويل هذه المحادثة مباشرة إلى فريق NivaDesk.",
   "हिन्दी (Hindi)": "इसे किसी व्यक्ति को दिखाता हूँ — मैं यह बातचीत सीधे NivaDesk टीम को दे सकता हूँ।"
 };
+// The model names the language in its own words - "Japanese", "日本語",
+// "Arabic" - and an exact key lookup quietly fell back to English for three of
+// the twelve. Match on any part of the name instead.
+const WEBSITE_ASSISTANT_UNSURE_ALIASES = {
+  english: "English", ingilizce: "English",
+  "türkçe": "Türkçe", turkce: "Türkçe", turkish: "Türkçe",
+  deutsch: "Deutsch", german: "Deutsch",
+  "français": "Français", francais: "Français", french: "Français",
+  italiano: "Italiano", italian: "Italiano",
+  "español": "Español (Spanish)", espanol: "Español (Spanish)", spanish: "Español (Spanish)",
+  "português": "Português", portugues: "Português", portuguese: "Português",
+  "русский": "Русский (Russian)", russian: "Русский (Russian)",
+  "日本語": "日本語 (Japanese)", japanese: "日本語 (Japanese)",
+  "中文": "中文 (Chinese)", chinese: "中文 (Chinese)", mandarin: "中文 (Chinese)",
+  "العربية": "العربية (Arabic)", arabic: "العربية (Arabic)",
+  "हिन्दी": "हिन्दी (Hindi)", hindi: "हिन्दी (Hindi)"
+};
 function websiteAssistantUnsureReply(language) {
-  return WEBSITE_ASSISTANT_UNSURE[String(language || "").trim()] || WEBSITE_ASSISTANT_UNSURE.English;
+  const raw = String(language || "").trim();
+  if (WEBSITE_ASSISTANT_UNSURE[raw]) return WEBSITE_ASSISTANT_UNSURE[raw];
+  const lower = raw.toLowerCase();
+  for (const [alias, key] of Object.entries(WEBSITE_ASSISTANT_UNSURE_ALIASES)) {
+    if (lower.includes(alias)) return WEBSITE_ASSISTANT_UNSURE[key];
+  }
+  return WEBSITE_ASSISTANT_UNSURE.English;
 }
 
 const WEBSITE_ASSISTANT_UNAVAILABLE_REPLY =
@@ -3846,10 +3869,15 @@ async function websiteAssistantReply(ticketData = {}, historyIn = []) {
     const raw = String(payload?.choices?.[0]?.message?.content || "");
     let reply = "";
     let confident = true;
+    let repliedIn = "";
     try {
       const parsed = JSON.parse(raw);
       reply = cleanSupportMultiline(parsed?.reply, 3000);
       confident = parsed?.confident !== false;
+      // The language the VISITOR just wrote in, which is not always the one the
+      // thread opened in - someone can switch mid-conversation, and the
+      // handover sentence has to follow them rather than the thread.
+      repliedIn = cleanSupportText(parsed?.language, 40);
     } catch {
       // A model that ignored the JSON contract still answered — treat the
       // whole thing as a confident reply rather than dropping it.
@@ -3860,7 +3888,7 @@ async function websiteAssistantReply(ticketData = {}, historyIn = []) {
     // guard: the prompt now asks for an empty reply when it is unsure, and an
     // empty reply used to mean "say nothing at all" - which is the silence
     // this whole path exists to prevent.
-    if (!confident) return { reply: websiteAssistantUnsureReply(ticketData.language), confident };
+    if (!confident) return { reply: websiteAssistantUnsureReply(repliedIn || ticketData.language), confident };
     if (!reply) return null;
     return { reply, confident };
   } catch (error) {
@@ -3873,7 +3901,15 @@ async function websiteAssistantReply(ticketData = {}, historyIn = []) {
 // Writes the assistant's answer into the thread as a support-side message so it
 // shows up in the widget and in every app's inbox exactly like a human reply.
 async function appendWebsiteAssistantReply(ticketRef, ticketData = {}) {
-  const snap = await ticketRef.collection("messages").limit(30).get();
+  // Ordered, newest first, THEN capped. A bare limit(30) returns whichever
+  // thirty Firestore feels like - document order, not time - so on a long
+  // conversation the newest question simply was not in the window and the bot
+  // kept answering an older one. Fifty-two messages in, it was replying to a
+  // question from twenty messages back, in the wrong language, every time.
+  const snap = await ticketRef.collection("messages")
+    .orderBy("createdAt", "desc")
+    .limit(30)
+    .get();
   const history = snap.docs
     .map((doc) => {
       const item = doc.data() || {};
