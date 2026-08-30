@@ -180,4 +180,40 @@ function topPaths(question, limit = 4) {
   pass("getting started matches the setup screen that ships, and is reachable");
 }
 
+// 7. Etsy is the first integration that is a real connection rather than a
+// generic webhook, and the guide used to list it among the webhook platforms.
+// A seller asking about it must land on the Etsy chapter, and the chapter must
+// answer the two questions that decide whether they trust it: what NivaDesk is
+// allowed to do in their shop, and what happens to their orders if they leave.
+{
+  const section = CORPUS.find((s) => s.id === "set-etsy");
+  assert(section, "the guide has an Etsy chapter");
+  assert(
+    /read-only/i.test(section.text),
+    "the chapter says the Etsy access is read-only"
+  );
+  assert(
+    /stays exactly where it is|orders are untouched/i.test(section.text),
+    "the chapter says what disconnecting does to work already here"
+  );
+  assert(
+    /fifteen minutes/i.test(section.text),
+    "the chapter states how often it syncs"
+  );
+  for (const question of [
+    "how do I connect my Etsy shop?",
+    "will NivaDesk change my Etsy listings?",
+    "what happens to my orders if I disconnect Etsy?",
+    "how often does NivaDesk check Etsy for new orders?",
+    "why did an Etsy order not import?"
+  ]) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /etsy/i.test(p)),
+      `"${question}" should reach the Etsy chapter, got: ${paths.join(" | ")}`
+    );
+  }
+  pass("Etsy questions reach the Etsy chapter, and it answers the trust questions");
+}
+
 console.log("\n✅ GUIDE RETRIEVAL GEÇTİ");
