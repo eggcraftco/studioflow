@@ -14,6 +14,7 @@ import {
   SUPPORTED_STUDIO_LANGUAGES,
   type StudioLanguage
 } from "@/lib/studioflow/language";
+import { studioLanguageDir } from "@/lib/studioflow/languageDirection";
 import {
   PUBLIC_SITE_EN,
   PUBLIC_SITE_TRANSLATIONS,
@@ -71,7 +72,10 @@ export function publicSiteT(key: PublicSiteTranslationKey, language: StudioLangu
 }
 
 export function publicLanguageDir(language: StudioLanguage) {
-  return language === "العربية (Arabic)" ? "rtl" : "ltr";
+  // One definition, in lib/studioflow/language.ts. The app and the marketing
+  // site disagreeing about which languages read right-to-left is not a thing
+  // that should be possible.
+  return studioLanguageDir(language);
 }
 
 function languageFromBrowserLocales(locales: readonly string[] | undefined) {

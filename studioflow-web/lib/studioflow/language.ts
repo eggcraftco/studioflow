@@ -18,6 +18,7 @@ export const SUPPORTED_STUDIO_LANGUAGES = [
 
 export type StudioLanguage = (typeof SUPPORTED_STUDIO_LANGUAGES)[number];
 
+
 type TranslationTable = Record<string, Partial<Record<StudioLanguage, string>>>;
 
 const WEB_TRANSLATIONS: TranslationTable = {
