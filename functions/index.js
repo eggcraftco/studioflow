@@ -17741,7 +17741,15 @@ function integrationOrderUpdate(mappedOrder, isNew) {
   if (isNew) return mappedOrder;
   const patch = {};
   for (const [key, value] of Object.entries(mappedOrder)) {
-    if (INTEGRATION_SHOP_OWNED_FIELDS.has(key)) patch[key] = value;
+    if (!INTEGRATION_SHOP_OWNED_FIELDS.has(key)) continue;
+    // The shop owns `notes` because it carries the buyer's own words. It does
+    // not own the absence of them. Most receipts have no note at all — an Etsy
+    // order with no personalisation, no buyer note and no gift message maps to
+    // "" — and writing that over the studio's notes on every resync erases
+    // work the shop never had a claim to. A real note still wins; an empty one
+    // is silence, not an instruction.
+    if (key === "notes" && String(value || "").trim() === "") continue;
+    patch[key] = value;
   }
   return patch;
 }

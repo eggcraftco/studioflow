@@ -247,6 +247,27 @@ check(() => {
   assert.ok(sum > 0, "the items sum to a real figure, so no phantom line is added");
 }, "line items carry lineTotal, the name every client and the reconciler read");
 
+// The app decides an order is cancelled by reading order.status, and Etsy wrote
+// "Not Yet" for every receipt including the cancelled ones. A seller who ticks
+// "Cancelled orders" to bring their history in would have had those orders sit
+// in the workspace as live work, counting as revenue they never received.
+check(() => {
+  const cancelled = JSON.parse(JSON.stringify(receipt));
+  cancelled.status = "canceled";
+  const out = normalizeEtsyReceipt(cancelled, opts);
+  assert.strictEqual(out.order.status, "Cancelled", "a cancelled receipt arrives cancelled");
+  assert.ok(out.source.isCancelled, "the read-only snapshot agrees");
+  assert.ok(
+    out.review.some((r) => r.code === "cancelled_at_source"),
+    "and the preview still says why it needs a decision"
+  );
+
+  // The ordinary case must not have moved.
+  const normal = normalizeEtsyReceipt(receipt, opts);
+  assert.strictEqual(normal.order.status, "Not Yet");
+  assert.ok(!normal.source.isCancelled);
+}, "a receipt cancelled on Etsy arrives as a cancelled order, not as live work");
+
 // --- robustness -------------------------------------------------------------
 check(() => {
   const { order, review } = normalizeEtsyReceipt({ receipt_id: 1 }, opts);

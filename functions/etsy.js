@@ -725,7 +725,13 @@ function normalizeEtsyReceipt(receipt, {
     shippingCountry: addressParts.country,
     shippingPhone: "",
     designStatus: "Not Yet",
-    status: "Not Yet",
+    // A receipt cancelled on Etsy has to arrive cancelled. The app reads
+    // order.status for this — nvIsCancelledStatus matches "Cancelled" — and
+    // writing "Not Yet" for every receipt meant an order the buyer cancelled
+    // sat in the workspace as live work and counted as revenue. The seller can
+    // choose to import cancelled orders, and when they do it must be visible
+    // that they are cancelled.
+    status: isCancelled ? "Cancelled" : "Not Yet",
     isDispatched: receipt?.is_shipped === true,
     trackingNumber: "",
     courier: "Auto Detect",

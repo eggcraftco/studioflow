@@ -98,10 +98,16 @@ const RECEIPT = (over = {}) => ({
 // fields the shop owns.
 const SHOP_OWNED = new Set(["customerName", "designName", "orderValue", "paidAmount", "remainingAmount",
   "lineItems", "deliveryCost", "taxAmount", "emailAddress", "notes", "shippingStreetAddress", "shippingCity"]);
+// Mirrors functions/index.js:integrationOrderUpdate, including the empty-notes
+// guard. A fake that is kinder than the real thing is worse than no fake.
 function integrationOrderUpdate(mapped, isNew) {
   if (isNew) return mapped;
   const patch = {};
-  for (const [key, value] of Object.entries(mapped)) if (SHOP_OWNED.has(key)) patch[key] = value;
+  for (const [key, value] of Object.entries(mapped)) {
+    if (!SHOP_OWNED.has(key)) continue;
+    if (key === "notes" && String(value || "").trim() === "") continue;
+    patch[key] = value;
+  }
   return patch;
 }
 
@@ -419,6 +425,28 @@ test("the screen asks Etsy before calling a connection healthy", () => {
     /liveCheck === "healthy"/.test(ui),
     'the Healthy label must be gated on the live check result'
   );
+});
+
+// The shop owns the buyer's words. It does not own their absence. Most Etsy
+// receipts have no personalisation, no buyer note and no gift message, so the
+// mapped order carries notes: "" — and writing that over the studio's own notes
+// on every resync erases work the shop never had a claim to.
+test("an empty shop note does not erase the studio's notes on resync", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const real = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const fn = real.slice(real.indexOf("function integrationOrderUpdate"), real.indexOf("function integrationOrderUpdate") + 1200);
+  assert.ok(
+    /key === "notes" && String\(value \|\| ""\)\.trim\(\) === ""/.test(fn),
+    "the real integrationOrderUpdate must skip an empty notes value on resync"
+  );
+
+  // And the behaviour, through the same shape the sync path uses.
+  const patch = integrationOrderUpdate({ notes: "", customerName: "Ada", orderValue: 105 }, false);
+  assert.ok(!("notes" in patch), "an empty note is not written");
+  assert.strictEqual(patch.customerName, "Ada", "everything else the shop owns still lands");
+  const withNote = integrationOrderUpdate({ notes: "Gift message — thanks", customerName: "Ada" }, false);
+  assert.strictEqual(withNote.notes, "Gift message — thanks", "a real note still wins");
 });
 
 // --- run --------------------------------------------------------------------
