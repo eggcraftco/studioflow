@@ -536,6 +536,48 @@ service cloud.firestore {
     // closed outright. Writes are allowed only for the row carrying your own
     // uid, which is the field all four apps already write, so registering and
     // signing out keep working exactly as they did.
+    // Support manager list. This one is a privilege list, not data: the server
+    // reads supportManagerUids out of it to decide who may act on other people's
+    // tickets (index.js workspaceSupportSettings). Left to the wildcard rule
+    // below it was writable by every member of the workspace, so any member
+    // could append their own uid and grant themselves the power the owner/admin
+    // check was there to withhold. No client reads or writes it; the server
+    // reaches it through the Admin SDK, which does not consult these rules.
+    match /companies/{companyId}/supportSettings/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Support tickets. The server stamps some of these targetRole:"owner_admin"
+    // (index.js:4741) precisely because they are not for everyone. No client
+    // reads them directly — the ticket screens go through callables — so the
+    // targeting is enforced here rather than hoped for in the UI.
+    match /companies/{companyId}/workspaceTickets/{document=**} {
+      allow read, write: if false;
+    }
+
+    // The marker that says a WooCommerce payment has already been merged. A
+    // member who could write it could make a real payment look already-merged,
+    // or clear it and have one counted twice. Server-only bookkeeping.
+    match /companies/{companyId}/wooMergedPayments/{document=**} {
+      allow read, write: if false;
+    }
+
+    // A server-side count of workspace members. Nothing on any client reads it.
+    match /companies/{companyId}/users/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Workspace activity notifications. Every client reads these (the bell), so
+    // read stays open to the workspace — but no client writes them. Marking one
+    // read goes through markActivityNotificationRead on all three platforms;
+    // the direct-write branch in FirebaseManager.swift is behind
+    // #if canImport(FirebaseFunctions) and never ships. Leaving write open let
+    // any member forge or silently edit another person's notification.
+    match /companies/{companyId}/notifications/{document=**} {
+      allow read: if canReadCompany(companyId);
+      allow write: if false;
+    }
+
     match /companies/{companyId}/deviceTokens/{tokenId} {
       allow read: if false;
       allow create: if signedIn()
@@ -710,6 +752,11 @@ service cloud.firestore {
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
+        && collectionId != 'notifications'
+        && collectionId != 'users'
+        && collectionId != 'wooMergedPayments'
+        && collectionId != 'workspaceTickets'
+        && collectionId != 'supportSettings'
         && canReadCompany(companyId);
       allow write: if collectionId != 'messageUserPreferences'
         && collectionId != 'messageSettings'
@@ -748,6 +795,11 @@ service cloud.firestore {
         && collectionId != 'deviceTokens'
         && collectionId != 'inventoryLocations'
         && collectionId != 'inventoryRecipes'
+        && collectionId != 'notifications'
+        && collectionId != 'users'
+        && collectionId != 'wooMergedPayments'
+        && collectionId != 'workspaceTickets'
+        && collectionId != 'supportSettings'
         && canWriteCompanyData(companyId);
     }
 
