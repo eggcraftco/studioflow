@@ -887,6 +887,12 @@ service cloud.firestore {
     match /etsyWebhookEvents/{document=**} {
       allow read, write: if false;
     }
+    // How many Etsy API calls the whole application has spent today. Server
+    // bookkeeping: no client has any business reading or moving it, and a
+    // client that could write it could make every shop stop syncing.
+    match /etsyQuota/{document=**} {
+      allow read, write: if false;
+    }
 
     match /{document=**} {
       allow read, write: if false;

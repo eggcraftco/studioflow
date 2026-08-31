@@ -53,7 +53,10 @@ const PATHS = [
   ["etsyOAuthStates", "state1"],
   ["etsyExternalOrders", `${CO}_222_333`],
   ["etsyCustomerLinks", `${CO}_222_444`],
-  ["etsyWebhookEvents", "wh1"]
+  ["etsyWebhookEvents", "wh1"],
+  // The application-wide daily call counter. A client that could write it
+  // could make every shop stop syncing.
+  ["etsyQuota", "2026-08-31"]
 ];
 
 const people = [
