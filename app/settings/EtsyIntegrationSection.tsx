@@ -97,13 +97,17 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   const [selectedId, setSelectedId] = useState("");
   const connection = connections.find((row) => row.id === selectedId) || connections[0] || null;
 
-  const refresh = useCallback(async () => {
+  // keepError: a reload is not evidence that whatever just failed is fine now.
+  // The OAuth return sets a message and then reloads; the live check sets one
+  // and then reloads. Clearing unconditionally deleted both a moment after they
+  // appeared, along with the address-bar parameters that produced them.
+  const refresh = useCallback(async (keepError = false) => {
     if (!companyId) return;
     try {
       const data = await getEtsyConnections(companyId);
       setConnections(Array.isArray(data.connections) ? data.connections : []);
       setConfigured(data.configured !== false);
-      setError("");
+      if (!keepError) setError("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : t("The Etsy connection could not be loaded."));
     } finally {
@@ -129,8 +133,9 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
       etsyErrorText(String(result?.reason || ""), t) ||
         t("Etsy did not accept this connection. Reconnect the shop to continue.")
     );
-    // The stored status may now disagree with what Etsy just said.
-    await refresh();
+    // The stored status may now disagree with what Etsy just said. Keep the
+    // message: the reload is not evidence the failure went away.
+    await refresh(true);
   }, [companyId, connections, refresh, t]);
 
   // The OAuth callback sends the seller back with ?etsy=connected|cancelled|error.
@@ -159,7 +164,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     params.delete("reason");
     const query = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-    void refresh();
+    void refresh(true);
   }, [refresh, t]);
 
   // The screen promises to verify on return. Do it once, as soon as the
@@ -525,7 +530,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                     ].filter(Boolean).join(" · ");
                     if (good) setNotice(good);
                     else if (!failed) setNotice(t("Everything is already up to date."));
-                    await refresh();
+                    await refresh(Boolean(failed));
                   })
                 }
               >
