@@ -319,3 +319,23 @@ func etsyRelativeTime(_ atMs: Double, lang: String) -> String {
     let days = hours / 24
     return "\(days) " + (days == 1 ? t("day ago", lang: lang) : t("days ago", lang: lang))
 }
+
+/// One line of the sync log, in words. The server writes event types —
+/// reconcile_failed, token_refresh_failed — and a technical code must never
+/// reach the screen. Showing the type with its underscores swapped for spaces
+/// is still the code; it only looks friendlier.
+func etsyEventText(_ event: EtsySyncEventInfo, lang: String) -> String {
+    let receipt = event.receiptId.isEmpty ? "" : " #\(event.receiptId)"
+    switch event.type {
+    case "order_imported":       return "\(t("Order", lang: lang))\(receipt) \(t("imported", lang: lang))"
+    case "webhook":              return "\(t("Order", lang: lang))\(receipt) \(t("updated", lang: lang))"
+    case "order_import_failed":  return "\(t("An order could not be imported", lang: lang))\(receipt)"
+    case "connected":            return t("Shop connected", lang: lang)
+    case "reconnected":          return t("Shop reconnected", lang: lang)
+    case "disconnected":         return t("Shop disconnected", lang: lang)
+    case "reconcile_failed":     return t("A scheduled check could not finish", lang: lang)
+    case "token_refresh_failed": return t("Etsy access could not be refreshed", lang: lang)
+    case "verify_failed":        return t("Etsy did not accept the connection check", lang: lang)
+    default:                     return t("Etsy activity", lang: lang)
+    }
+}

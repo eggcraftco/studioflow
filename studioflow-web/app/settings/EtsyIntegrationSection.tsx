@@ -18,6 +18,7 @@ import {
   beginEtsyConnect,
   disconnectEtsyShop,
   etsyErrorText,
+  etsyEventText,
   etsyReviewReasonText,
   getEtsyConnections,
   previewEtsyImport,
@@ -421,11 +422,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                   {connection.recentEvents.slice(0, 6).map((event, index) => (
                     <li key={`${event.atMs}-${index}`}>
                       <span>
-                        {event.type === "order_imported"
-                          ? `${t("Order")} #${event.receiptId} ${t("imported")}`
-                          : event.type === "webhook"
-                            ? `${t("Order")} #${event.receiptId} ${t("updated")}`
-                            : t(event.type.replace(/_/g, " "))}
+                        {etsyEventText(event, t)}
                       </span>
                       <span className="muted-copy">{relativeTime(event.atMs, t)}</span>
                     </li>

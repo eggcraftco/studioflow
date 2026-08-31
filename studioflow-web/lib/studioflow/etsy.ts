@@ -217,3 +217,39 @@ export function etsyErrorText(code: string, t: (text: string) => string): string
       return "";
   }
 }
+
+/**
+ * One line of the sync log, in words.
+ *
+ * The server writes event types — reconcile_failed, token_refresh_failed — and
+ * a technical code must never reach the screen. Showing the type with its
+ * underscores swapped for spaces is still the code; it just looks friendlier.
+ */
+export function etsyEventText(
+  event: { type: string; receiptId: string },
+  t: (text: string) => string
+): string {
+  const receipt = event.receiptId ? ` #${event.receiptId}` : "";
+  switch (event.type) {
+    case "order_imported":
+      return `${t("Order")}${receipt} ${t("imported")}`;
+    case "webhook":
+      return `${t("Order")}${receipt} ${t("updated")}`;
+    case "order_import_failed":
+      return `${t("An order could not be imported")}${receipt}`;
+    case "connected":
+      return t("Shop connected");
+    case "reconnected":
+      return t("Shop reconnected");
+    case "disconnected":
+      return t("Shop disconnected");
+    case "reconcile_failed":
+      return t("A scheduled check could not finish");
+    case "token_refresh_failed":
+      return t("Etsy access could not be refreshed");
+    case "verify_failed":
+      return t("Etsy did not accept the connection check");
+    default:
+      return t("Etsy activity");
+  }
+}

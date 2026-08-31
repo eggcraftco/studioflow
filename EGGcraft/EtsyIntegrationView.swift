@@ -33,7 +33,12 @@ struct EtsyIntegrationView: View {
     @State private var selectedId = ""
 
     private var connection: EtsyConnectionInfo? {
-        connections.first { $0.id == selectedId } ?? connections.first
+        // A disconnected row is not a connection. Without this the app showed a
+        // dead shop as live and could never get back to "Continue to Etsy",
+        // because nothing else clears the screen. The web has always filtered
+        // this; the native copy did not.
+        let live = connections.filter { $0.status != "disconnected" }
+        return live.first { $0.id == selectedId } ?? live.first
     }
     private func tr(_ text: String) -> String { t(text, lang: language) }
 
@@ -227,6 +232,10 @@ struct EtsyIntegrationView: View {
         let chosen = found.rows.filter { $0.outcome != "unsupported" && !excluded.contains($0.receiptId) }
         guard !chosen.isEmpty else { throw EtsyError(message: tr("Select at least one order to import.")) }
         let outcome = try await firebaseManager.etsyImport(live.id, rules: rules, receiptIds: chosen.map(\.receiptId))
+        // The server reports failures and they were being parsed and dropped.
+        if outcome.failed > 0 {
+            errorText = "\(outcome.failed) \(tr("could not be imported. The sync log below says why."))"
+        }
         notice = "\(outcome.created) \(tr("orders imported")) · \(outcome.updated) \(tr("updated"))"
         preview = nil
         await reload()
@@ -494,6 +503,7 @@ private struct EtsyPreviewCard: View {
                     EtsyPreviewRowView(
                         row: row,
                         language: language,
+                        isOwner: isOwner,
                         excluded: excluded.contains(row.receiptId),
                         onToggle: {
                             if excluded.contains(row.receiptId) { excluded.remove(row.receiptId) }
@@ -508,7 +518,7 @@ private struct EtsyPreviewCard: View {
                         onImport()
                     } label: {
                         if busy {
-                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(tr("Checking Etsy…")) }
+                            HStack(spacing: 6) { ProgressView().controlSize(.small); Text(tr("Importing…")) }
                         } else {
                             Text("\(tr("Import")) \(selectedCount) \(tr("selected orders"))")
                         }
@@ -527,6 +537,7 @@ private struct EtsyPreviewCard: View {
 private struct EtsyPreviewRowView: View {
     let row: EtsyPreviewRowInfo
     let language: String
+    let isOwner: Bool
     let excluded: Bool
     let onToggle: () -> Void
     let onLink: (EtsyCustomerCandidateInfo) -> Void
@@ -569,7 +580,11 @@ private struct EtsyPreviewRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if row.decision == "review" && !row.candidates.isEmpty {
+            // resolveEtsyCustomerMatch is owner-only on the server, and it needs a
+            // buyer id — Etsy does not send one for every receipt. Offering the
+            // button to a member gets a permission error, and offering it on a
+            // row with no buyer id sends an empty id that can never match.
+            if row.decision == "review" && !row.candidates.isEmpty && isOwner && !row.buyerId.isEmpty {
                 Text(tr("Possible customer match")).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
                 Text(tr("No automatic merge. The decision is saved for this Etsy buyer identity."))
                     .font(.system(size: 11)).foregroundColor(.secondary)
@@ -607,7 +622,7 @@ private struct EtsySyncCard: View {
                 } else {
                     ForEach(connection.recentEvents) { event in
                         HStack {
-                            Text(event.error.isEmpty ? event.type : "\(event.type) · \(event.error)")
+                            Text(etsyEventText(event, lang: language))
                                 .font(.system(size: 11)).lineLimit(1)
                             Spacer(minLength: 6)
                             Text(etsyRelativeTime(event.atMs, lang: language))
@@ -650,9 +665,20 @@ private struct EtsyDisconnectCard: View {
         ) {
             VStack(alignment: .leading, spacing: 10) {
                 Text(tr("What happens next?")).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
-                EtsyPermissionRow(text: tr("Stop future Etsy synchronisation"), allowed: false, label: "", language: language)
-                EtsyPermissionRow(text: tr("Keep existing orders and production work"), allowed: true, label: "", language: language)
-                EtsyPermissionRow(text: tr("Revoke stored access tokens"), allowed: false, label: "", language: language)
+                // These are three things that WILL happen, not a list of what is
+                // allowed. Drawing "Stop future Etsy synchronisation" with the
+                // not-allowed mark said the opposite of the truth.
+                ForEach([
+                    tr("Stop future Etsy synchronisation"),
+                    tr("Keep existing orders and production work"),
+                    tr("Revoke stored access tokens")
+                ], id: \.self) { line in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("\u{2022}").font(.system(size: 12)).foregroundColor(.secondary)
+                        Text(line).font(.system(size: 12))
+                        Spacer(minLength: 0)
+                    }
+                }
 
                 if !isOwner {
                     Text(tr("Only the workspace owner can disconnect Etsy."))

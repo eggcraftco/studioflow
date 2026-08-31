@@ -1868,7 +1868,10 @@ private fun EtsyDetail(state: StudioFlowUiState) {
     // the card, absent from the screen, with no way to sync or disconnect it.
     var selectedId by remember { mutableStateOf("") }
 
-    val connection = connections.firstOrNull { it.id == selectedId } ?: connections.firstOrNull()
+    // A disconnected row is not a connection. Without this the app showed a
+    // dead shop as live and could never get back to "Continue to Etsy".
+    val liveConnections = connections.filter { it.status != "disconnected" }
+    val connection = liveConnections.firstOrNull { it.id == selectedId } ?: liveConnections.firstOrNull()
 
     suspend fun reload() {
         val ws = workspace ?: return
@@ -2108,6 +2111,7 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                     EtsyPreviewLine(
                         row = row,
                         t = t,
+                        isOwner = isOwner,
                         excluded = excluded.contains(row.receiptId),
                         onToggle = {
                             excluded = if (excluded.contains(row.receiptId)) excluded - row.receiptId
@@ -2130,13 +2134,22 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                                 val ws = workspace ?: return@runAction
                                 if (chosen.isEmpty()) throw IllegalStateException(t("Select at least one order to import."))
                                 val outcome = repository.etsyImport(ws.id, connection.id, rules, chosen.map { it.receiptId })
+                                // The server reports failures; they were parsed and dropped.
+                                if (outcome.third > 0) {
+                                    errorText = "${outcome.third} ${t("could not be imported. The sync log below says why.")}"
+                                }
                                 statusText = "${outcome.first} ${t("orders imported")} · ${outcome.second} ${t("updated")}"
                                 preview = null
                                 reload()
                             }
                         },
                         enabled = busy.isEmpty() && chosen.isNotEmpty(),
-                    ) { Text("${t("Import")} ${chosen.size} ${t("selected orders")}") }
+                    ) {
+                        Text(
+                            if (busy == "import") t("Importing…")
+                            else "${t("Import")} ${chosen.size} ${t("selected orders")}"
+                        )
+                    }
                 } else {
                     Text(t("Only the workspace owner can import orders."),
                         fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2152,10 +2165,7 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                 Text(t("No Etsy activity yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 connection.recentEvents.forEach { event ->
-                    EtsyStatLine(
-                        if (event.error.isBlank()) event.type else "${event.type} · ${event.error}",
-                        etsyRelative(event.atMs, t),
-                    )
+                    EtsyStatLine(etsyEventSentence(event, t), etsyRelative(event.atMs, t))
                 }
             }
             OutlinedButton(
@@ -2188,9 +2198,19 @@ private fun EtsyDetail(state: StudioFlowUiState) {
         DetailCard(title = t("Disconnect Etsy"), icon = Icons.Filled.Link) {
             Text(t("What happens next?"), fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            EtsyPermissionLine(t("Stop future Etsy synchronisation"), false, "")
-            EtsyPermissionLine(t("Keep existing orders and production work"), true, "")
-            EtsyPermissionLine(t("Revoke stored access tokens"), false, "")
+            // These are three things that WILL happen, not a list of what is
+            // allowed. Drawing "Stop future Etsy synchronisation" with the
+            // not-allowed mark said the opposite of the truth.
+            listOf(
+                t("Stop future Etsy synchronisation"),
+                t("Keep existing orders and production work"),
+                t("Revoke stored access tokens"),
+            ).forEach { line ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("\u2022", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(line, modifier = Modifier.weight(1f))
+                }
+            }
             Text(t("Deleting imported Etsy source data is a separate request and is not available yet. Disconnecting never deletes anything from Etsy."),
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             when {
@@ -2256,6 +2276,7 @@ private fun EtsyToggleLine(text: String, checked: Boolean, onChange: ((Boolean) 
 private fun EtsyPreviewLine(
     row: uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyPreviewRow,
     t: (String) -> String,
+    isOwner: Boolean,
     excluded: Boolean,
     onToggle: () -> Unit,
     onLink: (uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyCandidateRow) -> Unit,
@@ -2283,7 +2304,11 @@ private fun EtsyPreviewLine(
         if (row.outcome != "ready") {
             Text(etsyReasonSentence(row.reason, t), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (row.decision == "review" && row.candidates.isNotEmpty()) {
+        // resolveEtsyCustomerMatch is owner-only on the server and needs a buyer
+        // id — Etsy does not send one for every receipt. Offering the button to a
+        // member gets a permission error; offering it on a row with no buyer id
+        // sends an empty id that can never match.
+        if (row.decision == "review" && row.candidates.isNotEmpty() && isOwner && row.buyerId.isNotBlank()) {
             Text(t("Possible customer match"), fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(t("No automatic merge. The decision is saved for this Etsy buyer identity."),
@@ -2301,6 +2326,29 @@ private fun EtsyPreviewLine(
 
 /** The seller-facing reason a receipt was not imported. The server sends codes;
  *  a technical code never reaches the screen. Same sentences as web and Swift. */
+/** One line of the sync log, in words. The server writes event types —
+ *  reconcile_failed, token_refresh_failed — and a technical code must never
+ *  reach the screen. Showing the type with its underscores swapped for spaces
+ *  is still the code; it only looks friendlier. */
+private fun etsyEventSentence(
+    event: uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsySyncEventRow,
+    t: (String) -> String,
+): String {
+    val receipt = if (event.receiptId.isBlank()) "" else " #${event.receiptId}"
+    return when (event.type) {
+        "order_imported" -> "${t("Order")}$receipt ${t("imported")}"
+        "webhook" -> "${t("Order")}$receipt ${t("updated")}"
+        "order_import_failed" -> "${t("An order could not be imported")}$receipt"
+        "connected" -> t("Shop connected")
+        "reconnected" -> t("Shop reconnected")
+        "disconnected" -> t("Shop disconnected")
+        "reconcile_failed" -> t("A scheduled check could not finish")
+        "token_refresh_failed" -> t("Etsy access could not be refreshed")
+        "verify_failed" -> t("Etsy did not accept the connection check")
+        else -> t("Etsy activity")
+    }
+}
+
 private fun etsyReasonSentence(code: String, t: (String) -> String): String = when (code) {
     "currency_mismatch" -> t("This order uses a different currency. NivaDesk kept the original amount and did not convert it.")
     "cancelled_at_source" -> t("This order was cancelled on Etsy.")
