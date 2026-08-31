@@ -94,22 +94,11 @@ const RECEIPT = (over = {}) => ({
   ...over
 });
 
-// The real guard from index.js, reproduced exactly: a resync writes only the
-// fields the shop owns.
-const SHOP_OWNED = new Set(["customerName", "designName", "orderValue", "paidAmount", "remainingAmount",
-  "lineItems", "deliveryCost", "taxAmount", "emailAddress", "notes", "shippingStreetAddress", "shippingCity"]);
-// Mirrors functions/index.js:integrationOrderUpdate, including the empty-notes
-// guard. A fake that is kinder than the real thing is worse than no fake.
-function integrationOrderUpdate(mapped, isNew) {
-  if (isNew) return mapped;
-  const patch = {};
-  for (const [key, value] of Object.entries(mapped)) {
-    if (!SHOP_OWNED.has(key)) continue;
-    if (key === "notes" && String(value || "").trim() === "") continue;
-    patch[key] = value;
-  }
-  return patch;
-}
+// Not a mirror any more. This used to be a hand-written copy of the real
+// integrationOrderUpdate, kept honest by a regex that scraped index.js — and it
+// drifted anyway, which is how a resync that erased the studio's notes passed
+// this very suite. The function is now a pure module both sides import.
+const { integrationOrderUpdate } = require("../../integrationOrderFields");
 
 function build({ nowRef, receipts = [RECEIPT()], capacity = { allowed: true }, owner = true, world = null, reportedCount = null }) {
   world = world || makeWorld(nowRef);
@@ -434,21 +423,46 @@ test("the screen asks Etsy before calling a connection healthy", () => {
 // mapped order carries notes: "" — and writing that over the studio's own notes
 // on every resync erases work the shop never had a claim to.
 test("an empty shop note does not erase the studio's notes on resync", () => {
-  const fs = require("fs");
-  const path = require("path");
-  const real = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
-  const fn = real.slice(real.indexOf("function integrationOrderUpdate"), real.indexOf("function integrationOrderUpdate") + 1200);
-  assert.ok(
-    /key === "notes" && String\(value \|\| ""\)\.trim\(\) === ""/.test(fn),
-    "the real integrationOrderUpdate must skip an empty notes value on resync"
-  );
-
-  // And the behaviour, through the same shape the sync path uses.
-  const patch = integrationOrderUpdate({ notes: "", customerName: "Ada", orderValue: 105 }, false);
+  const patch = integrationOrderUpdate({ notes: "", customerName: "Ada", orderValue: 105 }, false, { notes: "Bench: sized to M" });
   assert.ok(!("notes" in patch), "an empty note is not written");
   assert.strictEqual(patch.customerName, "Ada", "everything else the shop owns still lands");
-  const withNote = integrationOrderUpdate({ notes: "Gift message — thanks", customerName: "Ada" }, false);
-  assert.strictEqual(withNote.notes, "Gift message — thanks", "a real note still wins");
+});
+
+// The case this suite used to assert the WRONG way round. It checked that "a
+// real note still wins" and stopped there — never asking what the note was
+// winning against. What it was winning against was the bench's own writing.
+//
+// The buyer says "engrave AL inside the band" once. The order then syncs again
+// — shipped, repriced, a webhook replayed — and the same sentence arrives with
+// nothing new in it. Rewriting it informs nobody and erases the note the
+// jeweller added underneath. It needs no unusual data, only an order somebody
+// worked on, which is every order that matters.
+test("a buyer note already delivered does not overwrite the studio's notes", () => {
+  const buyerNote = "Buyer note — engrave 'AL' inside the band.";
+
+  // The bench added its own line under the buyer's.
+  const worked = `${buyerNote}\n\nWax model cast Tuesday.`;
+  const patch = integrationOrderUpdate({ notes: buyerNote, customerName: "Ada" }, false, { notes: worked });
+  assert.ok(!("notes" in patch), "the same buyer note was written a second time");
+
+  // The bench replaced the field outright. The buyer's words still have to
+  // reach the studio, but not at the price of the bench's.
+  const replaced = integrationOrderUpdate({ notes: buyerNote, customerName: "Ada" }, false, { notes: "Wax model cast Tuesday." });
+  assert.ok(replaced.notes.includes("Wax model cast Tuesday."), "the studio's note was destroyed");
+  assert.ok(replaced.notes.includes("engrave 'AL'"), "the buyer's note never arrived");
+
+  // And it settles: applying the merged result again adds nothing.
+  const again = integrationOrderUpdate({ notes: buyerNote, customerName: "Ada" }, false, { notes: replaced.notes });
+  assert.ok(!("notes" in again), "the note grows on every resync");
+
+  // A note the buyer genuinely changed is news, and lands.
+  const changed = integrationOrderUpdate({ notes: "Buyer note — make it a size N instead.", customerName: "Ada" }, false, { notes: worked });
+  assert.ok(changed.notes.includes("size N"), "a changed buyer note must reach the studio");
+  assert.ok(changed.notes.includes("Wax model cast Tuesday."), "and must not cost the studio its own note");
+
+  // On a brand-new order the shop writes everything, notes included.
+  const fresh = integrationOrderUpdate({ notes: buyerNote, customerName: "Ada" }, true, null);
+  assert.strictEqual(fresh.notes, buyerNote);
 });
 
 // The sweep asks for one page. When a shop has more modified receipts than fit

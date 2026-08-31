@@ -408,7 +408,13 @@ function createEtsySyncFunctions(deps) {
     }
 
     const orderRef = orderDocRef(orderId);
-    await orderRef.set(integrationOrderUpdate(normalised.order, isNew), { merge: true });
+    // On a resync the studio's side of the order has to be read before it is
+    // written to: `integrationOrderUpdate` needs to know what the bench already
+    // wrote in `notes` so a buyer note the seller has seen once is not stamped
+    // over it again on every webhook. One extra read, only when the order is
+    // not new.
+    const existingOrder = isNew ? null : ((await orderRef.get()).data() || {});
+    await orderRef.set(integrationOrderUpdate(normalised.order, isNew, existingOrder), { merge: true });
 
     // The read-only source panel. Kept apart from the order's own fields so a
     // resync can refresh it without ever reaching into the studio's work.

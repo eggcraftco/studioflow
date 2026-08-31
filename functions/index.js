@@ -24,6 +24,15 @@ if (process.env.FUNCTIONS_EMULATOR === "true" && !admin.firestore.FieldValue) {
 
 admin.initializeApp();
 
+// The shop-owned field set and the resync patch builder live in their own
+// module so the tests import the very function production runs, instead of a
+// copy of it that can drift. See integrationOrderFields.js.
+const {
+  INTEGRATION_SHOP_OWNED_FIELDS,
+  mergeShopNote,
+  integrationOrderUpdate
+} = require("./integrationOrderFields");
+
 const TRACK17_TOKEN = defineSecret("TRACK17_TOKEN");
 const ROYALMAIL_CLIENT_ID = defineSecret("ROYALMAIL_CLIENT_ID");
 const ROYALMAIL_CLIENT_SECRET = defineSecret("ROYALMAIL_CLIENT_SECRET");
@@ -13834,13 +13843,13 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         const ref = orderDocRef(docId);
         const existing = await ref.get();
         const mapped = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, defaultDeliveryTime);
-        await ref.set(integrationOrderUpdate(mapped, !existing.exists), { merge: true });
+        await ref.set(integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}), { merge: true });
       } else if (provider === "shopify") {
         const docId = shopifyOrderDocId(companyId, data.externalId);
         const ref = orderDocRef(docId);
         const existing = await ref.get();
         const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
-        await ref.set(integrationOrderUpdate(mapped, !existing.exists), { merge: true });
+        await ref.set(integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}), { merge: true });
       } else if (provider === "etsy") {
         // Etsy replays through its own applyReceipt rather than a second copy
         // of the mapping here: that path also writes the external-order row,
@@ -17703,56 +17712,6 @@ function resolveDefaultDeliveryTime(settingsData) {
   return Math.min(Math.max(Math.round(raw), 1), 730);
 }
 
-// A redelivery of the same order used to write the whole mapped object back with
-// merge:true. Every field the mapper produces is unconditionally present, so a
-// shop that resends an order — Woo retries, a Shopify update, a Zapier replay —
-// silently reset the studio's own work: designStatus and status back to
-// "Not Yet", the tracking number and courier blanked, the delivery time reset.
-// The shop owns the money and the customer; the studio owns the workflow.
-const INTEGRATION_SHOP_OWNED_FIELDS = new Set([
-  "customerName",
-  "designName",
-  "designLink",
-  "emailAddress",
-  "whatsappNumber",
-  "instagramUsername",
-  "notes",
-  "paidAmount",
-  "remainingAmount",
-  "orderValue",
-  "lineItems",
-  "payments",
-  "deliveryCost",
-  "taxAmount",
-  "taxRate",
-  "shippingName",
-  "shippingStreetAddress",
-  "shippingCity",
-  "shippingPostalCode",
-  "shippingCountry",
-  "shippingPhone",
-  "customFields",
-  "companyId",
-  "updatedAt",
-  "source"
-]);
-
-function integrationOrderUpdate(mappedOrder, isNew) {
-  if (isNew) return mappedOrder;
-  const patch = {};
-  for (const [key, value] of Object.entries(mappedOrder)) {
-    if (!INTEGRATION_SHOP_OWNED_FIELDS.has(key)) continue;
-    // The shop owns `notes` because it carries the buyer's own words. It does
-    // not own the absence of them. Most receipts have no note at all — an Etsy
-    // order with no personalisation, no buyer note and no gift message maps to
-    // "" — and writing that over the studio's notes on every resync erases
-    // work the shop never had a claim to. A real note still wins; an empty one
-    // is silence, not an instruction.
-    if (key === "notes" && String(value || "").trim() === "") continue;
-    patch[key] = value;
-  }
-  return patch;
-}
 
 function mapWooCommerceOrderToSiparis(order, companyId, isNew = true, defaultDeliveryTime = 30) {
   const now = new Date();
@@ -18549,7 +18508,7 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
 
     const wooDefaultDeliveryTime = resolveDefaultDeliveryTime((await companySettingsDocRef(companyId).get()).data());
     const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, wooDefaultDeliveryTime);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -18953,7 +18912,7 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -19344,7 +19303,7 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists), { merge: true });
+    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
 
     // Mirror the billing contact into the workspace's customer list (best-effort).
     try {
@@ -29968,3 +29927,29 @@ exports.shopifyImportOrders = onRequest({
     res.status(500).json({ ok: false, error: String(error?.message || "internal").slice(0, 200) });
   }
 });
+
+// Test-only handle on the real dependency graph.
+//
+// The Etsy unit tests run against a hand-built fake Firestore, and a fake is
+// only ever as honest as the person who wrote it. Ours is not honest about the
+// two things most likely to break in production: real Firestore rejects an
+// undefined field value outright (we do not set ignoreUndefinedProperties), and
+// a merge with a dotted key writes a literal field with a dot in its name
+// rather than descending into a map. The fake swallows both.
+//
+// So the emulator suite reaches for the same helpers production injects — not a
+// copy of them, which would drift — and runs them against a real Firestore.
+// Guarded by an env var, because a production deploy has no business carrying
+// a door into its own internals.
+if (process.env.NIVADESK_E2E === "1") {
+  exports._e2e = {
+    applyReceipt: etsySyncExports._internal.applyReceipt,
+    reconcileConnection: etsySyncExports._internal.reconcileConnection,
+    classify: etsySyncExports._internal.classify,
+    upsertIntegrationCustomer,
+    integrationOrderUpdate,
+    holdIntegrationOrder,
+    orderDocRef,
+    companySettingsDocRef
+  };
+}
