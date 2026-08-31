@@ -53,6 +53,28 @@ try { transport({ host: "smtp.example.com", port: 465 }); } catch { askedForReal
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
 ok("outside the emulator it still asks for a real transport", askedForReal, "guard would disable production email");
 
+// The other two channels that leave the building. Mail was the one that
+// actually escaped, but SMS costs money and arrives on a customer's phone, and
+// push buzzes whoever's device tokens are in the database — and the order
+// status trigger that sends SMS fires in the emulator like any other trigger.
+{
+  const captured2 = [];
+  const log2 = console.log;
+  console.log = (...a) => { const l = a.map(String).join(" "); if (l.includes("suppressed")) captured2.push(l); else log2(...a); };
+
+  const provider = fns._nvMessagingProvider && fns._nvMessagingProvider();
+  let smsResult = null;
+  if (provider && typeof provider.sendSMS === "function") {
+    smsResult = await provider.sendSMS({ to: "+447700900123", from: "NivaDesk", body: "probe" });
+  }
+  console.log = log2;
+
+  ok("SMS is suppressed under the emulator",
+    Boolean(provider) && smsResult && smsResult.status === "suppressed", JSON.stringify(smsResult));
+  ok("and it says which number it withheld",
+    captured2.some((l) => /SMS to \+447700900123/.test(l)), JSON.stringify(captured2));
+}
+
 nodemailer.createTransport = realCreate;
 console.log(fail ? `\n${fail} FAILED` : "\nPASS");
 process.exit(fail ? 1 : 0);

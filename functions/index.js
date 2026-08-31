@@ -24,6 +24,20 @@ const nodemailer = require("nodemailer");
 // it, and anything that has it is a test. Going through one helper rather than
 // guarding four call sites means the fifth mail path somebody adds later is
 // safe without them having to know any of this.
+// Is this process allowed to reach the outside world?
+//
+// FIRESTORE_EMULATOR_HOST is set by the emulator and never by a deployed
+// function, so it is the honest answer to "am I a test?". It guards every
+// channel that leaves the building — mail, SMS, push — because the emulators
+// emulate Firestore, Auth and the runtime, and nothing else. Real secrets are
+// fetched from Secret Manager on emulator start, so a test holds real
+// credentials for all three.
+function nvOutboundBlocked(channel) {
+  if (!process.env.FIRESTORE_EMULATOR_HOST) return false;
+  console.log(`[emulator] ${channel} suppressed`);
+  return true;
+}
+
 function nvMailTransport(options) {
   if (process.env.FIRESTORE_EMULATOR_HOST) {
     return {
@@ -359,6 +373,12 @@ async function sendPushNotificationToCompany(companyId, notification = {}) {
     previewImageURL: notification.previewImageURL || notification.previewImageUrl || ""
   });
 
+  // FCM is not emulated either: this reaches the real phones of whoever's
+  // tokens are in the database.
+  if (nvOutboundBlocked(`push to ${tokens.length} device(s)`)) {
+    return { sent: 0, failed: 0, reason: "emulator_suppressed" };
+  }
+
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
     notification: notificationPayload,
@@ -521,6 +541,12 @@ async function sendPushNotificationToRecipients(companyId, notification = {}, re
     priority: notification.priority || "",
     status: notification.status || ""
   });
+
+  // FCM is not emulated either: this reaches the real phones of whoever's
+  // tokens are in the database.
+  if (nvOutboundBlocked(`push to ${tokens.length} device(s)`)) {
+    return { sent: 0, failed: 0, reason: "emulator_suppressed" };
+  }
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -18383,6 +18409,7 @@ exports._billingPlanFromCompanyData = billingPlanFromCompanyData;
 // Exported so the guard can be tested for what it DOES rather than for how it
 // is written. See test/qa/no-mail-from-tests.mjs.
 exports._nvMailTransport = nvMailTransport;
+exports._nvMessagingProvider = activeMessagingProvider;
 
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
@@ -24593,6 +24620,13 @@ const twilioMessagingProvider = {
   },
 
   async sendSMS({ to, from, body, statusCallback }) {
+    // A text costs money and arrives on somebody's actual phone. The order
+    // status trigger that sends these carries the Twilio secrets, and it fires
+    // in the emulator like any other trigger — so a test that changes an order
+    // status in a workspace with SMS switched on would text a real customer.
+    if (nvOutboundBlocked(`SMS to ${to}`)) {
+      return { sid: "emulator-suppressed", status: "suppressed" };
+    }
     const sid = String(process.env.TWILIO_ACCOUNT_SID || "").trim();
     const token = String(process.env.TWILIO_AUTH_TOKEN || "").trim();
     if (!sid || !token) throw new Error("Twilio credentials are not configured.");
