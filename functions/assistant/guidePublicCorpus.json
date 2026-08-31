@@ -14,8 +14,8 @@
    "title": "Setting up your workspace when you first sign in",
    "path": "Getting started › Setting up your workspace when you first sign in",
    "headings": "",
-   "text": "When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings.",
-   "search": "Setting up your workspace when you first sign in When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings. İlk girişte çalışma alanınızı kurma NivaDesk'i ilk açtığınızda dört soruluk bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her soru cevaplanabilir ve son adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesiyle adımlar arasında dolaşabilirsiniz.\nKurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir."
+   "text": "When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start offers \"Start empty\" and \"I'll set this up later\" as real choices. Back is there from step two onwards.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings.",
+   "search": "Setting up your workspace when you first sign in When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start offers \"Start empty\" and \"I'll set this up later\" as real choices. Back is there from step two onwards.\nThe setup runs once per workspace. If you have already been through it, everything it set is in Settings. İlk girişte çalışma alanınızı kurma NivaDesk'i ilk açtığınızda beş adımlık bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her adım cevaplanabilir ve nasıl başlamak istediğinizi soran adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesi ikinci adımdan itibaren hep oradadır.\nKurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir."
   },
   {
    "id": "what-the-setup-changes",
@@ -72,6 +72,14 @@
    "headings": "",
    "text": "Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly.\nYou can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us.",
    "search": "Monthly and yearly billing Yearly billing is ten months' price for twelve. The plan page shows the monthly equivalent and the exact amount saved beside each yearly price — Pro is £190 a year, which is £15.83 a month and £38 saved — so you can compare the two honestly.\nYou can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us. Aylık ve yıllık faturalandırma Yıllık faturalandırma, on iki ay için on aylık fiyattır. Plan sayfası her yıllık fiyatın yanında aylık karşılığını ve tam tasarruf tutarını gösterir — Pro yılda £190, yani ayda £15.83 ve £38 tasarruf — böylece ikisini dürüstçe karşılaştırabilirsiniz.\nAylık ve yıllık arasında istediğiniz zaman geçebilir, Settings ▸ Plan & Access üzerinden bize yazmadan iptal edebilirsiniz."
+  },
+  {
+   "id": "home",
+   "title": "Home",
+   "path": "Home",
+   "headings": "",
+   "text": "Home is the screen you land on, and it is yours: a wall of cards showing the state of the workshop at a glance — what needs doing, what is coming, what came in. You choose which cards are there, how big each one is and in what order they sit.",
+   "search": "Home Home is the screen you land on, and it is yours: a wall of cards showing the state of the workshop at a glance — what needs doing, what is coming, what came in. You choose which cards are there, how big each one is and in what order they sit. Ana Ekran (Home) Home, uygulamayı açtığınızda indiğiniz ekrandır ve size aittir: atölyenin durumunu tek bakışta gösteren bir kart duvarı — yapılması gereken, yaklaşan ve gelen. Hangi kartların orada olacağına, her birinin ne kadar büyük olacağına ve hangi sırada duracağına siz karar verirsiniz."
   },
   {
    "id": "dashboard",
@@ -294,8 +302,8 @@
    "title": "Files",
    "path": "Files",
    "headings": "",
-   "text": "A read-only index of every client file across all your orders, so you can find any document without opening each order.",
-   "search": "Files A read-only index of every client file across all your orders, so you can find any document without opening each order. Files (Dosyalar) Tüm siparişlerinizdeki müşteri dosyalarının salt-okunur bir indeksi; herhangi bir belgeyi her siparişi açmadan bulun."
+   "text": "The workspace's file library: every client file, receipt, product photo and supplier document in one place, whichever order, purchase or transaction it came from. You can find a document without knowing which order it belongs to, and add one before you know.",
+   "search": "Files The workspace's file library: every client file, receipt, product photo and supplier document in one place, whichever order, purchase or transaction it came from. You can find a document without knowing which order it belongs to, and add one before you know. Files (Dosyalar) Çalışma alanının dosya kütüphanesi: her müşteri dosyası, fiş, ürün fotoğrafı ve tedarikçi belgesi tek yerde — hangi siparişten, alımdan ya da banka hareketinden geldiğinden bağımsız. Bir belgeyi hangi siparişe ait olduğunu bilmeden bulabilir, bilmeden de ekleyebilirsiniz."
   },
   {
    "id": "messages",

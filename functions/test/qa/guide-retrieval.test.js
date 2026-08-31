@@ -75,6 +75,40 @@ function topPaths(question, limit = 4) {
     );
   }
   pass("production questions reach the production chapter");
+
+// Home shipped across four platforms with no chapter at all, so every question
+// about it landed somewhere else — "how do I rearrange my Home cards?" was
+// answered out of the Notes chapter, which describes the phone HOME SCREEN
+// WIDGET. Two plausible-sounding words in common and the bot confidently
+// explains the wrong feature. That is the failure mode a missing chapter
+// actually has: not silence, a wrong answer.
+{
+  const questions = [
+    "how do I rearrange my Home cards?",
+    "can I change the size of a card on Home?",
+    // "how do I hide a card I do not use?" is deliberately NOT here: order
+    // detail cards can be hidden too, so that question is genuinely ambiguous
+    // and answering it from the Orders chapter is defensible. Naming the screen
+    // is what a person actually does when they mean this one.
+    "how do I remove a card from my Home screen?",
+    "why can my colleague not see the Money card?",
+    "does changing my Home layout change everyone else's?",
+    "how do I put a card back after hiding it?"
+  ];
+  for (const question of questions) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /home/i.test(p)),
+      `"${question}" should reach Home, got: ${paths.join(" | ")}`
+    );
+  }
+  const home = CORPUS.find((s) => s.id === "home");
+  assert(home, "the Home chapter is missing from the corpus");
+  // The two facts a member cannot work out by looking at the screen.
+  assert(/yours|not the workspace/i.test(home.text), "Home must say the layout is per person");
+  assert(/financial access|access allows/i.test(home.text), "Home must say why a card is absent for a colleague");
+  pass("Home questions reach the Home chapter, not the Notes widget");
+}
 }
 
 // 3. The same for categories — and these must land on Inventory, not somewhere
@@ -156,9 +190,32 @@ function topPaths(question, limit = 4) {
   );
   const text = setup.map((s) => s.text).join("\n");
   assert(setup.length >= 3, `expected the setup sub-sections, got ${setup.length}`);
+  // Derived from the wizard, not hardcoded. The previous version of this
+  // assertion required the literal string "four-question" — and TOTAL_STEPS had
+  // become 5 when the plan step was added, so the guide's false sentence was
+  // the one thing keeping this green. A test that names the answer can only
+  // ever certify whatever was true the day it was written.
+  const WIZARD = fs.readFileSync(
+    path.join(__dirname, "..", "..", "..", "studioflow-web", "components", "OnboardingWizard.tsx"),
+    "utf8"
+  );
+  const totalSteps = Number((WIZARD.match(/const TOTAL_STEPS = (\d+)/) || [])[1]);
   assert(
-    /four-question/i.test(text),
-    "getting started describes the wizard that actually ships"
+    Number.isFinite(totalSteps) && totalSteps > 0,
+    "could not read TOTAL_STEPS out of OnboardingWizard.tsx"
+  );
+  const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  const spelled = WORDS[totalSteps];
+  assert(
+    new RegExp(`${spelled}-step|${spelled} step|${totalSteps}-step`, "i").test(text),
+    `the wizard ships ${totalSteps} steps; the guide does not say so`
+  );
+  // And the step list has to have that many entries, or the prose is right and
+  // the steps under it still describe the old flow.
+  const setupSteps = (setup.map((s) => s.text).join("\n").match(/^- /gm) || []).length;
+  assert(
+    setupSteps >= totalSteps,
+    `the guide lists ${setupSteps} setup steps for a ${totalSteps}-step wizard`
   );
   assert(
     /Ready for Collection/i.test(text),
