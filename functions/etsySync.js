@@ -313,7 +313,7 @@ function createEtsySyncFunctions(deps) {
     }
 
     const isNew = !existing || !existing.nivadeskOrderId;
-    const orderId = existing?.nivadeskOrderId || etsy.nivadeskOrderIdFor(shopId, receiptId);
+    const orderId = existing?.nivadeskOrderId || etsy.nivadeskOrderIdFor(companyId, shopId, receiptId);
 
     if (isNew) {
       // Plan limits are the workspace's, not Etsy's. A full workspace parks the

@@ -479,8 +479,15 @@ function customerLinkKey(companyId, shopId, buyerId) {
 
 // The NivaDesk order document id for an Etsy receipt. Prefixed so a glance at
 // the id says where the order came from, and stable for the same receipt.
-function nivadeskOrderIdFor(shopId, receiptId) {
-  return `etsy_${safeIdPart(shopId)}_${safeIdPart(receiptId)}`;
+//
+// companyId is part of it, exactly as woo_ and shopify_ ids are. The orders
+// collection is global: without the workspace in the key, the same Etsy shop
+// connected to two workspaces would have both of them writing the same order
+// document — each sync moving the order to whichever workspace wrote last, and
+// showing one studio's customer to the other. Its two siblings here,
+// externalOrderKey and customerLinkKey, already got this right.
+function nivadeskOrderIdFor(companyId, shopId, receiptId) {
+  return `etsy_${safeIdPart(companyId)}_${safeIdPart(shopId)}_${safeIdPart(receiptId)}`;
 }
 
 module.exports = {

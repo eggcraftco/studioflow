@@ -172,7 +172,7 @@ check(() => {
 // --- identity ---------------------------------------------------------------
 check(() => {
   assert.strictEqual(etsy.externalOrderKey("c1", "222", "333"), "c1_222_333");
-  assert.strictEqual(etsy.nivadeskOrderIdFor("222", "333"), "etsy_222_333");
+  assert.strictEqual(etsy.nivadeskOrderIdFor("c1", "222", "333"), "etsy_c1_222_333");
   // Same receipt, same ids — that is the whole duplicate defence.
   assert.strictEqual(etsy.externalOrderKey("c1", "222", "333"), etsy.externalOrderKey("c1", "222", "333"));
 }, "external ids are deterministic");
@@ -233,6 +233,30 @@ check(() => {
   }));
   assert.strictEqual(url.searchParams.get("client_id"), "abc", "client_id is never joined");
 }, "the API header joins keystring and shared secret; the OAuth client_id does not");
+
+
+// The orders collection is global. Every importer puts the workspace in the
+// document id for that reason — woo_<company>_<id>, shopify_<company>_<id> —
+// and Etsy did not. Two workspaces connected to the same Etsy shop would have
+// written the same order document, each sync moving the order to whichever
+// wrote last and showing one studio's customer to the other.
+check(() => {
+  const a = etsy.nivadeskOrderIdFor("companyA", "222", "3312345678");
+  const b = etsy.nivadeskOrderIdFor("companyB", "222", "3312345678");
+  assert.notStrictEqual(a, b, "the same shop and receipt in two workspaces must not share an order id");
+  assert.ok(a.startsWith("etsy_"), "the prefix still says where it came from");
+  assert.ok(a.includes("companyA"), "the workspace is in the id");
+  assert.strictEqual(a, etsy.nivadeskOrderIdFor("companyA", "222", "3312345678"), "and it is stable");
+  // Its two siblings already did this; they must not drift apart again.
+  assert.notStrictEqual(
+    etsy.externalOrderKey("companyA", "222", "1"),
+    etsy.externalOrderKey("companyB", "222", "1")
+  );
+  assert.notStrictEqual(
+    etsy.customerLinkKey("companyA", "222", "9"),
+    etsy.customerLinkKey("companyB", "222", "9")
+  );
+}, "an order id is scoped to the workspace, like every other importer's");
 
 if (failed) { console.error(`\n${failed} check(s) failed`); process.exit(1); }
 console.log("\nPASS");

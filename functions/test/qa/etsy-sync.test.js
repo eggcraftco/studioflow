@@ -159,7 +159,7 @@ test("the same receipt twice creates one order", async () => {
   await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
   const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
   assert.strictEqual(orders.length, 1, `expected one order, got ${orders.length}: ${orders}`);
-  assert.strictEqual(orders[0], "siparisler/etsy_222_555");
+  assert.strictEqual(orders[0], "siparisler/etsy_c1_222_555");
 });
 
 test("the external-order row is the uniqueness key", async () => {
@@ -168,7 +168,7 @@ test("the external-order row is the uniqueness key", async () => {
   await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
   const keys = [...world.docs.keys()].filter((k) => k.startsWith("etsyExternalOrders/"));
   assert.deepStrictEqual(keys, ["etsyExternalOrders/c1_222_555"]);
-  assert.strictEqual(world.docs.get(keys[0]).nivadeskOrderId, "etsy_222_555");
+  assert.strictEqual(world.docs.get(keys[0]).nivadeskOrderId, "etsy_c1_222_555");
 });
 
 // --- field ownership --------------------------------------------------------
@@ -180,7 +180,7 @@ test("a resync never touches the studio's own work", async () => {
   await fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
 
   // The studio does its work.
-  await world.handle("siparisler/etsy_222_555").set({
+  await world.handle("siparisler/etsy_c1_222_555").set({
     status: "In Production",
     designStatus: "Done",
     priority: "High",
@@ -194,7 +194,7 @@ test("a resync never touches the studio's own work", async () => {
   const second = build({ nowRef, receipts: [changed], world });
   await second.fns.runEtsyImport(REQ({ connectionId: "c1_222" }));
 
-  const order = world.docs.get("siparisler/etsy_222_555");
+  const order = world.docs.get("siparisler/etsy_c1_222_555");
   // The shop's half DID update — otherwise this test would pass by doing nothing.
   assert.strictEqual(order.orderValue, 130, "the shop still owns the money");
   assert.strictEqual(order.status, "In Production", "production status must survive a resync");
@@ -287,7 +287,7 @@ test("only the selected receipts are imported", async () => {
   assert.strictEqual(result.outcome.created, 1);
   assert.strictEqual(result.outcome.skipped, 1);
   const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
-  assert.deepStrictEqual(orders, ["siparisler/etsy_222_777"]);
+  assert.deepStrictEqual(orders, ["siparisler/etsy_c1_222_777"]);
 });
 
 test("a failure is named and counted, never swallowed", async () => {
