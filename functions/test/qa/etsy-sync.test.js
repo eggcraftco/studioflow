@@ -531,6 +531,24 @@ test("the sweep obeys the import rules the seller chose", async () => {
   assert.deepStrictEqual(orders, [], "and no order was written behind the seller's back");
 });
 
+// A first import is the seller deliberately pulling in two years of history.
+// One push per order meant every phone in the workspace buzzing once per
+// receipt — up to five hundred times for a single button press. The webhook and
+// the sweep still notify per order, because there an order really did just
+// arrive.
+test("a bulk import sends one notification, not one per order", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const many = [1, 2, 3, 4, 5].map((n) => RECEIPT({ receipt_id: 700 + n }));
+  const { fns, calls } = build({ nowRef, receipts: many });
+
+  const result = await fns.runEtsyImport(REQ({ connectionId: "c1_222", rules: { sinceDays: 90 } }));
+  assert.strictEqual(result.outcome.created, 5, "all five arrived");
+  assert.strictEqual(
+    calls.pushes, 1,
+    `one summary push for five orders, not five. Sent ${calls.pushes}.`
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");

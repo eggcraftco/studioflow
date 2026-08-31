@@ -296,7 +296,7 @@ function createEtsySyncFunctions(deps) {
   // Applying one receipt — the single path every arrival takes
   // -------------------------------------------------------------------------
 
-  async function applyReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null, rules = null }) {
+  async function applyReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null, rules = null, notify = true }) {
     const shopId = String(connectionData.externalShopId || "");
     const normalised = etsy.normalizeEtsyReceipt(receipt, {
       companyId,
@@ -415,12 +415,19 @@ function createEtsySyncFunctions(deps) {
 
     if (isNew) {
       await connect.writeSyncEvent(connectionRef, { type: "order_imported", receiptId, orderId });
-      await sendPushNotificationToCompany(companyId, {
-        title: "New Etsy order",
-        body: `${normalised.order.customerName}: ${normalised.order.designName}`.slice(0, 140),
-        orderId,
-        type: "etsy_order"
-      }).catch(() => {});
+      // One notification per order is right when an order actually arrives —
+      // a webhook, or the sweep finding something new. It is wrong for a first
+      // import, where the seller is deliberately pulling in two years of
+      // history and would have every phone in the workspace buzz five hundred
+      // times. The bulk path turns this off and sends one summary instead.
+      if (notify) {
+        await sendPushNotificationToCompany(companyId, {
+          title: "New Etsy order",
+          body: `${normalised.order.customerName}: ${normalised.order.designName}`.slice(0, 140),
+          orderId,
+          type: "etsy_order"
+        }).catch(() => {});
+      }
     }
     return { status: isNew ? "created" : "updated", receiptId, orderId };
   }
@@ -468,7 +475,8 @@ function createEtsySyncFunctions(deps) {
           receipt,
           defaultDeliveryTime,
           customerChoice: choices[receiptId] || null,
-          rules
+          rules,
+          notify: false
         });
         outcome[result.status] = (outcome[result.status] || 0) + 1;
       } catch (error) {
@@ -490,6 +498,19 @@ function createEtsySyncFunctions(deps) {
       reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
+
+    // One summary rather than one per order. The per-order notification is
+    // switched off for this path precisely so a first import of two years of
+    // history does not buzz every phone in the workspace five hundred times.
+    if (outcome.created > 0) {
+      await sendPushNotificationToCompany(companyId, {
+        title: "Etsy orders imported",
+        body: outcome.created === 1
+          ? "1 order arrived from Etsy."
+          : `${outcome.created} orders arrived from Etsy.`,
+        type: "etsy_order"
+      }).catch(() => {});
+    }
 
     return { ok: true, outcome, failures: failures.slice(0, 25) };
   });
