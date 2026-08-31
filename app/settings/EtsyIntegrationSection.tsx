@@ -141,6 +141,13 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
       setCheckOnArrival(true);
     }
     else if (outcome === "cancelled") setNotice(t("Etsy connection cancelled. Nothing was changed."));
+    else if (params.get("reason") === "no_shop") {
+      // The most likely first-connect failure by a wide margin: the seller signs
+      // in with the Etsy account they buy from rather than the one that owns
+      // the shop. Etsy tells us exactly that, so say it rather than making them
+      // guess from "something went wrong".
+      setError(t("That Etsy account does not have a shop. Sign in to Etsy with the account that owns your shop, then connect again."));
+    }
     else setError(t("The Etsy connection could not be completed. Try connecting again."));
     params.delete("etsy");
     params.delete("shop");
