@@ -610,6 +610,46 @@ test("a codeless failure records the error and leaves the connection alone", asy
   assert.ok(row.lastErrorCode, "but the failure is still recorded");
 });
 
+// Etsy rotates the refresh token on every use, so two workers refreshing at
+// once is not a slow path — it is a broken connection an hour later, nowhere
+// near the code that caused it. The lock has to outlast the slowest refresh
+// that can still succeed: etsyFetch allows four attempts at twenty seconds
+// each plus backoff, and the lock used to be sixty seconds.
+test("the refresh lock outlasts the slowest refresh that can still succeed", () => {
+  const { REFRESH_LOCK_MS } = require("../../etsyConnect");
+  const etsyModule = require("../../etsy");
+  const worstCase = etsyModule.ETSY_MAX_ATTEMPTS * 20_000;   // timeouts alone, before any backoff
+  assert.ok(
+    REFRESH_LOCK_MS > worstCase,
+    `the lock (${REFRESH_LOCK_MS}ms) must outlast ${worstCase}ms of attempts, or a second worker starts its own refresh with the same rotating token`
+  );
+});
+
+// The loser of the single-flight race waited 1.5 seconds and then returned
+// whatever token was on the row — which is usually still the expired one the
+// refresh was started to replace. A guaranteed 401, reported to the seller as a
+// connection problem that was not there.
+test("the single-flight loser refuses an expired token instead of using it", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const { fns, store } = build({ nowRef });
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
+
+  const ref = store.docHandle("etsyConnections/c1_222");
+  // Someone else holds the lock, and the stored token is already expired.
+  await ref.set({
+    refreshLockAt: nowRef.value,
+    tokenExpiresAt: nowRef.value - 1000
+  }, { merge: true });
+
+  await assert.rejects(
+    () => fns._internal.accessTokenFor(ref),
+    (error) => /being refreshed/i.test(String(error?.message || error)),
+    "it must ask the caller to try again rather than hand back a token that will 401"
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy connection lifecycle");

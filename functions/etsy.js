@@ -498,6 +498,9 @@ module.exports = {
   ETSY_SCOPES,
   etsyApiKey,
   ETSY_MIN_CALL_GAP_MS,
+  // Exposed so the refresh-lock test can check the lock outlasts a slow retry
+  // chain rather than hard-coding a number that would silently drift.
+  ETSY_MAX_ATTEMPTS,
   ETSY_REQUESTS_PER_SECOND,
   ETSY_REQUESTS_PER_DAY,
   WEBHOOK_TOLERANCE_SECONDS,

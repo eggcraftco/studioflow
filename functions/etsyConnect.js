@@ -23,7 +23,14 @@
 // dead — and the connection breaks an hour later, far from the cause.
 
 const REFRESH_LEAD_MS = 5 * 60 * 1000;      // refresh once under five minutes remain
-const REFRESH_LOCK_MS = 60 * 1000;          // a lock older than this is presumed crashed
+// A lock older than this is presumed crashed. It has to outlast the slowest
+// refresh that can still succeed, or the lock expires mid-flight and a second
+// worker starts its own — and because Etsy ROTATES the refresh token on every
+// use, the loser of that race stores a token that is already dead and the
+// connection breaks an hour later, nowhere near the cause. etsyFetch allows
+// four attempts at twenty seconds each plus backoff, so sixty seconds was
+// comfortably short enough to lose.
+const REFRESH_LOCK_MS = 3 * 60 * 1000;
 const CONNECT_REDIRECT_FALLBACK = "https://nivadesk.app/settings";
 
 function createEtsyConnectFunctions(deps) {
@@ -141,11 +148,18 @@ function createEtsyConnectFunctions(deps) {
     });
 
     if (!claimed) {
-      // Someone else is refreshing. Give them a moment, then use what they stored.
+      // Someone else is refreshing. Give them a moment, then use what they
+      // stored — but only if they actually finished. The old code returned
+      // whatever token was on the row, which after 1.5 seconds is usually still
+      // the expired one the refresh was started to replace: a guaranteed 401,
+      // reported to the seller as a connection problem that is not there.
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const after = await connectionRef.get();
       const row = after.data() || {};
-      if (row.accessTokenEncrypted) return etsy.decryptToken(row.accessTokenEncrypted, tokenKey());
+      const stillValid = millis(row.tokenExpiresAt) - now() > 0;
+      if (row.accessTokenEncrypted && stillValid) {
+        return etsy.decryptToken(row.accessTokenEncrypted, tokenKey());
+      }
       throw new HttpsError("unavailable", "The Etsy connection is being refreshed. Try again shortly.");
     }
 
