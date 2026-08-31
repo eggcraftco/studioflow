@@ -31,6 +31,10 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const ETSY_KEYSTRING = defineSecret("ETSY_KEYSTRING");
 const ETSY_TOKEN_KEY = defineSecret("ETSY_TOKEN_KEY");
 const ETSY_WEBHOOK_SECRET = defineSecret("ETSY_WEBHOOK_SECRET");
+// Etsy hands out two values and they are not interchangeable: the keystring
+// is the OAuth client_id, the Shared Secret is what the API wants as
+// x-api-key. Both are needed.
+const ETSY_SHARED_SECRET = defineSecret("ETSY_SHARED_SECRET");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const APPLE_ROOT_CA_CERTS_PEM = defineSecret("APPLE_ROOT_CA_CERTS_PEM");
 const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
@@ -5650,11 +5654,12 @@ const { createEtsyConnectFunctions } = require("./etsyConnect");
 const ETSY_REDIRECT_URI = "https://europe-west2-eggcraft-studio.cloudfunctions.net/etsyOAuthCallback";
 const etsyConnectExports = createEtsyConnectFunctions({
   admin,
-  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
-  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
+  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY] }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY] }, handler),
   HttpsError,
   etsy: etsyModule,
   keystring: () => ETSY_KEYSTRING.value(),
+  sharedSecret: () => ETSY_SHARED_SECRET.value(),
   tokenKey: () => ETSY_TOKEN_KEY.value(),
   redirectUri: () => ETSY_REDIRECT_URI,
   // Connecting or cutting a shop loose is an owner/admin act: it changes what
@@ -5673,7 +5678,7 @@ const { createEtsySyncFunctions } = require("./etsySync");
 const etsyCustomerMatch = require("./etsyCustomerMatch");
 const etsySyncExports = createEtsySyncFunctions({
   admin,
-  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY] }, handler),
+  onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY] }, handler),
   HttpsError,
   etsy: etsyModule,
   customerMatch: etsyCustomerMatch,
@@ -5704,7 +5709,7 @@ exports.reconcileEtsyConnections = etsySyncExports.reconcileEtsyConnections;
 const { createEtsyWebhookFunction } = require("./etsyWebhook");
 exports.etsyWebhook = createEtsyWebhookFunction({
   admin,
-  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_TOKEN_KEY, ETSY_WEBHOOK_SECRET] }, handler),
+  onRequest: (options, handler) => onRequest({ ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY, ETSY_WEBHOOK_SECRET] }, handler),
   etsy: etsyModule,
   connect: etsyConnectExports._internal,
   applyReceipt: etsySyncExports._internal.applyReceipt,

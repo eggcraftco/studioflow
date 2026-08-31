@@ -36,6 +36,7 @@ function createEtsyConnectFunctions(deps) {
     keystring,                  // () => string
     tokenKey,                   // () => string
     redirectUri,                // () => string
+    sharedSecret = () => "",    // () => string, the x-api-key value
     requireWorkspaceOwner,      // (request) => { uid, companyId, companyData }
     requireWorkspaceMember,     // (request) => { uid, companyId, companyData }
     appReturnUrl = () => CONNECT_REDIRECT_FALLBACK,
@@ -201,13 +202,13 @@ function createEtsyConnectFunctions(deps) {
   async function callEtsy(connectionRef, path, options = {}) {
     let token = await accessTokenFor(connectionRef);
     try {
-      return await etsy.etsyFetch(path, { ...options, keystring: keystring(), accessToken: token });
+      return await etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: sharedSecret(), accessToken: token });
     } catch (error) {
       if (error?.code !== "auth_expired") throw error;
       // The stored expiry said fresh but Etsy disagrees — the token was revoked
       // or rotated elsewhere. One forced refresh, then give up honestly.
       token = await accessTokenFor(connectionRef, { force: true });
-      return etsy.etsyFetch(path, { ...options, keystring: keystring(), accessToken: token });
+      return etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: sharedSecret(), accessToken: token });
     }
   }
 
@@ -328,10 +329,15 @@ function createEtsyConnectFunctions(deps) {
       for (const path of [etsyUserId ? `/users/${etsyUserId}/shops` : "", "/users/me/shops"]) {
         if (!path) continue;
         try {
-          shop = await etsy.etsyFetch(path, { keystring: keystring(), accessToken });
+          shop = await etsy.etsyFetch(path, { keystring: keystring(), apiKey: sharedSecret(), accessToken });
           if (shop) break;
         } catch (failure) {
-          lookupError = String(failure?.message || failure);
+          // Etsy's own words, not just the status. A 403 here can mean the
+          // scope, the app's access level, or the endpoint — and the status
+          // alone cannot tell them apart. This goes to the server log; the
+          // seller only ever sees the plain sentence.
+          const detail = String(failure?.body || "").slice(0, 300);
+          lookupError = String(failure?.message || failure) + (detail ? ` ${detail}` : "");
         }
       }
       const firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);

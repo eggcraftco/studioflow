@@ -245,7 +245,13 @@ function parseRetryAfter(header) {
  * NOT retried here — a dead token is refreshed by the caller, and hammering a
  * 401 only burns the daily quota.
  */
-async function etsyFetch(path, { keystring, accessToken = "", method = "GET", query = null, body = null, timeoutMs = 20000 } = {}) {
+// `apiKey` is what goes in the x-api-key header, and it is NOT the keystring.
+// Etsy uses two different values: the keystring is the OAuth client_id, and
+// the app's Shared Secret is what the API accepts as x-api-key. Sending the
+// keystring gets a 403 whose body reads "Shared secret is required in
+// x-api-key header" — on every endpoint, including the unauthenticated ping.
+// It falls back to the keystring so nothing breaks before the secret is set.
+async function etsyFetch(path, { keystring, apiKey = "", accessToken = "", method = "GET", query = null, body = null, timeoutMs = 20000 } = {}) {
   if (!keystring) throw new EtsyApiError("invalid", "Etsy API key is not configured.");
   const url = new URL(path.startsWith("http") ? path : `${ETSY_API_BASE}${path}`);
   if (query) {
@@ -260,7 +266,7 @@ async function etsyFetch(path, { keystring, accessToken = "", method = "GET", qu
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const headers = { "x-api-key": String(keystring), Accept: "application/json" };
+      const headers = { "x-api-key": String(apiKey || keystring), Accept: "application/json" };
       if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
       if (body) headers["Content-Type"] = "application/json";
       const response = await fetch(url.toString(), {
