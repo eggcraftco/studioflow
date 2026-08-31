@@ -393,7 +393,13 @@ function createEtsySyncFunctions(deps) {
         ? { customerId: customerChoice.customerId }
         : await existingLinkFor(companyId, shopId, buyerId);
       if (link?.customerId || customerChoice?.decision === "create") {
-        await upsertIntegrationCustomer(companyId, normalised.customer, "etsy");
+        // Hand the confirmed customer id over rather than letting the mirror
+        // re-guess by relay email and parcel name. The seller already decided.
+        await upsertIntegrationCustomer(
+          companyId,
+          link?.customerId ? { ...normalised.customer, customerId: link.customerId } : normalised.customer,
+          "etsy"
+        );
       } else if (!link) {
         const candidates = await loadCustomerCandidates(companyId, normalised.source);
         const proposal = customerMatch.proposeCustomerMatch({ source: normalised.source, candidates });

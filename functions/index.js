@@ -17892,7 +17892,22 @@ async function upsertIntegrationCustomer(companyId, info, source = "woocommerce"
   // already lives here.
   const externalCustomerId = cleanWooText(String(info.externalCustomerId ?? "")).slice(0, 80);
   let snap = { empty: true, docs: [] };
-  if (externalCustomerId) {
+
+  // A decision the seller already made beats every heuristic below it. When
+  // they confirm "this Etsy buyer is that customer", the link is the answer —
+  // re-running email-then-name matching on the next order can land somewhere
+  // else entirely, because Etsy hides most buyers behind a relay address and
+  // the name is whatever is on the parcel. The confirmed link was acting only
+  // as a gate ("yes, mirror someone") rather than as the instruction it is.
+  const confirmedId = cleanWooText(String(info.customerId ?? "")).slice(0, 200);
+  if (confirmedId) {
+    const confirmed = await db.collection("musteriler").doc(confirmedId).get();
+    if (confirmed.exists && String((confirmed.data() || {}).companyId || "") === String(companyId)) {
+      snap = { empty: false, docs: [confirmed] };
+    }
+  }
+
+  if (snap.empty && externalCustomerId) {
     snap = await db.collection("musteriler")
       .where("companyId", "==", companyId)
       .where("source", "==", source)

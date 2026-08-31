@@ -577,6 +577,32 @@ test("a capped import neither hides it nor moves the watermark past what it skip
   );
 });
 
+// The seller confirms "this Etsy buyer is that customer" and the decision is
+// stored. It was then used only as a gate — "yes, mirror someone" — while the
+// write itself re-matched by email and name. Etsy hides most buyers behind a
+// relay address and the name is whatever is on the parcel, so the next order
+// could land on a different customer entirely, or mint a duplicate, after the
+// seller had already answered the question.
+test("a confirmed buyer link decides which customer the order writes to", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const { fns, calls } = build({ nowRef, world });
+
+  // The seller's remembered decision for this buyer.
+  await world.handle(`etsyCustomerLinks/${etsy.customerLinkKey("c1", "222", "987")}`).set({
+    companyId: "c1", externalShopId: "222", externalBuyerId: "987",
+    customerId: "customer-chosen-by-the-seller", matchMethod: "user_confirmed"
+  }, { merge: true });
+
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222", rules: { sinceDays: 90 } }));
+
+  assert.ok(calls.customers.length, "the customer was mirrored");
+  assert.strictEqual(
+    calls.customers[0].customerId, "customer-chosen-by-the-seller",
+    "the confirmed id travels with the write instead of being re-guessed"
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");
