@@ -603,6 +603,28 @@ test("a confirmed buyer link decides which customer the order writes to", async 
   );
 });
 
+// Etsy's 5,000 calls a day belong to the whole application, not to each
+// workspace. Nothing counted them, so the first sign of trouble would have been
+// every shop failing at once with no way to tell how close we had been.
+test("Etsy calls are counted against the shared daily budget", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const { fns } = build({ nowRef, world });
+
+  const before = await fns._internal.etsyCallsToday();
+  assert.strictEqual(before, 0, "a fresh day starts at zero");
+
+  await fns.runEtsyImport(REQ({ connectionId: "c1_222", rules: { sinceDays: 90 } }));
+  const after = await fns._internal.etsyCallsToday();
+  assert.ok(after > 0, `the fetch was counted, saw ${after}`);
+
+  // And the sweep's ceiling leaves room for the people-facing paths.
+  assert.ok(
+    fns._internal.SWEEP_QUOTA_CEILING < 1,
+    "the sweep must stand down before the budget is gone, so a webhook or a Sync now still works"
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");

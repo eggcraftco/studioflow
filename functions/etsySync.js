@@ -76,6 +76,46 @@ function createEtsySyncFunctions(deps) {
    * never needed. The daily quota is shared across every NivaDesk seller, so
    * this distinction is not a micro-optimisation.
    */
+  /**
+   * Etsy's daily budget is 5,000 calls for the whole application — every
+   * NivaDesk workspace shares one allowance, not one each. Nothing counted it,
+   * so the first sign of trouble would have been every shop failing at once,
+   * with no way to tell how close we had been.
+   *
+   * One counter document per day. The sweep is the only thing that gives way:
+   * it can catch up on the next run, while a webhook or a seller pressing Sync
+   * now is happening in front of someone.
+   */
+  const QUOTA_COLLECTION = "etsyQuota";
+  const SWEEP_QUOTA_CEILING = 0.75;   // the sweep stops here; the rest is for people
+
+  function quotaDocId(atMs) {
+    return new Date(atMs).toISOString().slice(0, 10);   // YYYY-MM-DD, UTC
+  }
+
+  async function recordEtsyCalls(count) {
+    if (!count) return;
+    try {
+      await db().collection(QUOTA_COLLECTION).doc(quotaDocId(now())).set({
+        calls: admin.firestore.FieldValue.increment(count),
+        day: quotaDocId(now()),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      // Never fail real work because the meter would not write.
+      console.warn("etsy quota counter failed:", error?.message || error);
+    }
+  }
+
+  async function etsyCallsToday() {
+    try {
+      const snap = await db().collection(QUOTA_COLLECTION).doc(quotaDocId(now())).get();
+      return Number((snap.data() || {}).calls || 0);
+    } catch (error) {
+      return 0;   // unknown is not the same as exhausted
+    }
+  }
+
   async function fetchReceipts(connectionRef, shopId, {
     minCreated = 0,
     minLastModified = 0,
@@ -93,6 +133,7 @@ function createEtsySyncFunctions(deps) {
     const collected = [];
     let offset = 0;
     let truncated = false;
+    let pages = 0;
 
     while (collected.length < max) {
       const limit = Math.min(RECEIPT_PAGE_SIZE, max - collected.length);
@@ -108,6 +149,7 @@ function createEtsySyncFunctions(deps) {
           sort_order: sortOrder
         }
       });
+      pages += 1;
       const results = Array.isArray(page?.results) ? page.results : [];
       collected.push(...results);
       const total = Number(page?.count);
@@ -121,6 +163,7 @@ function createEtsySyncFunctions(deps) {
       // Stay inside 5 requests/second with room to spare.
       await new Promise((resolve) => setTimeout(resolve, etsy.ETSY_MIN_CALL_GAP_MS));
     }
+    await recordEtsyCalls(pages);
     return { receipts: collected, truncated };
   }
 
@@ -643,6 +686,18 @@ function createEtsySyncFunctions(deps) {
     ? onSchedule(
         { schedule: "every 15 minutes", timeZone: "Europe/London", region: "europe-west2", timeoutSeconds: 540 },
         async () => {
+          // The sweep is the one caller that can wait. If the day's shared
+          // allowance is nearly spent, stand down and leave the rest for
+          // webhooks and for sellers pressing Sync now, which are happening in
+          // front of someone. The next sweep is fifteen minutes away, and it
+          // walks oldest-modified first, so nothing is lost by pausing.
+          const spent = await etsyCallsToday();
+          const ceiling = Math.floor(etsy.ETSY_REQUESTS_PER_DAY * SWEEP_QUOTA_CEILING);
+          if (spent >= ceiling) {
+            console.log(`etsy reconcile sweep: standing down, ${spent}/${etsy.ETSY_REQUESTS_PER_DAY} calls used today`);
+            return;
+          }
+
           const snap = await db().collection(etsy.CONNECTION_COLLECTION)
             .where("status", "==", "connected")
             .get();
@@ -662,7 +717,10 @@ function createEtsySyncFunctions(deps) {
               console.warn("etsy reconcile failed:", row.ref.id, error?.code || error?.message || error);
             }
           }
-          console.log(`etsy reconcile sweep: ${swept} shop(s), ${failed} failed, ${snap.size} connected`);
+          console.log(
+            `etsy reconcile sweep: ${swept} shop(s), ${failed} failed, ${snap.size} connected, ` +
+            `${await etsyCallsToday()}/${etsy.ETSY_REQUESTS_PER_DAY} calls used today`
+          );
         }
       )
     : null;
@@ -673,7 +731,7 @@ function createEtsySyncFunctions(deps) {
     syncEtsyNow,
     resolveEtsyCustomerMatch,
     reconcileEtsyConnections,
-    _internal: { fetchReceipts, applyReceipt, reconcileConnection, classify, normaliseRules, loadCustomerCandidates }
+    _internal: { fetchReceipts, applyReceipt, reconcileConnection, classify, normaliseRules, loadCustomerCandidates, recordEtsyCalls, etsyCallsToday, SWEEP_QUOTA_CEILING }
   };
 }
 
