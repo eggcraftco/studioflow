@@ -6,6 +6,35 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentWritten, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const archiver = require("archiver");
 const nodemailer = require("nodemailer");
+
+// Outbound mail, with one door.
+//
+// Every mail path in this file went straight to nodemailer.createTransport,
+// which opens a real SMTP connection to Hostinger. The Firebase emulators
+// emulate Firestore, Auth and the functions runtime — they do not emulate the
+// internet. So a test that exercised a callable which happens to send an email
+// sent a REAL one, to a real inbox, every time it ran.
+//
+// That is not hypothetical. test/qa/ticket-dedupe.mjs calls createSupportTicket
+// twice on purpose (it is testing deduplication), and the day those suites
+// were made runnable again it put a stream of "[NivaDesk Support] Uygulama
+// çöküyor — My Studio" tickets, from the seeded QA user, into a real inbox.
+//
+// FIRESTORE_EMULATOR_HOST is the honest signal: a deployed function never has
+// it, and anything that has it is a test. Going through one helper rather than
+// guarding four call sites means the fifth mail path somebody adds later is
+// safe without them having to know any of this.
+function nvMailTransport(options) {
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return {
+      sendMail: async (message) => {
+        console.log(`[emulator] mail suppressed: to=${message && message.to} subject=${message && message.subject}`);
+        return { messageId: "emulator-suppressed", accepted: [], rejected: [] };
+      }
+    };
+  }
+  return nodemailer.createTransport(options);
+}
 const { defineSecret } = require("firebase-functions/params");
 
 // The functions emulator wraps firebase-admin in a proxy and hands back
@@ -3326,7 +3355,7 @@ async function emailNivadeskSupportForTicket(ticketId, payload = {}) {
   const category = String(payload.category || "other");
   const priority = supportPriorityLabelForEmail(payload.priority);
 
-  const transporter = nodemailer.createTransport({
+  const transporter = nvMailTransport({
     host,
     port,
     secure: port === 465,
@@ -3523,7 +3552,7 @@ async function emailNivadeskSupportForWebsiteChat(ticketId, payload = {}, kind =
   const page = String(payload.visitorPage || "");
   const language = String(payload.language || "");
 
-  const transporter = nodemailer.createTransport({
+  const transporter = nvMailTransport({
     host, port, secure: port === 465, auth: { user, pass: password }
   });
 
@@ -3601,7 +3630,7 @@ async function emailWebsiteChatVisitorReply(ticketId, ticketData = {}, message =
   const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
   const inbox = String(process.env.NIVADESK_SUPPORT_INBOX || NIVADESK_SUPPORT_INBOX).trim();
 
-  const transporter = nodemailer.createTransport({
+  const transporter = nvMailTransport({
     host, port, secure: port === 465, auth: { user, pass: password }
   });
 
@@ -18351,6 +18380,10 @@ exports._wooWebhookAuthDecision = wooWebhookAuthDecision;
 // converted it ever arrived.
 exports._billingPlanFromCompanyData = billingPlanFromCompanyData;
 
+// Exported so the guard can be tested for what it DOES rather than for how it
+// is written. See test/qa/no-mail-from-tests.mjs.
+exports._nvMailTransport = nvMailTransport;
+
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
 // token. Owner-only; the secret lives in the server-only integrationSecrets
@@ -24953,7 +24986,7 @@ async function sendPortalStatusEmail({ toEmail, businessName, replyTo, subject, 
   const port = Number(process.env.NIVADESK_SMTP_PORT || 465);
   const user = String(process.env.NIVADESK_SMTP_USER || NIVADESK_SUPPORT_INBOX).trim();
 
-  const transporter = nodemailer.createTransport({
+  const transporter = nvMailTransport({
     host,
     port,
     secure: port === 465,
