@@ -173,6 +173,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   async function guard(key: string, run: () => Promise<void>) {
     setBusy(key);
     setError("");
+    // The last action's green line has nothing to say about this one, and
+    // leaving it there puts a success message directly above the error that
+    // contradicts it.
+    setNotice("");
     try {
       await run();
     } catch (actionError) {
@@ -283,8 +287,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     );
   }
 
-  const needsAttention =
-    connection.needsReconnect || connection.status === "needs_reconnect" || liveCheck === "unhealthy";
+  // What the server knows, which is what Reconnect exists for.
+  const storedNeedsReconnect = connection.needsReconnect || connection.status === "needs_reconnect";
+  // What the row says, which also reflects a live check that just failed.
+  const needsAttention = storedNeedsReconnect || liveCheck === "unhealthy";
   // Connected is a fact: we hold access. Healthy is a claim about this
   // moment, so only a live answer from Etsy earns that word.
   const connectionLabel = needsAttention
@@ -312,7 +318,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <span>{t("Connection")}</span>
             <span className="settings-action-row">
               <span className="studio-pill">{connectionLabel}</span>
-              {needsAttention ? null : (
+              {/* Hidden on a stored needs_reconnect, where Reconnect is the
+                  right action — but never hidden because a live check just
+                  failed. Etsy has bad minutes; that would leave the one button
+                  that can clear the state behind the state it set. */}
+              {storedNeedsReconnect ? null : (
                 <button
                   type="button"
                   className="button secondary"
@@ -374,7 +384,17 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               disabled={busy === "sync"}
               onClick={() =>
                 guard("sync", async () => {
-                  await syncEtsyNow(companyId, connection.id);
+                  // A button offered to fix something has to say whether it
+                  // did. This one ran and reported nothing either way.
+                  const result = await syncEtsyNow(companyId, connection.id);
+                  const created = Number(result?.outcome?.created || 0);
+                  const updated = Number(result?.outcome?.updated || 0);
+                  setNotice(
+                    created || updated
+                      ? `${created} ${t("imported")} · ${updated} ${t("updated")}`
+                      : t("Etsy answered. This connection is working.")
+                  );
+                  setLiveCheck("healthy");
                   await refresh();
                 })
               }
@@ -494,11 +514,20 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                     const result = await syncEtsyNow(companyId, connection.id);
                     const created = Number(result?.outcome?.created || 0);
                     const updated = Number(result?.outcome?.updated || 0);
-                    setNotice(
-                      created || updated
-                        ? `${created} ${t("imported")} · ${updated} ${t("updated")}`
-                        : t("Everything is already up to date.")
-                    );
+                    const failed = Number(result?.outcome?.failed || 0);
+                    const held = Number(result?.outcome?.held || 0);
+                    // "Everything is already up to date" was said whenever
+                    // nothing was created or updated — including a run where
+                    // every order failed. Report what actually happened.
+                    if (failed) {
+                      setError(`${failed} ${t("could not be imported. The sync log below says why.")}`);
+                    }
+                    const good = [
+                      created || updated ? `${created} ${t("imported")} · ${updated} ${t("updated")}` : "",
+                      held ? `${held} ${t("are waiting for room on your plan.")}` : ""
+                    ].filter(Boolean).join(" · ");
+                    if (good) setNotice(good);
+                    else if (!failed) setNotice(t("Everything is already up to date."));
                     await refresh();
                   })
                 }
@@ -634,6 +663,39 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                                     );
                                     setNotice(t("Decision saved. Later orders from this buyer will use it."));
                                     setOpenMatch("");
+                                    // The row still said "review" and still
+                                    // offered the same candidates, so the
+                                    // seller could not tell the decision had
+                                    // landed — and every other row from the
+                                    // same buyer kept asking. Settle them all.
+                                    setPreview((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            summary: {
+                                              ...current.summary,
+                                              review: Math.max(
+                                                0,
+                                                current.summary.review -
+                                                  current.rows.filter(
+                                                    (other) =>
+                                                      other.buyerId === row.buyerId &&
+                                                      other.customer.decision === "review"
+                                                  ).length
+                                              )
+                                            },
+                                            rows: current.rows.map((other) =>
+                                              other.buyerId === row.buyerId
+                                                ? {
+                                                    ...other,
+                                                    outcome: other.outcome === "review" ? "ready" : other.outcome,
+                                                    customer: { ...other.customer, decision: "link", candidates: [] }
+                                                  }
+                                                : other
+                                            )
+                                          }
+                                        : current
+                                    );
                                   })
                                 }
                               >
