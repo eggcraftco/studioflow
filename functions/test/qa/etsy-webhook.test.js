@@ -65,12 +65,12 @@ function makeWorld({ connections = [{ id: "c1_222", companyId: "c1", externalSho
   return { admin, docs, created, events, handle };
 }
 
-function build({ world, secret = SECRET, fetched = { receipt_id: 555 }, applied = { status: "created", receiptId: "555" }, onApply = null, callEtsy = null }) {
+function build({ world, secret = SECRET, fetched = { receipt_id: 555 }, applied = { status: "created", receiptId: "555" }, onApply = null, callEtsy = null, etsyOverride = null }) {
   const calls = { fetches: [], applies: 0 };
   return createEtsyWebhookFunction({
     admin: world.admin,
     onRequest: (_o, handler) => handler,
-    etsy,
+    etsy: etsyOverride || etsy,
     connect: {
       callEtsy: callEtsy || (async (_ref, url) => { calls.fetches.push(url); return fetched; }),
       writeSyncEvent: async (_ref, event) => { world.events.push(event); }
@@ -269,6 +269,28 @@ test("an unconfigured secret never accepts anything", async () => {
   await fn(req(PAID), r);
   assert.strictEqual(r.payload.ok, false);
   assert.strictEqual(r.payload.reason, "not_configured");
+});
+
+// The signature diagnosis tries every plausible secret encoding and body
+// framing — dozens of HMAC passes over bytes the caller chose. Worth doing once
+// when a real webhook is misconfigured; not worth selling to a stranger for the
+// price of one HTTP request, as often as they like.
+test("a flood of bad signatures does not buy a diagnosis each time", async () => {
+  const world = makeWorld();
+  let diagnoses = 0;
+  const etsyOverride = Object.create(etsy);
+  etsyOverride.diagnoseWebhookSignature = (...args) => {
+    diagnoses += 1;
+    return etsy.diagnoseWebhookSignature(...args);
+  };
+  const fn = build({ world, etsyOverride });
+
+  for (let i = 0; i < 5; i += 1) {
+    const r = res();
+    await fn(req({ event_type: "order.paid", shop_id: "222" }, { id: `probe-${i}`, secret: "whsec_" + Buffer.from("wrong").toString("base64") }), r);
+    assert.strictEqual(r.code, 401, "every probe is still rejected");
+  }
+  assert.ok(diagnoses <= 1, `at most one diagnosis for five probes, ran ${diagnoses}`);
 });
 
 (async () => {

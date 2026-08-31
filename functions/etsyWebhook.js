@@ -25,6 +25,12 @@
 
 const WEBHOOK_EVENTS = new Set(["order.paid", "order.canceled", "order.shipped", "order.delivered"]);
 
+// A misconfigured webhook is worth diagnosing once. A stranger sending wrong
+// signatures on purpose is not worth diagnosing at all, and the diagnosis is
+// dozens of HMAC passes over bytes they chose.
+const DIAGNOSIS_INTERVAL_MS = 10 * 60 * 1000;
+let lastDiagnosisMs = 0;
+
 function createEtsyWebhookFunction(deps) {
   const {
     admin,
@@ -69,7 +75,15 @@ function createEtsyWebhookFunction(deps) {
       // An unverified request is not from Etsy as far as we are concerned.
       // 401 and no detail: telling a prober which check failed helps them.
       console.warn("etsyWebhook rejected:", verdict.reason);
-      if (verdict.reason === "signature_mismatch" && typeof etsy.diagnoseWebhookSignature === "function") {
+      // The diagnosis tries every plausible secret encoding and body framing,
+      // which is dozens of HMAC passes over the caller's own bytes. That is
+      // fine once, when a real webhook is misconfigured and someone is trying
+      // to find out why. It is not fine on demand: any stranger with a wrong
+      // signature could buy that work for the price of one HTTP request, as
+      // often as they liked. At most one per instance per ten minutes.
+      const canDiagnose = now() - lastDiagnosisMs > DIAGNOSIS_INTERVAL_MS;
+      if (verdict.reason === "signature_mismatch" && canDiagnose && typeof etsy.diagnoseWebhookSignature === "function") {
+        lastDiagnosisMs = now();
         // Names and lengths only — never a secret, a signature or a body.
         try {
           console.warn("etsyWebhook signature diagnosis:", JSON.stringify(etsy.diagnoseWebhookSignature({
