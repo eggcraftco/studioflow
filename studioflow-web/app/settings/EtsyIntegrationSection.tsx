@@ -273,6 +273,17 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           <p className="muted-copy">
             {t("Disconnecting does not delete the orders already in NivaDesk.")}
           </p>
+          {/* Required by Etsy's API Terms of Use, verbatim and in a prominent
+              position: "The term 'Etsy' is a trademark of Etsy, Inc. This
+              application uses the Etsy API but is not endorsed or certified by
+              Etsy, Inc." It is deliberately NOT translated — it is a trademark
+              notice, and the wording Etsy requires is this wording. It sits
+              above the connect button because that is the moment a seller is
+              deciding whether we are Etsy, and we are not. */}
+          <p className="muted-copy">
+            The term &ldquo;Etsy&rdquo; is a trademark of Etsy, Inc. This application uses the
+            Etsy API but is not endorsed or certified by Etsy, Inc.
+          </p>
           <div className="settings-action-row">
             <button
               type="button"

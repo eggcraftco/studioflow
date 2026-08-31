@@ -1943,6 +1943,14 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(t("Disconnecting does not delete the orders already in NivaDesk."),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Required verbatim by Etsy's API Terms of Use, in a prominent
+                // position. NOT translated: it is a trademark notice, and the
+                // wording Etsy requires is this wording.
+                Text(
+                    "The term \u201CEtsy\u201D is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (isOwner) {
                     Button(
                         onClick = {

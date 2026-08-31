@@ -289,6 +289,15 @@ private struct EtsyConnectCard: View {
                 EtsyPermissionRow(text: tr("Import line items and variations"), allowed: true, label: tr("Included"), language: language)
                 EtsyPermissionRow(text: tr("Edit listings or Etsy checkout"), allowed: false, label: tr("Not allowed"), language: language)
 
+                // Required verbatim by Etsy's API Terms of Use, in a prominent
+                // position. NOT translated: it is a trademark notice, and the
+                // wording Etsy requires is this wording. It sits with the
+                // permissions because that is where a seller is working out
+                // who they are dealing with, and it is not Etsy.
+                Text("The term \u{201C}Etsy\u{201D} is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Text(tr("Privacy summary")).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
                 Text(tr("NivaDesk stores authorised connection tokens securely, uses data only for the connected workspace, and lets the owner disconnect at any time."))
                     .font(.system(size: 12)).foregroundColor(.secondary)
