@@ -5815,7 +5815,12 @@ Object.assign(exports, clientDomainCallables);
 // platforms write that document) into companies/{id}/settingsAuditLog, and an
 // owner callable reads it back. Module for the same reason clientDomains is.
 const { createSettingsAuditFunctions } = require("./settingsAudit");
-const settingsAuditCallables = createSettingsAuditFunctions({
+// Destructured like every other module factory here: without it the module's
+// `_internal` bag lands on exports, where a deploy reads the export list and
+// finds an object that is not a function. Harmless so far, and precisely the
+// kind of harmless that becomes a deploy error the day something starts
+// validating it.
+const { _internal: settingsAuditInternal, ...settingsAuditCallables } = createSettingsAuditFunctions({
   admin,
   onCall,
   HttpsError,
@@ -5829,7 +5834,7 @@ Object.assign(exports, settingsAuditCallables);
 // deliberate act. Lives in its own module for the same reason inventory does.
 const { createFilesLibraryFunctions, createPortalFilesHelper } = require("./filesLibrary");
 const portalLibraryFilesForOrder = createPortalFilesHelper({ admin });
-Object.assign(exports, createFilesLibraryFunctions({
+const { _internal: filesLibraryInternal, ...filesLibraryCallables } = createFilesLibraryFunctions({
   admin,
   onCall,
   HttpsError,
@@ -5845,7 +5850,8 @@ Object.assign(exports, createFilesLibraryFunctions({
     }
     return context;
   }
-}));
+});
+Object.assign(exports, filesLibraryCallables);
 
 // Pandle bookkeeping bridge: confirms NivaDesk-categorised bank transactions
 // in Pandle's Check queue (OAuth2, owner-only, read + confirm only).
@@ -15245,6 +15251,32 @@ exports.appendClientFile = onCall({ region: "europe-west2" }, async (request) =>
       source: orderData.source || "web"
     });
   });
+
+  // Into the file library, at upload time.
+  //
+  // Before this, an order's client file became a library record only when
+  // somebody opened the web Files page and pressed the index button — not
+  // scheduled, and not offered on Mac, iPhone or Android at all. So a file
+  // uploaded from a phone was not in the library, and neither was one uploaded
+  // from the web order card, which is most of them. The library exists to
+  // answer "find this document without knowing its order", and it could not.
+  //
+  // Doing it on the server means the apps already on people's phones are fixed
+  // too, without waiting for a store release. Best-effort on purpose: the file
+  // is already on the order and the upload has already succeeded, so a library
+  // bookkeeping failure must not turn that into an error the person sees.
+  try {
+    const orderSnap = await orderRef.get();
+    await filesLibraryInternal.registerOrderClientFile({
+      companyId,
+      orderId,
+      orderData: orderSnap.exists ? (orderSnap.data() || {}) : {},
+      file: clientFile,
+      uploaderEmail: String(request.auth?.token?.email || "")
+    });
+  } catch (error) {
+    console.warn("client file library registration failed:", error?.message || error);
+  }
 
   try {
     const updatedCompanySnap = await companyRef.get();

@@ -108,6 +108,38 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
     };
   }
 
+  // The shape of a brand-new library record, in ONE place.
+  //
+  // It used to exist only inside indexWorkspaceFilesIntoLibrary's upsert. When
+  // the upload path started creating records too, writing the object a second
+  // time produced activeVersion where the indexer writes activeVersionIndex,
+  // and a versions entry with the wrong key names — two record shapes in one
+  // collection, from two functions nobody would think to compare. So both call
+  // this.
+  function newLibraryRecord({ companyId, storagePath, fields, links, email, now, action }) {
+    return {
+      companyId,
+      storagePath,
+      ...fields,
+      links,
+      ...derived(links),
+      tags: [],
+      versions: [{
+        storagePath,
+        fileName: fields.fileName,
+        fileSize: fields.fileSize,
+        uploadedAtMs: fields.createdAtMs || now,
+        uploadedByEmail: fields.uploadedByEmail || "",
+        note: ""
+      }],
+      activeVersionIndex: 0,
+      activity: [activityEntry(email, action, fields.source)],
+      trashedAtMs: 0,
+      createdAtMs: fields.createdAtMs || now,
+      updatedAtMs: now
+    };
+  }
+
   function derived(links) {
     return {
       linkKinds: Array.from(new Set(links.map((row) => row.kind))),
@@ -451,6 +483,78 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
   // A bank receipt whose transaction is matched to a purchase links to the
   // purchase AND to every item that purchase created: the review's invoice.pdf
   // example, produced automatically.
+  // Put ONE order file into the library, at the moment it is uploaded.
+  //
+  // Until now the only way an order's client file became a library record was
+  // indexWorkspaceFilesIntoLibrary — a button on the web Files page that
+  // re-scans the whole workspace. It is not scheduled and no other platform
+  // offers it, so a file uploaded from a phone (or from the web order card)
+  // simply was not in the library until somebody happened to press it. The
+  // library's whole promise is "find a document without knowing which order it
+  // belongs to", and it was quietly not keeping it.
+  //
+  // Doing it here rather than in the apps means the fix reaches the versions
+  // already on people's phones, and does not wait for a store release.
+  //
+  // Best-effort by contract: the caller must not let a library bookkeeping
+  // failure fail an upload that already succeeded.
+  async function registerOrderClientFile({ companyId, orderId, orderData = {}, file = {}, uploaderEmail = "" }) {
+    const storagePath = String((file && (file.storagePath || file.path)) || "");
+    if (!companyId || !orderId || !storagePath) return { ok: false, reason: "missing" };
+    if (!storagePath.startsWith(`companies/${companyId}/`)) return { ok: false, reason: "foreign_path" };
+
+    const now = Date.now();
+    const ref = recordsRef(companyId).doc(fileIdForPath(storagePath));
+    const label = clean(`${orderData.customerName || ""} — ${orderData.designName || ""}`, "", 160);
+    const link = {
+      kind: "order", id: String(orderId), label, audience: "team",
+      displayName: "", addedAtMs: now, addedByEmail: clean(uploaderEmail, "", 120)
+    };
+
+    const snap = await ref.get();
+    if (snap.exists) {
+      // Re-uploading the same object, or a second platform reporting it. The
+      // record stands; only a missing link is worth adding.
+      const data = snap.data() || {};
+      const links = Array.isArray(data.links) ? data.links.slice() : [];
+      if (links.some((row) => row.kind === "order" && row.id === String(orderId))) {
+        return { ok: true, created: false, linked: false };
+      }
+      if (links.length >= LINK_CAP) return { ok: true, created: false, linked: false };
+      links.push(link);
+      await ref.set({ links, ...derived(links), updatedAtMs: now }, { merge: true });
+      return { ok: true, created: false, linked: true };
+    }
+
+    const fileName = clean(file.fileName || file.name, "file", 200);
+    await ref.set(newLibraryRecord({
+      companyId,
+      storagePath,
+      fields: {
+        fileName,
+        displayName: fileName,
+        // safeClientFileMetadata normalises an upload before it reaches here
+        // and calls this contentType; the indexer, reading raw order documents,
+        // sees fileType. Both spellings arrive at this function, and reading
+        // only one stored every phone upload with no content type at all.
+        fileType: clean(file.contentType || file.fileType, "", 120),
+        fileSize: Math.max(0, Number(file.fileSize) || 0),
+        source: "clientFile",
+        uploadedByEmail: clean(file.uploadedByEmail || file.uploadedBy || uploaderEmail, "", 120),
+        // Likewise the time: a Timestamp from the normaliser, plain millis from
+        // a raw order document.
+        createdAtMs: Number(file.uploadedAtMs)
+          || (file.uploadedAt && typeof file.uploadedAt.toMillis === "function" ? file.uploadedAt.toMillis() : 0)
+          || now
+      },
+      links: [link],
+      email: uploaderEmail,
+      now,
+      action: "uploaded"
+    }), { merge: true });
+    return { ok: true, created: true, linked: true };
+  }
+
   const indexWorkspaceFilesIntoLibrary = onCall({ region: REGION, timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
     const { companyId, email } = await requireWorkspace(request, { area: "clientFiles", write: true });
     const now = Date.now();
@@ -478,27 +582,9 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
         }
         return;
       }
-      writer.set(ref, {
-        companyId,
-        storagePath,
-        ...fields,
-        links: newLinks,
-        ...derived(newLinks),
-        tags: [],
-        versions: [{
-          storagePath,
-          fileName: fields.fileName,
-          fileSize: fields.fileSize,
-          uploadedAtMs: fields.createdAtMs || now,
-          uploadedByEmail: fields.uploadedByEmail || "",
-          note: ""
-        }],
-        activeVersionIndex: 0,
-        activity: [activityEntry(email, "indexed", fields.source)],
-        trashedAtMs: 0,
-        createdAtMs: fields.createdAtMs || now,
-        updatedAtMs: now
-      });
+      writer.set(ref, newLibraryRecord({
+        companyId, storagePath, fields, links: newLinks, email, now, action: "indexed"
+      }));
       created += 1;
     }
 
@@ -602,7 +688,10 @@ function createFilesLibraryFunctions({ admin, onCall, HttpsError, requireWorkspa
     deleteLibraryFile,
     addLibraryFileVersion,
     setLibraryFileActiveVersion,
-    indexWorkspaceFilesIntoLibrary
+    indexWorkspaceFilesIntoLibrary,
+    // Not a callable: the order-file upload path in index.js calls this
+    // directly. See registerOrderClientFile.
+    _internal: { registerOrderClientFile }
   };
 }
 
