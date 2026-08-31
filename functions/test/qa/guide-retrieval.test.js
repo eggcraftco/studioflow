@@ -216,4 +216,32 @@ function topPaths(question, limit = 4) {
   pass("Etsy questions reach the Etsy chapter, and it answers the trust questions");
 }
 
+// The website assistant answers ONLY from WEBSITE_ASSISTANT_FACTS plus retrieved
+// guide excerpts, and rule 4 forbids it from claiming a feature that is not
+// listed. The facts named platforms, plans, banking and billing — and not one
+// word about connecting a shop. So "do you support Etsy?" and "do you work with
+// Shopify?", two of the most likely pre-sales questions this product will ever
+// be asked, both ended as "let me get a person onto this". Found by asking the
+// live bot, which is the only place this shows.
+{
+  const fs = require("fs");
+  const path = require("path");
+  const source = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+  const start = source.indexOf("const WEBSITE_ASSISTANT_FACTS = [");
+  assert(start > 0, "WEBSITE_ASSISTANT_FACTS is still there");
+  const facts = source.slice(start, source.indexOf("].join(", start));
+
+  for (const platform of ["Etsy", "Shopify", "WooCommerce"]) {
+    assert(
+      facts.includes(platform),
+      `the website assistant cannot mention ${platform}, so it will hand "do you support ${platform}?" to a human`
+    );
+  }
+  assert(
+    /read-only/.test(facts),
+    "the facts should say the Etsy access is read-only — it is the first thing a seller asks"
+  );
+  pass("the website assistant can answer whether we connect to a shop");
+}
+
 console.log("\n✅ GUIDE RETRIEVAL GEÇTİ");
