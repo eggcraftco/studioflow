@@ -232,6 +232,9 @@ struct EtsyIntegrationView: View {
         let chosen = found.rows.filter { $0.outcome != "unsupported" && !excluded.contains($0.receiptId) }
         guard !chosen.isEmpty else { throw EtsyError(message: tr("Select at least one order to import.")) }
         let outcome = try await firebaseManager.etsyImport(live.id, rules: rules, receiptIds: chosen.map(\.receiptId))
+        if outcome.truncated {
+            errorText = tr("Not every order fitted in one run. Import again to bring in the rest.")
+        }
         // The server reports failures and they were being parsed and dropped.
         if outcome.failed > 0 {
             errorText = "\(outcome.failed) \(tr("could not be imported. The sync log below says why."))"

@@ -3762,21 +3762,25 @@ class StudioFlowRepository(
         )
     }
 
-    /** created, updated, failed. */
+    data class EtsyImportOutcome(val created: Int, val updated: Int, val failed: Int, val truncated: Boolean)
+
     suspend fun etsyImport(
         workspaceId: String,
         connectionId: String,
         rules: EtsyImportRules,
         receiptIds: List<String>,
-    ): Triple<Int, Int, Int> {
+    ): EtsyImportOutcome {
         val payload = mutableMapOf<String, Any?>("connectionId" to connectionId, "rules" to rules.payload())
         if (receiptIds.isNotEmpty()) payload["receiptIds"] = receiptIds
         val raw = etsyCall("runEtsyImport", workspaceId, payload, timeoutSeconds = 540)
         val outcome = raw["outcome"] as? Map<*, *> ?: emptyMap<String, Any?>()
-        return Triple(
+        return EtsyImportOutcome(
             longFromAny(outcome["created"], 0L).toInt(),
             longFromAny(outcome["updated"], 0L).toInt(),
             longFromAny(outcome["failed"], 0L).toInt(),
+            // The run hit its cap and never asked for the older orders. Saying
+            // nothing reads as "that was everything".
+            raw["truncated"] as? Boolean ?: false,
         )
     }
 

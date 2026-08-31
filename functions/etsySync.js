@@ -449,7 +449,7 @@ function createEtsySyncFunctions(deps) {
     const defaultDeliveryTime = resolveDefaultDeliveryTime(settings?.data() || {});
     const shopId = String(data.externalShopId || "");
 
-    const { receipts } = await fetchReceipts(ref, shopId, {
+    const { receipts, truncated } = await fetchReceipts(ref, shopId, {
       minCreated: now() - rules.sinceDays * 86400000,
       max: MAX_PREVIEW_RECEIPTS,
       wasCanceled: rules.includeCancelled ? null : false
@@ -495,7 +495,14 @@ function createEtsySyncFunctions(deps) {
       lastSuccessAt: admin.firestore.FieldValue.serverTimestamp(),
       // The watermark reconciliation resumes from. Deliberately behind now(),
       // so a receipt modified during this run is not missed.
-      reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS,
+      //
+      // Not moved at all when the fetch was truncated: there are older receipts
+      // this run never asked for, and moving the watermark forward would put
+      // them behind the sweep's window too. Nothing on Etsy re-modifies a
+      // receipt to bring it back, so that is a permanent loss. Leaving the
+      // watermark where it was means the sweep — which walks oldest-modified
+      // first — reaches them.
+      ...(truncated ? {} : { reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS }),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
@@ -512,7 +519,8 @@ function createEtsySyncFunctions(deps) {
       }).catch(() => {});
     }
 
-    return { ok: true, outcome, failures: failures.slice(0, 25) };
+    // Say so. A silent cap reads as "that was everything".
+    return { ok: true, outcome, truncated, failures: failures.slice(0, 25) };
   });
 
   /**

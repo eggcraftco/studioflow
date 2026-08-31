@@ -111,7 +111,7 @@ function integrationOrderUpdate(mapped, isNew) {
   return patch;
 }
 
-function build({ nowRef, receipts = [RECEIPT()], capacity = { allowed: true }, owner = true, world = null }) {
+function build({ nowRef, receipts = [RECEIPT()], capacity = { allowed: true }, owner = true, world = null, reportedCount = null }) {
   world = world || makeWorld(nowRef);
   const calls = { fetches: 0, held: [], pushes: 0, customers: [] };
   const connect = {
@@ -121,9 +121,11 @@ function build({ nowRef, receipts = [RECEIPT()], capacity = { allowed: true }, o
     },
     callEtsy: async (_ref, _path, options) => {
       calls.fetches += 1;
-      // Page once, then stop.
-      if (Number(options?.query?.offset) > 0) return { results: [], count: receipts.length };
-      return { results: receipts, count: receipts.length };
+      // Page once, then stop. reportedCount lets a test say "Etsy has more than
+      // this", which is what truncation is.
+      const total = reportedCount == null ? receipts.length : reportedCount;
+      if (Number(options?.query?.offset) > 0) return { results: [], count: total };
+      return { results: receipts, count: total };
     },
     writeSyncEvent: async (_ref, event) => { world.events.push(event); }
   };
@@ -546,6 +548,32 @@ test("a bulk import sends one notification, not one per order", async () => {
   assert.strictEqual(
     calls.pushes, 1,
     `one summary push for five orders, not five. Sent ${calls.pushes}.`
+  );
+});
+
+// The same shape as the sweep's bug, in the manual path. An import that hits
+// its cap has older receipts it never asked for; moving the watermark forward
+// puts them behind the sweep's window too, and nothing on Etsy re-modifies a
+// receipt to bring it back.
+test("a capped import neither hides it nor moves the watermark past what it skipped", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const before = nowRef.value - 7200_000;
+  await world.handle("etsyConnections/c1_222").set({ reconcileWatermarkMs: before }, { merge: true });
+
+  // Fill the page for real: MAX_PREVIEW_RECEIPTS receipts back, and Etsy saying
+  // there are more. Anything less and fetchReceipts stops before the cap and
+  // the flag is never set, which is the whole thing under test.
+  const { MAX_PREVIEW_RECEIPTS } = require("../../etsySync");
+  const page = Array.from({ length: MAX_PREVIEW_RECEIPTS }, (_, i) => RECEIPT({ receipt_id: 900000 + i }));
+
+  const harness = build({ nowRef, receipts: page, world, reportedCount: MAX_PREVIEW_RECEIPTS * 2 });
+  const result = await harness.fns.runEtsyImport(REQ({ connectionId: "c1_222", rules: { sinceDays: 90 } }));
+
+  assert.strictEqual(result.truncated, true, "the cap is reported, not swallowed");
+  assert.strictEqual(
+    world.docs.get("etsyConnections/c1_222").reconcileWatermarkMs, before,
+    "and the watermark stays where it was, so the sweep still reaches the rest"
   );
 });
 

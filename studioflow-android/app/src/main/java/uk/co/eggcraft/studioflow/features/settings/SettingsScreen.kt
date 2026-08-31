@@ -2135,10 +2135,12 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                                 if (chosen.isEmpty()) throw IllegalStateException(t("Select at least one order to import."))
                                 val outcome = repository.etsyImport(ws.id, connection.id, rules, chosen.map { it.receiptId })
                                 // The server reports failures; they were parsed and dropped.
-                                if (outcome.third > 0) {
-                                    errorText = "${outcome.third} ${t("could not be imported. The sync log below says why.")}"
+                                if (outcome.failed > 0) {
+                                    errorText = "${outcome.failed} ${t("could not be imported. The sync log below says why.")}"
+                                } else if (outcome.truncated) {
+                                    errorText = t("Not every order fitted in one run. Import again to bring in the rest.")
                                 }
-                                statusText = "${outcome.first} ${t("orders imported")} · ${outcome.second} ${t("updated")}"
+                                statusText = "${outcome.created} ${t("orders imported")} · ${outcome.updated} ${t("updated")}"
                                 preview = null
                                 reload()
                             }

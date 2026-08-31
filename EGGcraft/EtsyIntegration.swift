@@ -226,7 +226,7 @@ extension FirebaseManager {
         return EtsyPreviewInfo(data)
     }
 
-    func etsyImport(_ connectionId: String, rules: EtsyImportRules, receiptIds: [String]) async throws -> (created: Int, updated: Int, failed: Int) {
+    func etsyImport(_ connectionId: String, rules: EtsyImportRules, receiptIds: [String]) async throws -> (created: Int, updated: Int, failed: Int, truncated: Bool) {
         var payload: [String: Any] = ["connectionId": connectionId, "rules": rules.payload]
         if !receiptIds.isEmpty { payload["receiptIds"] = receiptIds }
         let data = try await etsyCall("runEtsyImport", payload, timeout: 540)
@@ -234,7 +234,10 @@ extension FirebaseManager {
         return (
             outcome["created"] as? Int ?? 0,
             outcome["updated"] as? Int ?? 0,
-            outcome["failed"] as? Int ?? 0
+            outcome["failed"] as? Int ?? 0,
+            // The run hit its cap and never asked for the older orders. Saying
+            // nothing reads as "that was everything".
+            data["truncated"] as? Bool ?? false
         )
     }
 

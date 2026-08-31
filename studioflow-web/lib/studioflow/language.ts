@@ -6084,6 +6084,12 @@ mergeIntoTranslations({
   "Order": { "Türkçe": "Sipariş", "Deutsch": "Bestellung", "Français": "Commande", "Italiano": "Ordine", "Español (Spanish)": "Pedido", "Português": "Encomenda", "Русский (Russian)": "Заказ", "日本語 (Japanese)": "注文", "中文 (Chinese)": "订单", "العربية (Arabic)": "طلب", "हिन्दी (Hindi)": "ऑर्डर" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
+// An import that hits its cap must say so; silence reads as "that was all".
+mergeIntoTranslations({
+  "Not every order fitted in one run. Import again to bring in the rest.": { "Türkçe": "Siparişlerin tamamı tek seferde sığmadı. Kalanları getirmek için içe aktarmayı tekrar çalıştırın.", "Deutsch": "Es haben nicht alle Bestellungen in einen Durchlauf gepasst. Importieren Sie erneut, um den Rest zu holen.", "Français": "Toutes les commandes ne tenaient pas en une fois. Relancez l'import pour récupérer le reste.", "Italiano": "Non tutti gli ordini sono entrati in una sola esecuzione. Importa di nuovo per prendere il resto.", "Español (Spanish)": "No todos los pedidos cupieron en una sola vez. Vuelve a importar para traer el resto.", "Português": "Nem todas as encomendas couberam numa só vez. Importe de novo para trazer as restantes.", "Русский (Russian)": "Не все заказы поместились за один раз. Запустите импорт снова, чтобы забрать остальные.", "日本語 (Japanese)": "すべての注文が一度には収まりませんでした。残りを取り込むにはもう一度インポートしてください。", "中文 (Chinese)": "并非所有订单都能在一次运行中导入完。请再次导入以取回其余订单。", "العربية (Arabic)": "لم تتسع كل الطلبات في تشغيل واحد. استورد مرة أخرى لجلب الباقي.", "हिन्दी (Hindi)": "सभी ऑर्डर एक बार में नहीं आ सके। बाकी लाने के लिए फिर से आयात करें।" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+
 
 
 

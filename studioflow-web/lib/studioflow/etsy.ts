@@ -95,6 +95,8 @@ export type EtsyPreview = {
 export type EtsyImportOutcome = {
   ok: boolean;
   outcome: Record<string, number>;
+  /** The run hit its cap and there are older orders it never asked for. */
+  truncated?: boolean;
   failures: Array<{ receiptId: string; error: string }>;
 };
 
