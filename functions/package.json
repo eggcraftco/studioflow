@@ -14,5 +14,9 @@
     "googleapis": "^173.0.0",
     "nodemailer": "^9.0.1",
     "stripe": "^22.1.1"
+  },
+  "scripts": {
+    "test": "for f in test/qa/*.test.js test/inventory/*.test.js; do node \"$f\" || exit 1; done",
+    "test:e2e": "test/run-e2e.sh"
   }
 }

@@ -29950,6 +29950,11 @@ if (process.env.NIVADESK_E2E === "1") {
     integrationOrderUpdate,
     holdIntegrationOrder,
     orderDocRef,
-    companySettingsDocRef
+    companySettingsDocRef,
+    // The other three channels' mappers, for the same undefined-field check.
+    // Etsy has no live sellers yet; these do.
+    mapShopifyOrderToSiparis,
+    mapWooCommerceOrderToSiparis,
+    mapGenericInboundOrderToSiparis
   };
 }
