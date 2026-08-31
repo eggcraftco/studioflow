@@ -81,7 +81,14 @@ function createEtsySyncFunctions(deps) {
     minLastModified = 0,
     max = MAX_PREVIEW_RECEIPTS,
     wasPaid = null,
-    wasCanceled = null
+    wasCanceled = null,
+    // The preview shows the newest first, because that is what a seller wants
+    // to look at. The reconcile sweep needs the opposite: oldest-modified
+    // first, so that when the page fills up the ones it drops are the ones it
+    // has not reached yet, and the watermark can move to the newest it did
+    // reach without stepping over anything.
+    sortOn = "created",
+    sortOrder = "down"
   } = {}) {
     const collected = [];
     let offset = 0;
@@ -97,8 +104,8 @@ function createEtsySyncFunctions(deps) {
           min_last_modified: minLastModified ? Math.floor(minLastModified / 1000) : undefined,
           was_paid: wasPaid === null ? undefined : String(wasPaid),
           was_canceled: wasCanceled === null ? undefined : String(wasCanceled),
-          sort_on: "created",
-          sort_order: "down"
+          sort_on: sortOn,
+          sort_order: sortOrder
         }
       });
       const results = Array.isArray(page?.results) ? page.results : [];
@@ -473,13 +480,23 @@ function createEtsySyncFunctions(deps) {
     const settings = await companySettingsDocRef(companyId).get().catch(() => null);
     const defaultDeliveryTime = resolveDefaultDeliveryTime(settings?.data() || {});
 
-    const { receipts } = await fetchReceipts(connectionRef, shopId, {
+    const { receipts, truncated } = await fetchReceipts(connectionRef, shopId, {
       minLastModified: Math.max(0, watermark - RECONCILE_OVERLAP_MS),
-      max: RECEIPT_PAGE_SIZE
+      max: RECEIPT_PAGE_SIZE,
+      sortOn: "updated",
+      sortOrder: "up"
     });
 
     const outcome = { created: 0, updated: 0, stale: 0, held: 0, failed: 0 };
+    // The newest modification time this sweep actually reached. When the page
+    // fills up, this is where the next sweep has to resume from — moving the
+    // watermark to "now" would step over every receipt that did not fit, and
+    // because nothing re-modifies them on Etsy they would never be asked for
+    // again. A missed order, missed for good, with nothing reported.
+    let reachedMs = 0;
     for (const receipt of receipts) {
+      const modifiedMs = Number(receipt?.update_timestamp || receipt?.updated_timestamp || 0) * 1000;
+      if (Number.isFinite(modifiedMs) && modifiedMs > reachedMs) reachedMs = modifiedMs;
       try {
         const result = await applyReceipt({
           companyId, connectionRef, connectionData, receipt, defaultDeliveryTime
@@ -500,7 +517,17 @@ function createEtsySyncFunctions(deps) {
       ...(outcome.failed ? {} : { lastSuccessAt: admin.firestore.FieldValue.serverTimestamp() }),
       // Only advance the watermark on a clean sweep. Moving it past a failure
       // is how a missed order becomes permanently missed.
-      ...(outcome.failed ? {} : { reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS }),
+      //
+      // And when the page filled up, advance only as far as this sweep actually
+      // reached rather than to "now": the rest are older modifications that did
+      // not fit, and the next sweep has to find them still waiting.
+      ...(outcome.failed
+        ? {}
+        : {
+            reconcileWatermarkMs: truncated && reachedMs
+              ? reachedMs
+              : now() - RECONCILE_OVERLAP_MS
+          }),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 

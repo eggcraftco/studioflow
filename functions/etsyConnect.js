@@ -150,7 +150,16 @@ function createEtsyConnectFunctions(deps) {
     }
 
     try {
-      const refreshToken = etsy.decryptToken(data.refreshTokenEncrypted, tokenKey());
+      // A stored blob we cannot read is permanent — the key rotated, or the row
+      // is corrupt — and only reconnecting fixes it. Name it, so the handler
+      // below can tell it apart from a network blip instead of treating every
+      // codeless throw as an expired connection.
+      let refreshToken;
+      try {
+        refreshToken = etsy.decryptToken(data.refreshTokenEncrypted, tokenKey());
+      } catch (unreadable) {
+        throw new etsy.EtsyApiError("token_unreadable", "The stored Etsy refresh token could not be read.");
+      }
       if (!refreshToken) throw new etsy.EtsyApiError("auth_expired", "No refresh token stored.");
       const tokens = await etsy.refreshAccessToken({ keystring: keystring(), refreshToken });
       const access = String(tokens?.access_token || "");
@@ -181,12 +190,18 @@ function createEtsyConnectFunctions(deps) {
       // rotated — erased a needs_reconnect that some earlier attempt had set
       // correctly. So: promote to needs_reconnect on an auth failure, and
       // otherwise leave `status` exactly as it was and record only the error.
-      const authFailure = error?.code === "auth_expired"
-        // A stored token we cannot read is not a transient problem either: it
-        // will not read on the next attempt, and only reconnecting fixes it.
-        || !error?.code;
+      // Only failures that will fail again. auth_expired is Etsy refusing the
+      // refresh token; token_unreadable is a blob we cannot decrypt. Both need
+      // the seller to reconnect and nothing else will fix them.
+      //
+      // This used to include `|| !error?.code`, meaning ANY throw without a
+      // code — a network blip, a Firestore hiccup, a TypeError in our own
+      // code — permanently marked a healthy connection as needing a reconnect,
+      // and only a full OAuth round trip could clear it. The decrypt failure it
+      // was written for now carries its own code, so the guess is not needed.
+      const authFailure = error?.code === "auth_expired" || error?.code === "token_unreadable";
       const patch = {
-        lastErrorCode: String(error?.code || "token_unreadable"),
+        lastErrorCode: String(error?.code || "upstream"),
         lastErrorAt: admin.firestore.FieldValue.serverTimestamp(),
         refreshLockAt: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()

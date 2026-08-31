@@ -449,6 +449,62 @@ test("an empty shop note does not erase the studio's notes on resync", () => {
   assert.strictEqual(withNote.notes, "Gift message — thanks", "a real note still wins");
 });
 
+// The sweep asks for one page. When a shop has more modified receipts than fit
+// in it, the ones that do not fit are not "later" — nothing re-modifies them on
+// Etsy, so if the watermark moves past them they are never asked for again. A
+// missed order, missed for good, with nothing reported anywhere.
+test("a full page does not let the watermark step over what did not fit", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const world = makeWorld(nowRef);
+  // 100 receipts back, and Etsy says there are 150 in the window.
+  const page = Array.from({ length: 100 }, (_, i) => {
+    const r = RECEIPT();
+    r.receipt_id = 900000 + i;
+    // Oldest-modified first, which is what the sweep now asks for.
+    r.update_timestamp = Math.floor((nowRef.value - 3600_000) / 1000) + i;
+    return r;
+  });
+  let seenQuery = null;
+  const connect = {
+    loadConnection: async () => ({
+      ref: world.handle("etsyConnections/c1_222"),
+      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 7200_000 }
+    }),
+    callEtsy: async (_ref, _path, options) => {
+      seenQuery = options.query;
+      if (Number(options?.query?.offset) > 0) return { results: [], count: 150 };
+      return { results: page, count: 150 };
+    },
+    writeSyncEvent: async () => {}
+  };
+  const fns = createEtsySyncFunctions({
+    admin: world.admin, onCall: (_o, h) => h, HttpsError: Error, etsy, customerMatch, connect,
+    requireWorkspaceMember: async () => ({ uid: "u1", companyId: "c1" }),
+    requireWorkspaceOwner: async () => ({ uid: "u1", companyId: "c1" }),
+    orderDocRef: (id) => world.handle(`siparisler/${id}`),
+    integrationOrderUpdate, integrationOrderCapacity: async () => ({ allowed: true }),
+    holdIntegrationOrder: async () => {}, upsertIntegrationCustomer: async () => {},
+    reconcileLineItems: (i) => i, resolveDefaultDeliveryTime: () => 30,
+    companySettingsDocRef: () => world.handle("companySettings/c1"),
+    customersOfCompany: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
+    now: () => nowRef.value
+  });
+
+  const ref = world.handle("etsyConnections/c1_222");
+  await fns._internal.reconcileConnection(ref, { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 7200_000 }, { companyId: "c1" });
+
+  assert.strictEqual(seenQuery.sort_on, "updated", "the sweep walks by modification time");
+  assert.strictEqual(seenQuery.sort_order, "up", "oldest first, so a full page drops the ones not reached yet");
+
+  const row = world.docs.get("etsyConnections/c1_222");
+  const newest = Math.max(...page.map((r) => r.update_timestamp * 1000));
+  assert.strictEqual(
+    row.reconcileWatermarkMs, newest,
+    "the watermark stops where the sweep actually reached, not at now()"
+  );
+  assert.ok(row.reconcileWatermarkMs < nowRef.value, "so the 50 that did not fit are still in the next window");
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");

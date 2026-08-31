@@ -583,6 +583,33 @@ test("an account with no shop is named as that, not as a generic failure", async
   );
 });
 
+// The other half of the same rule. A failure with no code at all — a network
+// stack throwing a bare Error, a Firestore hiccup, a TypeError in our own code
+// — used to be treated as an expired connection and permanently marked a
+// working shop as needing a reconnect. Only a full OAuth round trip cleared it,
+// for a problem that would have gone away on its own.
+test("a codeless failure records the error and leaves the connection alone", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const { fns, store } = build({
+    nowRef,
+    refreshImpl: async () => { throw new Error("socket hang up"); }   // no .code
+  });
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
+
+  const ref = store.docHandle("etsyConnections/c1_222");
+  await ref.set({ status: "connected", tokenExpiresAt: nowRef.value - 1000 }, { merge: true });
+  await assert.rejects(() => fns._internal.accessTokenFor(ref));
+
+  const row = store.docs.get("etsyConnections/c1_222");
+  assert.strictEqual(
+    row.status, "connected",
+    "a blip must not send the seller through a reconnect they do not need"
+  );
+  assert.ok(row.lastErrorCode, "but the failure is still recorded");
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy connection lifecycle");
