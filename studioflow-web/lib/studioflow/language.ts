@@ -6062,6 +6062,14 @@ mergeIntoTranslations({
   "Connected shops": { "Türkçe": "Bağlı mağazalar", "Deutsch": "Verbundene Shops", "Français": "Boutiques connectées", "Italiano": "Negozi collegati", "Español (Spanish)": "Tiendas conectadas", "Português": "Lojas ligadas", "Русский (Russian)": "Подключённые магазины", "日本語 (Japanese)": "接続済みのショップ", "中文 (Chinese)": "已连接的店铺", "العربية (Arabic)": "المتاجر المرتبطة", "हिन्दी (Hindi)": "जुड़ी हुई दुकानें" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
+// What a sync run actually did, including the parts that did not work.
+// Both follow a number, e.g. "3 could not be imported…".
+mergeIntoTranslations({
+  "could not be imported. The sync log below says why.": { "Türkçe": "tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.", "Deutsch": "konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.", "Français": "n'ont pas pu être importées. Le journal de synchronisation ci-dessous dit pourquoi.", "Italiano": "non sono stati importati. Il registro di sincronizzazione qui sotto dice perché.", "Español (Spanish)": "no se pudieron importar. El registro de sincronización de abajo dice por qué.", "Português": "não puderam ser importadas. O registo de sincronização abaixo diz porquê.", "Русский (Russian)": "не удалось импортировать. Почему — в журнале синхронизации ниже.", "日本語 (Japanese)": "件を取り込めませんでした。理由は下の同期ログにあります。", "中文 (Chinese)": "笔无法导入。原因见下方的同步记录。", "العربية (Arabic)": "تعذّر استيرادها. سجل المزامنة أدناه يوضح السبب.", "हिन्दी (Hindi)": "आयात नहीं हो सके। कारण नीचे दिए सिंक लॉग में है।" },
+  "are waiting for room on your plan.": { "Türkçe": "tanesi planınızda yer açılmasını bekliyor.", "Deutsch": "warten auf Platz in Ihrem Tarif.", "Français": "attendent de la place dans votre offre.", "Italiano": "sono in attesa di spazio nel tuo piano.", "Español (Spanish)": "esperan sitio en tu plan.", "Português": "estão à espera de espaço no seu plano.", "Русский (Russian)": "ждут места в вашем тарифе.", "日本語 (Japanese)": "件がプランの空きを待っています。", "中文 (Chinese)": "笔正在等待您套餐中的空位。", "العربية (Arabic)": "بانتظار مساحة في خطتك.", "हिन्दी (Hindi)": "आपके प्लान में जगह का इंतज़ार कर रहे हैं।" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+
 
 
 

@@ -3780,11 +3780,20 @@ class StudioFlowRepository(
         )
     }
 
-    /** created, updated. */
-    suspend fun etsySyncNow(workspaceId: String, connectionId: String): Pair<Int, Int> {
+    data class EtsySyncOutcome(val created: Int, val updated: Int, val failed: Int, val held: Int)
+
+    /** failed and held are part of what happened. Reading only created and
+     *  updated is how a run where every order failed gets reported to the
+     *  seller as "Everything is already up to date." */
+    suspend fun etsySyncNow(workspaceId: String, connectionId: String): EtsySyncOutcome {
         val raw = etsyCall("syncEtsyNow", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300)
         val outcome = raw["outcome"] as? Map<*, *> ?: emptyMap<String, Any?>()
-        return longFromAny(outcome["created"], 0L).toInt() to longFromAny(outcome["updated"], 0L).toInt()
+        return EtsySyncOutcome(
+            longFromAny(outcome["created"], 0L).toInt(),
+            longFromAny(outcome["updated"], 0L).toInt(),
+            longFromAny(outcome["failed"], 0L).toInt(),
+            longFromAny(outcome["held"], 0L).toInt(),
+        )
     }
 
     /** Remembers "this Etsy buyer is this customer" so the next order does not ask. */

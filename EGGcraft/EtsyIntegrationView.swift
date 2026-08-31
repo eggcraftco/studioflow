@@ -168,6 +168,9 @@ struct EtsyIntegrationView: View {
     private func run(_ key: String, _ work: @escaping () async throws -> Void) {
         busy = key
         errorText = ""
+        // The last action's green line has nothing to say about this one, and
+        // leaving it puts a success message above the error that contradicts it.
+        notice = ""
         Task {
             do { try await work() }
             catch { errorText = error.localizedDescription }
@@ -205,9 +208,18 @@ struct EtsyIntegrationView: View {
 
     private func syncNow(_ live: EtsyConnectionInfo) async throws {
         let outcome = try await firebaseManager.etsySyncNow(live.id)
-        notice = (outcome.created == 0 && outcome.updated == 0)
-            ? tr("Everything is already up to date.")
-            : "\(outcome.created) \(tr("orders imported")) · \(outcome.updated) \(tr("updated"))"
+        if outcome.failed > 0 {
+            errorText = "\(outcome.failed) \(tr("could not be imported. The sync log below says why."))"
+        }
+        var parts: [String] = []
+        if outcome.created > 0 || outcome.updated > 0 {
+            parts.append("\(outcome.created) \(tr("orders imported")) · \(outcome.updated) \(tr("updated"))")
+        }
+        if outcome.held > 0 {
+            parts.append("\(outcome.held) \(tr("are waiting for room on your plan."))")
+        }
+        if !parts.isEmpty { notice = parts.joined(separator: " · ") }
+        else if outcome.failed == 0 { notice = tr("Everything is already up to date.") }
         await reload()
     }
 

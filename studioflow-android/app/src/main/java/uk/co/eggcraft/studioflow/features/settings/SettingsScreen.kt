@@ -1890,6 +1890,10 @@ private fun EtsyDetail(state: StudioFlowUiState) {
         scope.launch {
             busy = key
             errorText = ""
+            // The last action's green line has nothing to say about this one,
+            // and leaving it puts a success message above the error that
+            // contradicts it.
+            statusText = ""
             try {
                 action()
             } catch (failure: Exception) {
@@ -2159,8 +2163,20 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                     runAction("sync") {
                         val ws = workspace ?: return@runAction
                         val outcome = repository.etsySyncNow(ws.id, connection.id)
-                        statusText = if (outcome.first == 0 && outcome.second == 0) t("Everything is already up to date.")
-                        else "${outcome.first} ${t("orders imported")} · ${outcome.second} ${t("updated")}"
+                        if (outcome.failed > 0) {
+                            errorText = "${outcome.failed} ${t("could not be imported. The sync log below says why.")}"
+                        }
+                        val parts = buildList {
+                            if (outcome.created > 0 || outcome.updated > 0) {
+                                add("${outcome.created} ${t("orders imported")} · ${outcome.updated} ${t("updated")}")
+                            }
+                            if (outcome.held > 0) add("${outcome.held} ${t("are waiting for room on your plan.")}")
+                        }
+                        statusText = when {
+                            parts.isNotEmpty() -> parts.joinToString(" · ")
+                            outcome.failed == 0 -> t("Everything is already up to date.")
+                            else -> ""
+                        }
                         reload()
                     }
                 },

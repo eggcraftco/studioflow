@@ -238,10 +238,18 @@ extension FirebaseManager {
         )
     }
 
-    func etsySyncNow(_ connectionId: String) async throws -> (created: Int, updated: Int) {
+    func etsySyncNow(_ connectionId: String) async throws -> (created: Int, updated: Int, failed: Int, held: Int) {
         let data = try await etsyCall("syncEtsyNow", ["connectionId": connectionId], timeout: 300)
         let outcome = data["outcome"] as? [String: Any] ?? [:]
-        return (outcome["created"] as? Int ?? 0, outcome["updated"] as? Int ?? 0)
+        // failed and held are part of what happened. Reading only created and
+        // updated is how a run where every order failed gets reported as
+        // "Everything is already up to date."
+        return (
+            outcome["created"] as? Int ?? 0,
+            outcome["updated"] as? Int ?? 0,
+            outcome["failed"] as? Int ?? 0,
+            outcome["held"] as? Int ?? 0
+        )
     }
 
     /// Remembers "this Etsy buyer is this customer" so the next order does not ask.
