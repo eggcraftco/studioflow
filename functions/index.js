@@ -20032,6 +20032,92 @@ function cleanMentionedMessageUids(value = [], allowedUids = [], senderUid = "")
   return out.slice(0, 25);
 }
 
+// Pin and unpin a message in a thread.
+//
+// These two were LIVE with no source. They had been deployed and then deleted
+// from this file at some point, and because Cloud Functions keeps running the
+// container it was given, pinning went on working while the code that did it
+// no longer existed anywhere. The shipped Mac, iPhone and Android builds call
+// them by name (FirebaseManager.swift:5526, StudioFlowRepository.kt:2249), so
+// the next full deploy would have removed the functions and broken pinning in
+// apps already on people's phones, with nothing to redeploy.
+//
+// Rewritten from what the three clients read, which is the only surviving
+// specification: the thread carries `pinnedMessageIds`, and the message itself
+// carries `pinned`, `pinnedByUid`, `pinnedByName` and `pinnedAt`. Both are
+// written in one transaction — a message flagged pinned that is missing from
+// the thread's list shows in one place and not the other, and the two views are
+// side by side on every platform.
+async function setMessagePinned(request, pinned) {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to pin messages.");
+
+  const { companyId, companyData } = await requireWorkspaceForBilling(request, false);
+  requireMessagesWriteAccess(companyData, uid);
+  const threadId = cleanSupportText(request.data?.threadId, 220) || "team";
+  const messageId = cleanSupportText(request.data?.messageId, 220);
+  if (!messageId) {
+    throw new HttpsError("invalid-argument", "Please choose a message to pin.");
+  }
+
+  if (threadId === "team") await ensureTeamMessageThread(companyId, companyData);
+  const { threadRef } = await requireMessageThreadAccess(companyId, threadId, uid, companyData);
+  const messageRef = threadRef.collection("messages").doc(messageId);
+  const sender = await messageSenderProfile(companyId, companyData, request);
+  const userLabel = cleanSupportText(request.data?.userName || sender.name || sender.email || "Team member", 120);
+
+  await admin.firestore().runTransaction(async (transaction) => {
+    // Both reads before either write: Firestore transactions do not allow a
+    // read after a write.
+    const messageSnap = await transaction.get(messageRef);
+    if (!messageSnap.exists) {
+      throw new HttpsError("not-found", "Message not found.");
+    }
+    const messageData = messageSnap.data() || {};
+    // A deleted message can still be in the pinned list — unpinning it is how
+    // you get it out — so only PINNING is refused here.
+    if (pinned && messageData.deletedForEveryone === true) {
+      throw new HttpsError("failed-precondition", "Deleted messages cannot be pinned.");
+    }
+    const threadSnap = await transaction.get(threadRef);
+    const threadData = threadSnap.exists ? (threadSnap.data() || {}) : {};
+
+    const current = Array.isArray(threadData.pinnedMessageIds)
+      ? threadData.pinnedMessageIds.map(String).filter(Boolean)
+      : [];
+    const next = pinned
+      ? (current.includes(messageId) ? current : [...current, messageId])
+      : current.filter((id) => id !== messageId);
+
+    transaction.set(threadRef, {
+      pinnedMessageIds: next,
+      pinnedUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    transaction.set(messageRef, pinned ? {
+      pinned: true,
+      pinnedByUid: uid,
+      pinnedByName: userLabel,
+      pinnedAt: admin.firestore.FieldValue.serverTimestamp(),
+      messageSchemaVersion: 2
+    } : {
+      pinned: false,
+      // Cleared rather than left behind: the clients render "pinned by X"
+      // from these, and a stale name under an unpinned message is a small lie
+      // that outlives the pin.
+      pinnedByUid: admin.firestore.FieldValue.delete(),
+      pinnedByName: admin.firestore.FieldValue.delete(),
+      pinnedAt: admin.firestore.FieldValue.delete(),
+      messageSchemaVersion: 2
+    }, { merge: true });
+  });
+
+  return { ok: true, threadId, messageId, pinned };
+}
+
+exports.pinMessageInThread = onCall({ region: "europe-west2" }, (request) => setMessagePinned(request, true));
+exports.unpinMessageInThread = onCall({ region: "europe-west2" }, (request) => setMessagePinned(request, false));
+
 exports.toggleMessageReaction = onCall({ region: "europe-west2" }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in to react to messages.");
