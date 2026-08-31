@@ -3575,6 +3575,226 @@ class StudioFlowRepository(
         awaitClose { registration.remove() }
     }
 
+
+    // ---------------------------------------------------------------------
+    // Etsy
+    //
+    // Mirrors studioflow-web/lib/studioflow/etsy.ts: eight callables, all in
+    // europe-west2, all workspace-scoped and role-checked on the server.
+    //
+    // Two things decide the shape here. The OAuth callback ends on the NivaDesk
+    // website and reads only its query string — nothing bound to the browser
+    // that started it — so the app opens any browser and afterwards simply asks
+    // the server again. And every etsy* collection is denied to clients in the
+    // firestore rules, because those rows hold OAuth tokens for someone else's
+    // shop, so there is no listener: polling a callable is the only way to see
+    // status.
+    // ---------------------------------------------------------------------
+
+    data class EtsySyncEventRow(
+        val atMs: Long,
+        val type: String,
+        val error: String,
+        val receiptId: String,
+    )
+
+    data class EtsyConnectionRow(
+        val id: String,
+        val shopId: String,
+        val shopName: String,
+        val shopCurrency: String,
+        val status: String,
+        val lastSyncAtMs: Long,
+        val lastSuccessAtMs: Long,
+        val lastErrorCode: String,
+        val needsReconnect: Boolean,
+        val importedOrders: Int,
+        val recentEvents: List<EtsySyncEventRow>,
+    ) {
+        /** The stored status only changes when a sync happens to run and fail,
+         *  so this is "we know something is wrong", never "everything is fine". */
+        val needsAttention: Boolean get() = needsReconnect || status == "needs_reconnect"
+    }
+
+    data class EtsyCandidateRow(val customerId: String, val name: String, val score: Double, val signals: List<String>)
+
+    data class EtsyPreviewRow(
+        val receiptId: String,
+        val buyerId: String,
+        val alreadyImported: Boolean,
+        val outcome: String,
+        val reason: String,
+        val customerName: String,
+        val currency: String,
+        val total: Double,
+        val itemTitles: List<String>,
+        val personalisation: List<String>,
+        val decision: String,
+        val candidates: List<EtsyCandidateRow>,
+    )
+
+    data class EtsyPreviewResult(
+        val truncated: Boolean,
+        val found: Int,
+        val ready: Int,
+        val review: Int,
+        val unsupported: Int,
+        val alreadyImported: Int,
+        val rows: List<EtsyPreviewRow>,
+    )
+
+    data class EtsyImportRules(
+        val sinceDays: Int = 90,
+        val includeCompleted: Boolean = false,
+        val includeCancelled: Boolean = false,
+        val includeDigital: Boolean = false,
+        val includeUnpaid: Boolean = false,
+    ) {
+        fun payload(): Map<String, Any?> = mapOf(
+            "sinceDays" to sinceDays,
+            "includeCompleted" to includeCompleted,
+            "includeCancelled" to includeCancelled,
+            "includeDigital" to includeDigital,
+            "includeUnpaid" to includeUnpaid,
+        )
+    }
+
+    /** A preview or an import runs for minutes on the server; the client default
+     *  would abandon work that then succeeds with nobody seeing the result. */
+    private suspend fun etsyCall(
+        name: String,
+        workspaceId: String,
+        data: Map<String, Any?> = emptyMap(),
+        timeoutSeconds: Long = 70,
+    ): Map<*, *> {
+        val payload = data.toMutableMap()
+        payload["companyId"] = workspaceId
+        val callable = functions.getHttpsCallable(name).withTimeout(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+        val result = callable.call(payload).await()
+        return result.data as? Map<*, *> ?: emptyMap<String, Any?>()
+    }
+
+    suspend fun etsyConnections(workspaceId: String): Pair<List<EtsyConnectionRow>, Boolean> {
+        val raw = etsyCall("getEtsyConnections", workspaceId)
+        val rows = (raw["connections"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            EtsyConnectionRow(
+                id = row["id"]?.toString().orEmpty(),
+                shopId = row["shopId"]?.toString().orEmpty(),
+                shopName = row["shopName"]?.toString().orEmpty(),
+                shopCurrency = row["shopCurrency"]?.toString().orEmpty(),
+                status = row["status"]?.toString().orEmpty(),
+                lastSyncAtMs = longFromAny(row["lastSyncAtMs"], 0L),
+                lastSuccessAtMs = longFromAny(row["lastSuccessAtMs"], 0L),
+                lastErrorCode = row["lastErrorCode"]?.toString().orEmpty(),
+                needsReconnect = row["needsReconnect"] as? Boolean ?: false,
+                importedOrders = longFromAny(row["importedOrders"], 0L).toInt(),
+                recentEvents = (row["recentEvents"] as? List<*>).orEmpty().mapNotNull { e ->
+                    val ev = e as? Map<*, *> ?: return@mapNotNull null
+                    EtsySyncEventRow(
+                        atMs = longFromAny(ev["atMs"], 0L),
+                        type = ev["type"]?.toString().orEmpty(),
+                        error = ev["error"]?.toString().orEmpty(),
+                        receiptId = ev["receiptId"]?.toString().orEmpty(),
+                    )
+                },
+            )
+        }
+        return rows to (raw["configured"] as? Boolean ?: true)
+    }
+
+    /** Returns the URL to send the seller to. Owner only, server-side. */
+    suspend fun etsyBeginConnect(workspaceId: String): String =
+        etsyCall("beginEtsyConnect", workspaceId)["authorizeUrl"]?.toString().orEmpty()
+
+    /** Asks Etsy, right now, whether this connection still works. */
+    suspend fun etsyVerify(workspaceId: String, connectionId: String): Pair<Boolean, String> {
+        val raw = etsyCall("verifyEtsyConnection", workspaceId, mapOf("connectionId" to connectionId))
+        return (raw["healthy"] as? Boolean ?: false) to raw["reason"]?.toString().orEmpty()
+    }
+
+    suspend fun etsyDisconnect(workspaceId: String, connectionId: String) {
+        etsyCall("disconnectEtsyShop", workspaceId, mapOf("connectionId" to connectionId))
+    }
+
+    /** A dry run. Writes no orders — the seller sees the list before anything. */
+    suspend fun etsyPreview(workspaceId: String, connectionId: String, rules: EtsyImportRules): EtsyPreviewResult {
+        val raw = etsyCall(
+            "previewEtsyImport", workspaceId,
+            mapOf("connectionId" to connectionId, "rules" to rules.payload()),
+            timeoutSeconds = 300,
+        )
+        val summary = raw["summary"] as? Map<*, *> ?: emptyMap<String, Any?>()
+        val rows = (raw["rows"] as? List<*>).orEmpty().mapNotNull { entry ->
+            val row = entry as? Map<*, *> ?: return@mapNotNull null
+            val customer = row["customer"] as? Map<*, *> ?: emptyMap<String, Any?>()
+            EtsyPreviewRow(
+                receiptId = row["receiptId"]?.toString().orEmpty(),
+                buyerId = row["buyerId"]?.toString().orEmpty(),
+                alreadyImported = row["alreadyImported"] as? Boolean ?: false,
+                outcome = row["outcome"]?.toString().orEmpty(),
+                reason = row["reason"]?.toString().orEmpty(),
+                customerName = row["customerName"]?.toString().orEmpty(),
+                currency = row["currency"]?.toString().orEmpty(),
+                total = (row["total"] as? Number)?.toDouble() ?: 0.0,
+                itemTitles = (row["itemTitles"] as? List<*>).orEmpty().map { it?.toString().orEmpty() },
+                personalisation = (row["personalization"] as? List<*>).orEmpty().map { it?.toString().orEmpty() },
+                decision = customer["decision"]?.toString().orEmpty(),
+                candidates = (customer["candidates"] as? List<*>).orEmpty().mapNotNull { c ->
+                    val cand = c as? Map<*, *> ?: return@mapNotNull null
+                    EtsyCandidateRow(
+                        customerId = cand["customerId"]?.toString().orEmpty(),
+                        name = cand["name"]?.toString().orEmpty(),
+                        score = (cand["score"] as? Number)?.toDouble() ?: 0.0,
+                        signals = (cand["signals"] as? List<*>).orEmpty().map { it?.toString().orEmpty() },
+                    )
+                },
+            )
+        }
+        return EtsyPreviewResult(
+            truncated = raw["truncated"] as? Boolean ?: false,
+            found = longFromAny(summary["found"], 0L).toInt(),
+            ready = longFromAny(summary["ready"], 0L).toInt(),
+            review = longFromAny(summary["review"], 0L).toInt(),
+            unsupported = longFromAny(summary["unsupported"], 0L).toInt(),
+            alreadyImported = longFromAny(summary["alreadyImported"], 0L).toInt(),
+            rows = rows,
+        )
+    }
+
+    /** created, updated, failed. */
+    suspend fun etsyImport(
+        workspaceId: String,
+        connectionId: String,
+        rules: EtsyImportRules,
+        receiptIds: List<String>,
+    ): Triple<Int, Int, Int> {
+        val payload = mutableMapOf<String, Any?>("connectionId" to connectionId, "rules" to rules.payload())
+        if (receiptIds.isNotEmpty()) payload["receiptIds"] = receiptIds
+        val raw = etsyCall("runEtsyImport", workspaceId, payload, timeoutSeconds = 540)
+        val outcome = raw["outcome"] as? Map<*, *> ?: emptyMap<String, Any?>()
+        return Triple(
+            longFromAny(outcome["created"], 0L).toInt(),
+            longFromAny(outcome["updated"], 0L).toInt(),
+            longFromAny(outcome["failed"], 0L).toInt(),
+        )
+    }
+
+    /** created, updated. */
+    suspend fun etsySyncNow(workspaceId: String, connectionId: String): Pair<Int, Int> {
+        val raw = etsyCall("syncEtsyNow", workspaceId, mapOf("connectionId" to connectionId), timeoutSeconds = 300)
+        val outcome = raw["outcome"] as? Map<*, *> ?: emptyMap<String, Any?>()
+        return longFromAny(outcome["created"], 0L).toInt() to longFromAny(outcome["updated"], 0L).toInt()
+    }
+
+    /** Remembers "this Etsy buyer is this customer" so the next order does not ask. */
+    suspend fun etsyResolveCustomer(workspaceId: String, connectionId: String, buyerId: String, customerId: String) {
+        etsyCall(
+            "resolveEtsyCustomerMatch", workspaceId,
+            mapOf("connectionId" to connectionId, "buyerId" to buyerId, "customerId" to customerId),
+        )
+    }
+
 }
 
 private fun workspaceSettings(

@@ -1837,6 +1837,458 @@ private fun clientDomainErrorMessage(failure: Throwable, fallback: String): Stri
 }
 
 @Composable
+private fun EtsyDetail(state: StudioFlowUiState) {
+    val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
+    val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
+    val workspace = state.workspace
+    val isOwner = workspace?.role?.trim()?.lowercase() == "owner"
+    val repository = remember { uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository() }
+    val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
+
+    var loading by remember { mutableStateOf(true) }
+    var configured by remember { mutableStateOf(true) }
+    var connections by remember {
+        mutableStateOf<List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyConnectionRow>>(emptyList())
+    }
+    var busy by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf("") }
+    var statusText by remember { mutableStateOf("") }
+    // Healthy is a claim about right now, so it is only ever set by an answer
+    // from Etsy. Until then the row says Connected, which is a fact.
+    var liveCheck by remember { mutableStateOf("unknown") }
+    var rules by remember { mutableStateOf(uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyImportRules()) }
+    var preview by remember {
+        mutableStateOf<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyPreviewResult?>(null)
+    }
+    var excluded by remember { mutableStateOf(setOf<String>()) }
+    var confirmDisconnect by remember { mutableStateOf(false) }
+
+    val connection = connections.firstOrNull()
+
+    suspend fun reload() {
+        val ws = workspace ?: return
+        try {
+            val result = repository.etsyConnections(ws.id)
+            connections = result.first
+            configured = result.second
+            errorText = ""
+        } catch (failure: Exception) {
+            errorText = failure.message ?: t("The Etsy connection could not be loaded.")
+        } finally {
+            loading = false
+        }
+    }
+
+    /** One place for busy state and messages, so no action leaves either behind. */
+    fun runAction(key: String, action: suspend () -> Unit) {
+        if (busy.isNotEmpty()) return
+        scope.launch {
+            busy = key
+            errorText = ""
+            try {
+                action()
+            } catch (failure: Exception) {
+                errorText = failure.message ?: t("Something went wrong. Try again.")
+            } finally {
+                busy = ""
+            }
+        }
+    }
+
+    LaunchedEffect(workspace?.id) { reload() }
+
+    DetailColumn {
+        if (errorText.isNotEmpty()) Text(errorText, color = DangerRed, fontWeight = FontWeight.SemiBold)
+        else if (statusText.isNotEmpty()) Text(statusText, color = StudioGreen, fontWeight = FontWeight.SemiBold)
+
+        if (loading) {
+            Text(t("Loading…"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@DetailColumn
+        }
+
+        if (!configured) {
+            DetailCard(title = t("Etsy"), icon = Icons.Filled.ShoppingCart) {
+                Text(t("Etsy is not set up on this server yet. Contact support and we will enable it."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            return@DetailColumn
+        }
+
+        if (connection == null) {
+            // ---- Before connecting -----------------------------------------
+            DetailCard(title = t("Secure Etsy connection"), icon = Icons.Filled.Lock) {
+                Text(t("Your Etsy password is never shared with NivaDesk."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EtsyPermissionLine(t("Read authorised sales data"), true, t("Included"))
+                EtsyPermissionLine(t("Import line items and variations"), true, t("Included"))
+                EtsyPermissionLine(t("Edit listings or Etsy checkout"), false, t("Not allowed"))
+                Text(t("Privacy summary"), fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("NivaDesk stores authorised connection tokens securely, uses data only for the connected workspace, and lets the owner disconnect at any time."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Disconnecting does not delete the orders already in NivaDesk."),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isOwner) {
+                    Button(
+                        onClick = {
+                            runAction("connect") {
+                                val ws = workspace ?: return@runAction
+                                val url = repository.etsyBeginConnect(ws.id)
+                                if (url.isEmpty()) throw IllegalStateException(t("Something went wrong. Try again."))
+                                // Etsy's approval page has to open in a browser: the
+                                // callback ends on the NivaDesk website and carries
+                                // nothing tied to this app. Afterwards we just ask again.
+                                uriHandler.openUri(url)
+                                statusText = t("Approve the connection in your browser, then come back and press Check now.")
+                            }
+                        },
+                        enabled = busy.isEmpty(),
+                    ) { Text(if (busy == "connect") t("Opening Etsy…") else t("Continue to Etsy")) }
+                } else {
+                    Text(t("Only the workspace owner can connect Etsy."),
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            return@DetailColumn
+        }
+
+        val needsAttention = connection.needsAttention || liveCheck == "unhealthy"
+
+        // ---- Connected shop ------------------------------------------------
+        DetailCard(
+            title = connection.shopName.ifBlank { t("Etsy shop") },
+            icon = Icons.Filled.ShoppingCart,
+        ) {
+            Text("${t("Shop ID")} ${connection.shopId}" +
+                    if (connection.shopCurrency.isNotBlank()) " · ${connection.shopCurrency}" else "",
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(t("Connection"), modifier = Modifier.weight(1f))
+                // Connected is a fact: we hold access. Healthy is a claim about
+                // this moment, and only a live answer from Etsy earns that word.
+                Text(
+                    when {
+                        needsAttention -> t("Needs attention")
+                        liveCheck == "healthy" -> t("Healthy")
+                        else -> t("Connected")
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (!needsAttention) {
+                    TextButton(
+                        onClick = {
+                            runAction("verify") {
+                                val ws = workspace ?: return@runAction
+                                val answer = repository.etsyVerify(ws.id, connection.id)
+                                if (answer.first) {
+                                    liveCheck = "healthy"
+                                    statusText = t("Etsy answered. This connection is working.")
+                                } else {
+                                    liveCheck = "unhealthy"
+                                    val sentence = etsyErrorSentence(answer.second, t)
+                                    errorText = sentence.ifBlank {
+                                        t("Etsy did not accept this connection. Reconnect the shop to continue.")
+                                    }
+                                }
+                                reload()
+                            }
+                        },
+                        enabled = busy.isEmpty(),
+                    ) { Text(if (busy == "verify") t("Checking Etsy…") else t("Check now")) }
+                }
+            }
+            EtsyStatLine(t("Granted scope"), t("Sales read"))
+            EtsyStatLine(t("Last successful sync"), etsyRelative(connection.lastSuccessAtMs, t))
+        }
+
+        if (needsAttention) {
+            DetailCard(title = t("Connection needs attention"), icon = Icons.Filled.Info) {
+                Text(t("We could not refresh this Etsy connection."))
+                val sentence = etsyErrorSentence(connection.lastErrorCode, t)
+                Text(sentence.ifBlank {
+                    t("The shop owner may have revoked access, or Etsy may require authorisation again. Existing NivaDesk orders are safe.")
+                }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                EtsyStatLine(t("Existing imported records"), t("Safe"))
+                if (isOwner) {
+                    Button(
+                        onClick = {
+                            runAction("connect") {
+                                val ws = workspace ?: return@runAction
+                                val url = repository.etsyBeginConnect(ws.id)
+                                if (url.isNotEmpty()) uriHandler.openUri(url)
+                                statusText = t("Approve the connection in your browser, then come back and press Check now.")
+                            }
+                        },
+                        enabled = busy.isEmpty(),
+                    ) { Text(t("Reconnect Etsy")) }
+                }
+            }
+        }
+
+        // ---- Choose what to import -----------------------------------------
+        DetailCard(title = t("Choose what to import"), icon = Icons.Filled.Tune) {
+            Text(t("Nothing is imported until the workspace owner confirms this list."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("Date range"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(30 to "Last 30 days", 90 to "Last 90 days", 365 to "Last 12 months").forEach { (days, label) ->
+                    if (rules.sinceDays == days) {
+                        Button(onClick = { rules = rules.copy(sinceDays = days) }) { Text(t(label)) }
+                    } else {
+                        OutlinedButton(onClick = { rules = rules.copy(sinceDays = days) }) { Text(t(label)) }
+                    }
+                }
+            }
+            Text(t("Order states"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EtsyToggleLine(t("Paid and open orders"), true, null)
+            EtsyToggleLine(t("Completed orders"), rules.includeCompleted) { rules = rules.copy(includeCompleted = it) }
+            EtsyToggleLine(t("Orders not paid yet"), rules.includeUnpaid) { rules = rules.copy(includeUnpaid = it) }
+            EtsyToggleLine(t("Cancelled orders"), rules.includeCancelled) { rules = rules.copy(includeCancelled = it) }
+            EtsyToggleLine(t("Digital-only orders"), rules.includeDigital) { rules = rules.copy(includeDigital = it) }
+            Button(
+                onClick = {
+                    runAction("preview") {
+                        val ws = workspace ?: return@runAction
+                        preview = repository.etsyPreview(ws.id, connection.id, rules)
+                        excluded = emptySet()
+                    }
+                },
+                enabled = busy.isEmpty(),
+            ) { Text(if (busy == "preview") t("Checking Etsy…") else t("Review Etsy orders")) }
+        }
+
+        // ---- The preview, which is the gate ---------------------------------
+        preview?.let { found ->
+            DetailCard(title = t("Review Etsy orders"), icon = Icons.Filled.TableChart) {
+                EtsyStatLine(t("Orders found"), "${found.found}")
+                EtsyStatLine(t("Unsupported records"), "${found.unsupported}")
+                if (found.alreadyImported > 0) {
+                    Text("${found.alreadyImported} ${t("of these are already in NivaDesk and will be updated, not duplicated.")}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (found.truncated) {
+                    Text(t("Only the most recent orders are shown. Import these first, then run the preview again."),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                found.rows.forEach { row ->
+                    EtsyPreviewLine(
+                        row = row,
+                        t = t,
+                        excluded = excluded.contains(row.receiptId),
+                        onToggle = {
+                            excluded = if (excluded.contains(row.receiptId)) excluded - row.receiptId
+                            else excluded + row.receiptId
+                        },
+                        onLink = { candidate ->
+                            runAction("match") {
+                                val ws = workspace ?: return@runAction
+                                repository.etsyResolveCustomer(ws.id, connection.id, row.buyerId, candidate.customerId)
+                                statusText = t("Decision saved. Later orders from this buyer will use it.")
+                            }
+                        },
+                    )
+                }
+                val chosen = found.rows.filter { it.outcome != "unsupported" && !excluded.contains(it.receiptId) }
+                if (isOwner) {
+                    Button(
+                        onClick = {
+                            runAction("import") {
+                                val ws = workspace ?: return@runAction
+                                if (chosen.isEmpty()) throw IllegalStateException(t("Select at least one order to import."))
+                                val outcome = repository.etsyImport(ws.id, connection.id, rules, chosen.map { it.receiptId })
+                                statusText = "${outcome.first} ${t("orders imported")} · ${outcome.second} ${t("updated")}"
+                                preview = null
+                                reload()
+                            }
+                        },
+                        enabled = busy.isEmpty() && chosen.isNotEmpty(),
+                    ) { Text("${t("Import")} ${chosen.size} ${t("selected orders")}") }
+                } else {
+                    Text(t("Only the workspace owner can import orders."),
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        // ---- Sync centre ----------------------------------------------------
+        DetailCard(title = t("Etsy sync"), icon = Icons.Filled.Timeline) {
+            EtsyStatLine(t("Last checked"), etsyRelative(connection.lastSyncAtMs, t))
+            EtsyStatLine(t("Existing imported records"), "${connection.importedOrders}")
+            if (connection.recentEvents.isEmpty()) {
+                Text(t("No Etsy activity yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                connection.recentEvents.forEach { event ->
+                    EtsyStatLine(
+                        if (event.error.isBlank()) event.type else "${event.type} · ${event.error}",
+                        etsyRelative(event.atMs, t),
+                    )
+                }
+            }
+            OutlinedButton(
+                onClick = {
+                    runAction("sync") {
+                        val ws = workspace ?: return@runAction
+                        val outcome = repository.etsySyncNow(ws.id, connection.id)
+                        statusText = if (outcome.first == 0 && outcome.second == 0) t("Everything is already up to date.")
+                        else "${outcome.first} ${t("orders imported")} · ${outcome.second} ${t("updated")}"
+                        reload()
+                    }
+                },
+                enabled = busy.isEmpty(),
+            ) { Text(if (busy == "sync") t("Checking Etsy…") else t("Sync now")) }
+        }
+
+        // ---- Disconnect ------------------------------------------------------
+        DetailCard(title = t("Disconnect Etsy"), icon = Icons.Filled.Link) {
+            Text(t("What happens next?"), fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            EtsyPermissionLine(t("Stop future Etsy synchronisation"), false, "")
+            EtsyPermissionLine(t("Keep existing orders and production work"), true, "")
+            EtsyPermissionLine(t("Revoke stored access tokens"), false, "")
+            Text(t("Deleting imported Etsy source data is a separate request and is not available yet. Disconnecting never deletes anything from Etsy."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            when {
+                !isOwner -> Text(t("Only the workspace owner can disconnect Etsy."),
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                confirmDisconnect -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            runAction("disconnect") {
+                                val ws = workspace ?: return@runAction
+                                repository.etsyDisconnect(ws.id, connection.id)
+                                confirmDisconnect = false
+                                preview = null
+                                liveCheck = "unknown"
+                                statusText = t("Etsy disconnected. Your orders and production work are unchanged.")
+                                reload()
+                            }
+                        },
+                        enabled = busy.isEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+                    ) { Text(t("Disconnect shop")) }
+                    OutlinedButton(onClick = { confirmDisconnect = false }) { Text(t("Keep connected")) }
+                }
+                else -> OutlinedButton(onClick = { confirmDisconnect = true }) { Text(t("Disconnect Etsy")) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EtsyStatLine(name: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(name, modifier = Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun EtsyPermissionLine(text: String, allowed: Boolean, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(
+            if (allowed) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = if (allowed) StudioGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text, modifier = Modifier.weight(1f))
+        if (label.isNotEmpty()) {
+            Text(label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun EtsyToggleLine(text: String, checked: Boolean, onChange: ((Boolean) -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange, enabled = onChange != null)
+    }
+}
+
+@Composable
+private fun EtsyPreviewLine(
+    row: uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyPreviewRow,
+    t: (String) -> String,
+    excluded: Boolean,
+    onToggle: () -> Unit,
+    onLink: (uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyCandidateRow) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (row.outcome != "unsupported") {
+                Checkbox(checked = !excluded, onCheckedChange = { onToggle() })
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(row.customerName.ifBlank { t("Etsy buyer") }, fontWeight = FontWeight.SemiBold)
+                if (row.itemTitles.isNotEmpty()) {
+                    Text(row.itemTitles.joinToString(", "), maxLines = 2,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (row.personalisation.isNotEmpty()) {
+                    Text("${t("Personalisation")}: ${row.personalisation.joinToString(" · ")}", maxLines = 2,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (row.total > 0) {
+                Text("${row.currency} ${"%.2f".format(row.total)}", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (row.outcome != "ready") {
+            Text(etsyReasonSentence(row.reason, t), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (row.decision == "review" && row.candidates.isNotEmpty()) {
+            Text(t("Possible customer match"), fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(t("No automatic merge. The decision is saved for this Etsy buyer identity."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            row.candidates.forEach { candidate ->
+                OutlinedButton(onClick = { onLink(candidate) }) {
+                    Text("${t("Link to existing")}: ${candidate.name}")
+                }
+            }
+            Text(t("Matching signals: normalised name + shipping address. Email alone is never enough."),
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The seller-facing reason a receipt was not imported. The server sends codes;
+ *  a technical code never reaches the screen. Same sentences as web and Swift. */
+private fun etsyReasonSentence(code: String, t: (String) -> String): String = when (code) {
+    "currency_mismatch" -> t("This order uses a different currency. NivaDesk kept the original amount and did not convert it.")
+    "cancelled_at_source" -> t("This order was cancelled on Etsy.")
+    "digital_only" -> t("This order contains only digital items.")
+    "not_paid" -> t("This order has not been paid yet.")
+    "no_line_items" -> t("This order has no items NivaDesk can import.")
+    "no_buyer_id" -> t("Etsy did not send a buyer for this order.")
+    "customer_review" -> t("This Etsy buyer may already exist in NivaDesk. Review the details before linking the order.")
+    else -> t("This order needs a look before it is imported.")
+}
+
+private fun etsyErrorSentence(code: String, t: (String) -> String): String = when (code) {
+    "auth_expired" -> t("We could not refresh this Etsy connection. Existing NivaDesk orders are safe. Reconnect Etsy to continue receiving updates.")
+    "rate_limited" -> t("Etsy is temporarily limiting requests. NivaDesk will continue automatically; no action is needed.")
+    "upstream", "network" -> t("Etsy could not be reached. NivaDesk will try again automatically.")
+    "token_unreadable" -> t("The stored Etsy access could not be read. Reconnect the shop to continue.")
+    else -> ""
+}
+
+/** "5 minutes ago" in the seller's language, from a millisecond timestamp. */
+private fun etsyRelative(atMs: Long, t: (String) -> String): String {
+    if (atMs <= 0L) return t("Never")
+    val seconds = ((System.currentTimeMillis() - atMs) / 1000).coerceAtLeast(0L)
+    val minutes = (seconds / 60).toInt()
+    if (minutes < 1) return t("Just now")
+    if (minutes < 60) return "$minutes " + if (minutes == 1) t("minute ago") else t("minutes ago")
+    val hours = minutes / 60
+    if (hours < 24) return "$hours " + if (hours == 1) t("hour ago") else t("hours ago")
+    val days = hours / 24
+    return "$days " + if (days == 1) t("day ago") else t("days ago")
+}
+
+@Composable
 private fun ClientDomainDetail(state: StudioFlowUiState) {
     val lang = uk.co.eggcraft.studioflow.language.LocalStudioLanguage.current
     val t: (String) -> String = { uk.co.eggcraft.studioflow.language.studioT(it, lang) }
@@ -2186,8 +2638,15 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             .getOrDefault(Triple(0L, false, false))
         val inbound = runCatching { repository.integrationChannelStatus(ws, "getInboundWebhookToken") }
             .getOrDefault(Triple(0L, false, false))
+        // Etsy's card state has to come from the shop itself, not from a flag we
+        // set when someone pressed Connect. Member-readable callable.
+        val etsy = runCatching { repository.etsyConnections(ws.id) }.getOrDefault(emptyList<Any>() to true)
+        @Suppress("UNCHECKED_CAST")
+        val etsyRows = etsy.first as List<uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository.EtsyConnectionRow>
         signals = IntegrationSignals(
             shopifyStores = stores.associate { it.shop to it.status },
+            etsyShops = etsyRows.size,
+            etsyShopsNeedingAttention = etsyRows.count { it.needsAttention },
             channels = mapOf(
                 "woocommerce" to IntegrationChannel(woo.first, woo.second, woo.third),
                 "inbound" to IntegrationChannel(inbound.first, inbound.second, inbound.third),
@@ -2206,6 +2665,7 @@ private fun IntegrationsHubDetail(state: StudioFlowUiState) {
             when (managing) {
                 "shopify" -> ShopifyDetail(state)
                 "woo" -> WooCommerceDetail(state)
+                "etsy" -> EtsyDetail(state)
                 else -> InboundDetail(state)
             }
         }

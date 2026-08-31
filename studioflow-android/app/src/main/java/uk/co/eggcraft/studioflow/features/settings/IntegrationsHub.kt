@@ -60,6 +60,10 @@ data class IntegrationSignals(
     val shopifyStores: Map<String, String> = emptyMap(),
     val channels: Map<String, IntegrationChannel> = emptyMap(),
     val bankConnections: Int = 0,
+    /** Live Etsy shops, and how many are asking for attention. Read from
+     *  getEtsyConnections, never from a flag we set ourselves. */
+    val etsyShops: Int = 0,
+    val etsyShopsNeedingAttention: Int = 0,
 )
 
 data class IntegrationProvider(
@@ -77,6 +81,10 @@ data class IntegrationProvider(
     val mark: String,
 ) {
     fun detail(signals: IntegrationSignals): String {
+        if (id == "etsy") {
+            if (signals.etsyShops == 0) return ""
+            return if (signals.etsyShops == 1) "1 shop" else "${signals.etsyShops} shops"
+        }
         if (id != "shopify") return ""
         val live = signals.shopifyStores.filterValues { it != "unlinked" }
         return when {
@@ -96,6 +104,10 @@ data class IntegrationProvider(
         }
         if (id == "openbanking") {
             return if (signals.bankConnections > 0) IntegrationState.Connected else IntegrationState.Available
+        }
+        if (id == "etsy") {
+            if (signals.etsyShops == 0) return IntegrationState.Available
+            return if (signals.etsyShopsNeedingAttention > 0) IntegrationState.Attention else IntegrationState.Connected
         }
         // Everything else arrives over a webhook channel. A test delivery proves
         // the wiring, not the connection — it does not turn the card green.
@@ -119,8 +131,8 @@ val INTEGRATION_PROVIDERS = listOf(
         listOf("Orders", "Customers"), "shopify", "S"),
     IntegrationProvider("woocommerce", "WooCommerce", "commerce", "webhook",
         "Import orders automatically.", listOf("Orders", "Customers"), "woo", "W"),
-    IntegrationProvider("etsy", "Etsy", "commerce", "webhook",
-        "Post orders to NivaDesk from Etsy through an automation.", listOf("Orders"), "inbound", "E"),
+    IntegrationProvider("etsy", "Etsy", "commerce", "native",
+        "Import orders and customers automatically.", listOf("Orders", "Customers"), "etsy", "E"),
     IntegrationProvider("wix", "Wix", "commerce", "webhook",
         "Post orders to NivaDesk from a Wix store.", listOf("Orders"), "inbound", "W"),
     IntegrationProvider("squarespace", "Squarespace", "commerce", "webhook",
