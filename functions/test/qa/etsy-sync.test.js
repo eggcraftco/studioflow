@@ -505,6 +505,32 @@ test("a full page does not let the watermark step over what did not fit", async 
   assert.ok(row.reconcileWatermarkMs < nowRef.value, "so the 50 that did not fit are still in the next window");
 });
 
+// The preview honours "do not import cancelled orders". The sweep and the
+// webhooks did not — they called applyReceipt with no rules at all — so half an
+// hour after the seller chose to leave cancelled orders out, the automatic path
+// brought them in and said nothing. The choice is stored on the connection when
+// they import, and the automatic paths read it.
+test("the sweep obeys the import rules the seller chose", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const cancelled = RECEIPT({ receipt_id: 601, status: "canceled", is_paid: false });
+  const { fns } = build({ nowRef, receipts: [cancelled], world });
+
+  const ref = world.handle("etsyConnections/c1_222");
+  // What the seller chose last time they imported: cancelled orders stay out.
+  const data = {
+    externalShopId: "222",
+    companyId: "c1",
+    importRules: { sinceDays: 90, includeCancelled: false, includeDigital: false, includeUnpaid: true }
+  };
+
+  const outcome = await fns._internal.reconcileConnection(ref, data, { companyId: "c1" });
+  assert.strictEqual(outcome.skipped, 1, "the cancelled receipt is skipped, not imported");
+  assert.strictEqual(outcome.created, 0);
+  const orders = [...world.docs.keys()].filter((k) => k.startsWith("siparisler/"));
+  assert.deepStrictEqual(orders, [], "and no order was written behind the seller's back");
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");

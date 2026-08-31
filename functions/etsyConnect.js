@@ -349,7 +349,13 @@ function createEtsyConnectFunctions(deps) {
       // real failure behind the fallback's, which cost a deploy cycle to find.
       let shop = null;
       const attempts = [];
-      const paths = ["/users/me", etsyUserId ? `/users/${etsyUserId}/shops` : ""].filter(Boolean);
+      // Order matters. /users/{id}/shops returns whole shop records — name,
+      // currency, the lot. /users/me returns only { user_id, shop_id }, so if
+      // it wins the connection is stored with an empty shop name and no
+      // currency, and the header card falls back to the words "Etsy shop"
+      // forever. Ask the one that answers properly first; keep /users/me for
+      // when the token carries no numeric id to ask with.
+      const paths = [etsyUserId ? `/users/${etsyUserId}/shops` : "", "/users/me"].filter(Boolean);
       for (const path of paths) {
         try {
           const answer = await etsy.etsyFetch(path, {
@@ -368,8 +374,24 @@ function createEtsyConnectFunctions(deps) {
         }
       }
       const lookupError = attempts.join(" | ");
-      const firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);
+      let firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);
       const shopId = String(firstShop?.shop_id || "");
+      // A shop id with no name came from /users/me. Ask for the shop itself
+      // rather than storing a connection the seller cannot recognise.
+      if (shopId && !firstShop?.shop_name) {
+        try {
+          const detail = await etsy.etsyFetch(`/shops/${encodeURIComponent(shopId)}`, {
+            keystring: keystring(),
+            apiKey: etsy.etsyApiKey(keystring(), sharedSecret()),
+            accessToken
+          });
+          if (detail?.shop_id) firstShop = detail;
+        } catch (failure) {
+          // Not fatal: a connection with a blank name still works, and the
+          // reconcile sweep will not care. Note it and carry on.
+          attempts.push(`/shops/${shopId}: ${failure?.message || failure}`);
+        }
+      }
       if (!shopId) {
         // "This account owns no shop" is not a fault the seller can debug from a
         // stack trace, and it is the single most likely reason a first connect

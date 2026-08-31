@@ -296,7 +296,7 @@ function createEtsySyncFunctions(deps) {
   // Applying one receipt — the single path every arrival takes
   // -------------------------------------------------------------------------
 
-  async function applyReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null }) {
+  async function applyReceipt({ companyId, connectionRef, connectionData, receipt, defaultDeliveryTime, customerChoice = null, rules = null }) {
     const shopId = String(connectionData.externalShopId || "");
     const normalised = etsy.normalizeEtsyReceipt(receipt, {
       companyId,
@@ -307,6 +307,27 @@ function createEtsySyncFunctions(deps) {
       reconcileLineItems
     });
     const receiptId = normalised.source.receiptId;
+
+    // The seller's choices are not a preview-only courtesy. The preview
+    // honoured "do not import cancelled orders" and then the 15-minute sweep
+    // and the webhooks brought them in anyway, half an hour later, with nothing
+    // said.
+    //
+    // Only the automatic paths are filtered here. A manual import passes its
+    // own rules AND an explicit list of receipts the seller ticked in the
+    // preview: re-deciding on their behalf at that point would overrule the
+    // person who just looked at the list.
+    if (!rules && connectionData.importRules) {
+      const stored = normaliseRules(connectionData.importRules);
+      const verdict = classify(normalised, stored);
+      if (verdict.outcome === "unsupported") {
+        return { status: "skipped", receiptId, reason: verdict.reason };
+      }
+      if (!stored.includeCompleted && String(normalised.source.status) === "completed") {
+        return { status: "skipped", receiptId, reason: "completed" };
+      }
+    }
+
     const key = etsy.externalOrderKey(companyId, shopId, receiptId);
     const externalRef = externalOrders().doc(key);
     const existingSnap = await externalRef.get();
@@ -429,7 +450,12 @@ function createEtsySyncFunctions(deps) {
 
     const outcome = { created: 0, updated: 0, held: 0, skipped: 0, failed: 0, stale: 0 };
     const failures = [];
-    await ref.set({ importState: "running", updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    // Remember what the seller chose, so the automatic paths obey it too.
+    await ref.set({
+      importState: "running",
+      importRules: rules,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
 
     for (const receipt of receipts) {
       const receiptId = String(receipt?.receipt_id || "");
@@ -441,7 +467,8 @@ function createEtsySyncFunctions(deps) {
           connectionData: data,
           receipt,
           defaultDeliveryTime,
-          customerChoice: choices[receiptId] || null
+          customerChoice: choices[receiptId] || null,
+          rules
         });
         outcome[result.status] = (outcome[result.status] || 0) + 1;
       } catch (error) {
@@ -487,7 +514,7 @@ function createEtsySyncFunctions(deps) {
       sortOrder: "up"
     });
 
-    const outcome = { created: 0, updated: 0, stale: 0, held: 0, failed: 0 };
+    const outcome = { created: 0, updated: 0, stale: 0, held: 0, skipped: 0, failed: 0 };
     // The newest modification time this sweep actually reached. When the page
     // fills up, this is where the next sweep has to resume from — moving the
     // watermark to "now" would step over every receipt that did not fit, and
