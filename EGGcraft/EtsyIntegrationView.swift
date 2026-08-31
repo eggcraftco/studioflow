@@ -316,6 +316,10 @@ private struct EtsyHeaderCard: View {
     let onCheck: () -> Void
     private func tr(_ text: String) -> String { t(text, lang: language) }
 
+    /// What the server knows, which is what Reconnect exists for. The live
+    /// check must never hide the button that can clear its own result.
+    private var storedNeedsReconnect: Bool { connection.needsAttention }
+
     private var label: String {
         if connection.needsAttention || liveCheck == "unhealthy" { return tr("Needs attention") }
         // Connected is a fact: we hold access. Healthy is a claim about this
@@ -333,7 +337,7 @@ private struct EtsyHeaderCard: View {
                     Text(tr("Connection")).font(.system(size: 12))
                     Spacer(minLength: 6)
                     Text(label).font(.system(size: 11, weight: .bold)).foregroundColor(.secondary)
-                    if !connection.needsAttention {
+                    if !storedNeedsReconnect {
                         Button(checking ? tr("Checking Etsy…") : tr("Check now"), action: onCheck)
                             .buttonStyle(.bordered).controlSize(.small).disabled(checking)
                     }

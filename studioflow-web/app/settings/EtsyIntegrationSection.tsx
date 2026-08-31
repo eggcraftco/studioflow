@@ -283,8 +283,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     );
   }
 
-  const needsAttention =
-    connection.needsReconnect || connection.status === "needs_reconnect" || liveCheck === "unhealthy";
+  // What the server knows, which is what Reconnect exists for.
+  const storedNeedsReconnect = connection.needsReconnect || connection.status === "needs_reconnect";
+  // What the row says, which also reflects a live check that just failed.
+  const needsAttention = storedNeedsReconnect || liveCheck === "unhealthy";
   // Connected is a fact: we hold access. Healthy is a claim about this
   // moment, so only a live answer from Etsy earns that word.
   const connectionLabel = needsAttention
@@ -312,7 +314,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <span>{t("Connection")}</span>
             <span className="settings-action-row">
               <span className="studio-pill">{connectionLabel}</span>
-              {needsAttention ? null : (
+              {/* Hidden on a stored needs_reconnect, where Reconnect is the
+                  right action — but never hidden because a live check just
+                  failed. Etsy has bad minutes; that would leave the one button
+                  that can clear the state behind the state it set. */}
+              {storedNeedsReconnect ? null : (
                 <button
                   type="button"
                   className="button secondary"

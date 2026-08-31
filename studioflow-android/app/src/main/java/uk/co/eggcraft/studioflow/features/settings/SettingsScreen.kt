@@ -2000,7 +2000,11 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                     },
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (!needsAttention) {
+                // Hidden on a stored needs_reconnect, where Reconnect is the
+                // right action — but never hidden because a live check just
+                // failed. Etsy has bad minutes; that would leave the one button
+                // that can clear the state behind the state it set.
+                if (!connection.needsAttention) {
                     TextButton(
                         onClick = {
                             runAction("verify") {
