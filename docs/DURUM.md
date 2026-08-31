@@ -2,11 +2,99 @@
 
 Amaç: yapılanlar ile yapılacakların birbirine karışmaması. Her büyük iş bittiğinde
 buraya taşınır; yeni raporlar "SIRADA" bölümüne girer ve bitince yukarı çıkar.
-Son güncelleme: 28 Ağustos 2026.
+Son güncelleme: 31 Ağustos 2026.
 
 ---
 
 ## TAMAMLANANLAR (canlıda / kodda doğrulanmış)
+
+### 31 Ağustos — bir günde on iş, ve defterin kendisi yalan söylüyordu
+
+Bu bölüm 173 commit sonra yazıldı. O boşlukta defter iki yönde birden yanlış
+bilgi veriyordu: bittiğini söylediği şeyler bitmemişti, beklediğini söylediği
+şeyler çoktan canlıydı. Aşağıdakiler ölçülerek yazıldı, hatırlanarak değil.
+
+**Kasa kapalıydı.** iOS/macOS 1.3, App Store'da **22 Ağustos'tan beri satışta**
+(defter "review'da" diyordu; public lookup API'si `trackId 6765475980` ile
+teyit etti). Ama `verifyAppleSubscriptionPurchase` ve
+`appleAppStoreServerNotification` canlıda `APPLE_ALLOW_PRODUCTION_BILLING=false`
+ile koşuyor, yani doğrulayıcı sadece `["Sandbox"]` ile kuruluyor. StoreKit
+parayı ÖNCE çekiyor. Günlükte hiç gerçek çağrı yok — kimse denememiş, yani
+aktif zarar değil; ama ilk deneyen kaybedecekti. `.env` düzeltildi
+(`APPLE_APP_STORE_ID=6765475980` + üretim açık); **deploy kullanıcıda kaldı.**
+
+**Aktivasyon teşhisi değişti.** 23 Ağu'daki "37 workspace, 0 müşteri" sekiz gün
+tekrar ölçülmemişti ve betiği commit edilmemişti. Şimdi
+`functions/scripts/activation-audit.mjs`. 31 Ağu ölçümü, 47 dış workspace:
+onboarding'i bitiren 3 (%6,4), **en az bir sipariş açan 19 (%40,4)**, müşteri
+kaydı açan 4, deneme başlatan 4, **ödeyen 0**. Kohort: 23 Ağu öncesi %27 aktif,
+sonrası %67. Yani "kimse aktive olmuyor" DOĞRU DEĞİL; sıkışma kasaya ulaşmakta.
+(Ölçüm iki kez yanlış çıktı ve iki kez düzeltildi: `plan`/`subscriptionStatus`
+diye alan yok — `billingPlan`/`billingStatus`; ve `lifetime_lite` ömürlük satın
+alma değil, £9 Starter planının eski kimliği.)
+
+**Üretimde kaynağı olmayan iki fonksiyon.** `pinMessageInThread` ve
+`unpinMessageInThread` canlıydı, gönderilmiş Mac/iPhone/Android sürümleri
+onları çağırıyordu, ve repoda hiçbir dosyada yoklardı. Tam bir deploy onları
+silip mağazadaki uygulamalarda sabitlemeyi bozacaktı. İstemcilerin okuduğu
+alanlardan yeniden yazıldı, 15 iddialık emülatör testiyle deploy edildi.
+
+**Kural açığı: yetki yükseltmesi.** `companies/{cid}` wildcard'ı bir REDDETME
+listesi ve beş alt koleksiyon atlanmıştı. En ciddisi `supportSettings/general`:
+içindeki `supportManagerUids` her üyeye yazılabilirdi — bir üye tek `setDoc` ile
+kendini destek yöneticisi yapabilirdi. Yanında `workspaceTickets`,
+`notifications` (yazma), `wooMergedPayments`, `users`. Kurallar OR'landığı için
+hem açık blok hem reddetme listesi gerekti; kontrol koşusunda reddetme listesi
+kaldırılınca **13 iddia düştü**. Deploy edildi.
+
+**Telefondan yüklenen dosyalar kütüphaneye girmiyordu.** Sipariş dosyasını
+kütüphaneye sokan tek şey web Files sayfasındaki elle basılan indeksleme
+düğmesiydi — zamanlanmış değil, native'de yok. Bu native'e özel bir eksik
+DEĞİLDİ; web sipariş kartı da dahil her platformda böyleydi. Kayıt artık
+sunucuda, `appendClientFile` içinde — yani **mağazadaki sürümler de düzeldi.**
+
+**Mağaza dosyaları:** markalı müşteri linkleri artık native'de de
+(`CustomerPortalLink.swift` / `CustomerLinks.kt`); web `clientPortalHost`
+kullanırken Mac/iPhone/Android `nivadesk.app`'i sabit yazıyordu, yani markalı
+alan adı için ödeyen atölye telefondan gönderdiğinde bizim adımızı veriyordu.
+Uygulama içinde **RTL hiç uygulanmıyordu** — `dir` yalnızca pazarlama sitesinde
+ayarlanıyordu, Arapça haftalardır soldan-sağa akıyordu. Android **0.1.9
+(versionCode 10)** imzalı paketi hazır; yükleme kullanıcıda.
+
+**Test altyapısı:** `npm test` 21 `.mjs` takımını sessizce atlıyordu — 19'u
+kimsenin koşamadığı, 351 iddialık bir katmandı. Dört katman ayrıldı ve
+adlandırıldı: `npm test` (birim, emülatörsüz) · `test:rules` · `test:e2e` ·
+`test:integration`. Bugün toplam **24 takım, 403 iddia**, hepsi yeşil.
+
+**Rehber:** Home ekranının hiç bölümü yoktu (dört platformda yayında) —
+"Home kartlarımı nasıl düzenlerim?" sorusu Notes **widget** bölümünden
+cevaplanıyordu. Files bölümü 26 Ağustos'ta değişen davranışı hâlâ eski hâliyle
+anlatıyordu. Kurulum "dört soruluk" diyordu, `TOTAL_STEPS = 5`. Üçü de
+düzeltildi; **yedi** asistan fonksiyonu deploy edildi — dört değil, çünkü
+`createWebsiteChat` de corpus taşıyor ve ziyaretçinin İLK sorusunu o karşılıyor.
+
+**Etsy:** OAuth turu **gerçek Etsy'de ilk kez çalıştı** (31 Ağu 19:17–19:24).
+Jeton takası, PKCE, tek kullanımlık state, ve mağazasız hesabın doğru mesajla
+geri çevrilmesi — hepsi geçti. Bağlantı yazılmadı çünkü o hesabın mağazası yok;
+beklenen davranış. `reconcileEtsyConnections` **hiç sır bağlanmadan** deploy
+edilmişti (`onSchedule` sarmalanmamıştı) — ilk mağaza bağlandığında sessizce
+ölü olacaktı, düzeltildi. Anahtarlar ölçüldü: `openapi-ping` 200, yalnız
+keystring 403 (birleşik biçimin kanıtı); bozuk v1/v3 sürümleri yok edildi.
+Eşleyici Etsy'nin yayımlanmış OpenAPI şemasına karşı denetlendi — 28 makbuz +
+7 işlem alanı, durum listesi, iade davranışı: **kusur yok**, ve artık test.
+
+**Etsy hesap topolojisi netleşti:** Seller App mümkün değil (Etsy personeli:
+"We do not allow users to have both Seller Apps and Personal/Commercial Apps").
+Ayrı hesap koruma sağlamıyor (Etsy ilişkili hesapları askıya alma hakkını saklı
+tutuyor, aynı vergi kimliği isteniyor) ve Developer Mode'u kaybettiriyor.
+Mağaza gerekirse uygulamanın durduğu hesapta açılmalı. Ama mağaza artık acil
+değil: OAuth yarısı geçti, `receipts` yarısı gerçek alıcı istiyor.
+
+**Bu ay dördüncü kez bir test bug'ı sertifikaladı** (`guide-retrieval.test.js`
+`/four-question/i` iddia ediyordu, yani rehberdeki YANLIŞ cümle testi yeşil
+tutan tek şeydi). Çare her seferinde aynı: cevabı adlandırma, kaynaktan türet.
+
+---
 
 ### Ana sayfa hero hizası — 28 Ağu, CANLI (Round 66)
 Şikâyet: "orantısız, kayık, çizgilerin gösterdiği yerler tam görünmüyor". Ölçüm
@@ -223,7 +311,9 @@ import kopya-politikaları, Tags/Storage görünümleri, kütüphaneye özel sto
 ## KULLANICIYA BAĞLI BEKLEYENLER
 - ~~reauth~~ 26 Ağu akşamı çözüldü: 5 webhook (müşteri kimliği) + storage.rules
   CANLI — envanter fotoğraf yayını artık tamamen açık.
-- Ana repo push (commit'ler hazır), mağaza sürümleri (iOS/macOS 1.3 review'da,
+- **DÜZELTME (31 Ağu): iOS/macOS 1.3 review'da DEĞİL — 22 Ağustos'tan beri
+  satışta.** Bekleyen, Apple üretim ödemesinin deploy'u (aşağıya bakın).
+- Ana repo push (commit'ler hazır), mağaza sürümleri (Android 0.1.9 paketi hazır,
   Android 0.1.8; native kütüphane + Files sekmesi bir sonraki sürümle),
   VAPID anahtarı (+ App Check — Schedule raporu §17 de doğruladı),
   "Recalculate Taxes" düğmesi (mağaza sürümlerinden sonra).
