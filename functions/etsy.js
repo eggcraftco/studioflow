@@ -245,6 +245,28 @@ function parseRetryAfter(header) {
  * NOT retried here — a dead token is refreshed by the caller, and hammering a
  * 401 only burns the daily quota.
  */
+/**
+ * The x-api-key header value, which is NOT the keystring on its own.
+ *
+ * Etsy issues two values and wants them joined: `keystring:shared_secret`.
+ * This is not in the reference documentation; Etsy only says so when you get
+ * it wrong, and it says three different things depending on how you get it
+ * wrong — "Shared secret is required in x-api-key header" for the keystring
+ * alone, "API key not found or not active" for the secret alone, and
+ * "Invalid API key: should be in the format 'keystring:shared_secret'" for any
+ * other separator. Found by trying them against openapi-ping, which needs no
+ * token and answers in one request.
+ *
+ * The keystring stays the OAuth client_id on its own; only the API header is
+ * joined. Falls back to the bare keystring so nothing breaks before the shared
+ * secret exists.
+ */
+function etsyApiKey(keystring, sharedSecret = "") {
+  const key = String(keystring || "");
+  const secret = String(sharedSecret || "");
+  return secret ? `${key}:${secret}` : key;
+}
+
 // `apiKey` is what goes in the x-api-key header, and it is NOT the keystring.
 // Etsy uses two different values: the keystring is the OAuth client_id, and
 // the app's Shared Secret is what the API accepts as x-api-key. Sending the
@@ -467,6 +489,7 @@ module.exports = {
   ETSY_TOKEN_URL,
   ETSY_API_BASE,
   ETSY_SCOPES,
+  etsyApiKey,
   ETSY_MIN_CALL_GAP_MS,
   ETSY_REQUESTS_PER_SECOND,
   ETSY_REQUESTS_PER_DAY,

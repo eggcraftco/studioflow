@@ -515,14 +515,37 @@ test("the web settings page opens the Etsy panel when the seller returns", () =>
 // with .catch(() => null) — so a working seller account was told "this Etsy
 // account has no shop", which sent them looking at their shop instead of at us.
 // Found by connecting a real shop, which is the only place it shows.
-test("the shop lookup asks for the numeric user id, not \"me\"", async () => {
+test("the shop lookup never puts \"me\" where Etsy wants a number", async () => {
   const nowRef = { value: 1_700_000_000_000 };
   const seen = [];
   const { fns, store } = build({
     nowRef,
     fetchImpl: async (path) => {
-      seen.push(path);
-      if (String(path).includes("/users/me/")) throw new Error("Etsy 404: not found");
+      seen.push(String(path));
+      // getMe answers with the shop directly. This is the happy path.
+      if (String(path) === "/users/me") return { user_id: 777, shop_id: 222, shop_name: "Ada Studio" };
+      return { results: [{ shop_id: 222, shop_name: "Ada Studio", currency_code: "GBP" }] };
+    },
+  });
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
+
+  assert.ok(store.docs.get("etsyConnections/c1_222"), "the shop connects");
+  assert.ok(
+    !seen.some((p) => p === "/users/me/shops"),
+    `"me" must never be the {user_id} path parameter — Etsy answers "Expected int value for 'user_id'". Saw: ${seen.join(" | ")}`
+  );
+});
+
+test("when getMe cannot answer, the numeric id is the fallback", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const seen = [];
+  const { fns, store } = build({
+    nowRef,
+    fetchImpl: async (path) => {
+      seen.push(String(path));
+      if (String(path) === "/users/me") throw new Error("Etsy request failed (404).");
       return { results: [{ shop_id: 222, shop_name: "Ada Studio", currency_code: "GBP" }] };
     },
   });
@@ -531,8 +554,8 @@ test("the shop lookup asks for the numeric user id, not \"me\"", async () => {
   await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, fakeRes());
 
   assert.ok(
-    seen.some((p) => /^\/users\/\d+\/shops$/.test(String(p))),
-    `expected a numeric-id shop lookup, saw: ${seen.join(" | ")}`
+    seen.some((p) => /^\/users\/\d+\/shops$/.test(p)),
+    `expected a numeric-id shop lookup after getMe failed, saw: ${seen.join(" | ")}`
   );
   assert.ok(store.docs.get("etsyConnections/c1_222"), "the shop still connects");
 });

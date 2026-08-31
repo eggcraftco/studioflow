@@ -216,5 +216,23 @@ check(() => {
   assert.ok(etsy.retryDelayMs(0, 999999) <= 30000, "an absurd Retry-After is capped");
 }, "retry timing respects Etsy and stays bounded");
 
+
+// Etsy wants both of its values in one header, joined by a colon:
+// keystring:shared_secret. Nothing in the reference documentation says so —
+// Etsy only tells you when you get it wrong, and it gives a different error for
+// each way of getting it wrong. The keystring alone is what we shipped, and it
+// 403s every request including the unauthenticated ping.
+check(() => {
+  assert.strictEqual(etsy.etsyApiKey("abc", "def"), "abc:def");
+  assert.strictEqual(etsy.etsyApiKey("abc", ""), "abc", "falls back before the secret exists");
+  assert.strictEqual(etsy.etsyApiKey("abc"), "abc");
+  // The OAuth client_id is the keystring on its own — joining it there would
+  // break the consent screen, which is the half that already worked.
+  const url = new URL(etsy.authorizeUrl({
+    keystring: "abc", redirectUri: "https://x.test/cb", state: "s", codeChallenge: "c"
+  }));
+  assert.strictEqual(url.searchParams.get("client_id"), "abc", "client_id is never joined");
+}, "the API header joins keystring and shared secret; the OAuth client_id does not");
+
 if (failed) { console.error(`\n${failed} check(s) failed`); process.exit(1); }
 console.log("\nPASS");

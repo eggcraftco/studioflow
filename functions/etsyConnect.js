@@ -202,13 +202,13 @@ function createEtsyConnectFunctions(deps) {
   async function callEtsy(connectionRef, path, options = {}) {
     let token = await accessTokenFor(connectionRef);
     try {
-      return await etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: sharedSecret(), accessToken: token });
+      return await etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: etsy.etsyApiKey(keystring(), sharedSecret()), accessToken: token });
     } catch (error) {
       if (error?.code !== "auth_expired") throw error;
       // The stored expiry said fresh but Etsy disagrees — the token was revoked
       // or rotated elsewhere. One forced refresh, then give up honestly.
       token = await accessTokenFor(connectionRef, { force: true });
-      return etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: sharedSecret(), accessToken: token });
+      return etsy.etsyFetch(path, { ...options, keystring: keystring(), apiKey: etsy.etsyApiKey(keystring(), sharedSecret()), accessToken: token });
     }
   }
 
@@ -324,22 +324,35 @@ function createEtsyConnectFunctions(deps) {
       // "this Etsy account has no shop", which is a different problem entirely
       // and sends them looking in the wrong place. So: use the id we already
       // have from the token, and let a real failure say what it was.
+      // Etsy exposes the seller's shop two ways and neither is guessable from
+      // the reference: getMe returns { user_id, shop_id } with no path
+      // parameter, and getShopByOwnerUserId is /users/{user_id}/shops with the
+      // NUMERIC id. The word "me" is not accepted in the path — it comes back
+      // as "Expected int value for 'user_id' (got string)".
+      //
+      // Every attempt is recorded. A single last-error-wins variable hid the
+      // real failure behind the fallback's, which cost a deploy cycle to find.
       let shop = null;
-      let lookupError = "";
-      for (const path of [etsyUserId ? `/users/${etsyUserId}/shops` : "", "/users/me/shops"]) {
-        if (!path) continue;
+      const attempts = [];
+      const paths = ["/users/me", etsyUserId ? `/users/${etsyUserId}/shops` : ""].filter(Boolean);
+      for (const path of paths) {
         try {
-          shop = await etsy.etsyFetch(path, { keystring: keystring(), apiKey: sharedSecret(), accessToken });
-          if (shop) break;
+          const answer = await etsy.etsyFetch(path, {
+            keystring: keystring(),
+            apiKey: etsy.etsyApiKey(keystring(), sharedSecret()),
+            accessToken
+          });
+          if (answer?.shop_id || Array.isArray(answer?.results)) { shop = answer; break; }
+          attempts.push(`${path}: no shop in the answer`);
         } catch (failure) {
-          // Etsy's own words, not just the status. A 403 here can mean the
-          // scope, the app's access level, or the endpoint — and the status
-          // alone cannot tell them apart. This goes to the server log; the
-          // seller only ever sees the plain sentence.
-          const detail = String(failure?.body || "").slice(0, 300);
-          lookupError = String(failure?.message || failure) + (detail ? ` ${detail}` : "");
+          // Etsy's own words, not just the status: a 403 here can mean the
+          // header, the scope or the app's access level, and the status alone
+          // cannot tell them apart. Server log only; the seller sees a sentence.
+          const detail = String(failure?.body || "").slice(0, 200);
+          attempts.push(`${path}: ${failure?.message || failure}${detail ? ` ${detail}` : ""}`);
         }
       }
+      const lookupError = attempts.join(" | ");
       const firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);
       const shopId = String(firstShop?.shop_id || "");
       if (!shopId) {
