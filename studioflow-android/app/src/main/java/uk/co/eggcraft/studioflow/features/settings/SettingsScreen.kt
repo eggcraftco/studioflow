@@ -1873,13 +1873,16 @@ private fun EtsyDetail(state: StudioFlowUiState) {
     val liveConnections = connections.filter { it.status != "disconnected" }
     val connection = liveConnections.firstOrNull { it.id == selectedId } ?: liveConnections.firstOrNull()
 
-    suspend fun reload() {
+    // keepError: a reload is not evidence that whatever just failed is fine now.
+    // The live check sets a message and then reloads; clearing unconditionally
+    // deleted it a moment after it appeared.
+    suspend fun reload(keepError: Boolean = false) {
         val ws = workspace ?: return
         try {
             val result = repository.etsyConnections(ws.id)
             connections = result.first
             configured = result.second
-            errorText = ""
+            if (!keepError) errorText = ""
         } catch (failure: Exception) {
             errorText = failure.message ?: t("The Etsy connection could not be loaded.")
         } finally {
@@ -2027,7 +2030,7 @@ private fun EtsyDetail(state: StudioFlowUiState) {
                                         t("Etsy did not accept this connection. Reconnect the shop to continue.")
                                     }
                                 }
-                                reload()
+                                reload(keepError = answer.first.not())
                             }
                         },
                         enabled = busy.isEmpty(),

@@ -155,12 +155,15 @@ struct EtsyIntegrationView: View {
 
     // MARK: - Actions
 
-    private func reload() async {
+    /// keepError: a reload is not evidence that whatever just failed is fine
+    /// now. The live check sets a message and then reloads; clearing
+    /// unconditionally deleted it a moment after it appeared.
+    private func reload(keepError: Bool = false) async {
         do {
             let result = try await firebaseManager.etsyConnections()
             connections = result.connections
             configured = result.configured
-            errorText = ""
+            if !keepError { errorText = "" }
         } catch {
             errorText = error.localizedDescription.isEmpty
                 ? tr("The Etsy connection could not be loaded.")
@@ -208,7 +211,7 @@ struct EtsyIntegrationView: View {
         liveCheck = "unhealthy"
         let sentence = etsyErrorText(answer.reason, lang: language)
         errorText = sentence.isEmpty ? tr("Etsy did not accept this connection. Reconnect the shop to continue.") : sentence
-        await reload()
+        await reload(keepError: true)
     }
 
     private func syncNow(_ live: EtsyConnectionInfo) async throws {
