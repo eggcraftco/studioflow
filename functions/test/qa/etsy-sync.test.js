@@ -373,6 +373,54 @@ test("the watermark does not advance past a failure", async () => {
     "advancing the watermark past a failure makes a missed order permanently missed");
 });
 
+// A rule the server honours but the screen never offers is a dead end for the
+// seller: the preview tells them an order was skipped because it was cancelled
+// on Etsy, and gives them no way to say "import it anyway". Three of the five
+// rules were in that state — supported by normaliseRules, absent from the UI.
+// This keeps the two in step in the direction that matters.
+test("every import rule the server honours is offered on the screen", () => {
+  const fs = require("fs");
+  const path = require("path");
+
+  const server = fs.readFileSync(path.join(__dirname, "..", "..", "etsySync.js"), "utf8");
+  // The rules the server actually reads out of the request.
+  const honoured = [...server.matchAll(/raw\?\.(include[A-Za-z]+)/g)].map((m) => m[1]);
+  const unique = [...new Set(honoured)];
+  assert.ok(unique.length >= 4, `expected the server to honour several include rules, found ${unique}`);
+
+  const screen = path.join(__dirname, "..", "..", "..", "studioflow-web", "app", "settings", "EtsyIntegrationSection.tsx");
+  if (!fs.existsSync(screen)) return;             // functions checked out on its own
+  const ui = fs.readFileSync(screen, "utf8");
+
+  // Whole identifier, not substring: "includeCancelledXX" contains
+  // "includeCancelled", and an includes() check would call that a match.
+  const missing = unique.filter((rule) => !new RegExp(`\\b${rule}\\b`).test(ui));
+  assert.deepStrictEqual(
+    missing, [],
+    `the server honours ${missing.join(", ")} but the Etsy screen never sends them, so a seller cannot reach those orders`
+  );
+});
+
+// "Healthy" is a claim about this moment. A stored status only changes when a
+// sync happens to run and fail, so access revoked an hour ago still reads as
+// fine. The word has to be backed by asking Etsy.
+test("the screen asks Etsy before calling a connection healthy", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const screen = path.join(__dirname, "..", "..", "..", "studioflow-web", "app", "settings", "EtsyIntegrationSection.tsx");
+  if (!fs.existsSync(screen)) return;
+  const ui = fs.readFileSync(screen, "utf8");
+
+  assert.ok(
+    /verifyEtsyConnection\(/.test(ui),
+    "the screen must call verifyEtsyConnection, or Healthy is only ever a stored field read back"
+  );
+  assert.ok(
+    /liveCheck === "healthy"/.test(ui),
+    'the Healthy label must be gated on the live check result'
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy sync engine");
