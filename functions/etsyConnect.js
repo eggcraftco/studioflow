@@ -251,6 +251,12 @@ function createEtsyConnectFunctions(deps) {
 
   function connectRedirect(res, params) {
     const url = new URL(appReturnUrl());
+    // Name the destination explicitly. The seller is coming back from granting
+    // access to their shop, and every one of these outcomes - connected,
+    // cancelled, or failed - is only readable on the Etsy panel. Sending them
+    // to /settings and hoping the right panel is open is how a successful
+    // connection looks to the seller like nothing happened.
+    url.searchParams.set("section", "etsy");
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
     res.redirect(302, url.toString());
   }

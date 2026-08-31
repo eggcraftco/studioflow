@@ -150,6 +150,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   woocommerce: "integrations",
   shopify: "integrations",
   inbound: "integrations",
+  etsy: "integrations",
   general: "profile-security",
   account: "profile-security",
   appearance: "preferences",
@@ -493,8 +494,23 @@ export default function SettingsPage() {
     const rawRequested = params.get("section");
     setIntegrationIntent(params.get("intent") ?? "");
     setIntegrationCategory(params.get("category") ?? "");
-    if (rawRequested === "shopify" || rawRequested === "woocommerce" || rawRequested === "inbound") {
+    if (
+      rawRequested === "shopify" ||
+      rawRequested === "woocommerce" ||
+      rawRequested === "inbound" ||
+      rawRequested === "etsy"
+    ) {
       setIntegrationProvider(rawRequested);
+    }
+    // Etsy sends the seller back to /settings with ?etsy=connected|cancelled|error
+    // and no section of its own. That message is read by the Etsy panel, and the
+    // panel only mounts once it is open - so a return from Etsy has to open it.
+    // Without this, the seller approves access to their shop, lands on whichever
+    // settings page happens to be first, and is told nothing at the one moment
+    // they most need an answer.
+    if (params.get("etsy")) {
+      setIntegrationProvider("etsy");
+      setActiveSection("integrations");
     }
     if (!rawRequested) return;
     const requested = (SETTINGS_SECTION_ALIASES[rawRequested] ?? rawRequested) as SettingsSectionId;

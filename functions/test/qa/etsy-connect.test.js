@@ -449,6 +449,67 @@ test("reconnecting the same shop reuses the row instead of piling up", async () 
   assert.strictEqual(rows.length, 1, `expected one connection, found ${rows.length}`);
 });
 
+// The seam that no unit test on either side can see on its own.
+//
+// The callback hands the seller back to the web app with ?etsy=connected. That
+// message is read by the Etsy panel — and the panel only mounts once it is
+// open. So if the redirect does not name the section, the seller approves
+// access to their shop, lands on whichever settings page happens to be first,
+// and is told nothing at all. The connection worked; it just looks like it
+// did not. Both halves are asserted here because the bug lives between them.
+test("every callback outcome names the section it wants opened", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const { fns } = build({ nowRef });
+
+  const outcomes = [];
+  // success
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  let res = fakeRes();
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, res);
+  outcomes.push(["connected", res.redirects[0].url]);
+  // seller pressed Cancel on Etsy
+  res = fakeRes();
+  await fns.etsyOAuthCallback({ query: { error: "access_denied" } }, res);
+  outcomes.push(["cancelled", res.redirects[0].url]);
+  // Etsy sent us back with nothing usable
+  res = fakeRes();
+  await fns.etsyOAuthCallback({ query: {} }, res);
+  outcomes.push(["missing_code", res.redirects[0].url]);
+  // a state that was never issued
+  res = fakeRes();
+  await fns.etsyOAuthCallback({ query: { state: "invented", code: "abc" } }, res);
+  outcomes.push(["bad_state", res.redirects[0].url]);
+
+  for (const [label, url] of outcomes) {
+    assert.ok(
+      new URL(url).searchParams.get("section") === "etsy",
+      `the ${label} redirect must name section=etsy, got: ${url}`
+    );
+  }
+});
+
+test("the web settings page opens the Etsy panel when the seller returns", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const page = path.join(__dirname, "..", "..", "..", "studioflow-web", "app", "settings", "page.tsx");
+  if (!fs.existsSync(page)) return;            // functions checked out on its own
+  const source = fs.readFileSync(page, "utf8");
+
+  assert.ok(
+    /etsy:\s*"integrations"/.test(source),
+    'SETTINGS_SECTION_ALIASES must map etsy -> integrations, or ?section=etsy lands nowhere'
+  );
+  assert.ok(
+    /rawRequested === "etsy"/.test(source),
+    'the provider allowlist must accept "etsy", or ?section=etsy opens Integrations but not the Etsy panel'
+  );
+  assert.ok(
+    /params\.get\("etsy"\)/.test(source) && /setIntegrationProvider\("etsy"\)/.test(source),
+    "returning from Etsy with ?etsy=... must open the Etsy panel, or the outcome message is never read"
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy connection lifecycle");
