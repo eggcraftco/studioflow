@@ -6140,6 +6140,7 @@ struct AyarlarView: View {
 
                     if integrationsManaging == "shopify" { shopifyIntegrationAyari }
                     else if integrationsManaging == "woocommerce" { wooCommerceIntegrationAyari }
+                    else if integrationsManaging == "etsy" { etsyIntegrationAyari }
                     else { inboundIntegrationAyari }
                 }
             } else {
@@ -6249,6 +6250,18 @@ struct AyarlarView: View {
                 integrationSignals.shopifyStores = raw.map {
                     ($0["shop"] as? String ?? "", $0["status"] as? String ?? "")
                 }
+                integrationSignalsLoaded = true
+            }
+        }
+        // Etsy's card state has to come from the shop itself, not from a flag we
+        // set when someone pressed Connect. This callable is member-readable.
+        functions.httpsCallable("getEtsyConnections").call(["companyId": companyId]) { result, _ in
+            DispatchQueue.main.async {
+                let rows = (result?.data as? [String: Any])?["connections"] as? [[String: Any]] ?? []
+                integrationSignals.etsyShops = rows.count
+                integrationSignals.etsyShopsNeedingAttention = rows.filter {
+                    ($0["needsReconnect"] as? Bool ?? false) || String(describing: $0["status"] ?? "") == "needs_reconnect"
+                }.count
                 integrationSignalsLoaded = true
             }
         }
@@ -6373,6 +6386,14 @@ struct AyarlarView: View {
             guard !handle.isEmpty else { return nil }
             return URL(string: "https://admin.shopify.com/store/\(handle)")
         }
+    }
+
+    private var etsyIntegrationAyari: some View {
+        EtsyIntegrationView(
+            language: seciliDil,
+            isOwner: firebaseManager.currentWorkspaceRole
+                .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "owner"
+        )
     }
 
     private var shopifyIntegrationAyari: some View {

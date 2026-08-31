@@ -43,6 +43,10 @@ struct NivaDeskIntegrationSignals {
     var shopifyStores: [(String, String)] = []
     var channels: [String: NivaDeskIntegrationChannel] = [:]
     var bankConnections = 0
+    /// Live Etsy shops, and how many of them are asking for attention. Read
+    /// from getEtsyConnections, never from a flag we set ourselves.
+    var etsyShops = 0
+    var etsyShopsNeedingAttention = 0
 }
 
 struct NivaDeskIntegration: Identifiable {
@@ -74,9 +78,9 @@ struct NivaDeskIntegration: Identifiable {
         .init(id: "woocommerce", name: "WooCommerce", category: "commerce", kind: "webhook",
               blurb: "Import orders and customers automatically.",
               capabilities: ["Orders", "Customers"], manage: "woocommerce", asset: "IntegrationWooCommerce", mark: "W"),
-        .init(id: "etsy", name: "Etsy", category: "commerce", kind: "webhook",
-              blurb: "Post orders to NivaDesk from Etsy through an automation.",
-              capabilities: ["Orders"], manage: "inbound", asset: "", mark: "E"),
+        .init(id: "etsy", name: "Etsy", category: "commerce", kind: "native",
+              blurb: "Import orders and customers automatically.",
+              capabilities: ["Orders", "Customers"], manage: "etsy", asset: "", mark: "E"),
         .init(id: "wix", name: "Wix", category: "commerce", kind: "webhook",
               blurb: "Post orders to NivaDesk from a Wix store.",
               capabilities: ["Orders"], manage: "inbound", asset: "", mark: "W"),
@@ -114,6 +118,10 @@ struct NivaDeskIntegration: Identifiable {
 
     /// The store this card is connected to, when we know it.
     func detail(signals: NivaDeskIntegrationSignals) -> String {
+        if id == "etsy" {
+            if signals.etsyShops == 0 { return "" }
+            return signals.etsyShops == 1 ? "1 shop" : "\(signals.etsyShops) shops"
+        }
         guard id == "shopify" else { return "" }
         let live = signals.shopifyStores.filter { $0.1 != "unlinked" }
         if live.count == 1 { return live[0].0 }
@@ -130,6 +138,10 @@ struct NivaDeskIntegration: Identifiable {
         }
         if id == "openbanking" {
             return signals.bankConnections > 0 ? .connected : .available
+        }
+        if id == "etsy" {
+            if signals.etsyShops == 0 { return .available }
+            return signals.etsyShopsNeedingAttention > 0 ? .attention : .connected
         }
 
         // Everything else arrives over a webhook channel. A test delivery proves
