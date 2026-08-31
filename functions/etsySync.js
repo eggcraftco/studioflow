@@ -321,7 +321,12 @@ function createEtsySyncFunctions(deps) {
       const companySnap = await db().collection("companies").doc(companyId).get();
       const capacity = await integrationOrderCapacity(companyId, companySnap.data() || {});
       if (!capacity.allowed) {
-        await holdIntegrationOrder(companyId, "etsy", receiptId, receipt, capacity);
+        // The connection id travels with the parked order: a raw Etsy receipt
+        // does not say which shop it came from, and the release path has to
+        // know before it can replay it.
+        await holdIntegrationOrder(companyId, "etsy", receiptId, receipt, capacity, {
+          etsyConnectionId: connectionRef.id
+        });
         await externalRef.set({
           companyId, provider: "etsy", externalShopId: shopId, externalOrderId: receiptId,
           syncState: "held", externalUpdatedAtMs: normalised.source.updatedAtMs,

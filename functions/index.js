@@ -2613,12 +2613,15 @@ function heldIntegrationOrdersRef(companyId) {
  * Parks one order and tells the owner — once a day at most, because a busy
  * store would otherwise send a notification per sale.
  */
-async function holdIntegrationOrder(companyId, provider, externalId, payload, capacity) {
+async function holdIntegrationOrder(companyId, provider, externalId, payload, capacity, extra = {}) {
   const id = `${provider}_${String(externalId || Date.now()).replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 180);
   await heldIntegrationOrdersRef(companyId).doc(id).set({
     provider,
     externalId: String(externalId || ""),
     payload,
+    // Whatever the release path will need to replay this. Etsy needs to know
+    // which shop it came from; a raw receipt does not say.
+    ...extra,
     heldAtMs: Date.now(),
     heldAt: admin.firestore.FieldValue.serverTimestamp(),
     reason: "plan_limit_reached",
@@ -13838,6 +13841,51 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         const existing = await ref.get();
         const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
         await ref.set(integrationOrderUpdate(mapped, !existing.exists), { merge: true });
+      } else if (provider === "etsy") {
+        // Etsy replays through its own applyReceipt rather than a second copy
+        // of the mapping here: that path also writes the external-order row,
+        // mirrors the customer and records the sync event, and a parallel
+        // version of it would drift.
+        //
+        // Before this branch existed, "etsy" fell into the else below and the
+        // parked order was DELETED without ever being imported — the seller
+        // was told the wait was over and the sale was gone.
+        const connectionId = String(data.etsyConnectionId || "");
+        let connectionRef = connectionId
+          ? admin.firestore().collection(etsyModule.CONNECTION_COLLECTION).doc(connectionId)
+          : null;
+        if (!connectionRef) {
+          // Orders parked before the connection id was recorded. One connected
+          // shop is unambiguous; more than one is not, so leave those held
+          // rather than guess which shop a receipt belongs to.
+          const candidates = await admin.firestore()
+            .collection(etsyModule.CONNECTION_COLLECTION)
+            .where("companyId", "==", companyId)
+            .where("status", "==", "connected")
+            .limit(2)
+            .get();
+          if (candidates.size === 1) connectionRef = candidates.docs[0].ref;
+        }
+        const connectionSnap = connectionRef ? await connectionRef.get() : null;
+        if (!connectionSnap || !connectionSnap.exists) {
+          // Leave it held rather than delete it. A shop that was disconnected
+          // may be reconnected; a deleted order never comes back.
+          console.warn("releaseHeldIntegrationOrders: no Etsy connection for", doc.id);
+          continue;
+        }
+        const outcome = await etsySyncExports._internal.applyReceipt({
+          companyId,
+          connectionRef,
+          connectionData: connectionSnap.data() || {},
+          receipt: order,
+          defaultDeliveryTime
+        });
+        // Still no room: applyReceipt parked it again, so deleting now would
+        // undo the very thing that protects it.
+        if (outcome && outcome.status === "held") continue;
+        await doc.ref.delete();
+        imported += 1;
+        continue;
       } else {
         await doc.ref.delete();
         continue;

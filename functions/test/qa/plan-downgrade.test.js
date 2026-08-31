@@ -11,6 +11,7 @@ const fs = require("fs");
 const path = require("path");
 
 const SOURCE = fs.readFileSync(path.join(__dirname, "..", "..", "index.js"), "utf8");
+const ETSY_SOURCE = require("fs").readFileSync(require("path").join(__dirname, "..", "..", "etsySync.js"), "utf8");
 function pass(name) { console.log("PASS ", name); }
 
 // 1. Nothing is deleted or hidden by a plan change. The gated actions are all
@@ -76,6 +77,29 @@ function pass(name) { console.log("PASS ", name); }
   assert(/24 \* 60 \* 60 \* 1000/.test(hold), "at most one notification a day");
   assert(/Nothing is lost/.test(hold), "the message says the orders are safe");
   pass("one notification a day, and it says nothing is lost");
+}
+
+// Every provider that can park an order must have a branch that can replay it.
+// Without this, adding a channel is a two-file change where forgetting the
+// second file is silent and destructive: releaseHeldIntegrationOrders ends in
+// `else { await doc.ref.delete(); continue; }`, so an unknown provider's parked
+// order is DELETED rather than imported — and the seller is told the wait is
+// over. Etsy shipped in exactly that state.
+{
+  const parked = [...SOURCE.matchAll(/holdIntegrationOrder\(\s*[A-Za-z_$][\w$]*\s*,\s*"([a-z]+)"/g)].map((m) => m[1]);
+  const alsoParked = [...ETSY_SOURCE.matchAll(/holdIntegrationOrder\(\s*[A-Za-z_$][\w$]*\s*,\s*"([a-z]+)"/g)].map((m) => m[1]);
+  const providers = [...new Set([...parked, ...alsoParked])];
+  assert(providers.length >= 2, `expected several providers to park orders, found ${providers}`);
+
+  const start = SOURCE.indexOf("exports.releaseHeldIntegrationOrders");
+  assert(start > 0, "releaseHeldIntegrationOrders is still there");
+  const release = SOURCE.slice(start, start + 5000);
+  const missing = providers.filter((name) => !new RegExp(`provider === "${name}"`).test(release));
+  assert.deepStrictEqual(
+    missing, [],
+    `${missing.join(", ")} can park an order but has no release branch, so those orders are deleted instead of imported`
+  );
+  pass(`every provider that parks an order can replay it (${providers.join(", ")})`);
 }
 
 console.log("\n✅ PLAN DOWNGRADE GEÇTİ");
