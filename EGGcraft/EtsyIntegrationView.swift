@@ -27,8 +27,14 @@ struct EtsyIntegrationView: View {
     @State private var preview: EtsyPreviewInfo?
     @State private var excluded: Set<String> = []
     @State private var confirmDisconnect = false
+    // A workspace can connect more than one shop, and the hub card counts them.
+    // Showing only the first made every shop after it unreachable: counted on
+    // the card, absent from the screen, with no way to sync or disconnect it.
+    @State private var selectedId = ""
 
-    private var connection: EtsyConnectionInfo? { connections.first }
+    private var connection: EtsyConnectionInfo? {
+        connections.first { $0.id == selectedId } ?? connections.first
+    }
     private func tr(_ text: String) -> String { t(text, lang: language) }
 
     var body: some View {
@@ -63,6 +69,27 @@ struct EtsyIntegrationView: View {
 
     @ViewBuilder
     private func connectedBody(_ live: EtsyConnectionInfo) -> some View {
+        if connections.count > 1 {
+            SettingsCard(title: tr("Connected shops"), iconName: "square.stack") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(connections) { row in
+                        Button(row.shopName.isEmpty ? row.shopId : row.shopName) {
+                            selectedId = row.id
+                            // Everything below belongs to the shop that was showing.
+                            preview = nil
+                            excluded = []
+                            liveCheck = "unknown"
+                            confirmDisconnect = false
+                            notice = ""
+                            errorText = ""
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(row.id == live.id ? .accentColor : .secondary)
+                    }
+                }
+            }
+        }
+
         EtsyHeaderCard(
             connection: live,
             language: language,

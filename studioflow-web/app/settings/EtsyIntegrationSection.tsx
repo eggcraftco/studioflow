@@ -90,7 +90,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   const [liveCheck, setLiveCheck] = useState<"unknown" | "healthy" | "unhealthy">("unknown");
   const [checkOnArrival, setCheckOnArrival] = useState(false);
 
-  const connection = connections[0] || null;
+  // A workspace can connect more than one Etsy shop, and the hub counts them.
+  // Showing only the first made every shop after it unreachable: counted on the
+  // card, absent from the screen, with no way to sync or disconnect it.
+  const [selectedId, setSelectedId] = useState("");
+  const connection = connections.find((row) => row.id === selectedId) || connections[0] || null;
 
   const refresh = useCallback(async () => {
     if (!companyId) return;
@@ -111,7 +115,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   }, [refresh]);
 
   const checkConnection = useCallback(async () => {
-    const current = connections[0];
+    const current = connections.find((row) => row.id === selectedId) || connections[0];
     if (!current) return;
     const result = await verifyEtsyConnection(companyId, current.id);
     if (result?.healthy) {
@@ -201,6 +205,34 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     );
   }
 
+  const shopPicker =
+    connections.length > 1 ? (
+      <section className="card app-card quick-reply-settings-card">
+        <h4 className="quick-reply-settings-label">{t("Connected shops")}</h4>
+        <div className="settings-action-row">
+          {connections.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              className={row.id === (connection?.id || "") ? "button" : "button secondary"}
+              onClick={() => {
+                setSelectedId(row.id);
+                // Everything below belongs to the shop that was showing.
+                setPreview(null);
+                setExcluded(new Set());
+                setLiveCheck("unknown");
+                setConfirmDisconnect(false);
+                setNotice("");
+                setError("");
+              }}
+            >
+              {row.shopName || row.shopId}
+            </button>
+          ))}
+        </div>
+      </section>
+    ) : null;
+
   // ── Screen 2 · Before connecting ──────────────────────────────────────────
   if (!connection || connection.status === "disconnected") {
     return (
@@ -265,6 +297,8 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     <div className="settings-card-stack">
       {notice ? <p className="success-copy">{notice}</p> : null}
       {error ? <p className="layout-error">{error}</p> : null}
+
+      {shopPicker}
 
       {/* ── Screen 3 · Connected shop header ─────────────────────────────── */}
       <section className="card app-card quick-reply-settings-card">

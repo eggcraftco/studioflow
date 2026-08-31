@@ -1863,8 +1863,12 @@ private fun EtsyDetail(state: StudioFlowUiState) {
     }
     var excluded by remember { mutableStateOf(setOf<String>()) }
     var confirmDisconnect by remember { mutableStateOf(false) }
+    // A workspace can connect more than one shop, and the hub card counts them.
+    // Showing only the first made every shop after it unreachable: counted on
+    // the card, absent from the screen, with no way to sync or disconnect it.
+    var selectedId by remember { mutableStateOf("") }
 
-    val connection = connections.firstOrNull()
+    val connection = connections.firstOrNull { it.id == selectedId } ?: connections.firstOrNull()
 
     suspend fun reload() {
         val ws = workspace ?: return
@@ -1954,6 +1958,27 @@ private fun EtsyDetail(state: StudioFlowUiState) {
         }
 
         val needsAttention = connection.needsAttention || liveCheck == "unhealthy"
+
+        if (connections.size > 1) {
+            DetailCard(title = t("Connected shops"), icon = Icons.Filled.ShoppingBag) {
+                connections.forEach { row ->
+                    val onThis = row.id == connection.id
+                    val label = row.shopName.ifBlank { row.shopId }
+                    val pick = {
+                        selectedId = row.id
+                        // Everything below belongs to the shop that was showing.
+                        preview = null
+                        excluded = emptySet()
+                        liveCheck = "unknown"
+                        confirmDisconnect = false
+                        statusText = ""
+                        errorText = ""
+                    }
+                    if (onThis) Button(onClick = pick) { Text(label) }
+                    else OutlinedButton(onClick = pick) { Text(label) }
+                }
+            }
+        }
 
         // ---- Connected shop ------------------------------------------------
         DetailCard(
