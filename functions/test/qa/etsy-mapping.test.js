@@ -208,6 +208,23 @@ check(() => {
   assert.strictEqual(order.companyId, "c1");
 }, "the order is stamped as an Etsy order for this workspace");
 
+// Where an order came from is not decoration. The rest of NivaDesk reads
+// customFields.Source: the dashboard's channel pills scope every figure by it,
+// and the tax recalculation uses it to decide an order's tax belongs to the
+// shop and must be left alone. While it was empty, an Etsy order was invisible
+// to the pills and its tax was being overwritten with the workspace default.
+check(() => {
+  const { order } = normalizeEtsyReceipt(receipt, opts);
+  assert.strictEqual(order.customFields.Source, "Etsy", "the order says it came from Etsy");
+  assert.strictEqual(order.customFields["Etsy Shop"], "Ada Studio");
+  assert.ok(order.customFields["Etsy Receipt ID"], "the receipt id travels with the order");
+  assert.strictEqual(order.taxRate, 0, "the rate stays zero so the recalculation skips it");
+  assert.ok(
+    order.customFields.communicationAddress.includes("Ada Studio") === false,
+    "the address block is the buyer's, not the shop's"
+  );
+}, "an imported order says it came from Etsy, so the pills and the tax rules can see it");
+
 // --- robustness -------------------------------------------------------------
 check(() => {
   const { order, review } = normalizeEtsyReceipt({ receipt_id: 1 }, opts);

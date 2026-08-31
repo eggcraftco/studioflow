@@ -697,7 +697,28 @@ function normalizeEtsyReceipt(receipt, {
     priority: "Normal",
     risk: "None",
     riskReason: "-",
-    customFields: {},
+    // The marker the rest of NivaDesk reads to know where an order came from.
+    // Two things depend on it and both were silently wrong while it was empty:
+    // the dashboard's channel pills could not scope figures to Etsy, and the
+    // tax recalculation, which skips orders whose tax came from a shop, was
+    // instead overwriting Etsy's own figure with the workspace default rate.
+    // Same shape as the Shopify and WooCommerce importers.
+    customFields: {
+      Source: "Etsy",
+      "Etsy Receipt ID": receiptId,
+      "Etsy Shop": etsyText(shopName, 200),
+      "Etsy Status": status,
+      "Etsy Payment Method": etsyText(receipt?.payment_method, 80),
+      "Etsy Currency": currency,
+      "Etsy Total": String(grand.value),
+      "Etsy Created At": createdAt ? new Date(createdAt).toISOString() : "",
+      "Etsy Products": lineItems.map((item) => item.name).filter(Boolean).join(", ").slice(0, 500),
+      // Billing address on the order so the invoice's address block fills in.
+      communicationAddress: [
+        addressParts.name, addressParts.street, addressParts.city,
+        addressParts.state, addressParts.postalCode, addressParts.country
+      ].filter(Boolean).join(", ")
+    },
     customToggles: {},
     clientFiles: [],
     todoItems: [],
