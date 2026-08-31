@@ -183,8 +183,30 @@ ok("yalnız portal-paylaşımlı dosya listede", Array.isArray(portalFiles) && p
    JSON.stringify((portalFiles || []).map(f => f.name)));
 if (Array.isArray(portalFiles) && portalFiles[0]) {
   ok("müşteri, seçilen adı görür", portalFiles[0].name === "Approved Design", portalFiles[0].name);
-  ok("URL token'lı ve oturumsuz", /alt=media&token=/.test(portalFiles[0].url), portalFiles[0].url);
-  const dl = await fetch(portalFiles[0].url.replace("https://firebasestorage.googleapis.com", "http://127.0.0.1:9199"));
+
+  // The portal URL is deliberately MASKED (functions/index.js maskedPortalFileUrl):
+  // a workspace paying for track.customer.com must keep its own host in the
+  // customer's address bar, so what goes out is /f/<path>?b=<bucket>&t=<token>
+  // and never the raw firebasestorage.googleapis.com link.
+  //
+  // This assertion used to require /alt=media&token=/ — the shape from BEFORE
+  // masking shipped — so it started failing on the arrival of the very feature
+  // it should have been protecting. It now checks the promise instead of the
+  // old spelling.
+  const portalUrl = portalFiles[0].url;
+  ok("URL maskeli: storage sunucusu müşteriye sızmıyor",
+     portalUrl.startsWith("/f/") && !portalUrl.includes("firebasestorage.googleapis.com"), portalUrl);
+  const masked = new URL(portalUrl, "https://nivadesk.app");
+  const bucket = masked.searchParams.get("b") || "";
+  const token = masked.searchParams.get("t") || "";
+  ok("URL token'lı ve oturumsuz", Boolean(bucket) && Boolean(token), portalUrl);
+
+  // And it still has to resolve to real bytes. Rebuild the storage URL exactly
+  // the way studioflow-web/app/f/[...slug]/route.ts does — decode per segment,
+  // then re-encode the whole path — and fetch it from the storage emulator.
+  const storagePath = masked.pathname.replace(/^\/f\//, "").split("/").map(decodeURIComponent).join("/");
+  const direct = `http://127.0.0.1:9199/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(storagePath)}?alt=media&token=${encodeURIComponent(token)}`;
+  const dl = await fetch(direct);
   ok("URL gerçekten indiriyor", dl.ok && (await dl.text()).includes("qa design bytes"), `status=${dl.status}`);
 }
 

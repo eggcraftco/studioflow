@@ -17,6 +17,9 @@
   },
   "scripts": {
     "test": "for f in test/qa/*.test.js test/inventory/*.test.js; do node \"$f\" || exit 1; done",
-    "test:e2e": "test/run-e2e.sh"
+    "test:rules": "for f in test/qa/*.test.mjs; do node \"$f\" || exit 1; done",
+    "test:e2e": "test/run-e2e.sh",
+    "test:integration": "test/run-integration.sh",
+    "test:all": "npm test && npm run test:rules && npm run test:e2e && npm run test:integration"
   }
 }

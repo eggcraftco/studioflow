@@ -135,7 +135,12 @@ ok("kart açılınca istatistik korunuyor", vintage2[0].stats.total === 2550, St
 
 console.log("\n=== 4. TESLİM ALMA ===");
 const rec = await call("receivePurchase", { purchaseId: purchase.purchaseId });
-ok("iki kalem teslim alındı", rec.received === 2, String(rec.received));
+// `received` is a count of THINGS, not of invoice rows: one dial plus twenty
+// solder pieces is 21 items going onto the shelf, and that is what the web
+// client puts in the toast ("21 items moved onto the shelf",
+// PurchasesPanel.tsx:127). This used to assert 2 — the number of lines — which
+// is the number nobody putting stock away is counting.
+ok("yirmi bir adet rafa girdi (1 kadran + 20 lehim)", rec.received === 21, String(rec.received));
 list = await call("listInventoryItems", { limit: 500 });
 ok("teslim sonrası rafta", list.items.find(i => i.name.includes("1675")).status === "available");
 await mustThrow("teslim alınmış alım silinemez",
@@ -185,7 +190,11 @@ await call("saveInventoryItem", { itemId: lacquer.itemId, item: {
 const afterEdit = (await call("listInventoryItems", { limit: 500 })).items.find(i => i.id === lacquer.itemId);
 ok("ad değişti", afterEdit.name.includes("yeni ad"), afterEdit.name);
 ok("ayrılmış miktar korundu (90)", afterEdit.quantity.reserved === 90, JSON.stringify(afterEdit.quantity));
-ok("rezervasyon kaydı korundu", (afterEdit.reservedForOrderId || "") === "" && afterEdit.status === "reserved", afterEdit.status);
+// 120 on hand with 90 promised away is partiallyReserved, which is a real
+// status in ITEM_STATUSES (inventory.js:43) and the honest one — "reserved"
+// would say the whole 120 is spoken for. The assertion that matters is the one
+// above: the 90 survived the rename and cannot be promised a second time.
+ok("rezervasyon kaydı korundu", (afterEdit.reservedForOrderId || "") === "" && afterEdit.status === "partiallyReserved", afterEdit.status);
 const stillHeld = await call("getOrderInventory", { orderId: "ORD-1002" });
 ok("sipariş hâlâ 90 ml tutuyor", stillHeld.items.length === 1 && stillHeld.items[0].quantity === 90,
    JSON.stringify(stillHeld.items.map(i => i.quantity)));
