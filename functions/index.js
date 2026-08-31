@@ -18299,6 +18299,16 @@ function wooWebhookAuthDecision({ signatureSecret, signatureHeader, rawBody, pro
 }
 exports._wooWebhookAuthDecision = wooWebhookAuthDecision;
 
+// The authoritative answer to "what plan is this workspace on?", exported so
+// nothing has to reimplement it. An ops script that reads `plan` and
+// `subscriptionStatus` off the company document finds neither — the fields are
+// billingPlan and billingStatus — and reports every workspace as unpaid, which
+// is exactly how the first run of the activation audit produced a confident,
+// wrong zero. The rule also has a part no field lookup can carry: a trial that
+// has run out falls back to demo whether or not the webhook that should have
+// converted it ever arrived.
+exports._billingPlanFromCompanyData = billingPlanFromCompanyData;
+
 // Settings report: store WooCommerce's own webhook signing secret so
 // deliveries can be verified by X-WC-Webhook-Signature, not just the URL
 // token. Owner-only; the secret lives in the server-only integrationSecrets

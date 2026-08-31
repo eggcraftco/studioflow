@@ -12,7 +12,18 @@
 //   node functions/scripts/activation-audit.mjs
 //   node functions/scripts/activation-audit.mjs --since 2026-08-23
 //
-import admin from "firebase-admin";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+
+// index.js is required for ONE function: the real plan resolver. Reimplementing
+// it here is what produced this audit's first result — "0 paid" across 47
+// workspaces, measured against a `plan` field that does not exist. The document
+// stores billingPlan and billingStatus, and an expired trial silently falls
+// back to demo. Requiring index.js also initialises firebase-admin, so this
+// file must not initialise it again.
+process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || "eggcraft-studio";
+process.env.FIREBASE_CONFIG = process.env.FIREBASE_CONFIG || `{"projectId":"${process.env.GCLOUD_PROJECT}"}`;
+const admin = require("firebase-admin");
 
 const args = process.argv.slice(2);
 const sinceArg = (() => {
@@ -32,7 +43,11 @@ if (useEmulator && !process.env.FIRESTORE_EMULATOR_HOST) {
   process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
 }
 
-admin.initializeApp({ projectId: process.env.GCLOUD_PROJECT || "eggcraft-studio" });
+const { _billingPlanFromCompanyData: billingPlanFor } = require("../index.js");
+if (typeof billingPlanFor !== "function") {
+  console.error("index.js did not export _billingPlanFromCompanyData — refusing to guess the plan field.");
+  process.exit(1);
+}
 const db = admin.firestore();
 
 // Ours, not theirs. These skew every number they appear in.
@@ -54,20 +69,27 @@ const millis = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-// Paid means money arrived, which is not the same as "is on a paid plan".
-// A lifetime purchase carries no subscription status at all; a subscription
-// that has been cancelled still says pro right up until it lapses; past_due
-// means they DID pay and a renewal has just failed, which is a customer, not a
-// prospect. Getting this wrong in the generous direction is the easiest way to
-// report a conversion rate that is not real.
-const SUBSCRIPTION_PLANS = new Set(["starter", "pro", "team"]);
-const LIFETIME_PLANS = new Set(["lifetime_lite", "lifetime_pro", "lifetime_team"]);
+// Paid means money arrived. There are exactly four plans — demo,
+// lifetime_lite, pro_monthly, team_monthly — and despite the name NONE of them
+// is a one-time purchase: lifetime_lite's displayName is "NivaDesk Starter" and
+// the prefix is historical. An earlier version of this check treated every
+// lifetime_* plan as paid regardless of status and duly reported a trialing
+// Starter workspace as a paying customer.
+//
+// Trialing is not paying. Every new workspace is granted pro_monthly/trialing
+// at signup (trialGrantAtSignup), so counting trials as revenue would report a
+// conversion rate identical to the signup rate. past_due IS paying: they paid
+// and a renewal has just failed. The plan comes from the server's own resolver,
+// so a trial that has run out already reads demo.
 const PAYING_STATUSES = new Set(["active", "past_due"]);
 const isPaid = (data) => {
-  const plan = String(data.plan || "").trim().toLowerCase();
-  const status = String(data.subscriptionStatus || "").trim().toLowerCase();
-  if (LIFETIME_PLANS.has(plan)) return true;
-  return SUBSCRIPTION_PLANS.has(plan) && PAYING_STATUSES.has(status);
+  const plan = billingPlanFor(data);
+  if (plan === "demo") return false;
+  return PAYING_STATUSES.has(String(data.billingStatus || "").trim().toLowerCase());
+};
+const isTrialing = (data) => {
+  const plan = billingPlanFor(data);
+  return plan !== "demo" && String(data.billingStatus || "").trim().toLowerCase() === "trialing";
 };
 
 // One count per workspace rather than one read per workspace per collection:
@@ -105,14 +127,24 @@ async function countSub(companyId, sub) {
       countSub(doc.id, "inventoryItems")
     ]);
 
+    // Our own test signups do not use our domains — roletest123, test8 and the
+    // rest were made with ordinary addresses. They cannot be excluded safely
+    // (a real jeweller may well have "studio" in their address), so they are
+    // counted and flagged rather than quietly dropped.
+    const email = String(data.ownerEmail || "").toLowerCase();
+    const looksLikeTest = /test|demo|qa|example|sample|deneme/.test(email);
+
     rows.push({
-      createdMs,
+      createdMs, looksLikeTest,
       // Onboarding writes these; their absence means the wizard was never finished.
       onboarded: Boolean(data.onboardingTeamSize || data.businessType),
       orders, customers, inventory,
-      plan: String(data.plan || "").trim().toLowerCase() || "(none)",
-      status: String(data.subscriptionStatus || "").trim().toLowerCase() || "(none)",
+      // The resolved plan, not the raw field: a trial that ran out reads demo.
+      plan: billingPlanFor(data),
+      rawPlan: String(data.billingPlan || "").trim().toLowerCase() || "(none)",
+      status: String(data.billingStatus || "").trim().toLowerCase() || "(none)",
       paid: isPaid(data),
+      trialing: isTrialing(data),
       members: Array.isArray(data.memberUids) ? data.memberUids.length : 1
     });
   }
@@ -126,6 +158,7 @@ async function countSub(companyId, sub) {
   const onboarded = rows.filter((r) => r.onboarded).length;
   const invited = rows.filter((r) => r.members > 1).length;
   const paid = rows.filter((r) => r.paid).length;
+  const trialing = rows.filter((r) => r.trialing).length;
   const doneAnything = rows.filter((r) => r.orders > 0 || r.customers > 0 || r.inventory > 0).length;
 
   const pct = (n) => (total ? `${Math.round((n / total) * 1000) / 10}%` : "—");
@@ -139,14 +172,18 @@ async function countSub(companyId, sub) {
   line("added at least one stock item", withInventory);
   line("did ANY of the three", doneAnything);
   line("invited a colleague", invited);
-  line("on a paid plan", paid);
+  const suspicious = rows.filter((r) => r.looksLikeTest).length;
+  if (suspicious) line("...of which look like test signups", suspicious);
+  line("on a trial right now", trialing);
+  line("PAYING", paid);
 
   // The funnel only means something as a sequence.
   console.log("\nThe drop:");
   console.log(`  signed up            ${total}`);
   console.log(`  → onboarded          ${onboarded}`);
   console.log(`  → did something      ${doneAnything}`);
-  console.log(`  → paid               ${paid}`);
+  console.log(`  → trialing           ${trialing}`);
+  console.log(`  → paying             ${paid}`);
 
   // Cohorts, so "did the first-run work help" is answerable rather than guessed.
   const cut = Date.UTC(2026, 7, 23);
@@ -163,7 +200,10 @@ async function countSub(companyId, sub) {
   cohort("23 Aug onwards", after);
 
   const plans = {};
-  for (const r of rows) plans[`${r.plan}/${r.status}`] = (plans[`${r.plan}/${r.status}`] || 0) + 1;
+  for (const r of rows) {
+    const label = r.plan === r.rawPlan ? `${r.plan}/${r.status}` : `${r.plan}/${r.status}  (stored ${r.rawPlan})`;
+    plans[label] = (plans[label] || 0) + 1;
+  }
   console.log("\nPlan and status:");
   for (const [key, n] of Object.entries(plans).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${key.padEnd(34)} ${String(n).padStart(4)}`);
