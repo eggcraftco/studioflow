@@ -363,17 +363,29 @@ export function OnboardingWizard({
                     <span
                       className="onboard-connect-logo"
                       data-name={integration.logoIncludesName ? "in-logo" : "beside"}
+                      data-fallback={integration.logo ? undefined : "1"}
                     >
                       {/* An official asset when one is present; the wordmark on the
                           brand's own colour when it is not, so the tile is never
-                          an empty box. */}
-                      <img
-                        src={integration.logo}
-                        alt=""
-                        onError={event => {
-                          event.currentTarget.parentElement?.setAttribute("data-fallback", "1");
-                        }}
-                      />
+                          an empty box.
+
+                          Some brands have no asset ON PURPOSE — Etsy publishes
+                          none for third parties and their API Terms require
+                          their marks to stay less prominent than ours. Those
+                          are marked fallback up front rather than rendered as
+                          an <img> with an empty src: a src="" does not reliably
+                          fire onError, it can resolve to the page itself and
+                          "load", leaving a broken picture where the name should
+                          be. */}
+                      {integration.logo ? (
+                        <img
+                          src={integration.logo}
+                          alt=""
+                          onError={event => {
+                            event.currentTarget.parentElement?.setAttribute("data-fallback", "1");
+                          }}
+                        />
+                      ) : null}
                       <b>{integration.name}</b>
                     </span>
                     <em>{t(integration.detail)}</em>

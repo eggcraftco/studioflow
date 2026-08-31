@@ -782,6 +782,18 @@ function normalizeEtsyReceipt(receipt, {
   // resync can refresh it without ever reaching into the studio's own fields.
   const source = {
     provider: "etsy",
+    // When Etsy told us this. Nothing recorded it before, which meant the
+    // read-only Etsy panel could show a status from any time at all and no
+    // screen could say how old it was.
+    //
+    // Etsy's API Terms limit how stale their content may be when it is
+    // DISPLAYED (6 hours for listing content, 24 for everything else). We do
+    // not display listings, and the order itself is the workshop's own record
+    // of their own sale — deleting that would not be compliance, it would be
+    // destroying the customer's books. What has a freshness obligation is this
+    // panel, which presents itself as "what Etsy says". So it is stamped, and
+    // the screens say "as of", rather than implying it is live.
+    fetchedAtMs: now instanceof Date ? now.getTime() : Date.now(),
     shopId: etsyText(shopId, 40),
     shopName: etsyText(shopName, 200),
     receiptId,

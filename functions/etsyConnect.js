@@ -31,6 +31,11 @@ const REFRESH_LEAD_MS = 5 * 60 * 1000;      // refresh once under five minutes r
 // four attempts at twenty seconds each plus backoff, so sixty seconds was
 // comfortably short enough to lose.
 const REFRESH_LOCK_MS = 3 * 60 * 1000;
+// How many orders one disconnect will clear Etsy's panel from. A shop with more
+// than this is swept the rest of the way by the next disconnect or reconnect;
+// the alternative is a callable that times out and leaves the job half done
+// with nothing recording where it stopped.
+const PURGE_CAP = 2000;
 const CONNECT_REDIRECT_FALLBACK = "https://nivadesk.app/settings";
 
 function createEtsyConnectFunctions(deps) {
@@ -516,7 +521,7 @@ function createEtsyConnectFunctions(deps) {
    */
   const disconnectEtsyShop = onCall({ region: "europe-west2" }, async (request) => {
     const { companyId } = await requireWorkspaceOwner(request);
-    const { ref } = await loadConnection(request.data?.connectionId, companyId);
+    const { ref, data } = await loadConnection(request.data?.connectionId, companyId);
     await ref.set({
       status: "disconnected",
       accessTokenEncrypted: admin.firestore.FieldValue.delete(),
@@ -527,7 +532,61 @@ function createEtsyConnectFunctions(deps) {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
     await writeSyncEvent(ref, { type: "disconnected" });
-    return { ok: true, ordersKept: true };
+
+    // Let go of Etsy's copy of the seller's buyers.
+    //
+    // Etsy's API Terms say content must not be stored "longer than is
+    // reasonably necessary to provide service to your application's users".
+    // While a shop is connected, that is easy to justify: the panel is how a
+    // jeweller checks what Etsy says about an order. After they disconnect
+    // there is no service left to justify it.
+    //
+    // What goes: the etsySource panel on every imported order — Etsy's mirror
+    // of the buyer's email, address, message and the receipt's state — and the
+    // buyer-id links, which are Etsy's identifier for a person.
+    //
+    // What STAYS, deliberately: the orders themselves. Those are the
+    // workshop's own record of their own sales, needed for their books and
+    // their VAT long after they stop selling on Etsy; deleting them would not
+    // be compliance, it would be destroying a customer's business records. The
+    // etsyExternalOrders rows stay too — they are our own id mapping with no
+    // personal data in them, and without them a reconnect would import
+    // everything a second time.
+    //
+    // Best-effort: the shop IS disconnected and the tokens ARE gone by the
+    // time this runs, so a failure here must not turn a successful disconnect
+    // into an error the seller sees. It is logged and swept up on reconnect.
+    let cleared = 0;
+    try {
+      const shopId = String(data.externalShopId || "");
+      if (shopId) {
+        const rows = await db().collection(etsy.EXTERNAL_ORDER_COLLECTION)
+          .where("companyId", "==", companyId)
+          .where("externalShopId", "==", shopId)
+          .limit(PURGE_CAP)
+          .get();
+        const writer = db().bulkWriter();
+        for (const row of rows.docs) {
+          const orderId = String((row.data() || {}).nivadeskOrderId || "");
+          if (!orderId) continue;
+          writer.update(db().collection("siparisler").doc(orderId), {
+            etsySource: admin.firestore.FieldValue.delete()
+          }).catch(() => undefined);   // the order may have been deleted since
+          cleared += 1;
+        }
+        const links = await db().collection(etsy.CUSTOMER_LINK_COLLECTION)
+          .where("companyId", "==", companyId)
+          .where("externalShopId", "==", shopId)
+          .limit(PURGE_CAP)
+          .get();
+        for (const link of links.docs) writer.delete(link.ref);
+        await writer.close();
+      }
+    } catch (error) {
+      console.warn("etsy disconnect purge failed:", error?.message || error);
+    }
+
+    return { ok: true, ordersKept: true, etsyDataCleared: cleared };
   });
 
   return {

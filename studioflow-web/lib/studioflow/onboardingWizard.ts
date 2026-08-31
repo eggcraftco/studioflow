@@ -138,7 +138,7 @@ export const ONBOARDING_GOALS: { id: OnboardingGoal; label: string; primary: boo
  * dropped in.
  */
 export type OnboardingIntegration = {
-  id: "shopify" | "woocommerce" | "bank" | "chatgpt";
+  id: "shopify" | "woocommerce" | "etsy" | "bank" | "chatgpt";
   name: string;
   detail: string;
   href: string;
@@ -168,6 +168,20 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     logo: "/brand/integrations/woocommerce.svg",
     colour: "#7F54B3",
     logoIncludesName: true,
+  },
+  {
+    // No logo file, and that is deliberate: Etsy publishes no downloadable
+    // brand asset and their API Terms require their marks to be less
+    // prominent than ours. The tile falls back to the name in Etsy's orange,
+    // which is the correct outcome rather than a missing file. See
+    // public/brand/integrations/README.md.
+    id: "etsy",
+    name: "Etsy",
+    detail: "Import your Etsy orders, with the buyer's personalisation notes.",
+    href: "/settings?section=etsy",
+    logo: "",
+    colour: "#F1641E",
+    logoIncludesName: false,
   },
   {
     id: "bank",

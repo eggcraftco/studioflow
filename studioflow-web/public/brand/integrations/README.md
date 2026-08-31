@@ -34,3 +34,24 @@ Keep them SVG, transparent, and trimmed to the mark — the tile sizes them to
 
 Do not edit the three third-party files. To update one, replace it with a fresh
 download from the same page.
+
+## Etsy — deliberately absent, do not "fix" this
+
+There is no etsy.svg and there should not be one. The tile shows the name in
+Etsy's orange, which is the fallback working as designed.
+
+Etsy publishes no downloadable brand asset for third parties. The mark is a
+registered trademark and Etsy's guidance is that it is not for commercial use
+without their explicit written permission. Their API Terms of Use go further
+for anyone building on the API: you may not use Etsy's trademarks or logos "in
+a way that suggests endorsement from or affiliation with Etsy", and "Etsy's
+marks must be less prominent than your own".
+
+So putting their logo on our integration card would not be tidying up a
+missing asset — it would be adding a trademark risk to close a cosmetic gap,
+on the one integration where we are also required to display a sentence saying
+Etsy has not endorsed us.
+
+If a future version of this really needs the mark, the route is written
+permission from Etsy, not a third-party SVG site. Those sites are where the
+OpenAI mistake came from — see above.
