@@ -644,7 +644,13 @@ function normalizeEtsyReceipt(receipt, {
       sku: etsyText(transaction?.sku, 80),
       quantity,
       unitPrice: price.value,
-      total: Math.round(price.value * quantity * 100) / 100
+      // lineTotal, not total. Every client and reconcileLineItems read
+      // lineTotal — the shared schema is { id, name, quantity, unitPrice,
+      // lineTotal } and it is written down in index.js. Writing `total` meant
+      // each line rendered as zero on the order screen, exported blank to CSV,
+      // and — worst — reconcileLineItems summed the items to nothing and added
+      // a phantom "Shipping & other" line for the entire order value.
+      lineTotal: Math.round(price.value * quantity * 100) / 100
     });
   }
   if (!transactions.length) review.push({ code: "no_line_items" });

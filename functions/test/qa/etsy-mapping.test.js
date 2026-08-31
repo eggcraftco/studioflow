@@ -122,7 +122,7 @@ check(() => {
   assert.strictEqual(order.lineItems.length, 1);
   assert.strictEqual(order.lineItems[0].quantity, 2);
   assert.strictEqual(order.lineItems[0].unitPrice, 50);
-  assert.strictEqual(order.lineItems[0].total, 100, "unit price times quantity");
+  assert.strictEqual(order.lineItems[0].lineTotal, 100, "unit price times quantity");
   assert.strictEqual(order.lineItems[0].sku, "RING-18K");
   assert.ok(order.lineItems[0].name.includes("Size: M"), "the product option belongs in the line label");
   assert.ok(!order.lineItems[0].name.includes("For Ada"), "personalisation is not a product option");
@@ -224,6 +224,28 @@ check(() => {
     "the address block is the buyer's, not the shop's"
   );
 }, "an imported order says it came from Etsy, so the pills and the tax rules can see it");
+
+// Every client and reconcileLineItems read lineTotal. The shared schema is
+// written down in index.js as { id, name, quantity, unitPrice, lineTotal }, and
+// Etsy was writing `total` instead. Three things broke silently: each line
+// rendered as zero on the order screen, the CSV export wrote blanks, and
+// reconcileLineItems summed the items to nothing and added a phantom
+// "Shipping & other" line for the entire order value.
+check(() => {
+  const { order } = normalizeEtsyReceipt(receipt, opts);
+  assert.ok(order.lineItems.length, "there are line items to check");
+  for (const item of order.lineItems) {
+    for (const field of ["id", "name", "quantity", "unitPrice", "lineTotal"]) {
+      assert.ok(field in item, `a line item is missing ${field} — the shared schema is not optional`);
+    }
+    assert.strictEqual(typeof item.lineTotal, "number", "lineTotal is a number, not undefined");
+    assert.ok(!("total" in item), "total is the wrong name and nothing reads it");
+  }
+  // The reconciler's own arithmetic: items must sum to something, or it invents
+  // a line for the difference.
+  const sum = order.lineItems.reduce((acc, i) => acc + (Number(i.lineTotal) || 0), 0);
+  assert.ok(sum > 0, "the items sum to a real figure, so no phantom line is added");
+}, "line items carry lineTotal, the name every client and the reconciler read");
 
 // --- robustness -------------------------------------------------------------
 check(() => {
