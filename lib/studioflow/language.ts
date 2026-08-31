@@ -6057,6 +6057,12 @@ mergeIntoTranslations({
   "That Etsy account does not have a shop. Sign in to Etsy with the account that owns your shop, then connect again.": { "Türkçe": "Bu Etsy hesabının bir mağazası yok. Etsy'ye mağazanızın sahibi olan hesapla girin, sonra tekrar bağlanın.", "Deutsch": "Dieses Etsy-Konto hat keinen Shop. Melden Sie sich bei Etsy mit dem Konto an, dem Ihr Shop gehört, und verbinden Sie dann erneut.", "Français": "Ce compte Etsy n'a pas de boutique. Connectez-vous à Etsy avec le compte propriétaire de votre boutique, puis reconnectez-vous.", "Italiano": "Questo account Etsy non ha un negozio. Accedi a Etsy con l'account proprietario del tuo negozio, poi collega di nuovo.", "Español (Spanish)": "Esa cuenta de Etsy no tiene tienda. Inicia sesión en Etsy con la cuenta propietaria de tu tienda y vuelve a conectar.", "Português": "Essa conta Etsy não tem loja. Inicie sessão na Etsy com a conta proprietária da sua loja e volte a ligar.", "Русский (Russian)": "У этого аккаунта Etsy нет магазина. Войдите в Etsy под аккаунтом, которому принадлежит магазин, и подключите снова.", "日本語 (Japanese)": "この Etsy アカウントにはショップがありません。ショップを所有しているアカウントで Etsy にサインインしてから、もう一度接続してください。", "中文 (Chinese)": "该 Etsy 账户没有店铺。请用拥有该店铺的账户登录 Etsy，然后重新连接。", "العربية (Arabic)": "هذا الحساب على Etsy لا يملك متجرًا. سجّل الدخول إلى Etsy بالحساب المالك لمتجرك ثم أعد الربط.", "हिन्दी (Hindi)": "इस Etsy खाते की कोई दुकान नहीं है। जिस खाते की दुकान है उससे Etsy में साइन इन करें, फिर दोबारा कनेक्ट करें।" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
+// A workspace can connect more than one Etsy shop; the picker names them.
+mergeIntoTranslations({
+  "Connected shops": { "Türkçe": "Bağlı mağazalar", "Deutsch": "Verbundene Shops", "Français": "Boutiques connectées", "Italiano": "Negozi collegati", "Español (Spanish)": "Tiendas conectadas", "Português": "Lojas ligadas", "Русский (Russian)": "Подключённые магазины", "日本語 (Japanese)": "接続済みのショップ", "中文 (Chinese)": "已连接的店铺", "العربية (Arabic)": "المتاجر المرتبطة", "हिन्दी (Hindi)": "जुड़ी हुई दुकानें" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+
 
 
 
