@@ -5651,7 +5651,14 @@ const etsyModule = require("./etsy");
 const { createEtsyConnectFunctions } = require("./etsyConnect");
 // Etsy's callback URL is registered with Etsy itself and cannot drift: it is
 // the one address their consent screen is allowed to return the seller to.
-const ETSY_REDIRECT_URI = "https://europe-west2-eggcraft-studio.cloudfunctions.net/etsyOAuthCallback";
+//
+// It is on our own domain rather than pointing straight at the function,
+// because Etsy's consent screen warns in yellow when the destination is not the
+// app's registered domain — and a seller meeting us for the first time reads
+// that as a phishing warning at the exact moment they hand over their shop.
+// nivadesk.app/etsy/callback forwards to this function untouched. Both URLs are
+// registered with Etsy, so a connection begun before this change still lands.
+const ETSY_REDIRECT_URI = "https://nivadesk.app/etsy/callback";
 const etsyConnectExports = createEtsyConnectFunctions({
   admin,
   onCall: (options, handler) => onCall({ ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY] }, handler),
