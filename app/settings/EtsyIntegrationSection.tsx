@@ -728,6 +728,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                   const created = Number(result?.outcome?.created || 0);
                   const updated = Number(result?.outcome?.updated || 0);
                   const failed = Number(result?.outcome?.failed || 0);
+                  // A silent cap reads as "that was everything". It is not:
+                  // there are older orders this run never asked for.
+                  if (result?.truncated) {
+                    setError(t("Not every order fitted in one run. Import again to bring in the rest."));
+                  }
                   setNotice(
                     failed
                       ? `${created} ${t("imported")} · ${failed} ${t("need review. No records were lost; you can run the preview again.")}`
