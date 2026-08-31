@@ -316,11 +316,33 @@ function createEtsyConnectFunctions(deps) {
 
       const etsyUserId = etsy.etsyUserIdFromToken(accessToken);
       // Which shop is this? Ask Etsy rather than trusting anything in the URL.
-      const shop = await etsy.etsyFetch("/users/me/shops", { keystring: keystring(), accessToken })
-        .catch(() => null);
+      //
+      // The path takes the numeric user id, not the word "me" — Etsy's
+      // getShopByOwnerUserId is /users/{user_id}/shops. Asking for "me" 404s,
+      // and because the failure was swallowed it surfaced to the seller as
+      // "this Etsy account has no shop", which is a different problem entirely
+      // and sends them looking in the wrong place. So: use the id we already
+      // have from the token, and let a real failure say what it was.
+      let shop = null;
+      let lookupError = "";
+      for (const path of [etsyUserId ? `/users/${etsyUserId}/shops` : "", "/users/me/shops"]) {
+        if (!path) continue;
+        try {
+          shop = await etsy.etsyFetch(path, { keystring: keystring(), accessToken });
+          if (shop) break;
+        } catch (failure) {
+          lookupError = String(failure?.message || failure);
+        }
+      }
       const firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);
       const shopId = String(firstShop?.shop_id || "");
-      if (!shopId) throw new Error("This Etsy account has no shop NivaDesk can read.");
+      if (!shopId) {
+        throw new Error(
+          lookupError
+            ? `Etsy would not tell us which shop this account owns: ${lookupError}`
+            : "This Etsy account has no shop NivaDesk can read."
+        );
+      }
 
       // Deterministic id: reconnecting the same shop updates the same row rather
       // than leaving a graveyard of stale connections behind.
