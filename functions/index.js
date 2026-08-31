@@ -5717,7 +5717,17 @@ const etsySyncExports = createEtsySyncFunctions({
   companySettingsDocRef,
   customersOfCompany: (companyId) => admin.firestore().collection("musteriler").where("companyId", "==", companyId),
   sendPushNotificationToCompany,
-  onSchedule
+  // The sweep needs the same three secrets the callables do — it decrypts a
+  // stored refresh token and then calls Etsy with the joined api key. Passing
+  // onSchedule raw here deployed reconcileEtsyConnections with NO secrets
+  // bound, and it went unnoticed because the sweep logs "0 shop(s)" every
+  // fifteen minutes: with nothing connected it returns before it ever reaches
+  // the point of needing them. The first seller to connect a shop would have
+  // been the one to find out.
+  onSchedule: (options, handler) => onSchedule(
+    { ...options, secrets: [ETSY_KEYSTRING, ETSY_SHARED_SECRET, ETSY_TOKEN_KEY] },
+    handler
+  )
 });
 exports.previewEtsyImport = etsySyncExports.previewEtsyImport;
 exports.runEtsyImport = etsySyncExports.runEtsyImport;
