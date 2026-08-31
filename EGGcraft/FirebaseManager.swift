@@ -977,6 +977,12 @@ class FirebaseManager: ObservableObject {
     /// customer screen open a store-fed record where it actually lives, the same
     /// way the web app does.
     @Published var shopifyLinkedShop: String = ""
+    /// The workspace's own customer-link host, from the workspace document: their
+    /// paid domain, else their `name.nivadesk.app` subdomain, else empty. Every
+    /// customer-facing link is built from this via `CustomerPortalLink`, so a
+    /// workspace that pays for its brand gets it on Mac and iPhone too — not only
+    /// on the web.
+    @Published var clientPortalHost: String = ""
     @Published var isAssigningWorkspaceTicket: Bool = false
     @Published var messageThreads: [StudioMessageThread] = []
     @Published var messageTeamMembers: [StudioMessageTeamMember] = []
@@ -1296,14 +1302,19 @@ class FirebaseManager: ObservableObject {
     /// Settings screen was open, so Mac/iPhone could show a stale value (e.g.
     /// Corporation Tax) that web/Android — reading the live setting — did not.
     /// The workspace document itself — not companySettings, which is a different
-    /// doc. Only the fields the app actually shows are read; today that is the
-    /// connected Shopify shop, so a Shopify-fed customer can be opened in the
-    /// store admin from Mac and iPhone and not only from the web.
+    /// doc. Only the fields the app actually shows are read: the connected Shopify
+    /// shop, so a Shopify-fed customer can be opened in the store admin from Mac
+    /// and iPhone and not only from the web, and the workspace's customer-link
+    /// host, so a workspace that pays for its own domain gets ITS name on the
+    /// links it sends from a phone.
     private func startCompanyDocSync(companyId: String) {
         companyDocListenerRegistration?.remove()
         let cleanId = companyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanId.isEmpty else {
-            DispatchQueue.main.async { self.shopifyLinkedShop = "" }
+            DispatchQueue.main.async {
+                self.shopifyLinkedShop = ""
+                self.clientPortalHost = ""
+            }
             return
         }
         companyDocListenerRegistration = Firestore.firestore()
@@ -1315,10 +1326,16 @@ class FirebaseManager: ObservableObject {
                     print("Company document sync listener error: \(error)")
                     return
                 }
-                let shop = (snapshot?.data()?["shopifyLinkedShop"] as? String ?? "")
+                let data = snapshot?.data()
+                let shop = (data?["shopifyLinkedShop"] as? String ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                let portalHost = CustomerPortalLink.host(
+                    customHost: data?["clientPortalCustomHost"] as? String,
+                    slug: data?["clientPortalSlug"] as? String
+                )
                 DispatchQueue.main.async {
                     if self.shopifyLinkedShop != shop { self.shopifyLinkedShop = shop }
+                    if self.clientPortalHost != portalHost { self.clientPortalHost = portalHost }
                 }
             }
     }
@@ -3597,6 +3614,7 @@ class FirebaseManager: ObservableObject {
         companyDocListenerRegistration?.remove()
         companyDocListenerRegistration = nil
         shopifyLinkedShop = ""
+        clientPortalHost = ""
         listenerRegistration = nil
         musteriListenerRegistration = nil
         supportTicketsListenerRegistration = nil

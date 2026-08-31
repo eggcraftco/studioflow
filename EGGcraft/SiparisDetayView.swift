@@ -40,10 +40,11 @@ private func clientFileIsImage(_ item: ClientFileItem) -> Bool {
     return [".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".gif", ".tiff", ".bmp"].contains { lowerName.hasSuffix($0) }
 }
 
-// Rebrands a raw Firebase Storage download URL as a nivadesk.app viewer link.
-// Use ONLY for opening/sharing links (so the address bar shows nivadesk.app);
-// inline image/PDF loading and direct downloads keep the raw URL.
-func maskFileUrl(_ raw: String) -> String {
+// Rebrands a raw Firebase Storage download URL as a branded viewer link.
+// Use ONLY for opening/sharing links (so the address bar shows the workspace's
+// own customer host, or ours when they have none); inline image/PDF loading and
+// direct downloads keep the raw URL.
+func maskFileUrl(_ raw: String, brandedHost: String = "") -> String {
     guard let comps = URLComponents(string: raw),
           comps.host == "firebasestorage.googleapis.com" else { return raw }
     let fullPath = comps.path // URLComponents returns the percent-decoded path
@@ -61,7 +62,7 @@ func maskFileUrl(_ raw: String) -> String {
     }.joined(separator: "/")
     let encBucket = bucket.addingPercentEncoding(withAllowedCharacters: allowed) ?? bucket
     let encToken = token.addingPercentEncoding(withAllowedCharacters: allowed) ?? token
-    return "https://nivadesk.app/f/\(segments)?b=\(encBucket)&t=\(encToken)"
+    return "\(CustomerPortalLink.origin(brandedHost: brandedHost))/f/\(segments)?b=\(encBucket)&t=\(encToken)"
 }
 
 private func loadClientFilePlatformImage(from url: URL) -> PlatformImage? {
@@ -8282,7 +8283,10 @@ struct SiparisDetayView: View {
     }
 
     private var portalLinkURL: String {
-        siparis.portalToken.isEmpty ? "" : "https://nivadesk.app/track/\(siparis.portalToken)"
+        CustomerPortalLink.portalUrl(
+            token: siparis.portalToken,
+            brandedHost: firebaseManager.clientPortalHost
+        )
     }
 
     private func copyPortalLink() {
@@ -9304,13 +9308,14 @@ struct SiparisDetayView: View {
             showUploadSafetyError = true
             return
         }
-        // Create a short, branded nivadesk.app link (hides company id + token), then
-        // open it. Falls back to the path-based masked URL if the call fails.
+        // Create a short, branded link (hides company id + token), then open it.
+        // Falls back to the path-based masked URL if the call fails.
+        let brandedHost = firebaseManager.clientPortalHost
         Functions.functions(region: "europe-west2").httpsCallable("nvCreateFileLink").call(["url": raw]) { result, _ in
-            var target = maskFileUrl(raw)
+            var target = maskFileUrl(raw, brandedHost: brandedHost)
             if let data = result?.data as? [String: Any], let id = data["id"] as? String, !id.isEmpty {
                 let ext = (data["ext"] as? String).flatMap { $0.isEmpty ? nil : ".\($0)" } ?? ""
-                target = "https://nivadesk.app/f/\(id)\(ext)"
+                target = "\(CustomerPortalLink.origin(brandedHost: brandedHost))/f/\(id)\(ext)"
             }
             DispatchQueue.main.async {
                 if let url = URL(string: target) { openURL(url) }

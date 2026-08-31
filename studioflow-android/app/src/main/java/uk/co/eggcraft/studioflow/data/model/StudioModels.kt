@@ -154,6 +154,10 @@ data class StudioWorkspace(
     val storageAddonMB: Long = 0,
     val teamMemberLimitEffective: Int = 0,
     val quickReplyMenuEnabled: Boolean = true,
+    /** The host every customer link is served on: the workspace's own domain, or
+     *  its nivadesk.app subdomain, or "" when it has neither. Derived once from
+     *  the company document — see CustomerLinks.workspaceHost. */
+    val clientPortalHost: String = "",
     /** Connected Shopify shop domain, so a store-fed customer can be opened where
      *  it lives — the same link the web and Mac customer screens offer. */
     val shopifyLinkedShop: String = "",

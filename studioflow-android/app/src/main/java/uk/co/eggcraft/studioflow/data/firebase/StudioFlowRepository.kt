@@ -21,6 +21,7 @@ import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 import uk.co.eggcraft.studioflow.data.model.BANK_DEFAULT_CATEGORY_TAX
+import uk.co.eggcraft.studioflow.data.model.CustomerLinks
 import uk.co.eggcraft.studioflow.data.model.StudioBankRule
 import uk.co.eggcraft.studioflow.data.model.StudioBankWaitingReceipt
 import uk.co.eggcraft.studioflow.data.model.bankRuleFromDocument
@@ -317,6 +318,10 @@ class StudioFlowRepository(
             },
             teamMemberLimitEffective = (data["billingTeamMemberLimit"] as? Number)?.toInt() ?: 0,
             quickReplyMenuEnabled = (data["quickReplyMenuEnabled"] as? Boolean) ?: true,
+            clientPortalHost = CustomerLinks.workspaceHost(
+                stringValue(data["clientPortalCustomHost"], ""),
+                stringValue(data["clientPortalSlug"], "")
+            ),
             memberAccess = memberAccess(data, user.uid, role == "owner", rawRole, customRoles),
             accountDisplayName = stringValue(
                 member?.get("displayName"),

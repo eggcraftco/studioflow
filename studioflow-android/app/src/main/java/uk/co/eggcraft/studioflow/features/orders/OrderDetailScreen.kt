@@ -177,6 +177,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import uk.co.eggcraft.studioflow.data.firebase.StudioFlowRepository
+import uk.co.eggcraft.studioflow.data.model.CustomerLinks
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardId
 import uk.co.eggcraft.studioflow.data.model.OrderDetailCardLayout
 import uk.co.eggcraft.studioflow.data.model.STUDIO_PRIMARY_SPECIAL_NOTE_ID
@@ -227,6 +228,8 @@ private val LocalUnifiedBoardVerticalScroll = compositionLocalOf { false }
 private val LocalKeepOrderCardVisible = compositionLocalOf<(OrderDetailCardId) -> Unit> { {} }
 private val LocalCurrencySymbol = compositionLocalOf { "£" }
 private val LocalDecimalSeparator = compositionLocalOf { "." }
+/** The workspace's own customer host (see CustomerLinks); "" means ours. */
+private val LocalClientPortalHost = compositionLocalOf { "" }
 private const val StudioCardDragMime = "application/x-studioflow-card"
 private const val OrderWorkspaceLayoutKey = "__workspaceLayoutV1"
 private const val MaxDesktopCardColumns = 8
@@ -447,6 +450,7 @@ fun OrderDetailScreen(
     CompositionLocalProvider(
         LocalCurrencySymbol provides workspaceSettings.selectedCurrency.ifBlank { "£" },
         LocalDecimalSeparator provides workspaceSettings.selectedDecimalSeparator,
+        LocalClientPortalHost provides workspace?.clientPortalHost.orEmpty(),
         LocalKeepOrderCardVisible provides { cardId ->
             locallyVisibleCards = locallyVisibleCards + cardId
         },
@@ -3783,7 +3787,7 @@ private fun CustomerPortalCard(
     // Optimistic so a tap responds at once; the order listener confirms it.
     var shows by remember(order.id, portal.visibility) { mutableStateOf(portal.visibility) }
     var auto by remember(order.id, portal.autoUpdates) { mutableStateOf(portal.autoUpdates) }
-    val portalUrl = if (portal.token.isBlank()) "" else "https://nivadesk.app/track/${portal.token}"
+    val portalUrl = CustomerLinks.portalUrlForToken(portal.token, LocalClientPortalHost.current)
 
     fun savePreferences(nextShows: StudioPortalVisibility, nextAuto: StudioPortalAutoUpdates) {
         shows = nextShows
@@ -4146,6 +4150,7 @@ private fun RepairIntakePhotoStrip(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val fileOpenScope = rememberCoroutineScope()
+    val brandedPortalHost = LocalClientPortalHost.current
     var previewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
 
     val photos = order.clientFiles.filter { file ->
@@ -4164,7 +4169,7 @@ private fun RepairIntakePhotoStrip(
             onOpenExternal = {
                 if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch {
                     uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce()
-                    uriHandler.openUri(createSharedFileLink(pf.downloadUrl))
+                    uriHandler.openUri(createSharedFileLink(pf.downloadUrl, brandedPortalHost))
                 }
             }
         )
@@ -4520,6 +4525,7 @@ private fun DesktopClientFilesCard(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val fileOpenScope = rememberCoroutineScope()
+    val brandedPortalHost = LocalClientPortalHost.current
     var clientPreviewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
     clientPreviewFile?.let { pf ->
         ClientFilePreviewDialog(
@@ -4532,7 +4538,7 @@ private fun DesktopClientFilesCard(
                 }
             },
             onDismiss = { clientPreviewFile = null },
-            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl, brandedPortalHost)) } }
         )
     }
     var renameFileId by remember(order.id) { mutableStateOf("") }
@@ -4625,7 +4631,7 @@ private fun DesktopClientFilesCard(
                             isCurrentPreview = file.downloadUrl.isNotBlank() && file.downloadUrl == order.designLink,
                             onPreview = { if (file.downloadUrl.isNotBlank()) clientPreviewFile = file },
                             onDownload = { downloadClientFile(context, file) },
-                            onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(file.downloadUrl)) } },
+                            onOpenExternal = { if (file.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(file.downloadUrl, brandedPortalHost)) } },
                             onUseAsPreview = {
                                 if (isClientFileImage(file.contentType, file.fileName) && file.downloadUrl.isNotBlank()) {
                                     onUpdateOrderFields(order, mapOf("details" to mapOf("designLink" to file.downloadUrl)))
@@ -8382,6 +8388,7 @@ private fun OperationsCard(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val fileOpenScope = rememberCoroutineScope()
+    val brandedPortalHost = LocalClientPortalHost.current
     var clientPreviewFile by remember(order.id) { mutableStateOf<StudioClientFile?>(null) }
     clientPreviewFile?.let { pf ->
         ClientFilePreviewDialog(
@@ -8394,7 +8401,7 @@ private fun OperationsCard(
                 }
             },
             onDismiss = { clientPreviewFile = null },
-            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl)) } }
+            onOpenExternal = { if (pf.downloadUrl.isNotBlank()) fileOpenScope.launch { uk.co.eggcraft.studioflow.features.shell.AppLockGuard.suppressNextLockOnce(); uriHandler.openUri(createSharedFileLink(pf.downloadUrl, brandedPortalHost)) } }
         )
     }
     var newTaskTitle by remember(order.id) { mutableStateOf("") }
@@ -11487,10 +11494,11 @@ private fun isClientFileImage(contentType: String, fileName: String): Boolean {
     return cleanType.startsWith("image/") || extension in setOf("jpg", "jpeg", "png", "webp", "heic", "heif")
 }
 
-// Rebrands a raw Firebase Storage download URL as a nivadesk.app viewer link.
-// Use ONLY for opening/sharing links (so the address shows nivadesk.app);
-// inline previews and the "use as preview" raw URL stay unchanged.
-internal fun maskFileUrl(raw: String): String {
+// Rebrands a raw Firebase Storage download URL as a branded viewer link.
+// Use ONLY for opening/sharing links (so the address shows the workspace's own
+// host, ours when it has none); inline previews and the "use as preview" raw
+// URL stay unchanged.
+internal fun maskFileUrl(raw: String, brandedHost: String = ""): String {
     return try {
         val uri = android.net.Uri.parse(raw)
         if (uri.host != "firebasestorage.googleapis.com") return raw
@@ -11504,13 +11512,13 @@ internal fun maskFileUrl(raw: String): String {
         val token = uri.getQueryParameter("token") ?: return raw
         if (bucket.isEmpty() || storagePath.isEmpty()) return raw
         val segments = storagePath.split("/").joinToString("/") { android.net.Uri.encode(it) }
-        "https://nivadesk.app/f/$segments?b=${android.net.Uri.encode(bucket)}&t=${android.net.Uri.encode(token)}"
+        "${CustomerLinks.originFor(brandedHost)}/f/$segments?b=${android.net.Uri.encode(bucket)}&t=${android.net.Uri.encode(token)}"
     } catch (e: Exception) {
         raw
     }
 }
 
-// Creates a short, clean nivadesk.app link (company id + token hidden) via a
+// Creates a short, clean branded link (company id + token hidden) via a
 // server-side mapping. Falls back to the path-based masked URL on any failure.
 // The estimate card talks to the server directly rather than threading four new
 // callbacks down through the screen: order.companyId is all the auth needs.
@@ -11555,7 +11563,7 @@ internal suspend fun revokeEstimateLinkForOrder(order: StudioOrder, estimateId: 
         .await()
 }
 
-internal suspend fun createSharedFileLink(rawUrl: String): String {
+internal suspend fun createSharedFileLink(rawUrl: String, brandedHost: String = ""): String {
     if (rawUrl.isBlank()) return rawUrl
     return try {
         val result = com.google.firebase.functions.FirebaseFunctions.getInstance("europe-west2")
@@ -11566,18 +11574,18 @@ internal suspend fun createSharedFileLink(rawUrl: String): String {
         val id = data?.get("id") as? String
         if (!id.isNullOrBlank()) {
             val ext = (data["ext"] as? String)?.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ""
-            "https://nivadesk.app/f/$id$ext"
+            "${CustomerLinks.originFor(brandedHost)}/f/$id$ext"
         } else {
-            maskFileUrl(rawUrl)
+            maskFileUrl(rawUrl, brandedHost)
         }
     } catch (e: Exception) {
-        maskFileUrl(rawUrl)
+        maskFileUrl(rawUrl, brandedHost)
     }
 }
 
 // In-app client file viewer (matches the Mac preview sheet): images render inline
 // with Coil, PDFs via the Google Docs viewer, other types show a fallback. The
-// "Open externally" button uses the short branded nivadesk.app link.
+// "Open externally" button uses the short branded link.
 @Composable
 internal fun ClientFilePreviewDialog(
     file: StudioClientFile,
