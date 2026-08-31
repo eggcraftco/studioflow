@@ -24,6 +24,7 @@ import {
   resolveEtsyCustomerMatch,
   runEtsyImport,
   syncEtsyNow,
+  verifyEtsyConnection,
   type EtsyConnection,
   type EtsyImportRules,
   type EtsyPreview,
@@ -70,12 +71,24 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
 
-  const [rules, setRules] = useState<EtsyImportRules>({ sinceDays: 90, includeCompleted: false });
+  const [rules, setRules] = useState<EtsyImportRules>({
+    sinceDays: 90,
+    includeCompleted: false,
+    includeCancelled: false,
+    includeDigital: false,
+    includeUnpaid: false
+  });
   const [preview, setPreview] = useState<EtsyPreview | null>(null);
   const [onlyReview, setOnlyReview] = useState(false);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [openMatch, setOpenMatch] = useState("");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  // "Healthy" is a claim about right now, so it has to be earned by asking
+  // Etsy. A stored status only changes when a sync happens to run and fail:
+  // access revoked an hour ago still reads as fine until then. Until a check
+  // answers, the row says Connected — which is a fact — rather than Healthy.
+  const [liveCheck, setLiveCheck] = useState<"unknown" | "healthy" | "unhealthy">("unknown");
+  const [checkOnArrival, setCheckOnArrival] = useState(false);
 
   const connection = connections[0] || null;
 
@@ -97,6 +110,24 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     void refresh();
   }, [refresh]);
 
+  const checkConnection = useCallback(async () => {
+    const current = connections[0];
+    if (!current) return;
+    const result = await verifyEtsyConnection(companyId, current.id);
+    if (result?.healthy) {
+      setLiveCheck("healthy");
+      setNotice(t("Etsy answered. This connection is working."));
+      return;
+    }
+    setLiveCheck("unhealthy");
+    setError(
+      etsyErrorText(String(result?.reason || ""), t) ||
+        t("Etsy did not accept this connection. Reconnect the shop to continue.")
+    );
+    // The stored status may now disagree with what Etsy just said.
+    await refresh();
+  }, [companyId, connections, refresh, t]);
+
   // The OAuth callback sends the seller back with ?etsy=connected|cancelled|error.
   // Read it once, say what happened in words, then clean the address bar so a
   // refresh does not repeat the message.
@@ -105,7 +136,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("etsy");
     if (!outcome) return;
-    if (outcome === "connected") setNotice(t("Etsy shop connected. Choose what to import."));
+    if (outcome === "connected") {
+      setNotice(t("Etsy shop connected. Choose what to import."));
+      setCheckOnArrival(true);
+    }
     else if (outcome === "cancelled") setNotice(t("Etsy connection cancelled. Nothing was changed."));
     else setError(t("The Etsy connection could not be completed. Try connecting again."));
     params.delete("etsy");
@@ -115,6 +149,15 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     void refresh();
   }, [refresh, t]);
+
+  // The screen promises to verify on return. Do it once, as soon as the
+  // connection this callback created has actually loaded.
+  useEffect(() => {
+    if (!checkOnArrival || !connections[0]) return;
+    setCheckOnArrival(false);
+    setBusy("verify");
+    void checkConnection().catch(() => {}).finally(() => setBusy(""));
+  }, [checkOnArrival, connections, checkConnection]);
 
   async function guard(key: string, run: () => Promise<void>) {
     setBusy(key);
@@ -201,7 +244,15 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     );
   }
 
-  const needsAttention = connection.needsReconnect || connection.status === "needs_reconnect";
+  const needsAttention =
+    connection.needsReconnect || connection.status === "needs_reconnect" || liveCheck === "unhealthy";
+  // Connected is a fact: we hold access. Healthy is a claim about this
+  // moment, so only a live answer from Etsy earns that word.
+  const connectionLabel = needsAttention
+    ? t("Needs attention")
+    : liveCheck === "healthy"
+      ? t("Healthy")
+      : t("Connected");
 
   return (
     <div className="settings-card-stack">
@@ -218,7 +269,19 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
         <ul className="settings-rule-list">
           <li>
             <span>{t("Connection")}</span>
-            <span className="studio-pill">{needsAttention ? t("Needs attention") : t("Healthy")}</span>
+            <span className="settings-action-row">
+              <span className="studio-pill">{connectionLabel}</span>
+              {needsAttention ? null : (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy === "verify"}
+                  onClick={() => guard("verify", checkConnection)}
+                >
+                  {busy === "verify" ? t("Checking Etsy…") : t("Check now")}
+                </button>
+              )}
+            </span>
           </li>
           <li>
             <span>{t("Granted scope")}</span>
@@ -339,6 +402,30 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               onChange={(event) => setRules((current) => ({ ...current, includeCompleted: event.target.checked }))}
             />
             <span>{t("Completed orders")}</span>
+          </label>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={rules.includeUnpaid === true}
+              onChange={(event) => setRules((current) => ({ ...current, includeUnpaid: event.target.checked }))}
+            />
+            <span>{t("Orders not paid yet")}</span>
+          </label>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={rules.includeCancelled === true}
+              onChange={(event) => setRules((current) => ({ ...current, includeCancelled: event.target.checked }))}
+            />
+            <span>{t("Cancelled orders")}</span>
+          </label>
+          <label className="settings-toggle-row">
+            <input
+              type="checkbox"
+              checked={rules.includeDigital === true}
+              onChange={(event) => setRules((current) => ({ ...current, includeDigital: event.target.checked }))}
+            />
+            <span>{t("Digital-only orders")}</span>
           </label>
 
           <div className="settings-action-row">

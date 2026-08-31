@@ -927,8 +927,54 @@ const TREE_EN: GuideNode[] = [
             "WooCommerce: open its card, press Set up, then create one webhook (Order created) in WooCommerce and paste the delivery URL.",
             "WooCommerce signature check (optional, recommended): set a Secret on the WooCommerce webhook, paste the same Secret in the integration screen's Signature check card, and NivaDesk verifies every delivery's signature — a wrong signature is rejected even with a valid URL.",
             "Shopify: add an order webhook (Order payment, JSON format) pointing at the delivery URL.",
-            "Other platforms: Wix, Squarespace, Etsy, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
+            "Other platforms: Wix, Squarespace, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
+            "Etsy is not one of those: it has a connection of its own, described in the next section.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
+          ] }
+        ]
+      },
+      {
+        id: "set-etsy",
+        title: "Etsy",
+        blocks: [
+          { kind: "para", text: "Etsy is a connection of its own rather than a webhook recipe. You sign in to Etsy once, and your shop's orders arrive in NivaDesk with the buyer, the items and the personalisation notes already in place — so a made-to-order shop can work from its production board instead of living in the Etsy tab." },
+          { kind: "para", text: "Nothing is imported behind your back. The first import is a preview you approve, and any order NivaDesk will not bring in tells you why in a sentence instead of disappearing quietly." },
+          { kind: "sub", text: "Connecting your shop" },
+          { kind: "bullets", items: [
+            "[Web] Settings → Integrations → Etsy → Manage, then Connect Etsy. NivaDesk lists what it will read before it sends you anywhere.",
+            "You approve on Etsy's own page and come back. NivaDesk never sees your Etsy password, and no Etsy access is ever held by your browser.",
+            "The access is read-only: your orders, your shop details, and the buyer email Etsy provides. NivaDesk cannot touch your listings, your prices or anything else in your shop.",
+            "On your return the shop is checked and named on screen, so you can see which shop you connected before going any further.",
+            "More than one shop can be connected to the same workspace."
+          ] },
+          { kind: "sub", text: "Choosing what comes in" },
+          { kind: "bullets", items: [
+            "How far back to look starts at 90 days, and can reach back as far as two years.",
+            "Completed, cancelled, digital-only and not-yet-paid orders are each left out unless you turn them on.",
+            "Preview writes nothing at all. It shows every order it found and what it would do with each one.",
+            "An order it will not import says why: cancelled on Etsy, digital only, not paid yet, or nothing in it NivaDesk can map.",
+            "An order in another currency is kept exactly as the buyer paid it, and never converted.",
+            "Import everything the preview found, or tick only the orders you want."
+          ] },
+          { kind: "sub", text: "Buyers and your customer list" },
+          { kind: "para", text: "When the same buyer orders again, NivaDesk recognises them and files the new order under the customer you already have." },
+          { kind: "bullets", items: [
+            "A buyer is linked automatically only when Etsy's own buyer id matches — the one signal that cannot be a coincidence.",
+            "Etsy hides many buyers behind a forwarding address, and NivaDesk will not treat one of those as proof of who someone is.",
+            "When it is unsure it shows you the likely matches and lets you choose, then remembers your answer so it does not ask twice."
+          ] },
+          { kind: "sub", text: "Staying up to date" },
+          { kind: "bullets", items: [
+            "NivaDesk checks your shop every fifteen minutes on its own. Sync now is there for when you would rather not wait.",
+            "The sync centre says what actually happened on each run: what arrived, what was updated, and anything that needs a look.",
+            "Etsy keeps the money and the buyer. Totals, items and buyer details go on coming from your shop.",
+            "Your production work is yours — stages, notes, schedule, files, everything you add here — and a sync never writes over it.",
+            "If the connection ever needs your attention the card says so in plain words, and Reconnect puts it right. Your orders are untouched in the meantime."
+          ] },
+          { kind: "sub", text: "Disconnecting" },
+          { kind: "bullets", items: [
+            "Disconnect says what will happen before it happens: syncing stops, and the stored Etsy access is destroyed.",
+            "Every order and every piece of production work already in NivaDesk stays exactly where it is."
           ] }
         ]
       },
@@ -1973,8 +2019,54 @@ const TREE_TR: GuideNode[] = [
             "WooCommerce: kartını aç, Set up'a bas, sonra WooCommerce'te bir webhook (Order created) oluşturup delivery URL'ini yapıştır.",
             "WooCommerce imza denetimi (isteğe bağlı, önerilir): WooCommerce webhook'unda bir Secret belirle, aynısını entegrasyon ekranındaki Signature check kartına yapıştır; NivaDesk her teslimatın imzasını doğrular — yanlış imza geçerli URL ile bile reddedilir.",
             "Shopify: bir sipariş webhook'u (Order payment, JSON) ekleyip delivery URL'ine yönlendir.",
-            "Diğer platformlar: Wix, Squarespace, Etsy, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
+            "Diğer platformlar: Wix, Squarespace, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
+            "Etsy bunlardan biri değil: kendi bağlantısı var, bir sonraki bölümde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
+          ] }
+        ]
+      },
+      {
+        id: "set-etsy",
+        title: "Etsy",
+        blocks: [
+          { kind: "para", text: "Etsy bir webhook tarifi değil, kendi başına bir bağlantı. Etsy'ye bir kez giriş yaparsınız; mağazanızın siparişleri NivaDesk'e alıcısı, ürünleri ve kişiselleştirme notlarıyla birlikte gelir — böylece siparişe göre üretim yapan bir mağaza, Etsy sekmesinde yaşamak yerine kendi üretim panosundan çalışabilir." },
+          { kind: "para", text: "Arkanızdan hiçbir şey içe aktarılmaz. İlk içe aktarma, sizin onayladığınız bir önizlemedir; NivaDesk'in almayacağı her sipariş sessizce kaybolmak yerine nedenini bir cümleyle söyler." },
+          { kind: "sub", text: "Mağazanızı bağlamak" },
+          { kind: "bullets", items: [
+            "[Web] Settings → Integrations → Etsy → Manage, ardından Connect Etsy. NivaDesk sizi bir yere göndermeden önce neyi okuyacağını sıralar.",
+            "Onayı Etsy'nin kendi sayfasında verir, sonra geri dönersiniz. NivaDesk Etsy şifrenizi hiç görmez ve tarayıcınız hiçbir zaman Etsy erişimi taşımaz.",
+            "Erişim salt okunurdur: siparişleriniz, mağaza bilgileriniz ve Etsy'nin verdiği alıcı e-postası. NivaDesk ilanlarınıza, fiyatlarınıza ya da mağazanızdaki başka bir şeye dokunamaz.",
+            "Döndüğünüzde mağaza doğrulanır ve adı ekranda yazar; devam etmeden önce hangi mağazayı bağladığınızı görürsünüz.",
+            "Aynı çalışma alanına birden fazla mağaza bağlanabilir."
+          ] },
+          { kind: "sub", text: "Neyin geleceğini seçmek" },
+          { kind: "bullets", items: [
+            "Ne kadar geriye bakılacağı 90 günden başlar, iki yıla kadar uzatılabilir.",
+            "Tamamlanmış, iptal edilmiş, yalnızca dijital ve henüz ödenmemiş siparişlerin her biri, siz açmadıkça dışarıda bırakılır.",
+            "Önizleme hiçbir şey yazmaz. Bulduğu her siparişi ve her biriyle ne yapacağını gösterir.",
+            "İçe aktarmayacağı sipariş nedenini söyler: Etsy'de iptal edilmiş, yalnızca dijital, henüz ödenmemiş ya da NivaDesk'in eşleyebileceği bir şey yok.",
+            "Başka para birimindeki sipariş, alıcının ödediği haliyle korunur ve asla çevrilmez.",
+            "Önizlemenin bulduğu her şeyi içe aktarabilir ya da yalnızca istediğiniz siparişleri işaretleyebilirsiniz."
+          ] },
+          { kind: "sub", text: "Alıcılar ve müşteri listeniz" },
+          { kind: "para", text: "Aynı alıcı yeniden sipariş verdiğinde NivaDesk onu tanır ve yeni siparişi zaten sahip olduğunuz müşterinin altına yazar." },
+          { kind: "bullets", items: [
+            "Bir alıcı yalnızca Etsy'nin kendi alıcı kimliği eşleştiğinde otomatik bağlanır — tesadüf olamayacak tek sinyal budur.",
+            "Etsy pek çok alıcıyı yönlendirme adresinin arkasında saklar; NivaDesk bunlardan birini kimlik kanıtı saymaz.",
+            "Emin olmadığında olası eşleşmeleri gösterir ve seçimi size bırakır, sonra cevabınızı hatırlayıp bir daha sormaz."
+          ] },
+          { kind: "sub", text: "Güncel kalmak" },
+          { kind: "bullets", items: [
+            "NivaDesk mağazanızı kendi kendine on beş dakikada bir kontrol eder. Beklemek istemediğinizde Sync now orada.",
+            "Senkronizasyon merkezi her turda gerçekte ne olduğunu söyler: ne geldi, ne güncellendi ve bakılması gereken ne var.",
+            "Para ve alıcı Etsy'nindir. Toplamlar, ürünler ve alıcı bilgileri mağazanızdan gelmeye devam eder.",
+            "Üretim işiniz sizindir — aşamalar, notlar, takvim, dosyalar, buraya eklediğiniz her şey — ve senkronizasyon bunların üzerine asla yazmaz.",
+            "Bağlantı bir gün ilginizi gerektirirse kart bunu açık sözlerle söyler, Reconnect düzeltir. Bu sırada siparişlerinize dokunulmaz."
+          ] },
+          { kind: "sub", text: "Bağlantıyı kesmek" },
+          { kind: "bullets", items: [
+            "Disconnect, olmadan önce ne olacağını söyler: senkronizasyon durur ve saklanan Etsy erişimi yok edilir.",
+            "NivaDesk'te zaten bulunan her sipariş ve her üretim işi olduğu yerde kalır."
           ] }
         ]
       },
