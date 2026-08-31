@@ -356,11 +356,20 @@ function createEtsyConnectFunctions(deps) {
       const firstShop = Array.isArray(shop?.results) ? shop.results[0] : (shop?.shop_id ? shop : null);
       const shopId = String(firstShop?.shop_id || "");
       if (!shopId) {
-        throw new Error(
+        // "This account owns no shop" is not a fault the seller can debug from a
+        // stack trace, and it is the single most likely reason a first connect
+        // fails: people sign in with the Etsy account they buy from. Etsy says
+        // so in as many words, so name the case and let the screen say it
+        // plainly. Everything else stays a generic failure with the detail in
+        // the log, where it belongs.
+        const noShop = /could not find a shop/i.test(lookupError);
+        const failure = new Error(
           lookupError
             ? `Etsy would not tell us which shop this account owns: ${lookupError}`
             : "This Etsy account has no shop NivaDesk can read."
         );
+        failure.connectReason = noShop ? "no_shop" : "";
+        throw failure;
       }
 
       // Deterministic id: reconnecting the same shop updates the same row rather
@@ -396,7 +405,7 @@ function createEtsyConnectFunctions(deps) {
       connectRedirect(res, { etsy: "connected", shop: shopId });
     } catch (error) {
       console.error("etsyOAuthCallback failed:", error?.message || error);
-      connectRedirect(res, { etsy: "error", reason: "exchange" });
+      connectRedirect(res, { etsy: "error", reason: error?.connectReason || "exchange" });
     }
   });
 

@@ -560,6 +560,29 @@ test("when getMe cannot answer, the numeric id is the fallback", async () => {
   assert.ok(store.docs.get("etsyConnections/c1_222"), "the shop still connects");
 });
 
+test("an account with no shop is named as that, not as a generic failure", async () => {
+  const nowRef = { value: 1_700_000_000_000 };
+  const { fns } = build({
+    nowRef,
+    fetchImpl: async (path) => {
+      const failure = new Error("Etsy request failed (404).");
+      failure.body = JSON.stringify({ error: "Could not find a shop for user with user_id = 1116716839" });
+      throw failure;
+    },
+  });
+  const begun = await fns.beginEtsyConnect({ auth: { uid: "u1" }, data: {} });
+  const state = new URL(begun.authorizeUrl).searchParams.get("state");
+  const res = fakeRes();
+  await fns.etsyOAuthCallback({ query: { state, code: "abc" } }, res);
+
+  const url = new URL(res.redirects[0].url);
+  assert.strictEqual(url.searchParams.get("etsy"), "error");
+  assert.strictEqual(
+    url.searchParams.get("reason"), "no_shop",
+    "the screen has to be able to say which failure this was — signing in with the buying account is the likeliest first-connect mistake there is"
+  );
+});
+
 // --- run --------------------------------------------------------------------
 (async () => {
   console.log("Etsy connection lifecycle");
