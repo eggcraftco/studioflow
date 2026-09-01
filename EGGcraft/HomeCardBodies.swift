@@ -515,12 +515,15 @@ struct HomeQuickActionsBody: View {
                 }
             }
         } else if size == .twoByOne {
+            // Three across, two down — the reference's layout, and the one that
+            // fits: two columns meant three rows, and the third row was landing
+            // under the card's own footer.
             let shown = Array(rows.prefix(6))
             VStack(spacing: 8) {
-                ForEach(0..<3, id: \.self) { row in
+                ForEach(0..<2, id: \.self) { row in
                     HStack(spacing: 8) {
-                        ForEach(0..<2, id: \.self) { column in
-                            let index = row * 2 + column
+                        ForEach(0..<3, id: \.self) { column in
+                            let index = row * 3 + column
                             if index < shown.count {
                                 HomeActionRow(action: shown[index], lang: lang) { fire(shown[index]) }
                             } else {
@@ -592,8 +595,16 @@ struct HomeActionRow: View {
     var body: some View {
         Button(action: tap) {
             HStack(spacing: 9) {
-                Image(systemName: action.symbol).font(.system(size: 15))
-                    .foregroundColor(action.primary ? .white : action.tone)
+                // The glyph sits in a disc of its own tint, as the sheet draws
+                // it: a bare icon on a tinted tile reads as a smudge, and the
+                // disc gives it an edge. The primary inverts — white disc,
+                // coloured glyph.
+                ZStack {
+                    Circle().fill(action.primary ? Color.white : action.tone.opacity(0.14))
+                    Image(systemName: action.symbol).font(.system(size: 14))
+                        .foregroundColor(action.primary ? HomeTone.accent : action.tone)
+                }
+                .frame(width: 30, height: 30)
                 Text(t(action.label, lang: lang))
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundColor(action.primary ? .white : .primary)
@@ -604,7 +615,7 @@ struct HomeActionRow: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(action.primary ? HomeTone.accent : Color.clear)
+                    .fill(action.primary ? HomeTone.accent : action.tone.opacity(0.07))
                     .overlay(RoundedRectangle(cornerRadius: 12)
                         .stroke(action.primary ? Color.clear : Color.primary.opacity(0.10), lineWidth: 1))
             )
