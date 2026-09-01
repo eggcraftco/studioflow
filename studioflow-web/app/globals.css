@@ -27658,6 +27658,22 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
    the gap is the cheapest place to find it: 14px between three blocks is 28px
    of air on a card with none to spare. */
 .home-card-1x1 .home-money.is-files { gap: 10px; }
+/* The wide card's storage line, laid out the way the sheet lays it out: the
+   figures, the percentage, and the bar on one line rather than stacked. The
+   sheet puts them in the header; at 492px that truncates the card's own name
+   to "File librar…", which is the defect the square just had. So they stay in
+   the body and pay for themselves by taking one line instead of two — which is
+   what lets the third row exist at all. It did not before: the body has 147px
+   and three rows wanted 186, so the last one was cut off. */
+.home-card-2x1 .home-money.is-files { gap: 6px; }
+.home-card-2x1 .home-money.is-files .home-eyebrow { margin-top: 0; }
+.home-card-2x1 .home-quota { flex-direction: row; align-items: center; gap: 10px; }
+.home-card-2x1 .home-quota-line { flex: 0 0 auto; gap: 8px; }
+.home-card-2x1 .home-quota-line b { margin-left: 0; }
+.home-card-2x1 .home-quota-bar { flex: 1 1 auto; height: 6px; }
+.home-card-2x1 .home-file-list a { padding: 4px 0; }
+.home-card-2x1 .home-file-icon { width: 24px; height: 24px; border-radius: 6px; font-size: 7.5px; }
+.home-card-2x1 .home-file-list a { grid-template-columns: 24px minmax(0, 1.5fr) minmax(0, 1fr) auto; }
 .home-file-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .home-file-stack strong { max-width: 100%; }
 .home-file-list .home-chip {

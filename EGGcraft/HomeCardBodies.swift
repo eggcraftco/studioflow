@@ -3019,15 +3019,18 @@ struct HomeFilesBody: View {
                 let pct = limitBytes > 0 ? min(100, Int((used / limitBytes) * 100)) : 0
                 VStack(alignment: .leading, spacing: compact ? 5 : 9) {
                     if limitBytes > 0 {
-                        VStack(alignment: .leading, spacing: compact ? 3 : 5) {
-                            HStack {
-                                Text("\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))")
-                                    .font(.system(size: compact ? 10.5 : 12.5)).foregroundColor(.secondary)
-                                Spacer(minLength: 6)
-                                Text("\(pct)%")
-                                    .font(.system(size: compact ? 10.5 : 12.5, weight: .heavy))
-                                    .foregroundColor(pct >= 90 ? HomeTone.red : HomeTone.accent)
-                            }
+                        // The figures, the percentage and the bar on one line,
+                        // the way the sheet lays them out. Two lines here was a
+                        // whole file row's worth of height on a card that shows
+                        // three of them.
+                        HStack(spacing: 10) {
+                            Text("\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))")
+                                .font(.system(size: compact ? 10.5 : 12.5)).foregroundColor(.secondary)
+                                .lineLimit(1).fixedSize()
+                            Text("\(pct)%")
+                                .font(.system(size: compact ? 10.5 : 12.5, weight: .heavy))
+                                .foregroundColor(pct >= 90 ? HomeTone.red : HomeTone.accent)
+                                .fixedSize()
                             HomeProgressBar(fraction: Double(pct) / 100, tint: pct >= 90 ? HomeTone.red : HomeTone.accent)
                         }
                     }
