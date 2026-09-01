@@ -451,6 +451,7 @@ function createEtsySyncFunctions(deps) {
 
     // The customer, best-effort: an order that arrived is worth more than a
     // perfect contact record, and the seller can resolve a match later.
+    let matchedCustomerId = "";
     try {
       const buyerId = normalised.source.buyerUserId;
       const link = customerChoice?.customerId
@@ -470,6 +471,7 @@ function createEtsySyncFunctions(deps) {
         if (proposal.decision !== "review") {
           await upsertIntegrationCustomer(companyId, normalised.customer, "etsy");
           if (buyerId && proposal.customerId) {
+            matchedCustomerId = proposal.customerId;
             await customerLinks().doc(etsy.customerLinkKey(companyId, shopId, buyerId)).set({
               companyId, externalShopId: shopId, externalBuyerId: buyerId,
               customerId: proposal.customerId, matchMethod: proposal.matchMethod,
@@ -483,6 +485,30 @@ function createEtsySyncFunctions(deps) {
       console.warn("etsy customer upsert failed:", error?.message || error);
     }
 
+    // The sync centre's feed is meant to carry four kinds of line — imported,
+    // updated, matched, and needs-review — and only the first was ever written.
+    // So a receipt the preview had labelled "Currency review" was imported half
+    // an hour later in silence, an order Etsy changed left no trace at all, and
+    // the two chips the screen has no server event for were the two the seller
+    // most needed: the ones that say something is not finished.
+    if (!isNew) {
+      await connect.writeSyncEvent(connectionRef, { type: "order_updated", receiptId, orderId });
+    }
+    if (matchedCustomerId) {
+      await connect.writeSyncEvent(connectionRef, {
+        type: "customer_matched", receiptId, orderId, customerId: matchedCustomerId
+      });
+    }
+    // classify() calls these "review" rather than "unsupported" precisely
+    // because the order is real and must not be dropped. It still has to be
+    // visible: an order imported at a currency NivaDesk did not convert is
+    // money in the wrong units until somebody looks at it.
+    const reviewCodes = normalised.review
+      .map((row) => row.code)
+      .filter((code) => code === "currency_mismatch" || code === "no_buyer_id");
+    for (const code of reviewCodes) {
+      await connect.writeSyncEvent(connectionRef, { type: "order_needs_review", receiptId, orderId, reason: code });
+    }
     if (isNew) {
       await connect.writeSyncEvent(connectionRef, { type: "order_imported", receiptId, orderId });
       // One notification per order is right when an order actually arrives —

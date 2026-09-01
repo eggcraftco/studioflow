@@ -20,6 +20,8 @@ export type EtsySyncEvent = {
   type: string;
   error: string;
   receiptId: string;
+  /** Why an order_needs_review event was written. */
+  reason?: string;
 };
 
 export type EtsyConnection = {
@@ -228,13 +230,25 @@ export function etsyErrorText(code: string, t: (text: string) => string): string
  * underscores swapped for spaces is still the code; it just looks friendlier.
  */
 export function etsyEventText(
-  event: { type: string; receiptId: string },
+  event: { type: string; receiptId: string; reason?: string },
   t: (text: string) => string
 ): string {
   const receipt = event.receiptId ? ` #${event.receiptId}` : "";
   switch (event.type) {
     case "order_imported":
       return `${t("Order")}${receipt} ${t("imported")}`;
+    case "order_updated":
+      return `${t("Order")}${receipt} ${t("updated")}`;
+    case "customer_matched":
+      return `${t("Order")}${receipt} ${t("matched to an existing customer")}`;
+    // The reason matters here more than anywhere else in this list: an order
+    // imported at a currency NivaDesk did not convert is money in the wrong
+    // units until somebody looks at it, and a receipt with no Etsy buyer id
+    // cannot be linked to a customer with any confidence.
+    case "order_needs_review":
+      return event.reason === "currency_mismatch"
+        ? `${t("Order")}${receipt} ${t("needs currency review")}`
+        : `${t("Order")}${receipt} ${t("needs a customer match")}`;
     case "webhook":
       return `${t("Order")}${receipt} ${t("updated")}`;
     case "order_import_failed":

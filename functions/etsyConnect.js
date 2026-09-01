@@ -482,7 +482,10 @@ function createEtsyConnectFunctions(deps) {
             atMs: millis(event.ts),
             type: String(event.type || ""),
             error: String(event.error || "").slice(0, 200),
-            receiptId: String(event.receiptId || "")
+            receiptId: String(event.receiptId || ""),
+            // An order_needs_review line is unreadable without it: "needs
+            // review" says nothing about what the seller is meant to look at.
+            reason: String(event.reason || "").slice(0, 60)
           };
         });
       } catch (_error) {
