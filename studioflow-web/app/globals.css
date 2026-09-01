@@ -27604,17 +27604,14 @@ body[data-studio-theme="dark"] .home-day-strip li { background: rgba(148, 163, 1
    against gets a solid mark and a word, the bars get guide lines to sit on,
    and the dates move to their own section underneath. */
 .home-week.is-large { row-gap: 0; }
-.home-week.is-large .home-week-day { padding: 0 0 6px; border-bottom: 0; font-size: 10.5px; }
+/* The big card puts its section name above the week, so the day row is the
+   grid's second row and keeps the rule under it that ties it to the bars. */
+.home-week.is-large .home-week-day { padding: 0 0 6px; font-size: 10.5px; }
+.home-week-eyebrow.is-first { border-top: 0; padding-top: 0; }
 .home-week.is-large .home-week-day b { font-size: 13px; }
-.home-week.is-large .home-week-day.is-today {
-  color: inherit;
-}
-.home-week.is-large .home-week-day.is-today em,
-.home-week.is-large .home-week-day.is-today b {
-  background: #2563eb; color: #fff;
-}
-.home-week.is-large .home-week-day.is-today em { padding: 3px 9px 0; border-radius: 9px 9px 0 0; opacity: 1; font-weight: 700; }
-.home-week.is-large .home-week-day.is-today b { padding: 0 9px 3px; border-radius: 0 0 9px 9px; }
+/* The big card used to mark today with a filled two-part pill. The sheet gives
+   it what the wide card has — blue text over a tinted column — so the two sizes
+   stop marking the same day two different ways. */
 .home-week.is-large .home-week-day i { font-style: normal; font-size: 9.5px; color: #1d4ed8; margin-top: 2px; }
 
 .home-week-eyebrow {
@@ -27628,21 +27625,61 @@ body[data-studio-theme="dark"] .home-day-strip li { background: rgba(148, 163, 1
 
 /* One element draws all of them: seven column lines and a line under every
    row but the last, as a pair of repeating gradients. */
-.home-week-guides {
-  grid-column: 2 / -1; align-self: stretch; pointer-events: none;
-  background-image:
-    repeating-linear-gradient(to right,
-      var(--border) 0 1px, transparent 1px calc(100% / 7)),
-    repeating-linear-gradient(to bottom,
-      transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%);
-  opacity: 0.4;
+/* The sheet rules the wide card like a table. Two elements, one per axis: the
+   column lines start after the name column, the row lines run the full width so
+   a name stays tied to its own bar. Both take the row count from the card —
+   the single element below has four rows baked into it and drew a fourth line
+   on a card showing three. */
+.home-week-cols, .home-week-rules { align-self: stretch; pointer-events: none; opacity: 0.4; }
+.home-week-cols {
+  grid-column: 2 / -1;
+  background-image: repeating-linear-gradient(to right, var(--border) 0 1px, transparent 1px calc(100% / 7));
 }
+.home-week-rules {
+  grid-column: 1 / -1;
+  background-image: repeating-linear-gradient(to bottom,
+    transparent 0 calc(100% / var(--home-week-rows, 3) - 1px),
+    var(--border) calc(100% / var(--home-week-rows, 3) - 1px) calc(100% / var(--home-week-rows, 3)));
+}
+/* Today's date carries its own word on the wide card, as it does on the big
+   one: the blue alone does not say which of "today" and "selected" it means. */
+.home-week-day i { font-style: normal; font-size: 9.5px; line-height: 11px; color: #1d4ed8; }
+/* Fixed line boxes for the same reason the small card's rows have them: a
+   Devanagari or Arabic header measured taller than the English one, and the
+   wide card pays for its day names out of the same 133px the bars need. */
+.home-week-day em { line-height: 11px; }
+.home-week-day b { line-height: 14px; }
+/* The wide card's day header carries a third line only under today, and it is
+   the bars that need the room. */
+.home-card-2x1 .home-week-day { padding: 1px 0 3px; }
+/* The sheet's header: weekday beside its date, and today's word wrapping under
+   the pair. Set only when the language's own short weekday fits beside a
+   number in a 46px column. */
+.home-week.is-inline-days .home-week-day {
+  flex-direction: row; flex-wrap: wrap; justify-content: center;
+  align-items: baseline; column-gap: 4px;
+}
+.home-week.is-inline-days .home-week-day i { flex: 1 0 100%; text-align: center; }
+.home-card-2x1 .home-week { row-gap: 1px; }
+/* A deadline that fell before this week has no span to draw, so its dashed chip
+   sizes to its own word rather than to a column — and it sits at the left edge,
+   where growing rightward runs into the week, not off the card. */
+.home-week-bar.is-off-week { min-width: fit-content; }
+
 
 .home-upcoming {
   grid-column: 1 / -1; list-style: none; margin: 0; padding: 0;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.home-upcoming li { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 2px 10px 0; }
+.home-upcoming li { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 2px 6px 0; }
+.home-upcoming li:last-child { padding-right: 0; }
+/* The sheet spells out three deadlines, not two. A third column takes 154px of
+   the card's 462, and the mark and the gaps had to give some of it back so an
+   order still fits its own name. */
+.home-upcoming-mark { width: 26px; height: 26px; }
+.home-upcoming-mark svg { width: 14px; height: 14px; }
+.home-upcoming em { font-size: 11.5px; }
+.home-upcoming a { font-size: 11px; }
 .home-upcoming li + li { border-left: 1px solid var(--border); }
 .home-upcoming li:first-child { padding-left: 0; }
 .home-upcoming li > span { min-width: 0; }

@@ -2846,10 +2846,33 @@ struct HomeScheduleBody: View {
                 // "Upcoming" is what is still ahead. The timeline above already
                 // carries the late ones, and repeating them here would spend the
                 // section on old news.
-                HomeWeekTimeline(days: week, entries: Array(upcoming.prefix(4)),
-                                 ahead: Array(upcoming.filter { $0.1 >= today }.prefix(2)),
+                HomeWeekTimeline(days: week, entries: Array(upcoming.prefix(5)),
+                                 ahead: Array(upcoming.filter { $0.1 >= today }.prefix(3)),
                                  lang: lang, compact: compact, large: true)
             }
+        }
+    }
+}
+
+/// One day's heading. The sheet sets the weekday beside its date; where the
+/// language's own short weekday will not fit next to a number in a 46pt column,
+/// the date goes under it instead of the pair being cut.
+struct HomeWeekDayLabel: View {
+    let weekday: String
+    let day: Int
+    let inline: Bool
+    let large: Bool
+    let isToday: Bool
+
+    var body: some View {
+        let name = Text(weekday)
+            .font(.system(size: large ? 10.5 : 9.5, weight: isToday ? .bold : .regular))
+            .opacity(isToday ? 1 : 0.6)
+        let number = Text("\(day)").font(.system(size: large ? 13 : 11.5, weight: .bold))
+        if inline {
+            HStack(spacing: 4) { name; number }
+        } else {
+            VStack(spacing: 0) { name; number }
         }
     }
 }
@@ -2877,10 +2900,23 @@ struct HomeWeekTimeline: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
         formatter.dateFormat = "EEE"
+        let labels = days.map { formatter.string(from: $0) }
+        // The sheet sets "Mon 24" on one line. A wide card's column is about
+        // 46pt, which holds the pair in eleven of the twelve languages; Arabic's
+        // "الاثنين" alone comes to 28pt and the date has to go under it.
+        let inlineDays = (labels.map(\.count).max() ?? 0) <= 4
 
         return GeometryReader { geo in
             let cell = max(0, geo.size.width - nameWidth) / 7
             VStack(spacing: 0) {
+                if large {
+                    // The sheet names the section first and then draws the week
+                    // under it: the day row belongs to the timeline, not to the
+                    // card's own header.
+                    HomeEyebrow(text: t("Weekly timeline", lang: lang))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 6)
+                }
                 HStack(spacing: 0) {
                     // Not Color.clear: it is greedy in both axes and would make
                     // the day strip as tall as the whole card.
@@ -2888,33 +2924,22 @@ struct HomeWeekTimeline: View {
                     ForEach(Array(days.enumerated()), id: \.element) { index, day in
                         let isToday = index == todayIndex
                         VStack(spacing: 0) {
-                            VStack(spacing: 0) {
-                                Text(formatter.string(from: day))
-                                    .font(.system(size: large ? 10.5 : 9.5,
-                                                  weight: isToday ? .bold : .regular))
-                                    .opacity(isToday ? 1 : 0.6)
-                                Text("\(Calendar.current.component(.day, from: day))")
-                                    .font(.system(size: large ? 13 : 11.5, weight: .bold))
-                            }
+                            HomeWeekDayLabel(
+                                weekday: labels[index], day: Calendar.current.component(.day, from: day),
+                                inline: inlineDays, large: large, isToday: isToday)
                             // The big card marks today the way the sheet does —
                             // solid, with the word under it. The wide card has
                             // no height for either and tints the column instead.
-                            .foregroundColor(isToday ? (large ? .white : HomeTone.accent) : .primary)
-                            .padding(.horizontal, large && isToday ? 9 : 0)
-                            .padding(.vertical, large && isToday ? 3 : 0)
-                            .background(
-                                RoundedRectangle(cornerRadius: 9)
-                                    .fill(large && isToday ? HomeTone.accent : .clear)
-                            )
+                            .foregroundColor(isToday ? HomeTone.accent : .primary)
                             // A day column is about 34pt wide and the mark needs
                             // more than that: let it take its own width and sit
                             // over its neighbours rather than wrap to four lines.
                             .fixedSize()
-                            if large && isToday {
+                            if isToday {
                                 Text(t("Today", lang: lang))
                                     .font(.system(size: 9.5))
                                     .foregroundColor(HomeTone.accent)
-                                    .padding(.top, 2)
+                                    .padding(.top, large ? 2 : 0)
                             }
                         }
                         .frame(width: cell)
@@ -2927,29 +2952,23 @@ struct HomeWeekTimeline: View {
                         .padding(.leading, large ? 0 : nameWidth)
                 }
 
-                if large {
-                    HomeEyebrow(text: t("Weekly timeline", lang: lang))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 6)
-                }
-
                 ZStack(alignment: .topLeading) {
-                    if large {
-                        // A line at the head of every day column, so a bar can be
-                        // read back to the day it starts on.
-                        HStack(spacing: 0) {
-                            Color.clear.frame(width: nameWidth)
-                            ForEach(0..<7, id: \.self) { _ in
-                                Rectangle().fill(Color.primary.opacity(0.08))
-                                    .frame(width: 1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    } else if let todayIndex {
+                    if let todayIndex {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(HomeTone.accent.opacity(0.07))
                             .frame(width: cell)
                             .offset(x: nameWidth + cell * CGFloat(todayIndex))
+                    }
+                    // A line at the head of every day column, so a bar can be
+                    // read back to the day it starts on. Both sizes: the sheet
+                    // rules the wide card like a table too.
+                    HStack(spacing: 0) {
+                        Color.clear.frame(width: nameWidth)
+                        ForEach(0..<7, id: \.self) { _ in
+                            Rectangle().fill(Color.primary.opacity(0.08))
+                                .frame(width: 1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                     VStack(spacing: 2) {
                         ForEach(Array(entries.enumerated()), id: \.element.0.id) { _, entry in
@@ -2985,10 +3004,7 @@ struct HomeWeekTimeline: View {
                             }
                             .frame(maxHeight: .infinity)
                             .overlay(alignment: .bottom) {
-                                if large {
-                                    Rectangle().fill(Color.primary.opacity(0.08))
-                                        .frame(height: 1).padding(.leading, nameWidth)
-                                }
+                                Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 1)
                             }
                         }
                     }
@@ -3018,25 +3034,27 @@ struct HomeUpcomingRow: View {
                 let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
                 let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
                 let ref = entry.0.watchRef.trimmingCharacters(in: .whitespaces)
-                HStack(spacing: 9) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 8) {
+                    // A deadline that has arrived is not another calendar entry,
+                    // and the sheet does not draw it as one.
+                    Image(systemName: chip.tone == HomeTone.red ? "exclamationmark.circle" : "calendar")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(chip.tone)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 26, height: 26)
                         .background(Circle().fill(chip.tone.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(chip.label)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 11.5, weight: .bold))
                             .foregroundColor(chip.tone)
                             .lineLimit(1)
                         Text(ref.isEmpty ? name : "\(ref.hasPrefix("#") ? ref : "#" + ref) \(name)")
-                            .font(.system(size: 11.5))
+                            .font(.system(size: 11))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.leading, index == 0 ? 0 : 10)
+                .padding(.leading, index == 0 ? 0 : 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .leading) {
                     if index > 0 {
@@ -3059,7 +3077,10 @@ func homeWeekBarColumns(order: Siparis, due: Date, days: [Date]) -> (start: Int,
     let from = max(0, column(order.paymentDate))
     let to = column(due)
     let end = min(max(to, from), 6)
-    let start = end == 6 ? min(from, 5) : min(from, 6)
+    // A bar narrower than its own label has to borrow a column, and it borrows
+    // to the left: borrowing to the right runs off the card. A single column is
+    // too narrow for "Overdue" alone, so a one-day bar always takes two.
+    let start = max(0, min(from, end - 1))
     return (start, end, to < 0)
 }
 

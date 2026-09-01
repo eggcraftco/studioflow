@@ -1025,6 +1025,13 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
    *  September — setHours(0,0,0,0) lands on 01:00, and comparing the numbers
    *  would have every day of that week disagree with itself. */
   const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  /** Letters, not UTF-16 units: "शुक्र" is five units and three letters. Both
+   *  the day strip and the week header ask the same question of a weekday name
+   *  — will it fit — and both measured Arabic as the one language that will
+   *  not. */
+  const letters = (label: string) => label.normalize("NFD").replace(/\p{M}/gu, "").length;
+  /** Whether a set of weekday names will sit beside their dates on one line. */
+  const letters2 = (labels: string[]) => Math.max(...labels.map(letters)) <= 4;
   const dueChip = (order: ScheduleOrderItem) => {
     const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
     if (startsIn > 0 && startsIn < 7) {
@@ -1064,7 +1071,6 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
     // three letters, and the naive length demoted Hindi at 17px. (Swift counts
     // letters already, so the Mac side needs no such care.)
     const shortDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
-    const letters = (label: string) => label.normalize("NFD").replace(/\p{M}/gu, "").length;
     const narrow = Math.max(...shortDays.map(letters)) > 4;
     return (
       <>
@@ -1129,24 +1135,37 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
       Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
     const todayColumn = columnOf(today);
 
+    const bars = upcoming.slice(0, 3);
+    // The sheet sets "Mon 24" on one line. A column is 46px, which holds the
+    // pair in eleven of the twelve languages; Arabic's "الاثنين" alone comes to
+    // 28px and the date has to go under it.
+    const weekDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
+    const inlineDays = letters2(weekDays);
     return (
-      <div className="home-week">
+      <div className={`home-week${inlineDays ? " is-inline-days" : ""}`}
+           style={{ "--home-week-rows": bars.length } as CSSProperties}>
         {/* Today's column runs the height of the card, as the sheet draws it —
             it is what every bar is read against. */}
         {todayColumn >= 0 && todayColumn <= 6 ? (
           <span className="home-week-today" style={{ gridColumn: todayColumn + 2 }} aria-hidden="true" />
         ) : null}
+        {/* The sheet rules this like a table: a line at the head of every day
+            column so a bar can be read back to the day it starts on, and a line
+            under every row so a name stays tied to its own bar. */}
+        <span className="home-week-cols" style={{ gridRow: "2 / -1" }} aria-hidden="true" />
+        <span className="home-week-rules" style={{ gridRow: "2 / -1" }} aria-hidden="true" />
         {days.map((date, index) => {
           const isToday = index === todayColumn;
           return (
             <span key={date.toISOString()} className={`home-week-day${isToday ? " is-today" : ""}`}
                   style={{ gridColumn: index + 2 }}>
-              <em>{date.toLocaleDateString(locale, { weekday: "short" })}</em>
+              <em>{weekDays[index]}</em>
               <b>{date.getDate()}</b>
+              {isToday ? <i>{t("Today")}</i> : null}
             </span>
           );
         })}
-        {upcoming.slice(0, 3).map((order, row) => {
+        {bars.map((order, row) => {
           const chip = dueChip(order);
           const name = order.customerName || order.designName;
           const ref = order.watchRef.trim();
@@ -1155,10 +1174,12 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
           const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
           const to = columnOf(order.dueDate!);
           const offWeek = to < 0;
-          // A bar narrower than its own chip has to borrow a column, and it
-          // borrows to the left: borrowing to the right runs off the card.
+          // A bar narrower than its own label has to borrow a column, and it
+          // borrows to the left: borrowing to the right runs off the card. One
+          // column is 46px and "Overdue" alone measures 57, so a single-day bar
+          // always takes two — which is what the sheet draws for "Starts 30".
           const end = Math.min(Math.max(to, from), 6);
-          const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+          const start = Math.max(0, Math.min(from, end - 1));
           // The name and the bar are grid items of the card's own grid, not of a
           // row box: that is what makes a bar land exactly on its days.
           return (
@@ -1185,25 +1206,43 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
   const columnOf = (date: Date) =>
     Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
   const todayColumn = columnOf(today);
-  const bars = upcoming.slice(0, 4);
+  const bars = upcoming.slice(0, 5);
   // "Upcoming" is what is still ahead. The timeline above already carries the
   // late ones, and repeating them here would spend the section on old news.
-  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 2);
+  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 3);
+  const largeWeekDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
 
   return (
-    <div className="home-week is-large" style={{ gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto` }}>
+    <div className={`home-week is-large${letters2(largeWeekDays) ? " is-inline-days" : ""}`}
+         style={{
+           gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto`,
+           "--home-week-rows": bars.length,
+         } as CSSProperties}>
+      {/* Today's column runs the height of the timeline, as the sheet draws it.
+          It used to be a filled pill on this size alone; the sheet gives both
+          the wide card and this one the same tinted column. */}
+      {/* The sheet names the section first and then draws the week under it —
+          the day row belongs to the timeline, not to the card's header. */}
+      <p className="home-week-eyebrow is-first" style={{ gridRow: 1 }}>{t("Weekly timeline")}</p>
+      {todayColumn >= 0 && todayColumn <= 6 ? (
+        <span className="home-week-today" style={{ gridColumn: todayColumn + 2, gridRow: `2 / ${bars.length + 3}` }}
+              aria-hidden="true" />
+      ) : null}
       {days.map((date, index) => (
         <span key={date.toISOString()} className={`home-week-day${index === todayColumn ? " is-today" : ""}`}
-              style={{ gridColumn: index + 2 }}>
-          <em>{date.toLocaleDateString(locale, { weekday: "short" })}</em>
+              style={{ gridColumn: index + 2, gridRow: 2 }}>
+          <em>{largeWeekDays[index]}</em>
           <b>{date.getDate()}</b>
           {index === todayColumn ? <i>{t("Today")}</i> : null}
         </span>
       ))}
-      <p className="home-week-eyebrow" style={{ gridRow: 2 }}>{t("Weekly timeline")}</p>
-      {/* One element draws every day line and row line: seven spans and four
-          more would say the same thing and cost eleven DOM nodes. */}
-      <span className="home-week-guides" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      {/* A line at the head of every day column, and one under every row so a
+          name stays tied to its own bar. Two elements rather than one, because
+          the row lines run the full width and the day lines start after the
+          name column — and because the single element they replace had four
+          rows baked into it and drew a fourth line on a card showing three. */}
+      <span className="home-week-cols" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      <span className="home-week-rules" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
       {bars.map((order, row) => {
         const chip = dueChip(order);
         const name = order.customerName || order.designName;
@@ -1212,7 +1251,7 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
         const to = columnOf(order.dueDate!);
         const offWeek = to < 0;
         const end = Math.min(Math.max(to, from), 6);
-        const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+        const start = Math.max(0, Math.min(from, end - 1));
         // The section below spells out the dates, so up here only the bars that
         // need doing something about carry a word.
         const urgent = offWeek || columnOf(order.dueDate!) <= todayColumn + 1;
@@ -1232,15 +1271,18 @@ export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
       {ahead.length > 0 ? (
         <>
           <p className="home-week-eyebrow is-ruled" style={{ gridRow: bars.length + 3 }}>{t("Upcoming")}</p>
-          <ul className="home-upcoming" style={{ gridRow: bars.length + 4 }}>
+          <ul className="home-upcoming"
+          style={{ gridRow: bars.length + 4, gridTemplateColumns: `repeat(${ahead.length}, minmax(0, 1fr))` }}>
             {ahead.map((order) => {
               const chip = dueChip(order);
               const name = order.customerName || order.designName;
               const ref = order.watchRef.trim();
               return (
                 <li key={order.id}>
+                  {/* A deadline that has arrived is not another calendar
+                      entry, and the sheet does not draw it as one. */}
                   <span className={`home-upcoming-mark ${chip.hue}`} aria-hidden="true">
-                    <HomeTileIcon name="reminder" />
+                    <HomeTileIcon name={chip.hue === "hue-red" ? "overdue" : "reminder"} />
                   </span>
                   <span>
                     <em className={chip.hue}>{chip.label}</em>
