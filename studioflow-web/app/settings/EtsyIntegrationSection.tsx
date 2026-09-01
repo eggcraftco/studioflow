@@ -61,9 +61,24 @@ function money(value: number, currency: string): string {
   }
 }
 
+/** Etsy's own scope names are not readable, and there is exactly one we ask
+ *  for, so name that one and pass the rest through untranslated. */
+function scopeLabel(scopes: string[] | undefined, t: (text: string) => string): string {
+  const list = (scopes || []).filter(Boolean);
+  if (!list.length) return t("Unknown");
+  if (list.length === 1 && list[0] === "transactions_r") return t("Sales read");
+  return list.join(", ");
+}
+
 export function EtsyIntegrationSection({ workspace, language = "English" }: Props) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const companyId = workspace.id.trim();
+  // beginEtsyConnect and disconnectEtsyShop both require the workspace owner on
+  // the server. This screen offered both buttons to everyone and let the
+  // rejection explain it — as "Only the workspace owner can run this billing
+  // action", which is not what the member pressed and not a thing they can act
+  // on. Mac and Android have hidden them from members all along.
+  const isOwner = workspace.role === "owner";
 
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(true);
@@ -311,7 +326,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <button
               type="button"
               className="button"
-              disabled={busy === "connect"}
+              disabled={busy === "connect" || !isOwner}
               onClick={() =>
                 guard("connect", async () => {
                   const result = await beginEtsyConnect(companyId);
@@ -322,6 +337,9 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               {busy === "connect" ? t("Opening Etsy…") : t("Continue to Etsy")}
             </button>
           </div>
+          {!isOwner ? (
+            <p className="muted-copy">{t("Only the workspace owner can connect an Etsy shop.")}</p>
+          ) : null}
         </section>
       </div>
     );
@@ -376,7 +394,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           </li>
           <li>
             <span>{t("Granted scope")}</span>
-            <span className="studio-pill">{t("Sales read")}</span>
+            {/* What Etsy actually granted, not a label that says "Sales read"
+                whatever is stored. The friendly name survives for the scope we
+                ask for; anything else shows its own name rather than being
+                described as something it is not. */}
+            <span className="studio-pill">{scopeLabel(connection.scopes, t)}</span>
           </li>
           <li>
             <span>{t("Last successful sync")}</span>
@@ -831,7 +853,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <button
               type="button"
               className="button"
-              disabled={busy === "disconnect"}
+              disabled={busy === "disconnect" || !isOwner}
               onClick={() =>
                 guard("disconnect", async () => {
                   await disconnectEtsyShop(companyId, connection.id);

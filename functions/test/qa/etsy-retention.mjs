@@ -85,5 +85,50 @@ ok("the connection is marked disconnected", conn.status === "disconnected", Stri
 ok("the access token is gone", conn.accessTokenEncrypted === undefined, String(conn.accessTokenEncrypted));
 ok("the refresh token is gone", conn.refreshTokenEncrypted === undefined, String(conn.refreshTokenEncrypted));
 
+// A second shop, with more orders than one page of the purge.
+//
+// The old query took a single unordered limit(2000) and stopped. Firestore
+// returns those by document id, so the same rows came back every time and
+// nothing marked a row as done — a shop with more than the cap kept Etsy's copy
+// of the rest of its buyers for ever, while the code's own comment claimed the
+// remainder was "swept the rest of the way by the next disconnect or
+// reconnect". Nothing swept anything; PURGE_CAP appeared in that one call and
+// nowhere else. This seeds past the page size, so a purge that does not walk
+// pages leaves evidence behind.
+const SHOP2 = "88002";
+const CONN2 = "conn-retention-pages";
+await db.collection(etsy.CONNECTION_COLLECTION).doc(CONN2).set({
+  companyId, provider: "etsy", externalShopId: SHOP2, externalShopName: "Paging Test",
+  status: "connected", accessTokenEncrypted: "x", refreshTokenEncrypted: "y"
+});
+const PAGE_PROBE = [];
+for (let i = 0; i < 620; i += 1) {
+  const receipt = `7${String(i).padStart(4, "0")}`;
+  const id = `etsy_${companyId}_${SHOP2}_${receipt}`;
+  PAGE_PROBE.push(id);
+  await db.collection("siparisler").doc(id).set({
+    companyId, customerName: `Buyer ${i}`, orderValue: 10,
+    etsySource: { provider: "etsy", shopId: SHOP2, receiptId: receipt, buyerEmail: `b${i}@convos.etsy.com` }
+  });
+  await db.collection(etsy.EXTERNAL_ORDER_COLLECTION).doc(id).set({
+    companyId, provider: "etsy", externalShopId: SHOP2, externalOrderId: receipt, nivadeskOrderId: id
+  });
+}
+const paged = await fns.disconnectEtsyShop.run({
+  data: { companyId, connectionId: CONN2 }, auth, acceptsStreaming: false
+});
+let leftBehind = 0;
+for (const id of PAGE_PROBE) {
+  const snap = await db.collection("siparisler").doc(id).get();
+  if (snap.exists && snap.data().etsySource) leftBehind += 1;
+}
+ok("the purge walks past its first page", leftBehind === 0,
+   `${leftBehind} of ${PAGE_PROBE.length} orders kept Etsy's copy`);
+ok("it clears every order, not a capped page", Number(paged.etsyDataCleared) === PAGE_PROBE.length,
+   `cleared ${paged.etsyDataCleared} of ${PAGE_PROBE.length}`);
+ok("and says whether it finished", paged.purgeComplete === true, String(paged.purgeComplete));
+ok("the second shop's id mapping also survives",
+   (await db.collection(etsy.EXTERNAL_ORDER_COLLECTION).where("externalShopId", "==", SHOP2).get()).size === PAGE_PROBE.length);
+
 console.log(fail ? `\n${fail} FAILED` : "\nPASS");
 process.exit(fail ? 1 : 0);

@@ -31,11 +31,21 @@ const REFRESH_LEAD_MS = 5 * 60 * 1000;      // refresh once under five minutes r
 // four attempts at twenty seconds each plus backoff, so sixty seconds was
 // comfortably short enough to lose.
 const REFRESH_LOCK_MS = 3 * 60 * 1000;
-// How many orders one disconnect will clear Etsy's panel from. A shop with more
-// than this is swept the rest of the way by the next disconnect or reconnect;
-// the alternative is a callable that times out and leaves the job half done
-// with nothing recording where it stopped.
-const PURGE_CAP = 2000;
+// The purge walks the shop's orders a page at a time and keeps going until it
+// runs out or runs out of time.
+//
+// It used to take one unordered `limit(2000)` and stop. Firestore returns those
+// by document id, so the same first 2,000 rows came back every time and nothing
+// marked a row as done — a shop with 2,500 orders kept Etsy's copy of 500
+// buyers for ever, while the comment here claimed "a shop with more than this
+// is swept the rest of the way by the next disconnect or reconnect". Nothing
+// swept anything: grep found PURGE_CAP used only inside this one call.
+//
+// A page rather than a single query, because the callable has a real deadline
+// and a shop can have any number of orders; the deadline is what bounds the
+// work now, and what is left is reported rather than assumed finished.
+const PURGE_PAGE = 500;
+const PURGE_BUDGET_MS = 40 * 1000;
 const CONNECT_REDIRECT_FALLBACK = "https://nivadesk.app/settings";
 
 function createEtsyConnectFunctions(deps) {
@@ -560,36 +570,68 @@ function createEtsyConnectFunctions(deps) {
     // time this runs, so a failure here must not turn a successful disconnect
     // into an error the seller sees. It is logged and swept up on reconnect.
     let cleared = 0;
+    let purgeComplete = true;
     try {
       const shopId = String(data.externalShopId || "");
       if (shopId) {
-        const rows = await db().collection(etsy.EXTERNAL_ORDER_COLLECTION)
+        const deadline = Date.now() + PURGE_BUDGET_MS;
+        const byId = admin.firestore.FieldPath.documentId();
+
+        // Ordered by document id so the cursor means something: without an
+        // order, "the next page" is not a thing Firestore can give you.
+        const page = (collection) => db().collection(collection)
           .where("companyId", "==", companyId)
           .where("externalShopId", "==", shopId)
-          .limit(PURGE_CAP)
-          .get();
+          .orderBy(byId)
+          .limit(PURGE_PAGE);
+
         const writer = db().bulkWriter();
-        for (const row of rows.docs) {
-          const orderId = String((row.data() || {}).nivadeskOrderId || "");
-          if (!orderId) continue;
-          writer.update(db().collection("siparisler").doc(orderId), {
-            etsySource: admin.firestore.FieldValue.delete()
-          }).catch(() => undefined);   // the order may have been deleted since
-          cleared += 1;
+        let cursor = null;
+        for (;;) {
+          const query = cursor ? page(etsy.EXTERNAL_ORDER_COLLECTION).startAfter(cursor) : page(etsy.EXTERNAL_ORDER_COLLECTION);
+          const rows = await query.get();
+          if (rows.empty) break;
+          for (const row of rows.docs) {
+            const orderId = String((row.data() || {}).nivadeskOrderId || "");
+            if (!orderId) continue;
+            writer.update(db().collection("siparisler").doc(orderId), {
+              etsySource: admin.firestore.FieldValue.delete()
+            }).catch(() => undefined);   // the order may have been deleted since
+            cleared += 1;
+          }
+          cursor = rows.docs[rows.docs.length - 1].id;
+          if (rows.size < PURGE_PAGE) break;
+          if (Date.now() > deadline) { purgeComplete = false; break; }
         }
-        const links = await db().collection(etsy.CUSTOMER_LINK_COLLECTION)
-          .where("companyId", "==", companyId)
-          .where("externalShopId", "==", shopId)
-          .limit(PURGE_CAP)
-          .get();
-        for (const link of links.docs) writer.delete(link.ref);
+
+        let linkCursor = null;
+        for (;;) {
+          const query = linkCursor
+            ? page(etsy.CUSTOMER_LINK_COLLECTION).startAfter(linkCursor)
+            : page(etsy.CUSTOMER_LINK_COLLECTION);
+          const links = await query.get();
+          if (links.empty) break;
+          for (const link of links.docs) writer.delete(link.ref);
+          linkCursor = links.docs[links.docs.length - 1].id;
+          if (links.size < PURGE_PAGE) break;
+          if (Date.now() > deadline) { purgeComplete = false; break; }
+        }
         await writer.close();
       }
     } catch (error) {
       console.warn("etsy disconnect purge failed:", error?.message || error);
+      purgeComplete = false;
     }
 
-    return { ok: true, ordersKept: true, etsyDataCleared: cleared };
+    // Said out loud rather than assumed. A disconnect that ran out of time has
+    // left some of Etsy's copy behind, and the seller is entitled to know that
+    // rather than be told the shop is clear.
+    await ref.set({
+      etsyPurgeComplete: purgeComplete,
+      etsyPurgedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).catch(() => undefined);
+
+    return { ok: true, ordersKept: true, etsyDataCleared: cleared, purgeComplete };
   });
 
   return {
