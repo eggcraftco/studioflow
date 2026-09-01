@@ -6198,3 +6198,16 @@ mergeIntoTranslations({
   "Which moments send one is a workspace setting.": {},
   "Customer SMS settings": {},
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The Schedule small card names its deadline list. NOT t("Next"): that key is
+// already spoken for by the wizard button, and its German is "Weiter" and its
+// Italian "Avanti" — a Continue button sitting over a list of deadlines.
+// The day strip's marker, read aloud only. A dot drawn in CSS says "something
+// is due this day" to everyone except a screen reader.
+mergeIntoTranslations({
+  "Deadline on this day": { "Türkçe": "Teslim tarihi", "Deutsch": "Termin", "Français": "Échéance", "Italiano": "Scadenza", "Español (Spanish)": "Fecha de entrega", "Português": "Prazo", "Русский (Russian)": "Срок", "日本語 (Japanese)": "納期", "中文 (Chinese)": "交付日", "العربية (Arabic)": "موعد التسليم", "हिन्दी (Hindi)": "नियत तिथि" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+mergeIntoTranslations({
+  "Next up": { "Türkçe": "Sıradakiler", "Deutsch": "Als Nächstes", "Français": "À suivre", "Italiano": "Prossimi", "Español (Spanish)": "A continuación", "Português": "A seguir", "Русский (Russian)": "Ближайшие", "日本語 (Japanese)": "次の予定", "中文 (Chinese)": "接下来", "العربية (Arabic)": "القادم", "हिन्दी (Hindi)": "अगले" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);

@@ -128,19 +128,42 @@ func homeDueChip(_ order: Siparis, due: Date, lang: String) -> (label: String, t
 }
 
 /// The sheet names the row after the order. A workspace that never gave the
-/// order a reference has only the customer, and then that is the name. On a
-/// phone the word "Order" costs a third of the row, and the "#1094" beside it
+/// order a reference has only the customer, and then that is the name. The word
+/// "Order" is left off at every size: it costs a third of the line, and "#1094"
 /// says the same thing on a card already headed Schedule.
-func homeOrderReference(_ order: Siparis, name: String, lang: String, compact: Bool) -> String {
+func homeOrderReference(_ order: Siparis, name: String) -> String {
     let raw = order.watchRef.trimmingCharacters(in: .whitespaces)
     if raw.isEmpty { return name }
-    let hash = raw.hasPrefix("#") ? raw : "#" + raw
-    return compact ? hash : "\(t("Order", lang: lang)) \(hash)"
+    return raw.hasPrefix("#") ? raw : "#" + raw
 }
 
-/// A phone 1×1 is a 174pt square with a header on top: the sheet's one-line row
-/// — reference, customer and chip side by side — fits two of the three, so the
-/// customer drops to a second line rather than pushing the chip off the card.
+/// The deadlines, ruled apart. Its own view so the small card can offer the
+/// same list with and without the week above it without writing it three times.
+struct HomeDueList: View {
+    let rows: [(Siparis, Date)]
+    let lang: String
+    var compact: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.0.id) { index, entry in
+                let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
+                let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
+                HomeDueRow(reference: homeOrderReference(entry.0, name: name),
+                           name: entry.0.watchRef.trimmingCharacters(in: .whitespaces).isEmpty ? "" : name,
+                           chip: chip.label, tone: chip.tone, compact: compact)
+                if index < rows.count - 1 { Divider().opacity(0.5) }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// The sheet sets reference, customer and chip on one line, and that is what
+/// makes three of them fit under the day strip on a 238pt square. A phone 1×1
+/// is a 174pt square with a header on top: there the line fits two of the
+/// three, so the customer drops underneath rather than pushing the chip off
+/// the card.
 struct HomeDueRow: View {
     let reference: String
     let name: String
@@ -154,18 +177,99 @@ struct HomeDueRow: View {
                 Text(reference)
                     .font(.system(size: compact ? 12 : 12.5, weight: .bold))
                     .lineLimit(1)
-                Spacer(minLength: 6)
+                if !compact, !name.isEmpty {
+                    Text(name)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                }
+                Spacer(minLength: 0)
                 HomeChip(text: chip, tone: tone)
             }
-            if !name.isEmpty {
+            if compact, !name.isEmpty {
                 Text(name)
-                    .font(.system(size: compact ? 10 : 11.5))
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, compact ? 4 : 6)
+        .padding(.vertical, compact ? 4 : 5)
+    }
+}
+
+/// The week the small card is about: today filled the way the big card already
+/// draws it, and a dot on any day carrying a deadline — without that the strip
+/// would be a calendar, and the day of the month is on the clock already.
+struct HomeDayStrip: View {
+    let days: [Date]
+    /// The deadlines themselves, matched with isDate(inSameDayAs:) rather than
+    /// held in a Set of start-of-day instants: two dates are the same day when
+    /// they NAME the same day, and where the clocks jump at midnight the
+    /// instants disagree while the names do not.
+    let dueDays: [Date]
+    let lang: String
+
+    var body: some View {
+        let today = homeStartOfToday()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier(forLanguage: lang))
+        // "EEE" is what the sheet draws and what the wide card uses, but it is
+        // not short in every locale: pt-PT answers "domingo" and Arabic
+        // "الخميس", both wider than a 27pt tile. When the longest name of the
+        // week will not fit, the whole strip drops to the narrow form rather
+        // than cutting one day mid-word — the position in a Monday-first strip
+        // says which day it is.
+        formatter.dateFormat = "EEE"
+        let short = days.map { formatter.string(from: $0) }
+        let labels: [String]
+        if (short.map(\.count).max() ?? 0) > 4 {
+            formatter.dateFormat = "EEEEE"
+            labels = days.map { formatter.string(from: $0) }
+        } else {
+            labels = short
+        }
+
+        return HStack(spacing: 3) {
+            ForEach(Array(days.enumerated()), id: \.element) { index, day in
+                let isToday = Calendar.current.isDate(day, inSameDayAs: today)
+                let hasDue = dueDays.contains { Calendar.current.isDate($0, inSameDayAs: day) }
+                VStack(spacing: 0) {
+                    Text(labels[index])
+                        .font(.system(size: 8.5, weight: isToday ? .bold : .regular))
+                        .opacity(isToday ? 0.85 : 0.65)
+                        .lineLimit(1)
+                    Text("\(Calendar.current.component(.day, from: day))")
+                        .font(.system(size: 12, weight: .heavy))
+                        .lineLimit(1)
+                    // Always laid out, only painted when there is something due:
+                    // a dot that appears and disappears must not move the number
+                    // above it.
+                    Circle()
+                        // White on today's filled tile, ink on the rest:
+                        // Color.primary is the system ink, not the tile's own
+                        // foreground, so it would come out near-black on blue.
+                        .fill((isToday ? Color.white : Color.primary).opacity(hasDue ? (isToday ? 0.9 : 0.6) : 0))
+                        .frame(width: 3, height: 3)
+                        .padding(.top, 2)
+                }
+                .foregroundColor(isToday ? .white : .primary)
+                .padding(.vertical, 3)
+                .frame(maxWidth: .infinity)
+                .background(RoundedRectangle(cornerRadius: 8)
+                    .fill(isToday ? HomeTone.accent : Color.primary.opacity(0.07)))
+                // Today is a fill and a deadline is a 3pt disc: VoiceOver reads
+                // neither, and the dots cover every open order, not only the
+                // three listed below.
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel([labels[index],
+                                     "\(Calendar.current.component(.day, from: day))",
+                                     isToday ? t("Today", lang: lang) : "",
+                                     hasDue ? t("Deadline on this day", lang: lang) : ""]
+                    .filter { !$0.isEmpty }.joined(separator: ", "))
+            }
+        }
     }
 }
 
@@ -2706,17 +2810,32 @@ struct HomeScheduleBody: View {
         if upcoming.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else if size == .oneByOne {
-            VStack(alignment: .leading, spacing: 0) {
-                let rows = Array(upcoming.prefix(3))
-                ForEach(Array(rows.enumerated()), id: \.element.0.id) { index, entry in
-                    let chip = homeDueChip(entry.0, due: entry.1, lang: lang)
-                    let name = entry.0.customerName.isEmpty ? entry.0.designName : entry.0.customerName
-                    HomeDueRow(reference: homeOrderReference(entry.0, name: name, lang: lang, compact: compact),
-                               name: entry.0.watchRef.trimmingCharacters(in: .whitespaces).isEmpty ? "" : name,
-                               chip: chip.label, tone: chip.tone, compact: compact)
-                    if index < rows.count - 1 { Divider().opacity(0.5) }
+            let rows = Array(upcoming.prefix(3))
+            if compact {
+                // A phone square is 174pt with a header on it: the week strip
+                // would cost a deadline, which is the wrong trade.
+                HomeDueList(rows: rows, lang: lang, compact: true)
+            } else {
+                // The sheet opens the small card with the week it is about. How
+                // much of that fits is the card's business, not a guess: the
+                // column is 238pt in a full window but shrinks to 160 in a
+                // narrow one, and there a calendar is what has to go.
+                let strip = HomeDayStrip(days: homeWeekDays(),
+                                         dueDays: upcoming.map { $0.1 },
+                                         lang: lang)
+                // Not t("Next"): that key is the wizard's forward button, and
+                // its German is "Weiter" and its Italian "Avanti" — a Continue
+                // button standing over a list of deadlines.
+                ViewThatFits(in: .vertical) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        strip.padding(.bottom, 5)
+                        HomeEyebrow(text: t("Next up", lang: lang), strong: false).padding(.bottom, 1)
+                        HomeDueList(rows: rows, lang: lang)
+                    }
+                    // The week is what gives, not a deadline — the same order
+                    // the web card degrades in when its column gets narrow.
+                    HomeDueList(rows: rows, lang: lang)
                 }
-                Spacer(minLength: 0)
             }
         } else {
             let week = homeWeekDays()

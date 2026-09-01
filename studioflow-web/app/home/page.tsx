@@ -27,7 +27,7 @@ import {
   type ActivityFilterId,
 } from "@/components/home/HomeCardBodies";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import {
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
@@ -262,7 +262,8 @@ export default function HomePage() {
 
   function renderBody(id: HomeCardId, size: HomeCardSize, period: HomeCardPeriod) {
     const props: CardBodyProps = {
-      size, period, data, t, moneySettings, hideNumbers, onQuickAction: handleQuickAction,
+      size, period, data, t, locale: studioLocaleTag(language),
+      moneySettings, hideNumbers, onQuickAction: handleQuickAction,
     };
     switch (id) {
       case "money": return <MoneyCardBody {...props} />;
@@ -374,7 +375,7 @@ export default function HomePage() {
                       // Both week cards name which week beside the heading; the
                       // 1x1 has no week to name.
                       : placement.id === "schedule" && placement.size !== "1x1"
-                        ? homeWeekRangeLabel()
+                        ? homeWeekRangeLabel(studioLocaleTag(language))
                         : undefined
               }
               footerNote={

@@ -33,6 +33,11 @@ export type CardBodyProps = {
   period: HomeCardPeriod;
   data: HomeData;
   t: (text: string) => string;
+  /** The BCP-47 tag for the workspace's chosen language. Dates on a card must
+   *  read in the language the rest of the card is written in — the browser's
+   *  locale is a different question and answers it wrong for anyone whose
+   *  laptop is not set to their working language. */
+  locale: string;
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
@@ -986,21 +991,21 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 /* --------------------------------------------------------------- Schedule */
 
 /// "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months.
-export function homeWeekRangeLabel() {
+export function homeWeekRangeLabel(locale?: string) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   const sameMonth = start.getMonth() === end.getMonth();
-  const endLabel = end.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const endLabel = end.toLocaleDateString(locale, { day: "numeric", month: "short" });
   const startLabel = sameMonth
     ? String(start.getDate())
-    : start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    : start.toLocaleDateString(locale, { day: "numeric", month: "short" });
   return sameMonth ? `${startLabel}–${endLabel}` : `${startLabel} – ${endLabel}`;
 }
 
-export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
+export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
   // Dates and deadlines only — never production status again (§10).
   const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
   if (open.length === 0) return null;
@@ -1015,10 +1020,15 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   // takes a date.
   const startOfDayOf = (date: Date) => new Date(new Date(date).setHours(0, 0, 0, 0));
   const daysFromToday = (date: Date) => Math.round((startOfDayOf(date).getTime() - today.getTime()) / 86400000);
+  /** Two dates are the same day when they NAME the same day, not when they hold
+   *  the same instant. Where the clocks jump at midnight — Santiago, every
+   *  September — setHours(0,0,0,0) lands on 01:00, and comparing the numbers
+   *  would have every day of that week disagree with itself. */
+  const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
   const dueChip = (order: ScheduleOrderItem) => {
     const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
     if (startsIn > 0 && startsIn < 7) {
-      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(undefined, { weekday: "short" });
+      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(locale, { weekday: "short" });
       return { label: t("Starts {day}").replace("{day}", day), hue: "hue-purple" };
     }
     const days = daysFromToday(order.dueDate!);
@@ -1026,38 +1036,10 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     if (days === 0) return { label: t("Due today"), hue: "hue-red" };
     if (days === 1) return { label: t("Tomorrow"), hue: "hue-amber" };
     return {
-      label: order.dueDate!.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+      label: order.dueDate!.toLocaleDateString(locale, { day: "numeric", month: "short" }),
       hue: "hue-blue",
     };
   };
-
-  if (size === "1x1") {
-    return (
-      <ul className="home-due-list">
-        {upcoming.slice(0, 3).map((order) => {
-          const chip = dueChip(order);
-          const ref = order.watchRef.trim();
-          const name = order.customerName || order.designName;
-          return (
-            <li key={order.id}>
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                <span className="home-due-head">
-                  {/* The sheet names the row after the order. A workspace that
-                      never gave the order a reference has only the customer,
-                      and then that is the name. */}
-                  <b>
-                    {ref ? <><i>{t("Order")}</i>{ref.startsWith("#") ? ref : `#${ref}`}</> : name}
-                  </b>
-                  <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
-                </span>
-                {ref && name ? <em>{name}</em> : null}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    );
-  }
 
   // The visible week, Monday first, so the timeline and the day strip agree.
   const weekStart = new Date(today);
@@ -1068,10 +1050,81 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     return date;
   });
 
+  if (size === "1x1") {
+    // Which days of this week carry a deadline — every open order, not just the
+    // three the list has room for, because the strip is the week's load and the
+    // list is only the front of the queue.
+    const dueDays = new Set(upcoming.map((order) => dayKey(order.dueDate!)));
+    // "short" is what the sheet draws and what the wide card uses, but it is not
+    // short in every language: measured at 8.5px in a 25px tile, eleven of the
+    // twelve fit and Arabic does not — "الخميس" comes to 28px. That one drops to
+    // the narrow form rather than cutting a day mid-word; the position in a
+    // Monday-first strip says which day it is.
+    // The count is of letters, not of UTF-16 units: "शुक्र" is five units and
+    // three letters, and the naive length demoted Hindi at 17px. (Swift counts
+    // letters already, so the Mac side needs no such care.)
+    const shortDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
+    const letters = (label: string) => label.normalize("NFD").replace(/\p{M}/gu, "").length;
+    const narrow = Math.max(...shortDays.map(letters)) > 4;
+    return (
+      <>
+        {/* The sheet opens the small card with the week it is about. Without the
+            dots it would be a calendar: the day of the month is on the clock
+            already, which day has work on it is not. */}
+        <ol className="home-day-strip" aria-label={homeWeekRangeLabel(locale)}>
+          {days.map((date, index) => {
+            const isToday = dayKey(date) === dayKey(today);
+            const hasDue = dueDays.has(dayKey(date));
+            const marks = `${isToday ? " is-today" : ""}${hasDue ? " has-due" : ""}`;
+            return (
+              <li key={date.toISOString()} className={marks.trim() || undefined}>
+                <em>{narrow ? date.toLocaleDateString(locale, { weekday: "narrow" }) : shortDays[index]}</em>
+                <b>{date.getDate()}</b>
+                {/* Today is a background colour and a deadline is a 3px disc
+                    drawn in CSS: neither reaches a screen reader, and the dots
+                    cover every open order, not only the three listed below. */}
+                {isToday ? <span className="sr-only">{t("Today")}</span> : null}
+                {hasDue ? <span className="sr-only">{t("Deadline on this day")}</span> : null}
+              </li>
+            );
+          })}
+        </ol>
+        {/* Not t("Next"): that key is the wizard's forward button, and its
+            German is "Weiter" and its Italian "Avanti" — a Continue button
+            standing over a list of deadlines. */}
+        <p className="home-due-eyebrow">{t("Next up")}</p>
+        <ul className="home-due-list">
+          {upcoming.slice(0, 3).map((order) => {
+            const chip = dueChip(order);
+            const ref = order.watchRef.trim();
+            const name = order.customerName || order.designName;
+            return (
+              <li key={order.id}>
+                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                  {/* The sheet names the row after the order and sets the
+                      customer beside it. A workspace that never gave the order
+                      a reference has only the customer, and then that is the
+                      name. The word "Order" is left off: it costs a third of a
+                      208px row on a card already headed Schedule, and "#1094"
+                      says the same thing. */}
+                  <span className="home-due-head">
+                    <b className={ref && name ? "is-ref" : undefined}>
+                      {ref ? (ref.startsWith("#") ? ref : `#${ref}`) : name}
+                    </b>
+                    {ref && name ? <em>{name}</em> : null}
+                    <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    );
+  }
+
 
   if (size === "2x1") {
-    const weekEndDay = new Date(days[6]);
-    weekEndDay.setHours(23, 59, 59, 999);
     const columnOf = (date: Date) =>
       Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
     const todayColumn = columnOf(today);
@@ -1088,7 +1141,7 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
           return (
             <span key={date.toISOString()} className={`home-week-day${isToday ? " is-today" : ""}`}
                   style={{ gridColumn: index + 2 }}>
-              <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+              <em>{date.toLocaleDateString(locale, { weekday: "short" })}</em>
               <b>{date.getDate()}</b>
             </span>
           );
@@ -1142,7 +1195,7 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
       {days.map((date, index) => (
         <span key={date.toISOString()} className={`home-week-day${index === todayColumn ? " is-today" : ""}`}
               style={{ gridColumn: index + 2 }}>
-          <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+          <em>{date.toLocaleDateString(locale, { weekday: "short" })}</em>
           <b>{date.getDate()}</b>
           {index === todayColumn ? <i>{t("Today")}</i> : null}
         </span>
