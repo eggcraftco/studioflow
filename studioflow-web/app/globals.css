@@ -29080,3 +29080,29 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
    two lines apart and nothing else about them. */
 .home-chart-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.75; }
 .home-chart-tick { font-size: 9px; fill: currentColor; opacity: 0.5; font-variant-numeric: tabular-nums; }
+
+/* ---- Quick actions ---------------------------------------------------- */
+/* The primary tile asked for white text and did not get it. .is-primary sets
+   color:#fff, and .home-action-tile.tone-blue sets color:#1d4ed8 — same
+   specificity, and the tone rules sit later in this file, so the tone won.
+   "New order" was rendering blue-on-blue. Raised above the tones rather than
+   moved, because moving it would only work until the next tone is added below.
+   The glyph needed saying too: the row variant had a white-glyph rule and the
+   tile variant never did. */
+.home-action-tile.is-primary.is-primary,
+.home-action-row.is-primary.is-primary {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.home-action-tile.is-primary.is-primary .home-action-glyph,
+.home-action-tile.is-primary.is-primary .home-action-label { color: #fff; }
+
+/* Four tiles in a square.
+   A tile wants 10+10 padding, a 34px glyph, an 8px gap and a ~16px label —
+   about 78px — and two rows plus the gap need about 166. A 1x1 body is shorter
+   than that, and .home-card-body clips what does not fit, so the bottom row
+   arrived cut in half: "Add note" and "Upload file" with their labels sliced.
+   Smaller marks on the square, which is the size that has no room to spare. */
+.home-card-1x1 .home-action-grid.is-tiles { gap: 8px; }
+.home-card-1x1 .home-action-tile { padding: 6px 6px; gap: 5px; }
+.home-card-1x1 .home-action-glyph svg { width: 22px; height: 22px; }
+.home-card-1x1 .home-action-label { font-size: 11.5px; }

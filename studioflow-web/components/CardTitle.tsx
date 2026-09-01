@@ -6,6 +6,7 @@ export type CardIcon =
   | "calendar"
   | "calendarClock"
   | "check"
+  | "bolt"
   | "checklist"
   | "customer"
   | "dashboard"
@@ -38,6 +39,10 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   calendar: ["M7 2v3M17 2v3M4 9h16", "M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"],
   calendarClock: ["M7 2v3M17 2v3M4 9h16", "M5 4h14a2 2 0 0 1 2 2v7", "M5 4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h7", "M17 14v4l3 2", "M17 22a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"],
   check: ["m5 12 4 4L19 6"],
+  // Quick actions is a bolt on Mac (bolt.fill) and on Android (Icons.Filled.Bolt)
+  // and was a checklist only on web — the same card wearing two different
+  // meanings depending on which screen you opened it on.
+  bolt: ["M13.2 2.4 4.6 13.4h5.6l-.6 8.2 8.6-11h-5.6l.6-8.2Z"],
   checklist: ["M8 6h12", "M8 12h12", "M8 18h12", "m3 6 .7 .7L5 5", "m3 12 .7 .7L5 11", "m3 18 .7 .7L5 17"],
   customer: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
   dashboard: ["M4 13h6V4H4v9ZM14 20h6V4h-6v16ZM4 20h6v-4H4v4Z"],

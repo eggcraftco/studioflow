@@ -86,7 +86,10 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "quickActions",
     title: "Quick actions",
-    icon: "tasks",
+    // A bolt, as Mac and Android already draw it. Web was the only one showing
+    // a checklist, which is a different promise: a list you work through
+    // rather than four things you fire off.
+    icon: "bolt",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     href: "/orders",
