@@ -78,6 +78,7 @@ export function HomeCardShell({
   subtitle,
   subtitleInline,
   children,
+  place,
   onMove,
   onResize,
   onHide,
@@ -111,6 +112,8 @@ export function HomeCardShell({
   onTone: (tone: HomeCardTone) => void;
   onHeading: (heading: string) => void;
   onPeriod: (period: HomeCardPeriod) => void;
+  /** The cell this card sits in, from the page's own packing. */
+  place?: { gridColumn: string; gridRow: string };
   dragHandlers: {
     onDragStart: (event: React.DragEvent) => void;
     onDragEnd: (event: React.DragEvent) => void;
@@ -186,7 +189,12 @@ export function HomeCardShell({
         if (!window.matchMedia("(max-width: 640px)").matches) return;
         router.push(definition.href);
       }}
-      style={{
+      /* Placed, not floated. The browser's own auto-placement put the cards in
+         exactly these cells, but only the browser knew where the gaps between
+         them were — and a gap you cannot name is a gap you cannot drop into.
+         The page packs the grid itself now, by the same arithmetic the Mac and
+         Android use, and hands each card its cell. */
+      style={place ?? {
         gridColumn: `span ${homeCardColumns(placement.size)}`,
         gridRow: `span ${homeCardRows(placement.size)}`,
       }}

@@ -337,13 +337,37 @@ fun HomeScreen(
             // cards read as squat letterboxes.
             val compact = availableDp < 600
             val rowHeight = unit
-            val rows = HomeGridLayout.rowCount(visible, columnCount)
+            val packed = HomeGridLayout.pack(visible, columnCount)
+            val rows = packed.rows
             Box(
                 Modifier
                     .fillMaxWidth()
                     .height((rows * rowHeight + (rows - 1).coerceAtLeast(0) * CARD_GAP).dp)
             ) {
-            HomeGridLayout.slots(visible, columnCount).forEach { slot ->
+            // The gaps. A 2-wide card that does not fit the rest of a row starts
+            // the next one and leaves a hole behind it, and until now a card
+            // could only be dropped a fixed number of places along the list —
+            // which is not where the hole is when the cards are different
+            // widths. A hole only shows for a card that actually fits it.
+            val draggingCard = draggingId?.let { id -> visible.firstOrNull { it.id == id } }
+            packed.holes.forEach { hole ->
+                val fitsHole = draggingCard != null &&
+                    minOf(draggingCard.size.columns, columnCount) <= hole.width
+                if (customising && fitsHole) {
+                    val gapWidth = unit * hole.width + CARD_GAP * (hole.width - 1)
+                    Box(
+                        Modifier
+                            .offset(
+                                x = ((unit + CARD_GAP) * hole.column).dp,
+                                y = ((rowHeight + CARD_GAP) * hole.row).dp
+                            )
+                            .width(gapWidth.dp)
+                            .height(rowHeight.dp)
+                            .border(2.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                    )
+                }
+            }
+            packed.slots.forEach { slot ->
                 val width = minOf(slot.placement.size.columns, columnCount)
                 val cardWidth = unit * width + CARD_GAP * (width - 1)
                 val span = slot.placement.size.rows
@@ -375,20 +399,39 @@ fun HomeScreen(
                                         dragOffset += amount
                                     },
                                     onDragEnd = {
-                                        // Where the card was let go, in grid cells.
+                                        // Where the card was let go, as a cell.
+                                        // Turning the distance into "so many
+                                        // places along the list" assumed one
+                                        // cell is one list place, which is only
+                                        // true when every card is the same
+                                        // width — and none of them are.
                                         val cellWidth = (unit + CARD_GAP).toFloat()
                                         val cellHeight = (rowHeight + CARD_GAP).toFloat()
-                                        val movedColumns = (dragOffset.x / density.density / cellWidth).roundToInt()
-                                        val movedRows = (dragOffset.y / density.density / cellHeight).roundToInt()
-                                        val steps = movedRows * columnCount + movedColumns
-                                        val index = layout.cards.indexOfFirst { it.id == slot.placement.id }
-                                        if (index >= 0 && steps != 0) {
-                                            val target = (index + steps).coerceIn(0, layout.cards.size - 1)
-                                            if (target != index) {
-                                                val reordered = layout.cards.toMutableList()
-                                                reordered.add(target, reordered.removeAt(index))
-                                                commit(layout.copy(cards = reordered))
-                                            }
+                                        val dropColumn = (slot.column +
+                                            (dragOffset.x / density.density / cellWidth).roundToInt())
+                                            .coerceIn(0, columnCount - 1)
+                                        val dropRow = (slot.row +
+                                            (dragOffset.y / density.density / cellHeight).roundToInt())
+                                            .coerceAtLeast(0)
+                                        val onCard = packed.slots.firstOrNull { other ->
+                                            other.placement.id != slot.placement.id &&
+                                                dropRow >= other.row && dropRow < other.row + other.height &&
+                                                dropColumn >= other.column && dropColumn < other.column + other.width
+                                        }
+                                        val width = minOf(slot.placement.size.columns, columnCount)
+                                        val onHole = packed.holes.firstOrNull { hole ->
+                                            width <= hole.width && dropRow == hole.row &&
+                                                dropColumn >= hole.column && dropColumn < hole.column + hole.width
+                                        }
+                                        val beforeId = when {
+                                            onHole != null -> visible.getOrNull(onHole.index)?.id
+                                            onCard != null ->
+                                                if (onCard.index > slot.index) visible.getOrNull(onCard.index + 1)?.id
+                                                else onCard.placement.id
+                                            else -> null
+                                        }
+                                        if (onHole != null || onCard != null) {
+                                            commit(moveCardBefore(layout, slot.placement.id, beforeId))
                                         }
                                         draggingId = null
                                         dragOffset = Offset.Zero

@@ -392,6 +392,26 @@ export function moveHomeCard(layout: HomeLayout, from: number, to: number): Home
   return { ...layout, cards };
 }
 
+/**
+ * Move a card to sit just before another one, or to the end when `beforeId` is
+ * null.
+ *
+ * By id, not by index, because the grid draws a FILTERED list — hidden cards
+ * and ones this member's role cannot see are not in it — while the layout holds
+ * them all. moveHomeCard was being handed the filtered index and splicing the
+ * unfiltered array with it, so on any workspace with a hidden card the drag
+ * moved a different card than the one under the hand.
+ */
+export function moveHomeCardBefore(layout: HomeLayout, id: HomeCardId, beforeId: HomeCardId | null): HomeLayout {
+  const cards = layout.cards.slice();
+  const from = cards.findIndex((card) => card.id === id);
+  if (from < 0 || id === beforeId) return layout;
+  const [moved] = cards.splice(from, 1);
+  const to = beforeId ? cards.findIndex((card) => card.id === beforeId) : cards.length;
+  cards.splice(to < 0 ? cards.length : to, 0, moved);
+  return { ...layout, cards };
+}
+
 export function resizeHomeCard(layout: HomeLayout, id: HomeCardId, size: HomeCardSize): HomeLayout {
   const definition = homeCardById(id);
   if (!definition || !definition.sizes.includes(size)) return layout;

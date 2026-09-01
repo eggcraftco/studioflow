@@ -288,43 +288,110 @@ data class HomeLayout(
  * left on a row starts the next. Compose's LazyVerticalGrid cannot span two
  * rows, and §2 needs 2x2, so the placement is worked out here.
  */
+/**
+ * Move a card to sit just before another one, or to the end when [beforeId] is
+ * null.
+ *
+ * By id, not by index: the grid draws a FILTERED list — cards this member's
+ * role cannot see are not in it — while the layout holds them all, so an index
+ * from the grid does not address the same card in the layout.
+ */
+fun moveCardBefore(layout: HomeLayout, id: HomeCardId, beforeId: HomeCardId?): HomeLayout {
+    val cards = layout.cards.toMutableList()
+    val from = cards.indexOfFirst { it.id == id }
+    if (from < 0 || id == beforeId) return layout
+    val moved = cards.removeAt(from)
+    val to = if (beforeId == null) cards.size else cards.indexOfFirst { it.id == beforeId }
+    cards.add(if (to < 0) cards.size else to, moved)
+    return layout.copy(cards = cards)
+}
+
 object HomeGridLayout {
-    data class Slot(val placement: HomeCardPlacement, val row: Int, val column: Int)
+    data class Slot(
+        val placement: HomeCardPlacement, val row: Int, val column: Int,
+        val index: Int = 0, val width: Int = 1, val height: Int = 1
+    )
+
+    /** A run of free cells with a card after it, and where a card dropped into it goes. */
+    data class Hole(val row: Int, val column: Int, val width: Int, val index: Int)
+
+    data class Packed(val slots: List<Slot>, val holes: List<Hole>, val rows: Int)
 
     fun slots(
         placements: List<HomeCardPlacement>,
         columnCount: Int,
         rowSpan: (HomeCardPlacement) -> Int = { it.size.rows }
-    ): List<Slot> {
+    ): List<Slot> = pack(placements, columnCount, rowSpan).slots
+
+    /**
+     * Where the cards land, and where the holes are.
+     *
+     * The rule is the web grid's own sparse auto-placement, and the one the
+     * comment above says this does: a card that does not fit the space left on
+     * a row starts the next one, and the cursor never goes backwards. This
+     * searched from row 0 for every card instead, which quietly backfilled a
+     * hole with a later card — the same layout drew one way here and another in
+     * a browser, and a card dragged to the end could land at the top.
+     */
+    fun pack(
+        placements: List<HomeCardPlacement>,
+        columnCount: Int,
+        rowSpan: (HomeCardPlacement) -> Int = { it.size.rows }
+    ): Packed {
         val occupied = HashMap<Int, MutableSet<Int>>()
         val result = mutableListOf<Slot>()
-        for (placement in placements) {
+        var cursorRow = 0
+        var cursorColumn = 0
+        placements.forEachIndexed { index, placement ->
             val width = minOf(placement.size.columns, columnCount)
             val height = rowSpan(placement)
-            var row = 0
-            var column = 0
-            outer@ while (true) {
-                for (candidate in 0..(columnCount - width)) {
-                    val fits = (0 until height).all { rowOffset ->
-                        (0 until width).all { columnOffset ->
-                            occupied[row + rowOffset]?.contains(candidate + columnOffset) != true
-                        }
-                    }
-                    if (fits) {
-                        column = candidate
-                        break@outer
+            var row = cursorRow
+            var column = cursorColumn
+            while (true) {
+                if (column + width > columnCount) { row += 1; column = 0; continue }
+                val fits = (0 until height).all { rowOffset ->
+                    (0 until width).all { columnOffset ->
+                        occupied[row + rowOffset]?.contains(column + columnOffset) != true
                     }
                 }
-                row += 1
+                if (fits) break
+                column += 1
             }
             for (rowOffset in 0 until height) {
                 for (columnOffset in 0 until width) {
                     occupied.getOrPut(row + rowOffset) { mutableSetOf() }.add(column + columnOffset)
                 }
             }
-            result += Slot(placement, row, column)
+            result += Slot(placement, row, column, index, width, height)
+            cursorRow = row
+            cursorColumn = column + width
         }
-        return result
+
+        val rows = result.maxOfOrNull { it.row + it.height } ?: 0
+        // A free cell is only a hole if something comes after it: the space at
+        // the end of the last row is where the list stops, not a gap in it.
+        var lastCell = -1
+        for (slot in result) {
+            val cell = (slot.row + slot.height - 1) * columnCount + slot.column + slot.width - 1
+            if (cell > lastCell) lastCell = cell
+        }
+        val holes = mutableListOf<Hole>()
+        for (row in 0 until rows) {
+            var column = 0
+            while (column < columnCount) {
+                val taken = occupied[row]?.contains(column) == true
+                if (taken || row * columnCount + column > lastCell) { column += 1; continue }
+                var width = 0
+                while (column + width < columnCount &&
+                    occupied[row]?.contains(column + width) != true &&
+                    row * columnCount + column + width <= lastCell
+                ) width += 1
+                val after = result.firstOrNull { it.row > row || (it.row == row && it.column >= column + width) }
+                holes += Hole(row, column, width, after?.index ?: placements.size)
+                column += width
+            }
+        }
+        return Packed(result, holes, rows)
     }
 
     fun rowCount(

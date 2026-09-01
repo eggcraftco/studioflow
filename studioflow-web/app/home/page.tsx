@@ -8,6 +8,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { usePricePrivacy } from "@/components/PricePrivacy";
 import { HomeCardShell, type HomeCardState } from "@/components/home/HomeCardShell";
+import { homeHoleAccepts, packHomeGrid } from "@/lib/studioflow/homeGrid";
 import {
   BankingCardBody,
   CustomersCardBody,
@@ -39,7 +40,7 @@ import {
   defaultHomeLayout,
   hideHomeCard,
   homeCardById,
-  moveHomeCard,
+  moveHomeCardBefore,
   resetHomeCard,
   resizeHomeCard,
   setHomeCardHeading,
@@ -100,6 +101,13 @@ export default function HomePage() {
   const [activityFilter, setActivityFilter] = useState<ActivityFilterId>("all");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  /** Which gap the card is over, if it is over one. */
+  const [dropHole, setDropHole] = useState<number | null>(null);
+  /** Four columns, or two on a phone. The grid publishes it with the unit.
+   *  Null until it has measured: placing cards explicitly against a guessed
+   *  column count would put them in the wrong cells for a frame, and the
+   *  browser's own auto-placement gets it right in the meantime. */
+  const [columnCount, setColumnCount] = useState<number | null>(null);
   const [saveError, setSaveError] = useState("");
   // The layout as the server last accepted it, so a failed save can be undone.
   const lastSaved = useRef<HomeLayout | null>(null);
@@ -118,6 +126,9 @@ export default function HomePage() {
       const gap = parseFloat(styles.columnGap) || 0;
       const unit = (grid.clientWidth - gap * (columns - 1)) / columns;
       if (unit > 0) grid.style.setProperty("--home-unit", `${Math.round(unit)}px`);
+      // The packing needs the same column count the stylesheet just used, or the
+      // gaps it works out are gaps in a grid nobody is looking at.
+      setColumnCount(columns);
     };
     apply();
     const observer = new ResizeObserver(apply);
@@ -207,6 +218,33 @@ export default function HomePage() {
   );
 
   const cards = useMemo(() => visibleHomeCards(layout, workspace), [layout, workspace]);
+  // Where each card lands, and where the holes are. Same arithmetic as the Mac
+  // and Android packers, so one member's layout reads the same on all three.
+  const grid = useMemo(
+    () => packHomeGrid(cards.map(({ placement }) => placement), columnCount ?? 4),
+    [cards, columnCount],
+  );
+  const cellOf = useCallback(
+    (index: number) => {
+      const slot = columnCount === null ? undefined : grid.slots[index];
+      if (!slot) return undefined;
+      return {
+        gridColumn: `${slot.column + 1} / span ${slot.width}`,
+        gridRow: `${slot.row + 1} / span ${slot.height}`,
+      };
+    },
+    [grid, columnCount],
+  );
+  /** A drop lands a card in front of whatever the gap sits in front of. */
+  const dropAt = useCallback(
+    (fromIndex: number, visibleIndex: number) => {
+      const moving = cards[fromIndex]?.placement.id;
+      if (!moving) return;
+      const before = cards[visibleIndex]?.placement.id ?? null;
+      void commit(moveHomeCardBefore(layout, moving, before));
+    },
+    [cards, layout, commit],
+  );
   const gallery = useMemo(() => availableHomeCards(layout, workspace), [layout, workspace]);
 
   const moneySettings = useMemo(
@@ -486,36 +524,85 @@ export default function HomePage() {
                   </span>
                 ) : undefined
               }
-              onMove={(direction) => void commit(moveHomeCard(layout, index, index + direction))}
+              /* By id, like the drag: index is this card's place in the list the
+                 grid draws, and that list has the hidden and unpermitted cards
+                 taken out of it. */
+              onMove={(direction) => {
+                const target = index + direction;
+                if (target < 0 || target >= cards.length) return;
+                dropAt(index, direction > 0 ? target + 1 : target);
+              }}
               onResize={(size: HomeCardSize) => void commit(resizeHomeCard(layout, placement.id, size))}
               onHide={() => void commit(hideHomeCard(layout, placement.id))}
               onReset={() => void commit(resetHomeCard(layout, placement.id))}
               onTone={(tone: HomeCardTone) => void commit(setHomeCardTone(layout, placement.id, tone))}
               onHeading={(heading) => void commit(setHomeCardHeading(layout, placement.id, heading))}
               onPeriod={(period) => void commit(setHomeCardPeriod(layout, placement.id, period))}
+              place={cellOf(index)}
               dragHandlers={{
                 dragging: dragIndex === index,
                 dropTarget: dropIndex === index && dragIndex !== index,
                 onDragStart: () => setDragIndex(index),
-                onDragEnd: () => { setDragIndex(null); setDropIndex(null); },
+                onDragEnd: () => { setDragIndex(null); setDropIndex(null); setDropHole(null); },
                 onDragOver: (event) => {
                   if (dragIndex === null) return;
                   event.preventDefault();
                   setDropIndex(index);
+                  setDropHole(null);
                 },
                 onDrop: (event) => {
                   event.preventDefault();
+                  // Dropping ON a card puts the dragged one in its place and
+                  // pushes it along, which is what dragging over a list means
+                  // everywhere else. It used to swap the two, so the card you
+                  // dropped on jumped to where you had dragged from.
                   if (dragIndex !== null && dragIndex !== index) {
-                    void commit(moveHomeCard(layout, dragIndex, index));
+                    dropAt(dragIndex, dragIndex < index ? index + 1 : index);
                   }
                   setDragIndex(null);
                   setDropIndex(null);
+                  setDropHole(null);
                 },
               }}
             >
               {renderBody(placement.id, placement.size, placement.period ?? "month")}
             </HomeCardShell>
           ))}
+          {/* The gaps. A 2-wide card that does not fit the rest of a row starts
+              the next one and leaves a hole behind it, and until now the only
+              thing you could drop a card on was another card — so the hole just
+              sat there. A hole only lights up for a card that actually fits it:
+              offering a 2-wide card a 1-wide gap is a promise the grid cannot
+              keep. */}
+          {dragIndex !== null && columnCount !== null && grid.holes.map((hole) => {
+            const dragged = cards[dragIndex]?.placement;
+            const accepts = dragged ? homeHoleAccepts(hole, dragged.size) : false;
+            if (!accepts) return null;
+            const key = `${hole.row}:${hole.column}`;
+            return (
+              <div
+                key={key}
+                className={`home-grid-gap${dropHole === hole.index ? " is-over" : ""}`}
+                style={{
+                  gridColumn: `${hole.column + 1} / span ${hole.width}`,
+                  gridRow: `${hole.row + 1} / span 1`,
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDropIndex(null);
+                  setDropHole(hole.index);
+                }}
+                onDragLeave={() => setDropHole((current) => (current === hole.index ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  dropAt(dragIndex, hole.index);
+                  setDragIndex(null);
+                  setDropIndex(null);
+                  setDropHole(null);
+                }}
+              />
+            );
+          })}
         </div>
 
         {customising && gallery.length > 0 ? (

@@ -27198,6 +27198,15 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   color: inherit; font-weight: 700; font-size: 12.5px;
 }
 
+/* A gap in the grid, offered only while a card that fits it is in the air.
+   Dashed rather than filled: it is a place to put something, not a card. */
+.home-grid-gap {
+  border: 2px dashed var(--border); border-radius: 16px;
+  background: transparent; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.home-grid-gap.is-over { border-color: #2563eb; background: rgba(37, 99, 235, 0.08); }
+@media (prefers-reduced-motion: reduce) { .home-grid-gap { transition: none; } }
+
 .home-grid {
   display: grid; gap: 16px;
   grid-template-columns: repeat(4, minmax(0, 1fr));

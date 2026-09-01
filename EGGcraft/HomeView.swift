@@ -179,6 +179,8 @@ struct HomeView: View {
     /// The card currently under the pointer, so a drop knows where it landed.
     @State private var draggingID: HomeCardID?
     @State private var dropTargetID: HomeCardID?
+    /// The gap the card is over, if it is over one.
+    @State private var dropHole: HomeGridLayout.Hole?
     @State private var renaming: HomeCardID?
     @State private var renameText = ""
     /// The grid's own column width once it has laid out. Squares come from this.
@@ -399,6 +401,18 @@ struct HomeView: View {
                             store.move(from: from, to: to)
                             return true
                         }
+                },
+                gap: { hole, _, _ in
+                    HomeGapTarget(hole: hole,
+                                  accepts: gapAccepts(hole),
+                                  over: dropHole == hole,
+                                  isTargeted: Binding(
+                                    get: { dropHole == hole },
+                                    set: { targeted in
+                                        if targeted { dropHole = hole; dropTargetID = nil }
+                                        else if dropHole == hole { dropHole = nil }
+                                    }),
+                                  onDrop: { dropInto(hole) })
                 }
             )
             .onAppear { measuredUnit = unit }
@@ -408,6 +422,25 @@ struct HomeView: View {
             }
         }
         .frame(height: gridHeight)
+    }
+
+    /// A gap is offered only for a card that actually fits it: showing a 2-wide
+    /// card a 1-wide gap is a promise the grid cannot keep.
+    private func gapAccepts(_ hole: HomeGridLayout.Hole) -> Bool {
+        guard customising, let moving = draggingID,
+              let card = store.layout.cards.first(where: { $0.id == moving }) else { return false }
+        return min(card.size.columns, columnCount) <= hole.width
+    }
+
+    /// The gap sits in front of a card; a card dropped into it takes that place
+    /// and pushes the rest along.
+    private func dropInto(_ hole: HomeGridLayout.Hole) -> Bool {
+        defer { draggingID = nil; dropTargetID = nil; dropHole = nil }
+        guard gapAccepts(hole), let moving = draggingID,
+              let from = store.layout.cards.firstIndex(where: { $0.id == moving }) else { return false }
+        let to = min(hole.index, store.layout.cards.count - 1)
+        store.move(from: from, to: to)
+        return true
     }
 
     private var wantsInventoryItems: Bool {
@@ -550,6 +583,27 @@ private extension View {
 /// The grid places cards at fixed offsets, so the row height has to be the one
 /// the tallest card actually needs — a row shorter than its content does not
 /// shrink the card, it lets the card paint over its neighbour.
+/// A gap in the grid, offered only while a card that fits it is in the air.
+/// Dashed rather than filled: it is a place to put something, not a card.
+struct HomeGapTarget: View {
+    let hole: HomeGridLayout.Hole
+    let accepts: Bool
+    let over: Bool
+    let isTargeted: Binding<Bool>
+    let onDrop: () -> Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .strokeBorder(over ? Color.blue : Color.primary.opacity(0.18),
+                          style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            .background(RoundedRectangle(cornerRadius: 16)
+                .fill(over ? Color.blue.opacity(0.08) : Color.clear))
+            .opacity(accepts ? 1 : 0)
+            .allowsHitTesting(accepts)
+            .onDrop(of: [.text], isTargeted: isTargeted) { _ in onDrop() }
+    }
+}
+
 enum HomeGridMetrics {
     static let rowHeight: CGFloat = 236
     static let gap: CGFloat = 16
@@ -570,33 +624,88 @@ enum HomeGridLayout {
     /// naming a Content the caller does not have.
     static func slots(_ placements: [HomeCardPlacement], columnCount: Int,
                       rowSpan: (HomeCardPlacement) -> Int = { $0.size.rows }) -> [(HomeCardPlacement, Int, Int)] {
-        var placed: [(HomeCardPlacement, Int, Int)] = []
-        // occupancy[row] is a bitmask of the columns already taken on that row.
+        packed(placements, columnCount: columnCount, rowSpan: rowSpan).slots
+            .map { ($0.placement, $0.row, $0.column) }
+    }
+
+    struct Slot { let placement: HomeCardPlacement; let index: Int; let row: Int; let column: Int
+                  let width: Int; let height: Int }
+    /// A run of free cells with a card after it, and where a card dropped into
+    /// it goes in the list.
+    struct Hole: Hashable { let row: Int; let column: Int; let width: Int; let index: Int }
+
+    /// Where the cards land, and where the holes are.
+    ///
+    /// The rule is the web grid's own sparse auto-placement, and the one the
+    /// comment above HomeGrid has always described: a card that does not fit
+    /// the space left on a row starts the next one, and the cursor never goes
+    /// backwards. This searched from row 0 for every card instead, which
+    /// quietly backfilled a hole with a later card — the same layout drew one
+    /// way here and another in a browser, and a card dragged to the end could
+    /// land at the top.
+    static func packed(_ placements: [HomeCardPlacement], columnCount: Int,
+                       rowSpan: (HomeCardPlacement) -> Int = { $0.size.rows })
+        -> (slots: [Slot], holes: [Hole], rows: Int) {
         var occupancy: [Int: Set<Int>] = [:]
-        for placement in placements {
+        var slots: [Slot] = []
+        var cursorRow = 0
+        var cursorColumn = 0
+        for (index, placement) in placements.enumerated() {
             let width = min(placement.size.columns, columnCount)
             let height = rowSpan(placement)
-            var row = 0
-            var column = 0
-            outer: while true {
-                for candidate in 0...(max(0, columnCount - width)) {
-                    let fits = (0..<height).allSatisfy { rowOffset in
-                        (0..<width).allSatisfy { columnOffset in
-                            !(occupancy[row + rowOffset] ?? []).contains(candidate + columnOffset)
-                        }
+            var row = cursorRow
+            var column = cursorColumn
+            while true {
+                if column + width > columnCount { row += 1; column = 0; continue }
+                let fits = (0..<height).allSatisfy { rowOffset in
+                    (0..<width).allSatisfy { columnOffset in
+                        !(occupancy[row + rowOffset] ?? []).contains(column + columnOffset)
                     }
-                    if fits { column = candidate; break outer }
                 }
-                row += 1
+                if fits { break }
+                column += 1
             }
             for rowOffset in 0..<height {
                 for columnOffset in 0..<width {
                     occupancy[row + rowOffset, default: []].insert(column + columnOffset)
                 }
             }
-            placed.append((placement, row, column))
+            slots.append(Slot(placement: placement, index: index, row: row, column: column,
+                              width: width, height: height))
+            cursorRow = row
+            cursorColumn = column + width
         }
-        return placed
+
+        let rows = slots.map { $0.row + $0.height }.max() ?? 0
+        // A free cell is only a hole if something comes after it: the space at
+        // the end of the last row is where the list stops, not a gap in it.
+        // Broken up on purpose: as one expression the type-checker gives up.
+        var lastCell = -1
+        for slot in slots {
+            let bottomRow: Int = slot.row + slot.height - 1
+            let rightColumn: Int = slot.column + slot.width - 1
+            let cell: Int = bottomRow * columnCount + rightColumn
+            if cell > lastCell { lastCell = cell }
+        }
+        var holes: [Hole] = []
+        for row in 0..<max(0, rows) {
+            var column = 0
+            while column < columnCount {
+                let taken = (occupancy[row] ?? []).contains(column)
+                if taken || row * columnCount + column > lastCell { column += 1; continue }
+                var width = 0
+                while column + width < columnCount
+                        && !(occupancy[row] ?? []).contains(column + width)
+                        && row * columnCount + column + width <= lastCell {
+                    width += 1
+                }
+                let after = slots.first { $0.row > row || ($0.row == row && $0.column >= column + width) }
+                holes.append(Hole(row: row, column: column, width: width,
+                                  index: after?.index ?? placements.count))
+                column += width
+            }
+        }
+        return (slots, holes, rows)
     }
 
     static func rowCount(_ placements: [HomeCardPlacement], columnCount: Int,
@@ -611,7 +720,7 @@ enum HomeGridLayout {
 /// A shelf-packing grid: cards keep their order and a 2-wide card that does not
 /// fit the remaining space starts the next row. SwiftUI's LazyVGrid cannot span
 /// two rows, and §2 needs 2×2, so the placement is done here.
-struct HomeGrid<Content: View>: View {
+struct HomeGrid<Content: View, Gap: View>: View {
     let placements: [HomeCardPlacement]
     let columnCount: Int
     let unit: CGFloat
@@ -619,18 +728,26 @@ struct HomeGrid<Content: View>: View {
     let rowHeight: CGFloat
     let spacing: CGFloat
     @ViewBuilder let content: (HomeCardPlacement, CGFloat, CGFloat) -> Content
+    /// What to draw in a gap. Until this existed the only thing a card could be
+    /// dropped on was another card, so a hole in the grid just sat there.
+    @ViewBuilder let gap: (HomeGridLayout.Hole, CGFloat, CGFloat) -> Gap
 
     var body: some View {
+        let packed = HomeGridLayout.packed(placements, columnCount: columnCount)
         ZStack(alignment: .topLeading) {
-            ForEach(HomeGridLayout.slots(placements, columnCount: columnCount), id: \.0.id) { entry in
-                let (placement, row, column) = entry
-                let width = min(placement.size.columns, columnCount)
-                let cardWidth = unit * CGFloat(width) + spacing * CGFloat(width - 1)
-                let span = placement.size.rows
-                let cardHeight = rowHeight * CGFloat(span) + spacing * CGFloat(span - 1)
-                content(placement, cardWidth, cardHeight)
-                    .offset(x: (unit + spacing) * CGFloat(column),
-                            y: (rowHeight + spacing) * CGFloat(row))
+            ForEach(packed.holes, id: \.self) { hole in
+                let gapWidth = unit * CGFloat(hole.width) + spacing * CGFloat(hole.width - 1)
+                gap(hole, gapWidth, rowHeight)
+                    .frame(width: gapWidth, height: rowHeight)
+                    .offset(x: (unit + spacing) * CGFloat(hole.column),
+                            y: (rowHeight + spacing) * CGFloat(hole.row))
+            }
+            ForEach(packed.slots, id: \.placement.id) { slot in
+                let cardWidth = unit * CGFloat(slot.width) + spacing * CGFloat(slot.width - 1)
+                let cardHeight = rowHeight * CGFloat(slot.height) + spacing * CGFloat(slot.height - 1)
+                content(slot.placement, cardWidth, cardHeight)
+                    .offset(x: (unit + spacing) * CGFloat(slot.column),
+                            y: (rowHeight + spacing) * CGFloat(slot.row))
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)

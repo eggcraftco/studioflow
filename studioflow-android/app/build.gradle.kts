@@ -58,6 +58,10 @@ android {
 }
 
 dependencies {
+    // Test-only: the Home grid packer has to agree with the web's and the Mac's,
+    // and that is worth a test rather than a promise. Nothing here ships.
+    testImplementation("junit:junit:4.13.2")
+
     val composeBom = platform("androidx.compose:compose-bom:2026.04.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
