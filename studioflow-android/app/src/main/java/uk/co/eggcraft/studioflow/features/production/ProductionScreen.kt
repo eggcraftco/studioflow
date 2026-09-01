@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +32,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -250,10 +254,24 @@ fun ProductionScreen(state: StudioFlowUiState, onOpenOrder: (StudioOrder) -> Uni
                                     Modifier.padding(10.dp).fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Text(
-                                        "#${card.order.watchRef.ifEmpty { card.order.id.take(6) }} · ${card.order.displayCustomerName}",
-                                        fontSize = 11.sp, color = Color.Gray
-                                    )
+                                    // Once delivered orders are shown, the Done
+                                    // lane holds two different things: work that
+                                    // left the workshop and work that arrived. A
+                                    // tick beside the reference tells them apart
+                                    // without a lane of its own.
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Text(
+                                            "#${card.order.watchRef.ifEmpty { card.order.id.take(6) }} · ${card.order.displayCustomerName}",
+                                            fontSize = 11.sp, color = Color.Gray
+                                        )
+                                        if (card.resolved.delivered) {
+                                            Icon(
+                                                Icons.Filled.Check, t("Delivered"),
+                                                Modifier.size(12.dp), Color(0xFF16A34A)
+                                            )
+                                        }
+                                    }
                                     Text(card.order.designName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                     if (card.resolved.total > 0) {
                                         Text(

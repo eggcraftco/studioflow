@@ -365,8 +365,20 @@ struct ProductionView: View {
     private func cardView(_ card: Card) -> some View {
         Button { selected = card.order } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Text("#\(card.order.watchRef.isEmpty ? String((card.order.id ?? "").prefix(6)) : card.order.watchRef) · \(card.order.customerName)")
-                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                // Once delivered orders are shown, the Done lane holds two
+                // different things: work that left the workshop and work that
+                // arrived. A tick beside the reference tells them apart without
+                // a lane of its own.
+                HStack(spacing: 4) {
+                    Text("#\(card.order.watchRef.isEmpty ? String((card.order.id ?? "").prefix(6)) : card.order.watchRef) · \(card.order.customerName)")
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    if card.resolved.delivered {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .heavy))
+                            .foregroundColor(.green)
+                            .accessibilityLabel(t("Delivered", lang: seciliDil))
+                    }
+                }
                 Text(card.order.designName).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                 if let due = card.dueDate {
                     Text(due.formatted(.dateTime.day().month(.abbreviated)))

@@ -53,6 +53,8 @@ type ProductionCard = {
   blocker: ProductionBlocker | null;
   currentStep: HeadingItem | null;
   partsReady: boolean;
+  /** The parcel arrived. Done says it left the workshop; this says it got there. */
+  delivered: boolean;
   dueDate: Date | null;
   isLate: boolean;
   isAtRisk: boolean;
@@ -175,6 +177,7 @@ export function ProductionContent({
           currentStep: resolved.currentStep,
           // "Parts ready" means every material box that exists is ticked.
           partsReady: materialValues.length > 0 && materialValues.every(Boolean),
+          delivered: resolved.delivered,
           dueDate,
           isLate: daysLeft !== null && daysLeft < 0 && !order.isDelivered,
           // At risk: due within three days and demonstrably not finished, or
@@ -590,7 +593,16 @@ function BoardCard({
           ? <img src={order.previewImageUrl} alt="" className="production-card-thumb" />
           : <span className="production-card-thumb production-card-thumb-empty" aria-hidden />}
         <div className="production-card-heading">
-          <span className="production-card-ref">#{order.watchRef || order.id.slice(0, 6)} · {order.customerName}</span>
+          <span className="production-card-ref">
+            #{order.watchRef || order.id.slice(0, 6)} · {order.customerName}
+            {/* The Done lane holds two different things once delivered orders are
+                shown: work that left the workshop, and work that arrived. A tick
+                beside the reference tells them apart without a lane of its own,
+                because arriving is not another thing the workshop does. */}
+            {card.delivered
+              ? <i className="delivered-tick" title={t("Delivered")} aria-label={t("Delivered")}>✓</i>
+              : null}
+          </span>
           <strong>{order.designName}</strong>
         </div>
       </div>
@@ -776,7 +788,12 @@ function ProductionDetailPanel({
           ? <img src={order.previewImageUrl} alt="" className="production-panel-thumb" />
           : <span className="production-panel-thumb production-card-thumb-empty" aria-hidden />}
         <div>
-          <span className="production-card-ref">#{order.watchRef || order.id.slice(0, 6)} · {order.customerName}</span>
+          <span className="production-card-ref">
+            #{order.watchRef || order.id.slice(0, 6)} · {order.customerName}
+            {card.delivered
+              ? <i className="delivered-tick" title={t("Delivered")} aria-label={t("Delivered")}>✓</i>
+              : null}
+          </span>
           <strong className="production-panel-title">{order.designName}</strong>
           <span className={`production-chip production-chip-${priorityTone(order.priority || "Normal")}`}>
             {t(order.priority || "Normal")}

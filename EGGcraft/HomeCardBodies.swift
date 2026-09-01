@@ -137,22 +137,6 @@ func homeOrderReference(_ order: Siparis, name: String) -> String {
     return raw.hasPrefix("#") ? raw : "#" + raw
 }
 
-/// Done says the piece left the workshop; this says it arrived. A tick beside
-/// the lane, not a lane of its own — arriving is not another thing the workshop
-/// does, so it does not get a seventh column.
-struct HomeDeliveredTick: View {
-    let shown: Bool
-    let lang: String
-    var body: some View {
-        if shown {
-            Image(systemName: "checkmark")
-                .font(.system(size: 10, weight: .heavy))
-                .foregroundColor(HomeTone.green)
-                .accessibilityLabel(t("Delivered", lang: lang))
-        }
-    }
-}
-
 /// The deadlines, ruled apart. Its own view so the small card can offer the
 /// same list with and without the week above it without writing it three times.
 struct HomeDueList: View {
@@ -1281,7 +1265,6 @@ struct HomeOrderRows: View {
                     }
                     if let stage {
                         HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
-                        HomeDeliveredTick(shown: entry?.1.delivered == true, lang: lang)
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -2937,7 +2920,6 @@ struct HomeOrdersProductionBody: View {
                             }
                             if let stage {
                                 HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
-                                HomeDeliveredTick(shown: entry?.1.delivered == true, lang: lang)
                             }
                         }
                         .padding(.vertical, 6)
@@ -3016,7 +2998,6 @@ struct HomeOrdersProductionBody: View {
                                         Spacer(minLength: 6)
                                         if let stage {
                                             HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
-                                            HomeDeliveredTick(shown: entry?.1.delivered == true, lang: lang)
                                         }
                                         if let due = homeDueDate(order), due < Date() {
                                             let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
