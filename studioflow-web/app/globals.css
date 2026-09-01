@@ -29112,8 +29112,11 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
    Two columns meant three rows, three rows did not fit the body, and
    .home-card-body clips: "Add inventory item" and "Scan receipt" arrived cut
    through their labels exactly as the square's bottom row did. */
-.home-action-grid.is-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 900px) { .home-action-grid.is-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 2x1 ONLY. The 2x2 card reuses .is-rows for its three groups and the sheet
+   draws those two across, not three — an unscoped rule here would have
+   restyled a card nobody was looking at. */
+.home-card-2x1 .home-action-grid.is-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .home-card-2x1 .home-action-grid.is-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* One hue per action, so the tile tint, the disc and the glyph all come from
    the same value instead of three that can drift. */
@@ -29126,28 +29129,28 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 .home-action-row.tone-green  { --action-tone: #16a34a; }
 .home-action-row.tone-blue   { --action-tone: #2563eb; }
 
-.home-action-grid.is-rows .home-action-row {
+.home-card-2x1 .home-action-grid.is-rows .home-action-row {
   padding: 10px 12px;
   background: color-mix(in srgb, var(--action-tone, #64748b) 7%, var(--surface, #fff));
   border-color: color-mix(in srgb, var(--action-tone, #64748b) 14%, transparent);
 }
 /* The glyph sits in a disc of its own tint, as the reference draws it — a bare
    icon on a tinted tile reads as a smudge; the disc gives it an edge. */
-.home-action-grid.is-rows .home-action-glyph {
+.home-card-2x1 .home-action-grid.is-rows .home-action-glyph {
   width: 34px; height: 34px; border-radius: 999px; flex: 0 0 auto;
   align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--action-tone, #64748b) 14%, transparent);
   color: var(--action-tone, #64748b);
 }
-.home-action-grid.is-rows .home-action-glyph svg { width: 17px; height: 17px; }
-.home-action-grid.is-rows .home-action-label { font-size: 13px; }
+.home-card-2x1 .home-action-grid.is-rows .home-action-glyph svg { width: 17px; height: 17px; }
+.home-card-2x1 .home-action-grid.is-rows .home-action-label { font-size: 13px; }
 
 /* The primary keeps its solid fill, and its disc inverts: white disc, coloured
    glyph, as the sheet draws it. */
-.home-action-grid.is-rows .home-action-row.is-primary .home-action-glyph {
+.home-card-2x1 .home-action-grid.is-rows .home-action-row.is-primary .home-action-glyph {
   background: #fff; color: #2563eb;
 }
-body[data-studio-theme="dark"] .home-action-grid.is-rows .home-action-row {
+body[data-studio-theme="dark"] .home-card-2x1 .home-action-grid.is-rows .home-action-row {
   background: color-mix(in srgb, var(--action-tone, #64748b) 16%, transparent);
   border-color: color-mix(in srgb, var(--action-tone, #64748b) 28%, transparent);
 }
