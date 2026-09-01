@@ -95,6 +95,9 @@ const GOOGLE_PLAY_SERVICE_ACCOUNT = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT");
 // shared secret the Cloud Run app server uses to call shopifyAppBridge.
 const SHOPIFY_APP_SECRET = defineSecret("SHOPIFY_APP_SECRET");
 const SHOPIFY_BRIDGE_SECRET = defineSecret("SHOPIFY_BRIDGE_SECRET");
+// SHOP-004: the key the Shopify offline token is boxed under at rest. Its own
+// key, not Etsy's, so the two can be rotated apart.
+const SHOPIFY_TOKEN_KEY = defineSecret("SHOPIFY_TOKEN_KEY");
 // Password for the contact@nivadesk.co.uk mailbox (Hostinger SMTP), used to email
 // the NivaDesk support inbox when a customer opens a "Contact NivaDesk Support" ticket.
 const NIVADESK_SMTP_PASSWORD = defineSecret("NIVADESK_SMTP_PASSWORD");
@@ -13993,7 +13996,7 @@ exports.listHeldIntegrationOrders = onCall({ region: "europe-west2" }, async (re
  * exists and leaves the rest parked, because deciding which of someone's orders
  * to keep is not ours to make.
  */
-exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutSeconds: 300 }, async (request) => {
+exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutSeconds: 300, secrets: [SHOPIFY_TOKEN_KEY] }, async (request) => {
   const { uid, companyId, companyData } = await requireWorkspaceForBilling(request, false);
   if (!uidCanEditWorkspaceOrders(companyData, uid)) {
     throw new HttpsError("permission-denied", "Your workspace role cannot import orders.");
@@ -29105,6 +29108,70 @@ function shopifyStoreRef(shop) {
   return admin.firestore().collection("shopifyStores").doc(shop);
 }
 
+// SHOP-004 — the offline token at rest.
+//
+// Written as an AES-256-GCM box under SHOPIFY_TOKEN_KEY (the Etsy scheme with
+// its own key) and read back only through shopifyStoreAccessToken. While
+// SHOPIFY_TOKEN_DUAL_WRITE is on — the app is in Shopify's review, planned
+// until 16 Sep 2026 — the plaintext field is still written and still serves as
+// the fallback, so a store whose box will not decrypt keeps syncing rather than
+// failing in front of a reviewer. Phase B turns the flag off, blanks the
+// plaintext everywhere and makes a box that will not decrypt an error. A store
+// that still carries only the plaintext is given its box the first time its
+// token is read.
+const SHOPIFY_TOKEN_DUAL_WRITE = true;
+const shopifyTokenMigrationsInFlight = new Set();
+
+function shopifyTokenKey() {
+  try { return String(SHOPIFY_TOKEN_KEY.value() || ""); } catch { return ""; }
+}
+
+function shopifyEncryptToken(plain) {
+  const key = shopifyTokenKey();
+  if (!key) return null;
+  return etsyModule.encryptToken(plain, key);
+}
+
+function shopifyStoreAccessToken(store) {
+  const plaintext = String(store?.accessToken || "").trim();
+  const box = store?.accessTokenEncrypted;
+  if (box && typeof box === "object" && box.data) {
+    const key = shopifyTokenKey();
+    if (!key) {
+      console.warn("shopify token: SHOPIFY_TOKEN_KEY not declared by this function, using the plaintext fallback for", String(store?.shop || "?"));
+      return plaintext;
+    }
+    try {
+      const token = etsyModule.decryptToken(box, key);
+      if (token) return token;
+    } catch (error) {
+      console.warn("shopify token: box would not decrypt, using the plaintext fallback:", String(error?.message || error).slice(0, 120));
+    }
+  } else if (plaintext && store?.shop) {
+    migrateShopifyStoreToken(String(store.shop), plaintext);
+  }
+  return plaintext;
+}
+
+// Fire-and-forget: the read that found a plaintext-only store must neither
+// wait on, nor fail because of, the write that gives it a box. One attempt per
+// shop per instance; a failed attempt is allowed again.
+function migrateShopifyStoreToken(shop, plaintext) {
+  if (shopifyTokenMigrationsInFlight.has(shop)) return;
+  const box = shopifyEncryptToken(plaintext);
+  if (!box) return;   // no key in this function: a function that has one will do it
+  shopifyTokenMigrationsInFlight.add(shop);
+  shopifyStoreRef(shop).set({
+    accessTokenEncrypted: box,
+    tokenEncryptedAt: admin.firestore.FieldValue.serverTimestamp()
+  }, { merge: true })
+    .then(() => console.log("shopify token: boxed in place for", shop))
+    .catch((error) => {
+      shopifyTokenMigrationsInFlight.delete(shop);
+      console.warn("shopify token: in-place boxing failed for", shop, error?.message || error);
+    });
+}
+
 function shopifyBridgeAuthed(req) {
   const provided = String(req.headers["x-nivadesk-bridge-secret"] || "");
   const expected = String(process.env.SHOPIFY_BRIDGE_SECRET || "").trim();
@@ -29180,7 +29247,7 @@ function sanitizeShopifyStoreSettings(raw) {
 // Single action-routed endpoint for the embedded app's server (Cloud Run).
 // Auth: shared secret header — never end-user credentials; end users act
 // through the Firebase callables below instead.
-exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY_BRIDGE_SECRET] }, async (req, res) => {
+exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY_BRIDGE_SECRET, SHOPIFY_TOKEN_KEY] }, async (req, res) => {
   try {
     if (req.method !== "POST") { res.status(405).json({ ok: false, error: "post_only" }); return; }
     if (!shopifyBridgeAuthed(req)) { res.status(401).json({ ok: false, error: "unauthorized" }); return; }
@@ -29195,7 +29262,17 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
       const existingSnap = await ref.get();
       const update = { shop, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
       const accessToken = String(req.body?.accessToken || "").trim();
-      if (accessToken) update.accessToken = accessToken;
+      if (accessToken) {
+        const box = shopifyEncryptToken(accessToken);
+        if (box) {
+          update.accessTokenEncrypted = box;
+          update.tokenEncryptedAt = admin.firestore.FieldValue.serverTimestamp();
+        } else {
+          console.warn("shopify token: SHOPIFY_TOKEN_KEY unavailable, plaintext only for", shop);
+        }
+        // Phase A keeps the plaintext beside the box; Phase B writes "" here.
+        update.accessToken = SHOPIFY_TOKEN_DUAL_WRITE || !box ? accessToken : "";
+      }
       for (const [key, limit] of [["shopName", 120], ["email", 160], ["scopes", 400], ["apiVersion", 20], ["currencyCode", 8]]) {
         if (req.body?.[key] !== undefined) update[key] = String(req.body[key] || "").slice(0, limit);
       }
@@ -29403,6 +29480,7 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
       await ref.set({
         status: "uninstalled",
         accessToken: "",
+        accessTokenEncrypted: admin.firestore.FieldValue.delete(),
         uninstalledAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
@@ -29683,7 +29761,7 @@ function shopifyRedactedPayloadJson(payload) {
 // failure so collection-filtered orders land as retryable "failed" rows rather
 // than silently importing against the merchant's filter.
 async function shopifyOrderCollectionIds(shop, store, order) {
-  const token = String(store.accessToken || "").trim();
+  const token = shopifyStoreAccessToken(store);
   if (!token) throw new Error("collection_lookup_no_token");
   const productIds = [...new Set(shopifyOrderProductIds(order))];
   const found = new Set();
@@ -30148,7 +30226,7 @@ async function routeShopifyAppTopic(shop, store, topic, payload) {
   }
 }
 
-exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIFY_APP_SECRET] }, async (req, res) => {
+exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIFY_APP_SECRET, SHOPIFY_TOKEN_KEY] }, async (req, res) => {
   try {
     if (req.method !== "POST") {
       res.status(200).json({ ok: true, message: "NivaDesk Shopify app webhook endpoint. POST only." });
@@ -30218,6 +30296,7 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
       await shopifyStoreRef(shop).set({
         status: "uninstalled",
         accessToken: "",
+        accessTokenEncrypted: admin.firestore.FieldValue.delete(),
         uninstalledAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
@@ -30405,7 +30484,7 @@ function shopifyGraphQLOrderToRest(node) {
 }
 
 async function shopifyAdminGraphQL(shop, store, query, variables) {
-  const token = String(store.accessToken || "").trim();
+  const token = shopifyStoreAccessToken(store);
   if (!token) throw new Error("missing_access_token");
   const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_APP_API_VERSION}/graphql.json`, {
     method: "POST",
@@ -30446,7 +30525,7 @@ function shopifyImportRangeQuery(body) {
 // polls the imports/{id} progress doc through the bridge's importStatus.
 exports.shopifyImportOrders = onRequest({
   region: "europe-west2",
-  secrets: [SHOPIFY_BRIDGE_SECRET],
+  secrets: [SHOPIFY_BRIDGE_SECRET, SHOPIFY_TOKEN_KEY],
   timeoutSeconds: 540,
   memory: "512MiB"
 }, async (req, res) => {
@@ -30608,6 +30687,10 @@ if (process.env.NIVADESK_E2E === "1") {
     shopifyStoreRef,
     shopifyRedactedPayloadJson,
     // RET-004: what an account deletion takes from the provider root collections.
-    purgeProviderDataForWorkspace
+    purgeProviderDataForWorkspace,
+    // SHOP-004: the token at rest — box, read-back and the client-safe view.
+    shopifyStoreAccessToken,
+    shopifyEncryptToken,
+    shopifyPublicStoreView
   };
 }
