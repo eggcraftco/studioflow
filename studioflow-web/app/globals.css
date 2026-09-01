@@ -26978,6 +26978,19 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .onboard-hint { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 
 .onboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+/* The work step asks six questions and reads as a form, not a row of tiles: at
+   664px of card the auto-fit above makes three columns, and the sheet draws two.
+   Below 560px it stacks, because a select with a full sentence above it is not
+   a thing to put two-across on a phone. */
+/* Two columns on the card, one on a phone, decided by the space the grid is
+   actually given rather than by the width of the window: min(100%, 260px) is a
+   floor that fits twice in the 664px card and once in a phone's. Same mechanism
+   the plain .onboard-grid above uses. */
+.onboard-grid.is-pairs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  column-gap: 18px; row-gap: 16px;
+}
+.onboard-grid.is-pairs .onboard-why { grid-column: 1 / -1; margin: 0; }
 .onboard-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .onboard-field select {
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);

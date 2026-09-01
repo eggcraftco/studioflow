@@ -37,10 +37,17 @@ export type OnboardingAnswers = {
    *  than hunted for in Settings after the fact. */
   language: string;
   timeZone: string;
+  /** Kept as a list because businessTypeForWorkKinds reads kinds[0] and the
+   *  saved answers are read elsewhere; the question itself is now one choice. */
   workKinds: OnboardingWorkKind[];
   workflow: OnboardingWorkflow;
   teamSize: OnboardingTeamSize;
   volume: OnboardingVolume;
+  businessAge: OnboardingBusinessAge | "";
+  inventoryExperience: OnboardingInventoryExperience | "";
+  /** Not used to set anything up. Asked because knowing which channel brought
+   *  someone is the difference between guessing at marketing and measuring it. */
+  heardFrom: OnboardingHeardFrom | "";
   mainGoal: OnboardingGoal | "";
   extraGoals: OnboardingGoal[];
   start: OnboardingStart | "";
@@ -93,6 +100,36 @@ export const ONBOARDING_WORKFLOWS: { id: OnboardingWorkflow; label: string; deta
   { id: "repairs", label: "Repairs and servicing", detail: "Customers send or bring items for work." },
   { id: "batch", label: "Batch production", detail: "I make products in groups and sell them afterwards." },
   { id: "mixed", label: "A mix of these", detail: "My business uses more than one workflow." },
+];
+
+export type OnboardingBusinessAge = "starting" | "under_1" | "1_3" | "3_10" | "over_10";
+export type OnboardingInventoryExperience = "none" | "some" | "confident" | "no_stock";
+export type OnboardingHeardFrom =
+  "search" | "shopify" | "etsy" | "social" | "word_of_mouth" | "advert" | "other";
+
+export const ONBOARDING_BUSINESS_AGES: { id: OnboardingBusinessAge; label: string }[] = [
+  { id: "starting", label: "Just starting out" },
+  { id: "under_1", label: "Less than a year" },
+  { id: "1_3", label: "1–3 years" },
+  { id: "3_10", label: "3–10 years" },
+  { id: "over_10", label: "More than 10 years" },
+];
+
+export const ONBOARDING_INVENTORY_EXPERIENCE: { id: OnboardingInventoryExperience; label: string }[] = [
+  { id: "no_stock", label: "I don't hold stock" },
+  { id: "none", label: "New to it" },
+  { id: "some", label: "I track some of it" },
+  { id: "confident", label: "I track it closely" },
+];
+
+export const ONBOARDING_HEARD_FROM: { id: OnboardingHeardFrom; label: string }[] = [
+  { id: "search", label: "A search engine" },
+  { id: "shopify", label: "The Shopify App Store" },
+  { id: "etsy", label: "Etsy, or a sellers' group" },
+  { id: "social", label: "Social media" },
+  { id: "word_of_mouth", label: "A friend or colleague" },
+  { id: "advert", label: "An advert" },
+  { id: "other", label: "Somewhere else" },
 ];
 
 export const ONBOARDING_TEAM_SIZES: { id: OnboardingTeamSize; label: string; seats: number }[] = [
@@ -409,6 +446,9 @@ export async function saveOnboardingAnswers(
       onboardingWorkflow: answers.workflow,
       onboardingTeamSizeBand: answers.teamSize,
       onboardingOrderVolume: answers.volume,
+      onboardingBusinessAge: answers.businessAge,
+      onboardingInventoryExperience: answers.inventoryExperience,
+      onboardingHeardFrom: answers.heardFrom,
       onboardingGoals: goals,
       onboardingMainGoal: answers.mainGoal,
       onboardingStartChoice: answers.start,

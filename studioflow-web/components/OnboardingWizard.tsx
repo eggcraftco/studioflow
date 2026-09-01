@@ -22,6 +22,9 @@ import {
   ONBOARDING_TRIAL_PLANS,
   ONBOARDING_VOLUMES,
   ONBOARDING_WORKFLOWS,
+  ONBOARDING_BUSINESS_AGES,
+  ONBOARDING_HEARD_FROM,
+  ONBOARDING_INVENTORY_EXPERIENCE,
   ONBOARDING_WORK_KINDS,
   type OnboardingAnswers,
   type OnboardingGoal,
@@ -153,6 +156,9 @@ export function OnboardingWizard({
     workflow: "made_to_order",
     teamSize: "solo",
     volume: "",
+    businessAge: "",
+    inventoryExperience: "",
+    heardFrom: "",
     mainGoal: "",
     extraGoals: [],
     start: "",
@@ -184,15 +190,6 @@ export function OnboardingWizard({
   }, [language]);
 
   const visibleGoals = showMoreGoals ? ONBOARDING_GOALS : ONBOARDING_GOALS.filter(goal => goal.primary);
-
-  function toggleWorkKind(id: OnboardingWorkKind) {
-    setAnswers(current => ({
-      ...current,
-      workKinds: current.workKinds.includes(id)
-        ? current.workKinds.filter(kind => kind !== id)
-        : [...current.workKinds, id],
-    }));
-  }
 
   // At most two extras, and never the main goal twice.
   function toggleExtraGoal(id: OnboardingGoal) {
@@ -268,45 +265,40 @@ export function OnboardingWizard({
         ) : null}
 
         {stepKey === "work" ? (
+          /* Six questions as six dropdowns, in two columns.
+             It was a wall of nine chips and four radio cards before, which is a
+             lot of reading for a screen whose answers only pick a preset — and
+             the chip row was a multiple choice that nothing downstream used:
+             businessTypeForWorkKinds reads kinds[0] and stops. One choice, kept
+             in a list so the saved shape does not change. */
           <div className="onboard-sections">
-            <div>
-              <h2>{t("What kind of work do you do?")}</h2>
-              <p className="onboard-hint">{t("Pick as many as apply.")}</p>
-              <div className="onboard-chips">
-                {ONBOARDING_WORK_KINDS.map(kind => (
-                  <button
-                    key={kind.id}
-                    type="button"
-                    className={answers.workKinds.includes(kind.id) ? "is-on" : ""}
-                    onClick={() => toggleWorkKind(kind.id)}
-                  >
-                    {t(kind.label)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <div className="onboard-grid is-pairs">
+              <label className="onboard-field">
+                <span>{t("What do you mostly make?")}</span>
+                <select
+                  value={answers.workKinds[0] ?? ""}
+                  onChange={event => set("workKinds", event.target.value
+                    ? [event.target.value as OnboardingWorkKind]
+                    : [])}
+                >
+                  <option value="">{t("Choose…")}</option>
+                  {ONBOARDING_WORK_KINDS.map(kind => (
+                    <option key={kind.id} value={kind.id}>{t(kind.label)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="onboard-field">
+                <span>{t("How do you mainly work?")}</span>
+                <select value={answers.workflow} onChange={event => set("workflow", event.target.value as OnboardingWorkflow)}>
+                  {ONBOARDING_WORKFLOWS.map(option => (
+                    <option key={option.id} value={option.id}>{t(option.label)}</option>
+                  ))}
+                </select>
+                <em className="onboard-why">
+                  {t(ONBOARDING_WORKFLOWS.find(option => option.id === answers.workflow)?.detail ?? "")}
+                </em>
+              </label>
 
-            <div>
-              <h2>{t("How do you mainly work?")}</h2>
-              <div className="onboard-options">
-                {ONBOARDING_WORKFLOWS.map(option => (
-                  <label key={option.id} className={answers.workflow === option.id ? "is-on" : ""}>
-                    <input
-                      type="radio"
-                      name="onboard-workflow"
-                      checked={answers.workflow === option.id}
-                      onChange={() => set("workflow", option.id as OnboardingWorkflow)}
-                    />
-                    <span>
-                      <strong>{t(option.label)}</strong>
-                      <em>{t(option.detail)}</em>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="onboard-grid">
               <label className="onboard-field">
                 <span>{t("How many people will use NivaDesk?")}</span>
                 <select value={answers.teamSize} onChange={event => set("teamSize", event.target.value as OnboardingTeamSize)}>
@@ -319,8 +311,46 @@ export function OnboardingWizard({
                   <option value="">{t("Rather not say")}</option>
                   {ONBOARDING_VOLUMES.map(volume => <option key={volume.id} value={volume.id}>{t(volume.label)}</option>)}
                 </select>
-                <em className="onboard-why">{t("This helps us suggest the right setup. It won't affect your trial.")}</em>
               </label>
+
+              <label className="onboard-field">
+                <span>{t("How long have you been in business?")}</span>
+                <select
+                  value={answers.businessAge}
+                  onChange={event => set("businessAge", event.target.value as OnboardingAnswers["businessAge"])}
+                >
+                  <option value="">{t("Rather not say")}</option>
+                  {ONBOARDING_BUSINESS_AGES.map(age => <option key={age.id} value={age.id}>{t(age.label)}</option>)}
+                </select>
+              </label>
+              <label className="onboard-field">
+                <span>{t("How familiar are you with stock tracking?")}</span>
+                <select
+                  value={answers.inventoryExperience}
+                  onChange={event => set("inventoryExperience", event.target.value as OnboardingAnswers["inventoryExperience"])}
+                >
+                  <option value="">{t("Rather not say")}</option>
+                  {ONBOARDING_INVENTORY_EXPERIENCE.map(level => (
+                    <option key={level.id} value={level.id}>{t(level.label)}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="onboard-field">
+                <span>{t("How did you find us?")}</span>
+                <select
+                  value={answers.heardFrom}
+                  onChange={event => set("heardFrom", event.target.value as OnboardingAnswers["heardFrom"])}
+                >
+                  <option value="">{t("Rather not say")}</option>
+                  {ONBOARDING_HEARD_FROM.map(source => (
+                    <option key={source.id} value={source.id}>{t(source.label)}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="onboard-why onboard-field">
+                {t("This helps us suggest the right setup. It won't affect your trial.")}
+              </p>
             </div>
           </div>
         ) : null}
