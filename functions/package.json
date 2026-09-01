@@ -20,6 +20,11 @@
     "test:rules": "for f in test/qa/*.test.mjs; do node \"$f\" || exit 1; done",
     "test:e2e": "test/run-e2e.sh",
     "test:integration": "test/run-integration.sh",
-    "test:all": "npm test && npm run test:rules && npm run test:e2e && npm run test:integration"
+    "test:all": "npm test && npm run test:rules && npm run test:e2e && npm run test:integration",
+    "test:ci": "npm test && npm run test:rules && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.18.0"
   }
 }
