@@ -61,12 +61,23 @@ function money(value: number, currency: string): string {
   }
 }
 
-/** Etsy's own scope names are not readable, and there is exactly one we ask
- *  for, so name that one and pass the rest through untranslated. */
+/** Etsy's own scope names are not readable. NivaDesk asks for exactly this set
+ *  — the server's ETSY_SCOPES — and "Sales read" is what it amounts to: the
+ *  receipts, the buyer's contact on them, and which shop they came from.
+ *
+ *  The previous attempt at this checked for a single "transactions_r" and fell
+ *  through to the raw names for everything else, which is every real connection
+ *  — so the row read "transactions_r, email_r, shops_r" to sellers, which is
+ *  the technical code this file's own header forbids reaching the screen. The
+ *  raw list is now only for a connection whose stored scopes are NOT what we
+ *  ask for, where saying "Sales read" would be the untrue answer. */
+const ETSY_REQUESTED_SCOPES = ["transactions_r", "email_r", "shops_r"];
+
 function scopeLabel(scopes: string[] | undefined, t: (text: string) => string): string {
   const list = (scopes || []).filter(Boolean);
   if (!list.length) return t("Unknown");
-  if (list.length === 1 && list[0] === "transactions_r") return t("Sales read");
+  const asked = [...ETSY_REQUESTED_SCOPES].sort().join(",");
+  if ([...list].sort().join(",") === asked) return t("Sales read");
   return list.join(", ");
 }
 
@@ -870,12 +881,18 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               {t("Keep connected")}
             </button>
           </div>
-        ) : (
+        ) : isOwner ? (
           <div className="settings-action-row">
             <button type="button" className="button secondary" onClick={() => setConfirmDisconnect(true)}>
               {t("Disconnect Etsy")}
             </button>
           </div>
+        ) : (
+          // Gated where the journey starts, not two clicks in. Disabling the
+          // confirm button left a member able to open the confirmation and find
+          // a greyed-out control with nothing saying why — and a disabled button
+          // is out of the tab order, so a screen reader is told even less.
+          <p className="muted-copy">{t("Only the workspace owner can disconnect an Etsy shop.")}</p>
         )}
       </section>
     </div>

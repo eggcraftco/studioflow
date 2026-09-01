@@ -192,7 +192,7 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "notes",
     title: "Notes",
-    icon: "notes",
+    icon: "noteCompose",
     badgeTone: "amber",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",

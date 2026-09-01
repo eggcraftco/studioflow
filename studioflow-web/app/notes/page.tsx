@@ -52,10 +52,7 @@ export default function NotesPage() {
   // Arriving from the Home card's magnifier: put the caret where they were
   // going, rather than in a search box they then have to find and click.
   const searchRef = useRef<HTMLInputElement | null>(null);
-  useQuickActionParam("search", Boolean(user), () => {
-    searchRef.current?.focus();
-    searchRef.current?.scrollIntoView({ block: "center" });
-  });
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 768px)");
@@ -337,6 +334,17 @@ export default function NotesPage() {
       save({ ...n, manualOrder: ts + i });
     });
   }
+
+  // Not Boolean(user): this page returns a LoadingScreen on the line below
+  // while `loading` is still true, so the search input is not mounted and the
+  // ref is null — and useQuickActionParam strips the parameter on that first
+  // run and never fires again. It waits for the same condition the render does.
+  // Declared here rather than beside the sibling "new" hook because it reads
+  // state that is set up further down the component.
+  useQuickActionParam("search", !authLoading && !loading && Boolean(workspace) && Boolean(user), () => {
+    searchRef.current?.focus();
+    searchRef.current?.scrollIntoView({ block: "center" });
+  });
 
   if (authLoading || loading || !workspace || !user) return <LoadingScreen />;
 

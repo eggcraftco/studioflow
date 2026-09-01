@@ -27676,6 +27676,9 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-card-2x1 .home-file-list a { grid-template-columns: 24px minmax(0, 1.5fr) minmax(0, 1fr) auto; }
 .home-file-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .home-file-stack strong { max-width: 100%; }
+/* A row without a chip is three columns, not four with a hole in it. */
+.home-file-list a.is-plain { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.home-card-2x1 .home-file-list a.is-plain { grid-template-columns: 24px minmax(0, 1fr) auto; }
 .home-file-list .home-chip {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   /* start, so a short chip is a pill rather than a stretched bar — and a
@@ -27722,7 +27725,10 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 6px 6px 6px 11px; opacity: 1; flex: 0 0 auto;
 }
-.home-note-composer.is-inline > span:first-child { opacity: 0.55; font-size: 12px; }
+/* 0.55 at 12px composites to 3.91:1 on white, under AA's 4.5 for normal text —
+   and this is the only words on the card's primary control. 0.72 reads 3.0:1
+   darker at 5.3:1 and still sits back from the note titles below it. */
+.home-note-composer.is-inline > span:first-child { opacity: 0.72; font-size: 12px; }
 .home-note-composer-add {
   flex: 0 0 auto; width: 24px; height: 24px; border-radius: 8px;
   background: #2563eb; color: #fff; font-weight: 800; font-size: 15px; line-height: 1;
@@ -27815,6 +27821,9 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 /* A header action that is a mark rather than a word — sized to the ... button
    it sits next to, so the two read as one row of controls. */
 .home-head-icon-button {
+  /* This file has no global button reset, so a bare <button> arrives with the
+     UA's grey buttonface — every sibling control clears it explicitly. */
+  border: 0; background: transparent; cursor: pointer; padding: 0;
   width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   color: inherit; opacity: 0.65; text-decoration: none;
@@ -28409,8 +28418,18 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
 .home-card-2x2 .home-money-tile b { white-space: nowrap; }
 .home-money-tile b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
 /* The proportion under the figure, for the one tile that is a proportion. */
-.home-money-tile-bar { display: block; height: 5px; border-radius: 999px; background: rgba(120, 130, 150, 0.2); overflow: hidden; margin-top: 2px; }
-.home-money-tile-bar i { display: block; height: 100%; border-radius: 999px; background: currentColor; }
+/* width:100% and align-self, because at <=640px the tile switches to
+   align-items:flex-start and a block whose only content is a percentage-width
+   child contributes zero — the bar vanished on phones and nowhere else. */
+.home-money-tile-bar {
+  display: block; width: 100%; align-self: stretch;
+  height: 5px; border-radius: 999px; background: rgba(120, 130, 150, 0.2);
+  overflow: hidden; margin-top: 2px;
+}
+/* opacity, because `.home-money-tile i` — written for the tile's sub line —
+   also matches this fill and washed it out to 60% on one card while the same
+   figure drew solid on the other two. */
+.home-money-tile-bar i { display: block; height: 100%; border-radius: 999px; background: currentColor; opacity: 1; }
 .home-money-tile.tone-green .home-money-tile-bar i { background: #15803d; }
 .home-money-tile.tone-orange .home-money-tile-bar i { background: #c2410c; }
 .home-linking-mark { display: inline-flex; line-height: 0; }
@@ -29104,7 +29123,8 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
   .home-note-grid[data-size="1x1"] .home-note-foot { gap: 4px; }
   .home-note-grid[data-size="1x1"] .home-chip { font-size: 9px; padding: 0 6px; line-height: 1.5; }
   .home-note-grid[data-size="1x1"] .home-note-foot em { font-size: 9px; }
-  .home-note-pin { font-size: 9px; margin-right: 4px; }
+  .home-note-pin { margin-right: 4px; }
+  .home-note-pin svg { width: 10px; height: 10px; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }

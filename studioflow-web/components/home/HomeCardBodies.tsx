@@ -1544,10 +1544,20 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   // "on a square the name and the chip cannot share a line".
   const fileRow = (file: (typeof files)[number], stacked = false) => {
     const kind = fileKind(file.fileName, file.contentType);
-    const ext = (file.fileName.split(".").pop() || "").slice(0, 4).toUpperCase();
+    // Only when the name actually has one. `split(".").pop()` on a dotless name
+    // returns the whole name, so a scan saved as "invoice 4471" wore a badge
+    // reading "INVO" in the slot that everywhere else names the file's type.
+    const dot = file.fileName.lastIndexOf(".");
+    const ext = dot > 0 ? file.fileName.slice(dot + 1, dot + 5).toUpperCase() : "";
     return (
       <li key={file.fileId || file.id}>
-        <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
+        {/* is-plain when there is no chip: the row is a four-track grid and
+            three children auto-place into the first three, which strands the
+            date in the middle with the last track collapsed to nothing. */}
+        <Link
+          className={file.orderId ? undefined : "is-plain"}
+          href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}
+        >
           <span className={`home-file-icon is-${kind}`} aria-hidden="true">{ext}</span>
           {stacked ? (
             <span className="home-file-stack">
@@ -1739,12 +1749,19 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
           learned to carry the note's colour, its chip and its reminder, and
           those are the three things that tell you which note this is. Two
           columns fit four of them in the space three rows took. */}
-      <p className="home-eyebrow is-strong">{t("Recent")}</p>
-      <div className="home-note-grid">
-        {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => (
-          <NoteTile key={note.id} note={note} t={t} />
-        ))}
-      </div>
+      {/* Only when there is a recent note to put under it. `recent` excludes
+          everything pinned, so a workspace whose live notes are all pinned got
+          a heading over an empty grid. */}
+      {recent.length > 0 ? (
+        <>
+          <p className="home-eyebrow is-strong">{t("Recent")}</p>
+          <div className="home-note-grid">
+            {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => (
+              <NoteTile key={note.id} note={note} t={t} />
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

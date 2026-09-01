@@ -418,12 +418,29 @@ export default function HomePage() {
                       ↑ {t("Upload file")}
                     </button>
                   )
-                ) : placement.id === "notes" && placement.size !== "1x1" ? (
-                  // Not on the square: that size opens with the composer, whose
-                  // own + is the one control for the action. The wider header
-                  // has room to name it instead — the same call the files card
-                  // makes two arms up, for the same reason: a bare + on a card
-                  // full of notes is not obviously "write one".
+                ) : placement.id === "notes" && placement.size === "1x1" ? (
+                  // The square's create control is the composer in its body —
+                  // except when there are no notes, because then the body is
+                  // replaced by "Nothing here yet." and the composer never
+                  // renders at all. Taking the + out of the header left a brand
+                  // new workspace with no way to write its first note from this
+                  // card. Exactly one control, in every state.
+                  isEmpty("notes", placement.period ?? "month") ? (
+                    <button
+                      type="button"
+                      className="home-add-button"
+                      aria-label={t("New note")}
+                      title={t("New note")}
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                    >
+                      +
+                    </button>
+                  ) : undefined
+                ) : placement.id === "notes" ? (
+                  // The wider header has room to name the action instead — the
+                  // same call the files card makes two arms up, for the same
+                  // reason: a bare + on a card full of notes is not obviously
+                  // "write one".
                   <>
                     {/* Only where there is room to spare: the wide-open card.
                         It goes to the Notes screen's own search box with the
