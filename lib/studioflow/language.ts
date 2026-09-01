@@ -3842,6 +3842,7 @@ const PANDLE_TRANSLATIONS: TranslationTable = {
   "Just now": { "Türkçe": "Az önce", "Deutsch": "Gerade eben", "Français": "À l'instant", "Italiano": "Proprio ora", "Español (Spanish)": "Ahora mismo", "Português": "Agora mesmo", "Русский (Russian)": "Только что", "日本語 (Japanese)": "たった今", "中文 (Chinese)": "刚刚", "العربية (Arabic)": "الآن", "हिन्दी (Hindi)": "अभी" },
   "This month": { "Türkçe": "Bu ay", "Deutsch": "Diesen Monat", "Français": "Ce mois-ci", "Italiano": "Questo mese", "Español (Spanish)": "Este mes", "Português": "Este mês", "Русский (Russian)": "Этот месяц", "日本語 (Japanese)": "今月", "中文 (Chinese)": "本月", "العربية (Arabic)": "هذا الشهر", "हिन्दी (Hindi)": "इस महीने" },
   "All time": { "Türkçe": "Tüm zamanlar", "Deutsch": "Gesamter Zeitraum", "Français": "Depuis le début", "Italiano": "Sempre", "Español (Spanish)": "Todo el tiempo", "Português": "Todo o período", "Русский (Russian)": "За всё время", "日本語 (Japanese)": "全期間", "中文 (Chinese)": "全部时间", "العربية (Arabic)": "كل الأوقات", "हिन्दी (Hindi)": "सभी समय" },
+  "Open Production": { "Türkçe": "Üretimi aç", "Deutsch": "Produktion öffnen", "Français": "Ouvrir la production", "Italiano": "Apri la produzione", "Español (Spanish)": "Abrir producción", "Português": "Abrir produção", "Русский (Russian)": "Открыть производство", "日本語 (Japanese)": "製造を開く", "中文 (Chinese)": "打开生产", "العربية (Arabic)": "فتح الإنتاج", "हिन्दी (Hindi)": "उत्पादन खोलें" },
   "Only the workspace owner can disconnect an Etsy shop.": { "Türkçe": "Etsy mağazasının bağlantısını yalnızca çalışma alanı sahibi kesebilir.", "Deutsch": "Nur der Workspace-Inhaber kann einen Etsy-Shop trennen.", "Français": "Seul le propriétaire de l'espace de travail peut déconnecter une boutique Etsy.", "Italiano": "Solo il proprietario dello spazio di lavoro può scollegare un negozio Etsy.", "Español (Spanish)": "Solo el propietario del espacio de trabajo puede desconectar una tienda de Etsy.", "Português": "Apenas o proprietário do espaço de trabalho pode desligar uma loja Etsy.", "Русский (Russian)": "Отключить магазин Etsy может только владелец рабочего пространства.", "日本語 (Japanese)": "Etsy ショップの接続を解除できるのはワークスペースの所有者だけです。", "中文 (Chinese)": "只有工作区所有者可以断开 Etsy 店铺。", "العربية (Arabic)": "يمكن لمالك مساحة العمل فقط فصل متجر Etsy.", "हिन्दी (Hindi)": "केवल वर्कस्पेस स्वामी ही Etsy स्टोर डिस्कनेक्ट कर सकता है।" },
   "Open Files": { "Türkçe": "Dosyaları aç", "Deutsch": "Dateien öffnen", "Français": "Ouvrir les fichiers", "Italiano": "Apri i file", "Español (Spanish)": "Abrir archivos", "Português": "Abrir ficheiros", "Русский (Russian)": "Открыть файлы", "日本語 (Japanese)": "ファイルを開く", "中文 (Chinese)": "打开文件", "العربية (Arabic)": "فتح الملفات", "हिन्दी (Hindi)": "फ़ाइलें खोलें" },
   "New note": { "Türkçe": "Yeni not", "Deutsch": "Neue Notiz", "Français": "Nouvelle note", "Italiano": "Nuova nota", "Español (Spanish)": "Nueva nota", "Português": "Nova nota", "Русский (Russian)": "Новая заметка", "日本語 (Japanese)": "新しいメモ", "中文 (Chinese)": "新建笔记", "العربية (Arabic)": "ملاحظة جديدة", "हिन्दी (Hindi)": "नई नोट" },
@@ -6196,4 +6197,36 @@ mergeIntoTranslations({
   "Texts arrive from": {},
   "Which moments send one is a workspace setting.": {},
   "Customer SMS settings": {},
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// Six of the eleven cards say "Open X"; this one said "View inventory", and the
+// sheet says "Open Inventory".
+mergeIntoTranslations({
+  "Open Inventory": { "Türkçe": "Envanteri aç", "Deutsch": "Bestand öffnen", "Français": "Ouvrir l'inventaire", "Italiano": "Apri inventario", "Español (Spanish)": "Abrir inventario", "Português": "Abrir inventário", "Русский (Russian)": "Открыть склад", "日本語 (Japanese)": "在庫を開く", "中文 (Chinese)": "打开库存", "العربية (Arabic)": "فتح المخزون", "हिन्दी (Hindi)": "इन्वेंटरी खोलें" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The Customers card's link, and the column its recent list heads.
+mergeIntoTranslations({
+  "Open Customers": { "Türkçe": "Müşterileri aç", "Deutsch": "Kunden öffnen", "Français": "Ouvrir les clients", "Italiano": "Apri clienti", "Español (Spanish)": "Abrir clientes", "Português": "Abrir clientes", "Русский (Russian)": "Открыть клиентов", "日本語 (Japanese)": "顧客を開く", "中文 (Chinese)": "打开客户", "العربية (Arabic)": "فتح العملاء", "हिन्दी (Hindi)": "ग्राहक खोलें" },
+  "Source": { "Türkçe": "Kaynak", "Deutsch": "Quelle", "Français": "Source", "Italiano": "Origine", "Español (Spanish)": "Origen", "Português": "Origem", "Русский (Russian)": "Источник", "日本語 (Japanese)": "経路", "中文 (Chinese)": "来源", "العربية (Arabic)": "المصدر", "हिन्दी (Hindi)": "स्रोत" },
+  "Latest order": { "Türkçe": "Son sipariş", "Deutsch": "Letzte Bestellung", "Français": "Dernière commande", "Italiano": "Ultimo ordine", "Español (Spanish)": "Último pedido", "Português": "Último pedido", "Русский (Russian)": "Последний заказ", "日本語 (Japanese)": "最新の注文", "中文 (Chinese)": "最近订单", "العربية (Arabic)": "آخر طلب", "हिन्दी (Hindi)": "नवीनतम ऑर्डर" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The Inventory small card names its bar. Without a name it reads as a
+// progress meter rather than as how much of the shelf needs reordering.
+mergeIntoTranslations({
+  "Stock health": { "Türkçe": "Stok sağlığı", "Deutsch": "Bestandszustand", "Français": "État du stock", "Italiano": "Stato delle scorte", "Español (Spanish)": "Estado del stock", "Português": "Estado do stock", "Русский (Russian)": "Состояние запасов", "日本語 (Japanese)": "在庫の状態", "中文 (Chinese)": "库存状况", "العربية (Arabic)": "حالة المخزون", "हिन्दी (Hindi)": "स्टॉक स्थिति" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The Schedule small card names its deadline list. NOT t("Next"): that key is
+// already spoken for by the wizard button, and its German is "Weiter" and its
+// Italian "Avanti" — a Continue button sitting over a list of deadlines.
+// The day strip's marker, read aloud only. A dot drawn in CSS says "something
+// is due this day" to everyone except a screen reader.
+mergeIntoTranslations({
+  "Deadline on this day": { "Türkçe": "Teslim tarihi", "Deutsch": "Termin", "Français": "Échéance", "Italiano": "Scadenza", "Español (Spanish)": "Fecha de entrega", "Português": "Prazo", "Русский (Russian)": "Срок", "日本語 (Japanese)": "納期", "中文 (Chinese)": "交付日", "العربية (Arabic)": "موعد التسليم", "हिन्दी (Hindi)": "नियत तिथि" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+mergeIntoTranslations({
+  "Next up": { "Türkçe": "Sıradakiler", "Deutsch": "Als Nächstes", "Français": "À suivre", "Italiano": "Prossimi", "Español (Spanish)": "A continuación", "Português": "A seguir", "Русский (Russian)": "Ближайшие", "日本語 (Japanese)": "次の予定", "中文 (Chinese)": "接下来", "العربية (Arabic)": "القادم", "हिन्दी (Hindi)": "अगले" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);

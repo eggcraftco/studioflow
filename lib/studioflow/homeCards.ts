@@ -74,6 +74,9 @@ export type HomeCardDefinition = {
   href: string;
   /** The footer link's English label. */
   linkLabel: string;
+  /** A second destination, for a card whose name covers two screens. */
+  secondaryHref?: string;
+  secondaryLinkLabel?: string;
 };
 
 /**
@@ -145,27 +148,31 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     href: "/inventory",
-    linkLabel: "View inventory",
+    linkLabel: "Open Inventory",
   },
   {
     id: "customers",
     title: "Customers",
-    icon: "customer",
+    icon: "customers",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     access: "customers",
     href: "/customers",
-    linkLabel: "View customers",
+    linkLabel: "Open Customers",
   },
   {
     id: "ordersProduction",
     title: "Orders & production",
-    icon: "orders",
+    icon: "ordersProduction",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
     access: "orders",
+    // Both halves of the card's own name. The single link said "orders" and
+    // went to production.
     href: "/production",
-    linkLabel: "View all orders",
+    linkLabel: "Open Production",
+    secondaryHref: "/orders",
+    secondaryLinkLabel: "Open Orders",
   },
   {
     id: "schedule",
@@ -382,6 +389,26 @@ export function moveHomeCard(layout: HomeLayout, from: number, to: number): Home
   const cards = layout.cards.slice();
   const [moved] = cards.splice(from, 1);
   cards.splice(to, 0, moved);
+  return { ...layout, cards };
+}
+
+/**
+ * Move a card to sit just before another one, or to the end when `beforeId` is
+ * null.
+ *
+ * By id, not by index, because the grid draws a FILTERED list — hidden cards
+ * and ones this member's role cannot see are not in it — while the layout holds
+ * them all. moveHomeCard was being handed the filtered index and splicing the
+ * unfiltered array with it, so on any workspace with a hidden card the drag
+ * moved a different card than the one under the hand.
+ */
+export function moveHomeCardBefore(layout: HomeLayout, id: HomeCardId, beforeId: HomeCardId | null): HomeLayout {
+  const cards = layout.cards.slice();
+  const from = cards.findIndex((card) => card.id === id);
+  if (from < 0 || id === beforeId) return layout;
+  const [moved] = cards.splice(from, 1);
+  const to = beforeId ? cards.findIndex((card) => card.id === beforeId) : cards.length;
+  cards.splice(to < 0 ? cards.length : to, 0, moved);
   return { ...layout, cards };
 }
 

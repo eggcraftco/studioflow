@@ -78,6 +78,7 @@ export function HomeCardShell({
   subtitle,
   subtitleInline,
   children,
+  place,
   onMove,
   onResize,
   onHide,
@@ -111,6 +112,8 @@ export function HomeCardShell({
   onTone: (tone: HomeCardTone) => void;
   onHeading: (heading: string) => void;
   onPeriod: (period: HomeCardPeriod) => void;
+  /** The cell this card sits in, from the page's own packing. */
+  place?: { gridColumn: string; gridRow: string };
   dragHandlers: {
     onDragStart: (event: React.DragEvent) => void;
     onDragEnd: (event: React.DragEvent) => void;
@@ -186,7 +189,12 @@ export function HomeCardShell({
         if (!window.matchMedia("(max-width: 640px)").matches) return;
         router.push(definition.href);
       }}
-      style={{
+      /* Placed, not floated. The browser's own auto-placement put the cards in
+         exactly these cells, but only the browser knew where the gaps between
+         them were — and a gap you cannot name is a gap you cannot drop into.
+         The page packs the grid itself now, by the same arithmetic the Mac and
+         Android use, and hands each card its cell. */
+      style={place ?? {
         gridColumn: `span ${homeCardColumns(placement.size)}`,
         gridRow: `span ${homeCardRows(placement.size)}`,
       }}
@@ -385,9 +393,20 @@ export function HomeCardShell({
         ) : footerNote ? (
           <span className="home-card-footnote"><i aria-hidden="true">i</i>{footerNote}</span>
         ) : <span />}
-        <Link href={definition.href} className="home-card-link">
-          {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
-        </Link>
+        {/* A card that covers two screens offers both, as the sheet draws it.
+            Orders & production had one link reading "orders" and pointing at
+            /production — the two halves of its own name, with only one of them
+            reachable and the label naming the other. */}
+        <span className="home-card-links">
+          {definition.secondaryHref && definition.secondaryLinkLabel ? (
+            <Link href={definition.secondaryHref} className="home-card-link">
+              {t(definition.secondaryLinkLabel)}<span aria-hidden="true"> →</span>
+            </Link>
+          ) : null}
+          <Link href={definition.href} className="home-card-link">
+            {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
+          </Link>
+        </span>
       </footer>
     </section>
   );

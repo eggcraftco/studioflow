@@ -106,7 +106,15 @@ export type HomeTileIconName =
   // What the Files card's three figures mean. Same rule as the line above:
   // added, not borrowed — the card was drawing three empty coloured discs
   // because it passed no icon at all, and a stand-in would have been worse.
-  | "fileStack" | "pie" | "link";
+  | "fileStack" | "pie" | "link"
+  // What the Inventory card's four figures mean. Same rule again: added, not
+  // borrowed. The nearest thing to a box was a delivery truck and the nearest
+  // thing to an alert was a clock, and the card was drawing four empty discs
+  // because it passed no icon at all.
+  | "money" | "tag" | "box" | "alert"
+  // What the Customers card's four figures mean. Added, not borrowed, for the
+  // reason stated twice above: the card was drawing four empty discs.
+  | "customerPair" | "customerNew" | "customerReturning" | "bag";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -228,6 +236,69 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
         <svg {...common}>
           <path d="M12 3a9 9 0 1 0 9 9h-9V3Z" />
           <path d="M14.5 3.6A9 9 0 0 1 20.4 9.5" />
+        </svg>
+      );
+    case "money":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M10 16h5" />
+          <path d="M13.6 16c-1.6-1-2.2-2.4-2.2-4.2V10a2.1 2.1 0 0 1 3.9-1" />
+          <path d="M9.6 12.6h4" />
+        </svg>
+      );
+    case "tag":
+      return (
+        <svg {...common}>
+          <path d="M11.4 3.2H19a1.8 1.8 0 0 1 1.8 1.8v7.6a1.8 1.8 0 0 1-.53 1.27l-6.4 6.4a1.8 1.8 0 0 1-2.55 0l-7.6-7.6a1.8 1.8 0 0 1 0-2.55l6.4-6.4a1.8 1.8 0 0 1 1.27-.53Z" />
+          <circle cx="16.2" cy="7.8" r="1.3" />
+        </svg>
+      );
+    case "box":
+      return (
+        <svg {...common}>
+          <path d="M4 8 12 4l8 4-8 4-8-4Z" />
+          <path d="M4 8v8l8 4 8-4V8" />
+          <path d="M12 12v8" />
+        </svg>
+      );
+    case "alert":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.6v5" />
+          <path d="M12 16.1v.1" />
+        </svg>
+      );
+    case "customerPair":
+      return (
+        <svg {...common}>
+          <circle cx="9.5" cy="8.2" r="3.4" />
+          <path d="M2.6 19.6a7 7 0 0 1 13.8 0" />
+          <path d="M16.2 11.4a3 3 0 1 0-1.6-5.5" />
+          <path d="M17.4 13.6a6 6 0 0 1 4.1 5.7" />
+        </svg>
+      );
+    case "customerNew":
+      return (
+        <svg {...common}>
+          <circle cx="9.5" cy="8.2" r="3.4" />
+          <path d="M2.6 19.6a7 7 0 0 1 13.8 0" />
+          <path d="M18.5 8v6M15.5 11h6" />
+        </svg>
+      );
+    case "customerReturning":
+      return (
+        <svg {...common}>
+          <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+          <path d="M20.5 4v4.2h-4.2" />
+        </svg>
+      );
+    case "bag":
+      return (
+        <svg {...common}>
+          <path d="M5 7.5h14l-1 12.2a1.6 1.6 0 0 1-1.6 1.5H7.6A1.6 1.6 0 0 1 6 19.7Z" />
+          <path d="M9 7.5V6a3 3 0 0 1 6 0v1.5" />
         </svg>
       );
     case "link":

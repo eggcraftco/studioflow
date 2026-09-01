@@ -9,6 +9,7 @@ export type CardIcon =
   | "bolt"
   | "checklist"
   | "customer"
+  | "customers"
   | "dashboard"
   | "docText"
   | "export"
@@ -22,6 +23,7 @@ export type CardIcon =
   | "notes"
   | "noteCompose"
   | "orders"
+  | "ordersProduction"
   | "paintbrush"
   | "photo"
   | "plan"
@@ -47,6 +49,11 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   bolt: ["M13.2 2.4 4.6 13.4h5.6l-.6 8.2 8.6-11h-5.6l.6-8.2Z"],
   checklist: ["M8 6h12", "M8 12h12", "M8 18h12", "m3 6 .7 .7L5 5", "m3 12 .7 .7L5 11", "m3 18 .7 .7L5 17"],
   customer: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
+  // The Customers card is about more than one of them, and the sheet draws two.
+  // A new key rather than a redrawn `customer`: that one is also the admin hub's
+  // and the logged-out marketing site's.
+  customers: ["M9.5 11.5a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z", "M2.5 20a7 7 0 0 1 14 0",
+              "M16.2 11.4a3 3 0 1 0-1.6-5.5", "M17.4 13.6A6 6 0 0 1 21.5 19.3"],
   dashboard: ["M4 13h6V4H4v9ZM14 20h6V4h-6v16ZM4 20h6v-4H4v4Z"],
   docText: ["M6 3h8l4 4v14H6V3Z", "M14 3v5h4", "M9 12h6M9 16h6"],
   export: ["M12 3v12", "m7 8 5-5 5 5", "M5 15v4h14v-4"],
@@ -65,6 +72,10 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   // logged-out marketing site, none of which are about composing anything.
   noteCompose: ["M20 12.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6.5", "M18.4 3.6a2.1 2.1 0 0 1 3 3L13 15l-4 1 1-4 8.4-8.4Z"],
   orders: ["M6 3h12v18H6V3Z", "M9 7h6M9 11h6M9 15h4"],
+  // A bag with a cog: what was ordered, and the work of making it. Its own key,
+  // not a redraw of `orders` — that one is shared with ten other CardTitle call
+  // sites across Settings, Customers and the Orders screen.
+  ordersProduction: ["M5 8h10l1 12H4L5 8Z", "M7.5 8V6a2.5 2.5 0 0 1 5 0v2", "M18 11.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z", "M18 9.2v1M18 17.8v1M20.9 10.6l-.7.7M15.8 15.7l-.7.7M21.8 14h-1M16.2 14h-1M20.9 17.4l-.7-.7M15.8 12.3l-.7-.7"],
   paintbrush: ["M14 4l6 6-7 7-6-6 7-7Z", "M6 12l6 6", "M5 14c-2 2-2 5-2 7 2 0 5 0 7-2"],
   photo: ["M4 5h16v14H4V5Z", "M8 13l2.5-2.5L14 14l2-2 4 4", "M9 9h.01"],
   plan: ["M4 5h16v14H4V5Z", "M4 10h16", "M8 15h3"],

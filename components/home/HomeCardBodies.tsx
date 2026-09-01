@@ -12,7 +12,7 @@ import {
   orderSalesTotal,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
-import type { ScheduleOrderItem } from "@/lib/studioflow/firestore";
+import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
@@ -33,6 +33,11 @@ export type CardBodyProps = {
   period: HomeCardPeriod;
   data: HomeData;
   t: (text: string) => string;
+  /** The BCP-47 tag for the workspace's chosen language. Dates on a card must
+   *  read in the language the rest of the card is written in — the browser's
+   *  locale is a different question and answers it wrong for anyone whose
+   *  laptop is not set to their working language. */
+  locale: string;
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
@@ -214,7 +219,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 function MoneyTile({
   label, value, tone, sub, icon, bar,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral" | "purple" | "teal"; sub?: string;
   icon?: HomeTileIconName;
   /** 0–100 for a figure that is a proportion, drawn under it as the sheet
    *  draws storage. A number on its own does not say how close to full it is. */
@@ -629,9 +634,18 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
     // The sheet reads: what the stock is worth, then the three counts that say
     // whether it needs attention, then the mix as one bar. Reserved is the third
     // — stock that is spoken for is not stock you can sell.
-    const items = summary.uniqueCount + summary.quantityCount;
-    const healthy = Math.max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount);
-    const share = (value: number) => (items > 0 ? value / items : 0);
+    // Every one of these is a count of ITEMS, and the server settles what each
+    // means (functions/inventory.js): an item still on its way is counted as
+    // incoming and then returns before the totals, so it is not on the shelf at
+    // all; low stock is only ever a quantity-tracked item at or below its
+    // reorder level; and an item can be low AND reserved at once. The old bar
+    // subtracted incoming from a shelf it was never part of and subtracted the
+    // overlap twice, so its four segments partitioned nothing.
+    // What these numbers CAN say truthfully is how much of the shelf needs
+    // reordering. That is what stock health means, and the counts above already
+    // say how much is spoken for and how much is coming.
+    const shelf = summary.uniqueCount + summary.quantityCount;
+    const low = Math.min(summary.lowStockCount, shelf);
     return (
       <div className="home-money is-stock">
         <p className="home-metric-label">{t("total value")}</p>
@@ -650,13 +664,16 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
             <b className={summary.reservedCount > 0 ? "is-warning" : ""}>{summary.reservedCount}</b>
           </span>
         </div>
-        {items > 0 ? (
-          <span className="home-mix-bar" aria-hidden="true">
-            <i className="tone-green" style={{ flex: `${share(healthy)} 1 0` }} />
-            <i className="tone-orange" style={{ flex: `${share(summary.incomingCount)} 1 0` }} />
-            <i className="tone-red" style={{ flex: `${share(summary.lowStockCount)} 1 0` }} />
-            <i className="tone-slate" style={{ flex: `${share(summary.reservedCount)} 1 0` }} />
-          </span>
+        {shelf > 0 ? (
+          <>
+            <p className="home-stock-health">{t("Stock health")}</p>
+            <span className="home-mix-bar"
+                  role="img"
+                  aria-label={`${t("Stock health")}: ${low} / ${shelf} ${t("low stock")}`}>
+              <i className="tone-green" style={{ flex: `${shelf - low} 1 0` }} />
+              <i className="tone-red" style={{ flex: `${low} 1 0` }} />
+            </span>
+          </>
         ) : null}
       </div>
     );
@@ -741,28 +758,67 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
     .sort((a, b) => a.rank - b.rank)
     .slice(0, 3);
   const kindLabel = { low: t("Low stock"), reserved: t("Reserved"), incoming: t("Incoming") };
+  const pct = (value: number) => (total > 0 ? `${((value / total) * 100).toFixed(1)}%` : "—");
+  // The three things that are not free shelf, worst last so the eye lands on
+  // it. Low stock is here as well as in the tile above: the tile counts it,
+  // this says what it is worth having to reorder.
+  const statuses = [
+    { key: "reserved", icon: "reserved" as const, label: t("Reserved"), count: summary.reservedCount, value: money(summary.reservedValue) },
+    { key: "incoming", icon: "incomingStock" as const, label: t("incoming"), count: summary.incomingCount, value: money(summary.incomingValue) },
+    { key: "low", icon: "alert" as const, label: t("Low stock"), count: summary.lowStockCount, value: "" },
+  ];
   return (
     <div className="home-money is-large is-stock">
       <div className="home-tile-row">
-        <MoneyTile label={t("total value")} value={money(summary.totalValue)} tone="blue" />
-        <MoneyTile label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
-        <MoneyTile label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
-        <MoneyTile label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
+        {/* Four tiles, four empty discs: the tile takes an icon and none of
+            them was given one. */}
+        <MoneyTile icon="money" label={t("total value")} value={money(summary.totalValue)} tone="blue" />
+        <MoneyTile icon="tag" label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
+        <MoneyTile icon="box" label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
+        <MoneyTile icon="alert" label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
       </div>
-      <div className="home-panel home-donut-panel">
-        <Donut share={uniqueShare} />
-        <ul className="home-donut-key">
-          <li>
-            <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
-            <em>{t("Unique items")}</em>
-            <b>{money(summary.uniqueValue)}</b>
-          </li>
-          <li>
-            <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
-            <em>{t("Quantity stock")}</em>
-            <b>{money(summary.quantityValue)}</b>
-          </li>
-        </ul>
+      {/* The sheet sets the two of them side by side: what the value is made
+          of, and what is not free shelf. The ring on its own left the card
+          with a third of its height empty. */}
+      <div className="home-stock-split">
+        <div className="home-panel home-donut-panel">
+          <p className="home-eyebrow is-strong">{t("Inventory value")}</p>
+          {/* Ring on the left, its key beside it — the sheet's arrangement, and
+              the only one that fits: the panel is half a card wide, and two key
+              columns left 95px for an amount that needs 88. */}
+          <div className="home-donut-body">
+          <Donut share={uniqueShare} />
+          <ul className="home-donut-key">
+            <li>
+              <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
+              <em>{t("Unique items")}</em>
+              <b>{money(summary.uniqueValue)}</b>
+              <i>{pct(summary.uniqueValue)}</i>
+            </li>
+            <li>
+              <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
+              <em>{t("Quantity stock")}</em>
+              <b>{money(summary.quantityValue)}</b>
+              <i>{pct(summary.quantityValue)}</i>
+            </li>
+          </ul>
+          </div>
+        </div>
+        <div className="home-panel home-status-panel">
+          <p className="home-eyebrow is-strong">{t("Stock status")}</p>
+          <ul className="home-status-list">
+            {statuses.map((row) => (
+              <li key={row.key} className={`is-${row.key}`}>
+                <span className="home-status-mark" aria-hidden="true"><HomeTileIcon name={row.icon} /></span>
+                <span className="home-status-name">
+                  <strong>{row.label}</strong>
+                  <em>{row.count} {t("items")}</em>
+                </span>
+                {row.value ? <b>{row.value}</b> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Needs attention")}</p>
@@ -770,6 +826,16 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
           <p className="home-card-note">{t("Nothing here yet.")}</p>
         ) : (
           <ul className="home-attention-list">
+            {/* The sheet heads the columns. Four rows of thumbnail, chip and
+                place with nothing naming them is a list pretending to be a
+                table. */}
+            <li className="is-head" aria-hidden="true">
+              <span />
+              <em>{t("Item")}</em>
+              <em>{t("Status")}</em>
+              <em>{t("Location")}</em>
+              <em>{t("Value")}</em>
+            </li>
             {attention.map(({ item, kind }) => (
               <li key={item.id}>
                 {item.photos?.[0] ? (
@@ -781,6 +847,11 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
                 <strong>{item.name}</strong>
                 <span className={`home-attention-chip is-${kind}`}>{kindLabel[kind]}</span>
                 <span className="home-attention-where">{item.location || "—"}</span>
+                {/* The same line value the server totals with: one for a unique
+                    piece, the count on the shelf for a quantity line. */}
+                <b>{money(item.trackingType === "unique"
+                  ? item.valuationCost
+                  : item.valuationCost * (item.quantity?.onHand ?? 0))}</b>
               </li>
             ))}
           </ul>
@@ -814,6 +885,14 @@ const STAGE_TONE: Record<string, string> = {
   ready: "green", active: "blue", blocked: "red", review: "purple", shipready: "green", done: "slate",
 };
 
+/** The mark inside each flow node. The nodes were bare coloured discs — six
+ *  blobs above six names, on the one row of the card whose job is to say what
+ *  each stage IS. Every one of these already existed for another card. */
+const STAGE_ICON: Record<string, HomeTileIconName> = {
+  ready: "ready", active: "inProduction", blocked: "overdue",
+  review: "search", shipready: "readyToShip", done: "paid",
+};
+
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   const open = data.scheduleOrders.filter((order) => !order.isDelivered);
   if (open.length === 0) return null;
@@ -831,6 +910,44 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
     count: resolved.filter((entry) => entry.stageId === stage.id).length,
   }));
   const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
+
+  /** One row for an order that needs a decision: what it looks like, who it is
+   *  for, what it is, where it has got to and whether it is late. Written once
+   *  because the 2x2 had its own thinner version — a name and two chips, no
+   *  thumbnail and no order — so the biggest card said less per row than the
+   *  medium one, which is backwards and is not what the sheet draws. */
+  const orderRow = (order: (typeof open)[number]) => {
+    const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
+    const days = order.dueDate
+      ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
+      : 0;
+    const stage = byStage.find((entry) =>
+      entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
+    const name = order.customerName || order.designName || order.watchRef;
+    return (
+      <li key={order.id}>
+        <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+          {order.previewImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
+          ) : (
+            <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
+          )}
+          <strong>{name}</strong>
+          <span className="home-order-design">{order.designName}</span>
+          {overdue ? (
+            <span className="home-chip is-late">
+              {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
+            </span>
+          ) : <span />}
+          {stage ? (
+            <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
+          ) : <span />}
+          <span className="home-order-chevron" aria-hidden="true">›</span>
+        </Link>
+      </li>
+    );
+  };
 
   if (size === "1x1") {
     // The square reads top to bottom: how many are live, how they are split,
@@ -873,11 +990,16 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
     );
   }
 
+  // Done is left out here for the reason the wide card gives for leaving it out
+  // of its lanes: finished work is not a bottleneck, and its node only narrowed
+  // the five that are. The sheet draws five.
   const flow = (
     <ol className="home-flow">
-      {byStage.map((stage) => (
+      {byStage.filter((stage) => stage.kind !== "done").map((stage) => (
         <li key={stage.id}>
-          <span className={`home-flow-node tone-${STAGE_TONE[stage.kind] ?? "slate"}`} aria-hidden="true" />
+          <span className={`home-flow-node tone-${STAGE_TONE[stage.kind] ?? "slate"}`} aria-hidden="true">
+            <HomeTileIcon name={STAGE_ICON[stage.kind] ?? "order"} />
+          </span>
           <em>{t(stage.title)}</em>
           <b className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{stage.count}</b>
         </li>
@@ -904,40 +1026,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
             </li>
           ))}
         </ol>
-        <ul className="home-order-list">
-          {priority.map((order) => {
-            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
-            const days = order.dueDate
-              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
-              : 0;
-            const stage = byStage.find((entry) =>
-              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
-            const name = order.customerName || order.designName || order.watchRef;
-            return (
-              <li key={order.id}>
-                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                  {order.previewImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
-                  ) : (
-                    <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
-                  )}
-                  <strong>{name}</strong>
-                  <span className="home-order-design">{order.designName}</span>
-                  {overdue ? (
-                    <span className="home-chip is-late">
-                      {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
-                    </span>
-                  ) : <span />}
-                  {stage ? (
-                    <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
-                  ) : <span />}
-                  <span className="home-order-chevron" aria-hidden="true">›</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="home-order-list">{priority.map(orderRow)}</ul>
       </div>
     );
   }
@@ -946,8 +1035,12 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   return (
     <div className="home-money is-large is-production">
       <div className="home-tile-row is-pair">
-        <MoneyTile label={t("active orders")} value={String(open.length)} tone="blue" />
-        <MoneyTile label={t("Overdue")} value={String(late.length)} tone={late.length > 0 ? "orange" : "blue"} />
+        {/* Both wore an empty disc: the tile takes an icon and neither was
+            given one. And the first was labelled "active orders" in lower case
+            beside "Overdue" — that is the phrase from the lede, not a label. */}
+        <MoneyTile icon="order" label={t("Active orders")} value={String(open.length)} tone="blue" />
+        <MoneyTile icon="overdue" label={t("Overdue")} value={String(late.length)}
+                   tone={late.length > 0 ? "orange" : "blue"} />
       </div>
       <div className="home-panel">
         <p className="home-eyebrow is-strong">{t("Production flow")}</p>
@@ -955,29 +1048,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Priority orders")}</p>
-        <ul className="home-record-list">
-          {priority.map((order) => {
-            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
-            const days = order.dueDate
-              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
-              : 0;
-            const stage = byStage.find((entry) =>
-              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
-            return (
-              <li key={order.id}>
-                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                  {order.customerName || order.designName || order.watchRef}
-                </Link>
-                {stage ? <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span> : null}
-                {overdue ? (
-                  <span className="home-chip is-late">
-                    {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
-                  </span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="home-order-list">{priority.map(orderRow)}</ul>
       </div>
     </div>
   );
@@ -986,21 +1057,21 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
 /* --------------------------------------------------------------- Schedule */
 
 /// "24–30 Aug", or "28 Aug – 3 Sep" when the visible week straddles two months.
-export function homeWeekRangeLabel() {
+export function homeWeekRangeLabel(locale?: string) {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
   const sameMonth = start.getMonth() === end.getMonth();
-  const endLabel = end.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const endLabel = end.toLocaleDateString(locale, { day: "numeric", month: "short" });
   const startLabel = sameMonth
     ? String(start.getDate())
-    : start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    : start.toLocaleDateString(locale, { day: "numeric", month: "short" });
   return sameMonth ? `${startLabel}–${endLabel}` : `${startLabel} – ${endLabel}`;
 }
 
-export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
+export function ScheduleCardBody({ size, data, t, locale }: CardBodyProps) {
   // Dates and deadlines only — never production status again (§10).
   const open = data.scheduleOrders.filter((order) => !order.isDelivered && order.dueDate);
   if (open.length === 0) return null;
@@ -1015,10 +1086,22 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   // takes a date.
   const startOfDayOf = (date: Date) => new Date(new Date(date).setHours(0, 0, 0, 0));
   const daysFromToday = (date: Date) => Math.round((startOfDayOf(date).getTime() - today.getTime()) / 86400000);
+  /** Two dates are the same day when they NAME the same day, not when they hold
+   *  the same instant. Where the clocks jump at midnight — Santiago, every
+   *  September — setHours(0,0,0,0) lands on 01:00, and comparing the numbers
+   *  would have every day of that week disagree with itself. */
+  const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  /** Letters, not UTF-16 units: "शुक्र" is five units and three letters. Both
+   *  the day strip and the week header ask the same question of a weekday name
+   *  — will it fit — and both measured Arabic as the one language that will
+   *  not. */
+  const letters = (label: string) => label.normalize("NFD").replace(/\p{M}/gu, "").length;
+  /** Whether a set of weekday names will sit beside their dates on one line. */
+  const letters2 = (labels: string[]) => Math.max(...labels.map(letters)) <= 4;
   const dueChip = (order: ScheduleOrderItem) => {
     const startsIn = order.paymentDate ? daysFromToday(order.paymentDate) : 0;
     if (startsIn > 0 && startsIn < 7) {
-      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(undefined, { weekday: "short" });
+      const day = startOfDayOf(order.paymentDate!).toLocaleDateString(locale, { weekday: "short" });
       return { label: t("Starts {day}").replace("{day}", day), hue: "hue-purple" };
     }
     const days = daysFromToday(order.dueDate!);
@@ -1026,38 +1109,10 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     if (days === 0) return { label: t("Due today"), hue: "hue-red" };
     if (days === 1) return { label: t("Tomorrow"), hue: "hue-amber" };
     return {
-      label: order.dueDate!.toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+      label: order.dueDate!.toLocaleDateString(locale, { day: "numeric", month: "short" }),
       hue: "hue-blue",
     };
   };
-
-  if (size === "1x1") {
-    return (
-      <ul className="home-due-list">
-        {upcoming.slice(0, 3).map((order) => {
-          const chip = dueChip(order);
-          const ref = order.watchRef.trim();
-          const name = order.customerName || order.designName;
-          return (
-            <li key={order.id}>
-              <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                <span className="home-due-head">
-                  {/* The sheet names the row after the order. A workspace that
-                      never gave the order a reference has only the customer,
-                      and then that is the name. */}
-                  <b>
-                    {ref ? <><i>{t("Order")}</i>{ref.startsWith("#") ? ref : `#${ref}`}</> : name}
-                  </b>
-                  <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
-                </span>
-                {ref && name ? <em>{name}</em> : null}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    );
-  }
 
   // The visible week, Monday first, so the timeline and the day strip agree.
   const weekStart = new Date(today);
@@ -1068,32 +1123,115 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
     return date;
   });
 
+  if (size === "1x1") {
+    // Which days of this week carry a deadline — every open order, not just the
+    // three the list has room for, because the strip is the week's load and the
+    // list is only the front of the queue.
+    const dueDays = new Set(upcoming.map((order) => dayKey(order.dueDate!)));
+    // "short" is what the sheet draws and what the wide card uses, but it is not
+    // short in every language: measured at 8.5px in a 25px tile, eleven of the
+    // twelve fit and Arabic does not — "الخميس" comes to 28px. That one drops to
+    // the narrow form rather than cutting a day mid-word; the position in a
+    // Monday-first strip says which day it is.
+    // The count is of letters, not of UTF-16 units: "शुक्र" is five units and
+    // three letters, and the naive length demoted Hindi at 17px. (Swift counts
+    // letters already, so the Mac side needs no such care.)
+    const shortDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
+    const narrow = Math.max(...shortDays.map(letters)) > 4;
+    return (
+      <>
+        {/* The sheet opens the small card with the week it is about. Without the
+            dots it would be a calendar: the day of the month is on the clock
+            already, which day has work on it is not. */}
+        <ol className="home-day-strip" aria-label={homeWeekRangeLabel(locale)}>
+          {days.map((date, index) => {
+            const isToday = dayKey(date) === dayKey(today);
+            const hasDue = dueDays.has(dayKey(date));
+            const marks = `${isToday ? " is-today" : ""}${hasDue ? " has-due" : ""}`;
+            return (
+              <li key={date.toISOString()} className={marks.trim() || undefined}>
+                <em>{narrow ? date.toLocaleDateString(locale, { weekday: "narrow" }) : shortDays[index]}</em>
+                <b>{date.getDate()}</b>
+                {/* Today is a background colour and a deadline is a 3px disc
+                    drawn in CSS: neither reaches a screen reader, and the dots
+                    cover every open order, not only the three listed below. */}
+                {isToday ? <span className="sr-only">{t("Today")}</span> : null}
+                {hasDue ? <span className="sr-only">{t("Deadline on this day")}</span> : null}
+              </li>
+            );
+          })}
+        </ol>
+        {/* Not t("Next"): that key is the wizard's forward button, and its
+            German is "Weiter" and its Italian "Avanti" — a Continue button
+            standing over a list of deadlines. */}
+        <p className="home-due-eyebrow">{t("Next up")}</p>
+        <ul className="home-due-list">
+          {upcoming.slice(0, 3).map((order) => {
+            const chip = dueChip(order);
+            const ref = order.watchRef.trim();
+            const name = order.customerName || order.designName;
+            return (
+              <li key={order.id}>
+                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+                  {/* The sheet names the row after the order and sets the
+                      customer beside it. A workspace that never gave the order
+                      a reference has only the customer, and then that is the
+                      name. The word "Order" is left off: it costs a third of a
+                      208px row on a card already headed Schedule, and "#1094"
+                      says the same thing. */}
+                  <span className="home-due-head">
+                    <b className={ref && name ? "is-ref" : undefined}>
+                      {ref ? (ref.startsWith("#") ? ref : `#${ref}`) : name}
+                    </b>
+                    {ref && name ? <em>{name}</em> : null}
+                    <span className={`home-chip ${chip.hue}`}>{chip.label}</span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    );
+  }
+
 
   if (size === "2x1") {
-    const weekEndDay = new Date(days[6]);
-    weekEndDay.setHours(23, 59, 59, 999);
     const columnOf = (date: Date) =>
       Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
     const todayColumn = columnOf(today);
 
+    const bars = upcoming.slice(0, 3);
+    // The sheet sets "Mon 24" on one line. A column is 46px, which holds the
+    // pair in eleven of the twelve languages; Arabic's "الاثنين" alone comes to
+    // 28px and the date has to go under it.
+    const weekDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
+    const inlineDays = letters2(weekDays);
     return (
-      <div className="home-week">
+      <div className={`home-week${inlineDays ? " is-inline-days" : ""}`}
+           style={{ "--home-week-rows": bars.length } as CSSProperties}>
         {/* Today's column runs the height of the card, as the sheet draws it —
             it is what every bar is read against. */}
         {todayColumn >= 0 && todayColumn <= 6 ? (
           <span className="home-week-today" style={{ gridColumn: todayColumn + 2 }} aria-hidden="true" />
         ) : null}
+        {/* The sheet rules this like a table: a line at the head of every day
+            column so a bar can be read back to the day it starts on, and a line
+            under every row so a name stays tied to its own bar. */}
+        <span className="home-week-cols" style={{ gridRow: "2 / -1" }} aria-hidden="true" />
+        <span className="home-week-rules" style={{ gridRow: "2 / -1" }} aria-hidden="true" />
         {days.map((date, index) => {
           const isToday = index === todayColumn;
           return (
             <span key={date.toISOString()} className={`home-week-day${isToday ? " is-today" : ""}`}
                   style={{ gridColumn: index + 2 }}>
-              <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+              <em>{weekDays[index]}</em>
               <b>{date.getDate()}</b>
+              {isToday ? <i>{t("Today")}</i> : null}
             </span>
           );
         })}
-        {upcoming.slice(0, 3).map((order, row) => {
+        {bars.map((order, row) => {
           const chip = dueChip(order);
           const name = order.customerName || order.designName;
           const ref = order.watchRef.trim();
@@ -1102,10 +1240,12 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
           const from = Math.max(0, columnOf(order.paymentDate ?? weekStart));
           const to = columnOf(order.dueDate!);
           const offWeek = to < 0;
-          // A bar narrower than its own chip has to borrow a column, and it
-          // borrows to the left: borrowing to the right runs off the card.
+          // A bar narrower than its own label has to borrow a column, and it
+          // borrows to the left: borrowing to the right runs off the card. One
+          // column is 46px and "Overdue" alone measures 57, so a single-day bar
+          // always takes two — which is what the sheet draws for "Starts 30".
           const end = Math.min(Math.max(to, from), 6);
-          const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+          const start = Math.max(0, Math.min(from, end - 1));
           // The name and the bar are grid items of the card's own grid, not of a
           // row box: that is what makes a bar land exactly on its days.
           return (
@@ -1132,25 +1272,43 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
   const columnOf = (date: Date) =>
     Math.round((new Date(new Date(date).setHours(0, 0, 0, 0)).getTime() - weekStart.getTime()) / 86400000);
   const todayColumn = columnOf(today);
-  const bars = upcoming.slice(0, 4);
+  const bars = upcoming.slice(0, 5);
   // "Upcoming" is what is still ahead. The timeline above already carries the
   // late ones, and repeating them here would spend the section on old news.
-  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 2);
+  const ahead = upcoming.filter((order) => columnOf(order.dueDate!) >= 0).slice(0, 3);
+  const largeWeekDays = days.map((date) => date.toLocaleDateString(locale, { weekday: "short" }));
 
   return (
-    <div className="home-week is-large" style={{ gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto` }}>
+    <div className={`home-week is-large${letters2(largeWeekDays) ? " is-inline-days" : ""}`}
+         style={{
+           gridTemplateRows: `auto auto repeat(${bars.length}, minmax(0, 1fr)) auto auto`,
+           "--home-week-rows": bars.length,
+         } as CSSProperties}>
+      {/* Today's column runs the height of the timeline, as the sheet draws it.
+          It used to be a filled pill on this size alone; the sheet gives both
+          the wide card and this one the same tinted column. */}
+      {/* The sheet names the section first and then draws the week under it —
+          the day row belongs to the timeline, not to the card's header. */}
+      <p className="home-week-eyebrow is-first" style={{ gridRow: 1 }}>{t("Weekly timeline")}</p>
+      {todayColumn >= 0 && todayColumn <= 6 ? (
+        <span className="home-week-today" style={{ gridColumn: todayColumn + 2, gridRow: `2 / ${bars.length + 3}` }}
+              aria-hidden="true" />
+      ) : null}
       {days.map((date, index) => (
         <span key={date.toISOString()} className={`home-week-day${index === todayColumn ? " is-today" : ""}`}
-              style={{ gridColumn: index + 2 }}>
-          <em>{date.toLocaleDateString(undefined, { weekday: "short" })}</em>
+              style={{ gridColumn: index + 2, gridRow: 2 }}>
+          <em>{largeWeekDays[index]}</em>
           <b>{date.getDate()}</b>
           {index === todayColumn ? <i>{t("Today")}</i> : null}
         </span>
       ))}
-      <p className="home-week-eyebrow" style={{ gridRow: 2 }}>{t("Weekly timeline")}</p>
-      {/* One element draws every day line and row line: seven spans and four
-          more would say the same thing and cost eleven DOM nodes. */}
-      <span className="home-week-guides" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      {/* A line at the head of every day column, and one under every row so a
+          name stays tied to its own bar. Two elements rather than one, because
+          the row lines run the full width and the day lines start after the
+          name column — and because the single element they replace had four
+          rows baked into it and drew a fourth line on a card showing three. */}
+      <span className="home-week-cols" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
+      <span className="home-week-rules" style={{ gridRow: `3 / ${bars.length + 3}` }} aria-hidden="true" />
       {bars.map((order, row) => {
         const chip = dueChip(order);
         const name = order.customerName || order.designName;
@@ -1159,7 +1317,7 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
         const to = columnOf(order.dueDate!);
         const offWeek = to < 0;
         const end = Math.min(Math.max(to, from), 6);
-        const start = end === 6 ? Math.min(from, 5) : Math.min(from, 6);
+        const start = Math.max(0, Math.min(from, end - 1));
         // The section below spells out the dates, so up here only the bars that
         // need doing something about carry a word.
         const urgent = offWeek || columnOf(order.dueDate!) <= todayColumn + 1;
@@ -1179,15 +1337,18 @@ export function ScheduleCardBody({ size, data, t }: CardBodyProps) {
       {ahead.length > 0 ? (
         <>
           <p className="home-week-eyebrow is-ruled" style={{ gridRow: bars.length + 3 }}>{t("Upcoming")}</p>
-          <ul className="home-upcoming" style={{ gridRow: bars.length + 4 }}>
+          <ul className="home-upcoming"
+          style={{ gridRow: bars.length + 4, gridTemplateColumns: `repeat(${ahead.length}, minmax(0, 1fr))` }}>
             {ahead.map((order) => {
               const chip = dueChip(order);
               const name = order.customerName || order.designName;
               const ref = order.watchRef.trim();
               return (
                 <li key={order.id}>
+                  {/* A deadline that has arrived is not another calendar
+                      entry, and the sheet does not draw it as one. */}
                   <span className={`home-upcoming-mark ${chip.hue}`} aria-hidden="true">
-                    <HomeTileIcon name="reminder" />
+                    <HomeTileIcon name={chip.hue === "hue-red" ? "overdue" : "reminder"} />
                   </span>
                   <span>
                     <em className={chip.hue}>{chip.label}</em>
@@ -1225,27 +1386,82 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
   const withActive = customers.filter((customer) => activeNames.has(customer.name.toLowerCase())).length;
 
   if (size === "1x1") {
-    const latest = customers[0];
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("customers")}</p>
-        <strong className="home-metric-value">{customers.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("active orders")}</em><b className="is-positive">{withActive}</b></span>
-          {latest ? <span><em>{t("Latest")}</em><b className="is-plain">{latest.name}</b></span> : null}
+      <div className="home-money is-people">
+        {/* The sheet sets the count and the word on one line: "18 customers"
+            reads as a sentence, where a label stacked over a number reads as
+            two facts. */}
+        <p className="home-people-total">
+          <strong>{customers.length}</strong>
+          <em>{t("customers")}</em>
+        </p>
+        <div className="home-figure-row is-boxed">
+          <span>
+            <em>{t("New this month")}</em>
+            <b className="tone-new">{newThisMonth}</b>
+          </span>
+          <span>
+            <em>{t("Returning")}</em>
+            <b className="tone-returning">{returning}</b>
+          </span>
         </div>
+        {/* Two of them by name. A count of customers does not tell a jeweller
+            whose work is on the bench. */}
+        <ul className="home-people-list">
+          {customers.slice(0, 2).map((customer) => (
+            <li key={customer.id}>
+              <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>
+                <CustomerAvatar customer={customer} />
+                <span>
+                  <strong>{customer.name}</strong>
+                  <em>{activeNames.has(customer.name.toLowerCase())
+                    ? t("Active customer") : t("No open orders")}</em>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }
 
+  // One colour per idea, and the same one wherever the idea appears: the mix
+  // key below reads new as green, returning as purple and the rest as teal, and
+  // the figures were painting returning blue and active orders green.
   const tiles = (
     <div className="home-tile-row">
-      <MoneyTile label={t("Total customers")} value={String(customers.length)} tone="blue" />
-      <MoneyTile label={t("New this month")} value={String(newThisMonth)} tone="green" />
-      <MoneyTile label={t("Returning customers")} value={String(returning)} tone="blue" />
-      <MoneyTile label={t("Customers with active orders")} value={String(withActive)} tone="green" />
+      <MoneyTile icon="customerPair" label={t("Total customers")} value={String(customers.length)} tone="blue" />
+      <MoneyTile icon="customerNew" label={t("New this month")} value={String(newThisMonth)} tone="green" />
+      <MoneyTile icon="customerReturning" label={t("Returning customers")} value={String(returning)} tone="purple" />
+      <MoneyTile icon="bag" label={t("Customers with active orders")} value={String(withActive)} tone="teal" />
     </div>
   );
+
+  const latestOrderOf = (customer: CustomerDirectoryItem) => customer.orders[0]?.designName ?? "";
+  /** The store wrote "shopify"; the card is naming a company. Done here rather
+   *  than in CSS: ::first-letter does not apply to a flex container, which the
+   *  chip is. */
+  const sourceLabel = (source: string) => source.charAt(0).toUpperCase() + source.slice(1);
+  const customerRow = (customer: CustomerDirectoryItem, withOrder: boolean) => {
+    const active = activeNames.has(customer.name.toLowerCase());
+    const store = customer.source && customer.source !== "manual";
+    return (
+      <li key={customer.id}>
+        <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>
+          <CustomerAvatar customer={customer} />
+          <strong>{customer.name}</strong>
+          <span className={`home-chip is-source${store ? " is-store" : ""}`}>
+            {store ? sourceLabel(customer.source) : t("Direct")}
+          </span>
+          {withOrder ? <em className="home-people-order">{latestOrderOf(customer)}</em> : null}
+          <span className={active ? "home-chip is-active" : "home-chip is-muted"}>
+            {active ? t("Active customer") : t("No open orders")}
+          </span>
+          <i className="home-people-go" aria-hidden="true">›</i>
+        </Link>
+      </li>
+    );
+  };
 
   const mix = [
     { key: "New this month", count: newThisMonth, tone: "new" },
@@ -1255,10 +1471,20 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
   const mixTotal = Math.max(1, newThisMonth + returning + existing);
 
   if (size === "2x1") {
+    // The sheet's wide card: the four figures ruled apart rather than boxed,
+    // then the customers themselves. The mix bar is the big card's job — on a
+    // card this height it cost the three names their room.
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <CustomerMix mix={mix} total={mixTotal} t={t} />
+      <div className="home-money is-wide is-people">
+        <div className="home-figure-row is-quad">
+          <span><em>{t("Total customers")}</em><b className="tone-total">{customers.length}</b></span>
+          <span><em>{t("New this month")}</em><b className="tone-new">{newThisMonth}</b></span>
+          <span><em>{t("Returning customers")}</em><b className="tone-returning">{returning}</b></span>
+          <span><em>{t("Customers with active orders")}</em><b className="tone-existing">{withActive}</b></span>
+        </div>
+        <ul className="home-people-list is-wide">
+          {customers.slice(0, 3).map((customer) => customerRow(customer, true))}
+        </ul>
       </div>
     );
   }
@@ -1272,19 +1498,18 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Recent customers")}</p>
-        <ul className="home-record-list">
-          {customers.slice(0, 3).map((customer) => (
-            <li key={customer.id}>
-              <span className="home-avatar" aria-hidden="true">{customer.name.slice(0, 1).toUpperCase()}</span>
-              <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>{customer.name}</Link>
-              <span className={`home-chip is-source${customer.source && customer.source !== "manual" ? " is-store" : ""}`}>
-                {customer.source && customer.source !== "manual" ? customer.source : t("Direct")}
-              </span>
-              <span className={activeNames.has(customer.name.toLowerCase()) ? "home-chip is-active" : "home-chip is-muted"}>
-                {activeNames.has(customer.name.toLowerCase()) ? t("Active customer") : t("No open orders")}
-              </span>
-            </li>
-          ))}
+        <ul className="home-people-list is-wide is-table">
+          {/* The sheet heads the columns. Three rows of avatar, chip and chip
+              with nothing naming them is a list pretending to be a table. */}
+          <li className="is-head" aria-hidden="true">
+            <span />
+            <em>{t("Customer")}</em>
+            <em>{t("Source")}</em>
+            <em>{t("Latest order")}</em>
+            <em>{t("Status")}</em>
+            <span />
+          </li>
+          {customers.slice(0, 3).map((customer) => customerRow(customer, true))}
         </ul>
       </div>
       {/* §11 and §19: a member only ever sees the customers their role allows,
@@ -1292,6 +1517,15 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
       <p className="home-action-note">{t("Only customers you have permission to view are shown")}</p>
     </div>
   );
+}
+
+/** The record carries a photo; the card was drawing an initial over it. */
+function CustomerAvatar({ customer }: { customer: CustomerDirectoryItem }) {
+  if (customer.profileImageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="home-avatar is-photo" src={customer.profileImageUrl} alt="" loading="lazy" />;
+  }
+  return <span className="home-avatar" aria-hidden="true">{customer.name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; tone: string }[]; total: number; t: (text: string) => string }) {
@@ -1977,7 +2211,21 @@ export function GettingStartedCardBody({
             ) : null}
           </>
         ) : (
-          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+          <>
+            {/* Nothing left to do left 89px of the square empty. What was done
+                is the only true thing the card still has to say, and a jeweller
+                who wants to check one off against memory can now see it. The
+                square does not also carry "All set — nice work.": six ticks
+                under "6 of 6 complete" say it, and the sentence costs a step. */}
+            {skipped.length > 0 && onRestoreSkipped ? (
+              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            ) : null}
+            <ul className="home-check-list is-ruled is-recap">
+              {done.map((step) => (
+                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     );
@@ -1991,28 +2239,37 @@ export function GettingStartedCardBody({
     return (
       <div className="home-setup is-split">
         <HomeProgress complete={complete} total={steps.length} t={t} />
-        <div className="home-setup-columns">
-          <div className="home-setup-next">
-            {next ? (
-              <>
-                <NextStepPanel step={next} t={t} inline />
-                {onSkip ? (
-                  <button type="button" className="home-setup-skip"
-                          onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-                    {t("Skip for now")}
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
-            )}
+        {next ? (
+          <div className="home-setup-columns">
+            <div className="home-setup-next">
+              <NextStepPanel step={next} t={t} inline />
+              {onSkip ? (
+                <button type="button" className="home-setup-skip"
+                        onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                  {t("Skip for now")}
+                </button>
+              ) : null}
+            </div>
+            <ul className="home-check-list is-ruled">
+              {todo.slice(0, 3).map((step) => (
+                <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
           </div>
-          <ul className="home-check-list is-ruled">
-            {todo.slice(0, 3).map((step) => (
-              <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-            ))}
-          </ul>
-        </div>
+        ) : (
+          // With nothing left to do the second column has nothing in it, and its
+          // rule was standing on its own beside a sentence with half the card
+          // empty. Done, the card is one column: the sentence and the work it
+          // is talking about.
+          <>
+            <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            <ul className="home-check-list is-recap is-two-up">
+              {done.map((step) => (
+                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     );
   }
