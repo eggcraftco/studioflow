@@ -1108,9 +1108,9 @@ private fun DemoPlanUpgradeBanner(
 }
 
 /**
- * The four-question wizard (see features/onboarding), in place of the old
- * business-type dropdown and prompt box. There is no Skip: the last step offers
- * "Start empty" and "I'll set this up later" as real answers instead.
+ * The five-step wizard (see features/onboarding), in place of the old
+ * business-type dropdown and prompt box. There is no Skip: "I'll set this up
+ * later" is a real answer instead.
  */
 @Composable
 private fun WorkspaceOnboardingScreen(

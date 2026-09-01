@@ -2,14 +2,18 @@ import SwiftUI
 
 /// The Apple half of studioflow-web/lib/studioflow/onboardingWizard.ts.
 ///
-/// Four questions worth asking before someone starts work. The report's cut: ask
-/// only what genuinely changes the product, and make the answers visibly change
-/// it. Business age, inventory experience and "how did you find us" were dropped
-/// — they help us, not the person filling the form.
+/// Five steps, asked in the order `onboardingStepOrder` lists them. Connecting a
+/// store comes second, because someone who already has their work somewhere else
+/// should be able to bring it in before answering questions about it.
 ///
-/// There is no Skip. Every step is answerable instead: "Start empty" and "I'll
-/// set this up later" are real choices on the last step, not an escape hatch, so
-/// nobody is trapped and nobody is nagged. Back moves between steps.
+/// The step about the work is six dropdowns in two columns. Every one of those
+/// answers is a one-of-a-list, and a page of chips and radio cards spends a
+/// screenful of scrolling saying so; a tidy grid of controls asks the same six
+/// questions in a quarter of the height.
+///
+/// There is no Skip. Every step is answerable instead: "I'll set this up later"
+/// is a real choice, not an escape hatch, so nobody is trapped and nobody is
+/// nagged. Back moves between steps.
 
 enum OnboardingWorkKind: String, CaseIterable {
     case watchesJewellery = "watches_jewellery"
@@ -181,6 +185,44 @@ enum OnboardingVolume: String, CaseIterable {
     }
 }
 
+/// Raw values are the ids the web wizard writes, and they have to stay
+/// identical: the same workspace is read back by four platforms.
+enum OnboardingBusinessAge: String, CaseIterable {
+    case starting
+    case underOneYear = "under_1"
+    case oneToThreeYears = "1_3"
+    case threeToTenYears = "3_10"
+    case overTenYears = "over_10"
+
+    var label: String {
+        switch self {
+        case .starting: return "Just starting out"
+        case .underOneYear: return "Less than a year"
+        case .oneToThreeYears: return "1–3 years"
+        case .threeToTenYears: return "3–10 years"
+        case .overTenYears: return "More than 10 years"
+        }
+    }
+}
+
+enum OnboardingInventoryExperience: String, CaseIterable {
+    case noStock = "no_stock"
+    // Not `case none`: an enum case of that name shadows `Optional.none` at
+    // every use site, and this one is held in an Optional.
+    case newToIt = "none"
+    case someOfIt = "some"
+    case confident
+
+    var label: String {
+        switch self {
+        case .noStock: return "I don't hold stock"
+        case .newToIt: return "New to it"
+        case .someOfIt: return "I track some of it"
+        case .confident: return "I track it closely"
+        }
+    }
+}
+
 enum OnboardingGoal: String, CaseIterable {
     case ordersCustomers = "orders_customers"
     case productionDeadlines = "production_deadlines"
@@ -205,18 +247,6 @@ enum OnboardingGoal: String, CaseIterable {
         case .connectStore: return "Connect Shopify or WooCommerce"
         case .team: return "Manage work with my team"
         case .other: return "Something else"
-        }
-    }
-
-    /// Six shown first, the rest behind "Show more goals" — a wall of ten
-    /// choices is a wall, not a question.
-    var isPrimary: Bool {
-        switch self {
-        case .ordersCustomers, .productionDeadlines, .repairsService,
-             .estimates, .inventory, .finance:
-            return true
-        default:
-            return false
         }
     }
 
@@ -339,11 +369,22 @@ struct OnboardingAnswers {
     /// The workspace's language, guessed from the device and changed right here.
     var language: String = studioLanguageForDeviceLocale()
     var timeZone: String = TimeZone.current.identifier
+    /// Kept as a list because `businessType` reads the first entry and saved
+    /// workspaces carry an array; the question itself is now one choice.
     var workKinds: [OnboardingWorkKind] = []
     var workflow: OnboardingWorkflow = .madeToOrder
     var teamSize: OnboardingTeamSize = .solo
     var volume: OnboardingVolume?
+    var businessAge: OnboardingBusinessAge?
+    var inventoryExperience: OnboardingInventoryExperience?
+    /// Their own words. Not used to set anything up — asked because knowing what
+    /// brought someone is the difference between guessing at marketing and
+    /// measuring it, and a list of channels we thought of first would only ever
+    /// collect the ones we thought of.
+    var heardFrom: String = ""
     var mainGoal: OnboardingGoal?
+    /// What they typed when the goal is "Something else". Their words, not ours.
+    var otherGoal: String = ""
     var extraGoals: [OnboardingGoal] = []
     /// Pre-picked: it is the only row, and making someone tick the one choice
     /// there is before Next will let them through is a ritual, not a question.
@@ -405,30 +446,33 @@ let onboardingTimeZones: [String] = [
 // MARK: - Shared pieces
 //
 // Each control is its own small struct. The type checker gives up on a single
-// `body` that builds four steps' worth of chips, radios and pickers inline.
+// `body` that builds five steps' worth of rows, fields and pickers inline.
 
-private struct OnboardingChip: View {
-    let title: String
+private extension View {
+    /// The card an option row is drawn on. Shared, because the "Something else"
+    /// row cannot be a Button — it holds a text field — and a hand-copied
+    /// approximation of the rows above it would drift the first time either is
+    /// touched.
+    func onboardingRowSurface(isOn: Bool) -> some View {
+        padding(11)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(isOn ? Color.accentColor.opacity(0.08) : Color.gray.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(isOn ? Color.accentColor.opacity(0.55) : Color.gray.opacity(0.20), lineWidth: 1)
+            )
+    }
+}
+
+private struct OnboardingRadio: View {
     let isOn: Bool
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 13, weight: isOn ? .semibold : .regular))
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 999, style: .continuous)
-                        .fill(isOn ? Color.accentColor.opacity(0.16) : Color.gray.opacity(0.10))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 999, style: .continuous)
-                        .stroke(isOn ? Color.accentColor : Color.gray.opacity(0.28), lineWidth: isOn ? 1.4 : 1)
-                )
-                .foregroundColor(isOn ? Color.accentColor : .primary)
-        }
-        .buttonStyle(.plain)
+        Image(systemName: isOn ? "largecircle.fill.circle" : "circle")
+            .font(.system(size: 16))
+            .foregroundColor(isOn ? Color.accentColor : Color.secondary.opacity(0.6))
     }
 }
 
@@ -441,9 +485,7 @@ private struct OnboardingOptionRow: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 11) {
-                Image(systemName: isOn ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 16))
-                    .foregroundColor(isOn ? Color.accentColor : Color.secondary.opacity(0.6))
+                OnboardingRadio(isOn: isOn)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 13.5, weight: .semibold))
                     if !detail.isEmpty {
@@ -452,34 +494,92 @@ private struct OnboardingOptionRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(11)
-            .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(isOn ? Color.accentColor.opacity(0.08) : Color.gray.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(isOn ? Color.accentColor.opacity(0.55) : Color.gray.opacity(0.20), lineWidth: 1)
-            )
+            .onboardingRowSurface(isOn: isOn)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
 
-private struct OnboardingFlowChips<Item: Hashable>: View {
-    let items: [Item]
-    let title: (Item) -> String
-    let isOn: (Item) -> Bool
-    let toggle: (Item) -> Void
+/// A short grey label above, the question itself inside the control.
+///
+/// With the whole question as the label the rows came out at different heights
+/// — "How familiar are you with stock tracking?" wraps where "Team size" does
+/// not — and a grid of controls that do not line up reads as untidy however
+/// carefully it is spaced.
+private struct OnboardingFieldLabel: View {
+    let text: String
 
     var body: some View {
-        // A simple wrapping row: LazyVGrid with adaptive columns keeps the chips
-        // on one line where they fit and wraps where they don't.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 8) {
-            ForEach(items, id: \.self) { item in
-                OnboardingChip(title: title(item), isOn: isOn(item)) { toggle(item) }
+        Text(text)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(.secondary)
+    }
+}
+
+/// A dropdown whose answer is required, so it opens already showing one.
+private struct OnboardingPickerField<Value: Hashable>: View {
+    let label: String
+    let options: [Value]
+    let title: (Value) -> String
+    @Binding var selection: Value
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingFieldLabel(text: label)
+            Picker("", selection: $selection) {
+                ForEach(options, id: \.self) { option in
+                    Text(title(option)).tag(option)
+                }
             }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A dropdown that may go unanswered: the question sits in the empty row, so
+/// the control says what it is asking before anything is picked.
+private struct OnboardingOptionalPickerField<Value: Hashable>: View {
+    let label: String
+    let placeholder: String
+    let options: [Value]
+    let title: (Value) -> String
+    @Binding var selection: Value?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingFieldLabel(text: label)
+            Picker("", selection: $selection) {
+                Text(placeholder).tag(Value?.none)
+                ForEach(options, id: \.self) { option in
+                    Text(title(option)).tag(Value?.some(option))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct OnboardingTextEntryField: View {
+    let label: String
+    let placeholder: String
+    /// What the server keeps. Clamped as it is typed rather than silently cut on
+    /// save, so nobody writes a paragraph and loses the end of it.
+    let limit: Int
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            OnboardingFieldLabel(text: label)
+            TextField(placeholder, text: Binding(
+                get: { text },
+                set: { text = String($0.prefix(limit)) }
+            ))
+            .textFieldStyle(.roundedBorder)
         }
     }
 }
@@ -521,7 +621,7 @@ private struct OnboardingStepBasics: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(t("Country", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                OnboardingFieldLabel(text: t("Country", lang: lang))
                 Picker("", selection: $answers.country) {
                     ForEach(onboardingCountries, id: \.code) { entry in
                         Text(t(entry.label, lang: lang)).tag(entry.code)
@@ -538,7 +638,7 @@ private struct OnboardingStepBasics: View {
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(t("Currency", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                OnboardingFieldLabel(text: t("Currency", lang: lang))
                 Picker("", selection: $answers.currency) {
                     ForEach(onboardingCurrencies, id: \.code) { entry in
                         Text(entry.label).tag(entry.code)
@@ -551,7 +651,7 @@ private struct OnboardingStepBasics: View {
                 // Picked here rather than hunted for in Settings afterwards, and
                 // applied the moment it changes so the rest of the setup already
                 // reads in it.
-                Text(t("Language", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                OnboardingFieldLabel(text: t("Language", lang: lang))
                 Picker("", selection: $answers.language) {
                     ForEach(studioSupportedLanguages, id: \.self) { name in
                         Text(name).tag(name)
@@ -564,7 +664,7 @@ private struct OnboardingStepBasics: View {
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(t("Time zone", lang: lang)).font(.system(size: 12, weight: .bold)).foregroundColor(.secondary)
+                OnboardingFieldLabel(text: t("Time zone", lang: lang))
                 Picker("", selection: $answers.timeZone) {
                     ForEach(onboardingTimeZones, id: \.self) { zone in
                         Text(zone).tag(zone)
@@ -581,110 +681,149 @@ private struct OnboardingStepWork: View {
     @Binding var answers: OnboardingAnswers
     let lang: String
 
-    private func toggleKind(_ kind: OnboardingWorkKind) {
-        if let index = answers.workKinds.firstIndex(of: kind) {
-            answers.workKinds.remove(at: index)
-        } else {
-            answers.workKinds.append(kind)
-        }
+    /// One choice, stored as a list of one: `businessType` reads the first entry
+    /// and the saved shape is read back by the other three platforms.
+    private var workKind: Binding<OnboardingWorkKind?> {
+        Binding(
+            get: { answers.workKinds.first },
+            set: { picked in answers.workKinds = picked.map { [$0] } ?? [] }
+        )
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("What kind of work do you do?", lang: lang)).font(.system(size: 14, weight: .semibold))
-                Text(t("Pick as many as apply.", lang: lang)).font(.system(size: 12)).foregroundColor(.secondary)
-                OnboardingFlowChips(
-                    items: OnboardingWorkKind.allCases,
-                    title: { t($0.label, lang: lang) },
-                    isOn: { answers.workKinds.contains($0) },
-                    toggle: { toggleKind($0) }
-                )
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text(t("How do you mainly work?", lang: lang)).font(.system(size: 14, weight: .semibold))
-                ForEach(OnboardingWorkflow.allCases, id: \.self) { flow in
-                    OnboardingOptionRow(
-                        title: t(flow.label, lang: lang),
-                        detail: t(flow.detail, lang: lang),
-                        isOn: answers.workflow == flow
-                    ) {
-                        answers.workflow = flow
-                    }
+        // Two columns where there is room for them, one on a phone. Six controls
+        // stacked full width is a page of scrolling to answer six one-word
+        // questions.
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 230), spacing: 14, alignment: .topLeading)],
+            alignment: .leading,
+            spacing: 14
+        ) {
+            OnboardingOptionalPickerField(
+                label: t("What you make", lang: lang),
+                placeholder: t("What do you mostly make?", lang: lang),
+                options: OnboardingWorkKind.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: workKind
+            )
+            OnboardingPickerField(
+                label: t("How you work", lang: lang),
+                options: OnboardingWorkflow.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: $answers.workflow
+            )
+            OnboardingPickerField(
+                label: t("Team size", lang: lang),
+                options: OnboardingTeamSize.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: $answers.teamSize
+            )
+            OnboardingOptionalPickerField(
+                label: t("Monthly orders", lang: lang),
+                placeholder: t("How many a month?", lang: lang),
+                options: OnboardingVolume.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: $answers.volume
+            )
+            OnboardingOptionalPickerField(
+                label: t("Business age", lang: lang),
+                placeholder: t("How long in business?", lang: lang),
+                options: OnboardingBusinessAge.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: $answers.businessAge
+            )
+            OnboardingOptionalPickerField(
+                label: t("Stock tracking", lang: lang),
+                placeholder: t("How well do you track it?", lang: lang),
+                options: OnboardingInventoryExperience.allCases,
+                title: { t($0.label, lang: lang) },
+                selection: $answers.inventoryExperience
+            )
+            // Typed, not chosen: a list of the channels we thought of first only
+            // ever collects the channels we thought of first.
+            OnboardingTextEntryField(
+                label: t("How did you find us?", lang: lang),
+                placeholder: t("A search, a friend, an advert…", lang: lang),
+                limit: 200,
+                text: $answers.heardFrom
+            )
+            Text(t("This helps us suggest the right setup. It won't affect your trial.", lang: lang))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// The last row, and the only one that takes their own words.
+///
+/// The field is INSIDE the row: a box that appears underneath would push the
+/// rest of the list down the moment the row is picked. A TextField cannot live
+/// in a Button's label — the button swallows the taps — so the row draws its own
+/// radio and card, and only the heading is tappable.
+private struct OnboardingOwnGoalRow: View {
+    let title: String
+    let placeholder: String
+    let isOn: Bool
+    @Binding var text: String
+    let select: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Button(action: select) {
+                HStack(alignment: .top, spacing: 11) {
+                    OnboardingRadio(isOn: isOn)
+                    Text(title).font(.system(size: 13.5, weight: .semibold))
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(t("How many people will use NivaDesk?", lang: lang)).font(.system(size: 13, weight: .semibold))
-                Picker("", selection: $answers.teamSize) {
-                    ForEach(OnboardingTeamSize.allCases, id: \.self) { size in
-                        Text(t(size.label, lang: lang)).tag(size)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(t("Roughly how many orders a month?", lang: lang)).font(.system(size: 13, weight: .semibold))
-                Picker("", selection: $answers.volume) {
-                    Text(t("Rather not say", lang: lang)).tag(OnboardingVolume?.none)
-                    ForEach(OnboardingVolume.allCases, id: \.self) { volume in
-                        Text(t(volume.label, lang: lang)).tag(OnboardingVolume?.some(volume))
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                Text(t("This helps us suggest the right setup. It won't affect your trial.", lang: lang))
-                    .font(.system(size: 11)).foregroundColor(.secondary)
+            .buttonStyle(.plain)
+            if isOn {
+                TextField(placeholder, text: Binding(
+                    get: { text },
+                    set: { text = String($0.prefix(200)) }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .padding(.leading, 27)
             }
         }
+        .onboardingRowSurface(isOn: isOn)
     }
 }
 
 private struct OnboardingStepGoal: View {
     @Binding var answers: OnboardingAnswers
-    @Binding var showAllGoals: Bool
     let lang: String
 
-    private var visibleGoals: [OnboardingGoal] {
-        showAllGoals ? OnboardingGoal.allCases : OnboardingGoal.allCases.filter { $0.isPrimary }
-    }
-
-    private func toggleExtra(_ goal: OnboardingGoal) {
-        if let index = answers.extraGoals.firstIndex(of: goal) {
-            answers.extraGoals.remove(at: index)
-        } else if answers.extraGoals.count < 2 {
-            answers.extraGoals.append(goal)
-        }
-    }
-
+    /// One question, one list, one answer.
+    ///
+    /// Picking a goal used to open a second question underneath it — "Anything
+    /// else?", with a row of chips — so the screen grew a new section the moment
+    /// you touched it, and what it collected was never read by the preset
+    /// engine. All ten are listed now, and the wall of choices "Show more goals"
+    /// was hiding turns out to be four extra rows.
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(visibleGoals, id: \.self) { goal in
-                OnboardingOptionRow(
-                    title: t(goal.label, lang: lang),
-                    detail: "",
-                    isOn: answers.mainGoal == goal
-                ) {
-                    answers.mainGoal = goal
-                    answers.extraGoals.removeAll { $0 == goal }
-                }
-            }
-            if !showAllGoals {
-                Button(t("Show more goals", lang: lang)) { showAllGoals = true }
-                    .font(.system(size: 12, weight: .semibold))
-                    .buttonStyle(.plain)
-                    .foregroundColor(.accentColor)
-            }
-            if answers.mainGoal != nil {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(t("Anything else?", lang: lang)).font(.system(size: 13, weight: .semibold))
-                    Text(t("Up to two more. Optional.", lang: lang)).font(.system(size: 11)).foregroundColor(.secondary)
-                    OnboardingFlowChips(
-                        items: OnboardingGoal.allCases.filter { $0 != answers.mainGoal },
-                        title: { t($0.label, lang: lang) },
-                        isOn: { answers.extraGoals.contains($0) },
-                        toggle: { toggleExtra($0) }
-                    )
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(OnboardingGoal.allCases, id: \.self) { goal in
+                if goal == .other {
+                    OnboardingOwnGoalRow(
+                        title: t(goal.label, lang: lang),
+                        placeholder: t("In your own words", lang: lang),
+                        isOn: answers.mainGoal == goal,
+                        text: $answers.otherGoal
+                    ) {
+                        answers.mainGoal = goal
+                    }
+                } else {
+                    OnboardingOptionRow(
+                        title: t(goal.label, lang: lang),
+                        detail: "",
+                        isOn: answers.mainGoal == goal
+                    ) {
+                        answers.mainGoal = goal
+                    }
                 }
             }
         }
@@ -728,7 +867,7 @@ private struct OnboardingConnectTile: View {
 }
 
 
-/// Step 5: the plan the answers imply, and the two alternatives.
+/// The last step: the plan the answers imply, and the two alternatives.
 ///
 /// The trial already started at sign-up on Pro — sign-up cannot know the team
 /// size, the questions come after — so this step confirms which plan the
@@ -856,6 +995,22 @@ private struct OnboardingStepStart: View {
 
 // MARK: - The wizard
 
+/// The order the five steps are asked in.
+///
+/// They used to be numbers, checked as `case 4` in four separate switches, so
+/// moving one meant editing every one of them and hoping none was missed. The
+/// step is named now and the order lives here: to reorder the wizard, reorder
+/// this list.
+enum OnboardingStepKey: String, CaseIterable {
+    case basics
+    case bringWork
+    case goal
+    case work
+    case plan
+}
+
+let onboardingStepOrder: [OnboardingStepKey] = [.basics, .bringWork, .goal, .work, .plan]
+
 struct OnboardingWizardView: View {
     let lang: String
     let saving: Bool
@@ -868,38 +1023,41 @@ struct OnboardingWizardView: View {
 
     @State private var step: Int = 1
     @State private var answers = OnboardingAnswers()
-    @State private var showAllGoals = false
 
-    private let totalSteps = 5
+    private var totalSteps: Int { onboardingStepOrder.count }
+
+    private var stepKey: OnboardingStepKey {
+        onboardingStepOrder[min(max(step, 1), totalSteps) - 1]
+    }
 
     private var title: String {
-        switch step {
-        case 1: return t("Workspace basics", lang: lang)
-        case 2: return t("What should NivaDesk help with first?", lang: lang)
-        case 3: return t("Tell us about your work", lang: lang)
-        case 4: return t("Bring your work in", lang: lang)
-        default: return t("Your plan", lang: lang)
+        switch stepKey {
+        case .basics: return t("Workspace basics", lang: lang)
+        case .bringWork: return t("Bring your work in", lang: lang)
+        case .goal: return t("What should NivaDesk help with first?", lang: lang)
+        case .work: return t("Tell us about your work", lang: lang)
+        case .plan: return t("Your plan", lang: lang)
         }
     }
 
     private var subtitle: String {
-        switch step {
-        case 1: return t("We've suggested these from your location. You can change them now or later in Settings.", lang: lang)
-        case 2: return t("Your answer decides what your dashboard and first tasks show.", lang: lang)
-        case 3: return t("This sets up your order cards, production stages and labels.", lang: lang)
-        case 4: return t("Pick how you'd like to start. You can do any of the others later.", lang: lang)
-        default: return t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.", lang: lang)
+        switch stepKey {
+        case .basics: return t("We've suggested these from your location. You can change them now or later in Settings.", lang: lang)
+        case .bringWork: return t("Pick how you'd like to start. You can do any of the others later.", lang: lang)
+        case .goal: return t("Your answer decides what your dashboard and first tasks show.", lang: lang)
+        case .work: return t("This sets up your order cards, production stages and labels.", lang: lang)
+        case .plan: return t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.", lang: lang)
         }
     }
 
     private var canContinue: Bool {
-        switch step {
-        case 1: return !answers.country.isEmpty && !answers.currency.isEmpty
-        case 2: return answers.mainGoal != nil
-        case 3: return !answers.workKinds.isEmpty
-        case 4: return answers.start != nil
+        switch stepKey {
+        case .basics: return !answers.country.isEmpty && !answers.currency.isEmpty
+        case .bringWork: return answers.start != nil
+        case .goal: return answers.mainGoal != nil
+        case .work: return !answers.workKinds.isEmpty
         // The plan step arrives with a recommendation already chosen.
-        default: return true
+        case .plan: return true
         }
     }
 
@@ -910,15 +1068,15 @@ struct OnboardingWizardView: View {
 
     @ViewBuilder
     private var stepBody: some View {
-        switch step {
-        case 1: OnboardingStepBasics(answers: $answers, lang: lang)
-        case 2: OnboardingStepGoal(answers: $answers, showAllGoals: $showAllGoals, lang: lang)
-        case 3: OnboardingStepWork(answers: $answers, lang: lang)
-        case 4:
+        switch stepKey {
+        case .basics: OnboardingStepBasics(answers: $answers, lang: lang)
+        case .bringWork:
             OnboardingStepStart(answers: $answers, lang: lang, saving: saving) { integration in
                 onConnect(answers, integration)
             }
-        default: OnboardingStepPlan(answers: $answers, lang: lang)
+        case .goal: OnboardingStepGoal(answers: $answers, lang: lang)
+        case .work: OnboardingStepWork(answers: $answers, lang: lang)
+        case .plan: OnboardingStepPlan(answers: $answers, lang: lang)
         }
     }
 

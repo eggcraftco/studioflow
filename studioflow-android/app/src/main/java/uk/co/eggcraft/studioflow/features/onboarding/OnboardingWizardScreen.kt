@@ -21,6 +21,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,47 +52,56 @@ private val Muted = Color(0xFF6B7280)
  *  contrast choice is visible in one place. */
 private val InkStrong = Color(0xFF17181C)
 
-@Composable
-private fun WizardChip(title: String, isOn: Boolean, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (isOn) Accent.copy(alpha = 0.18f) else InkStrong.copy(alpha = 0.05f),
-        modifier = Modifier.padding(end = 8.dp, bottom = 8.dp)
-    ) {
-        TextButton(onClick = onClick) {
-            Text(
-                title,
-                fontSize = 13.sp,
-                fontWeight = if (isOn) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isOn) Accent else InkStrong
-            )
-        }
-    }
-}
+/**
+ * The order the five steps are asked in.
+ *
+ * They were numbers, and `step == 4` had to be got right in four places that
+ * never sat together — the title, the lede, the can-continue test and the body.
+ * The step is named now and the order lives in one list: to reorder the wizard,
+ * reorder this list.
+ */
+private enum class WizardStep { BASICS, BRING_WORK, GOAL, WORK, PLAN }
+
+private val wizardSteps = listOf(
+    WizardStep.BASICS, WizardStep.BRING_WORK, WizardStep.GOAL, WizardStep.WORK, WizardStep.PLAN
+)
 
 @Composable
-private fun WizardOptionRow(title: String, detail: String, isOn: Boolean, onClick: () -> Unit) {
+private fun WizardOptionRow(
+    title: String,
+    detail: String,
+    isOn: Boolean,
+    /** Grows inside the row while it is the chosen one — the "Something else"
+     *  goal takes their own words here, so nothing new appears below the row.
+     *  Outside the TextButton on purpose: a field within a button spends every
+     *  tap on the button. */
+    inside: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = if (isOn) Accent.copy(alpha = 0.10f) else InkStrong.copy(alpha = 0.04f),
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
     ) {
-        TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = if (isOn) Accent else Color.Transparent,
-                    border = if (isOn) null else androidx.compose.foundation.BorderStroke(1.dp, Muted),
-                    modifier = Modifier.size(16.dp)
-                ) {}
-                Spacer(Modifier.size(11.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
-                    if (detail.isNotBlank()) {
-                        Text(detail, fontSize = 12.sp, color = Muted)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (isOn) Accent else Color.Transparent,
+                        border = if (isOn) null else androidx.compose.foundation.BorderStroke(1.dp, Muted),
+                        modifier = Modifier.size(16.dp)
+                    ) {}
+                    Spacer(Modifier.size(11.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
+                        if (detail.isNotBlank()) {
+                            Text(detail, fontSize = 12.sp, color = Muted)
+                        }
                     }
                 }
             }
+            inside?.invoke()
         }
     }
 }
@@ -100,14 +111,22 @@ private fun WizardPicker(
     label: String,
     selected: String,
     options: List<Pair<String, String>>,
+    /** The question itself, standing in the control until it is answered. The
+     *  label above stays short so every row of the grid is the same height. */
+    placeholder: String = "",
     onSelect: (String) -> Unit
 ) {
     var open by remember { mutableStateOf(false) }
+    val unanswered = placeholder.isNotBlank() && selected.isBlank()
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Muted)
         Box {
             OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(options.firstOrNull { it.first == selected }?.second ?: selected, color = InkStrong)
+                Text(
+                    if (unanswered) placeholder
+                    else options.firstOrNull { it.first == selected }?.second ?: selected,
+                    color = if (unanswered) Muted else InkStrong
+                )
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 options.forEach { (value, text) ->
@@ -117,6 +136,67 @@ private fun WizardPicker(
                     })
                 }
             }
+        }
+    }
+}
+
+/**
+ * A question answered in their own words. The wizard is always light (see the
+ * palette above), so the field is given its colours rather than taking them
+ * from a workspace running the dark theme.
+ */
+@Composable
+private fun WizardTextField(
+    label: String,
+    value: String,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onValueChange: (String) -> Unit
+) {
+    Column(modifier = modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        if (label.isNotBlank()) {
+            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Muted)
+        }
+        OutlinedTextField(
+            value = value,
+            // Cut where the save cuts it, so nobody types a paragraph we will
+            // silently drop.
+            onValueChange = { onValueChange(it.take(200)) },
+            placeholder = { Text(placeholder, fontSize = 13.sp, color = Muted) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = InkStrong,
+                unfocusedTextColor = InkStrong,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                cursorColor = Accent,
+                focusedBorderColor = Accent,
+                unfocusedBorderColor = Muted.copy(alpha = 0.5f)
+            )
+        )
+    }
+}
+
+/**
+ * Two controls side by side where there is room for two. On a phone there never
+ * is: half-width dropdowns would cut their own question in half.
+ */
+@Composable
+private fun WizardFieldPair(
+    isCompact: Boolean,
+    first: @Composable () -> Unit,
+    second: @Composable () -> Unit
+) {
+    if (isCompact) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            first()
+            second()
+        }
+    } else {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(modifier = Modifier.weight(1f)) { first() }
+            Box(modifier = Modifier.weight(1f)) { second() }
         }
     }
 }
@@ -173,9 +253,9 @@ private fun WizardHeader(step: Int, total: Int, title: String, subtitle: String)
 }
 
 /**
- * The four-question wizard. There is no Skip button anywhere: the last step
- * offers "Start empty" and "I'll set this up later" as real answers instead, so
- * the workspace still learns what the person chose.
+ * The five-step wizard. There is no Skip button anywhere: "I'll set this up
+ * later" is a real answer on the step that offers the connections, so the
+ * workspace still learns what the person chose.
  */
 @Composable
 fun OnboardingWizardScreen(
@@ -191,31 +271,31 @@ fun OnboardingWizardScreen(
 ) {
     var step by remember { mutableStateOf(1) }
     var answers by remember { mutableStateOf(OnboardingAnswers()) }
-    var showAllGoals by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    val total = 5
+    val total = wizardSteps.size
+    val stepKey = wizardSteps[step - 1]
 
-    val title = when (step) {
-        1 -> t("Workspace basics")
-        2 -> t("What should NivaDesk help with first?")
-        3 -> t("Tell us about your work")
-        4 -> t("Bring your work in")
-        else -> t("Your plan")
+    val title = when (stepKey) {
+        WizardStep.BASICS -> t("Workspace basics")
+        WizardStep.BRING_WORK -> t("Bring your work in")
+        WizardStep.GOAL -> t("What should NivaDesk help with first?")
+        WizardStep.WORK -> t("Tell us about your work")
+        WizardStep.PLAN -> t("Your plan")
     }
-    val subtitle = when (step) {
-        1 -> t("We've suggested these from your location. You can change them now or later in Settings.")
-        2 -> t("Your answer decides what your dashboard and first tasks show.")
-        3 -> t("This sets up your order cards, production stages and labels.")
-        4 -> t("Pick how you'd like to start. You can do any of the others later.")
-        else -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
+    val subtitle = when (stepKey) {
+        WizardStep.BASICS -> t("We've suggested these from your location. You can change them now or later in Settings.")
+        WizardStep.BRING_WORK -> t("Pick how you'd like to start. You can do any of the others later.")
+        WizardStep.GOAL -> t("Your answer decides what your dashboard and first tasks show.")
+        WizardStep.WORK -> t("This sets up your order cards, production stages and labels.")
+        WizardStep.PLAN -> t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
     }
-    val canContinue = when (step) {
-        1 -> answers.country.isNotBlank() && answers.currency.isNotBlank() && answers.language.isNotBlank()
-        2 -> answers.mainGoal != null
-        3 -> answers.workKinds.isNotEmpty()
-        4 -> answers.start != null
+    val canContinue = when (stepKey) {
+        WizardStep.BASICS -> answers.country.isNotBlank() && answers.currency.isNotBlank() && answers.language.isNotBlank()
+        WizardStep.BRING_WORK -> answers.start != null
+        WizardStep.GOAL -> answers.mainGoal != null
+        WizardStep.WORK -> answers.workKinds.isNotEmpty()
         // The plan step arrives with a recommendation already chosen.
-        else -> true
+        WizardStep.PLAN -> true
     }
 
     BoxWithConstraints(
@@ -234,8 +314,8 @@ fun OnboardingWizardScreen(
             Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 WizardHeader(step, total, title, subtitle)
 
-                when (step) {
-                    1 -> Column {
+                when (stepKey) {
+                    WizardStep.BASICS -> Column {
                         WizardPicker(
                             t("Country"),
                             answers.country,
@@ -265,42 +345,109 @@ fun OnboardingWizardScreen(
                         }
                     }
 
-                    3 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(t("What kind of work do you do?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
-                        Text(t("Pick as many as apply."), fontSize = 12.sp, color = Muted)
-                        androidx.compose.foundation.layout.FlowRow(modifier = Modifier.fillMaxWidth()) {
-                            OnboardingWorkKind.entries.forEach { kind ->
-                                WizardChip(t(kind.label), answers.workKinds.contains(kind)) {
+                    // A short grey label above, the question itself inside the
+                    // control. With the whole question as the label the rows
+                    // came out at different heights — "How well do you track
+                    // it?" wraps where "Team size" does not — and a grid of
+                    // controls that do not line up reads as untidy however
+                    // carefully it is spaced.
+                    WizardStep.WORK -> Column(modifier = Modifier.fillMaxWidth()) {
+                        WizardFieldPair(
+                            isCompact,
+                            first = {
+                                WizardPicker(
+                                    t("What you make"),
+                                    answers.workKinds.firstOrNull()?.id ?: "",
+                                    listOf("" to t("What do you mostly make?")) +
+                                        OnboardingWorkKind.entries.map { it.id to t(it.label) },
+                                    placeholder = t("What do you mostly make?")
+                                ) { value ->
+                                    // One choice, still saved as a list: the preset
+                                    // engine reads the first entry, and the shape of
+                                    // the saved field must not change under it.
                                     answers = answers.copy(
-                                        workKinds = if (answers.workKinds.contains(kind))
-                                            answers.workKinds - kind else answers.workKinds + kind
+                                        workKinds = OnboardingWorkKind.entries.filter { it.id == value }
+                                    )
+                                }
+                            },
+                            second = {
+                                WizardPicker(
+                                    t("How you work"),
+                                    answers.workflow.id,
+                                    OnboardingWorkflow.entries.map { it.id to t(it.label) }
+                                ) { value ->
+                                    answers = answers.copy(
+                                        workflow = OnboardingWorkflow.entries.first { it.id == value }
                                     )
                                 }
                             }
-                        }
-                        Text(t("How do you mainly work?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
-                        OnboardingWorkflow.entries.forEach { flow ->
-                            WizardOptionRow(t(flow.label), t(flow.detail), answers.workflow == flow) {
-                                answers = answers.copy(workflow = flow)
+                        )
+                        WizardFieldPair(
+                            isCompact,
+                            first = {
+                                WizardPicker(
+                                    t("Team size"),
+                                    answers.teamSize.id,
+                                    OnboardingTeamSize.entries.map { it.id to t(it.label) }
+                                ) { value ->
+                                    answers = answers.copy(
+                                        teamSize = OnboardingTeamSize.entries.first { it.id == value }
+                                    )
+                                }
+                            },
+                            second = {
+                                WizardPicker(
+                                    t("Monthly orders"),
+                                    answers.volume?.id ?: "",
+                                    listOf("" to t("How many a month?")) +
+                                        OnboardingVolume.entries.map { it.id to t(it.label) },
+                                    placeholder = t("How many a month?")
+                                ) { value ->
+                                    answers = answers.copy(
+                                        volume = OnboardingVolume.entries.firstOrNull { it.id == value }
+                                    )
+                                }
                             }
-                        }
-                        WizardPicker(
-                            t("How many people will use NivaDesk?"),
-                            answers.teamSize.id,
-                            OnboardingTeamSize.entries.map { it.id to t(it.label) }
+                        )
+                        WizardFieldPair(
+                            isCompact,
+                            first = {
+                                WizardPicker(
+                                    t("Business age"),
+                                    answers.businessAge?.id ?: "",
+                                    listOf("" to t("How long in business?")) +
+                                        OnboardingBusinessAge.entries.map { it.id to t(it.label) },
+                                    placeholder = t("How long in business?")
+                                ) { value ->
+                                    answers = answers.copy(
+                                        businessAge = OnboardingBusinessAge.entries.firstOrNull { it.id == value }
+                                    )
+                                }
+                            },
+                            second = {
+                                WizardPicker(
+                                    t("Stock tracking"),
+                                    answers.inventoryExperience?.id ?: "",
+                                    listOf("" to t("How well do you track it?")) +
+                                        OnboardingInventoryExperience.entries.map { it.id to t(it.label) },
+                                    placeholder = t("How well do you track it?")
+                                ) { value ->
+                                    answers = answers.copy(
+                                        inventoryExperience =
+                                            OnboardingInventoryExperience.entries.firstOrNull { it.id == value }
+                                    )
+                                }
+                            }
+                        )
+                        // Typed, not chosen: a list of the channels we thought
+                        // of first only ever collects the channels we thought
+                        // of first.
+                        WizardTextField(
+                            t("How did you find us?"),
+                            answers.heardFrom,
+                            t("A search, a friend, an advert…")
                         ) { value ->
-                            answers = answers.copy(
-                                teamSize = OnboardingTeamSize.entries.first { it.id == value }
-                            )
-                        }
-                        WizardPicker(
-                            t("Roughly how many orders a month?"),
-                            answers.volume?.id ?: "",
-                            listOf("" to t("Rather not say")) + OnboardingVolume.entries.map { it.id to t(it.label) }
-                        ) { value ->
-                            answers = answers.copy(
-                                volume = OnboardingVolume.entries.firstOrNull { it.id == value }
-                            )
+                            answers = answers.copy(heardFrom = value)
                         }
                         Text(
                             t("This helps us suggest the right setup. It won't affect your trial."),
@@ -308,43 +455,40 @@ fun OnboardingWizardScreen(
                         )
                     }
 
-                    2 -> Column {
-                        val visible = if (showAllGoals) OnboardingGoal.entries
-                        else OnboardingGoal.entries.filter { it.isPrimary }
-                        visible.forEach { goal ->
-                            WizardOptionRow(t(goal.label), "", answers.mainGoal == goal) {
-                                answers = answers.copy(
-                                    mainGoal = goal,
-                                    extraGoals = answers.extraGoals - goal
-                                )
-                            }
-                        }
-                        if (!showAllGoals) {
-                            TextButton(onClick = { showAllGoals = true }) {
-                                Text(t("Show more goals"), color = Accent, fontSize = 12.sp)
-                            }
-                        }
-                        if (answers.mainGoal != null) {
-                            Spacer(Modifier.size(8.dp))
-                            Text(t("Anything else?"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
-                            Text(t("Up to two more. Optional."), fontSize = 11.sp, color = Muted)
-                            androidx.compose.foundation.layout.FlowRow(modifier = Modifier.fillMaxWidth()) {
-                                OnboardingGoal.entries.filter { it != answers.mainGoal }.forEach { goal ->
-                                    WizardChip(t(goal.label), answers.extraGoals.contains(goal)) {
-                                        answers = answers.copy(
-                                            extraGoals = when {
-                                                answers.extraGoals.contains(goal) -> answers.extraGoals - goal
-                                                answers.extraGoals.size < 2 -> answers.extraGoals + goal
-                                                else -> answers.extraGoals
-                                            }
-                                        )
+                    // One question, one list, one answer. Picking a goal used
+                    // to open a second question underneath it — "Anything
+                    // else?", with a row of chips — so the screen grew a new
+                    // section the moment you touched it, and what that section
+                    // collected was never what the preset engine read. All ten
+                    // are listed, and the last one takes their own words.
+                    WizardStep.GOAL -> Column {
+                        OnboardingGoal.entries.forEach { goal ->
+                            val isOwnWords = goal == OnboardingGoal.OTHER && answers.mainGoal == goal
+                            WizardOptionRow(
+                                t(goal.label),
+                                "",
+                                answers.mainGoal == goal,
+                                inside = if (isOwnWords) {
+                                    {
+                                        WizardTextField(
+                                            "",
+                                            answers.otherGoal,
+                                            t("In your own words"),
+                                            // Lined up with the row's title,
+                                            // past the radio and its gap.
+                                            modifier = Modifier.padding(start = 39.dp, end = 12.dp)
+                                        ) { value ->
+                                            answers = answers.copy(otherGoal = value)
+                                        }
                                     }
-                                }
+                                } else null
+                            ) {
+                                answers = answers.copy(mainGoal = goal)
                             }
                         }
                     }
 
-                    4 -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    WizardStep.BRING_WORK -> Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(t("Connect your accounts"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
                         Text(
                             t("Optional. Connecting now means your workspace opens with your real work already in it."),
@@ -365,12 +509,12 @@ fun OnboardingWizardScreen(
                         }
                     }
 
-                    // Step 5: the plan the answers imply, and the alternatives.
-                    // The trial already started at sign-up on Pro — sign-up
-                    // cannot know the team size, the questions come after — so
-                    // this confirms which plan the fortnight is spent on.
-                    // Choosing here never changes when it ends.
-                    else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // The plan the answers imply, and the alternatives. The
+                    // trial already started at sign-up on Pro — sign-up cannot
+                    // know the team size, the questions come after — so this
+                    // confirms which plan the fortnight is spent on. Choosing
+                    // here never changes when it ends.
+                    WizardStep.PLAN -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // Read the language OUTSIDE remember: a composition
                         // local is a @Composable read and cannot happen inside
                         // the calculation lambda.

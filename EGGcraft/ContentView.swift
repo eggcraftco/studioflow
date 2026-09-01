@@ -10397,9 +10397,10 @@ struct ContentView: View {
     }
 
     /// The sign-up wizard (see OnboardingWizardView.swift), in place of the old
-    /// business-type dropdown and prompt box. There is no Skip: step four offers
-    /// "Start empty" and "I'll set this up later" as real answers instead, and
-    /// step five confirms which plan the free fortnight is spent on.
+    /// business-type dropdown and prompt box. There is no Skip: the step that
+    /// offers the integrations offers "I'll set this up later" as a real answer
+    /// instead, and the last one confirms which plan the free fortnight is spent
+    /// on.
     ///
     /// Always presented light. Whoever is answering has not chosen a theme yet —
     /// the account is created on light and Settings can change it afterwards —
@@ -10438,6 +10439,10 @@ struct ContentView: View {
         .preferredColorScheme(.light)
     }
 
+    private func onboardingTrimmedAnswer(_ text: String) -> String {
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+    }
+
     private func applyOnboardingWizardAnswers(_ answers: OnboardingAnswers) {
         onboardingWizardSaving = true
         onboardingWizardError = ""
@@ -10467,7 +10472,13 @@ struct ContentView: View {
             "onboardingWorkKinds": answers.workKinds.map { $0.rawValue },
             "onboardingWorkflow": answers.workflow.rawValue,
             "onboardingTeamSizeBand": answers.teamSize.rawValue,
+            "onboardingBusinessAge": answers.businessAge?.rawValue ?? "",
+            "onboardingInventoryExperience": answers.inventoryExperience?.rawValue ?? "",
+            // Their own words, kept to what the web wizard's fields allow so the
+            // same workspace never holds two different lengths of the answer.
+            "onboardingHeardFrom": onboardingTrimmedAnswer(answers.heardFrom),
             "onboardingGoals": answers.goals,
+            "onboardingOtherGoal": onboardingTrimmedAnswer(answers.otherGoal),
             "onboardingStartChoice": answers.start?.rawValue ?? "",
             "productionStages": stages
         ]

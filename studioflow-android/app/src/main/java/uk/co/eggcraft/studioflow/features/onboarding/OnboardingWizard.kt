@@ -5,14 +5,17 @@ import com.google.firebase.firestore.FieldValue
 /**
  * The Android half of studioflow-web/lib/studioflow/onboardingWizard.ts.
  *
- * Four questions worth asking before someone starts work. The report's cut: ask
- * only what genuinely changes the product, and make the answers visibly change
- * it. Business age, inventory experience and "how did you find us" were dropped
- * — they help us, not the person filling the form.
+ * Five named steps, asked in the order OnboardingWizardScreen's step list sets.
+ * Ask only what genuinely changes the product, and make the answers visibly
+ * change it — the work step is now one grid of dropdowns, which is why business
+ * age and stock tracking are worth asking again: in a grid they cost a glance
+ * each rather than a screen each, and they change what we suggest. "How did you
+ * find us" earns its place differently — it is the only thing here that tells us
+ * where people actually come from.
  *
- * There is no Skip. Every step is answerable instead: "Start empty" and "I'll
- * set this up later" are real choices on the last step, not an escape hatch, so
- * nobody is trapped and nobody is nagged. Back moves between steps.
+ * There is no Skip. Every step is answerable instead: "I'll set this up later"
+ * is a real choice, not an escape hatch, so nobody is trapped and nobody is
+ * nagged. Back moves between steps.
  */
 
 enum class OnboardingWorkKind(val id: String, val label: String, val businessType: String) {
@@ -81,6 +84,23 @@ enum class OnboardingVolume(val id: String, val label: String) {
     THIRTY_ONE_TO_HUNDRED("31_100", "31–100"),
     HUNDRED_PLUS("100_plus", "More than 100"),
     NOT_SURE("not_sure", "Not sure yet")
+}
+
+/** Ids and labels are the web file's, character for character: a workspace is
+ *  answered on one platform and read back on whichever opens it next. */
+enum class OnboardingBusinessAge(val id: String, val label: String) {
+    STARTING("starting", "Just starting out"),
+    UNDER_ONE("under_1", "Less than a year"),
+    ONE_TO_THREE("1_3", "1–3 years"),
+    THREE_TO_TEN("3_10", "3–10 years"),
+    OVER_TEN("over_10", "More than 10 years")
+}
+
+enum class OnboardingInventoryExperience(val id: String, val label: String) {
+    NO_STOCK("no_stock", "I don't hold stock"),
+    NONE("none", "New to it"),
+    SOME("some", "I track some of it"),
+    CONFIDENT("confident", "I track it closely")
 }
 
 enum class OnboardingGoal(val id: String, val label: String, val isPrimary: Boolean) {
@@ -206,11 +226,20 @@ data class OnboardingAnswers(
      *  Settings afterwards. */
     val language: String = "English",
     val timeZone: String = "Europe/London",
+    /** One choice now, still a list: [businessType] reads the first entry and
+     *  the saved field is a list on every platform. */
     val workKinds: List<OnboardingWorkKind> = emptyList(),
     val workflow: OnboardingWorkflow = OnboardingWorkflow.MADE_TO_ORDER,
     val teamSize: OnboardingTeamSize = OnboardingTeamSize.SOLO,
     val volume: OnboardingVolume? = null,
+    val businessAge: OnboardingBusinessAge? = null,
+    val inventoryExperience: OnboardingInventoryExperience? = null,
+    /** Their own words, and typed rather than chosen: a list of the channels we
+     *  thought of first would only ever collect the channels we thought of. */
+    val heardFrom: String = "",
     val mainGoal: OnboardingGoal? = null,
+    /** What they typed when the goal is "Something else". Their words, not ours. */
+    val otherGoal: String = "",
     val extraGoals: List<OnboardingGoal> = emptyList(),
     // Pre-picked: it is the only row, and making someone tick the one choice
     // there is before Next will let them through is a ritual, not a question.
@@ -253,7 +282,13 @@ fun onboardingWizardUpdates(answers: OnboardingAnswers, userId: String): Map<Str
     put("onboardingWorkKinds", answers.workKinds.map { it.id })
     put("onboardingWorkflow", answers.workflow.id)
     put("onboardingTeamSizeBand", answers.teamSize.id)
+    put("onboardingBusinessAge", answers.businessAge?.id ?: "")
+    put("onboardingInventoryExperience", answers.inventoryExperience?.id ?: "")
+    // Free text into a settings document every platform reads, so it is cut to
+    // the same 200 characters the web save cuts it to.
+    put("onboardingHeardFrom", answers.heardFrom.trim().take(200))
     put("onboardingGoals", answers.goals)
+    put("onboardingOtherGoal", answers.otherGoal.trim().take(200))
     put("onboardingStartChoice", answers.start?.id ?: "")
     put("productionStages", answers.workflow.productionStages())
     answers.mainGoal?.let { put("onboardingMainGoal", it.id) }
