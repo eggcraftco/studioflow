@@ -402,17 +402,29 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               onClick={() =>
                 guard("sync", async () => {
                   // A button offered to fix something has to say whether it
-                  // did. This one ran and reported nothing either way.
+                  // did. This one ran and reported nothing either way — and
+                  // then it went further and said the opposite: it read only
+                  // created and updated, so a run where every order failed
+                  // printed "this connection is working" and forced the badge
+                  // to healthy. Sync now, 130 lines below, was fixed for
+                  // exactly this and the fix never reached here.
                   const result = await syncEtsyNow(companyId, connection.id);
                   const created = Number(result?.outcome?.created || 0);
                   const updated = Number(result?.outcome?.updated || 0);
-                  setNotice(
-                    created || updated
-                      ? `${created} ${t("imported")} · ${updated} ${t("updated")}`
-                      : t("Etsy answered. This connection is working.")
-                  );
-                  setLiveCheck("healthy");
-                  await refresh();
+                  const failed = Number(result?.outcome?.failed || 0);
+                  const held = Number(result?.outcome?.held || 0);
+                  if (failed) {
+                    setError(`${failed} ${t("could not be imported. The sync log below says why.")}`);
+                  }
+                  const good = [
+                    created || updated ? `${created} ${t("imported")} · ${updated} ${t("updated")}` : "",
+                    held ? `${held} ${t("are waiting for room on your plan.")}` : ""
+                  ].filter(Boolean).join(" · ");
+                  if (good) setNotice(good);
+                  else if (!failed) setNotice(t("Etsy answered. This connection is working."));
+                  // Only claim health when the run gave a reason to.
+                  if (!failed) setLiveCheck("healthy");
+                  await refresh(Boolean(failed));
                 })
               }
             >

@@ -107,6 +107,10 @@ function connectionFixture(over = {}) {
     externalShopName: "E2E Test Shop",
     shopCurrency: "GBP",
     status: "connected",
+    // The state every automatic path actually runs in: the owner has already
+    // been through the preview and approved an import. Before that, applyReceipt
+    // writes nothing at all — see "nothing lands before the owner has approved".
+    importState: "done",
     ...over
   };
 }
@@ -383,6 +387,22 @@ test("a cancelled receipt is marked cancelled, not silently paid", async () => {
   assert.strictEqual(result.status, "created");
   const order = (await db.collection("siparisler").doc(result.orderId).get()).data();
   assert.strictEqual(order.status, "Cancelled", `cancelled receipt stored status ${order.status}`);
+});
+
+// The panel says "Choose what to import" and hides Sync now until the owner has
+// been through the preview. The server did not agree: a shop connected but
+// never imported has no importRules, so the rules gate was skipped whole and
+// the 15-minute sweep and every webhook wrote orders behind the seller's back.
+test("nothing lands before the owner has approved a first import", async () => {
+  const seeded = await seed({ connection: { importState: "none" } });
+  const result = await applyReceipt({
+    companyId: CID, connectionRef: seeded.connRef, connectionData: seeded.connData,
+    receipt: FULL_RECEIPT({ receipt_id: 900400 }), defaultDeliveryTime: 21
+  });
+  assert.strictEqual(result.status, "skipped", `expected skipped, got ${result.status}`);
+  assert.strictEqual(result.reason, "awaiting_first_import");
+  const orders = await db.collection("siparisler").where("companyId", "==", CID).get();
+  assert.strictEqual(orders.size, 0, `${orders.size} orders were written without approval`);
 });
 
 // ---------------------------------------------------------------------------

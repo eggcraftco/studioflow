@@ -836,8 +836,13 @@ function normalizeEtsyReceipt(receipt, {
     }),
     createdAtMs: createdAt ? createdAt.getTime() : 0,
     updatedAtMs: (etsyTimestampToDate(receipt?.update_timestamp ?? receipt?.updated_timestamp, null) || createdAt || now).getTime(),
+    // The seller's own Sold Orders page, filtered to this receipt. It used to
+    // carry the /completed segment, which is a TAB: it shows orders the seller
+    // has already marked complete, so the link could never open the orders the
+    // studio is actually working on — which is every order this panel exists
+    // for. The tab-neutral page finds a receipt in any state.
     viewOnEtsyUrl: receiptId && shopId
-      ? `https://www.etsy.com/your/orders/sold/completed?order_id=${encodeURIComponent(receiptId)}`
+      ? `https://www.etsy.com/your/orders/sold?order_id=${encodeURIComponent(receiptId)}`
       : ""
   };
 

@@ -318,7 +318,7 @@ test("reconciliation asks only for what changed", async () => {
   const connect = {
     loadConnection: async () => ({
       ref: world.handle("etsyConnections/c1_222"),
-      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 3600_000 }
+      data: { externalShopId: "222", companyId: "c1", importState: "done", reconcileWatermarkMs: nowRef.value - 3600_000 }
     }),
     callEtsy: async (_ref, _path, options) => { seenQuery = options.query; return { results: [], count: 0 }; },
     writeSyncEvent: async () => {}
@@ -340,13 +340,49 @@ test("reconciliation asks only for what changed", async () => {
   assert.ok(!seenQuery.min_created, "asking by creation date would re-read everything");
 });
 
+// "Nothing is imported until the workspace owner confirms this list" was
+// enforced by the preview screen and by nothing else. A shop connected but
+// never imported has no importRules, so the rules gate below was skipped
+// entirely and the 15-minute sweep and the webhooks brought every receipt in
+// unfiltered — while the panel was still showing "Choose what to import" and
+// deliberately offering no Sync now button.
+test("nothing is imported before the owner has approved a first import", async () => {
+  const nowRef = { value: 1_760_000_000_000 };
+  const world = makeWorld(nowRef);
+  const connect = {
+    loadConnection: async () => ({
+      ref: world.handle("etsyConnections/c1_222"),
+      // importState "none": connected, never imported.
+      data: { externalShopId: "222", companyId: "c1", importState: "none", reconcileWatermarkMs: 1000 }
+    }),
+    callEtsy: async () => ({ results: [RECEIPT()], count: 1 }),
+    writeSyncEvent: async () => {}
+  };
+  let wrote = false;
+  const fns = createEtsySyncFunctions({
+    admin: world.admin, onCall: (_o, h) => h, HttpsError: Error, etsy, customerMatch, connect,
+    requireWorkspaceMember: async () => ({ uid: "u1", companyId: "c1" }),
+    requireWorkspaceOwner: async () => ({ uid: "u1", companyId: "c1" }),
+    orderDocRef: (id) => { wrote = true; return world.handle(`siparisler/${id}`); },
+    integrationOrderUpdate, integrationOrderCapacity: async () => ({ allowed: true }),
+    holdIntegrationOrder: async () => {}, upsertIntegrationCustomer: async () => {},
+    reconcileLineItems: (i) => i, resolveDefaultDeliveryTime: () => 30,
+    companySettingsDocRef: () => world.handle("companySettings/c1"),
+    customersOfCompany: () => ({ where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
+    now: () => nowRef.value
+  });
+  const result = await fns.syncEtsyNow(REQ({ connectionId: "c1_222" }));
+  assert.strictEqual(wrote, false, "an order was written for a shop whose owner has never approved an import");
+  assert.strictEqual(result.outcome.created, 0);
+});
+
 test("the watermark does not advance past a failure", async () => {
   const nowRef = { value: 1_760_000_000_000 };
   const world = makeWorld(nowRef);
   const connect = {
     loadConnection: async () => ({
       ref: world.handle("etsyConnections/c1_222"),
-      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: 1000 }
+      data: { externalShopId: "222", companyId: "c1", importState: "done", reconcileWatermarkMs: 1000 }
     }),
     callEtsy: async () => ({ results: [RECEIPT()], count: 1 }),
     writeSyncEvent: async () => {}
@@ -484,7 +520,7 @@ test("a full page does not let the watermark step over what did not fit", async 
   const connect = {
     loadConnection: async () => ({
       ref: world.handle("etsyConnections/c1_222"),
-      data: { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 7200_000 }
+      data: { externalShopId: "222", companyId: "c1", importState: "done", reconcileWatermarkMs: nowRef.value - 7200_000 }
     }),
     callEtsy: async (_ref, _path, options) => {
       seenQuery = options.query;
@@ -507,7 +543,7 @@ test("a full page does not let the watermark step over what did not fit", async 
   });
 
   const ref = world.handle("etsyConnections/c1_222");
-  await fns._internal.reconcileConnection(ref, { externalShopId: "222", companyId: "c1", reconcileWatermarkMs: nowRef.value - 7200_000 }, { companyId: "c1" });
+  await fns._internal.reconcileConnection(ref, { externalShopId: "222", companyId: "c1", importState: "done", reconcileWatermarkMs: nowRef.value - 7200_000 }, { companyId: "c1" });
 
   assert.strictEqual(seenQuery.sort_on, "updated", "the sweep walks by modification time");
   assert.strictEqual(seenQuery.sort_order, "up", "oldest first, so a full page drops the ones not reached yet");

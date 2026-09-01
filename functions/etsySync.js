@@ -360,14 +360,26 @@ function createEtsySyncFunctions(deps) {
     // own rules AND an explicit list of receipts the seller ticked in the
     // preview: re-deciding on their behalf at that point would overrule the
     // person who just looked at the list.
-    if (!rules && connectionData.importRules) {
-      const stored = normaliseRules(connectionData.importRules);
-      const verdict = classify(normalised, stored);
-      if (verdict.outcome === "unsupported") {
-        return { status: "skipped", receiptId, reason: verdict.reason };
+    if (!rules) {
+      // Nothing is imported until the workspace owner has confirmed a list.
+      // That gate was enforced by the preview screen and by nothing else: a
+      // shop connected but never imported has no importRules, so the condition
+      // below was false and the sweep and the webhooks brought every receipt
+      // in unfiltered — while the panel was still showing "Choose what to
+      // import" and offering no Sync now button. The seller connects, previews,
+      // approves; only then does the shop start flowing on its own.
+      if (String(connectionData.importState || "none") !== "done") {
+        return { status: "skipped", receiptId, reason: "awaiting_first_import" };
       }
-      if (!stored.includeCompleted && String(normalised.source.status) === "completed") {
-        return { status: "skipped", receiptId, reason: "completed" };
+      if (connectionData.importRules) {
+        const stored = normaliseRules(connectionData.importRules);
+        const verdict = classify(normalised, stored);
+        if (verdict.outcome === "unsupported") {
+          return { status: "skipped", receiptId, reason: verdict.reason };
+        }
+        if (!stored.includeCompleted && String(normalised.source.status) === "completed") {
+          return { status: "skipped", receiptId, reason: "completed" };
+        }
       }
     }
 
@@ -550,7 +562,10 @@ function createEtsySyncFunctions(deps) {
       importState: "done",
       importedOrders: admin.firestore.FieldValue.increment(outcome.created),
       lastSyncAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastSuccessAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Not a success while any receipt in the run failed — reconcileConnection
+      // guards the same field the same way. A green "last synced" over a run
+      // that dropped orders is the one status a seller cannot act on.
+      ...(outcome.failed ? {} : { lastSuccessAt: admin.firestore.FieldValue.serverTimestamp() }),
       // The watermark reconciliation resumes from. Deliberately behind now(),
       // so a receipt modified during this run is not missed.
       //
@@ -560,7 +575,13 @@ function createEtsySyncFunctions(deps) {
       // receipt to bring it back, so that is a permanent loss. Leaving the
       // watermark where it was means the sweep — which walks oldest-modified
       // first — reaches them.
-      ...(truncated ? {} : { reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS }),
+      //
+      // And not moved past a failure, for exactly the reason the sweep gives
+      // in its own copy of this write: "Moving it past a failure is how a
+      // missed order becomes permanently missed." This path had the guard on
+      // truncation but not on failure, so an initial import that dropped a
+      // receipt reported a clean run and stepped over it.
+      ...(truncated || outcome.failed ? {} : { reconcileWatermarkMs: now() - RECONCILE_OVERLAP_MS }),
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
 
