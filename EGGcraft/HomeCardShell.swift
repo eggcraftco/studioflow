@@ -22,6 +22,8 @@ struct HomeCardShell<CardBody: View>: View {
     /// A quiet line on the right of the header — how fresh the feed is.
     var headerNote: String = ""
     let onOpen: () -> Void
+    /// Opens the card's second destination, where it has one.
+    var onOpenSecondary: (() -> Void)? = nil
     /// The + the sheet puts on the notes card: the thing you most often want
     /// from a wall of notes is one more note.
     var onAdd: (() -> Void)? = nil
@@ -243,20 +245,29 @@ struct HomeCardShell<CardBody: View>: View {
     }
 
     private var footer: some View {
-        Button(action: onOpen) {
-            HStack(spacing: 5) {
-                Spacer()
-                Text(t(definition.linkLabel, lang: lang))
-                Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
+        HStack(spacing: 18) {
+            Spacer()
+            // A card that covers two screens offers both, as the sheet draws it.
+            if let onOpenSecondary, !definition.secondaryLinkLabel.isEmpty {
+                Button(action: onOpenSecondary) { footerLabel(definition.secondaryLinkLabel) }
+                    .buttonStyle(.plain)
             }
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(HomeTone.accent)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
+            Button(action: onOpen) { footerLabel(definition.linkLabel) }
+                .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
         .overlay(Rectangle().frame(height: 1).foregroundColor(.primary.opacity(0.06)), alignment: .top)
+    }
+
+    private func footerLabel(_ key: String) -> some View {
+        HStack(spacing: 5) {
+            Text(t(key, lang: lang))
+            Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundColor(HomeTone.accent)
+        .contentShape(Rectangle())
     }
 }
 

@@ -461,6 +461,8 @@ struct HomeView: View {
                     && !firebaseManager.bankTransactions.isEmpty
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
+                onOpenSecondary: definition.secondaryDestination.isEmpty
+                    ? nil : { onOpen(definition.secondaryDestination) },
                 onAdd: definition.id == .files ? { onOpen("Files") }
                     // Not on the square: that size now opens with the composer,
                     // and a + in the header beside it would be a second control

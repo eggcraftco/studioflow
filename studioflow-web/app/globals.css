@@ -27383,6 +27383,7 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 9px 14px; border-top: 1px solid var(--border); font-size: 12.5px;
 }
+.home-card-links { display: inline-flex; align-items: center; gap: 18px; min-width: 0; }
 .home-card-link { font-weight: 720; color: #2563eb; text-decoration: none; }
 .home-card-link:hover { text-decoration: underline; }
 .home-card-stale { opacity: 0.55; font-size: 11.5px; }
@@ -28853,8 +28854,29 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
    window. The lanes are the card's job; the list gives up rows until it fits.
    The card's width gives its height away — a 2x1 is 2*unit + gap across, and
    the row is the unit. */
+/* The thresholds were right about the arithmetic and wrong about the shape: at
+   the grid's real 2x1 — 492px wide, 147px of body — a 63px lane block and 56px
+   rows left room for exactly one order, so the card sliced three and drew one.
+   The tiers below it (two rows under 573, three under 685) describe cards this
+   grid never makes.
+
+   Both blocks come down, and the thumbnail lands where the sheet has it — 5.9%
+   of the card's width, which is 29px here rather than 40. That buys a second
+   order, not a third: three would need 30px rows around a 26px thumbnail, and
+   the rule this list already states is that it gives up rows until it fits
+   rather than shrinking until it does not read. The sheet draws three on a card
+   3.6 times wider than this one. */
+.home-card-2x1 .home-lane-head { min-height: 26px; }
+.home-card-2x1 .home-lane-row em { font-size: 11.5px; }
+.home-card-2x1 .home-lane-row b { font-size: 19px; }
+.home-card-2x1 .home-lane-row li { padding: 0 9px; }
+.home-card-2x1 .home-order-list a { padding: 3px 0; gap: 9px; grid-template-columns: 28px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px; }
+.home-card-2x1 .home-order-thumb { width: 28px; height: 28px; border-radius: 7px; }
+.home-card-2x1 .home-order-thumb.is-blank { font-size: 12px; }
+.home-card-2x1 .home-order-list strong { font-size: 12.5px; }
+.home-card-2x1 .home-order-design { font-size: 12px; }
 @container (max-width: 685px) { .home-order-list li:nth-child(n + 3) { display: none; } }
-@container (max-width: 573px) { .home-order-list li:nth-child(n + 2) { display: none; } }
+@container (max-width: 430px) { .home-order-list li:nth-child(n + 2) { display: none; } }
 @container (max-width: 461px) { .home-order-list { display: none; } }
 
 .home-flow-row { list-style: none; margin: 6px 0 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }

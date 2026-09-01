@@ -385,9 +385,20 @@ export function HomeCardShell({
         ) : footerNote ? (
           <span className="home-card-footnote"><i aria-hidden="true">i</i>{footerNote}</span>
         ) : <span />}
-        <Link href={definition.href} className="home-card-link">
-          {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
-        </Link>
+        {/* A card that covers two screens offers both, as the sheet draws it.
+            Orders & production had one link reading "orders" and pointing at
+            /production — the two halves of its own name, with only one of them
+            reachable and the label naming the other. */}
+        <span className="home-card-links">
+          {definition.secondaryHref && definition.secondaryLinkLabel ? (
+            <Link href={definition.secondaryHref} className="home-card-link">
+              {t(definition.secondaryLinkLabel)}<span aria-hidden="true"> →</span>
+            </Link>
+          ) : null}
+          <Link href={definition.href} className="home-card-link">
+            {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
+          </Link>
+        </span>
       </footer>
     </section>
   );

@@ -74,6 +74,9 @@ export type HomeCardDefinition = {
   href: string;
   /** The footer link's English label. */
   linkLabel: string;
+  /** A second destination, for a card whose name covers two screens. */
+  secondaryHref?: string;
+  secondaryLinkLabel?: string;
 };
 
 /**
@@ -164,8 +167,12 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
     access: "orders",
+    // Both halves of the card's own name. The single link said "orders" and
+    // went to production.
     href: "/production",
-    linkLabel: "Open Orders",
+    linkLabel: "Open Production",
+    secondaryHref: "/orders",
+    secondaryLinkLabel: "Open Orders",
   },
   {
     id: "schedule",

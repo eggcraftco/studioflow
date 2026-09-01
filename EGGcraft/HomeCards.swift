@@ -91,6 +91,12 @@ struct HomeCardDefinition {
     /// The tab this card's single footer link opens.
     let destination: String
     let linkLabel: String
+    /// A second destination, for a card whose name covers two screens. The
+    /// Orders & production card had one link reading "orders" that opened
+    /// Production — the two halves of its own name, with one reachable and the
+    /// label naming the other.
+    var secondaryDestination: String = ""
+    var secondaryLinkLabel: String = ""
 }
 
 enum HomeCards {
@@ -125,7 +131,8 @@ enum HomeCards {
         // card's own destination is. Web draws its own paths and gets the sheet's.
         HomeCardDefinition(id: .ordersProduction, title: "Orders & production", icon: "hammer.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .orders,
-                           financeOnly: false, destination: "Production", linkLabel: "Open Orders"),
+                           financeOnly: false, destination: "Production", linkLabel: "Open Production",
+                           secondaryDestination: "Orders", secondaryLinkLabel: "Open Orders"),
         HomeCardDefinition(id: .schedule, title: "Schedule", icon: "calendar",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .schedule,
                            financeOnly: false, destination: "Schedule", linkLabel: "Open Schedule"),
