@@ -25,6 +25,9 @@ struct HomeCardShell<CardBody: View>: View {
     /// The + the sheet puts on the notes card: the thing you most often want
     /// from a wall of notes is one more note.
     var onAdd: (() -> Void)? = nil
+    /// When set, the header names the action instead of showing a bare +. A
+    /// plus on a card full of notes is not obviously "write one".
+    var addLabel: String = ""
     let onResize: (HomeCardSize) -> Void
     let onPeriod: (HomeCardPeriod) -> Void
     let onTone: (HomeCardTone) -> Void
@@ -122,14 +125,24 @@ struct HomeCardShell<CardBody: View>: View {
             Spacer(minLength: 4)
             if let onAdd {
                 Button(action: onAdd) {
-                    Image(systemName: "plus")
-                        .font(.system(size: compact ? 12 : 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
+                    if addLabel.isEmpty {
+                        Image(systemName: "plus")
+                            .font(.system(size: compact ? 12 : 14, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
+                            .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
+                    } else {
+                        Text(addLabel)
+                            .font(.system(size: compact ? 11 : 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, compact ? 9 : 11)
+                            .frame(height: compact ? 24 : 28)
+                            .background(RoundedRectangle(cornerRadius: 9).fill(HomeTone.accent))
+                    }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(t("New note", lang: lang))
+                .accessibilityLabel(addLabel.isEmpty ? t("New note", lang: lang) : addLabel)
             }
             // The range the card's totals cover. It sits in the header because a
             // figure without its period is not an answer — §4 puts the filter

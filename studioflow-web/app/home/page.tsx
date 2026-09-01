@@ -402,17 +402,17 @@ export default function HomePage() {
                     ↑ {t("Upload file")}
                   </button>
                 ) : placement.id === "notes" && placement.size !== "1x1" ? (
-                  // Not on the square: that size now opens with the composer,
-                  // and a + in the header beside it would be a second control
-                  // for the one action.
+                  // Not on the square: that size opens with the composer, whose
+                  // own + is the one control for the action. The wider header
+                  // has room to name it instead — the same call the files card
+                  // makes two arms up, for the same reason: a bare + on a card
+                  // full of notes is not obviously "write one".
                   <button
                     type="button"
-                    className="home-add-button"
-                    aria-label={t("New Note")}
-                    title={t("New Note")}
+                    className="home-add-button is-wide"
                     onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
                   >
-                    +
+                    {t("New note")}
                   </button>
                 ) : placement.id === "recentActivity" && placement.size === "2x2" ? (
                   // The sheet puts the pills beside the title on the wide-open

@@ -27615,7 +27615,10 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-note strong { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-note p { margin: 0; font-size: 11.5px; opacity: 0.75; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .home-note { position: relative; }
-.home-note-pin { position: absolute; top: 6px; right: 8px; font-size: 11px; line-height: 1; }
+/* The pin takes the note's own colour: on a coloured ground a grey mark reads
+   as disabled, and the note is what the pin belongs to. */
+.home-note-pin { position: absolute; top: 7px; right: 8px; line-height: 0; opacity: 0.75; }
+.home-note-pin svg { width: 13px; height: 13px; }
 /* Only a pinned note pays for the pin's corner: reserving it on every note
    would cost the unpinned ones a word of their title for nothing. */
 .home-note.is-pinned strong { padding-right: 19px; }
@@ -27706,7 +27709,8 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
 }
 .home-card-1x1 .home-note-foot { margin-top: 1px; }
-.home-card-1x1 .home-note-pin { top: 4px; right: 6px; font-size: 10px; }
+.home-card-1x1 .home-note-pin { top: 5px; right: 6px; }
+.home-card-1x1 .home-note-pin svg { width: 11px; height: 11px; }
 
 /* Recent as rows rather than tiles: at this size the title and the one fact
    beside it are what fit, and a row fits three where a tile fits two. */

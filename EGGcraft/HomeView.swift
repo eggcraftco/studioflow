@@ -472,6 +472,7 @@ struct HomeView: View {
                     onOpen("Notes")
                 }
                     : nil,
+                addLabel: definition.id == .notes ? t("New note", lang: seciliDil) : "",
                 onResize: { store.resize(placement.id, to: $0) },
                 onPeriod: { store.setPeriod(placement.id, period: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },

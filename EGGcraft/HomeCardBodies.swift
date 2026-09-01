@@ -3190,8 +3190,23 @@ struct HomeNotesBody: View {
                     Spacer(minLength: 0)
                 }
             } else {
-                let shown = Array((pinned + recent).prefix(3))
-                HomeNoteGrid(notes: shown, lang: lang, columns: 3, compact: compact)
+                // The wide card opens with the field too, as the sheet draws
+                // it. Its + is the named button in the header, so the field
+                // here carries none.
+                VStack(alignment: .leading, spacing: compact ? 5 : 8) {
+                    Button(action: onNewNote) {
+                        Text(t("Take a note…", lang: lang))
+                            .font(.system(size: compact ? 11 : 12)).foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, compact ? 10 : 11).padding(.vertical, compact ? 5 : 7)
+                            .overlay(RoundedRectangle(cornerRadius: 9)
+                                .stroke(Color.primary.opacity(0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    HomeNoteGrid(notes: Array((pinned + recent).prefix(3)), lang: lang,
+                                 columns: 3, compact: compact)
+                    Spacer(minLength: 0)
+                }
             }
         }
     }

@@ -1644,16 +1644,17 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
     // be the one that loses what you typed.
     return (
       <div className="home-notes-small" data-size={size}>
-        {size === "1x1" ? (
-          <button
-            type="button"
-            className="home-note-composer is-inline"
-            onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
-          >
-            <span>{t("Take a note…")}</span>
-            <span className="home-note-composer-add" aria-hidden="true">+</span>
-          </button>
-        ) : null}
+        {/* The square carries its + here, because its header has no room for a
+            named button. The wide card's header does, so the sheet gives it
+            "New note" up there and leaves the field plain. */}
+        <button
+          type="button"
+          className={`home-note-composer is-inline${size === "1x1" ? " has-add" : ""}`}
+          onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
+        >
+          <span>{t("Take a note…")}</span>
+          {size === "1x1" ? <span className="home-note-composer-add" aria-hidden="true">+</span> : null}
+        </button>
         <div className="home-note-grid" data-size={size}>
           {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
         </div>
@@ -1740,7 +1741,11 @@ function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: stri
     >
       {/* Top right, out of the title's way — the sheet marks the corner rather
           than pushing the heading along. */}
-      {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
+      {note.isPinned ? (
+        <span className="home-note-pin" aria-label={t("Pinned")}>
+          <HomeTileIcon name="pin" />
+        </span>
+      ) : null}
       <strong>{note.title || t("Untitled note")}</strong>
       {note.text ? <p>{note.text}</p> : null}
       <span className="home-note-foot">
