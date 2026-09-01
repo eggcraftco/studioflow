@@ -27965,6 +27965,89 @@ exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 6
   };
 });
 
+/**
+ * What people answered while setting up.
+ *
+ * The wizard asks eight questions and writes every answer to
+ * companySettings/{companyId}; until now nothing read them back, so the
+ * questions were a survey nobody collected. This is the collection: counts per
+ * answer, and the two free-text fields verbatim because "how did you find us"
+ * is only worth asking if somebody reads the sentence.
+ */
+exports.getAdminOnboardingDetail = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  const email = String(request.auth?.token?.email || "").trim().toLowerCase();
+  if (!request.auth || !SUPPORT_ADMIN_EMAILS.has(email)) {
+    throw new HttpsError("permission-denied", "Admin insights are restricted to NivaDesk admins.");
+  }
+
+  const db = admin.firestore();
+  const snap = await db.collection("companySettings").limit(5000).get();
+
+  const tally = () => ({});
+  const bump = (bucket, key) => {
+    const clean = String(key ?? "").trim();
+    if (!clean) return;
+    bucket[clean] = (bucket[clean] || 0) + 1;
+  };
+
+  const counts = {
+    workKind: tally(), workflow: tally(), teamSize: tally(), volume: tally(),
+    businessAge: tally(), inventoryExperience: tally(), mainGoal: tally(),
+    start: tally(), completedAction: tally(),
+  };
+  // The sentences, newest first. Capped because this is a panel, not an export.
+  const heardFrom = [];
+  const otherGoals = [];
+
+  let settingsDocs = 0;
+  let completed = 0;
+  let answeredAnything = 0;
+
+  snap.forEach((doc) => {
+    const data = doc.data() || {};
+    settingsDocs += 1;
+    if (data.businessOnboardingCompleted === true) completed += 1;
+
+    const kinds = Array.isArray(data.onboardingWorkKinds) ? data.onboardingWorkKinds : [];
+    // The wizard asks for one; older workspaces hold several and the preset only
+    // ever read the first, so the first is what this counts.
+    if (kinds.length) bump(counts.workKind, kinds[0]);
+    bump(counts.workflow, data.onboardingWorkflow);
+    bump(counts.teamSize, data.onboardingTeamSizeBand);
+    bump(counts.volume, data.onboardingOrderVolume);
+    bump(counts.businessAge, data.onboardingBusinessAge);
+    bump(counts.inventoryExperience, data.onboardingInventoryExperience);
+    bump(counts.mainGoal, data.onboardingMainGoal);
+    bump(counts.start, data.onboardingStartChoice);
+    bump(counts.completedAction, data.businessOnboardingCompletedAction);
+
+    const at = data.businessOnboardingCompletedAt;
+    const atMs = at && typeof at.toMillis === "function" ? at.toMillis() : 0;
+
+    const said = String(data.onboardingHeardFrom || "").trim();
+    if (said) heardFrom.push({ text: said.slice(0, 200), atMs });
+    const goal = String(data.onboardingOtherGoal || "").trim();
+    if (goal) otherGoals.push({ text: goal.slice(0, 200), atMs });
+
+    if (kinds.length || data.onboardingMainGoal || data.onboardingWorkflow) answeredAnything += 1;
+  });
+
+  const newestFirst = (rows) => rows.sort((a, b) => b.atMs - a.atMs).slice(0, 200);
+
+  return {
+    ok: true,
+    generatedAtMs: Date.now(),
+    settingsDocs,
+    completed,
+    answeredAnything,
+    counts,
+    heardFrom: newestFirst(heardFrom),
+    otherGoals: newestFirst(otherGoals),
+    note: "Counts come from companySettings, one document per workspace. A workspace that never finished setup contributes whatever it had answered when it stopped.",
+  };
+});
+
+
 // ---------------------------------------------------------------------------
 // Admin Insights detail: Feature Usage
 // ---------------------------------------------------------------------------
