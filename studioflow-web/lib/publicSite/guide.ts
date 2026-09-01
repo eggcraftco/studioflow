@@ -91,7 +91,7 @@ const TREE_EN: GuideNode[] = [
         id: "trial-no-credit-card",
         title: "No credit card to sign up",
         blocks: [
-          { kind: "para", text: "You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, 10 customers, your personal notes and export access, at no cost and with no time limit." },
+          { kind: "para", text: "You do not need a credit card to sign up for NivaDesk, and no payment details are asked for anywhere in setup. The Free plan never expires: 10 active orders, unlimited customers, your personal notes and export access, at no cost and with no time limit." },
           { kind: "para", text: "The 14-day trial of the paid plan is separate, and it does not start when you register." }
         ]
       },

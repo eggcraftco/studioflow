@@ -292,7 +292,10 @@ enum StudioBillingPlan: String, CaseIterable, Identifiable, Codable, Equatable, 
             return StudioPlanEntitlements(
                 plan: self,
                 orderLimit: 10,
-                customerLimit: 10,
+                // No customer limit on any plan: a customer without an order costs
+                // nothing, and PLAN_ENTITLEMENTS.demo dropped it when the free tier
+                // moved to one number. This copy had kept saying 10.
+                customerLimit: nil,
                 storageLimitMB: 50,
                 teamMemberLimit: 1,
                 clientFilesEnabled: false,
@@ -429,7 +432,9 @@ struct StudioPlanEntitlements: Equatable {
         return "\(storageLimitMB) MB"
     }
 
-    var orderLimitText: String { orderLimit.map { "\($0) orders" } ?? "Unlimited orders" }
+    // ACTIVE orders: finished work is not using anything, and saying so is the
+    // difference between a limit you can get back under and one you cannot.
+    var orderLimitText: String { orderLimit.map { "\($0) active orders" } ?? "Unlimited orders" }
     var customerLimitText: String { customerLimit.map { "\($0) customers" } ?? "Unlimited customers" }
     var teamLimitText: String { teamMemberLimit <= 1 ? "1 user" : "Up to \(teamMemberLimit) users" }
     var taskLimitText: String { taskLimitPerOrder.map { "Up to \($0) tasks per order" } ?? "Unlimited tasks" }

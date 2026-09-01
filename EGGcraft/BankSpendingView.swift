@@ -798,7 +798,11 @@ private struct BankPeriodControl: View {
     var body: some View {
         if isPhone {
             VStack(alignment: .leading, spacing: 8) {
-                modePicker.frame(maxWidth: .infinity)
+                // No .frame(maxWidth: .infinity) here: the picker's own 300pt cap
+                // binds first, so the outer frame could not stretch it — all it did
+                // was centre a 300pt control in a 362pt row while every other row on
+                // the screen starts at the left margin.
+                modePicker
                 HStack(spacing: 8) { periodStepper }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

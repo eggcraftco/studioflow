@@ -6572,11 +6572,15 @@ private object MaterialThemeColorFallback {
 }
 
 private fun planOrderLimitText(plan: StudioBillingPlan): String {
-    return if (plan == StudioBillingPlan.Demo) "10 orders" else "Unlimited orders"
+    // The free plan counts ACTIVE orders: finished work is not using anything,
+    // which is also the way back under the limit.
+    return if (plan == StudioBillingPlan.Demo) "10 active orders" else "Unlimited orders"
 }
 
 private fun planCustomerLimitText(plan: StudioBillingPlan): String {
-    return if (plan == StudioBillingPlan.Demo) "10 customers" else "Unlimited customers"
+    // There has been no customer limit on any plan since the free tier moved to
+    // one number; a customer without an order costs nothing.
+    return "Unlimited customers"
 }
 
 private fun planStorageLimitText(plan: StudioBillingPlan): String {

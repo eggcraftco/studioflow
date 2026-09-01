@@ -104,8 +104,26 @@ service cloud.firestore {
         && (!requiresAssignedToSelfFilter(data.companyId) || data.assignedToUid == request.auth.uid);
     }
 
+    // Mirrors trialHasExpired() in functions/index.js, including the 36-hour grace
+    // window that keeps a workspace open while a late renewal webhook lands. The
+    // server already drops a lapsed trial to the free plan, but these rules read
+    // billingPlan straight off the document, so without this a Team trial that
+    // ended a month ago still opened the Team-only collections. Only a workspace
+    // whose status is 'trialing' is ever tested: a paying customer is 'active'.
+    function trialLapsed(data) {
+      return data.get('billingStatus', '') == 'trialing'
+        && (
+          (data.get('billingTrialEndsAt', null) is timestamp
+            && request.time > data.billingTrialEndsAt + duration.value(36, 'h'))
+          || (!(data.get('billingTrialEndsAt', null) is timestamp)
+            && data.get('billingCurrentPeriodEnd', null) is timestamp
+            && request.time > data.billingCurrentPeriodEnd + duration.value(36, 'h'))
+        );
+    }
+
     function hasTeamPlan(companyId) {
       return companyExists(companyId)
+        && !trialLapsed(get(companyPath(companyId)).data)
         && get(companyPath(companyId)).data.billingPlan in [
           'team_monthly', 'team_yearly', 'teamMonthly', 'teamYearly'
         ];
@@ -113,6 +131,7 @@ service cloud.firestore {
 
     function hasAdvancedFinancePlan(companyId) {
       return companyExists(companyId)
+        && !trialLapsed(get(companyPath(companyId)).data)
         && get(companyPath(companyId)).data.billingPlan in [
           'pro_monthly', 'pro_yearly', 'team_monthly', 'team_yearly',
           'proMonthly', 'proYearly', 'teamMonthly', 'teamYearly'
@@ -226,6 +245,16 @@ service cloud.firestore {
         'billingPlanName',
         'billingPlanSource',
         'billingStatus',
+        // The trial's end date decides the plan just as surely as the plan field
+        // does — trialHasExpired() in functions/index.js reads billingTrialEndsAt
+        // FIRST — so leaving it writable let an owner post a date in the year 3000
+        // and keep a Team trial forever, free. billingTrialUsedAt is the
+        // once-per-workspace stamp; clearing it re-armed the free fortnight on
+        // every re-subscribe. All server-written; no client ever sets them.
+        'billingTrialEndsAt',
+        'billingTrialStartedAt',
+        'billingTrialUsedAt',
+        'billingProvider',
         'billingProviderRawStatus',
         'billingEffectivePlan',
         'billingEffectivePlanTier',

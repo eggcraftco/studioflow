@@ -3710,7 +3710,7 @@ function websiteAssistantConfigRef() {
 const WEBSITE_ASSISTANT_FACTS = [
   "NivaDesk is studio management software for creative and custom-order businesses: orders, customers, scheduling, invoices, client files, notes, to-dos, team roles, dashboards and bank spending.",
   "Platforms: web (nivadesk.app), macOS, iPhone, iPad and Android. The same workspace syncs across all of them. There is no Windows app yet.",
-  "Plans: Free (permanent, no card, room for 10 orders and 10 customers), Starter £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
+  "Plans: Free (permanent, no card, room for 10 active orders and unlimited customers), Starter £9/month or £90/year, Pro £19/month or £190/year, Team £49/month or £490/year. Yearly is ten months' price for twelve months, about 17% off. Extra Team seats are £5/month or £50/year each, up to 10 users. More than 10 users: email contact@nivadesk.co.uk.",
   "Every paid plan starts with a 14-day free trial. A card is needed to start it and nothing is charged until the trial ends. Cancel inside the 14 days and the workspace falls back to Free: the orders and customers already saved stay readable and exportable, but no new ones can be added until a plan is picked again.",
   "The step-by-step user guide at nivadesk.app/guide and the in-app help assistant are part of Starter, Pro and Team. On Free, this chat is the place to ask: answer what NivaDesk does, what it costs and whether it fits, and leave the menu-by-menu detail to the guide.",
   "Every plan includes the NivaDesk ChatGPT app. It connects a workspace to ChatGPT through OAuth so the owner can ask about orders, notes, finances and bank spending in plain language, create orders from existing records, and attach receipts to bank transactions.",
@@ -27927,13 +27927,33 @@ exports.getAdminPlansDetail = onCall({ region: "europe-west2", timeoutSeconds: 6
     console.warn("plansDetail recent orders failed:", error?.message || error);
   }
 
-  // Static comparison straight from the entitlement constants used by the app.
+  // The comparison said it came "straight from the entitlement constants" and was
+  // a hand-typed literal that had drifted: a plan called "Free Demo" — a name
+  // that exists nowhere else — with 5 orders and 3 customers, against a real
+  // free tier of 10 ACTIVE orders and no customer limit at all. Now it is read.
   const comparison = [
-    { plan: "demo", label: "Free Demo", orders: "5", customers: "3", storage: "50 MB", seats: "1", monthly: 0, yearly: 0 },
-    { plan: "lifetime_lite", label: "Starter", orders: "Unlimited", customers: "Unlimited", storage: "250 MB", seats: "1", monthly: 9, yearly: 90 },
-    { plan: "pro_monthly", label: "Pro", orders: "Unlimited", customers: "Unlimited", storage: "10 GB", seats: "1", monthly: 19, yearly: 190 },
-    { plan: "team_monthly", label: "Team", orders: "Unlimited", customers: "Unlimited", storage: "50 GB", seats: "5 (+5 add-on)", monthly: 49, yearly: 490 }
-  ];
+    { plan: "demo", monthly: 0, yearly: 0 },
+    { plan: "lifetime_lite", monthly: 9, yearly: 90 },
+    { plan: "pro_monthly", monthly: 19, yearly: 190 },
+    { plan: "team_monthly", monthly: 49, yearly: 490 }
+  ].map((row) => {
+    const plan = PLAN_ENTITLEMENTS[row.plan] || PLAN_ENTITLEMENTS.demo;
+    const seats = plan.teamMemberLimit > 1
+      ? `${plan.teamMemberLimit} (+${TEAM_SELF_SERVICE_MAX_SEATS - plan.teamMemberLimit} add-on)`
+      : String(plan.teamMemberLimit);
+    return {
+      plan: row.plan,
+      label: plan.displayName,
+      orders: plan.orderLimit == null ? "Unlimited" : `${plan.orderLimit} active`,
+      customers: plan.customerLimit == null ? "Unlimited" : String(plan.customerLimit),
+      storage: plan.storageLimitMB >= 1024
+        ? `${Math.round(plan.storageLimitMB / 1024)} GB`
+        : `${plan.storageLimitMB} MB`,
+      seats,
+      monthly: row.monthly,
+      yearly: row.yearly
+    };
+  });
 
   return {
     ok: true,

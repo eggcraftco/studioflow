@@ -14861,7 +14861,7 @@ struct AccountProfileView: View {
     private func planBestForText(_ plan: StudioBillingPlan) -> String {
         switch plan {
         case .demo:
-            return "Keep a small studio running for free, with room for 10 orders and 10 customers."
+            return "Keep a small studio running for free, with room for 10 active orders and as many customers as you like."
         case .lifetimeLite:
             return "Best for solo makers who want local order tracking without team tools."
         case .proMonthly:
