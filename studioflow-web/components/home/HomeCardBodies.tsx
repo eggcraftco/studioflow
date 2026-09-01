@@ -1167,30 +1167,41 @@ function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; ton
 
 /** Event type to colour. The title always names the event, so colour only
  *  speeds up scanning — it never carries the meaning on its own (§20). */
-function activityTone(type: string) {
-  const key = type.toLowerCase();
-  if (key.includes("payment")) return "green";
-  if (key.includes("order")) return "purple";
-  if (key.includes("production") || key.includes("status")) return "blue";
-  if (key.includes("file")) return "amber";
-  if (key.includes("inventory")) return "orange";
-  if (key.includes("customer")) return "teal";
-  if (key.includes("schedule")) return "blue";
-  return "slate";
-}
+// What a row looks like, decided from the notification type the SERVER writes.
+//
+// This was a chain of substring guesses ending in a grey disc, and ten real
+// types fell off the end of it — estimate_decision, both bank_ types,
+// shared_note, support_ticket_reply, workspace_ticket_assigned, team, direct,
+// delivery, deleted. The card in front of a real workspace was three blank grey
+// circles: two estimate approvals and a bank connection, none of them
+// recognisable, all of them things this product does every day.
+//
+// So it is a table now, and homeActivityTypes.test.ts checks it against the
+// list of types the server actually writes. A guess that silently degrades to
+// grey is worse than a missing case that a test can point at.
+const ACTIVITY_LOOKS: Array<{ match: RegExp; tone: string; glyph: HomeActivityIconName }> = [
+  // Money first: woocommerce_payment must not be read as an order.
+  { match: /payment|refund|invoice_paid/, tone: "green", glyph: "payment" },
+  { match: /^bank_|bank_connection|bank_receipt/, tone: "cyan", glyph: "bank" },
+  { match: /estimate/, tone: "indigo", glyph: "estimate" },
+  { match: /delivery|dispatch|shipped/, tone: "blue", glyph: "delivery" },
+  { match: /production|status|stage/, tone: "blue", glyph: "production" },
+  // Deletion requests are about an order but are not one; they read as admin.
+  { match: /deletion|deleted/, tone: "slate", glyph: "message" },
+  { match: /order/, tone: "purple", glyph: "order" },
+  { match: /note/, tone: "amber", glyph: "note" },
+  { match: /ticket|support|direct|message|reply/, tone: "slate", glyph: "message" },
+  { match: /team|member|invite/, tone: "teal", glyph: "team" },
+  { match: /file|upload|document/, tone: "amber", glyph: "file" },
+  { match: /inventory|stock/, tone: "orange", glyph: "inventory" },
+  { match: /customer/, tone: "teal", glyph: "customer" },
+  { match: /schedule|reminder/, tone: "blue", glyph: "schedule" }
+];
 
-/** The glyph, decided from the same key as the tone so the two cannot drift
- *  apart — a green disc with a cart in it would be worse than no glyph. */
-function activityGlyph(type: string): HomeActivityIconName {
-  const key = type.toLowerCase();
-  if (key.includes("payment")) return "payment";
-  if (key.includes("order")) return "order";
-  if (key.includes("production") || key.includes("status")) return "production";
-  if (key.includes("file")) return "file";
-  if (key.includes("inventory")) return "inventory";
-  if (key.includes("customer")) return "customer";
-  if (key.includes("schedule")) return "schedule";
-  return "update";
+export function activityLook(type: string): { tone: string; glyph: HomeActivityIconName } {
+  const key = String(type || "").toLowerCase();
+  const hit = ACTIVITY_LOOKS.find((row) => row.match.test(key));
+  return hit ? { tone: hit.tone, glyph: hit.glyph } : { tone: "slate", glyph: "update" };
 }
 
 export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBodyProps) {
@@ -1217,10 +1228,10 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
 
   const symbol = moneySymbol(moneySettings);
   const row = (item: (typeof rows)[number]) => {
-    const glyph = activityGlyph(item.type);
+    const { tone, glyph } = activityLook(item.type);
     return (
     <li key={item.id}>
-      <span className={`home-activity-mark tone-${activityTone(item.type)}`} aria-hidden="true">
+      <span className={`home-activity-mark tone-${tone}`} aria-hidden="true">
         {/* Money is the one row that shows a character rather than a drawing:
             the workspace's own currency, so a euro shop is never shown a
             pound. Everything else is a glyph. */}

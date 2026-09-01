@@ -617,16 +617,45 @@ struct HomeActionRow: View {
 
 /// Event type to colour. The title always names the event, so colour only
 /// speeds up scanning — it never carries the meaning on its own (§20).
-func homeActivityTone(_ type: String) -> Color {
+// What an activity row looks like, decided from the notification type the
+// SERVER writes — and it writes eighteen of them.
+//
+// This was a chain of substring guesses ending in a grey disc, and the types
+// that fell off the end were not obscure: estimate_decision, both bank_ ones,
+// shared_note, the ticket ones, team. A real workspace's card was three blank
+// grey circles for two estimate approvals and a bank connection.
+//
+// Kept in the same order as the web table in
+// studioflow-web/components/home/HomeCardBodies.tsx, and checked against the
+// server's list by functions/test/qa/home-activity-looks.test.js. Money first,
+// so woocommerce_payment is not read as an order.
+private let homeActivityLooks: [(match: [String], tone: Color, glyph: String)] = [
+    (["payment", "refund", "invoice_paid"], HomeTone.green, "creditcard.fill"),
+    (["bank_"], HomeTone.teal, "building.columns"),
+    (["estimate"], HomeTone.purple, "checkmark.seal.fill"),
+    (["delivery", "dispatch", "shipped"], HomeTone.accent, "shippingbox.fill"),
+    (["production", "status", "stage"], HomeTone.accent, "gearshape.fill"),
+    (["deletion", "deleted"], HomeTone.slate, "bubble.left.and.bubble.right.fill"),
+    (["order"], HomeTone.purple, "cart.fill"),
+    (["note"], HomeTone.amber, "note.text"),
+    (["ticket", "support", "direct", "message", "reply"], HomeTone.slate, "bubble.left.and.bubble.right.fill"),
+    (["team", "member", "invite"], HomeTone.teal, "person.2.fill"),
+    (["file", "upload", "document"], HomeTone.amber, "doc.fill"),
+    (["inventory", "stock"], HomeTone.orange, "shippingbox.fill"),
+    (["customer"], HomeTone.teal, "person.fill"),
+    (["schedule", "reminder"], HomeTone.accent, "calendar")
+]
+
+private func homeActivityLook(_ type: String) -> (tone: Color, glyph: String) {
     let key = type.lowercased()
-    if key.contains("payment") { return HomeTone.green }
-    if key.contains("order") { return HomeTone.purple }
-    if key.contains("production") || key.contains("status") { return HomeTone.accent }
-    if key.contains("file") { return HomeTone.amber }
-    if key.contains("inventory") { return HomeTone.orange }
-    if key.contains("customer") { return HomeTone.teal }
-    if key.contains("schedule") { return HomeTone.accent }
-    return HomeTone.slate
+    for row in homeActivityLooks where row.match.contains(where: { key.contains($0) }) {
+        return (row.tone, row.glyph)
+    }
+    return (HomeTone.slate, "clock.fill")
+}
+
+func homeActivityTone(_ type: String) -> Color {
+    homeActivityLook(type).tone
 }
 
 /// The glyph inside the disc, decided from the same key as the tone above so a
@@ -634,15 +663,7 @@ func homeActivityTone(_ type: String) -> Color {
 /// that ships with macOS 14 — an invented name draws nothing at all and the
 /// disc silently goes back to being an empty circle.
 func homeActivityGlyph(_ type: String) -> String {
-    let key = type.lowercased()
-    if key.contains("payment") { return "creditcard.fill" }
-    if key.contains("order") { return "cart.fill" }
-    if key.contains("production") || key.contains("status") { return "gearshape.fill" }
-    if key.contains("file") { return "doc.fill" }
-    if key.contains("inventory") { return "shippingbox.fill" }
-    if key.contains("customer") { return "person.fill" }
-    if key.contains("schedule") { return "calendar" }
-    return "clock.fill"
+    homeActivityLook(type).glyph
 }
 
 struct HomeRecentActivityBody: View {

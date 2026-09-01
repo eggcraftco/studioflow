@@ -22,6 +22,18 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Build
@@ -762,19 +774,46 @@ private fun ActionRow(action: QuickAction, t: (String) -> String, modifier: Modi
 
 /** Event type to colour. The title always names the event, so colour only
  *  speeds up scanning — it never carries the meaning on its own (§20). */
-private fun activityTone(type: String): Color {
+// What an activity row looks like, from the notification type the SERVER
+// writes — eighteen of them.
+//
+// Android was a step behind the other two: it had the colours and drew a bare
+// coloured circle with nothing in it, which is the empty-avatar look the
+// reference sheet replaces. And the colour chain itself dropped the types that
+// matter most in a real workspace — estimate_decision, both bank_ ones,
+// shared_note, the ticket ones, team — onto grey.
+//
+// Same order as the web table in
+// studioflow-web/components/home/HomeCardBodies.tsx and the Swift one in
+// EGGcraft/HomeCardBodies.swift; checked against the server's list by
+// functions/test/qa/home-activity-looks.test.js. Money first, so
+// woocommerce_payment is not read as an order.
+private data class ActivityLook(val tone: Color, val icon: ImageVector)
+
+private val ACTIVITY_LOOKS: List<Pair<List<String>, ActivityLook>> = listOf(
+    listOf("payment", "refund", "invoice_paid") to ActivityLook(HomeTone.green, Icons.Filled.CreditCard),
+    listOf("bank_") to ActivityLook(HomeTone.teal, Icons.Filled.AccountBalance),
+    listOf("estimate") to ActivityLook(HomeTone.purple, Icons.Filled.CheckCircle),
+    listOf("delivery", "dispatch", "shipped") to ActivityLook(HomeTone.accent, Icons.Filled.LocalShipping),
+    listOf("production", "status", "stage") to ActivityLook(HomeTone.accent, Icons.Filled.Settings),
+    listOf("deletion", "deleted") to ActivityLook(HomeTone.slate, Icons.AutoMirrored.Filled.Chat),
+    listOf("order") to ActivityLook(HomeTone.purple, Icons.Filled.ShoppingCart),
+    listOf("note") to ActivityLook(HomeTone.amber, Icons.AutoMirrored.Filled.Note),
+    listOf("ticket", "support", "direct", "message", "reply") to ActivityLook(HomeTone.slate, Icons.AutoMirrored.Filled.Chat),
+    listOf("team", "member", "invite") to ActivityLook(HomeTone.teal, Icons.Filled.Group),
+    listOf("file", "upload", "document") to ActivityLook(HomeTone.amber, Icons.Filled.InsertDriveFile),
+    listOf("inventory", "stock") to ActivityLook(HomeTone.orange, Icons.Filled.Inventory2),
+    listOf("customer") to ActivityLook(HomeTone.teal, Icons.Filled.Person),
+    listOf("schedule", "reminder") to ActivityLook(HomeTone.accent, Icons.Filled.CalendarMonth)
+)
+
+private fun activityLook(type: String): ActivityLook {
     val key = type.lowercase()
-    return when {
-        key.contains("payment") -> HomeTone.green
-        key.contains("order") -> HomeTone.purple
-        key.contains("production") || key.contains("status") -> HomeTone.accent
-        key.contains("file") -> HomeTone.amber
-        key.contains("inventory") -> HomeTone.orange
-        key.contains("customer") -> HomeTone.teal
-        key.contains("schedule") -> HomeTone.accent
-        else -> HomeTone.slate
-    }
+    return ACTIVITY_LOOKS.firstOrNull { (keys, _) -> keys.any { key.contains(it) } }?.second
+        ?: ActivityLook(HomeTone.slate, Icons.Filled.Schedule)
 }
+
+private fun activityTone(type: String): Color = activityLook(type).tone
 
 @Composable
 private fun HomeRecentActivityBody(size: HomeCardSize, state: StudioFlowUiState, t: (String) -> String) {
@@ -818,7 +857,13 @@ private fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(Modifier.size(24.dp).background(activityTone(type), CircleShape))
+        val look = activityLook(type)
+        Box(
+            Modifier.size(24.dp).background(look.tone, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(look.icon, null, Modifier.size(13.dp), Color.White)
+        }
         Column(Modifier.weight(1f)) {
             Text(title.ifEmpty { t("Update") }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)

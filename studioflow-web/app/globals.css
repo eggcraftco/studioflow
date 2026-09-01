@@ -27739,6 +27739,8 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-activity-mark.tone-orange { background: #ea580c; }
 .home-activity-mark.tone-teal { background: #14b8a6; }
 .home-activity-mark.tone-slate { background: #64748b; }
+.home-activity-mark.tone-indigo { background: #4f46e5; }
+.home-activity-mark.tone-cyan { background: #0891b2; }
 .home-activity-text { flex: 1 1 auto; min-width: 0; }
 .home-activity-text strong { display: block; font-size: 13px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-activity-text em { display: block; font-style: normal; font-size: 11.5px; opacity: 0.6; line-height: 1.25; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
