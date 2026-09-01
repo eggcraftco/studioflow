@@ -27088,8 +27088,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .onboard-connect-tile {
   display: grid;
+  /* Logo, description, action — and the description takes the slack, so the
+     buttons land on one line across the row however long each description
+     runs. Packed to the top before, which put every button at a different
+     height and made the grid look thrown together. */
+  grid-template-rows: auto 1fr auto;
   gap: 8px;
-  align-content: start;
   padding: 14px;
   border: 1px solid rgba(120, 120, 140, 0.22);
   border-radius: 14px;
@@ -27124,6 +27128,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 /* Connected and Coming soon stand where the button stood, so the tile keeps its
    shape whichever state it is in. */
+/* All three states are the same box, because they occupy the same row of every
+   tile: measured, the button was 39pt tall, the Coming soon pill 27 and the
+   Connected line 16, so the bottoms lined up and nothing else did. */
+.onboard-connect-done,
+.onboard-connect-soon,
+.onboard-connect-btn { min-height: 39px; }
 .onboard-connect-done {
   justify-self: start; display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; font-weight: 700; color: #15803d;
@@ -27131,7 +27141,8 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .onboard-connect-done i { font-style: normal; font-weight: 900; }
 body[data-studio-theme="dark"] .onboard-connect-done { color: #4ade80; }
 .onboard-connect-soon {
-  justify-self: start; font-size: 12.5px; font-weight: 650;
+  justify-self: start; display: inline-flex; align-items: center;
+  font-size: 12.5px; font-weight: 650;
   color: var(--foreground); opacity: 0.55;
   border: 1px dashed var(--border); border-radius: 999px; padding: 5px 12px;
 }
