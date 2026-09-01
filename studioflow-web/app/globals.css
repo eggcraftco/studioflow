@@ -28237,7 +28237,11 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 .home-cost-list li:last-child { border-bottom: 0; }
 .home-cost-list em { font-style: normal; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-cost-list b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.home-cost-dot { width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto; }
+.home-cost-dot {
+  width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.home-cost-dot svg { width: 11px; height: 11px; display: block; }
 .home-cost-dot.tone-0 { background: #f97316; }
 .home-cost-dot.tone-1 { background: #7c3aed; }
 .home-cost-dot.tone-2 { background: #2563eb; }
@@ -29069,3 +29073,10 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   white-space: nowrap;
   border: 0;
 }
+
+/* ---- Revenue & profit chart ------------------------------------------- */
+/* The chart had no scale, no dates, and preserveAspectRatio="none" stretching
+   the line until a quiet month looked like a cliff — a reader could tell the
+   two lines apart and nothing else about them. */
+.home-chart-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.75; }
+.home-chart-tick { font-size: 9px; fill: currentColor; opacity: 0.5; font-variant-numeric: tabular-nums; }

@@ -98,7 +98,11 @@ export type HomeTileIconName =
   // The two stock holdings that are not free shelf.
   | "reserved" | "incomingStock"
   // What a note is about.
-  | "reminder" | "order" | "customer" | "note";
+  | "reminder" | "order" | "customer" | "note"
+  // What the Money card's four figures and four deductions mean. Added rather
+  // than borrowed: the nearest existing glyphs meant something else, and a
+  // clock standing in for a pie chart is worse than no icon at all.
+  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -111,6 +115,21 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
     "aria-hidden": true,
   };
   switch (name) {
+    case "trendUp":
+      return (<svg {...common}><polyline points="3 16.5 9 10.5 13 14.5 21 6.5" /><polyline points="15 6.5 21 6.5 21 12.5" /></svg>);
+    case "paid":
+      return (<svg {...common}><circle cx="12" cy="12" r="8.6" /><polyline points="8.2 12.2 11 15 15.9 9.4" /></svg>);
+    case "awaiting":
+      return (<svg {...common}><circle cx="12" cy="12" r="8.6" /><polyline points="12 7.2 12 12.3 15.6 14.4" /></svg>);
+    case "margin":
+      // A pie with one slice lifted: margin is a share of a whole, and a plain
+      // circle would have said "clock" beside a clock.
+      return (<svg {...common}><path d="M12 3.6a8.4 8.4 0 1 0 8.4 8.4H12V3.6Z" /><path d="M14.4 2.2a8.4 8.4 0 0 1 7.4 7.4h-7.4V2.2Z" /></svg>);
+    case "percent":
+      return (<svg {...common}><line x1="6.5" y1="17.5" x2="17.5" y2="6.5" /><circle cx="7.8" cy="7.8" r="2.4" /><circle cx="16.2" cy="16.2" r="2.4" /></svg>);
+    case "calculator":
+      return (<svg {...common}><rect x="5" y="2.8" width="14" height="18.4" rx="2.2" /><line x1="8.2" y1="7.2" x2="15.8" y2="7.2" /><line x1="8.4" y1="11.4" x2="8.5" y2="11.4" /><line x1="12" y1="11.4" x2="12.1" y2="11.4" /><line x1="15.6" y1="11.4" x2="15.7" y2="11.4" /><line x1="8.4" y1="15.4" x2="8.5" y2="15.4" /><line x1="12" y1="15.4" x2="12.1" y2="15.4" /><line x1="15.6" y1="15.4" x2="15.7" y2="15.4" /></svg>);
+
     case "in":
       return <svg {...common}><path d="M12 4v14M6.5 12.5 12 18l5.5-5.5" /></svg>;
     case "out":

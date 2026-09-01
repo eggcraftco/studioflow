@@ -170,22 +170,31 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   return (
     <div className="home-money is-large">
       <div className="home-tile-row">
-        <MoneyTile label={t("Revenue")} value={money(revenue)} tone="green" />
-        <MoneyTile label={t("Payments received")} value={money(received)} tone="green" />
-        <MoneyTile label={t("Outstanding")} value={money(outstanding)} tone="blue" />
-        <MoneyTile label={t("Net profit")} value={money(profit)} tone="green" />
+        {/* MoneyTile has always taken an icon and these four never passed one,
+            so the tile drew an empty pale disc — the "unfinished placeholder"
+            look the reference replaces with a mark that says what the figure
+            is. */}
+        <MoneyTile label={t("Revenue")} value={money(revenue)} tone="green" icon="trendUp" />
+        <MoneyTile label={t("Payments received")} value={money(received)} tone="green" icon="paid" />
+        <MoneyTile label={t("Outstanding")} value={money(outstanding)} tone="blue" icon="awaiting" />
+        <MoneyTile label={t("Net profit")} value={money(profit)} tone={profit >= 0 ? "green" : "red"} icon="margin" />
       </div>
       <div className="home-money-panels">
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Revenue & profit")}</p>
-          <RevenueProfitChart orders={orders} t={t} />
+          <RevenueProfitChart orders={orders} t={t} moneySettings={moneySettings} />
         </div>
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Cost breakdown")}</p>
           <ul className="home-cost-list">
             {deductions.map((entry, index) => (
               <li key={entry.label}>
-                <span className={`home-cost-dot tone-${index}`} aria-hidden="true" />
+                {/* A coloured dot says "this row is a different colour". An
+                    icon says what the row IS, which is what the four labels
+                    beside them are already doing and the dot was not. */}
+                <span className={`home-cost-dot tone-${index}`} aria-hidden="true">
+                  <HomeTileIcon name={COST_ICONS[index] ?? "percent"} />
+                </span>
                 <em>{t(entry.label)}</em>
                 <b>{money(entry.value)}</b>
               </li>
@@ -224,10 +233,24 @@ function MoneyTile({
  * Drawn inline rather than with a chart library: it is two polylines and two
  * fills, and a library would be a bigger download than the whole screen.
  */
-function RevenueProfitChart({ orders, t }: { orders: HomeData["financeOrders"]; t: (text: string) => string }) {
+/** In the same order as `deductions`: what was spent, what the platform took,
+ *  what the courier took, what the taxman is owed. */
+const COST_ICONS: HomeTileIconName[] = ["order", "percent", "out", "calculator"];
+
+function RevenueProfitChart({ orders, t, moneySettings }: {
+  orders: HomeData["financeOrders"];
+  t: (text: string) => string;
+  moneySettings: StudioMoneySettings;
+}) {
   const weeks = 12;
   const now = new Date();
-  const buckets = Array.from({ length: weeks }, () => ({ revenue: 0, profit: 0 }));
+  const buckets = Array.from({ length: weeks }, (_unused, index) => {
+    // Each bucket keeps the date it covers, because a chart with no dates on
+    // it is a shape rather than a reading.
+    const end = new Date(now);
+    end.setDate(now.getDate() - (weeks - 1 - index) * 7);
+    return { revenue: 0, profit: 0, end };
+  });
   for (const order of orders) {
     if (!order.paymentDate) continue;
     const weeksAgo = Math.floor((now.getTime() - order.paymentDate.getTime()) / (7 * 24 * 3600 * 1000));
@@ -237,32 +260,87 @@ function RevenueProfitChart({ orders, t }: { orders: HomeData["financeOrders"]; 
     bucket.revenue += value;
     bucket.profit += value - order.watchPurchasePrice - order.paymentFee - order.deliveryCost - order.taxAmount;
   }
-  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.revenue, b.profit)));
-  const width = 100;
-  const height = 46;
-  const point = (index: number, value: number) =>
-    `${(index / (weeks - 1)) * width},${height - (Math.max(0, value) / peak) * height}`;
-  const line = (key: "revenue" | "profit") => buckets.map((b, i) => point(i, b[key])).join(" ");
-  const area = (key: "revenue" | "profit") => `0,${height} ${line(key)} ${width},${height}`;
 
   if (buckets.every((b) => b.revenue === 0)) {
     return <p className="home-card-note">{t("Not enough history yet.")}</p>;
   }
+
+  // A grid the eye can measure against. The chart had none — no scale, no
+  // dates, and preserveAspectRatio="none" stretching the line until a quiet
+  // month looked like a cliff. A reader could tell the two lines apart and
+  // nothing else about them.
+  const rawPeak = Math.max(1, ...buckets.map((b) => Math.max(b.revenue, b.profit)));
+  const step = niceAxisStep(rawPeak / 4);
+  const top = Math.ceil(rawPeak / step) * step;
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_unused, i) => i * step);
+
+  // Room on the left for the scale and under it for the dates; the plot keeps
+  // what is left. Proportional, so the line is never distorted.
+  const W = 320, H = 158, L = 40, R = 6, TOP = 8, B = 22;
+  const plotW = W - L - R;
+  const plotH = H - TOP - B;
+  const x = (index: number) => L + (index / (weeks - 1)) * plotW;
+  const y = (value: number) => TOP + plotH - (Math.max(0, value) / top) * plotH;
+  const line = (key: "revenue" | "profit") => buckets.map((b, i) => `${x(i)},${y(b[key])}`).join(" ");
+  const area = (key: "revenue" | "profit") =>
+    `${L},${TOP + plotH} ${line(key)} ${L + plotW},${TOP + plotH}`;
+
+  const shortMoney = (value: number) => compactMoney(value, moneySettings);
+  const shortDate = (date: Date) =>
+    date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  // Three dates, not twelve: first, middle, last is enough to say what window
+  // this is, and twelve would overlap into a smudge.
+  const dateAt = [0, Math.floor((weeks - 1) / 2), weeks - 1];
+
   return (
     <>
       <p className="home-chart-key">
         <span><i className="is-revenue" aria-hidden="true" />{t("Revenue")}</span>
         <span><i className="is-profit" aria-hidden="true" />{t("Net profit")}</span>
       </p>
-      <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
-           aria-label={t("Revenue & profit")}>
+      <svg className="home-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Revenue & profit")}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line className="home-chart-grid" x1={L} y1={y(tick)} x2={W - R} y2={y(tick)} />
+            <text className="home-chart-tick" x={L - 7} y={y(tick) + 3.5} textAnchor="end">{shortMoney(tick)}</text>
+          </g>
+        ))}
         <polygon className="home-chart-area is-revenue" points={area("revenue")} />
         <polygon className="home-chart-area is-profit" points={area("profit")} />
         <polyline className="home-chart-line is-revenue" points={line("revenue")} />
         <polyline className="home-chart-line is-profit" points={line("profit")} />
+        {dateAt.map((index, position) => (
+          <text
+            key={index}
+            className="home-chart-tick"
+            x={x(index)}
+            y={H - 6}
+            textAnchor={position === 0 ? "start" : position === 2 ? "end" : "middle"}
+          >
+            {shortDate(buckets[index].end)}
+          </text>
+        ))}
       </svg>
     </>
   );
+}
+
+/** 1, 2 or 5 times a power of ten — the steps a person reads without doing
+ *  arithmetic. An axis at £1,317 intervals is technically correct and useless. */
+function niceAxisStep(rough: number): number {
+  const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(1, rough))));
+  const normalised = rough / magnitude;
+  const stepped = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
+  return stepped * magnitude;
+}
+
+/** £8K rather than £8,000.00: an axis label has to be read sideways, at a
+ *  glance, in the width of a gutter. */
+function compactMoney(value: number, settings: StudioMoneySettings): string {
+  const symbol = moneySymbol(settings);
+  if (value >= 1_000_000) return `${symbol}${Math.round(value / 100_000) / 10}M`;
+  if (value >= 1_000) return `${symbol}${Math.round(value / 100) / 10}K`.replace(".0K", "K");
+  return `${symbol}${Math.round(value)}`;
 }
 
 /* ---------------------------------------------------------------- Banking */
