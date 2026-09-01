@@ -273,6 +273,10 @@ function createEtsyConnectFunctions(deps) {
       redirectUri: redirectUri(),
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       expiresAt: now() + etsy.OAUTH_STATE_TTL_MS,
+      // The same instant as a Timestamp: expiresAt is what the callback compares,
+      // expireAt is what the TTL policy purges by. A numeric field cannot carry a
+      // TTL, which is why fourteen spent states were still sitting here.
+      expireAt: admin.firestore.Timestamp.fromMillis(now() + etsy.OAUTH_STATE_TTL_MS),
       used: false
     });
 

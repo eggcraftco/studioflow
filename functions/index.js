@@ -29327,22 +29327,44 @@ exports.shopifyAppBridge = onRequest({ region: "europe-west2", secrets: [SHOPIFY
     }
 
     if (action === "retryRow") {
-      // Manual retry from the Sync History screen: replay the stored payload
-      // through the same topic router (defined below; hoisted declaration).
+      // Manual retry from the Sync History screen.
+      //
+      // SYNC-010: for an order topic the stored copy is not the source. The
+      // order is fetched again from the Admin API, so a retry applies what the
+      // store says NOW — and the stored copy, which is redacted, never has to
+      // carry the customer. An order Shopify no longer has is not retryable;
+      // a fetch that fails is reported as that, so the button stays. The
+      // stored payload is only replayed for the topics whose payload is not an
+      // order (refunds, fulfilments) and for rows written before this change.
       const rowId = String(req.body?.rowId || "").trim();
       if (!rowId) { res.status(400).json({ ok: false, error: "missing_row" }); return; }
       const rowSnap = await ref.collection("syncLog").doc(rowId).get();
       if (!rowSnap.exists) { res.status(404).json({ ok: false, error: "unknown_row" }); return; }
       const row = rowSnap.data() || {};
-      if (!row.payloadJson) { res.status(400).json({ ok: false, error: "not_retryable" }); return; }
-      let payload;
-      try { payload = JSON.parse(row.payloadJson); } catch { res.status(400).json({ ok: false, error: "bad_payload" }); return; }
-      const outcome = await routeShopifyAppTopic(shop, data, String(row.topic || "orders/create"), payload);
+      const topic = String(row.topic || "orders/create");
+      let payload = null;
+      let replaySource = "stored";
+      if (SHOPIFY_ORDER_TOPICS.has(topic) && row.shopifyOrderId) {
+        try {
+          payload = await fetchShopifyOrderById(shop, data, row.shopifyOrderId);
+        } catch (error) {
+          console.warn("retryRow: fetch-latest failed", error?.message || error);
+          res.status(502).json({ ok: false, error: "fetch_failed" });
+          return;
+        }
+        if (!payload) { res.status(400).json({ ok: false, error: "order_not_in_shopify" }); return; }
+        replaySource = "fetched";
+      } else {
+        if (!row.payloadJson) { res.status(400).json({ ok: false, error: "not_retryable" }); return; }
+        try { payload = JSON.parse(row.payloadJson); } catch { res.status(400).json({ ok: false, error: "bad_payload" }); return; }
+      }
+      const outcome = await routeShopifyAppTopic(shop, data, topic, payload);
       await writeShopifySyncRow(shop, {
-        topic: String(row.topic || ""),
+        topic,
         status: outcome.status,
         error: String(outcome.error || ""),
         retriedFrom: rowId,
+        replaySource,
         shopifyOrderId: String(outcome.shopifyOrderId || row.shopifyOrderId || ""),
         shopifyOrderNumber: String(outcome.shopifyOrderNumber || row.shopifyOrderNumber || ""),
         nivadeskOrderId: String(outcome.nivadeskOrderId || "")
@@ -29508,9 +29530,33 @@ function shopifyOrderProductIds(order) {
     .filter(Boolean);
 }
 
-function shopifySafePayloadJson(payload) {
+// RET-002 / OBS-002. A failed delivery's payload is kept so the row can be
+// retried, and that is the only reason it is kept — so it keeps what a retry
+// needs (ids, statuses, line items, totals, tracking) and not who the buyer
+// is. Names, emails, phones, addresses and the buyer's note are stripped
+// wherever they appear, and the whole thing is capped at 32 KB where it used
+// to be 180. For an order topic the retry re-fetches the order anyway
+// (SYNC-010), so nothing here has to carry the customer.
+const SHOPIFY_PAYLOAD_PII_KEYS = new Set([
+  "customer", "billing_address", "shipping_address", "default_address",
+  "email", "contact_email", "phone", "note", "note_attributes", "client_details", "browser_ip"
+]);
+const SHOPIFY_PAYLOAD_JSON_LIMIT = 32000;
+
+function shopifyRedactPayload(value, depth = 0) {
+  if (depth > 12 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => shopifyRedactPayload(item, depth + 1));
+  const out = {};
+  for (const [key, inner] of Object.entries(value)) {
+    if (SHOPIFY_PAYLOAD_PII_KEYS.has(key)) continue;
+    out[key] = shopifyRedactPayload(inner, depth + 1);
+  }
+  return out;
+}
+
+function shopifyRedactedPayloadJson(payload) {
   try {
-    return JSON.stringify(payload).slice(0, 180000);
+    return JSON.stringify(shopifyRedactPayload(payload)).slice(0, SHOPIFY_PAYLOAD_JSON_LIMIT);
   } catch {
     return "";
   }
@@ -29620,9 +29666,19 @@ function shopifyTodoItemsFromTemplate(template, assigneeUid, assigneeEmail) {
     .filter((item) => item.title);
 }
 
+// OPEN-003, decided 2 Sep 2026: fourteen days. A row carries the raw payload of
+// a failed delivery, and that is worth keeping for exactly as long as someone
+// might come back to see why it failed. The TTL policy on the syncLog group
+// reads expireAt; a row written without it would live forever.
+const SHOPIFY_SYNC_ROW_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
 async function writeShopifySyncRow(shop, entry, deltas = {}) {
   const ref = shopifyStoreRef(shop);
-  await ref.collection("syncLog").add({ ts: admin.firestore.FieldValue.serverTimestamp(), ...entry });
+  await ref.collection("syncLog").add({
+    ts: admin.firestore.FieldValue.serverTimestamp(),
+    expireAt: admin.firestore.Timestamp.fromMillis(Date.now() + SHOPIFY_SYNC_ROW_TTL_MS),
+    ...entry
+  });
   const stats = { lastWebhookAt: admin.firestore.FieldValue.serverTimestamp() };
   if (deltas.synced) stats.syncedOrders = admin.firestore.FieldValue.increment(deltas.synced);
   if (deltas.failed) stats.failedCount = admin.firestore.FieldValue.increment(deltas.failed);
@@ -29939,7 +29995,7 @@ async function handleShopifyPrivacyTopic(shop, storeData, topic, payload, eventI
     await ref.collection("privacyRequests").doc(auditId).set({
       topic,
       receivedAt: admin.firestore.FieldValue.serverTimestamp(),
-      payloadJson: shopifySafePayloadJson(payload)
+      payloadJson: shopifyRedactedPayloadJson(payload)
     });
   } catch (error) {
     console.warn("privacy audit write failed:", error?.message || error);
@@ -30094,7 +30150,7 @@ exports.shopifyAppWebhook = onRequest({ region: "europe-west2", secrets: [SHOPIF
         shopifyOrderId: cleanWooText(payload?.id || payload?.order_id || ""),
         shopifyOrderNumber: cleanWooText(payload?.name || payload?.order_number || ""),
         nivadeskOrderId: "",
-        payloadJson: shopifySafePayloadJson(payload)
+        payloadJson: shopifyRedactedPayloadJson(payload)
       }, { failed: 1 });
       // Release the claim so Shopify's redelivery can reprocess.
       if (eventRef) { try { await eventRef.delete(); } catch { /* best-effort */ } }
@@ -30178,6 +30234,21 @@ function shopifyGraphQLAddressToRest(addr) {
     phone: addr.phone || ""
   };
 }
+
+// One order, by id, in the REST shape the apply path reads — the same query
+// and the same conversion the backfill uses, so a retried order and an
+// imported one are the same order (MERGE-006). null means Shopify no longer
+// has it.
+async function fetchShopifyOrderById(shop, store, shopifyOrderId) {
+  const id = String(shopifyOrderId || "").replace(/\D/g, "");
+  if (!id) return null;
+  const query = `query($ids: [ID!]!) { nodes(ids: $ids) { ... on Order { ${SHOPIFY_ORDER_IMPORT_FIELDS} } } }`;
+  const result = await shopifyAdminGraphQL(shop, store, query, { ids: [`gid://shopify/Order/${id}`] });
+  const node = (result.nodes || []).find(Boolean);
+  return node ? shopifyGraphQLOrderToRest(node) : null;
+}
+
+const SHOPIFY_ORDER_TOPICS = new Set(["orders/create", "orders/updated", "orders/paid", "orders/cancelled"]);
 
 function shopifyGraphQLOrderToRest(node) {
   const n = node || {};
@@ -30327,7 +30398,7 @@ exports.shopifyImportOrders = onRequest({
           shopifyOrderId: restOrder.id,
           shopifyOrderNumber: label,
           nivadeskOrderId: "",
-          payloadJson: shopifySafePayloadJson(restOrder)
+          payloadJson: shopifyRedactedPayloadJson(restOrder)
         }, { failed: 1 });
       }
     };
@@ -30415,6 +30486,10 @@ if (process.env.NIVADESK_E2E === "1") {
     inboundSourceLabel,
     inboundOrderDocId,
     shopifyOrderDocId,
-    heldIntegrationOrdersRef
+    heldIntegrationOrdersRef,
+    // RET-001: the sync-log writer, so the suite can see the row carry expireAt.
+    writeShopifySyncRow,
+    shopifyStoreRef,
+    shopifyRedactedPayloadJson
   };
 }

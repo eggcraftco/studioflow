@@ -210,6 +210,39 @@ const PAID = { billingPlan: "pro_monthly", billingPlanName: "NivaDesk Pro", bill
     assert.strictEqual(order.deliveryTime, 12);
   });
 
+  // ---- RET-001: the row carries the field the TTL policy purges by ----------
+  await check("a Shopify sync-log row carries a fourteen-day expireAt", async () => {
+    await e2e.writeShopifySyncRow(SHOP, { status: "failed", error: "faz1_test", shopifyOrderId: "1" });
+    const rows = await e2e.shopifyStoreRef(SHOP).collection("syncLog").orderBy("ts", "desc").limit(1).get();
+    const row = rows.docs[0].data();
+    assert(row.expireAt && typeof row.expireAt.toMillis === "function", "expireAt is a Timestamp");
+    const days = (row.expireAt.toMillis() - Date.now()) / 86400000;
+    assert(days > 13.9 && days < 14.1, `expires in ${days.toFixed(2)} days`);
+    await Promise.all(rows.docs.map((d) => d.ref.delete()));
+  });
+
+  // ---- RET-002 / OBS-002: what a failed delivery's stored copy may hold ----
+  await check("a stored payload keeps what a retry needs and nothing about who the buyer is", () => {
+    const raw = {
+      id: 9001, name: "#9001", financial_status: "paid", total_price: "40.00", tags: "rush",
+      customer: { id: 7, first_name: "Dee", email: "dee@example.com" },
+      billing_address: { address1: "1 Test St" }, shipping_address: { address1: "1 Test St" },
+      email: "dee@example.com", phone: "+44", note: "gift for my mother", note_attributes: [{ name: "x", value: "y" }],
+      client_details: { browser_ip: "1.2.3.4" },
+      line_items: [{ id: 1, sku: "RING-1", quantity: 1, title: "Signet ring", properties: [{ name: "engraving", value: "DF" }] }],
+      fulfillments: [{ id: 5, tracking_number: "T1", email: "carrier@example.com" }]
+    };
+    const kept = JSON.parse(e2e.shopifyRedactedPayloadJson(raw));
+    for (const gone of ["customer", "billing_address", "shipping_address", "email", "phone", "note", "note_attributes", "client_details"]) {
+      assert.strictEqual(kept[gone], undefined, `${gone} stripped`);
+    }
+    assert.strictEqual(kept.fulfillments[0].email, undefined, "stripped at depth too");
+    assert.strictEqual(kept.id, 9001); assert.strictEqual(kept.financial_status, "paid");
+    assert.strictEqual(kept.line_items[0].sku, "RING-1"); assert.strictEqual(kept.fulfillments[0].tracking_number, "T1");
+    const huge = { id: 1, line_items: Array.from({ length: 4000 }, (_, i) => ({ id: i, title: "x".repeat(40) })) };
+    assert(e2e.shopifyRedactedPayloadJson(huge).length <= 32000, "capped at 32 KB");
+  });
+
   await wipe();
   console.log(failures === 0 ? "\n✅ FAZ 1 INBOUND/KAPASITE GEÇTİ" : `\n❌ ${failures} BAŞARISIZ`);
   process.exit(failures === 0 ? 0 : 1);

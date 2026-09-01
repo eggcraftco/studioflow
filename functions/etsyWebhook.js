@@ -119,7 +119,11 @@ function createEtsyWebhookFunction(deps) {
       await eventRef.create({
         eventType,
         shopId,
-        receivedAt: admin.firestore.FieldValue.serverTimestamp()
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Seven days, like the Shopify dedupe rows: longer than any provider's
+        // retry window, short enough that the collection stays a window rather
+        // than a history. The TTL policy reads this field.
+        expireAt: admin.firestore.Timestamp.fromMillis(now() + 7 * 24 * 60 * 60 * 1000)
       });
     } catch (_error) {
       res.status(200).json({ ok: true, duplicate: true });
