@@ -124,7 +124,7 @@ enum HomeCards {
                            financeOnly: false, destination: "Inventory", linkLabel: "Open Inventory"),
         HomeCardDefinition(id: .customers, title: "Customers", icon: "person.2.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .customers,
-                           financeOnly: false, destination: "Customers", linkLabel: "View customers"),
+                           financeOnly: false, destination: "Customers", linkLabel: "Open Customers"),
         // hammer.fill stays: the sheet's mark is a bag with a cog, and SF Symbols
         // has no such glyph (bag.badge.gearshape does not exist). A plain bag
         // would name the orders and drop the production, which is the half this

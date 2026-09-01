@@ -153,12 +153,12 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "customers",
     title: "Customers",
-    icon: "customer",
+    icon: "customers",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     access: "customers",
     href: "/customers",
-    linkLabel: "View customers",
+    linkLabel: "Open Customers",
   },
   {
     id: "ordersProduction",

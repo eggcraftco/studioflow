@@ -6205,6 +6205,13 @@ mergeIntoTranslations({
   "Open Inventory": { "Türkçe": "Envanteri aç", "Deutsch": "Bestand öffnen", "Français": "Ouvrir l'inventaire", "Italiano": "Apri inventario", "Español (Spanish)": "Abrir inventario", "Português": "Abrir inventário", "Русский (Russian)": "Открыть склад", "日本語 (Japanese)": "在庫を開く", "中文 (Chinese)": "打开库存", "العربية (Arabic)": "فتح المخزون", "हिन्दी (Hindi)": "इन्वेंटरी खोलें" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
+// The Customers card's link, and the column its recent list heads.
+mergeIntoTranslations({
+  "Open Customers": { "Türkçe": "Müşterileri aç", "Deutsch": "Kunden öffnen", "Français": "Ouvrir les clients", "Italiano": "Apri clienti", "Español (Spanish)": "Abrir clientes", "Português": "Abrir clientes", "Русский (Russian)": "Открыть клиентов", "日本語 (Japanese)": "顧客を開く", "中文 (Chinese)": "打开客户", "العربية (Arabic)": "فتح العملاء", "हिन्दी (Hindi)": "ग्राहक खोलें" },
+  "Source": { "Türkçe": "Kaynak", "Deutsch": "Quelle", "Français": "Source", "Italiano": "Origine", "Español (Spanish)": "Origen", "Português": "Origem", "Русский (Russian)": "Источник", "日本語 (Japanese)": "経路", "中文 (Chinese)": "来源", "العربية (Arabic)": "المصدر", "हिन्दी (Hindi)": "स्रोत" },
+  "Latest order": { "Türkçe": "Son sipariş", "Deutsch": "Letzte Bestellung", "Français": "Dernière commande", "Italiano": "Ultimo ordine", "Español (Spanish)": "Último pedido", "Português": "Último pedido", "Русский (Russian)": "Последний заказ", "日本語 (Japanese)": "最新の注文", "中文 (Chinese)": "最近订单", "العربية (Arabic)": "آخر طلب", "हिन्दी (Hindi)": "नवीनतम ऑर्डर" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
 // The Inventory small card names its bar. Without a name it reads as a
 // progress meter rather than as how much of the shelf needs reordering.
 mergeIntoTranslations({

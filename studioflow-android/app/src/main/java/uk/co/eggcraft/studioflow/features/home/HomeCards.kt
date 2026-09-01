@@ -129,7 +129,7 @@ object HomeCards {
         HomeCardDefinition(HomeCardId.Inventory, "Inventory", Icons.Filled.Inventory2, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Orders, false, "Inventory", "Open Inventory"),
         HomeCardDefinition(HomeCardId.Customers, "Customers", Icons.Filled.People, everySize, HomeCardSize.OneByOne,
-            HomeCardAccess.Customers, false, "Customers", "View customers"),
+            HomeCardAccess.Customers, false, "Customers", "Open Customers"),
         HomeCardDefinition(HomeCardId.OrdersProduction, "Orders & production", Icons.Filled.Handyman, everySize, HomeCardSize.TwoByOne,
             HomeCardAccess.Orders, false, "Production", "View all orders"),
         HomeCardDefinition(HomeCardId.Schedule, "Schedule", Icons.Filled.CalendarMonth, everySize, HomeCardSize.TwoByOne,

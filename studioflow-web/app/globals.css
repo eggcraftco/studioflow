@@ -28214,6 +28214,100 @@ body[data-studio-theme="dark"] .home-pill.is-warning { color: #fb9a5c; }
 /* Four equal columns gave the headline figure 102px, and "£18,650.00" needs
    113 — €1.284.900,00 needs 145. The money column takes the width it needs and
    the low-stock column, which holds a small integer, gives it up. */
+/* The customers square: two figures in one bordered box, as the sheet draws
+   them under the headline. */
+.home-figure-row.is-boxed {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--border); border-radius: 10px; padding: 3px 0;
+}
+/* "Neu diesen Monat" is 87px of an 79px column; the box's own side padding is
+   the only place that width can come from. */
+.home-figure-row.is-boxed > span { padding: 0 7px; }
+.home-figure-row.is-boxed > span:first-child { padding-left: 7px; }
+.home-figure-row.is-boxed em { font-size: 10px; line-height: 12px; }
+.home-figure-row.is-boxed b { font-size: 16px; line-height: 19px; }
+.home-figure-row b.tone-total { color: #1d4ed8 !important; }
+.home-figure-row b.tone-new { color: #15803d !important; }
+.home-figure-row b.tone-returning { color: #6d28d9 !important; }
+.home-figure-row b.tone-existing { color: #0f766e !important; }
+body[data-studio-theme="dark"] .home-figure-row b.tone-total { color: #7dabfb !important; }
+body[data-studio-theme="dark"] .home-figure-row b.tone-new { color: #4ade80 !important; }
+body[data-studio-theme="dark"] .home-figure-row b.tone-returning { color: #c4b5fd !important; }
+body[data-studio-theme="dark"] .home-figure-row b.tone-existing { color: #5eead4 !important; }
+
+/* The square's headline: the count and the word on one line. */
+/* 141px of card for a headline, a pair of figures and two names. The sheet
+   draws this at two and a half times the size it ships at, so every block here
+   is set to what it measures at, not to what the sheet looks like. */
+.home-money.is-people { gap: 4px; }
+/* Scoped, because .home-card-1x1 .home-money sets 14px later in this file at
+   the same specificity — the same override that hid the stock card's bar. */
+.home-card-1x1 .home-money.is-people { gap: 4px; }
+.home-people-total { margin: 0; display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.home-people-total strong {
+  font-size: 23px; font-weight: 820; line-height: 26px; letter-spacing: -0.02em;
+  color: #1d4ed8; font-variant-numeric: tabular-nums;
+}
+.home-people-total em {
+  font-style: normal; font-size: 12.5px; font-weight: 650; line-height: 15px; opacity: 0.72;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-people-total em::first-letter { text-transform: uppercase; }
+
+/* Two customers by name, each with the photo the record carries. */
+.home-people-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.home-people-list li + li { border-top: 1px solid var(--border); }
+.home-people-list a {
+  display: flex; align-items: center; gap: 9px; min-width: 0;
+  padding: 2px 0; color: inherit; text-decoration: none;
+}
+.home-people-list a:hover strong { text-decoration: underline; }
+/* The wide card lists the customer across the row, as the sheet lays it out:
+   who, where they came from, what they last ordered, and where they stand. */
+.home-people-list.is-wide a {
+  display: grid; align-items: center; gap: 9px; padding: 2px 0;
+  grid-template-columns: 20px minmax(0, 1.2fr) auto minmax(0, 1.2fr) auto 10px;
+}
+.home-people-list.is-wide .home-avatar { width: 20px; height: 20px; font-size: 10px; }
+/* The wide card is 133px for four figures and three names. The figure block
+   keeps its two lines — "Customers with active orders" is 150px of a 115px
+   column and has to wrap — and everything else is set to what it measures. */
+.home-money.is-people.is-wide { gap: 8px; }
+.home-card-2x1 .home-money.is-people { gap: 8px; }
+.home-money.is-people .home-figure-row.is-quad em { font-size: 10.5px; line-height: 12px; height: 24px; }
+.home-money.is-people .home-figure-row.is-quad b { font-size: 18px; line-height: 21px; }
+.home-money.is-people .home-figure-row.is-quad { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.home-people-list.is-wide strong { font-size: 12.5px; line-height: 15px; }
+.home-people-order {
+  font-style: normal; font-size: 11.5px; line-height: 14px; opacity: 0.62;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-people-go { font-style: normal; font-size: 14px; opacity: 0.35; text-align: right; }
+/* The big card's column heads. */
+.home-people-list.is-table li.is-head a, .home-people-list.is-table li.is-head { border-top: 0; }
+.home-people-list.is-table li.is-head {
+  display: grid; align-items: center; gap: 9px; padding: 0 0 3px;
+  grid-template-columns: 20px minmax(0, 1.2fr) auto minmax(0, 1.2fr) auto 10px;
+}
+.home-people-list.is-table li.is-head em {
+  font-style: normal; font-size: 10.5px; line-height: 13px; opacity: 0.5; font-weight: 650;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-people-list.is-table li.is-head + li { border-top: 0; }
+/* A fixed line box on the chips too: Devanagari measured three pixels taller
+   and the wide card fits its three names with four to spare. */
+.home-people-list .home-chip { white-space: nowrap; line-height: 12px; padding-top: 2.5px; padding-bottom: 2.5px; }
+.home-people-list .home-avatar { width: 22px; height: 22px; font-size: 11px; }
+.home-people-list span { display: flex; flex-direction: column; min-width: 0; }
+.home-people-list strong {
+  font-size: 12px; font-weight: 700; line-height: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-people-list em {
+  font-style: normal; font-size: 10.5px; line-height: 12px; opacity: 0.6;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .home-figure-row.is-quad { grid-template-columns: 1.7fr 1fr 1fr 0.9fr; }
 .home-figure-row.is-quad > span { padding: 0 10px; }
 /* Two lines' worth of label whether it needs them or not, so all four numbers
@@ -28424,6 +28518,9 @@ body[data-studio-theme="dark"] .home-aside-mark { background: rgba(96, 165, 250,
 .home-money-tile.tone-orange .home-money-tile-dot { background: rgba(249, 115, 22, 0.18); }
 .home-money-tile.tone-orange b { color: #c2410c; }
 
+/* The record has carried a photo all along and the card drew an initial over
+   it. The initial stays as the fallback for a customer who has none. */
+.home-avatar.is-photo { object-fit: cover; background: rgba(120, 130, 150, 0.12); }
 .home-avatar {
   width: 22px; height: 22px; border-radius: 999px; flex: 0 0 auto;
   background: rgba(37, 99, 235, 0.14); color: #1d4ed8;
@@ -28624,21 +28721,30 @@ body[data-studio-theme="dark"] .home-ratio-foot b.is-costs { color: #fb9a5c; }
 .home-money-tile-dot { width: 22px; height: 22px; border-radius: 999px; }
 .home-money-tile.tone-green .home-money-tile-dot { background: rgba(22, 163, 74, 0.16); }
 .home-money-tile.tone-blue .home-money-tile-dot { background: rgba(37, 99, 235, 0.16); }
+/* Returning is purple and the rest teal wherever they appear — the mix key
+   below the figures has always read them that way. */
+.home-money-tile.tone-purple .home-money-tile-dot { background: rgba(124, 58, 237, 0.16); }
+.home-money-tile.tone-teal .home-money-tile-dot { background: rgba(13, 148, 136, 0.16); }
 /* Same trap this file already documents for the flow nodes: the bare
    .tone-green / .tone-blue classes carry a `color: … !important` from far
    earlier in the stylesheet, and MoneyTile puts the tone on the tile itself —
    so the LABEL went green and blue along with the figure, and "Fixed" read as
    a link. Only the figure carries a tone; a label is a label. */
 .home-money-tile.tone-green, .home-money-tile.tone-blue, .home-money-tile.tone-red,
-.home-money-tile.tone-orange, .home-money-tile.tone-neutral { color: inherit !important; }
+.home-money-tile.tone-orange, .home-money-tile.tone-neutral,
+.home-money-tile.tone-purple, .home-money-tile.tone-teal { color: inherit !important; }
 .home-money-tile.tone-green b { color: #15803d !important; }
 .home-money-tile.tone-blue b { color: #1d4ed8 !important; }
 .home-money-tile.tone-red b { color: #dc2626 !important; }
 .home-money-tile.tone-orange b { color: #c2410c !important; }
+.home-money-tile.tone-purple b { color: #6d28d9 !important; }
+.home-money-tile.tone-teal b { color: #0f766e !important; }
 body[data-studio-theme="dark"] .home-money-tile.tone-green b { color: #4ade80 !important; }
 body[data-studio-theme="dark"] .home-money-tile.tone-blue b { color: #7dabfb !important; }
 body[data-studio-theme="dark"] .home-money-tile.tone-red b { color: #f87171 !important; }
 body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-purple b { color: #c4b5fd !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !important; }
 .home-money-tile em { font-style: normal; font-size: 11px; opacity: 0.62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* On the square there is no width to truncate against: the label wraps to a
    second line rather than becoming "Incoming this...". */

@@ -9,6 +9,7 @@ export type CardIcon =
   | "bolt"
   | "checklist"
   | "customer"
+  | "customers"
   | "dashboard"
   | "docText"
   | "export"
@@ -48,6 +49,11 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   bolt: ["M13.2 2.4 4.6 13.4h5.6l-.6 8.2 8.6-11h-5.6l.6-8.2Z"],
   checklist: ["M8 6h12", "M8 12h12", "M8 18h12", "m3 6 .7 .7L5 5", "m3 12 .7 .7L5 11", "m3 18 .7 .7L5 17"],
   customer: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
+  // The Customers card is about more than one of them, and the sheet draws two.
+  // A new key rather than a redrawn `customer`: that one is also the admin hub's
+  // and the logged-out marketing site's.
+  customers: ["M9.5 11.5a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8Z", "M2.5 20a7 7 0 0 1 14 0",
+              "M16.2 11.4a3 3 0 1 0-1.6-5.5", "M17.4 13.6A6 6 0 0 1 21.5 19.3"],
   dashboard: ["M4 13h6V4H4v9ZM14 20h6V4h-6v16ZM4 20h6v-4H4v4Z"],
   docText: ["M6 3h8l4 4v14H6V3Z", "M14 3v5h4", "M9 12h6M9 16h6"],
   export: ["M12 3v12", "m7 8 5-5 5 5", "M5 15v4h14v-4"],

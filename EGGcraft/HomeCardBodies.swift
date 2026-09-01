@@ -2474,6 +2474,87 @@ struct HomeDonutKey: View {
     }
 }
 
+/// The record carries a photo; the card was drawing an initial over it.
+struct HomeCustomerAvatar: View {
+    let customer: Musteri
+    var side: CGFloat = 22
+    var body: some View {
+        Circle()
+            .fill(HomeTone.accent.opacity(0.14))
+            .frame(width: side, height: side)
+            .overlay(
+                Group {
+                    if let url = URL(string: customer.profileImageUrl), !customer.profileImageUrl.isEmpty {
+                        AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { Color.clear }
+                    } else {
+                        Text(String(customer.name.prefix(1)).uppercased())
+                            .font(.system(size: side * 0.5, weight: .heavy))
+                            .foregroundColor(HomeTone.accent)
+                    }
+                }
+            )
+            .clipShape(Circle())
+    }
+}
+
+/// The column heads of the big card's recent list.
+struct HomeCustomerHead: View {
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        HStack(spacing: compact ? 7 : 9) {
+            Spacer(minLength: 0).frame(width: compact ? 18 : 22)
+            Text(t("Customer", lang: lang)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(t("Source", lang: lang)).frame(width: compact ? 52 : 66, alignment: .leading)
+            Text(t("Latest order", lang: lang)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(t("Status", lang: lang)).frame(width: compact ? 76 : 96, alignment: .leading)
+        }
+        .font(.system(size: compact ? 9 : 10.5, weight: .semibold))
+        .foregroundColor(.secondary.opacity(0.7))
+        .padding(.bottom, 1)
+    }
+}
+
+/// One customer across the row, as the sheet lays it out: who, where they came
+/// from, what they last ordered, and where they stand. The square stacks the
+/// standing under the name instead — 206pt does not hold the row.
+struct HomeCustomerRow: View {
+    let customer: Musteri
+    let active: Bool
+    let latestOrder: String
+    let lang: String
+    var compact: Bool = false
+    var stacked: Bool = false
+
+    var body: some View {
+        // The store wrote "shopify"; the card is naming a company.
+        let raw = (customer.source ?? "").trimmingCharacters(in: .whitespaces)
+        let store = !raw.isEmpty && raw != "manual"
+        let sourceText = store ? raw.homeCapitalisedFirst : t("Direct", lang: lang)
+        let standing = active ? t("Active customer", lang: lang) : t("No open orders", lang: lang)
+        HStack(spacing: compact ? 7 : 9) {
+            HomeCustomerAvatar(customer: customer, side: stacked ? 22 : (compact ? 18 : 22))
+            if stacked {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(customer.name).font(.system(size: compact ? 11.5 : 12, weight: .bold)).lineLimit(1)
+                    Text(standing).font(.system(size: compact ? 10 : 10.5)).foregroundColor(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            } else {
+                Text(customer.name).font(.system(size: compact ? 11.5 : 12.5, weight: .bold))
+                    .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                HomeChip(text: sourceText, tone: store ? HomeTone.green : HomeTone.accent)
+                    .frame(width: compact ? 52 : 66, alignment: .leading)
+                Text(latestOrder).font(.system(size: compact ? 10.5 : 11.5)).foregroundColor(.secondary)
+                    .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                HomeChip(text: standing, tone: active ? HomeTone.green : HomeTone.slate)
+                    .frame(width: compact ? 76 : 96, alignment: .leading)
+            }
+        }
+        .padding(.vertical, compact ? 2 : 3)
+    }
+}
+
 // MARK: - Customers
 
 struct HomeCustomersBody: View {
@@ -2501,49 +2582,91 @@ struct HomeCustomersBody: View {
                 .filter { (orderCounts[$0] ?? 0) <= 1 }.count
             let existing = max(0, customers.count - newThisMonth - returning)
 
+            // The latest order each customer placed, by the same rule the wide
+            // card's list shows it: newest first, by name.
+            let latestOrder = Dictionary(grouping: firebaseManager.siparisler.filter { !$0.isDeleted },
+                                         by: { $0.customerName.lowercased() })
+                .mapValues { $0.sorted { $0.paymentDate > $1.paymentDate }.first?.designName ?? "" }
+
             if size == .oneByOne {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(t("customers", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
-                    Text("\(customers.count)").font(.system(size: compact ? 28 : 36, weight: .heavy))
-                    Spacer(minLength: 0)
-                    HomeSplitPair {
-                        HomeFigure(label: t("active orders", lang: lang), value: "\(withActive)", tone: HomeTone.green)
-                    } right: {
-                        HomeFigure(label: t("Latest", lang: lang), value: customers.first?.name ?? "—")
+                // The sheet sets the count and the word on one line: "18
+                // customers" reads as a sentence, where a label stacked over a
+                // number reads as two facts.
+                VStack(alignment: .leading, spacing: compact ? 3 : 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("\(customers.count)")
+                            .font(.system(size: compact ? 22 : 26, weight: .heavy))
+                            .foregroundColor(HomeTone.accent)
+                            .lineLimit(1).minimumScaleFactor(0.5)
+                        Text(t("customers", lang: lang).homeCapitalisedFirst)
+                            .font(.system(size: compact ? 11 : 12.5, weight: .semibold))
+                            .foregroundColor(.secondary).lineLimit(1).minimumScaleFactor(0.7)
                     }
+                    HStack(spacing: 0) {
+                        HomeBankFigure(label: t("New this month", lang: lang), value: "\(newThisMonth)",
+                                       tone: HomeTone.green, compact: compact)
+                        Divider().frame(height: compact ? 26 : 30)
+                        HomeBankFigure(label: t("Returning", lang: lang), value: "\(returning)",
+                                       tone: HomeTone.purple, compact: compact)
+                    }
+                    .padding(.vertical, compact ? 2 : 3)
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.12), lineWidth: 1))
+                    // Two of them by name. A count of customers does not tell a
+                    // jeweller whose work is on the bench.
+                    ForEach(Array(customers.prefix(2).enumerated()), id: \.element.id) { index, customer in
+                        if index > 0 { Divider().opacity(0.5) }
+                        HomeCustomerRow(customer: customer,
+                                        active: activeNames.contains(customer.name.lowercased()),
+                                        latestOrder: "", lang: lang, compact: compact, stacked: true)
+                    }
+                    Spacer(minLength: 0)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        HomeMetricTile(label: t("Total customers", lang: lang), value: "\(customers.count)", tone: HomeTone.accent)
-                        HomeMetricTile(label: t("New this month", lang: lang), value: "\(newThisMonth)", tone: HomeTone.green)
-                        HomeMetricTile(label: t("Returning customers", lang: lang), value: "\(returning)", tone: HomeTone.purple)
-                        HomeMetricTile(label: t("Customers with active orders", lang: lang), value: "\(withActive)", tone: HomeTone.teal)
+                    if size == .twoByTwo {
+                        HStack(spacing: 10) {
+                            HomeMetricTile(label: t("Total customers", lang: lang), value: "\(customers.count)", tone: HomeTone.accent, symbol: "person.2")
+                            HomeMetricTile(label: t("New this month", lang: lang), value: "\(newThisMonth)", tone: HomeTone.green, symbol: "person.badge.plus")
+                            HomeMetricTile(label: t("Returning customers", lang: lang), value: "\(returning)", tone: HomeTone.purple, symbol: "arrow.counterclockwise")
+                            HomeMetricTile(label: t("Customers with active orders", lang: lang), value: "\(withActive)", tone: HomeTone.teal, symbol: "bag")
+                        }
+                        HomeMixBar(segments: [
+                            (t("New this month", lang: lang), newThisMonth, HomeTone.green),
+                            (t("Returning", lang: lang), returning, HomeTone.purple),
+                            (t("Existing", lang: lang), existing, HomeTone.teal),
+                        ])
+                    } else {
+                        // The sheet's wide card: the four figures ruled apart
+                        // rather than boxed, then the customers themselves. The
+                        // mix bar is the big card's job — on a card this height
+                        // it cost the three names their room.
+                        HStack(alignment: .top, spacing: 0) {
+                            HomeLaneFigure(title: t("Total customers", lang: lang), count: customers.count, tone: HomeTone.accent)
+                            Divider().frame(height: 44)
+                            HomeLaneFigure(title: t("New this month", lang: lang), count: newThisMonth, tone: HomeTone.green)
+                            Divider().frame(height: 44)
+                            HomeLaneFigure(title: t("Returning customers", lang: lang), count: returning, tone: HomeTone.purple)
+                            Divider().frame(height: 44)
+                            HomeLaneFigure(title: t("Customers with active orders", lang: lang), count: withActive, tone: HomeTone.teal)
+                        }
+                        ForEach(Array(customers.prefix(3).enumerated()), id: \.element.id) { index, customer in
+                            if index > 0 { Divider().opacity(0.5) }
+                            HomeCustomerRow(customer: customer,
+                                            active: activeNames.contains(customer.name.lowercased()),
+                                            latestOrder: latestOrder[customer.name.lowercased()] ?? "",
+                                            lang: lang, compact: compact)
+                        }
                     }
-                    HomeMixBar(segments: [
-                        (t("New this month", lang: lang), newThisMonth, HomeTone.green),
-                        (t("Returning", lang: lang), returning, HomeTone.purple),
-                        (t("Existing", lang: lang), existing, HomeTone.teal),
-                    ])
                     if size == .twoByTwo {
                         HomePanel {
                             HomeEyebrow(text: t("Recent customers", lang: lang))
-                            ForEach(customers.prefix(3), id: \.id) { customer in
-                                HStack(spacing: 9) {
-                                    Text(String(customer.name.prefix(1)).uppercased())
-                                        .font(.system(size: 11, weight: .heavy))
-                                        .foregroundColor(HomeTone.accent)
-                                        .frame(width: 22, height: 22)
-                                        .background(Circle().fill(HomeTone.accent.opacity(0.14)))
-                                    Text(customer.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                                    Spacer(minLength: 6)
-                                    HomeChip(
-                                        text: activeNames.contains(customer.name.lowercased())
-                                            ? t("Active customer", lang: lang) : t("No open orders", lang: lang),
-                                        tone: activeNames.contains(customer.name.lowercased()) ? HomeTone.green : HomeTone.slate
-                                    )
-                                }
-                                .padding(.vertical, 5)
+                            HomeCustomerHead(lang: lang, compact: compact)
+                            ForEach(Array(customers.prefix(3).enumerated()), id: \.element.id) { index, customer in
+                                if index > 0 { Divider().opacity(0.5) }
+                                HomeCustomerRow(customer: customer,
+                                                active: activeNames.contains(customer.name.lowercased()),
+                                                latestOrder: latestOrder[customer.name.lowercased()] ?? "",
+                                                lang: lang, compact: compact)
                             }
                         }
                         // §11 and §19: a member sees only the customers their role

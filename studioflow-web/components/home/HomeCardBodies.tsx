@@ -12,7 +12,7 @@ import {
   orderSalesTotal,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
-import type { ScheduleOrderItem } from "@/lib/studioflow/firestore";
+import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
@@ -219,7 +219,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 function MoneyTile({
   label, value, tone, sub, icon, bar,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral" | "purple" | "teal"; sub?: string;
   icon?: HomeTileIconName;
   /** 0–100 for a figure that is a proportion, drawn under it as the sheet
    *  draws storage. A number on its own does not say how close to full it is. */
@@ -1386,27 +1386,82 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
   const withActive = customers.filter((customer) => activeNames.has(customer.name.toLowerCase())).length;
 
   if (size === "1x1") {
-    const latest = customers[0];
     return (
-      <div className="home-money">
-        <p className="home-metric-label">{t("customers")}</p>
-        <strong className="home-metric-value">{customers.length}</strong>
-        <div className="home-split-pair">
-          <span><em>{t("active orders")}</em><b className="is-positive">{withActive}</b></span>
-          {latest ? <span><em>{t("Latest")}</em><b className="is-plain">{latest.name}</b></span> : null}
+      <div className="home-money is-people">
+        {/* The sheet sets the count and the word on one line: "18 customers"
+            reads as a sentence, where a label stacked over a number reads as
+            two facts. */}
+        <p className="home-people-total">
+          <strong>{customers.length}</strong>
+          <em>{t("customers")}</em>
+        </p>
+        <div className="home-figure-row is-boxed">
+          <span>
+            <em>{t("New this month")}</em>
+            <b className="tone-new">{newThisMonth}</b>
+          </span>
+          <span>
+            <em>{t("Returning")}</em>
+            <b className="tone-returning">{returning}</b>
+          </span>
         </div>
+        {/* Two of them by name. A count of customers does not tell a jeweller
+            whose work is on the bench. */}
+        <ul className="home-people-list">
+          {customers.slice(0, 2).map((customer) => (
+            <li key={customer.id}>
+              <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>
+                <CustomerAvatar customer={customer} />
+                <span>
+                  <strong>{customer.name}</strong>
+                  <em>{activeNames.has(customer.name.toLowerCase())
+                    ? t("Active customer") : t("No open orders")}</em>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     );
   }
 
+  // One colour per idea, and the same one wherever the idea appears: the mix
+  // key below reads new as green, returning as purple and the rest as teal, and
+  // the figures were painting returning blue and active orders green.
   const tiles = (
     <div className="home-tile-row">
-      <MoneyTile label={t("Total customers")} value={String(customers.length)} tone="blue" />
-      <MoneyTile label={t("New this month")} value={String(newThisMonth)} tone="green" />
-      <MoneyTile label={t("Returning customers")} value={String(returning)} tone="blue" />
-      <MoneyTile label={t("Customers with active orders")} value={String(withActive)} tone="green" />
+      <MoneyTile icon="customerPair" label={t("Total customers")} value={String(customers.length)} tone="blue" />
+      <MoneyTile icon="customerNew" label={t("New this month")} value={String(newThisMonth)} tone="green" />
+      <MoneyTile icon="customerReturning" label={t("Returning customers")} value={String(returning)} tone="purple" />
+      <MoneyTile icon="bag" label={t("Customers with active orders")} value={String(withActive)} tone="teal" />
     </div>
   );
+
+  const latestOrderOf = (customer: CustomerDirectoryItem) => customer.orders[0]?.designName ?? "";
+  /** The store wrote "shopify"; the card is naming a company. Done here rather
+   *  than in CSS: ::first-letter does not apply to a flex container, which the
+   *  chip is. */
+  const sourceLabel = (source: string) => source.charAt(0).toUpperCase() + source.slice(1);
+  const customerRow = (customer: CustomerDirectoryItem, withOrder: boolean) => {
+    const active = activeNames.has(customer.name.toLowerCase());
+    const store = customer.source && customer.source !== "manual";
+    return (
+      <li key={customer.id}>
+        <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>
+          <CustomerAvatar customer={customer} />
+          <strong>{customer.name}</strong>
+          <span className={`home-chip is-source${store ? " is-store" : ""}`}>
+            {store ? sourceLabel(customer.source) : t("Direct")}
+          </span>
+          {withOrder ? <em className="home-people-order">{latestOrderOf(customer)}</em> : null}
+          <span className={active ? "home-chip is-active" : "home-chip is-muted"}>
+            {active ? t("Active customer") : t("No open orders")}
+          </span>
+          <i className="home-people-go" aria-hidden="true">›</i>
+        </Link>
+      </li>
+    );
+  };
 
   const mix = [
     { key: "New this month", count: newThisMonth, tone: "new" },
@@ -1416,10 +1471,20 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
   const mixTotal = Math.max(1, newThisMonth + returning + existing);
 
   if (size === "2x1") {
+    // The sheet's wide card: the four figures ruled apart rather than boxed,
+    // then the customers themselves. The mix bar is the big card's job — on a
+    // card this height it cost the three names their room.
     return (
-      <div className="home-money is-wide">
-        {tiles}
-        <CustomerMix mix={mix} total={mixTotal} t={t} />
+      <div className="home-money is-wide is-people">
+        <div className="home-figure-row is-quad">
+          <span><em>{t("Total customers")}</em><b className="tone-total">{customers.length}</b></span>
+          <span><em>{t("New this month")}</em><b className="tone-new">{newThisMonth}</b></span>
+          <span><em>{t("Returning customers")}</em><b className="tone-returning">{returning}</b></span>
+          <span><em>{t("Customers with active orders")}</em><b className="tone-existing">{withActive}</b></span>
+        </div>
+        <ul className="home-people-list is-wide">
+          {customers.slice(0, 3).map((customer) => customerRow(customer, true))}
+        </ul>
       </div>
     );
   }
@@ -1433,19 +1498,18 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Recent customers")}</p>
-        <ul className="home-record-list">
-          {customers.slice(0, 3).map((customer) => (
-            <li key={customer.id}>
-              <span className="home-avatar" aria-hidden="true">{customer.name.slice(0, 1).toUpperCase()}</span>
-              <Link href={`/customers?customer=${encodeURIComponent(customer.id)}`}>{customer.name}</Link>
-              <span className={`home-chip is-source${customer.source && customer.source !== "manual" ? " is-store" : ""}`}>
-                {customer.source && customer.source !== "manual" ? customer.source : t("Direct")}
-              </span>
-              <span className={activeNames.has(customer.name.toLowerCase()) ? "home-chip is-active" : "home-chip is-muted"}>
-                {activeNames.has(customer.name.toLowerCase()) ? t("Active customer") : t("No open orders")}
-              </span>
-            </li>
-          ))}
+        <ul className="home-people-list is-wide is-table">
+          {/* The sheet heads the columns. Three rows of avatar, chip and chip
+              with nothing naming them is a list pretending to be a table. */}
+          <li className="is-head" aria-hidden="true">
+            <span />
+            <em>{t("Customer")}</em>
+            <em>{t("Source")}</em>
+            <em>{t("Latest order")}</em>
+            <em>{t("Status")}</em>
+            <span />
+          </li>
+          {customers.slice(0, 3).map((customer) => customerRow(customer, true))}
         </ul>
       </div>
       {/* §11 and §19: a member only ever sees the customers their role allows,
@@ -1453,6 +1517,15 @@ export function CustomersCardBody({ size, data, t }: CardBodyProps) {
       <p className="home-action-note">{t("Only customers you have permission to view are shown")}</p>
     </div>
   );
+}
+
+/** The record carries a photo; the card was drawing an initial over it. */
+function CustomerAvatar({ customer }: { customer: CustomerDirectoryItem }) {
+  if (customer.profileImageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="home-avatar is-photo" src={customer.profileImageUrl} alt="" loading="lazy" />;
+  }
+  return <span className="home-avatar" aria-hidden="true">{customer.name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; tone: string }[]; total: number; t: (text: string) => string }) {

@@ -111,7 +111,10 @@ export type HomeTileIconName =
   // borrowed. The nearest thing to a box was a delivery truck and the nearest
   // thing to an alert was a clock, and the card was drawing four empty discs
   // because it passed no icon at all.
-  | "money" | "tag" | "box" | "alert";
+  | "money" | "tag" | "box" | "alert"
+  // What the Customers card's four figures mean. Added, not borrowed, for the
+  // reason stated twice above: the card was drawing four empty discs.
+  | "customerPair" | "customerNew" | "customerReturning" | "bag";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -265,6 +268,37 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.6v5" />
           <path d="M12 16.1v.1" />
+        </svg>
+      );
+    case "customerPair":
+      return (
+        <svg {...common}>
+          <circle cx="9.5" cy="8.2" r="3.4" />
+          <path d="M2.6 19.6a7 7 0 0 1 13.8 0" />
+          <path d="M16.2 11.4a3 3 0 1 0-1.6-5.5" />
+          <path d="M17.4 13.6a6 6 0 0 1 4.1 5.7" />
+        </svg>
+      );
+    case "customerNew":
+      return (
+        <svg {...common}>
+          <circle cx="9.5" cy="8.2" r="3.4" />
+          <path d="M2.6 19.6a7 7 0 0 1 13.8 0" />
+          <path d="M18.5 8v6M15.5 11h6" />
+        </svg>
+      );
+    case "customerReturning":
+      return (
+        <svg {...common}>
+          <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+          <path d="M20.5 4v4.2h-4.2" />
+        </svg>
+      );
+    case "bag":
+      return (
+        <svg {...common}>
+          <path d="M5 7.5h14l-1 12.2a1.6 1.6 0 0 1-1.6 1.5H7.6A1.6 1.6 0 0 1 6 19.7Z" />
+          <path d="M9 7.5V6a3 3 0 0 1 6 0v1.5" />
         </svg>
       );
     case "link":
