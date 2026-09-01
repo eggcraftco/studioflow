@@ -160,12 +160,12 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "ordersProduction",
     title: "Orders & production",
-    icon: "orders",
+    icon: "ordersProduction",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
     access: "orders",
     href: "/production",
-    linkLabel: "View all orders",
+    linkLabel: "Open Orders",
   },
   {
     id: "schedule",

@@ -27967,6 +27967,20 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 /* flex: 0 0 auto, or a full column shrinks it to nothing instead of overflowing
    — which reads as "the bar was never drawn" rather than "it did not fit". */
 .home-mix-bar { display: flex; flex: 0 0 auto; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.16); gap: 2px; }
+/* The counts were sized for a square that does not exist: the comment above
+   them reckons "a real 336px square is ~76px each", and the grid's square is
+   238px, which is ~46px each. So the tiles were 112px tall in a 155px body and
+   the mix bar — the whole point of the bottom of this card — was pushed out of
+   it entirely and clipped away. Everything below is that 34px, taken back from
+   padding and type size rather than by dropping anything the card says. */
+.home-card-1x1 .home-lede strong { font-size: 30px; }
+.home-card-1x1 .home-count-row { gap: 5px; }
+.home-card-1x1 .home-count { padding: 6px 2px; gap: 3px; border-radius: 10px; }
+/* 9px, because at 9.5 the word "production" alone is 44px in a 41px box —
+   the tile is a quarter of 208px, not of the 336 the sizing assumed. */
+.home-card-1x1 .home-count em { font-size: 9px; line-height: 1.15; }
+.home-card-1x1 .home-count b { font-size: 20px; }
+.home-card-1x1 .home-count-icon svg { width: 14px; height: 14px; }
 .home-mix-bar i { display: block; border-radius: 999px; }
 .home-mix-bar i.tone-new { background: #16a34a; }
 .home-mix-bar i.tone-returning { background: #7c3aed; }

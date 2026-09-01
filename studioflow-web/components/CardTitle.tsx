@@ -22,6 +22,7 @@ export type CardIcon =
   | "notes"
   | "noteCompose"
   | "orders"
+  | "ordersProduction"
   | "paintbrush"
   | "photo"
   | "plan"
@@ -65,6 +66,10 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   // logged-out marketing site, none of which are about composing anything.
   noteCompose: ["M20 12.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6.5", "M18.4 3.6a2.1 2.1 0 0 1 3 3L13 15l-4 1 1-4 8.4-8.4Z"],
   orders: ["M6 3h12v18H6V3Z", "M9 7h6M9 11h6M9 15h4"],
+  // A bag with a cog: what was ordered, and the work of making it. Its own key,
+  // not a redraw of `orders` — that one is shared with ten other CardTitle call
+  // sites across Settings, Customers and the Orders screen.
+  ordersProduction: ["M5 8h10l1 12H4L5 8Z", "M7.5 8V6a2.5 2.5 0 0 1 5 0v2", "M18 11.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z", "M18 9.2v1M18 17.8v1M20.9 10.6l-.7.7M15.8 15.7l-.7.7M21.8 14h-1M16.2 14h-1M20.9 17.4l-.7-.7M15.8 12.3l-.7-.7"],
   paintbrush: ["M14 4l6 6-7 7-6-6 7-7Z", "M6 12l6 6", "M5 14c-2 2-2 5-2 7 2 0 5 0 7-2"],
   photo: ["M4 5h16v14H4V5Z", "M8 13l2.5-2.5L14 14l2-2 4 4", "M9 9h.01"],
   plan: ["M4 5h16v14H4V5Z", "M4 10h16", "M8 15h3"],

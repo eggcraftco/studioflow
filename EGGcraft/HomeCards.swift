@@ -119,9 +119,13 @@ enum HomeCards {
         HomeCardDefinition(id: .customers, title: "Customers", icon: "person.2.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .customers,
                            financeOnly: false, destination: "Customers", linkLabel: "View customers"),
+        // hammer.fill stays: the sheet's mark is a bag with a cog, and SF Symbols
+        // has no such glyph (bag.badge.gearshape does not exist). A plain bag
+        // would name the orders and drop the production, which is the half this
+        // card's own destination is. Web draws its own paths and gets the sheet's.
         HomeCardDefinition(id: .ordersProduction, title: "Orders & production", icon: "hammer.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .orders,
-                           financeOnly: false, destination: "Production", linkLabel: "View all orders"),
+                           financeOnly: false, destination: "Production", linkLabel: "Open Orders"),
         HomeCardDefinition(id: .schedule, title: "Schedule", icon: "calendar",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .schedule,
                            financeOnly: false, destination: "Schedule", linkLabel: "Open Schedule"),

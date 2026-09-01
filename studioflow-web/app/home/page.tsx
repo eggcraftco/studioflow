@@ -420,12 +420,13 @@ export default function HomePage() {
                   )
                 ) : placement.id === "notes" && placement.size === "1x1" ? (
                   // The square's create control is the composer in its body —
-                  // except when there are no notes, because then the body is
-                  // replaced by "Nothing here yet." and the composer never
-                  // renders at all. Taking the + out of the header left a brand
-                  // new workspace with no way to write its first note from this
-                  // card. Exactly one control, in every state.
-                  isEmpty("notes", placement.period ?? "month") ? (
+                  // but the shell replaces that body wholesale in four states:
+                  // loading, error, offline and empty. The header is outside
+                  // that switch, which is exactly why the + used to survive all
+                  // of them. So it comes back whenever the body is not the
+                  // ready one, and stands down when the composer is really
+                  // there. Exactly one control, in every state.
+                  cardState(placement.id, isEmpty(placement.id, placement.period ?? "month")).kind !== "ready" ? (
                     <button
                       type="button"
                       className="home-add-button"
