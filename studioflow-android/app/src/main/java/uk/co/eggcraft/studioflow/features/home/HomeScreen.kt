@@ -656,10 +656,11 @@ fun HomeCardShell(
                     .padding(start = 14.dp, end = 2.dp, top = 12.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (customising) {
-                    HomeGripDots()
-                    Spacer(Modifier.width(9.dp))
-                }
+                // THE BADGE IS THE FIXED POINT. It is first, at the same inset,
+                // on every card and in both modes — nothing may push it. The grip
+                // sat in front of it, so every icon jumped sideways the moment
+                // you pressed Customise; it is on the far side now, beside the
+                // menu it belongs with.
                 HomeBadge(
                     definition.icon,
                     if (placement.tone == HomeCardTone.Standard) HomeTone.accent else homeToneColor(placement.tone),
@@ -704,7 +705,7 @@ fun HomeCardShell(
                 // The range the card's totals cover. It sits in the header
                 // because a figure without its period is not an answer — §4 puts
                 // the filter here, beside the heading, not in a footnote.
-                if (definition.periods) {
+                if (definition.periods && !(compact && customising)) {
                     Spacer(Modifier.weight(1f))
                     var periodOpen by remember { mutableStateOf(false) }
                     Box {
@@ -763,6 +764,17 @@ fun HomeCardShell(
                     Text(headerNote, fontSize = 10.sp, maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(6.dp))
+                }
+                // The grip, on the far side with the menu, so it never displaces
+                // the badge — the card's icon has to be in the same place on
+                // every card, in both modes.
+                // The card itself is the drag target (detectDragGesturesAfterLongPress
+                // above), so on a phone the grip is decoration — and measured on the
+                // Mac's own layout engine it costs the badge its 13pt inset. The
+                // badge's place is the rule; the grip is not.
+                if (customising && !compact) {
+                    HomeGripDots()
                     Spacer(Modifier.width(6.dp))
                 }
                 // On a phone the ⋯ costs a quarter of the card's width. It appears

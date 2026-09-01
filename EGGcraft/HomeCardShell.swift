@@ -77,8 +77,12 @@ struct HomeCardShell<CardBody: View>: View {
     }
 
     private var header: some View {
-        HStack(spacing: 11) {
-            if customising { HomeGripDots() }
+        // THE BADGE IS THE FIXED POINT. It is first, at the same inset, on every
+        // card, at every size, in both modes — nothing may push it or replace it.
+        // The grip used to sit in front of it, so every card's icon jumped
+        // sideways the moment you pressed Customise; the grip is on the far side
+        // now, beside the menu it belongs with.
+        HStack(spacing: compact ? 8 : 11) {
             // A 1×1 is a small square now, so it gets the small badge too — the
             // desktop one ate the width the title needed.
             HomeBadge(symbol: definition.icon,
@@ -162,7 +166,7 @@ struct HomeCardShell<CardBody: View>: View {
             // The range the card's totals cover. It sits in the header because a
             // figure without its period is not an answer — §4 puts the filter
             // here, beside the heading, not in a footnote.
-            if definition.periods {
+            if definition.periods && !(compact && customising) {
                 Menu {
                     ForEach(HomeCardPeriod.allCases, id: \.self) { period in
                         Button { onPeriod(period) } label: {
@@ -188,9 +192,19 @@ struct HomeCardShell<CardBody: View>: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                .fixedSize()
+                // fixedSize on a phone is what turned "too wide" into "clipped":
+                // the header could not compress, so it overflowed, and an
+                // overflowing HStack is centred in its frame — which cut the
+                // badge off the left edge and the menu off the right.
+                .fixedSize(horizontal: !compact, vertical: false)
                 .accessibilityLabel(t("Date range", lang: lang))
             }
+            // Measured at a phone 1×1 (172pt): with the grip the badge lands at
+            // 0 instead of its 13pt inset, and with it in FRONT it landed at −3,
+            // outside the card — which is the icon being cut off the left edge.
+            // The whole card is the drag target on a phone, so the grip there is
+            // decoration that costs the badge its place.
+            if customising && !compact { HomeGripDots() }
             if !headerNote.isEmpty && !(compact && customising) {
                 Text(headerNote)
                     .font(.system(size: 10.5))
@@ -238,7 +252,7 @@ struct HomeCardShell<CardBody: View>: View {
                 // 44 is the touch target, and on a pointer it is just 14pt of
                 // header taken off every card's body — enough on a 236pt square
                 // to push the footer out of the card and clip it.
-                .frame(width: 44, height: compact ? 44 : 30)
+                .frame(width: compact ? 36 : 44, height: compact ? 36 : 30)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
