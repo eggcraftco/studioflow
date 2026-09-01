@@ -1965,6 +1965,160 @@ type AdminPlansDetail = {
 
 const ADMIN_PLAN_ORDER = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"];
 
+type AdminOnboardingDetail = {
+  ok: boolean;
+  generatedAtMs: number;
+  settingsDocs: number;
+  completed: number;
+  answeredAnything: number;
+  counts: Record<string, Record<string, number>>;
+  heardFrom: { text: string; atMs: number }[];
+  otherGoals: { text: string; atMs: number }[];
+  note: string;
+};
+
+/* The ids the wizard writes, in the order it offers them, with the words it
+   shows. Reading a panel of raw ids ("lifetime_lite", "3_10") is a translation
+   exercise; these are the same labels the person answering saw. */
+const ONBOARDING_ANSWER_LABELS: Record<string, string> = {
+  watches_jewellery: "Watches & jewellery", repairs: "Repairs & servicing", leather: "Leather goods",
+  art_design: "Art & custom design", clothing: "Clothing & tailoring", food: "Cakes & food",
+  ceramics: "Ceramics & crafts", made_to_order: "General made-to-order", other: "Other",
+  batch: "Batch production", mixed: "A mix of these",
+  solo: "Just me", "2_5": "2–5 people", "6_10": "6–10 people", "10_plus": "More than 10",
+  under_10: "Fewer than 10", "10_30": "10–30", "31_100": "31–100", "100_plus": "More than 100",
+  not_sure: "Not sure yet",
+  starting: "Just starting out", under_1: "Less than a year", "1_3": "1–3 years",
+  "3_10": "3–10 years", over_10: "More than 10 years",
+  no_stock: "I don't hold stock", none: "New to it", some: "I track some of it",
+  confident: "I track it closely",
+  orders_customers: "Organise my orders and customers", production_deadlines: "Plan production and deadlines",
+  repairs_service: "Track repairs and service work", estimates: "Send estimates and get approvals",
+  inventory: "Manage inventory and materials", finance: "Track income, expenses and profit",
+  files_notes: "Keep files and notes together", connect_store: "Connect Shopify or WooCommerce",
+  team: "Manage work with my team",
+  first_order: "Create my first order", sample: "Explore a sample workspace",
+  spreadsheet: "Import a spreadsheet", empty: "Start empty", later: "I'll set this up later",
+  wizard: "Finished the wizard", smart: "Smart setup", standard: "Standard setup", skip: "Skipped setup",
+};
+
+const ONBOARDING_SECTIONS: { key: string; title: string; blurb: string }[] = [
+  { key: "workKind", title: "What they make", blurb: "The first work kind, which is the one the preset reads." },
+  { key: "workflow", title: "How they work", blurb: "Decides the production board's lanes." },
+  { key: "mainGoal", title: "What they want first", blurb: "Decides the starting task list." },
+  { key: "teamSize", title: "Team size", blurb: "Also picks the trial plan we recommend." },
+  { key: "volume", title: "Orders a month", blurb: "" },
+  { key: "businessAge", title: "Business age", blurb: "" },
+  { key: "inventoryExperience", title: "Stock tracking", blurb: "" },
+  { key: "start", title: "How they chose to start", blurb: "Only one option is offered now; older workspaces carry the rest." },
+  { key: "completedAction", title: "How setup finished", blurb: "" },
+];
+
+function AdminOnboardingDetail({ onBack }: { onBack: () => void }) {
+  const [data, setData] = useState<AdminOnboardingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const callable = httpsCallable<Record<string, never>, AdminOnboardingDetail>(functions, "getAdminOnboardingDetail");
+    callable({})
+      .then(result => { if (!cancelled) setData(result.data); })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const crumb = (
+    <p className="muted-copy" style={{ margin: "0 0 4px" }}>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      {" › "}Setup Answers
+    </p>
+  );
+
+  if (loading || error || !data) {
+    return (
+      <div className="settings-card-stack">
+        <section className="card app-card">
+          {crumb}
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Setup Answers" />
+          {loading ? <p className="muted-copy">Loading details...</p> : <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>}
+        </section>
+      </div>
+    );
+  }
+
+  const label = (id: string) => ONBOARDING_ANSWER_LABELS[id] ?? id;
+  const when = (ms: number) => (ms > 0 ? new Date(ms).toLocaleDateString() : "—");
+
+  /* A share of the people who answered THIS question, not of every workspace:
+     most of these are optional, and dividing by the whole estate would make
+     every bar look tiny for no reason anyone could act on. */
+  const rows = (bucket: Record<string, number>) => {
+    const entries = Object.entries(bucket || {}).sort((a, b) => b[1] - a[1]);
+    const answered = entries.reduce((sum, [, n]) => sum + n, 0);
+    return { entries, answered };
+  };
+
+  return (
+    <div className="settings-card-stack">
+      <section className="card app-card">
+        {crumb}
+        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Setup Answers" />
+        <p className="muted-copy">{data.note}</p>
+        <div className="site-stats-grid">
+          {[
+            ["Workspaces with settings", data.settingsDocs],
+            ["Finished setup", data.completed],
+            ["Answered something", data.answeredAnything],
+          ].map(([caption, value]) => (
+            <section key={String(caption)} className="card app-card" style={{ display: "grid", gap: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--muted)" }}>{caption}</span>
+              <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{Number(value).toLocaleString()}</strong>
+            </section>
+          ))}
+        </div>
+      </section>
+
+      {ONBOARDING_SECTIONS.map(section => {
+        const { entries, answered } = rows(data.counts?.[section.key] ?? {});
+        return (
+          <section key={section.key} className="card app-card">
+            <CardTitle icon="dashboard" eyebrow={`${answered} answered`} title={section.title} />
+            {section.blurb ? <p className="muted-copy">{section.blurb}</p> : null}
+            {entries.length === 0 ? (
+              <p className="muted-copy">Nobody has answered this yet.</p>
+            ) : (
+              <StatsRankedList entries={entries.map(([id, count]) => [label(id), count] as [string, number])} />
+            )}
+          </section>
+        );
+      })}
+
+      {[
+        { title: "How did you find us?", rows: data.heardFrom, empty: "Nobody has typed an answer yet." },
+        { title: "Something else, in their words", rows: data.otherGoals, empty: "Nobody has typed a goal yet." },
+      ].map(block => (
+        <section key={block.title} className="card app-card">
+          <CardTitle icon="dashboard" eyebrow={`${block.rows.length} written`} title={block.title} />
+          {block.rows.length === 0 ? (
+            <p className="muted-copy">{block.empty}</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: "10px 0 0", padding: 0, display: "grid", gap: 6 }}>
+              {block.rows.map((row, index) => (
+                <li key={`${row.atMs}-${index}`} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 10, fontSize: 13, borderBottom: "1px solid var(--border)", paddingBottom: 6 }}>
+                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{row.text}</span>
+                  <span className="muted-copy" style={{ whiteSpace: "nowrap" }}>{when(row.atMs)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function AdminPlansDetail({ onBack }: { onBack: () => void }) {
   const [data, setData] = useState<AdminPlansDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2846,7 +3000,8 @@ type AdminHubPage =
   | "lookup"
   | "sitestats"
   | "searchconsole"
-  | "customorderlanding";
+  | "customorderlanding"
+  | "onboarding";
 
 const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -2859,7 +3014,8 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
   { id: "lookup", label: "User Lookup" },
   { id: "sitestats", label: "Global Statistics" },
   { id: "searchconsole", label: "Google Search" },
-  { id: "customorderlanding", label: "Custom Order Landing Page" }
+  { id: "customorderlanding", label: "Custom Order Landing Page" },
+  { id: "onboarding", label: "Setup Answers" }
 ];
 
 export function AdminInsightsHub() {
@@ -2892,6 +3048,7 @@ export function AdminInsightsHub() {
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
         {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
+        {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} /> : null}
       </div>
     </div>
   );

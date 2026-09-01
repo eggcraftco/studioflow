@@ -29428,10 +29428,12 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   .home-card.is-square .home-card-badge { width: 28px; height: 28px; }
   .home-card.is-square .home-card-badge svg { width: 15px; height: 15px; }
   .home-card.is-square .home-card-title { font-size: 13.5px; }
-  /* Customising puts the grip and the menu back on a header that is one phone
-     column wide. The badge is decoration and the heading is the card's name, so
-     the badge is what stands down. */
-  .home-screen.is-customising .home-card.is-square .home-card-badge { display: none; }
+  /* The badge is NOT decoration: it is how you find a card at a glance, and it
+     has to be in the same place on every card in both modes. Dropping it while
+     customising made the icons jump about on the one screen whose whole job is
+     moving cards around. The range stands down instead — you are arranging, not
+     reading figures — which is what the pill beside it already does. */
+  .home-screen.is-customising .home-card.is-square .home-period { display: none; }
   /* Half a phone turns the chart into a spike and truncates every cost, so the
      panels take the full width and stack. */
   .home-money-panels { grid-template-columns: minmax(0, 1fr); }
@@ -29632,6 +29634,11 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   /* Phone cards are tapped, not dragged — long-press enters customise instead. */
   .home-screen:not(.is-customising) .home-card-grip,
   .home-screen:not(.is-customising) .home-card-menu-button { display: none; }
+  /* The card is the tap-and-hold target on a phone, so the grip is decoration
+     there — and it is decoration that would push every card's icon sideways the
+     moment you pressed Customise. The badge's place is the rule. */
+  .home-screen .home-card-grip { display: none; }
+  .home-card-menu-button { order: 10; }
   .home-header h1 { font-size: 22px; }
 }
 
