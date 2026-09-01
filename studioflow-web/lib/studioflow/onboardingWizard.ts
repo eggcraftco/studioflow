@@ -267,11 +267,19 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
   },
 ];
 
+/**
+ * One row, and it is the honest one.
+ *
+ * There were five. Not one of them did anything: onboardingStartChoice is
+ * written by all three platforms and read by none, so "Create my first order"
+ * created no order, "Explore a sample workspace" had no sample data anywhere in
+ * the repo to explore, and "Import a spreadsheet" had no importer to open. Four
+ * promises the product could not keep, on the screen where someone decides
+ * whether to trust it.
+ *
+ * The type still admits the old ids because workspaces already carry them.
+ */
 export const ONBOARDING_STARTS: { id: OnboardingStart; label: string; detail: string }[] = [
-  { id: "first_order", label: "Create my first order", detail: "Start with the thing you actually do." },
-  { id: "sample", label: "Explore a sample workspace", detail: "Look around with example orders before adding your own." },
-  { id: "spreadsheet", label: "Import a spreadsheet", detail: "Move what you already track into NivaDesk." },
-  { id: "empty", label: "Start empty", detail: "A clean workspace, set up your way." },
   { id: "later", label: "I'll set this up later", detail: "Go straight to your workspace." },
 ];
 

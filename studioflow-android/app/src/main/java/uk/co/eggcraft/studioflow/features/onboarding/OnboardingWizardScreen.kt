@@ -358,7 +358,7 @@ fun OnboardingWizardScreen(
                             fontSize = 11.sp, color = Muted
                         )
                         Text(t("Or start another way"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = InkStrong)
-                        OnboardingStart.entries.forEach { option ->
+                        OnboardingStart.offered.forEach { option ->
                             WizardOptionRow(t(option.label), t(option.detail), answers.start == option) {
                                 answers = answers.copy(start = option)
                             }

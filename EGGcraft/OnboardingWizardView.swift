@@ -248,12 +248,20 @@ enum OnboardingGoal: String, CaseIterable {
     }
 }
 
+/// The cases stay because saved workspaces already carry them; `offered` is what
+/// the wizard actually shows. It showed all five, and not one of them did
+/// anything — onboardingStartChoice is written by all three platforms and read
+/// by none, so "Create my first order" created no order, "Explore a sample
+/// workspace" had no sample data to explore, and "Import a spreadsheet" had no
+/// importer to open. Four promises the product could not keep.
 enum OnboardingStart: String, CaseIterable {
     case firstOrder = "first_order"
     case sample
     case spreadsheet
     case empty
     case later
+
+    static let offered: [OnboardingStart] = [.later]
 
     var label: String {
         switch self {
@@ -337,7 +345,9 @@ struct OnboardingAnswers {
     var volume: OnboardingVolume?
     var mainGoal: OnboardingGoal?
     var extraGoals: [OnboardingGoal] = []
-    var start: OnboardingStart?
+    /// Pre-picked: it is the only row, and making someone tick the one choice
+    /// there is before Next will let them through is a ritual, not a question.
+    var start: OnboardingStart? = .later
     /// The plan the last step confirmed. nil until that step is reached.
     var plan: OnboardingTrialPlan?
 
@@ -830,7 +840,7 @@ private struct OnboardingStepStart: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(t("Or start another way", lang: lang))
                     .font(.system(size: 14, weight: .semibold))
-                ForEach(OnboardingStart.allCases, id: \.self) { option in
+                ForEach(OnboardingStart.offered, id: \.self) { option in
                     OnboardingOptionRow(
                         title: t(option.label, lang: lang),
                         detail: t(option.detail, lang: lang),

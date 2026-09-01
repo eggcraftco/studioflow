@@ -113,12 +113,22 @@ enum class OnboardingGoal(val id: String, val label: String, val isPrimary: Bool
     }
 }
 
+/**
+ * The entries stay because saved workspaces already carry them; [offered] is what
+ * the wizard actually shows. It showed all five, and not one of them did
+ * anything — onboardingStartChoice is written by all three platforms and read by
+ * none, so "Create my first order" created no order, "Explore a sample
+ * workspace" had no sample data to explore, and "Import a spreadsheet" had no
+ * importer to open. Four promises the product could not keep.
+ */
 enum class OnboardingStart(val id: String, val label: String, val detail: String) {
     FIRST_ORDER("first_order", "Create my first order", "Start with the thing you actually do."),
     SAMPLE("sample", "Explore a sample workspace", "Look around with example orders before adding your own."),
     SPREADSHEET("spreadsheet", "Import a spreadsheet", "Move what you already track into NivaDesk."),
     EMPTY("empty", "Start empty", "A clean workspace, set up your way."),
-    LATER("later", "I'll set this up later", "Go straight to your workspace.")
+    LATER("later", "I'll set this up later", "Go straight to your workspace.");
+
+    companion object { val offered = listOf(LATER) }
 }
 
 data class OnboardingCountry(
@@ -202,7 +212,9 @@ data class OnboardingAnswers(
     val volume: OnboardingVolume? = null,
     val mainGoal: OnboardingGoal? = null,
     val extraGoals: List<OnboardingGoal> = emptyList(),
-    val start: OnboardingStart? = null,
+    // Pre-picked: it is the only row, and making someone tick the one choice
+    // there is before Next will let them through is a ritual, not a question.
+    val start: OnboardingStart? = OnboardingStart.LATER,
     /** The plan the last step confirmed. null until that step is reached. */
     val plan: OnboardingTrialPlan? = null
 ) {

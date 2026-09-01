@@ -160,7 +160,9 @@ export function OnboardingWizard({
     mainGoal: "",
     otherGoal: "",
     extraGoals: [],
-    start: "",
+    // Pre-picked: it is the only row, and making someone tick the one choice
+    // there is before Continue will let them through is a ritual, not a question.
+    start: "later",
     plan: "",
   }));
 
@@ -443,7 +445,6 @@ export function OnboardingWizard({
                 {t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time.")}
               </p>
             </div>
-            <h2 className="onboard-subhead">{t("Or start another way")}</h2>
             <div className="onboard-options">
             {ONBOARDING_STARTS.map(option => (
               <label key={option.id} className={answers.start === option.id ? "is-on" : ""}>
