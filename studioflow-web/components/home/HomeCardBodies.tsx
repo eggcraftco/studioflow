@@ -1204,10 +1204,33 @@ export function activityLook(type: string): { tone: string; glyph: HomeActivityI
   return hit ? { tone: hit.tone, glyph: hit.glyph } : { tone: "slate", glyph: "update" };
 }
 
+/** The detail line under an activity title.
+ *
+ *  The reference sheet writes it as "detail · who", and the temptation is to
+ *  append senderName to every row. Our messages already put the actor in the
+ *  sentence — "Jeffrey approved EST-2026-0010." — so appending it produces
+ *  "Jeffrey approved EST-2026-0010. · Jeffrey", which reads like a bug.
+ *
+ *  So the name is added only when the sentence does not already contain it.
+ *  And `source` is deliberately NOT shown: in a notification it is internal
+ *  plumbing — "web", "callable", "default", "chatgpt" — not the "Shopify" or
+ *  "Stripe" the reference imagines, and showing a jeweller the word "callable"
+ *  would be worse than showing nothing. */
+function detailFor(item: { message: string; senderName: string }): string {
+  const message = String(item.message || "").trim();
+  const who = String(item.senderName || "").trim();
+  if (!who || !message) return message;
+  if (message.toLowerCase().includes(who.toLowerCase())) return message;
+  return `${message} · ${who}`;
+}
+
 export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBodyProps) {
   // The workspace's own stream, already filtered to what this user is a
   // recipient of — activity never widens what someone can see (§12).
-  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
+  // Six on a wide card, because it is two columns of three now rather than one
+  // column of five — an odd number left the second column short by one and the
+  // card looked like it had run out of events.
+  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 6 : 8);
   if (rows.length === 0) return null;
 
   const startOfToday = new Date();
@@ -1244,7 +1267,7 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
         {/* The second line used to be dropped in a square, which left the
             title stranded and the row taller than it needed to be. A 1x1 has
             the height for it; what it lacks is width, and that is a clamp. */}
-        {item.message ? <em>{item.message}</em> : null}
+        {item.message ? <em>{detailFor(item)}</em> : null}
       </span>
       {size === "2x2" && item.senderName ? <span className="home-chip is-muted">{item.senderName}</span> : null}
       <span className="home-activity-when">{relative(item.createdAtMillis)}</span>

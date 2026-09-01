@@ -674,7 +674,10 @@ struct HomeRecentActivityBody: View {
     var body: some View {
         // Only what the signed-in user is a recipient of — activity never widens
         // what someone can see (§12).
-        let limit = size == .oneByOne ? 3 : (size == .twoByOne ? 5 : 8)
+        // Six on a wide card, not five: it is two columns of three now, and an
+        // odd number left the second column short by one so the card looked
+        // like it had run out of events.
+        let limit = size == .oneByOne ? 3 : (size == .twoByOne ? 6 : 8)
         let rows = Array(firebaseManager.activityNotifications.prefix(limit))
         if rows.isEmpty {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
@@ -694,6 +697,23 @@ struct HomeRecentActivityBody: View {
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 Spacer(minLength: 0)
             }
+        } else if size == .twoByOne {
+            // Two columns, as the reference sheet draws the wide card. Split
+            // rather than stretched: each row keeps its full width for the
+            // title, which is what a one-column wide card was spending on
+            // whitespace.
+            let half = Int(ceil(Double(rows.count) / 2.0))
+            HStack(alignment: .top, spacing: 22) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.prefix(half)), id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false, size: size) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.dropFirst(half)), id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false, size: size) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Spacer(minLength: 0)
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(rows, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: false, size: size) }
@@ -712,11 +732,18 @@ struct HomeActivityRow: View {
     var size: HomeCardSize = .twoByOne
 
     private var disc: some View {
-        ZStack {
-            Circle().fill(homeActivityTone(item.type))
+        // The reference draws the two sizes differently on purpose: a square
+        // fills the disc and puts a white glyph in it, a wide card tints the
+        // disc and keeps the glyph in the colour. Same hue either way, so the
+        // two treatments cannot drift into different palettes.
+        let tone = homeActivityTone(item.type)
+        let solid = size == .oneByOne
+        return ZStack {
+            Circle().fill(solid ? tone : tone.opacity(0.13))
+            if !solid { Circle().strokeBorder(tone.opacity(0.32), lineWidth: 1.5) }
             Image(systemName: homeActivityGlyph(item.type))
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(solid ? .white : tone)
         }
         .frame(width: 28, height: 28)
     }

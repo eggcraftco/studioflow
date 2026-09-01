@@ -27732,15 +27732,50 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .home-activity-mark svg { width: 16px; height: 16px; display: block; }
 .home-activity-symbol { font-size: 14px; font-weight: 800; line-height: 1; font-style: normal; }
-.home-activity-mark.tone-green { background: #16a34a; }
-.home-activity-mark.tone-purple { background: #7c3aed; }
-.home-activity-mark.tone-blue { background: #2563eb; }
-.home-activity-mark.tone-amber { background: #f59e0b; }
-.home-activity-mark.tone-orange { background: #ea580c; }
-.home-activity-mark.tone-teal { background: #14b8a6; }
-.home-activity-mark.tone-slate { background: #64748b; }
-.home-activity-mark.tone-indigo { background: #4f46e5; }
-.home-activity-mark.tone-cyan { background: #0891b2; }
+/* One colour per tone, and the two treatments derive from it. The reference
+   sheet draws them differently on purpose: a square fills the disc and puts a
+   white glyph in it, and a wide card tints the disc and keeps the glyph in the
+   colour. Holding the hue in a variable is what stops those two drifting into
+   different palettes. */
+.home-activity-mark.tone-green { --activity-tone: #16a34a; }
+.home-activity-mark.tone-purple { --activity-tone: #7c3aed; }
+.home-activity-mark.tone-blue { --activity-tone: #2563eb; }
+.home-activity-mark.tone-amber { --activity-tone: #d97706; }
+.home-activity-mark.tone-orange { --activity-tone: #ea580c; }
+.home-activity-mark.tone-teal { --activity-tone: #14b8a6; }
+.home-activity-mark.tone-slate { --activity-tone: #64748b; }
+.home-activity-mark.tone-indigo { --activity-tone: #4f46e5; }
+.home-activity-mark.tone-cyan { --activity-tone: #0891b2; }
+.home-activity-mark { background: var(--activity-tone, #64748b); }
+
+/* The wide card: a tinted disc with a ring and the glyph in the tone, as the
+   reference draws it. color-mix keeps the tint tied to the one hue above
+   instead of adding nine more hex values that can drift out of step. */
+.home-card-2x1 .home-activity-mark,
+.home-card-2x2 .home-activity-mark {
+  background: color-mix(in srgb, var(--activity-tone, #64748b) 13%, #fff);
+  border: 1.5px solid color-mix(in srgb, var(--activity-tone, #64748b) 32%, #fff);
+  color: var(--activity-tone, #64748b);
+}
+body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark,
+body[data-studio-theme="dark"] .home-card-2x2 .home-activity-mark {
+  background: color-mix(in srgb, var(--activity-tone, #64748b) 22%, transparent);
+  border-color: color-mix(in srgb, var(--activity-tone, #64748b) 45%, transparent);
+}
+
+/* Two columns on a wide card, which is the reference's main structural move:
+   six events instead of five, and each row keeps its full width for the title
+   because the card is split rather than stretched. Falls back to one column
+   when the card is genuinely narrow. */
+.home-card-2x1 .home-activity-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 26px;
+  align-content: start;
+}
+@media (max-width: 720px) {
+  .home-card-2x1 .home-activity-list { grid-template-columns: minmax(0, 1fr); }
+}
 .home-activity-text { flex: 1 1 auto; min-width: 0; }
 .home-activity-text strong { display: block; font-size: 13px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-activity-text em { display: block; font-style: normal; font-size: 11.5px; opacity: 0.6; line-height: 1.25; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

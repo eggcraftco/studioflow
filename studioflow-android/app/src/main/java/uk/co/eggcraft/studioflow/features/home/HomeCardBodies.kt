@@ -820,7 +820,10 @@ private fun HomeRecentActivityBody(size: HomeCardSize, state: StudioFlowUiState,
     // Only what the signed-in user is a recipient of — activity never widens
     // what someone can see (§12).
     val limit = when (size) {
-        HomeCardSize.OneByOne -> 3; HomeCardSize.TwoByOne -> 5; HomeCardSize.TwoByTwo -> 8
+        // Six on a wide card, not five: it is two columns of three now, and an
+        // odd number left the second column short so the card looked like it
+        // had run out of events.
+        HomeCardSize.OneByOne -> 3; HomeCardSize.TwoByOne -> 6; HomeCardSize.TwoByTwo -> 8
     }
     val rows = state.activityNotifications.take(limit)
     if (rows.isEmpty()) {
@@ -833,24 +836,38 @@ private fun HomeRecentActivityBody(size: HomeCardSize, state: StudioFlowUiState,
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (today.isNotEmpty()) {
                 HomeEyebrow(t("Today"))
-                today.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true) }
+                today.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true, size) }
             }
             if (earlier.isNotEmpty()) {
                 HomeEyebrow(t("Earlier"))
-                earlier.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true) }
+                earlier.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, true, size) }
             }
             Text(t("Only activity you have permission to view is shown"), fontSize = 10.5.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    } else if (size == HomeCardSize.TwoByOne) {
+        // Two columns, as the reference sheet draws the wide card: split rather
+        // than stretched, so each row keeps its full width for the title
+        // instead of spending it on whitespace.
+        val half = (rows.size + 1) / 2
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            Column(Modifier.weight(1f)) {
+                rows.take(half).forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, false, size) }
+            }
+            Column(Modifier.weight(1f)) {
+                rows.drop(half).forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, false, size) }
+            }
+        }
     } else {
-        Column { rows.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, false) } }
+        Column { rows.forEach { ActivityRow(it.type, it.title, it.message, it.senderName, it.createdAt, t, false, size) } }
     }
 }
 
 @Composable
 private fun ActivityRow(
     type: String, title: String, message: String, actor: String,
-    createdAt: Date?, t: (String) -> String, showActor: Boolean
+    createdAt: Date?, t: (String) -> String, showActor: Boolean,
+    size: HomeCardSize = HomeCardSize.TwoByOne
 ) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -858,11 +875,21 @@ private fun ActivityRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         val look = activityLook(type)
+        // The reference draws the two sizes differently on purpose: a square
+        // fills the disc with a white glyph, a wide card tints it and keeps the
+        // glyph in the colour. One hue either way, so they cannot drift apart.
+        val solid = size == HomeCardSize.OneByOne
         Box(
-            Modifier.size(24.dp).background(look.tone, CircleShape),
+            Modifier
+                .size(24.dp)
+                .background(if (solid) look.tone else look.tone.copy(alpha = 0.13f), CircleShape)
+                .then(
+                    if (solid) Modifier
+                    else Modifier.border(1.5.dp, look.tone.copy(alpha = 0.32f), CircleShape)
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(look.icon, null, Modifier.size(13.dp), Color.White)
+            Icon(look.icon, null, Modifier.size(13.dp), if (solid) Color.White else look.tone)
         }
         Column(Modifier.weight(1f)) {
             Text(title.ifEmpty { t("Update") }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
