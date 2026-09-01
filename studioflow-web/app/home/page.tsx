@@ -542,11 +542,20 @@ export default function HomePage() {
               dragHandlers={{
                 dragging: dragIndex === index,
                 dropTarget: dropIndex === index && dragIndex !== index,
-                onDragStart: () => setDragIndex(index),
+                onDragStart: (event) => {
+                  // Without a payload the browser starts the drag and then
+                  // refuses every drop: dragstart and dragend both fire, drop
+                  // never does. Measured in the browser — this one line is the
+                  // whole reason cards could be dragged on a Mac and not here.
+                  event.dataTransfer.setData("text/plain", placement.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  setDragIndex(index);
+                },
                 onDragEnd: () => { setDragIndex(null); setDropIndex(null); setDropHole(null); },
                 onDragOver: (event) => {
                   if (dragIndex === null) return;
                   event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
                   setDropIndex(index);
                   setDropHole(null);
                 },
@@ -589,6 +598,7 @@ export default function HomePage() {
                 }}
                 onDragOver={(event) => {
                   event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
                   setDropIndex(null);
                   setDropHole(hole.index);
                 }}

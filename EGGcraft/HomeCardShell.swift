@@ -235,7 +235,10 @@ struct HomeCardShell<CardBody: View>: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(.secondary)
                 // §17 asks for at least 44pt of touch target; the glyph stays small.
-                .frame(width: 44, height: 44)
+                // 44 is the touch target, and on a pointer it is just 14pt of
+                // header taken off every card's body — enough on a 236pt square
+                // to push the footer out of the card and clip it.
+                .frame(width: 44, height: compact ? 44 : 30)
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
@@ -245,7 +248,9 @@ struct HomeCardShell<CardBody: View>: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 18) {
+        // A square has 206pt for two links that want 208. It gets them by
+        // spending less on the gap and the margin than a card twice its width.
+        HStack(spacing: placement.size == .oneByOne ? 10 : 18) {
             Spacer()
             // A card that covers two screens offers both, as the sheet draws it.
             if let onOpenSecondary, !definition.secondaryLinkLabel.isEmpty {
@@ -255,14 +260,17 @@ struct HomeCardShell<CardBody: View>: View {
             Button(action: onOpen) { footerLabel(definition.linkLabel) }
                 .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, placement.size == .oneByOne ? 11 : 16)
         .padding(.vertical, 11)
         .overlay(Rectangle().frame(height: 1).foregroundColor(.primary.opacity(0.06)), alignment: .top)
     }
 
     private func footerLabel(_ key: String) -> some View {
         HStack(spacing: 5) {
-            Text(t(key, lang: lang))
+            // "Open Orders" and "Open Production" are 18pt apart in a 206pt row:
+            // together they overrun a 1×1 by two points and wrapped, which turned
+            // a 35pt footer into a 52pt one and clipped the card. They shrink now.
+            Text(t(key, lang: lang)).lineLimit(1).minimumScaleFactor(0.75)
             Image(systemName: "arrow.right").font(.system(size: 10, weight: .bold))
         }
         .font(.system(size: 12, weight: .semibold))

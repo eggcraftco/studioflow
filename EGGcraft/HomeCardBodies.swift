@@ -2837,40 +2837,51 @@ struct HomeOrdersProductionBody: View {
                     (t("Overdue", lang: lang), late.count,
                      late.isEmpty ? HomeTone.slate : HomeTone.red, "clock"),
                 ]
-                VStack(alignment: .leading, spacing: compact ? 9 : 14) {
-                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                // The desktop square is 236pt with 50pt of header and 35pt of
+                // footer around it, so the body has 147pt: measured, the old
+                // sizing wanted 207 and the bar and the footer fell out of the
+                // card. These are the web square's own numbers, which solved the
+                // same overflow there — taken back from padding and type size
+                // rather than by dropping anything the card says.
+                VStack(alignment: .leading, spacing: compact ? 9 : 0) {
+                    HStack(alignment: .firstTextBaseline, spacing: compact ? 7 : 6) {
                         Text("\(live.count)")
-                            .font(.system(size: compact ? 32 : 42, weight: .heavy))
+                            .font(.system(size: compact ? 32 : 30, weight: .heavy))
                             .lineLimit(1).minimumScaleFactor(0.5)
                         Text(t("active orders", lang: lang))
-                            .font(.system(size: compact ? 12 : 15)).foregroundColor(.secondary)
+                            .font(.system(size: compact ? 12 : 13)).foregroundColor(.secondary)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
-                    Spacer(minLength: 0)
-                    HStack(spacing: compact ? 5 : 8) {
+                    Spacer(minLength: compact ? 0 : 10)
+                    HStack(spacing: 5) {
                         ForEach(Array(counts.enumerated()), id: \.offset) { _, entry in
-                            VStack(spacing: compact ? 3 : 6) {
+                            VStack(spacing: 3) {
                                 if !compact {
+                                    // Two lines at 9pt, as the web clamps them: a
+                                    // quarter of 206pt is 48, and "In production"
+                                    // does not survive one line of it.
                                     Text(entry.0)
-                                        .font(.system(size: 11.5)).foregroundColor(.secondary)
-                                        .lineLimit(1).minimumScaleFactor(0.6)
+                                        .font(.system(size: 9)).foregroundColor(.secondary)
+                                        .lineLimit(2).minimumScaleFactor(0.85)
+                                        .multilineTextAlignment(.center)
                                 }
                                 Text("\(entry.1)")
-                                    .font(.system(size: compact ? 15 : 26, weight: .heavy)).foregroundColor(entry.2)
+                                    .font(.system(size: compact ? 15 : 20, weight: .heavy)).foregroundColor(entry.2)
                                     .lineLimit(1).minimumScaleFactor(0.6)
                                 Image(systemName: entry.3)
-                                    .font(.system(size: compact ? 11 : 15)).foregroundColor(entry.2)
+                                    .font(.system(size: compact ? 11 : 12)).foregroundColor(entry.2)
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, compact ? 6 : 11)
-                            .padding(.horizontal, 4)
-                            .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 11).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, compact ? 4 : 2)
+                            .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 10).stroke(Color.primary.opacity(0.08), lineWidth: 1))
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel("\(entry.0): \(entry.1)")
                         }
                     }
-                    Spacer(minLength: 0)
+                    if compact { Spacer(minLength: 0) }
                     HomeStageBar(stages: data.stages, resolved: resolved)
+                        .padding(.top, compact ? 0 : 10)
                 }
             } else if size == .twoByOne && compact {
                 // The sheet gives the wide phone card four counts and then the
