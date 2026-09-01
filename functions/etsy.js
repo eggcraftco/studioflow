@@ -875,6 +875,21 @@ module.exports.etsyMoney = etsyMoney;
 module.exports.etsyTimestampToDate = etsyTimestampToDate;
 module.exports.splitVariations = splitVariations;
 module.exports.transactionLabel = transactionLabel;
+// Fields the mapper above fills only to complete the new-order shape, because
+// Etsy does not carry them. On a resync they must not be written: the "" ones
+// would blank whatever the studio typed, and taxRate: 0 would reset a VAT rate
+// set by hand — Etsy returns tax AMOUNTS but never a rate, so the 0 is a
+// placeholder, not an answer. taxAmount is deliberately absent from this list:
+// that one Etsy really does send.
+const ETSY_UNKNOWN_ON_UPDATE = new Set([
+  "designLink",
+  "instagramUsername",
+  "whatsappNumber",
+  "shippingPhone",
+  "taxRate"
+]);
+
+module.exports.ETSY_UNKNOWN_ON_UPDATE = ETSY_UNKNOWN_ON_UPDATE;
 module.exports.normalizeEtsyReceipt = normalizeEtsyReceipt;
 
 /**

@@ -414,7 +414,10 @@ function createEtsySyncFunctions(deps) {
     // over it again on every webhook. One extra read, only when the order is
     // not new.
     const existingOrder = isNew ? null : ((await orderRef.get()).data() || {});
-    await orderRef.set(integrationOrderUpdate(normalised.order, isNew, existingOrder), { merge: true });
+    await orderRef.set(
+      integrationOrderUpdate(normalised.order, isNew, existingOrder, etsy.ETSY_UNKNOWN_ON_UPDATE),
+      { merge: true }
+    );
 
     // The read-only source panel. Kept apart from the order's own fields so a
     // resync can refresh it without ever reaching into the studio's work.

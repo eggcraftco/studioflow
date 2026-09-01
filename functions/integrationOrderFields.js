@@ -73,20 +73,48 @@ function mergeShopNote(incoming, stored) {
 // side of it. Callers on the update path must pass it; without it there is no
 // way to tell a buyer's new words from their old ones, and the safe reading of
 // "I don't know" is to not overwrite.
-function integrationOrderUpdate(mappedOrder, isNew, existingOrder = null) {
+// The same reasoning as mergeShopNote, applied to the rest of the shop's
+// fields: the shop owns the VALUE, not the absence of one.
+//
+// A mapper produces the whole order shape on every run, because a new order
+// needs every field present. So the fields a channel has no data for come out
+// as constants — Etsy emits designLink, instagramUsername, whatsappNumber and
+// shippingPhone as literal "" on every receipt, because Etsy does not carry
+// them. On the update path those constants were copied straight into the patch
+// and written over whatever the studio had typed there. A jeweller who saved
+// the buyer's WhatsApp number lost it on the next sync of that order, and the
+// sync that did it had nothing to say about WhatsApp at all.
+//
+// So: an empty incoming value never replaces a stored one. It can still fill a
+// blank, which is what a shop that genuinely starts sending a field should do.
+// A field the shop really did clear stays as it was — the safe reading of
+// "I don't know" is not to overwrite, and that is the reading this module has
+// applied to notes since it was written.
+function isBlank(value) {
+  return value === "" || value === null || value === undefined;
+}
+
+// Fields a channel cannot know anything about, which its mapper only fills in
+// to complete the new-order shape. Unlike the blank rule above this also covers
+// numbers: Etsy returns no tax RATE, so its mapper says 0 — and 0 is a real
+// answer for Shopify, which is why this has to be per-channel and declared
+// rather than guessed from the value.
+function integrationOrderUpdate(mappedOrder, isNew, existingOrder = null, unknownOnUpdate = null) {
   if (isNew) return mappedOrder;
   const patch = {};
   for (const [key, value] of Object.entries(mappedOrder)) {
     if (!INTEGRATION_SHOP_OWNED_FIELDS.has(key)) continue;
+    if (unknownOnUpdate && unknownOnUpdate.has(key)) continue;
     if (key === "notes") {
       const merged = mergeShopNote(value, existingOrder ? existingOrder.notes : "");
       if (merged === null) continue;
       patch.notes = merged;
       continue;
     }
+    if (isBlank(value) && existingOrder && !isBlank(existingOrder[key])) continue;
     patch[key] = value;
   }
   return patch;
 }
 
-module.exports = { INTEGRATION_SHOP_OWNED_FIELDS, mergeShopNote, integrationOrderUpdate };
+module.exports = { INTEGRATION_SHOP_OWNED_FIELDS, mergeShopNote, integrationOrderUpdate, isBlank };
