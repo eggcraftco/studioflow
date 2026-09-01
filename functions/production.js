@@ -161,33 +161,43 @@ function resolveProductionStage(orderData = {}, stages = DEFAULT_PRODUCTION_STAG
   const doneCount = values.filter(stepIsDone).length;
   const total = steps.length;
 
+  // Reported on every answer, not just the branch it decides, so a card can put
+  // a tick on an order that arrived wherever that order is sitting.
+  const delivered = orderData.isDelivered === true;
+
   // A blocker outranks everything: a stuck job is stuck wherever it stood.
   const blocker = cleanBlocker(orderData.productionBlocker);
   if (blocker && blocked) {
-    return { stageId: blocked.id, source: "blocker", doneCount, total, blocker };
+    return { stageId: blocked.id, source: "blocker", doneCount, total, blocker, delivered };
   }
 
   // An override is a person's decision; only a delivered order overrules it,
   // because nothing still on the bench can already be with the customer.
-  const delivered = orderData.isDelivered === true;
   const override = String(orderData.productionStageOverride || "").trim();
-  if (delivered && done) return { stageId: done.id, source: "delivered", doneCount, total, blocker: null };
+  if (delivered && done) return { stageId: done.id, source: "delivered", doneCount, total, blocker: null, delivered };
   if (override && stages.some((stage) => stage.id === override)) {
-    return { stageId: override, source: "manual", doneCount, total, blocker: null };
+    return { stageId: override, source: "manual", doneCount, total, blocker: null, delivered };
   }
 
-  if (total === 0) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null };
-  // Two milestones, not one: the work being finished and the job leaving the
-  // workshop. Every step ticked means it is MADE — Ready to Ship. It only
-  // becomes Done once it has actually gone, which dispatch is the record of.
-  // Without this the board had no automatic route into Done at all: finishing
-  // every step parked the card in Ready to Ship for ever and somebody had to
-  // drag it across by hand.
-  if (doneCount >= total) {
-    const gone = orderData.isDispatched === true;
-    return { stageId: gone && done ? done.id : shipReady.id, source: "auto", doneCount, total, blocker: null };
+  // Done is the job leaving the workshop, and dispatch is the record of that.
+  // It used to be read only after every step was ticked, so an order that had
+  // shipped with a step still open sat in the middle of the board — and one
+  // with no steps at all sat in Ready however long ago it went. Whether the
+  // checklist was finished is the checklist's business; the board's question is
+  // whether the thing is still here.
+  if (orderData.isDispatched === true && done) {
+    return { stageId: done.id, source: "auto", doneCount, total, blocker: null, delivered };
   }
-  if (values.every(stepIsIdle)) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null };
+
+  if (total === 0) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null, delivered };
+  // Every step ticked means it is MADE — Ready to Ship. It becomes Done when it
+  // goes, which is the branch above. Without one of the two the board had no
+  // automatic route into Done at all: finishing every step parked the card in
+  // Ready to Ship for ever and somebody had to drag it across by hand.
+  if (doneCount >= total) {
+    return { stageId: shipReady.id, source: "auto", doneCount, total, blocker: null, delivered };
+  }
+  if (values.every(stepIsIdle)) return { stageId: ready.id, source: "auto", doneCount, total, blocker: null, delivered };
 
   // Name binding: when the step now being worked shares its name with a stage
   // ("Quality check" / "Quality Check"), that stage is plainly the right lane.
@@ -196,9 +206,9 @@ function resolveProductionStage(orderData = {}, stages = DEFAULT_PRODUCTION_STAG
   if (currentStep) {
     const wanted = String(currentStep.title || "").trim().toLowerCase();
     const named = stages.find((stage) => stage.kind !== "blocked" && stage.title.trim().toLowerCase() === wanted);
-    if (named) return { stageId: named.id, source: "auto", doneCount, total, blocker: null };
+    if (named) return { stageId: named.id, source: "auto", doneCount, total, blocker: null, delivered };
   }
-  return { stageId: firstActive.id, source: "auto", doneCount, total, blocker: null };
+  return { stageId: firstActive.id, source: "auto", doneCount, total, blocker: null, delivered };
 }
 
 function createProductionFunctions({ admin, onCall, HttpsError, requireWorkspace, companySettingsDocRef, orderDocRef, ordersOfCompany, blockHeadingStepsFromSettings, notifyOrderAssignee }) {

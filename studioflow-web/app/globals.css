@@ -27548,6 +27548,11 @@ body[data-studio-theme="dark"] .home-day-strip li { background: rgba(148, 163, 1
 .home-chip.hue-amber { background: rgba(249, 115, 22, 0.16); color: #c2410c; }
 .home-chip.hue-blue { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
 .home-chip.hue-purple { background: rgba(124, 58, 237, 0.12); color: #6d28d9; }
+/* Done means the piece left the workshop; this says it arrived. A tick beside
+   the lane, not a lane of its own — arriving is not another thing the workshop
+   does. Green whatever the lane's colour is, because it means one thing. */
+.home-delivered-tick { font-style: normal; margin-left: 5px; font-weight: 900; color: #15803d; }
+body[data-studio-theme="dark"] .home-delivered-tick { color: #4ade80; }
 .home-chip.hue-slate { background: rgba(100, 116, 139, 0.14); color: #475569; }
 
 .home-week {

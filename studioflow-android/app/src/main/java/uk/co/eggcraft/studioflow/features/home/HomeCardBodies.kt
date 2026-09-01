@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -2127,6 +2128,21 @@ private fun stageSymbol(kind: ProductionStageKind): ImageVector = when (kind) {
     ProductionStageKind.Done -> Icons.Filled.CheckCircle
 }
 
+/**
+ * Done says the piece left the workshop; this says it arrived. A tick beside the
+ * lane, not a lane of its own — arriving is not another thing the workshop does,
+ * so it does not get a seventh column.
+ */
+@Composable
+private fun DeliveredTick(shown: Boolean, t: (String) -> String) {
+    if (shown) {
+        Icon(
+            Icons.Filled.Check, t("Delivered"),
+            Modifier.size(13.dp), HomeTone.green
+        )
+    }
+}
+
 private fun stageTone(kind: ProductionStageKind): Color = when (kind) {
     ProductionStageKind.Ready -> HomeTone.green
     ProductionStageKind.Active -> HomeTone.accent
@@ -2251,6 +2267,7 @@ private fun HomeOrdersProductionBody(
                             HomeTone.red)
                     }
                     if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
+                    DeliveredTick(resolved.firstOrNull { it.first.id == order.id }?.second?.delivered == true, t)
                 }
             }
         }
@@ -2302,6 +2319,7 @@ private fun HomeOrdersProductionBody(
                             HomeTone.red)
                     }
                     if (stage != null) HomeChip(t(stage.title), stageTone(stage.kind))
+                    DeliveredTick(resolved.firstOrNull { it.first.id == order.id }?.second?.delivered == true, t)
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(16.dp),
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                 }

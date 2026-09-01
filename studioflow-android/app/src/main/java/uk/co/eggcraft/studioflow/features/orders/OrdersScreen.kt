@@ -1803,10 +1803,15 @@ private fun orderDueDaysRemaining(order: StudioOrder): Int? {
 
 private fun orderStatusPayload(order: StudioOrder, status: String): Map<String, Any?> {
     val nextExtraStatuses = order.extraStatuses.keys.associateWith { status }
+    // Done means the piece left the workshop, and dispatch is the record of it.
+    // Without this the order says Done everywhere except the production board,
+    // which reads the dispatch flag and would keep it in a lane.
+    val details = mutableMapOf<String, Any?>("extraStatuses" to nextExtraStatuses)
+    if (status == "Done") details["isDispatched"] = true
     return mapOf(
         "designStatus" to status,
         "paintingStatus" to status,
-        "details" to mapOf("extraStatuses" to nextExtraStatuses)
+        "details" to details.toMap()
     )
 }
 

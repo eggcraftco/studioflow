@@ -134,6 +134,9 @@ struct ResolvedProductionStage {
     var blocker: ProductionBlocker?
     /// The step now being worked — the card's "current operation" line.
     var currentStep: String
+    /// It arrived. Done says it left the workshop; this says it got there, and
+    /// it is true whichever branch decided the stage.
+    var delivered: Bool = false
 }
 
 private let productionDoneValues: Set<String> = ["done", "complete", "completed", "finished", "yes", "ready"]
@@ -193,7 +196,8 @@ func resolveProductionStage(
             doneCount: doneCount,
             total: total,
             blocker: blocker,
-            currentStep: currentStep
+            currentStep: currentStep,
+            delivered: order.isDelivered
         )
     }
 
@@ -207,13 +211,18 @@ func resolveProductionStage(
         return result(manual, "manual")
     }
 
+    // Done is the job leaving the workshop, and dispatch is the record of that.
+    // It used to be read only after every step was ticked, so an order that had
+    // shipped with a step still open sat in the middle of the board — and one
+    // with no steps at all sat in Ready however long ago it went. Whether the
+    // checklist was finished is the checklist's business; the board's question
+    // is whether the thing is still here.
+    if order.isDispatched, let doneStage { return result(doneStage, "auto") }
+
     if total == 0 { return result(readyStage, "auto") }
-    // Two milestones, not one: the work being finished and the job leaving the
-    // workshop. Every step ticked means it is MADE — Ready to Ship. It only
-    // becomes Done once it has actually gone, which dispatch is the record of.
-    if doneCount >= total {
-        return result(order.isDispatched ? (doneStage ?? shipReady) : shipReady, "auto")
-    }
+    // Every step ticked means it is MADE — Ready to Ship. It becomes Done when
+    // it goes, which is the branch above.
+    if doneCount >= total { return result(shipReady, "auto") }
     if values.allSatisfy(productionStepIsIdle) { return result(readyStage, "auto") }
 
     // Name binding: when the step being worked shares its name with a lane,

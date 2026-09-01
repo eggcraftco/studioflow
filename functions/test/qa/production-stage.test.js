@@ -49,23 +49,51 @@ function order(values, extra = {}) {
 // MADE; it reaches Done when it has actually left, which dispatch records.
 // Before this the board had no automatic route into Done at all — a finished
 // order sat in Ready to Ship until somebody dragged it across by hand.
+//
+// This block used to assert the other half too: that a dispatched order with a
+// step still open stayed in production, on the reasoning that dispatch must not
+// skip the work. The owner asked for the opposite and the reasoning does not
+// survive the question they asked with it — the board's question is whether the
+// piece is still in the workshop, and a dispatched one is not, whatever the
+// checklist still says. An unticked step is the checklist's business.
 {
   const finished = ["Done", "Done", "Done", "Done", "Done"];
+  const halfBuilt = ["Done", "In Progress", "Not Yet", "Not Yet", "Not Yet"];
   assert.strictEqual(stageOf(order(finished)), "ready_to_ship");
   assert.strictEqual(stageOf(order(finished, { isDispatched: true })), "done");
   assert.strictEqual(stageOf(order(finished, { isDelivered: true })), "done");
-  // Dispatch does not skip the work: a half-built order that someone marked
-  // dispatched is still in production, not finished.
-  assert.strictEqual(
-    stageOf(order(["Done", "In Progress", "Not Yet", "Not Yet", "Not Yet"], { isDispatched: true })),
-    "in_production"
-  );
+  // Gone is gone: an open step no longer holds a dispatched order back.
+  assert.strictEqual(stageOf(order(halfBuilt, { isDispatched: true })), "done");
+  assert.strictEqual(stageOf(order(halfBuilt)), "in_production");
+  // An order with no steps at all was sitting in Ready however long ago it
+  // shipped, because dispatch was only read after the step count.
+  assert.strictEqual(stageOf({ isDispatched: true }, []), "done");
+  assert.strictEqual(stageOf({}, []), "ready");
   // And a blocker still outranks everything, dispatched or not.
   assert.strictEqual(
     stageOf(order(finished, { isDispatched: true, productionBlocker: { reason: "supplier_delay", note: "" } })),
     "blocked"
   );
-  pass("finished is Ready to Ship; dispatched is Done");
+  // A person's own placement still wins over dispatch, as it does over the
+  // steps; only delivery overrules it.
+  assert.strictEqual(
+    stageOf(order(halfBuilt, { isDispatched: true, productionStageOverride: "quality_check" })),
+    "quality_check"
+  );
+  pass("finished is Ready to Ship; gone is Done, whatever the checklist says");
+}
+
+// 1c. Delivered is reported separately from the stage, so a card can put a tick
+// on an order that arrived without inventing a seventh lane for it.
+{
+  const finished = ["Done", "Done", "Done", "Done", "Done"];
+  assert.strictEqual(resolveProductionStage(order(finished, { isDispatched: true }), STAGES, STEPS).delivered, false);
+  assert.strictEqual(resolveProductionStage(order(finished, { isDelivered: true }), STAGES, STEPS).delivered, true);
+  // True whichever branch decided the stage — a delivered order a person parked
+  // in another lane is still delivered.
+  const parked = order(finished, { isDelivered: true, productionBlocker: { reason: "other", note: "" } });
+  assert.strictEqual(resolveProductionStage(parked, STAGES, STEPS).delivered, true);
+  pass("delivered is reported beside the stage, not as one");
 }
 
 // 2. An empty order (no answers at all) is Ready, not In Production — a job
