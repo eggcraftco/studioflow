@@ -777,10 +777,10 @@ private struct BankTabBar: View {
                 .pickerStyle(.segmented).frame(maxWidth: 520)
                 .onChange(of: model.tab) { _ in model.selectedTxId = nil }
                 Spacer()
-                BankPeriodControl(model: model, fmt: fmt, label: label)
+                BankPeriodControl(model: model, fmt: fmt, label: label, isPhone: false)
             }
         }
-        if isPhone { BankPeriodControl(model: model, fmt: fmt, label: label) }
+        if isPhone { BankPeriodControl(model: model, fmt: fmt, label: label, isPhone: true) }
     }
 }
 
@@ -788,9 +788,30 @@ private struct BankPeriodControl: View {
     @ObservedObject var model: BankScreenModel
     let fmt: BankFormat
     let label: String
+    let isPhone: Bool
 
+    /// One row is wider than a phone: a four-way segmented picker capped at 300
+    /// plus the ‹ month › stepper is about 450pt. It never wrapped — it made the
+    /// whole screen wider than the window, and a vertical ScrollView with content
+    /// wider than itself pans sideways. That was the Banking screen drifting
+    /// left and right while you scrolled down. Two rows on the phone.
     var body: some View {
-        HStack(spacing: 8) {
+        if isPhone {
+            VStack(alignment: .leading, spacing: 8) {
+                modePicker.frame(maxWidth: .infinity)
+                HStack(spacing: 8) { periodStepper }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 8) {
+                modePicker
+                periodStepper
+            }
+        }
+    }
+
+    private var modePicker: some View {
+        Group {
             Picker("", selection: $model.period) {
                 Text(fmt.t("Weekly")).tag(BankPeriodMode.week)
                 Text(fmt.t("Monthly")).tag(BankPeriodMode.month)
@@ -809,17 +830,21 @@ private struct BankPeriodControl: View {
                     model.customTo = Date()
                 }
             }
-            if model.period == .custom {
-                DatePicker("", selection: $model.customFrom, in: ...Date(), displayedComponents: .date)
-                    .labelsHidden().accessibilityLabel(fmt.t("From"))
-                Text("–").foregroundColor(.secondary)
-                DatePicker("", selection: $model.customTo, in: ...Date(), displayedComponents: .date)
-                    .labelsHidden().accessibilityLabel(fmt.t("To"))
-            } else {
-                Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
-                Text(label).font(.system(size: 12.5, weight: .bold)).lineLimit(1).frame(minWidth: 96)
-                Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
-            }
+        }
+    }
+
+    @ViewBuilder private var periodStepper: some View {
+        if model.period == .custom {
+            DatePicker("", selection: $model.customFrom, in: ...Date(), displayedComponents: .date)
+                .labelsHidden().accessibilityLabel(fmt.t("From"))
+            Text("–").foregroundColor(.secondary)
+            DatePicker("", selection: $model.customTo, in: ...Date(), displayedComponents: .date)
+                .labelsHidden().accessibilityLabel(fmt.t("To"))
+        } else {
+            Button { model.stepPeriod(-1) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain)
+            Text(label).font(.system(size: 12.5, weight: .bold)).lineLimit(1)
+                .frame(minWidth: isPhone ? 0 : 96)
+            Button { model.stepPeriod(1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain)
         }
     }
 }
