@@ -6,6 +6,7 @@ export type CardIcon =
   | "calendar"
   | "calendarClock"
   | "check"
+  | "bolt"
   | "checklist"
   | "customer"
   | "dashboard"
@@ -30,6 +31,7 @@ export type CardIcon =
   | "team"
   | "timer"
   | "workTime"
+  | "bank"
   | "warningTriangle";
 
 const ICON_PATHS: Record<CardIcon, string[]> = {
@@ -38,6 +40,10 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   calendar: ["M7 2v3M17 2v3M4 9h16", "M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"],
   calendarClock: ["M7 2v3M17 2v3M4 9h16", "M5 4h14a2 2 0 0 1 2 2v7", "M5 4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h7", "M17 14v4l3 2", "M17 22a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"],
   check: ["m5 12 4 4L19 6"],
+  // Quick actions is a bolt on Mac (bolt.fill) and on Android (Icons.Filled.Bolt)
+  // and was a checklist only on web — the same card wearing two different
+  // meanings depending on which screen you opened it on.
+  bolt: ["M13.2 2.4 4.6 13.4h5.6l-.6 8.2 8.6-11h-5.6l.6-8.2Z"],
   checklist: ["M8 6h12", "M8 12h12", "M8 18h12", "m3 6 .7 .7L5 5", "m3 12 .7 .7L5 11", "m3 18 .7 .7L5 17"],
   customer: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
   dashboard: ["M4 13h6V4H4v9ZM14 20h6V4h-6v16ZM4 20h6v-4H4v4Z"],
@@ -62,6 +68,7 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   team: ["M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "M2.5 21a7 7 0 0 1 13 0", "M13 21a5.5 5.5 0 0 1 8.5 0"],
   timer: ["M10 2h4", "M12 14V9", "M16.2 5.8l1.4-1.4", "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"],
   workTime: ["M12 7v5l3 2", "M19 12a7 7 0 1 1-2.05-4.95", "M19 4v5h-5"],
+  bank: ["M3 9.5 12 4.5l9 5", "M5.5 11v7M9.8 11v7M14.2 11v7M18.5 11v7", "M3.5 20.5h17"],
   warningTriangle: ["M12 3 2 21h20L12 3Z", "M12 9v5", "M12 17h.01"]
 };
 

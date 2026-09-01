@@ -27,9 +27,11 @@ import {
   type IntegrationProvider,
   type IntegrationSignals,
 } from "@/lib/studioflow/integrations";
+import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { ClientDomainSection } from "./ClientDomainSection";
+import { SmsNotificationsSection } from "./SmsNotificationsSection";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
 import { ACCOUNT_AVATAR_ACCEPT, changeAccountEmail, saveAccountAvatar, saveAccountProfile, sendAccountPasswordReset, uploadAccountAvatar } from "@/lib/studioflow/accountProfile";
@@ -119,6 +121,7 @@ type SettingsSectionId =
   | "plan-access"
   | "team-access"
   | "message-settings"
+  | "sms-notifications"
   | "support-tickets"
   | "client-domain";
 
@@ -151,6 +154,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   shopify: "integrations",
   inbound: "integrations",
   etsy: "integrations",
+  sms: "sms-notifications",
   general: "profile-security",
   account: "profile-security",
   appearance: "preferences",
@@ -190,6 +194,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
   { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
+  { id: "sms-notifications", title: "Customer SMS", appKey: "Customer SMS", description: "Text updates to customers: sender ID, what triggers a message, this month's usage.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
   { id: "message-settings", title: "Message Settings", appKey: "Message Settings", description: "Workspace-wide messaging permissions for the team.", icon: "reply", group: "team" },
@@ -211,6 +216,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   pdf: "invoice pdf export vat eori job sheet preview",
   workflow: "status steps template material headings badges",
   "quick-reply": "ai reply openai api key knowledge tone quick",
+  "sms-notifications": "sms text message texts sender id twilio notification trigger calling code customer updates mobile",
   financial: "vat tax fee currency corporation margin recalculate decimal",
   "team-access": "role member permission invite seat join request",
   "message-settings": "chat group messaging direct",
@@ -437,6 +443,10 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (sectionId === "safety-uploads") return allowed("settingsSafetyUploads");
   if (sectionId === "data") return allowed("settingsData");
   if (sectionId === "integrations") return allowed("settingsWorkflow");
+  // Customer SMS is deliberately NOT hidden on plans without it: a workspace
+  // that cannot text customers still deserves to be told that is why, and what
+  // it would take. The screen itself is read-only for everyone but the owner.
+  if (sectionId === "sms-notifications") return allowed("settingsWorkflow");
   if (sectionId === "plan-access") return allowed("settingsPlanAccess");
   return false;
 }
@@ -943,6 +953,8 @@ function renderSettingsSection({
       return <TeamAccessSection workspace={workspace} teamData={teamData} loadFailed={teamDataLoadFailed} onRefreshTeamAccess={onRefreshTeamAccess} language={language} />;
     case "message-settings":
       return <MessageSettingsSection workspace={workspace} language={language} />;
+    case "sms-notifications":
+      return <SmsNotificationsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
@@ -4976,7 +4988,7 @@ function IntegrationsSection({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
   const [signals, setSignals] = useState<IntegrationSignals>({
-    shopifyStores: [], channels: {}, bankConnections: 0,
+    shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0,
   });
   const [loaded, setLoaded] = useState(false);
 
@@ -4984,14 +4996,15 @@ function IntegrationsSection({
     if (!companyId) return;
     let active = true;
     (async () => {
-      // Four independent reads: one slow or refused answer must not blank the
-      // other three cards, so each settles on its own.
-      const [stores, woo, inbound, banks] = await Promise.allSettled([
+      // Five independent reads: one slow or refused answer must not blank the
+      // other cards, so each settles on its own.
+      const [stores, woo, inbound, banks, etsy] = await Promise.allSettled([
         httpsCallable<{ companyId: string }, { stores: ShopifyStoreView[] }>(
           functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
         getIntegrationWebhookInfo("woocommerce", companyId),
         getIntegrationWebhookInfo("inbound", companyId),
         getDocs(collection(db, "companies", companyId, "bankConnections")),
+        getEtsyConnections(companyId),
       ]);
       if (!active) return;
       const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
@@ -5005,6 +5018,13 @@ function IntegrationsSection({
       setSignals({
         shopifyStores: stores.status === "fulfilled" ? (stores.value.data?.stores ?? []) : [],
         channels: { woocommerce: channel(woo), inbound: channel(inbound) },
+        etsyShops: etsy.status === "fulfilled"
+          ? (etsy.value.connections ?? []).map((row: EtsyConnection) => ({
+              shop: row.shopName || row.shopId,
+              status: row.status,
+              needsReconnect: Boolean(row.needsReconnect),
+            }))
+          : [],
         bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
       });
       setLoaded(true);

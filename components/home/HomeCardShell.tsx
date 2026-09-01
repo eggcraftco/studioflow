@@ -74,6 +74,7 @@ export function HomeCardShell({
   customising,
   t,
   headerSlot,
+  titleBadge,
   subtitle,
   subtitleInline,
   children,
@@ -86,6 +87,7 @@ export function HomeCardShell({
   onPeriod,
   dragHandlers,
   lastUpdatedLabel,
+  footerNote,
 }: {
   definition: HomeCardDefinition;
   placement: HomeCardPlacement;
@@ -93,6 +95,10 @@ export function HomeCardShell({
   customising: boolean;
   t: (text: string) => string;
   headerSlot?: ReactNode;
+  /** A standing fact about the card that belongs to its name — Banking's
+   *  "Read-only". It sits against the heading, not out by the ... menu where
+   *  the header slot puts things. */
+  titleBadge?: ReactNode;
   /** Small line under the title — "3 of 6 complete", a date range. */
   subtitle?: string;
   /** Beside the title rather than under it — "10 active" on the wide cards. */
@@ -114,6 +120,10 @@ export function HomeCardShell({
     dropTarget: boolean;
   };
   lastUpdatedLabel?: string;
+  /** A sentence that belongs beside the footer link rather than inside the
+   *  card body — the reference sheet puts the activity card's permission note
+   *  there, level with "View all activity", not stranded under the last row. */
+  footerNote?: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   /** Which way the menu opens. Below by default, above when there is no room. */
@@ -184,7 +194,7 @@ export function HomeCardShell({
       onDragOver={dragHandlers.onDragOver}
       onDrop={dragHandlers.onDrop}
     >
-      <header className="home-card-head">
+      <header className={`home-card-head${titleBadge ? " has-title-badge" : ""}`}>
         {/* Drag only from the handle: the card body has links and buttons in it,
             and a card that starts moving when you meant to tap a row is worse
             than one that cannot be moved at all. */}
@@ -209,7 +219,7 @@ export function HomeCardShell({
         </button>
         {/* A ringed badge, not a bare glyph: it is what gives every card the same
             anchor at the same size regardless of which icon it carries. */}
-        <span className={`home-card-badge${definition.badge === "filled" ? " is-filled" : ""}`} aria-hidden="true">
+        <span className={`home-card-badge${definition.badge && definition.badge !== "ring" ? ` is-${definition.badge}` : ""}`} aria-hidden="true">
           <CardIconGlyph icon={definition.icon} />
         </span>
         {renaming ? (
@@ -232,6 +242,7 @@ export function HomeCardShell({
             {subtitle ? <span className="home-card-subtitle">{subtitle}</span> : null}
           </span>
         )}
+        {titleBadge}
         {/* The range the card's totals cover. It sits in the header because a
             figure without its period is not an answer — §4 puts the filter
             here, beside the heading, not in a footnote. */}
@@ -278,6 +289,28 @@ export function HomeCardShell({
                   </button>
                 ))}
               </div>
+              {/* The 1x1 header has no room for the range select, so the range
+                  lives here too — hiding a control is only acceptable while
+                  there is still a way to reach what it does. */}
+              {definition.periods ? (
+                <>
+                  <p className="home-card-menu-label">{t("Date range")}</p>
+                  <div className="home-card-menu-sizes">
+                    {HOME_CARD_PERIODS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={(placement.period ?? "month") === option}
+                        className={(placement.period ?? "month") === option ? "is-active" : ""}
+                        onClick={() => { onPeriod(option); setMenuOpen(false); }}
+                      >
+                        {t(HOME_PERIOD_LABELS[option])}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
               <p className="home-card-menu-label">{t("Choose colour")}</p>
               <div className="home-card-menu-tones">
                 {(["default", "blue", "green", "amber", "purple", "rose"] as HomeCardTone[]).map((tone) => (
@@ -344,7 +377,11 @@ export function HomeCardShell({
       </div>
 
       <footer className="home-card-foot">
-        {lastUpdatedLabel ? <span className="home-card-stale">{lastUpdatedLabel}</span> : <span />}
+        {lastUpdatedLabel ? (
+          <span className="home-card-stale">{lastUpdatedLabel}</span>
+        ) : footerNote ? (
+          <span className="home-card-footnote"><i aria-hidden="true">i</i>{footerNote}</span>
+        ) : <span />}
         <Link href={definition.href} className="home-card-link">
           {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
         </Link>

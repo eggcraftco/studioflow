@@ -90,12 +90,21 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   // answers, the row says Connected — which is a fact — rather than Healthy.
   const [liveCheck, setLiveCheck] = useState<"unknown" | "healthy" | "unhealthy">("unknown");
   const [checkOnArrival, setCheckOnArrival] = useState(false);
+  /** The Etsy shop id the OAuth callback just came back with, if any. */
+  const [arrivedShopId, setArrivedShopId] = useState("");
 
   // A workspace can connect more than one Etsy shop, and the hub counts them.
   // Showing only the first made every shop after it unreachable: counted on the
   // card, absent from the screen, with no way to sync or disconnect it.
   const [selectedId, setSelectedId] = useState("");
-  const connection = connections.find((row) => row.id === selectedId) || connections[0] || null;
+  // And falling back to connections[0] was only half the fix: the list is not
+  // ordered by health, so the first row can be a shop the seller disconnected
+  // months ago — which puts the live one back out of reach. Prefer a shop that
+  // still has an authorisation; fall back to the first only when none does.
+  const connection = connections.find((row) => row.id === selectedId)
+    || connections.find((row) => row.status !== "disconnected")
+    || connections[0]
+    || null;
 
   // keepError: a reload is not evidence that whatever just failed is fine now.
   // The OAuth return sets a message and then reloads; the live check sets one
@@ -149,6 +158,12 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     if (outcome === "connected") {
       setNotice(t("Etsy shop connected. Choose what to import."));
       setCheckOnArrival(true);
+      // Etsy sends the shop back with the outcome, and this read it only to
+      // delete it. In a workspace with more than one shop that meant connecting
+      // the second one left the panel showing the first: the seller pressed
+      // Connect, was told it worked, and looked at somebody else's sync log.
+      const shop = params.get("shop");
+      if (shop) setArrivedShopId(shop);
     }
     else if (outcome === "cancelled") setNotice(t("Etsy connection cancelled. Nothing was changed."));
     else if (params.get("reason") === "no_shop") {
@@ -166,6 +181,14 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     void refresh(true);
   }, [refresh, t]);
+
+  // Select the shop the seller just authorised, once its row has loaded.
+  useEffect(() => {
+    if (!arrivedShopId || !connections.length) return;
+    const row = connections.find((item) => item.shopId === arrivedShopId);
+    if (row) setSelectedId(row.id);
+    setArrivedShopId("");
+  }, [arrivedShopId, connections]);
 
   // The screen promises to verify on return. Do it once, as soon as the
   // connection this callback created has actually loaded.
@@ -272,6 +295,17 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           </p>
           <p className="muted-copy">
             {t("Disconnecting does not delete the orders already in NivaDesk.")}
+          </p>
+          {/* Required by Etsy's API Terms of Use, verbatim and in a prominent
+              position: "The term 'Etsy' is a trademark of Etsy, Inc. This
+              application uses the Etsy API but is not endorsed or certified by
+              Etsy, Inc." It is deliberately NOT translated — it is a trademark
+              notice, and the wording Etsy requires is this wording. It sits
+              above the connect button because that is the moment a seller is
+              deciding whether we are Etsy, and we are not. */}
+          <p className="muted-copy">
+            The term &ldquo;Etsy&rdquo; is a trademark of Etsy, Inc. This application uses the
+            Etsy API but is not endorsed or certified by Etsy, Inc.
           </p>
           <div className="settings-action-row">
             <button
@@ -391,17 +425,29 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               onClick={() =>
                 guard("sync", async () => {
                   // A button offered to fix something has to say whether it
-                  // did. This one ran and reported nothing either way.
+                  // did. This one ran and reported nothing either way — and
+                  // then it went further and said the opposite: it read only
+                  // created and updated, so a run where every order failed
+                  // printed "this connection is working" and forced the badge
+                  // to healthy. Sync now, 130 lines below, was fixed for
+                  // exactly this and the fix never reached here.
                   const result = await syncEtsyNow(companyId, connection.id);
                   const created = Number(result?.outcome?.created || 0);
                   const updated = Number(result?.outcome?.updated || 0);
-                  setNotice(
-                    created || updated
-                      ? `${created} ${t("imported")} · ${updated} ${t("updated")}`
-                      : t("Etsy answered. This connection is working.")
-                  );
-                  setLiveCheck("healthy");
-                  await refresh();
+                  const failed = Number(result?.outcome?.failed || 0);
+                  const held = Number(result?.outcome?.held || 0);
+                  if (failed) {
+                    setError(`${failed} ${t("could not be imported. The sync log below says why.")}`);
+                  }
+                  const good = [
+                    created || updated ? `${created} ${t("imported")} · ${updated} ${t("updated")}` : "",
+                    held ? `${held} ${t("are waiting for room on your plan.")}` : ""
+                  ].filter(Boolean).join(" · ");
+                  if (good) setNotice(good);
+                  else if (!failed) setNotice(t("Etsy answered. This connection is working."));
+                  // Only claim health when the run gave a reason to.
+                  if (!failed) setLiveCheck("healthy");
+                  await refresh(Boolean(failed));
                 })
               }
             >

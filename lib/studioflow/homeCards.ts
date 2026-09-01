@@ -49,9 +49,12 @@ export type HomeCardDefinition = {
   /** English title. Runs through t() at render, and the owner may rename it. */
   title: string;
   icon: CardIcon;
-  /** "ring" is the default anchor; "filled" is the solid badge the reference
-   *  gives Banking, where the glyph is knocked out of the colour. */
-  badge?: "ring" | "filled";
+  /** "ring" is the default anchor. "filled" is a solid badge with the glyph
+   *  knocked out of the colour. "tinted" is a wash of the colour behind a glyph
+   *  drawn in it — what the 2x1 sheet gives Banking, in place of the solid
+   *  badge an earlier sheet showed. Badge is per card, not per size, so this
+   *  moves Banking at all three. */
+  badge?: "ring" | "filled" | "tinted";
   sizes: HomeCardSize[];
   defaultSize: HomeCardSize;
   /**
@@ -86,7 +89,10 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "quickActions",
     title: "Quick actions",
-    icon: "tasks",
+    // A bolt, as Mac and Android already draw it. Web was the only one showing
+    // a checklist, which is a different promise: a list you work through
+    // rather than four things you fire off.
+    icon: "bolt",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     href: "/orders",
@@ -116,12 +122,15 @@ export const HOME_CARDS: HomeCardDefinition[] = [
   {
     id: "banking",
     title: "Banking",
-    icon: "plan",
-    badge: "filled",
+    // `plan` drew a rectangle with a rule through it, which reads as a window
+    // or a payment card. The sheet draws the thing itself.
+    icon: "bank",
+    badge: "tinted",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     access: "bankFeed",
     financeOnly: true,
+    periods: true,
     href: "/bank",
     linkLabel: "Go to banking",
   },

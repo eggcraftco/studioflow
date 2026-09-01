@@ -35,6 +35,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
 import { savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
@@ -989,6 +990,19 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function AppShellFrame({ children }: { children: ReactNode }) {
   const { user, language: personalLanguage, theme: personalTheme } = useAuth();
+
+  // The page's reading direction and language tag, from the person's own
+  // setting. Nothing inside the app set these: `dir` was written only by the
+  // marketing site's provider, so Arabic — which has shipped in the app for
+  // weeks — rendered right-to-left words in a left-to-right layout, and the
+  // [dir="rtl"] rules already in globals.css never reached an app screen. The
+  // `lang` tag matters too: it is what a screen reader picks a voice from.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.dir = studioLanguageDir(personalLanguage);
+    root.lang = studioLanguageLocale(personalLanguage);
+  }, [personalLanguage]);
   // What the setup wizard just picked. personalLanguage is never empty — it
   // falls back to the browser — so without this the choice made in the wizard
   // would be ignored until the auth listener caught up.

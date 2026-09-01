@@ -27264,8 +27264,26 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   background: #2563eb; border-color: #2563eb; color: #fff;
   --card-title-icon-cutout: #2563eb;
 }
+/* The tinted badge: a wash of the colour with the glyph drawn in it, no ring.
+   The cutout follows the wash, because the two knocked-out glyphs (shippingBox,
+   finance) punch through to whatever sits behind them. */
+.home-card-badge.is-tinted {
+  background: rgba(37, 99, 235, 0.13); border-color: transparent; color: #2563eb;
+  --card-title-icon-cutout: #dce6fb;
+}
+body[data-studio-theme="dark"] .home-card-badge.is-tinted {
+  background: rgba(96, 165, 250, 0.2); color: #9cc0fc;
+  --card-title-icon-cutout: #1e293b;
+}
 
 .home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+/* The titles column grows to fill the header, which is what pushes the period
+   select and the ... menu to the right edge. A badge that belongs to the
+   heading has to defeat that or it lands out by the menu — so on those cards
+   the column shrinks to its text and the period select's own margin-left:auto
+   takes the slack instead. Scoped, so no other card's header moves. */
+.home-card-head.has-title-badge .home-card-titles { flex: 0 1 auto; }
+.home-card-head.has-title-badge > .home-pill { flex: 0 0 auto; margin-right: auto; }
 /* "10 active" belongs beside the heading, not under it — the wide card has the
    width and the sheet reads it as one line. */
 .home-card-titles.is-inline { flex-direction: row; align-items: baseline; gap: 9px; }
@@ -27280,6 +27298,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: var(--surface);
 }
 .home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+/* An empty slot is not nothing: it still claims a share of the header's free
+   space through its own margin-left:auto and still costs a 12px gap, which is
+   what left the period select floating 35px short of the ... menu. */
+.home-card-head-slot:empty { display: none; }
 /* The range the card's totals cover. A native select, so it opens the way the
    platform expects and stays reachable by keyboard; the chevron is drawn on the
    wrapper because a select cannot be styled reliably across engines. */
@@ -27732,13 +27754,50 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .home-activity-mark svg { width: 16px; height: 16px; display: block; }
 .home-activity-symbol { font-size: 14px; font-weight: 800; line-height: 1; font-style: normal; }
-.home-activity-mark.tone-green { background: #16a34a; }
-.home-activity-mark.tone-purple { background: #7c3aed; }
-.home-activity-mark.tone-blue { background: #2563eb; }
-.home-activity-mark.tone-amber { background: #f59e0b; }
-.home-activity-mark.tone-orange { background: #ea580c; }
-.home-activity-mark.tone-teal { background: #14b8a6; }
-.home-activity-mark.tone-slate { background: #64748b; }
+/* One colour per tone, and the two treatments derive from it. The reference
+   sheet draws them differently on purpose: a square fills the disc and puts a
+   white glyph in it, and a wide card tints the disc and keeps the glyph in the
+   colour. Holding the hue in a variable is what stops those two drifting into
+   different palettes. */
+.home-activity-mark.tone-green { --activity-tone: #16a34a; }
+.home-activity-mark.tone-purple { --activity-tone: #7c3aed; }
+.home-activity-mark.tone-blue { --activity-tone: #2563eb; }
+.home-activity-mark.tone-amber { --activity-tone: #d97706; }
+.home-activity-mark.tone-orange { --activity-tone: #ea580c; }
+.home-activity-mark.tone-teal { --activity-tone: #14b8a6; }
+.home-activity-mark.tone-slate { --activity-tone: #64748b; }
+.home-activity-mark.tone-indigo { --activity-tone: #4f46e5; }
+.home-activity-mark.tone-cyan { --activity-tone: #0891b2; }
+.home-activity-mark { background: var(--activity-tone, #64748b); }
+
+/* The 2x1 card: a tinted disc with a ring and the glyph in the tone, as the
+   reference draws it. The square and the wide-open card keep the solid fill —
+   the sheet is not being inconsistent, it is giving the densest layout the
+   strongest marks. color-mix keeps the tint tied to the one hue above instead
+   of adding nine more hex values that can drift out of step. */
+.home-card-2x1 .home-activity-mark {
+  background: color-mix(in srgb, var(--activity-tone, #64748b) 13%, #fff);
+  border: 1.5px solid color-mix(in srgb, var(--activity-tone, #64748b) 32%, #fff);
+  color: var(--activity-tone, #64748b);
+}
+body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
+  background: color-mix(in srgb, var(--activity-tone, #64748b) 22%, transparent);
+  border-color: color-mix(in srgb, var(--activity-tone, #64748b) 45%, transparent);
+}
+
+/* Two columns on a wide card, which is the reference's main structural move:
+   six events instead of five, and each row keeps its full width for the title
+   because the card is split rather than stretched. Falls back to one column
+   when the card is genuinely narrow. */
+.home-card-2x1 .home-activity-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 26px;
+  align-content: start;
+}
+@media (max-width: 720px) {
+  .home-card-2x1 .home-activity-list { grid-template-columns: minmax(0, 1fr); }
+}
 .home-activity-text { flex: 1 1 auto; min-width: 0; }
 .home-activity-text strong { display: block; font-size: 13px; font-weight: 700; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-activity-text em { display: block; font-style: normal; font-size: 11.5px; opacity: 0.6; line-height: 1.25; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -27851,7 +27910,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid currentColor; white-space: nowrap;
 }
 .home-pill.is-warning { color: #c2410c; }
-.home-pill.is-solid { border-color: transparent; background: rgba(249, 115, 22, 0.16); font-weight: 800; }
+/* Outlined on a dark card, #c2410c is a dark orange on a dark ground — legible
+   enough when it had a tinted fill behind it, not on its own. */
+body[data-studio-theme="dark"] .home-pill.is-warning { color: #fb9a5c; }
 
 /* Freshness, not liveness: a stale or unhealthy feed gets the warning mark, a
    healthy one gets the refresh mark. */
@@ -27859,7 +27920,13 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-sync-line.is-warning { color: #c2410c; opacity: 1; font-weight: 600; }
 .home-sync-line span { font-size: 12px; }
 
-.home-metric-value.is-spend { color: #dc2626; }
+/* Kept as a no-op rather than deleted: `is-spend` may still be in a cached
+   bundle somewhere, and a stale class that resolves to the ordinary text
+   colour is harmless where one that resolves to red is the bug. */
+.home-metric-value.is-spend { color: inherit; }
+/* A tile with nothing to say about its figure. Spending is neutral: it gets a
+   mark and a number, not a verdict. */
+.home-money-tile.tone-neutral .home-money-tile-dot { background: rgba(100, 116, 139, 0.14); color: #475569; }
 
 /* 2x1 Banking: three figures divided by rules, then the feed beside what the
    workspace pays on repeat. Tiles were too heavy for three numbers. */
@@ -27975,6 +28042,7 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   background: rgba(37, 99, 235, 0.12); color: #1d4ed8;
   display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800;
 }
+body[data-studio-theme="dark"] .home-aside-mark { background: rgba(96, 165, 250, 0.2); color: #9cc0fc; }
 .home-cost-list b.is-negative { color: #dc2626; }
 .home-cost-list b.is-positive { color: #15803d; }
 
@@ -27996,7 +28064,9 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   justify-content: space-between; font-size: 9.5px; opacity: 0.55; text-align: right;
   font-variant-numeric: tabular-nums; flex: 0 0 auto; min-width: 26px;
 }
-.home-chart-axis li::before { content: "£"; }
+/* The axis wore a hardcoded £ regardless of what the workspace is priced in.
+   The chart hands its own symbol down; the £ stays only as a fallback. */
+.home-chart-axis li::before { content: var(--axis-symbol, "£"); }
 .home-chart-plot { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .home-chart-grid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 3; }
 .home-chart-dates {
@@ -28022,9 +28092,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 800;
 }
+/* #1d4ed8 initials on a dark card are close to invisible; the same wash needs a
+   light glyph on that ground, the way the tinted card badge does. */
+body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2); color: #9cc0fc; }
 .home-chart-line.is-spent { stroke: #f97316; }
 .home-chart-key i.is-spent { background: #f97316; }
 .home-year-line { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11.5px; opacity: 0.75; }
+.home-card-2x2 .home-year-line { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: 11px; }
+.home-card-2x2 .home-year-line b { white-space: nowrap; }
 .home-year-line b { font-variant-numeric: tabular-nums; }
 
 .home-alert-strip {
@@ -28054,9 +28129,31 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
    that needs a little more, so "Recent activity" came out as "Recent …".
    The badge is the part with room to give — it is an anchor, not a picture. */
 .home-card-1x1 .home-card-head { gap: 8px; padding-left: 16px; padding-right: 16px; }
+/* A 236px square holds a badge, a name and the menu, and that is the lot. The
+   range select is 87px of the 196px available, which is why the Money 1x1 has
+   been drawing its title at 10px — an ellipsis where the word should be — and
+   why Banking, which also carries a pill, overflowed its header by 46px. The
+   range and the pill live on the sizes with room for them; a 1x1 keeps
+   whatever range was last chosen on a bigger size, and defaults to the month. */
+.home-card-1x1 .home-period,
+.home-card-1x1 .home-card-head.has-title-badge > .home-pill { display: none; }
 .home-card-1x1 .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
 .home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
 .home-card-1x1 .home-card-title { font-size: 15px; }
+
+/* The range picker on a square.
+   A 1x1 header carries a handle, a badge, the title, this control and the
+   overflow button in about 240px, and the control was taking 130 of them at
+   full size. The reference sheet solves it by not drawing a picker on the
+   square at all — but the overflow menu offers Resize, colour, heading, hide
+   and reset, and NOT the range, so hiding it would take away the only way to
+   change the period on a square rather than tidy it. Compact instead: same
+   control, less of it. */
+.home-card-1x1 .home-period select {
+  font-size: 11.5px; max-width: 92px;
+  padding: 4px 20px 4px 8px;
+}
+.home-card-1x1 .home-period::after { right: 7px; }
 
 /* A 1x1 is ~240px of content. Disc, title, detail and time on one line left
    the title with about 120px, so "Order #10234 created" arrived as
@@ -28096,16 +28193,65 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-ratio-head, .home-ratio-foot { display: flex; justify-content: space-between; font-size: 11px; }
 .home-ratio-head em { font-style: normal; opacity: 0.62; }
 .home-ratio-foot b { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* The foot is the bar's legend, so each figure takes its own segment's
+   colour — it was green against a blue segment and a warning orange
+   against the costs segment, which read as a verdict on ordinary costs
+   rather than as a key. Both are darkened to stay legible as text. */
+.home-ratio-foot b.is-revenue { color: #1d4ed8; }
+.home-ratio-foot b.is-costs { color: #c2410c; }
+/* Both are too dark to read on the dark ground, and nothing else in this file
+   would have lightened them — the older figure colours never got this far. */
+body[data-studio-theme="dark"] .home-ratio-foot b.is-revenue { color: #7dabfb; }
+body[data-studio-theme="dark"] .home-ratio-foot b.is-costs { color: #fb9a5c; }
 .home-ratio-bar { display: flex; height: 7px; border-radius: 999px; overflow: hidden; background: rgba(120, 130, 150, 0.18); }
 .home-ratio-bar i.is-revenue { background: #2563eb; }
 .home-ratio-bar i.is-costs { background: #f97316; }
 
 .home-stat-row.is-ruled > * + * { border-left: 1px solid var(--border); padding-left: 14px; }
+/* Four figures, and one label ("Payments received") long enough to wrap on a
+   2x1. When it did, its value dropped a line and stopped being level with the
+   other three — a row of figures that do not line up reads as four unrelated
+   numbers rather than one comparison. Subgrid puts every label on one row and
+   every value on the next, so the wrap costs height and nothing else. */
+.home-stat-row.is-ruled { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; }
+.home-stat-row.is-ruled > .home-stat {
+  display: grid; grid-template-rows: subgrid; grid-row: span 2;
+  min-width: 0;
+}
+@supports not (grid-template-rows: subgrid) {
+  /* Older engines keep the flex behaviour rather than a broken grid; the
+     values sit slightly low on a wrap, which is what shipped before. */
+  .home-stat-row.is-ruled > .home-stat { display: flex; flex-direction: column; justify-content: flex-end; }
+}
+.home-stat-row.is-ruled { grid-template-rows: auto auto; row-gap: 2px; }
+.home-stat-row.is-ruled .home-stat-label { align-self: start; }
+.home-stat-row.is-ruled .home-stat strong { align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Revenue minus what it costs, ending in profit — the same arithmetic the
    Dashboard shows, laid out so you can read where the money went. */
 .home-waterfall { list-style: none; display: flex; align-items: stretch; gap: 0; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--border); }
 .home-waterfall li { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; flex: 1 1 0; min-width: 0; }
+/* The labels were unconstrained, so at 2x1 "Platform fees" ran into "Shipping"
+   and "VAT Amount" into "Net profit" — six items sharing one card's width with
+   nothing telling the text to stop. */
+.home-waterfall li em,
+.home-waterfall li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.home-waterfall li em { display: flex; align-items: center; gap: 5px; }
+.home-waterfall li em > span { overflow: hidden; text-overflow: ellipsis; }
+/* The ends are anchors, not columns: they hold the figure the row starts from
+   and the one it arrives at, so they get their content's width rather than an
+   equal share. */
+.home-waterfall li.is-end { flex: 0 1 auto; padding-left: 0; }
+.home-waterfall li.is-end:last-child { padding-right: 0; text-align: right; align-items: flex-end; }
+/* A hairline between deductions, as the reference draws it — the minus sign
+   says "subtract", the rule says "and this is a separate one". */
+.home-waterfall li.is-deduction + li.is-deduction { border-left: 1px solid var(--border); }
+.home-waterfall-arrow {
+  flex: 0 0 auto; padding: 0 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted, #94a3b8); font-size: 15px;
+}
+@media (max-width: 780px) { .home-waterfall-arrow { display: none; } }
 .home-waterfall li + li { border-left: 1px solid var(--border); }
 .home-waterfall li:first-child { padding-left: 0; }
 .home-waterfall em { font-style: normal; font-size: 11.5px; opacity: 0.7; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -28117,25 +28263,75 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 
 .home-money.is-large { gap: 12px; }
+
+/* The Banking 2x1 asks for three transaction rows underneath three figures, and
+   at the card's 236px that did not fit: the body wanted 199px and had 145, so
+   the list was cut off mid-row and the card showed one and a half payments.
+   Every number here is space taken out of padding rather than out of the row
+   count, because the third row is the point of the card. Scoped to .is-bank —
+   .is-wide is shared with five other bodies. */
+.home-money.is-bank { gap: 8px; }
+.home-money.is-bank .home-figure-row b { font-size: 17.5px; }
+.home-money.is-bank .home-bank-split { margin-top: 4px; padding-top: 4px; }
+.home-money.is-bank .home-eyebrow { margin-top: 0; font-size: 11px; }
+.home-money.is-bank .home-cost-list { margin-top: 0; }
+.home-money.is-bank .home-cost-list li { padding: 3px 0; }
+.home-money.is-bank .home-avatar { width: 18px; height: 18px; font-size: 9.5px; }
+/* The sheet centres each figure in its third. The first column's padding has to
+   come back for that, or its centre sits 7px left of the column's. */
+.home-money.is-bank .home-figure-row > span { align-items: center; text-align: center; }
+.home-money.is-bank .home-figure-row > span:first-child { padding-left: 14px; }
 .home-tile-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .home-money-tile { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .home-money-tile-dot { width: 22px; height: 22px; border-radius: 999px; }
 .home-money-tile.tone-green .home-money-tile-dot { background: rgba(22, 163, 74, 0.16); }
 .home-money-tile.tone-blue .home-money-tile-dot { background: rgba(37, 99, 235, 0.16); }
+/* Same trap this file already documents for the flow nodes: the bare
+   .tone-green / .tone-blue classes carry a `color: … !important` from far
+   earlier in the stylesheet, and MoneyTile puts the tone on the tile itself —
+   so the LABEL went green and blue along with the figure, and "Fixed" read as
+   a link. Only the figure carries a tone; a label is a label. */
+.home-money-tile.tone-green, .home-money-tile.tone-blue, .home-money-tile.tone-red,
+.home-money-tile.tone-orange, .home-money-tile.tone-neutral { color: inherit !important; }
+.home-money-tile.tone-green b { color: #15803d !important; }
+.home-money-tile.tone-blue b { color: #1d4ed8 !important; }
+.home-money-tile.tone-red b { color: #dc2626 !important; }
+.home-money-tile.tone-orange b { color: #c2410c !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-green b { color: #4ade80 !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-blue b { color: #7dabfb !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-red b { color: #f87171 !important; }
+body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !important; }
 .home-money-tile em { font-style: normal; font-size: 11px; opacity: 0.62; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* On the square there is no width to truncate against: the label wraps to a
+   second line rather than becoming "Incoming this...". */
+.home-card-2x2 .home-money-tile em {
+  white-space: normal; line-height: 1.2; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.home-card-2x2 .home-money-tile b { white-space: nowrap; }
 .home-money-tile b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .home-money-tile.tone-green b { color: #15803d; }
 .home-money-tile.tone-blue b { color: #1d4ed8; }
 
 .home-money-panels { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; min-height: 0; }
 .home-panel { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; }
+/* The card's height follows the grid's column width, so a narrower window makes
+   a shorter 2x2 while the chart's axis, key and dates stay the size they are.
+   Past that point the panels box is compressed, and because nothing clipped the
+   panel the chart carried on painting below it — straight over the receipts
+   strip, with the date labels showing through its translucent orange. These
+   three rules existed already, inside the phone media block; the collision is
+   not a phone problem. */
+.home-card-2x2 .home-money-panels { grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.home-card-2x2 .home-panel { min-height: 0; overflow: hidden; }
+.home-card-2x2 .home-chart-frame { min-height: 0; }
 
 .home-chart-key { display: flex; gap: 14px; margin: 4px 0 6px; font-size: 11px; opacity: 0.7; }
 .home-chart-key span { display: inline-flex; align-items: center; gap: 5px; }
 .home-chart-key i { width: 14px; height: 2.5px; border-radius: 999px; }
 .home-chart-key i.is-revenue { background: #2563eb; }
 .home-chart-key i.is-profit { background: #16a34a; }
-.home-chart { width: 100%; flex: 1 1 auto; min-height: 60px; overflow: visible; }
+.home-chart { width: 100%; flex: 1 1 auto; min-height: 40px; overflow: visible; }
 .home-chart-line { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .home-chart-line.is-revenue { stroke: #2563eb; }
 .home-chart-line.is-profit { stroke: #16a34a; }
@@ -28146,8 +28342,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-cost-list li { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
 .home-cost-list li:last-child { border-bottom: 0; }
 .home-cost-list em { font-style: normal; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home-cost-list b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.home-cost-dot { width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto; }
+.home-cost-list b { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.home-cost-dot {
+  width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.home-cost-dot svg { width: 11px; height: 11px; display: block; }
 .home-cost-dot.tone-0 { background: #f97316; }
 .home-cost-dot.tone-1 { background: #7c3aed; }
 .home-cost-dot.tone-2 { background: #2563eb; }
@@ -28903,4 +29103,160 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 @media (max-width: 640px) {
   .integrations-count { margin-left: 0; }
   .integrations-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+/* ---- Activity, wide open (2x2) ---------------------------------------- */
+/* The reference draws a row here as COLUMNS — mark, title, detail, who, when,
+   chevron — so the eye can run down one column instead of reading each row as
+   a block. Grid rather than flex: the columns have to line up between rows, and
+   that is the whole point of the layout. */
+.home-activity-list.is-wide { display: block; }
+.home-activity-wide {
+  display: grid;
+  grid-template-columns: 30px minmax(120px, 1.15fr) minmax(0, 1.35fr) minmax(96px, auto) auto 10px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 7px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.home-activity-wide.is-link:hover { background: var(--surface-2, rgba(0, 0, 0, 0.03)); border-radius: 10px; }
+.home-activity-head {
+  font-size: 13px; font-weight: 700; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-activity-detail {
+  font-size: 12px; opacity: 0.62; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-activity-actor {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; opacity: 0.72; white-space: nowrap;
+}
+.home-activity-actor i {
+  width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2, rgba(37, 99, 235, 0.1)); color: #2563eb;
+}
+.home-activity-actor i svg { width: 11px; height: 11px; display: block; }
+.home-activity-go { font-size: 15px; opacity: 0.35; text-align: right; }
+.home-empty-note { font-size: 12.5px; opacity: 0.6; margin: 8px 0 0; }
+
+/* The filter pills. Narrow the card enough and they would push the title out,
+   so they wrap under it rather than clipping the one thing that names the card. */
+.home-activity-filters { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.home-activity-filters button {
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  background: transparent; color: inherit;
+  border-radius: 999px; padding: 4px 11px;
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.home-activity-filters button[aria-pressed="true"] {
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+  border-color: color-mix(in srgb, #2563eb 34%, transparent);
+  color: #2563eb;
+}
+@media (max-width: 880px) { .home-activity-filters { display: none; } }
+.home-card-footnote { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; opacity: 0.6; }
+.home-card-footnote i {
+  width: 15px; height: 15px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid currentColor; font-style: normal; font-size: 10px; font-weight: 700;
+}
+
+/* Text for screen readers only.
+   Two places used this class and it was never defined, so both rendered the
+   text visibly: the Money card's header read "Money — Date range" and clipped
+   its own title on a square, and Settings showed a stray "Search
+   integrations...". The clip-rect form rather than display:none, because a
+   screen reader skips anything that is not rendered at all. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Revenue & profit chart ------------------------------------------- */
+/* The chart had no scale, no dates, and preserveAspectRatio="none" stretching
+   the line until a quiet month looked like a cliff — a reader could tell the
+   two lines apart and nothing else about them. */
+.home-chart-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.75; }
+.home-chart-tick { font-size: 9px; fill: currentColor; opacity: 0.5; font-variant-numeric: tabular-nums; }
+
+/* ---- Quick actions ---------------------------------------------------- */
+/* The primary tile asked for white text and did not get it. .is-primary sets
+   color:#fff, and .home-action-tile.tone-blue sets color:#1d4ed8 — same
+   specificity, and the tone rules sit later in this file, so the tone won.
+   "New order" was rendering blue-on-blue. Raised above the tones rather than
+   moved, because moving it would only work until the next tone is added below.
+   The glyph needed saying too: the row variant had a white-glyph rule and the
+   tile variant never did. */
+.home-action-tile.is-primary.is-primary,
+.home-action-row.is-primary.is-primary {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.home-action-tile.is-primary.is-primary .home-action-glyph,
+.home-action-tile.is-primary.is-primary .home-action-label { color: #fff; }
+
+/* Four tiles in a square.
+   A tile wants 10+10 padding, a 34px glyph, an 8px gap and a ~16px label —
+   about 78px — and two rows plus the gap need about 166. A 1x1 body is shorter
+   than that, and .home-card-body clips what does not fit, so the bottom row
+   arrived cut in half: "Add note" and "Upload file" with their labels sliced.
+   Smaller marks on the square, which is the size that has no room to spare. */
+.home-card-1x1 .home-action-grid.is-tiles { gap: 8px; }
+.home-card-1x1 .home-action-tile { padding: 6px 6px; gap: 5px; }
+.home-card-1x1 .home-action-glyph svg { width: 22px; height: 22px; }
+.home-card-1x1 .home-action-label { font-size: 11.5px; }
+
+/* ---- Quick actions, wide (2x1) ---------------------------------------- */
+/* Three across, two down — the reference's layout, and the one that fits.
+   Two columns meant three rows, three rows did not fit the body, and
+   .home-card-body clips: "Add inventory item" and "Scan receipt" arrived cut
+   through their labels exactly as the square's bottom row did. */
+/* 2x1 ONLY. The 2x2 card reuses .is-rows for its three groups and the sheet
+   draws those two across, not three — an unscoped rule here would have
+   restyled a card nobody was looking at. */
+.home-card-2x1 .home-action-grid.is-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .home-card-2x1 .home-action-grid.is-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* One hue per action, so the tile tint, the disc and the glyph all come from
+   the same value instead of three that can drift. */
+.home-action-row.tone-teal   { --action-tone: #0f766e; }
+.home-action-row.tone-amber  { --action-tone: #d97706; }
+.home-action-row.tone-violet { --action-tone: #6d28d9; }
+.home-action-row.tone-purple { --action-tone: #9333ea; }
+.home-action-row.tone-orange { --action-tone: #ea580c; }
+.home-action-row.tone-indigo { --action-tone: #4f46e5; }
+.home-action-row.tone-green  { --action-tone: #16a34a; }
+.home-action-row.tone-blue   { --action-tone: #2563eb; }
+
+.home-card-2x1 .home-action-grid.is-rows .home-action-row {
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--action-tone, #64748b) 7%, var(--surface, #fff));
+  border-color: color-mix(in srgb, var(--action-tone, #64748b) 14%, transparent);
+}
+/* The glyph sits in a disc of its own tint, as the reference draws it — a bare
+   icon on a tinted tile reads as a smudge; the disc gives it an edge. */
+.home-card-2x1 .home-action-grid.is-rows .home-action-glyph {
+  width: 34px; height: 34px; border-radius: 999px; flex: 0 0 auto;
+  align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--action-tone, #64748b) 14%, transparent);
+  color: var(--action-tone, #64748b);
+}
+.home-card-2x1 .home-action-grid.is-rows .home-action-glyph svg { width: 17px; height: 17px; }
+.home-card-2x1 .home-action-grid.is-rows .home-action-label { font-size: 13px; }
+
+/* The primary keeps its solid fill, and its disc inverts: white disc, coloured
+   glyph, as the sheet draws it. */
+.home-card-2x1 .home-action-grid.is-rows .home-action-row.is-primary .home-action-glyph {
+  background: #fff; color: #2563eb;
+}
+body[data-studio-theme="dark"] .home-card-2x1 .home-action-grid.is-rows .home-action-row {
+  background: color-mix(in srgb, var(--action-tone, #64748b) 16%, transparent);
+  border-color: color-mix(in srgb, var(--action-tone, #64748b) 28%, transparent);
 }

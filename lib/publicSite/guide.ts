@@ -53,12 +53,13 @@ const TREE_EN: GuideNode[] = [
         id: "first-sign-in-setup",
         title: "Setting up your workspace when you first sign in",
         blocks: [
-          { kind: "para", text: "When you first open NivaDesk, a four-question setup gets your workspace ready for your kind of work. There is no Skip: every question is answerable, and the last one includes \"Start empty\" and \"I'll set this up later\" as real choices. Back moves between steps." },
+          { kind: "para", text: "When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start offers \"Start empty\" and \"I'll set this up later\" as real choices. Back is there from step two onwards." },
           { kind: "steps", items: [
-            "Workspace basics: country, currency and time zone, guessed from where you are and editable now or later.",
-            "Your work: what you make or repair, and how you mainly work.",
+            "Workspace basics: country, currency and time zone, suggested from where you are and changeable now or later in Settings.",
             "What NivaDesk should help with first: your answer decides the three starting tasks you see when setup finishes.",
-            "How you would like to start: your first order, a sample workspace, a Shopify or WooCommerce connection, a spreadsheet import, or an empty workspace."
+            "Tell us about your work: what you make or repair, which sets your order cards, your production stages and your labels.",
+            "Bring your work in: connect Shopify, WooCommerce or Etsy — or start another way, with your first order, a sample workspace, a spreadsheet import, an empty workspace, or \"I'll set this up later\".",
+            "Your plan: the 14 trial days are free on any of them, nothing is charged until they end, and you can change plan at any time."
           ] },
           { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." }
         ]
@@ -138,6 +139,40 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "You can switch between monthly and yearly at any time, and cancel from Settings ▸ Plan & Access without contacting us." }
         ]
       }
+    ]
+  },
+  {
+    id: "home",
+    title: "Home",
+    blocks: [
+      { kind: "para", text: "Home is the screen you land on, and it is yours: a wall of cards showing the state of the workshop at a glance — what needs doing, what is coming, what came in. You choose which cards are there, how big each one is and in what order they sit." },
+      { kind: "sub", text: "The cards" },
+      { kind: "bullets", items: [
+        "Getting started — the setup checklist, with the next step first. Steps you wave off stay waved off for you and stay put for everyone else.",
+        "Quick actions — the handful of things you start most often.",
+        "Recent activity — what has happened in the workspace lately.",
+        "Money — what has been invoiced, paid and is still owed, over the months it is counting.",
+        "Banking — the feed, what is waiting for review, and what needs a receipt.",
+        "Inventory — what the stock is doing, and what is running low.",
+        "Customers — who is new and who has work in progress.",
+        "Orders & production — the lanes of the production board and the orders in them.",
+        "Schedule — the week, and which order each date belongs to.",
+        "Files — how full the workspace is and what needs doing in the library.",
+        "Notes — your latest notes, pinned ones looking pinned.",
+      ] },
+      { kind: "sub", text: "Changing the layout" },
+      { kind: "steps", items: [
+        "Press Customise. The button becomes Done, and a bar appears with the cards you do not currently have.",
+        "Drag a card to move it. [Android] Press and hold a card first — outside Customise a long press does nothing, so the drag only starts once you are in it.",
+        "Change a card's size between 1×1, 2×1 and 2×2. Every card offers all three, and the same card says more at a bigger size rather than just growing.",
+        "Add a card from the bar below, or hide one you do not want. A hidden card is not deleted — it goes back to the bar so you can put it back.",
+        "Press Done. The layout saves itself.",
+      ] },
+      { kind: "sub", text: "Two things worth knowing" },
+      { kind: "bullets", items: [
+        "The layout is YOURS, not the workspace's. Rearranging your Home does not move anybody else's, so a bench jeweller and a bookkeeper can each have the screen they need.",
+        "You only see the cards your access allows. Money and Banking need financial access, so a colleague without it does not see them in the bar either — the card is not hidden from them, it is simply not theirs to place.",
+      ] },
     ]
   },
   {
@@ -796,12 +831,16 @@ const TREE_EN: GuideNode[] = [
     id: "files",
     title: "Files",
     blocks: [
-      { kind: "para", text: "A read-only index of every client file across all your orders, so you can find any document without opening each order." },
+      { kind: "para", text: "The workspace's file library: every client file, receipt, product photo and supplier document in one place, whichever order, purchase or transaction it came from. You can find a document without knowing which order it belongs to, and add one before you know." },
       { kind: "bullets", items: [
-        "Browse and preview files, and open the order a file belongs to.",
-        "See who added each file.",
+        "Upload straight into the library, rename a file, and replace it with a new version while keeping the old ones.",
+        "Link a file to an order, a customer, a purchase, a supplier, an inventory item or a bank transaction — one file can be linked to several, and it is stored once.",
+        "Linking is not sharing. A linked file stays internal until you share it with the order, which is what puts it in front of the customer.",
+        "The left column filters: All Files, Recent, Shared with Clients, Internal Only, Unlinked, Trash, and By Connection (Client & Orders, Bank Transactions, Inventory, Purchases, Suppliers).",
+        "Search covers the file name, the customer and the design.",
+        "Deleting sends a file to Trash first, where it can be restored; emptying the Trash is what removes it for good.",
         "Uploads follow the maximum size and upload policy set in Settings ▸ Safety & Uploads.",
-        "To add or delete files, open that order's own Client Files card.",
+        "Opening and downloading files requires Pro or Team.",
       ] },
       { kind: "sub", text: "Opening a file, and Make Offline (keeping a file offline)" },
       { kind: "bullets", items: [
@@ -1039,6 +1078,34 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-sms",
+        title: "Customer SMS",
+        blocks: [
+          { kind: "para", text: "Text your customer when their work reaches a milestone, with a link to their order page. Owner only, under Settings ▸ Customer SMS, and available on NivaDesk Pro and Team." },
+          { kind: "sub", text: "Sending is not switched on yet" },
+          { kind: "para", text: "A text can only be sent from a sender name the mobile networks have registered. NivaDesk's own sender name is with the network operator for approval, so you can set everything up now and nothing will be sent until it clears. The screen says which state you are in rather than leaving you guessing." },
+          { kind: "sub", text: "Which status changes send a text, and stopping the ones you do not want" },
+          { kind: "bullets", items: [
+            "Estimate ready — on by default.",
+            "Work started — on by default.",
+            "Ready for collection — on by default.",
+            "Every status change — OFF by default, and deliberately. Telling a customer about every internal step is a choice your business makes, not one made for you.",
+          ] },
+          { kind: "sub", text: "The SMS sender name your customer sees" },
+          { kind: "bullets", items: [
+            "By default the platform sender name, with your workspace name written into the message so the customer knows who it is from.",
+            "You can register your own sender name instead — a customer trusts your studio's name more than ours. Enter it and it goes to \"pending\": a workspace cannot mark its own sender approved, the network operator does that.",
+            "Changing the name starts registration again, because the approval was for the old name.",
+            "The default calling code decides how a local number like 07700 900123 is dialled. It is 44 unless you change it.",
+          ] },
+          { kind: "sub", text: "What each text costs, and this month\u2019s usage" },
+          { kind: "bullets", items: [
+            "The screen shows this month's messages, segments and spend. A long message is more than one segment, and each segment is charged.",
+            "The number used is the one on the order's customer field; an order with no number is skipped rather than failing.",
+          ] },
+        ]
+      },
+      {
         id: "set-client-domain",
         title: "Customer Portal Domain",
         blocks: [
@@ -1158,12 +1225,13 @@ const TREE_TR: GuideNode[] = [
         id: "first-sign-in-setup",
         title: "İlk girişte çalışma alanınızı kurma",
         blocks: [
-          { kind: "para", text: "NivaDesk'i ilk açtığınızda dört soruluk bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her soru cevaplanabilir ve son adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesiyle adımlar arasında dolaşabilirsiniz." },
+          { kind: "para", text: "NivaDesk'i ilk açtığınızda beş adımlık bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her adım cevaplanabilir ve nasıl başlamak istediğinizi soran adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesi ikinci adımdan itibaren hep oradadır." },
           { kind: "steps", items: [
-            "Çalışma alanı temelleri: ülke, para birimi ve saat dilimi. Konumunuzdan tahmin edilir, şimdi veya sonra değiştirilebilir.",
-            "İşiniz: ne ürettiğiniz ya da onardığınız ve ağırlıklı olarak nasıl çalıştığınız.",
+            "Çalışma alanı temelleri: ülke, para birimi ve saat dilimi. Konumunuzdan önerilir; şimdi ya da sonra Ayarlar'dan değiştirilebilir.",
             "NivaDesk önce neye yardım etsin: cevabınız, kurulum bitince göreceğiniz üç başlangıç görevini belirler.",
-            "Nasıl başlamak istediğiniz: ilk siparişiniz, örnek bir çalışma alanı, Shopify veya WooCommerce bağlantısı, tablo içe aktarma ya da boş bir çalışma alanı."
+            "İşinizi anlatın: ne ürettiğiniz ya da onardığınız. Bu, sipariş kartlarınızı, üretim aşamalarınızı ve etiketlerinizi belirler.",
+            "İşinizi içeri alın: Shopify, WooCommerce veya Etsy bağlayın — ya da başka türlü başlayın: ilk siparişiniz, örnek bir çalışma alanı, tablo içe aktarma, boş çalışma alanı veya \"Bunu sonra ayarlayacağım\".",
+            "Planınız: 14 günlük deneme hepsinde ücretsizdir, deneme bitmeden hiçbir ücret alınmaz ve planı istediğiniz zaman değiştirebilirsiniz."
           ] },
           { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." }
         ]
@@ -1243,6 +1311,40 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Aylık ve yıllık arasında istediğiniz zaman geçebilir, Settings ▸ Plan & Access üzerinden bize yazmadan iptal edebilirsiniz." }
         ]
       }
+    ]
+  },
+  {
+    id: "home",
+    title: "Ana Ekran (Home)",
+    blocks: [
+      { kind: "para", text: "Home, uygulamayı açtığınızda indiğiniz ekrandır ve size aittir: atölyenin durumunu tek bakışta gösteren bir kart duvarı — yapılması gereken, yaklaşan ve gelen. Hangi kartların orada olacağına, her birinin ne kadar büyük olacağına ve hangi sırada duracağına siz karar verirsiniz." },
+      { kind: "sub", text: "Kartlar" },
+      { kind: "bullets", items: [
+        "Getting started — kurulum kontrol listesi, sıradaki adım en başta. Geçtiğiniz adımlar sizin için geçilmiş kalır, başkalarında yerinde durur.",
+        "Quick actions — en sık başlattığınız birkaç iş.",
+        "Recent activity — çalışma alanında son olanlar.",
+        "Money — faturalanan, tahsil edilen ve hâlâ beklenen tutarlar; saydığı aylarla birlikte.",
+        "Banking — akış, incelemeyi bekleyenler ve fiş bekleyenler.",
+        "Inventory — stokun durumu ve azalanlar.",
+        "Customers — yeni gelenler ve işi süren müşteriler.",
+        "Orders & production — üretim panosunun şeritleri ve içindeki siparişler.",
+        "Schedule — hafta ve her tarihin hangi siparişe ait olduğu.",
+        "Files — çalışma alanının doluluğu ve kütüphanede yapılacaklar.",
+        "Notes — son notlarınız; sabitlenmiş olanlar sabitlenmiş görünür.",
+      ] },
+      { kind: "sub", text: "Düzeni değiştirme" },
+      { kind: "steps", items: [
+        "Customise'a basın. Düğme Done olur ve şu an sizde olmayan kartların şeridi açılır.",
+        "Taşımak için kartı sürükleyin. [Android] Önce karta basılı tutun — Customise dışında uzun basış bir şey yapmaz, sürükleme ancak bu moda girince başlar.",
+        "Kartın boyutunu 1×1, 2×1 ve 2×2 arasında değiştirin. Her kart üçünü de sunar ve büyük boyutta yalnızca büyümez, daha fazlasını söyler.",
+        "Alttaki şeritten kart ekleyin ya da istemediğinizi gizleyin. Gizlenen kart silinmez — şeride geri döner, istediğinizde geri koyarsınız.",
+        "Done'a basın. Düzen kendiliğinden kaydedilir.",
+      ] },
+      { kind: "sub", text: "Bilinmesi gereken iki şey" },
+      { kind: "bullets", items: [
+        "Düzen SİZE aittir, çalışma alanına değil. Kendi Home'unuzu değiştirmeniz başkasınınkini oynatmaz; tezgâhtaki kuyumcu ile muhasebeci ayrı ekranlara sahip olabilir.",
+        "Yalnızca yetkinizin izin verdiği kartları görürsünüz. Money ve Banking finansal erişim ister; bu erişimi olmayan bir çalışma arkadaşı onları şeritte de görmez — kart ondan gizlenmiş değildir, yerleştirebileceği bir kart değildir.",
+      ] },
     ]
   },
   {
@@ -1888,12 +1990,16 @@ const TREE_TR: GuideNode[] = [
     id: "files",
     title: "Files (Dosyalar)",
     blocks: [
-      { kind: "para", text: "Tüm siparişlerinizdeki müşteri dosyalarının salt-okunur bir indeksi; herhangi bir belgeyi her siparişi açmadan bulun." },
+      { kind: "para", text: "Çalışma alanının dosya kütüphanesi: her müşteri dosyası, fiş, ürün fotoğrafı ve tedarikçi belgesi tek yerde — hangi siparişten, alımdan ya da banka hareketinden geldiğinden bağımsız. Bir belgeyi hangi siparişe ait olduğunu bilmeden bulabilir, bilmeden de ekleyebilirsiniz." },
       { kind: "bullets", items: [
-        "Dosyaları tarayıp önizleyin ve bir dosyanın ait olduğu siparişi açın.",
-        "Her dosyayı kimin eklediğini görün.",
+        "Doğrudan kütüphaneye yükleyin, dosyayı yeniden adlandırın, eskilerini saklayarak yeni sürüm koyun.",
+        "Bir dosyayı siparişe, müşteriye, alıma, tedarikçiye, stok kalemine veya banka hareketine bağlayın — bir dosya birkaçına birden bağlanabilir ve yine tek kopya saklanır.",
+        "Bağlamak paylaşmak değildir. Bağlı bir dosya, siz siparişle paylaşana kadar iç kalır; müşterinin önüne koyan şey paylaşmaktır.",
+        "Sol sütun filtreler: All Files, Recent, Shared with Clients, Internal Only, Unlinked, Trash ve By Connection (Client & Orders, Bank Transactions, Inventory, Purchases, Suppliers).",
+        "Arama; dosya adını, müşteriyi ve tasarımı kapsar.",
+        "Silme dosyayı önce Trash'e gönderir, oradan geri alınabilir; kalıcı silme ancak çöpü boşaltınca olur.",
         "Yüklemeler Settings ▸ Safety & Uploads'taki maksimum boyut ve upload politikasını izler.",
-        "Dosya eklemek veya silmek için ilgili siparişin kendi Client Files kartını açın.",
+        "Dosyaları açmak ve indirmek Pro veya Team gerektirir.",
       ] },
       { kind: "sub", text: "Dosya açma ve Make Offline (dosyayı çevrimdışı tutma)" },
       { kind: "bullets", items: [
@@ -2128,6 +2234,34 @@ const TREE_TR: GuideNode[] = [
             "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
           ] }
+        ]
+      },
+      {
+        id: "set-sms",
+        title: "Müşteri SMS'i",
+        blocks: [
+          { kind: "para", text: "İş bir aşamaya geldiğinde müşterinize kısa mesaj gönderin; içinde sipariş sayfasının bağlantısı olur. Yalnız sahip görür, Settings ▸ Customer SMS altındadır ve NivaDesk Pro ile Team planlarında bulunur." },
+          { kind: "sub", text: "Gönderim henüz açık değil" },
+          { kind: "para", text: "Kısa mesaj, ancak operatörlerin kaydettiği bir gönderen adından gönderilebilir. NivaDesk'in kendi gönderen adı şu anda operatör onayında; yani her şeyi şimdi ayarlayabilirsiniz ve onay çıkana kadar hiçbir mesaj gitmez. Ekran hangi durumda olduğunuzu tahmine bırakmadan yazar." },
+          { kind: "sub", text: "Hangi durum değişikliği SMS gönderir, istemediğinizi nasıl durdurursunuz" },
+          { kind: "bullets", items: [
+            "Teklif hazır — varsayılan açık.",
+            "İşe başlandı — varsayılan açık.",
+            "Teslime hazır — varsayılan açık.",
+            "Her durum değişikliği — varsayılan KAPALI, bilerek. Müşteriye her iç adımı haber vermek işletmenizin vereceği bir karardır, sizin adınıza verilmez.",
+          ] },
+          { kind: "sub", text: "Müşterinizin gördüğü SMS gönderen adı" },
+          { kind: "bullets", items: [
+            "Varsayılan olarak platformun gönderen adından; çalışma alanınızın adı mesajın içine yazılır ki müşteri kimden geldiğini bilsin.",
+            "Bunun yerine kendi gönderen adınızı kaydettirebilirsiniz — müşteri sizin atölyenizin adına bizimkinden çok güvenir. Girdiğinizde \"beklemede\" olur: bir çalışma alanı kendi gönderenini onaylı ilan edemez, bunu operatör yapar.",
+            "Adı değiştirmek kaydı yeniden başlatır, çünkü onay eski ad içindi.",
+            "Varsayılan ülke kodu, 07700 900123 gibi yerel bir numaranın nasıl aranacağını belirler. Değiştirmezseniz 44'tür.",
+          ] },
+          { kind: "sub", text: "Her SMS ne kadar tutar, bu ayki kullanım" },
+          { kind: "bullets", items: [
+            "Ekran bu ayın mesaj, segment ve harcama sayılarını gösterir. Uzun bir mesaj birden fazla segmenttir ve her segment ücretlidir.",
+            "Kullanılan numara siparişin müşteri alanındaki numaradır; numarası olmayan sipariş hata vermeden atlanır.",
+          ] },
         ]
       },
       {

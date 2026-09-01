@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeActivityIcon, HomeTileIcon, type HomeActionIconName, type HomeActivityIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
@@ -36,7 +36,35 @@ export type CardBodyProps = {
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
+  /** Which slice of the activity feed to show. Only the 2x2 activity card
+   *  offers the pills; every other size and card ignores it. */
+  activityFilter?: ActivityFilterId;
 };
+
+/** The filter pills on the wide-open activity card, as the reference sheet
+ *  draws them. Client-side over rows already loaded and already permission
+ *  filtered — a pill narrows what you look at, never what you may see. */
+export const ACTIVITY_FILTERS: Array<{ id: ActivityFilterId; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "orders", label: "Orders" },
+  { id: "production", label: "Production" },
+  { id: "payments", label: "Payments" },
+  { id: "files", label: "Files" }
+];
+
+export type ActivityFilterId = "all" | "orders" | "production" | "payments" | "files";
+
+const ACTIVITY_FILTER_MATCH: Record<Exclude<ActivityFilterId, "all">, RegExp> = {
+  orders: /order|estimate|delivery|dispatch|shipped/,
+  production: /production|status|stage|schedule|reminder/,
+  payments: /payment|refund|invoice_paid|bank_/,
+  files: /file|upload|document|note/
+};
+
+export function activityMatchesFilter(type: string, filter: ActivityFilterId): boolean {
+  if (filter === "all") return true;
+  return ACTIVITY_FILTER_MATCH[filter].test(String(type || "").toLowerCase());
+}
 
 export type QuickActionId =
   | "order" | "customer" | "note" | "file" | "inventory" | "reviewSpending" | "receipt" | "aiReply";
@@ -90,17 +118,21 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
             <i className="is-revenue" style={{ width: `${Math.max(0, 100 - costShare)}%` }} />
             <i className="is-costs" style={{ width: `${costShare}%` }} />
           </span>
-          <span className="home-ratio-foot"><b className="is-positive">{money(revenue)}</b><b className="is-warning">{money(costs)}</b></span>
+          <span className="home-ratio-foot"><b className="is-revenue">{money(revenue)}</b><b className="is-costs">{money(costs)}</b></span>
         </div>
       </div>
     );
   }
 
+  // "VAT" rather than the Dashboard's "VAT Amount": this row has six things to
+  // fit across one card and the longer label is what pushed the last two into
+  // each other. The Dashboard keeps its own wording — a summary card there has
+  // the room and the context to be explicit.
   const deductions = [
     { label: "Costs", value: costs },
     { label: "Platform fees", value: fees },
     { label: "Shipping", value: shipping },
-    { label: "VAT Amount", value: vat },
+    { label: "VAT", value: vat },
   ];
 
   // 2x1: the four headline figures, then how revenue becomes profit.
@@ -113,14 +145,20 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
           <Stat label={t("Outstanding")} value={money(outstanding)} tone="info" />
           <Stat label={t("Net profit")} value={money(profit)} tone={profit >= 0 ? "positive" : "warning"} />
         </div>
+        {/* How revenue becomes profit, read left to right. The two arrows are
+            the point of the row: without them it is six figures in a line and
+            nothing says the middle four are taken OUT of the first to reach the
+            last. */}
         <ol className="home-waterfall">
           <li className="is-end"><em>{t("Revenue")}</em><b className="is-positive">{money(revenue)}</b></li>
+          <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           {deductions.map((entry) => (
-            <li key={entry.label}>
-              <em><span className="home-minus" aria-hidden="true">−</span>{t(entry.label)}</em>
-              <b className="is-warning">{money(entry.value)}</b>
+            <li key={entry.label} className="is-deduction">
+              <em><span className="home-minus" aria-hidden="true">−</span><span>{t(entry.label)}</span></em>
+              <b>{money(entry.value)}</b>
             </li>
           ))}
+          <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           <li className="is-end"><em>{t("Net profit")}</em><b className="is-positive">{money(profit)}</b></li>
         </ol>
       </div>
@@ -132,22 +170,31 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   return (
     <div className="home-money is-large">
       <div className="home-tile-row">
-        <MoneyTile label={t("Revenue")} value={money(revenue)} tone="green" />
-        <MoneyTile label={t("Payments received")} value={money(received)} tone="green" />
-        <MoneyTile label={t("Outstanding")} value={money(outstanding)} tone="blue" />
-        <MoneyTile label={t("Net profit")} value={money(profit)} tone="green" />
+        {/* MoneyTile has always taken an icon and these four never passed one,
+            so the tile drew an empty pale disc — the "unfinished placeholder"
+            look the reference replaces with a mark that says what the figure
+            is. */}
+        <MoneyTile label={t("Revenue")} value={money(revenue)} tone="green" icon="trendUp" />
+        <MoneyTile label={t("Payments received")} value={money(received)} tone="green" icon="paid" />
+        <MoneyTile label={t("Outstanding")} value={money(outstanding)} tone="blue" icon="awaiting" />
+        <MoneyTile label={t("Net profit")} value={money(profit)} tone={profit >= 0 ? "green" : "red"} icon="margin" />
       </div>
       <div className="home-money-panels">
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Revenue & profit")}</p>
-          <RevenueProfitChart orders={orders} t={t} />
+          <RevenueProfitChart orders={orders} t={t} moneySettings={moneySettings} />
         </div>
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Cost breakdown")}</p>
           <ul className="home-cost-list">
             {deductions.map((entry, index) => (
               <li key={entry.label}>
-                <span className={`home-cost-dot tone-${index}`} aria-hidden="true" />
+                {/* A coloured dot says "this row is a different colour". An
+                    icon says what the row IS, which is what the four labels
+                    beside them are already doing and the dot was not. */}
+                <span className={`home-cost-dot tone-${index}`} aria-hidden="true">
+                  <HomeTileIcon name={COST_ICONS[index] ?? "percent"} />
+                </span>
                 <em>{t(entry.label)}</em>
                 <b>{money(entry.value)}</b>
               </li>
@@ -167,7 +214,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 function MoneyTile({
   label, value, tone, sub, icon,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red"; sub?: string; icon?: HomeTileIconName;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string; icon?: HomeTileIconName;
 }) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
@@ -186,10 +233,24 @@ function MoneyTile({
  * Drawn inline rather than with a chart library: it is two polylines and two
  * fills, and a library would be a bigger download than the whole screen.
  */
-function RevenueProfitChart({ orders, t }: { orders: HomeData["financeOrders"]; t: (text: string) => string }) {
+/** In the same order as `deductions`: what was spent, what the platform took,
+ *  what the courier took, what the taxman is owed. */
+const COST_ICONS: HomeTileIconName[] = ["order", "percent", "out", "calculator"];
+
+function RevenueProfitChart({ orders, t, moneySettings }: {
+  orders: HomeData["financeOrders"];
+  t: (text: string) => string;
+  moneySettings: StudioMoneySettings;
+}) {
   const weeks = 12;
   const now = new Date();
-  const buckets = Array.from({ length: weeks }, () => ({ revenue: 0, profit: 0 }));
+  const buckets = Array.from({ length: weeks }, (_unused, index) => {
+    // Each bucket keeps the date it covers, because a chart with no dates on
+    // it is a shape rather than a reading.
+    const end = new Date(now);
+    end.setDate(now.getDate() - (weeks - 1 - index) * 7);
+    return { revenue: 0, profit: 0, end };
+  });
   for (const order of orders) {
     if (!order.paymentDate) continue;
     const weeksAgo = Math.floor((now.getTime() - order.paymentDate.getTime()) / (7 * 24 * 3600 * 1000));
@@ -199,63 +260,134 @@ function RevenueProfitChart({ orders, t }: { orders: HomeData["financeOrders"]; 
     bucket.revenue += value;
     bucket.profit += value - order.watchPurchasePrice - order.paymentFee - order.deliveryCost - order.taxAmount;
   }
-  const peak = Math.max(1, ...buckets.map((b) => Math.max(b.revenue, b.profit)));
-  const width = 100;
-  const height = 46;
-  const point = (index: number, value: number) =>
-    `${(index / (weeks - 1)) * width},${height - (Math.max(0, value) / peak) * height}`;
-  const line = (key: "revenue" | "profit") => buckets.map((b, i) => point(i, b[key])).join(" ");
-  const area = (key: "revenue" | "profit") => `0,${height} ${line(key)} ${width},${height}`;
 
   if (buckets.every((b) => b.revenue === 0)) {
     return <p className="home-card-note">{t("Not enough history yet.")}</p>;
   }
+
+  // A grid the eye can measure against. The chart had none — no scale, no
+  // dates, and preserveAspectRatio="none" stretching the line until a quiet
+  // month looked like a cliff. A reader could tell the two lines apart and
+  // nothing else about them.
+  const rawPeak = Math.max(1, ...buckets.map((b) => Math.max(b.revenue, b.profit)));
+  const step = niceAxisStep(rawPeak / 4);
+  const top = Math.ceil(rawPeak / step) * step;
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_unused, i) => i * step);
+
+  // Room on the left for the scale and under it for the dates; the plot keeps
+  // what is left. Proportional, so the line is never distorted.
+  const W = 320, H = 158, L = 40, R = 6, TOP = 8, B = 22;
+  const plotW = W - L - R;
+  const plotH = H - TOP - B;
+  const x = (index: number) => L + (index / (weeks - 1)) * plotW;
+  const y = (value: number) => TOP + plotH - (Math.max(0, value) / top) * plotH;
+  const line = (key: "revenue" | "profit") => buckets.map((b, i) => `${x(i)},${y(b[key])}`).join(" ");
+  const area = (key: "revenue" | "profit") =>
+    `${L},${TOP + plotH} ${line(key)} ${L + plotW},${TOP + plotH}`;
+
+  const shortMoney = (value: number) => compactMoney(value, moneySettings);
+  const shortDate = (date: Date) =>
+    date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  // Three dates, not twelve: first, middle, last is enough to say what window
+  // this is, and twelve would overlap into a smudge.
+  const dateAt = [0, Math.floor((weeks - 1) / 2), weeks - 1];
+
   return (
     <>
       <p className="home-chart-key">
         <span><i className="is-revenue" aria-hidden="true" />{t("Revenue")}</span>
         <span><i className="is-profit" aria-hidden="true" />{t("Net profit")}</span>
       </p>
-      <svg className="home-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img"
-           aria-label={t("Revenue & profit")}>
+      <svg className="home-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Revenue & profit")}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line className="home-chart-grid" x1={L} y1={y(tick)} x2={W - R} y2={y(tick)} />
+            <text className="home-chart-tick" x={L - 7} y={y(tick) + 3.5} textAnchor="end">{shortMoney(tick)}</text>
+          </g>
+        ))}
         <polygon className="home-chart-area is-revenue" points={area("revenue")} />
         <polygon className="home-chart-area is-profit" points={area("profit")} />
         <polyline className="home-chart-line is-revenue" points={line("revenue")} />
         <polyline className="home-chart-line is-profit" points={line("profit")} />
+        {dateAt.map((index, position) => (
+          <text
+            key={index}
+            className="home-chart-tick"
+            x={x(index)}
+            y={H - 6}
+            textAnchor={position === 0 ? "start" : position === 2 ? "end" : "middle"}
+          >
+            {shortDate(buckets[index].end)}
+          </text>
+        ))}
       </svg>
     </>
   );
 }
 
+/** 1, 2 or 5 times a power of ten — the steps a person reads without doing
+ *  arithmetic. An axis at £1,317 intervals is technically correct and useless. */
+function niceAxisStep(rough: number): number {
+  const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(1, rough))));
+  const normalised = rough / magnitude;
+  const stepped = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 5 ? 5 : 10;
+  return stepped * magnitude;
+}
+
+/** £8K rather than £8,000.00: an axis label has to be read sideways, at a
+ *  glance, in the width of a gutter. */
+function compactMoney(value: number, settings: StudioMoneySettings): string {
+  const symbol = moneySymbol(settings);
+  if (value >= 1_000_000) return `${symbol}${Math.round(value / 100_000) / 10}M`;
+  if (value >= 1_000) return `${symbol}${Math.round(value / 100) / 10}K`.replace(".0K", "K");
+  return `${symbol}${Math.round(value)}`;
+}
+
 /* ---------------------------------------------------------------- Banking */
 
-export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+export function BankingCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
   const transactions = data.bankTransactions;
   if (transactions.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const thisMonth = transactions.filter((tx) => tx.bookingDate && tx.bookingDate >= monthStart);
-  const incoming = thisMonth.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-  const spent = thisMonth.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  // The header offers a range, so the totals have to cover it — the month was
+  // hardcoded here while the card said nothing about which month it meant.
+  const { start, end } = homePeriodRange(period);
+  const inRange = transactions.filter((tx) =>
+    tx.bookingDate !== null && tx.bookingDate >= start && tx.bookingDate <= end);
+  const incoming = inRange.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+  const spent = inRange.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
   const toReview = transactions.filter((tx) => !tx.reviewed).length;
+  // Not scoped to the range, and deliberately: this is a queue, not a
+  // statistic. A receipt you still owe from March does not stop being owed
+  // because the card is showing April, and the label never claims a period.
   const missingReceipts = transactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
+  // "Incoming this month" beside a header reading "This year" is just wrong,
+  // and at All time there is no window to name at all.
+  const incomingLabel = period === "month" ? "Incoming this month"
+    : period === "year" ? "Incoming this year" : "Incoming";
+  const spentLabel = period === "month" ? "Spent this month"
+    : period === "year" ? "Spent this year" : "Spent";
 
   // 1x1, as the sheet draws it: the freshness of the feed, then what left the
   // account this month, then what came in against what still needs a receipt.
-  // The read-only promise moved up beside the title where it belongs.
+  // The read-only promise and the range select both belong beside the title,
+  // and both are hidden at this size — the square has no room for either and
+  // was rendering the card's own name as an ellipsis to make space.
   if (size === "1x1") {
     return (
       <div className="home-money">
         <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
-        <p className="home-metric-label">{t("Spent this month")}</p>
-        <strong className="home-metric-value is-spend">−{money(spent)}</strong>
+        <p className="home-metric-label">{t(spentLabel)}</p>
+        {/* Spending is not a loss and not an error. It is what a workshop does
+            every week, and painting it red with a minus made an ordinary month
+            look like a warning — the label already says "Spent", so the sign
+            was saying it twice and the colour was saying something untrue. */}
+        <strong className="home-metric-value">{money(spent)}</strong>
         <div className="home-split-pair">
           <span><em>{t("Incoming")}</em><b className="is-positive">+{money(incoming)}</b></span>
           <span>
-            <em>{t("missing receipts")}</em>
+            <em>{t("Missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-negative" : ""}>{missingReceipts}</b>
           </span>
         </div>
@@ -268,12 +400,13 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   // tile implies would waste the slot.
   const tiles = (
     <div className="home-tile-row">
-      <MoneyTile icon="in" label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
-      <MoneyTile icon="out" label={t("Spent this month")} value={`−${money(spent)}`} tone="orange" />
+      <MoneyTile icon="in" label={t(incomingLabel)} value={`+${money(incoming)}`} tone="green" />
+      <MoneyTile icon="out" label={t(spentLabel)} value={money(spent)} tone="neutral" />
       <MoneyTile icon="receiptAlert" label={t("Missing receipts")} value={String(missingReceipts)}
                  tone={missingReceipts > 0 ? "red" : "blue"} />
       <MoneyTile icon="recurring" label={t("Fixed")}
-                 value={data.bankMonthlyFixed > 0 ? `≈ ${money(data.bankMonthlyFixed)}` : "—"} tone="blue" />
+                 value={data.bankMonthlyFixed > 0 ? `≈\u00a0${money(data.bankMonthlyFixed)}` : "—"}
+                 sub={data.bankMonthlyFixed > 0 ? t("per month") : undefined} tone="blue" />
     </div>
   );
 
@@ -284,12 +417,12 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   // the feed is.
   if (size === "2x1") {
     return (
-      <div className="home-money is-wide">
+      <div className="home-money is-wide is-bank">
         <div className="home-figure-row">
-          <span><em>{t("Incoming this month")}</em><b className="is-positive">+{money(incoming)}</b></span>
-          <span><em>{t("Spent this month")}</em><b className="is-negative">−{money(spent)}</b></span>
+          <span><em>{t(incomingLabel)}</em><b className="is-positive">+{money(incoming)}</b></span>
+          <span><em>{t(spentLabel)}</em><b>{money(spent)}</b></span>
           <span>
-            <em>{t("missing receipts")}</em>
+            <em>{t("Missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b>
           </span>
         </div>
@@ -301,7 +434,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
                 <li key={tx.id}>
                   <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
                   <em>{tx.name || t("Transactions")}</em>
-                  <b className={tx.amount < 0 ? "is-negative" : "is-positive"}>
+                  <b className={tx.amount < 0 ? "" : "is-positive"}>
                     {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
                   </b>
                 </li>
@@ -334,7 +467,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
       <div className="home-money-panels">
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Bank activity")}</p>
-          <BankActivityChart transactions={transactions} t={t} />
+          <BankActivityChart transactions={transactions} t={t} symbol={moneySymbol(moneySettings)} />
         </div>
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Recent transactions")}</p>
@@ -343,7 +476,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
               <li key={tx.id}>
                 <span className="home-avatar" aria-hidden="true">{(tx.name || "?").slice(0, 1).toUpperCase()}</span>
                 <em>{tx.name || t("Transactions")}</em>
-                <b className={tx.amount < 0 ? "is-warning" : "is-positive"}>
+                <b className={tx.amount < 0 ? "" : "is-positive"}>
                   {tx.amount < 0 ? "−" : "+"}{money(Math.abs(tx.amount))}
                 </b>
               </li>
@@ -351,7 +484,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
           </ul>
           <p className="home-year-line">
             {t("This year")}: <em>{t("In")}</em> <b className="is-positive">{money(yearIn)}</b>
-            {" · "}<em>{t("Out")}</em> <b className="is-negative">{money(yearOut)}</b>
+            {" · "}<em>{t("Out")}</em> <b>{money(yearOut)}</b>
           </p>
         </div>
       </div>
@@ -401,7 +534,9 @@ function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy
 }
 
 /** Money in and money out, week by week, from the feed itself. */
-function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTransactions"]; t: (text: string) => string }) {
+function BankActivityChart({ transactions, t, symbol }: {
+  transactions: HomeData["bankTransactions"]; t: (text: string) => string; symbol: string;
+}) {
   const weeks = 12;
   const now = new Date();
   const buckets = Array.from({ length: weeks }, (_, index) => {
@@ -421,12 +556,19 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
     return <p className="home-card-note">{t("Not enough history yet.")}</p>;
   }
 
-  // Round the top up to something a person would write on an axis, so the
-  // gridlines land on readable numbers rather than the exact peak.
+  // Pick the gridline STEP first and let the top follow, so every line lands on
+  // a number a person would write. Rounding the top on its own and then cutting
+  // it into quarters puts the odd numbers straight back: a peak of 8,600 became
+  // a top of 9,000 and gridlines at 2.3K, 4.5K and 6.8K.
   const peak = Math.max(1, ...buckets.map((b) => Math.max(b.incoming, b.spent)));
-  const magnitude = Math.pow(10, Math.floor(Math.log10(peak)));
-  const top = Math.ceil(peak / magnitude) * magnitude;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => share * top);
+  const niceStep = (raw: number) => {
+    const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    const scaled = raw / magnitude;
+    return (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 2.5 ? 2.5 : scaled <= 5 ? 5 : 10) * magnitude;
+  };
+  const step = niceStep(peak / 5);
+  const top = Math.ceil(peak / step) * step;
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
   const shortMoney = (value: number) =>
     value >= 1000 ? `${Math.round(value / 100) / 10}K` : String(Math.round(value));
 
@@ -443,7 +585,8 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
         <span><i className="is-spent" aria-hidden="true" />{t("Spent")}</span>
       </p>
       <div className="home-chart-frame">
-        <ul className="home-chart-axis" aria-hidden="true">
+        <ul className="home-chart-axis" aria-hidden="true"
+              style={{ "--axis-symbol": `"${symbol}"` } as CSSProperties}>
           {[...ticks].reverse().map((value) => <li key={value}>{shortMoney(value)}</li>)}
         </ul>
         <div className="home-chart-plot">
@@ -1167,37 +1310,81 @@ function CustomerMix({ mix, total, t }: { mix: { key: string; count: number; ton
 
 /** Event type to colour. The title always names the event, so colour only
  *  speeds up scanning — it never carries the meaning on its own (§20). */
-function activityTone(type: string) {
-  const key = type.toLowerCase();
-  if (key.includes("payment")) return "green";
-  if (key.includes("order")) return "purple";
-  if (key.includes("production") || key.includes("status")) return "blue";
-  if (key.includes("file")) return "amber";
-  if (key.includes("inventory")) return "orange";
-  if (key.includes("customer")) return "teal";
-  if (key.includes("schedule")) return "blue";
-  return "slate";
+// What a row looks like, decided from the notification type the SERVER writes.
+//
+// This was a chain of substring guesses ending in a grey disc, and ten real
+// types fell off the end of it — estimate_decision, both bank_ types,
+// shared_note, support_ticket_reply, workspace_ticket_assigned, team, direct,
+// delivery, deleted. The card in front of a real workspace was three blank grey
+// circles: two estimate approvals and a bank connection, none of them
+// recognisable, all of them things this product does every day.
+//
+// So it is a table now, and homeActivityTypes.test.ts checks it against the
+// list of types the server actually writes. A guess that silently degrades to
+// grey is worse than a missing case that a test can point at.
+const ACTIVITY_LOOKS: Array<{ match: RegExp; tone: string; glyph: HomeActivityIconName }> = [
+  // Money first: woocommerce_payment must not be read as an order.
+  { match: /payment|refund|invoice_paid/, tone: "green", glyph: "payment" },
+  { match: /^bank_|bank_connection|bank_receipt/, tone: "cyan", glyph: "bank" },
+  { match: /estimate/, tone: "indigo", glyph: "estimate" },
+  { match: /delivery|dispatch|shipped/, tone: "blue", glyph: "delivery" },
+  { match: /production|status|stage/, tone: "blue", glyph: "production" },
+  // Deletion requests are about an order but are not one; they read as admin.
+  { match: /deletion|deleted/, tone: "slate", glyph: "message" },
+  { match: /order/, tone: "purple", glyph: "order" },
+  { match: /note/, tone: "amber", glyph: "note" },
+  { match: /ticket|support|direct|message|reply/, tone: "slate", glyph: "message" },
+  { match: /team|member|invite/, tone: "teal", glyph: "team" },
+  { match: /file|upload|document/, tone: "amber", glyph: "file" },
+  { match: /inventory|stock/, tone: "orange", glyph: "inventory" },
+  { match: /customer/, tone: "teal", glyph: "customer" },
+  { match: /schedule|reminder/, tone: "blue", glyph: "schedule" }
+];
+
+export function activityLook(type: string): { tone: string; glyph: HomeActivityIconName } {
+  const key = String(type || "").toLowerCase();
+  const hit = ACTIVITY_LOOKS.find((row) => row.match.test(key));
+  return hit ? { tone: hit.tone, glyph: hit.glyph } : { tone: "slate", glyph: "update" };
 }
 
-/** The glyph, decided from the same key as the tone so the two cannot drift
- *  apart — a green disc with a cart in it would be worse than no glyph. */
-function activityGlyph(type: string): HomeActivityIconName {
-  const key = type.toLowerCase();
-  if (key.includes("payment")) return "payment";
-  if (key.includes("order")) return "order";
-  if (key.includes("production") || key.includes("status")) return "production";
-  if (key.includes("file")) return "file";
-  if (key.includes("inventory")) return "inventory";
-  if (key.includes("customer")) return "customer";
-  if (key.includes("schedule")) return "schedule";
-  return "update";
+/** The detail line under an activity title.
+ *
+ *  The reference sheet writes it as "detail · who", and the temptation is to
+ *  append senderName to every row. Our messages already put the actor in the
+ *  sentence — "Jeffrey approved EST-2026-0010." — so appending it produces
+ *  "Jeffrey approved EST-2026-0010. · Jeffrey", which reads like a bug.
+ *
+ *  So the name is added only when the sentence does not already contain it.
+ *  And `source` is deliberately NOT shown: in a notification it is internal
+ *  plumbing — "web", "callable", "default", "chatgpt" — not the "Shopify" or
+ *  "Stripe" the reference imagines, and showing a jeweller the word "callable"
+ *  would be worse than showing nothing. */
+function detailFor(item: { message: string; senderName: string }): string {
+  const message = String(item.message || "").trim();
+  const who = String(item.senderName || "").trim();
+  if (!who || !message) return message;
+  if (message.toLowerCase().includes(who.toLowerCase())) return message;
+  return `${message} · ${who}`;
 }
 
-export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBodyProps) {
+export function RecentActivityCardBody({ size, data, t, moneySettings, activityFilter = "all" }: CardBodyProps) {
   // The workspace's own stream, already filtered to what this user is a
-  // recipient of — activity never widens what someone can see (§12).
-  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 5 : 8);
-  if (rows.length === 0) return null;
+  // recipient of — activity never widens what someone can see (§12). The pills
+  // narrow what is LOOKED at, on top of that; they are not a permission.
+  const visible = size === "2x2"
+    ? data.activity.filter((item) => activityMatchesFilter(item.type, activityFilter))
+    : data.activity;
+  // Six on a wide card, because it is two columns of three now rather than one
+  // column of five — an odd number left the second column short by one and the
+  // card looked like it had run out of events.
+  const rows = visible.slice(0, size === "1x1" ? 3 : size === "2x1" ? 6 : 8);
+  if (rows.length === 0) {
+    // A pill with nothing behind it has to say so, or it reads as a card that
+    // has stopped working.
+    return activityFilter === "all"
+      ? null
+      : <p className="home-empty-note">{t("Nothing in this filter yet.")}</p>;
+  }
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -1217,10 +1404,10 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
 
   const symbol = moneySymbol(moneySettings);
   const row = (item: (typeof rows)[number]) => {
-    const glyph = activityGlyph(item.type);
+    const { tone, glyph } = activityLook(item.type);
     return (
     <li key={item.id}>
-      <span className={`home-activity-mark tone-${activityTone(item.type)}`} aria-hidden="true">
+      <span className={`home-activity-mark tone-${tone}`} aria-hidden="true">
         {/* Money is the one row that shows a character rather than a drawing:
             the workspace's own currency, so a euro shop is never shown a
             pound. Everything else is a glyph. */}
@@ -1233,7 +1420,7 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
         {/* The second line used to be dropped in a square, which left the
             title stranded and the row taller than it needed to be. A 1x1 has
             the height for it; what it lacks is width, and that is a clamp. */}
-        {item.message ? <em>{item.message}</em> : null}
+        {item.message ? <em>{detailFor(item)}</em> : null}
       </span>
       {size === "2x2" && item.senderName ? <span className="home-chip is-muted">{item.senderName}</span> : null}
       <span className="home-activity-when">{relative(item.createdAtMillis)}</span>
@@ -1245,6 +1432,38 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
     return <ul className="home-activity-list">{rows.map(row)}</ul>;
   }
 
+  // The wide-open card draws a row as columns rather than a stack: title,
+  // detail, who, when, and a chevron — the reference sheet's layout, and the
+  // one that makes a row scannable down its columns instead of read one block
+  // at a time.
+  const wideRow = (item: (typeof rows)[number]) => {
+    const { tone, glyph } = activityLook(item.type);
+    const who = String(item.senderName || "").trim() || t("System");
+    const href = item.orderId
+      ? `/orders?selectedOrderId=${encodeURIComponent(item.orderId)}`
+      : (item.route ? `/${String(item.route).replace(/^\//, "")}` : "");
+    const inner = (
+      <>
+        <span className={`home-activity-mark tone-${tone}`} aria-hidden="true">
+          {glyph === "payment" ? <b className="home-activity-symbol">{symbol}</b> : <HomeActivityIcon name={glyph} />}
+        </span>
+        <strong className="home-activity-head">{item.title || t("Update")}</strong>
+        <span className="home-activity-detail">{item.message}</span>
+        <span className="home-activity-actor">
+          <i aria-hidden="true"><HomeActivityIcon name={item.senderName ? "customer" : "production"} /></i>
+          {who}
+        </span>
+        <span className="home-activity-when">{relative(item.createdAtMillis)}</span>
+        {/* The chevron is only drawn when it goes somewhere. An arrow that does
+            nothing when pressed is worse than no arrow. */}
+        <span className="home-activity-go" aria-hidden="true">{href ? "\u203A" : ""}</span>
+      </>
+    );
+    return href
+      ? <li key={item.id}><Link href={href} className="home-activity-wide is-link">{inner}</Link></li>
+      : <li key={item.id}><span className="home-activity-wide">{inner}</span></li>;
+  };
+
   const today = rows.filter((item) => item.createdAtMillis >= startOfToday.getTime());
   const earlier = rows.filter((item) => item.createdAtMillis < startOfToday.getTime());
   return (
@@ -1252,16 +1471,17 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
       {today.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Today")}</p>
-          <ul className="home-activity-list">{today.map(row)}</ul>
+          <ul className="home-activity-list is-wide">{today.map(wideRow)}</ul>
         </>
       ) : null}
       {earlier.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Earlier")}</p>
-          <ul className="home-activity-list">{earlier.map(row)}</ul>
+          <ul className="home-activity-list is-wide">{earlier.map(wideRow)}</ul>
         </>
       ) : null}
-      <p className="home-action-note">{t("Only activity you have permission to view is shown")}</p>
+      {/* The permission note now sits in the card footer, beside the link —
+          see footerNote in HomeCardShell. */}
     </div>
   );
 }

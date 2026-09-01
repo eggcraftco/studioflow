@@ -18,6 +18,7 @@ export const SUPPORTED_STUDIO_LANGUAGES = [
 
 export type StudioLanguage = (typeof SUPPORTED_STUDIO_LANGUAGES)[number];
 
+
 type TranslationTable = Record<string, Partial<Record<StudioLanguage, string>>>;
 
 const WEB_TRANSLATIONS: TranslationTable = {
@@ -3831,6 +3832,7 @@ const PANDLE_TRANSLATIONS: TranslationTable = {
   "Not enough history yet.": { "Türkçe": "Henüz yeterli geçmiş yok.", "Deutsch": "Noch nicht genug Verlauf.", "Français": "Pas encore assez d'historique.", "Italiano": "Non c'è ancora abbastanza storico.", "Español (Spanish)": "Aún no hay suficiente historial.", "Português": "Ainda não há histórico suficiente.", "Русский (Russian)": "Пока недостаточно истории.", "日本語 (Japanese)": "まだ履歴が足りません。", "中文 (Chinese)": "历史数据还不够。", "العربية (Arabic)": "لا يوجد سجل كافٍ بعد.", "हिन्दी (Hindi)": "अभी पर्याप्त इतिहास नहीं है।" },
   "NivaDesk never moves money.": { "Türkçe": "NivaDesk hiçbir zaman para transfer etmez.", "Deutsch": "NivaDesk bewegt niemals Geld.", "Français": "NivaDesk ne déplace jamais d'argent.", "Italiano": "NivaDesk non muove mai denaro.", "Español (Spanish)": "NivaDesk nunca mueve dinero.", "Português": "O NivaDesk nunca movimenta dinheiro.", "Русский (Russian)": "NivaDesk не переводит деньги.", "日本語 (Japanese)": "NivaDesk が送金することはありません。", "中文 (Chinese)": "NivaDesk 从不划转资金。", "العربية (Arabic)": "لا يقوم NivaDesk بتحويل الأموال إطلاقًا.", "हिन्दी (Hindi)": "NivaDesk कभी पैसा स्थानांतरित नहीं करता।" },
   "Incoming this month": { "Türkçe": "Bu ay gelen", "Deutsch": "Eingang diesen Monat", "Français": "Entrées ce mois-ci", "Italiano": "In entrata questo mese", "Español (Spanish)": "Ingresos este mes", "Português": "Entradas este mês", "Русский (Russian)": "Поступления за месяц", "日本語 (Japanese)": "今月の入金", "中文 (Chinese)": "本月收入", "العربية (Arabic)": "الوارد هذا الشهر", "हिन्दी (Hindi)": "इस माह आया" },
+  "Incoming this year": { "Türkçe": "Bu yıl gelen", "Deutsch": "Eingang dieses Jahr", "Français": "Entrées cette année", "Italiano": "In entrata quest’anno", "Español (Spanish)": "Ingresos este año", "Português": "Entradas este ano", "Русский (Russian)": "Поступления за год", "日本語 (Japanese)": "今年の入金", "中文 (Chinese)": "本年收入", "العربية (Arabic)": "الوارد هذا العام", "हिन्दी (Hindi)": "इस वर्ष आया" },
   "Spent this month": { "Türkçe": "Bu ay harcanan", "Deutsch": "Ausgaben diesen Monat", "Français": "Dépenses ce mois-ci", "Italiano": "Speso questo mese", "Español (Spanish)": "Gastado este mes", "Português": "Gasto este mês", "Русский (Russian)": "Расходы за месяц", "日本語 (Japanese)": "今月の支出", "中文 (Chinese)": "本月支出", "العربية (Arabic)": "المنفق هذا الشهر", "हिन्दी (Hindi)": "इस माह खर्च" },
   "Bank activity": { "Türkçe": "Banka hareketleri", "Deutsch": "Bankbewegungen", "Français": "Activité bancaire", "Italiano": "Attività bancaria", "Español (Spanish)": "Actividad bancaria", "Português": "Atividade bancária", "Русский (Russian)": "Движение по счёту", "日本語 (Japanese)": "口座の動き", "中文 (Chinese)": "银行动态", "العربية (Arabic)": "نشاط البنك", "हिन्दी (Hindi)": "बैंक गतिविधि" },
   "Rule saved.": { "Türkçe": "Kural kaydedildi.", "Deutsch": "Regel gespeichert.", "Français": "Règle enregistrée.", "Italiano": "Regola salvata.", "Español (Spanish)": "Regla guardada.", "Português": "Regra guardada.", "Русский (Russian)": "Правило сохранено.", "日本語 (Japanese)": "ルールを保存しました。", "中文 (Chinese)": "规则已保存。", "العربية (Arabic)": "تم حفظ القاعدة.", "हिन्दी (Hindi)": "नियम सहेजा गया।" },
@@ -3840,6 +3842,10 @@ const PANDLE_TRANSLATIONS: TranslationTable = {
   "Just now": { "Türkçe": "Az önce", "Deutsch": "Gerade eben", "Français": "À l'instant", "Italiano": "Proprio ora", "Español (Spanish)": "Ahora mismo", "Português": "Agora mesmo", "Русский (Russian)": "Только что", "日本語 (Japanese)": "たった今", "中文 (Chinese)": "刚刚", "العربية (Arabic)": "الآن", "हिन्दी (Hindi)": "अभी" },
   "This month": { "Türkçe": "Bu ay", "Deutsch": "Diesen Monat", "Français": "Ce mois-ci", "Italiano": "Questo mese", "Español (Spanish)": "Este mes", "Português": "Este mês", "Русский (Russian)": "Этот месяц", "日本語 (Japanese)": "今月", "中文 (Chinese)": "本月", "العربية (Arabic)": "هذا الشهر", "हिन्दी (Hindi)": "इस महीने" },
   "All time": { "Türkçe": "Tüm zamanlar", "Deutsch": "Gesamter Zeitraum", "Français": "Depuis le début", "Italiano": "Sempre", "Español (Spanish)": "Todo el tiempo", "Português": "Todo o período", "Русский (Russian)": "За всё время", "日本語 (Japanese)": "全期間", "中文 (Chinese)": "全部时间", "العربية (Arabic)": "كل الأوقات", "हिन्दी (Hindi)": "सभी समय" },
+  "matched to an existing customer": { "Türkçe": "mevcut bir müşteriyle eşleştirildi", "Deutsch": "einem bestehenden Kunden zugeordnet", "Français": "associée à un client existant", "Italiano": "abbinato a un cliente esistente", "Español (Spanish)": "vinculado a un cliente existente", "Português": "associado a um cliente existente", "Русский (Russian)": "сопоставлен с существующим клиентом", "日本語 (Japanese)": "既存の顧客と一致", "中文 (Chinese)": "已匹配到现有客户", "العربية (Arabic)": "تمت مطابقته مع عميل حالي", "हिन्दी (Hindi)": "मौजूदा ग्राहक से मिलान किया गया" },
+  "needs currency review": { "Türkçe": "para birimi incelemesi gerekiyor", "Deutsch": "Währungsprüfung erforderlich", "Français": "nécessite une vérification de devise", "Italiano": "richiede una verifica della valuta", "Español (Spanish)": "necesita revisión de moneda", "Português": "precisa de revisão de moeda", "Русский (Russian)": "требует проверки валюты", "日本語 (Japanese)": "通貨の確認が必要", "中文 (Chinese)": "需要货币复核", "العربية (Arabic)": "يحتاج إلى مراجعة العملة", "हिन्दी (Hindi)": "मुद्रा समीक्षा आवश्यक" },
+  "needs a customer match": { "Türkçe": "müşteri eşleştirmesi gerekiyor", "Deutsch": "Kundenzuordnung erforderlich", "Français": "nécessite une correspondance client", "Italiano": "richiede un abbinamento cliente", "Español (Spanish)": "necesita coincidencia de cliente", "Português": "precisa de correspondência de cliente", "Русский (Russian)": "требует сопоставления клиента", "日本語 (Japanese)": "顧客の照合が必要", "中文 (Chinese)": "需要匹配客户", "العربية (Arabic)": "يحتاج إلى مطابقة عميل", "हिन्दी (Hindi)": "ग्राहक मिलान आवश्यक" },
+  "per month": { "Türkçe": "aylık", "Deutsch": "pro Monat", "Français": "par mois", "Italiano": "al mese", "Español (Spanish)": "al mes", "Português": "por mês", "Русский (Russian)": "в месяц", "日本語 (Japanese)": "月あたり", "中文 (Chinese)": "每月", "العربية (Arabic)": "شهريًا", "हिन्दी (Hindi)": "प्रति माह" },
   "Date range": { "Türkçe": "Tarih aralığı", "Deutsch": "Zeitraum", "Français": "Période", "Italiano": "Intervallo di date", "Español (Spanish)": "Intervalo de fechas", "Português": "Intervalo de datas", "Русский (Russian)": "Период", "日本語 (Japanese)": "期間", "中文 (Chinese)": "日期范围", "العربية (Arabic)": "النطاق الزمني", "हिन्दी (Hindi)": "तिथि सीमा" },
   "This year": { "Türkçe": "Bu yıl", "Deutsch": "Dieses Jahr", "Français": "Cette année", "Italiano": "Quest'anno", "Español (Spanish)": "Este año", "Português": "Este ano", "Русский (Russian)": "В этом году", "日本語 (Japanese)": "今年", "中文 (Chinese)": "今年", "العربية (Arabic)": "هذا العام", "हिन्दी (Hindi)": "इस साल" },
   "{count} transactions need a receipt": { "Türkçe": "{count} işlem fiş bekliyor", "Deutsch": "{count} Buchungen brauchen einen Beleg", "Français": "{count} opérations attendent un reçu", "Italiano": "{count} movimenti richiedono una ricevuta", "Español (Spanish)": "{count} movimientos necesitan recibo", "Português": "{count} movimentos precisam de recibo", "Русский (Russian)": "{count} операций ждут чек", "日本語 (Japanese)": "{count} 件の取引に領収書が必要です", "中文 (Chinese)": "{count} 笔交易缺少收据", "العربية (Arabic)": "{count} معاملة بحاجة إلى إيصال", "हिन्दी (Hindi)": "{count} लेनदेन को रसीद चाहिए" },
@@ -6096,3 +6102,92 @@ mergeIntoTranslations({
 
 
 
+
+
+// Settings → Customer SMS, and the two sentences the SMS callables throw.
+//
+// English only, on purpose. The words are authored here because this table is
+// where the other platforms copy them from; the eleven translations are a
+// separate pass over the whole screen, and a machine-guessed Turkish for
+// "sender ID" now would be harder to correct later than an empty row. studioT
+// falls back to the English key, so an untranslated row shows the sentence
+// above rather than nothing.
+mergeIntoTranslations({
+  "Customer SMS": {},
+  "Text updates to your customers": {},
+  "A short text at the moments a customer is waiting on: an estimate to approve, a piece ready to collect. One-way, and always about an order they already have with you — never a promotion.": {},
+  "Not on this plan": {},
+  "Customer SMS is part of NivaDesk Pro and Team.": {},
+  "Free and Starter workspaces can read this screen but cannot change it. Every text costs money at the carrier, which is why it sits on the paid plans.": {},
+  "Not set up": {},
+  "SMS is not switched on for this server yet.": {},
+  "Nothing is sent until it is. Contact NivaDesk support and we will enable it.": {},
+  "Sending": {},
+  "SMS is live.": {},
+  "Texts go out from": {},
+  "A customer only gets one when Automatic Updates and SMS are both switched on for their order.": {},
+  "Not sending yet": {},
+  "Everything you set here is saved and waiting.": {},
+  "The sender ID NivaDesk texts from is still being approved by the mobile networks, and until that lands no message leaves. Nothing is broken and there is nothing to fix at your end: approval is theirs to give. Registering your own sender ID below is the other way to start sending.": {},
+  "See plans": {},
+  "When a text goes out": {},
+  "Choose the moments": {},
+  "Estimate ready": {},
+  "Sent when an estimate is waiting for the customer to approve it.": {},
+  "Work started": {},
+  "Sent when the piece moves onto the bench.": {},
+  "Ready for collection": {},
+  "Sent when the work is finished and the customer can come in.": {},
+  "Every status change": {},
+  "Sent at every step of your workflow, not only the three above. Most workshops leave this off: internal steps mean little to a customer, and every message is charged.": {},
+  "These choices apply to the whole workspace. A text still only goes to a customer whose order has Automatic Updates and SMS switched on, on the order's Customer Portal card.": {},
+  "Sender": {},
+  "The name your text arrives from": {},
+  "NivaDesk sender ID": {},
+  "Approved by the networks. Used until your own sender ID is verified.": {},
+  "Registered and waiting for network approval. Until it lands, nothing sends from this name.": {},
+  "Your own sender ID": {},
+  "Register your own sender ID": {},
+  "Verified": {},
+  "Waiting for approval": {},
+  "Not registered": {},
+  "Your customers see this name.": {},
+  "Registration is with the networks. NivaDesk cannot approve it and neither can you.": {},
+  "Your customers see NivaDesk, and your workspace name is put at the start of the message instead.": {},
+  "Up to 11 letters, numbers and spaces. A customer trusts a text from your studio's name more than one from ours.": {},
+  "Your studio": {},
+  "Changing this name starts the registration again: the networks approve a name, not a workspace, so a new one goes back to waiting. NivaDesk cannot mark it verified itself — that answer only comes from them.": {},
+  "A sender ID of yours is already registered and waiting. Its name is not shown here until the networks approve it, and saving this screen with the box empty withdraws that registration — so type it again before you save anything else.": {},
+  "Phone numbers": {},
+  "Default calling code": {},
+  "Calling code": {},
+  "Digits only, no plus sign. Used when a customer's saved number has no country code of its own — 44 is the United Kingdom.": {},
+  "A number that already carries its own country code is left exactly as it is.": {},
+  "Usage this month": {},
+  "Spend": {},
+  "No messages have been sent from this workspace yet, so there is nothing to charge for.": {},
+  "A long message is charged as more than one segment: 160 plain characters each, or 70 if it contains an emoji or an accented letter.": {},
+  "Reload": {},
+  "Reload will discard your unsaved changes here. Continue?": {},
+  "Saving with the sender ID box empty withdraws the sender ID you registered, and your texts go back to being sent from NivaDesk. Continue?": {},
+  "Nothing was saved. Type your sender ID again to keep its registration.": {},
+  "SMS settings saved.": {},
+  "Only the workspace owner can change customer SMS settings. You can see what is set.": {},
+  "Upgrade to NivaDesk Pro or Team to change these settings.": {},
+  "The SMS settings could not be loaded.": {},
+  "The SMS settings could not be saved.": {},
+  "Only the workspace owner can change SMS settings.": {},
+  "SMS notifications are available on NivaDesk Pro and above.": {},
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The order screen's Customer Portal card, where the per-order SMS switch lives.
+// English only for the same reason as the block above.
+mergeIntoTranslations({
+  "Text updates are set up in Settings, under Customer SMS.": {},
+  "Checking whether this workspace can text customers…": {},
+  "Texting customers is part of NivaDesk Pro and Team. This order will still update by email.": {},
+  "Switch it on now if you want it: the sender ID is still waiting on approval from the mobile networks, so until that lands this order updates by email only.": {},
+  "Texts arrive from": {},
+  "Which moments send one is a workspace setting.": {},
+  "Customer SMS settings": {},
+} as Record<string, Partial<Record<StudioLanguage, string>>>);

@@ -21,6 +21,8 @@ import {
   homeWeekRangeLabel,
   type CardBodyProps,
   type QuickActionId,
+  ACTIVITY_FILTERS,
+  type ActivityFilterId,
 } from "@/components/home/HomeCardBodies";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
@@ -89,6 +91,11 @@ export default function HomePage() {
   const [settings, setSettings] = useState<WorkspaceSettingsOverview | null>(null);
   const [layout, setLayout] = useState<HomeLayout>(defaultHomeLayout());
   const [customising, setCustomising] = useState(false);
+  // Which slice of the activity feed the 2x2 card is showing. One per screen
+  // rather than one per card: two activity cards on one Home would be a
+  // strange thing to have, and this keeps the pills and the body reading the
+  // same value.
+  const [activityFilter, setActivityFilter] = useState<ActivityFilterId>("all");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [saveError, setSaveError] = useState("");
@@ -262,7 +269,7 @@ export default function HomePage() {
       case "ordersProduction": return <OrdersProductionCardBody {...props} />;
       case "schedule": return <ScheduleCardBody {...props} />;
       case "customers": return <CustomersCardBody {...props} />;
-      case "recentActivity": return <RecentActivityCardBody {...props} />;
+      case "recentActivity": return <RecentActivityCardBody {...props} activityFilter={activityFilter} />;
       case "files": return <FilesCardBody {...props} />;
       case "notes": return <NotesCardBody {...props} />;
       case "quickActions": return <QuickActionsCardBody {...props} />;
@@ -368,8 +375,21 @@ export default function HomePage() {
                         ? homeWeekRangeLabel()
                         : undefined
               }
+              footerNote={
+                placement.id === "recentActivity" && placement.size === "2x2"
+                  ? t("Only activity you have permission to view is shown")
+                  : undefined
+              }
               subtitleInline={placement.id === "ordersProduction" || placement.id === "files"
                 || placement.id === "schedule"}
+              titleBadge={
+                // The promise belongs to the card's name: this feed can never
+                // move money. Outlined rather than filled, so it reads as a
+                // note on the heading and not as a warning about the data.
+                placement.id === "banking" && data.bankTransactions.length > 0
+                  ? <span className="home-pill is-warning">{t("Read-only")}</span>
+                  : undefined
+              }
               headerSlot={
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
@@ -391,10 +411,22 @@ export default function HomePage() {
                   >
                     +
                   </button>
-                ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
-                  // The promise sits beside the title, not in a footnote: this
-                  // feed can never move money and the card should lead with that.
-                  <span className="home-pill is-warning is-solid">{t("Read-only")}</span>
+                ) : placement.id === "recentActivity" && placement.size === "2x2" ? (
+                  // The sheet puts the pills beside the title on the wide-open
+                  // card only: the smaller sizes have no room, and a filter you
+                  // cannot see the effect of is a trap.
+                  <span className="home-activity-filters">
+                    {ACTIVITY_FILTERS.map((filter) => (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        aria-pressed={activityFilter === filter.id}
+                        onClick={(event) => { event.stopPropagation(); setActivityFilter(filter.id); }}
+                      >
+                        {t(filter.label)}
+                      </button>
+                    ))}
+                  </span>
                 ) : undefined
               }
               onMove={(direction) => void commit(moveHomeCard(layout, index, index + direction))}

@@ -98,7 +98,11 @@ export type HomeTileIconName =
   // The two stock holdings that are not free shelf.
   | "reserved" | "incomingStock"
   // What a note is about.
-  | "reminder" | "order" | "customer" | "note";
+  | "reminder" | "order" | "customer" | "note"
+  // What the Money card's four figures and four deductions mean. Added rather
+  // than borrowed: the nearest existing glyphs meant something else, and a
+  // clock standing in for a pie chart is worse than no icon at all.
+  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -111,6 +115,21 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
     "aria-hidden": true,
   };
   switch (name) {
+    case "trendUp":
+      return (<svg {...common}><polyline points="3 16.5 9 10.5 13 14.5 21 6.5" /><polyline points="15 6.5 21 6.5 21 12.5" /></svg>);
+    case "paid":
+      return (<svg {...common}><circle cx="12" cy="12" r="8.6" /><polyline points="8.2 12.2 11 15 15.9 9.4" /></svg>);
+    case "awaiting":
+      return (<svg {...common}><circle cx="12" cy="12" r="8.6" /><polyline points="12 7.2 12 12.3 15.6 14.4" /></svg>);
+    case "margin":
+      // A pie with one slice lifted: margin is a share of a whole, and a plain
+      // circle would have said "clock" beside a clock.
+      return (<svg {...common}><path d="M12 3.6a8.4 8.4 0 1 0 8.4 8.4H12V3.6Z" /><path d="M14.4 2.2a8.4 8.4 0 0 1 7.4 7.4h-7.4V2.2Z" /></svg>);
+    case "percent":
+      return (<svg {...common}><line x1="6.5" y1="17.5" x2="17.5" y2="6.5" /><circle cx="7.8" cy="7.8" r="2.4" /><circle cx="16.2" cy="16.2" r="2.4" /></svg>);
+    case "calculator":
+      return (<svg {...common}><rect x="5" y="2.8" width="14" height="18.4" rx="2.2" /><line x1="8.2" y1="7.2" x2="15.8" y2="7.2" /><line x1="8.4" y1="11.4" x2="8.5" y2="11.4" /><line x1="12" y1="11.4" x2="12.1" y2="11.4" /><line x1="15.6" y1="11.4" x2="15.7" y2="11.4" /><line x1="8.4" y1="15.4" x2="8.5" y2="15.4" /><line x1="12" y1="15.4" x2="12.1" y2="15.4" /><line x1="15.6" y1="15.4" x2="15.7" y2="15.4" /></svg>);
+
     case "in":
       return <svg {...common}><path d="M12 4v14M6.5 12.5 12 18l5.5-5.5" /></svg>;
     case "out":
@@ -224,7 +243,9 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
  */
 export type HomeActivityIconName =
   | "order" | "payment" | "production" | "file"
-  | "inventory" | "customer" | "schedule" | "update";
+  | "inventory" | "customer" | "schedule"
+  | "estimate" | "bank" | "note" | "message" | "delivery" | "team"
+  | "update";
 
 export function HomeActivityIcon({ name }: { name: HomeActivityIconName }) {
   const common = { viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true };
@@ -271,6 +292,58 @@ export function HomeActivityIcon({ name }: { name: HomeActivityIconName }) {
         <svg {...common}>
           <path d="M7.4 2.6c.5 0 .9.4.9.9v1h6.4v-1a.9.9 0 1 1 1.8 0v1h1.2a2 2 0 0 1 2 2v12.6a2 2 0 0 1-2 2H5.3a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2h1.2v-1c0-.5.4-.9.9-.9ZM5.1 9.4v9.1h13.8V9.4H5.1Z" />
           <rect x="7" y="11.4" width="3.2" height="3.2" rx=".8" />
+        </svg>
+      );
+    case "estimate":
+      // A sheet with a tick: an estimate row is almost always an approval or a
+      // decline, and the tick is what tells the two apart at a glance from the
+      // colour beside it.
+      return (
+        <svg {...common}>
+          <path d="M6.6 2.6h6.3l5.1 5.1v6.2a6 6 0 0 0-8.1 7.6H6.6a1.7 1.7 0 0 1-1.7-1.7V4.3a1.7 1.7 0 0 1 1.7-1.7Z" />
+          <path d="M13.2 3v4.4h4.4" fill="#000" fillOpacity=".28" />
+          <path d="M16.9 14.4a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8Zm2.2 2.9-2.9 2.9-1.4-1.4-1 1 2.4 2.4 3.9-3.9-1-1Z" />
+        </svg>
+      );
+    case "bank":
+      return (
+        <svg {...common}>
+          <path d="M12 2.6 21.4 7v2H2.6V7L12 2.6Z" />
+          <rect x="4.9" y="10.6" width="2.4" height="7.2" rx=".7" />
+          <rect x="10.8" y="10.6" width="2.4" height="7.2" rx=".7" />
+          <rect x="16.7" y="10.6" width="2.4" height="7.2" rx=".7" />
+          <rect x="2.6" y="19.2" width="18.8" height="2.2" rx=".9" />
+        </svg>
+      );
+    case "note":
+      return (
+        <svg {...common}>
+          <path d="M5.4 3.2h13.2a1.8 1.8 0 0 1 1.8 1.8v10.3l-5.5 5.5H5.4a1.8 1.8 0 0 1-1.8-1.8V5a1.8 1.8 0 0 1 1.8-1.8Z" />
+          <path d="M20.4 15.3h-4a1.4 1.4 0 0 0-1.4 1.4v4l5.4-5.4Z" fill="#000" fillOpacity=".28" />
+        </svg>
+      );
+    case "message":
+      return (
+        <svg {...common}>
+          <path d="M4.4 3.6h15.2a1.9 1.9 0 0 1 1.9 1.9v9.1a1.9 1.9 0 0 1-1.9 1.9H9.8l-4.6 3.7a.8.8 0 0 1-1.3-.63V16.5h-.1a1.9 1.9 0 0 1-1.3-1.8V5.5a1.9 1.9 0 0 1 1.9-1.9Z" />
+        </svg>
+      );
+    case "delivery":
+      return (
+        <svg {...common}>
+          <path d="M2.8 5.6h9.6a1.2 1.2 0 0 1 1.2 1.2v8.4H2.8a1.2 1.2 0 0 1-1.2-1.2V6.8a1.2 1.2 0 0 1 1.2-1.2Z" />
+          <path d="M14.8 8.8h3.3l3.3 3.5v2.9h-6.6V8.8Z" />
+          <circle cx="7" cy="17.7" r="2.1" />
+          <circle cx="17.4" cy="17.7" r="2.1" />
+        </svg>
+      );
+    case "team":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="8" r="3.4" />
+          <circle cx="17" cy="9.4" r="2.6" />
+          <path d="M9 12.8c-3.5 0-6.3 2.1-6.3 4.7 0 .8.6 1.4 1.4 1.4h9.8c.8 0 1.4-.6 1.4-1.4 0-2.6-2.8-4.7-6.3-4.7Z" />
+          <path d="M17 13.4c-.7 0-1.4.1-2 .3 1.1 1 1.8 2.3 1.8 3.8h3.5c.7 0 1.3-.6 1.3-1.3 0-1.6-2-2.8-4.6-2.8Z" fill="#000" fillOpacity=".22" />
         </svg>
       );
     case "update":

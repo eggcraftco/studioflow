@@ -31,6 +31,7 @@ import {
   type PortalAutoUpdates,
   type PortalVisibility
 } from "@/lib/studioflow/customerPortal";
+import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
 import { studioT } from "@/lib/studioflow/language";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -5441,6 +5442,34 @@ export function OrderDetailContent({
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
 
+  // The SMS switch on this card was dead: hard-wired to OFF under the sentence
+  // "SMS is not connected yet". The server has read that per-order flag all
+  // along — it is half of the send gate, next to the workspace's triggers — so
+  // with nothing able to set it, no text could ever be sent by anyone.
+  //
+  // What the card is allowed to say comes from the workspace rather than from a
+  // constant, because the answer changes without this file changing: the plan
+  // decides whether SMS exists at all, and the mobile networks decide when it
+  // starts sending. Until the settings arrive the switch stays disabled — an
+  // unknown is not a yes.
+  const [workspaceSms, setWorkspaceSms] = useState<WorkspaceSmsSettings | null>(null);
+  const [workspaceSmsFailed, setWorkspaceSmsFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getWorkspaceSmsSettings(workspace)
+      .then(result => {
+        if (!cancelled) setWorkspaceSms(result);
+      })
+      .catch(() => {
+        // The rest of the card is unaffected; the SMS row simply says nothing it
+        // cannot stand behind.
+        if (!cancelled) setWorkspaceSmsFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace]);
+
   async function createPortalLink() {
     setPortalBusy(true);
     setPortalNotice("");
@@ -5977,14 +6006,26 @@ export function OrderDetailContent({
                   <span>SMS</span>
                   <button
                     type="button"
-                    className="portal-pill is-off"
-                    disabled
-                    title={t("No SMS provider is connected yet")}
+                    className={`portal-pill ${auto.sms ? "is-on" : "is-off"}`}
+                    disabled={!canEditPortal || !auto.enabled || workspaceSms?.available !== true}
+                    onClick={() => void savePortalPreferences(shows, { ...auto, sms: !auto.sms })}
                   >
-                    OFF
+                    {auto.sms ? "ON" : "OFF"}
                   </button>
                 </div>
-                <p className="portal-hint">SMS is not connected yet — email only for now.</p>
+                <p className="portal-hint">
+                  {!workspaceSms
+                    ? workspaceSmsFailed
+                      ? t("Text updates are set up in Settings, under Customer SMS.")
+                      : t("Checking whether this workspace can text customers…")
+                    : !workspaceSms.available
+                      ? t("Texting customers is part of NivaDesk Pro and Team. This order will still update by email.")
+                      : !workspaceSms.sendingLive
+                        ? t("Switch it on now if you want it: the sender ID is still waiting on approval from the mobile networks, so until that lands this order updates by email only.")
+                        : `${t("Texts arrive from")} ${workspaceSms.senderId}. ${t("Which moments send one is a workspace setting.")}`}
+                  {" "}
+                  <a href="/settings?section=sms-notifications">{t("Customer SMS settings")}</a>
+                </p>
               </div>
             </div>
           </section>
