@@ -9780,7 +9780,7 @@ exports.initializeFreeDemoWorkspace = onCall({ region: "europe-west2" }, async (
   }, { merge: true });
 
   await batch.commit();
-  return { ok: true, companyId: uid, plan: "demo", message: "Free Demo workspace created." };
+  return { ok: true, companyId: uid, plan: "demo", message: "Free workspace created." };
 });
 
 exports.saveAccountProfile = onCall({ region: "europe-west2" }, async (request) => {

@@ -291,8 +291,12 @@ service cloud.firestore {
     }
 
     function hasSafeFreeDemoBillingValues(data) {
+      // The plan was renamed from "Free Demo" to "Free" and all three clients
+      // now write the new name — against a rule that still demanded the old one,
+      // which denied every client-side workspace create. Both names are allowed:
+      // store builds shipped before the rename still write the old string.
       return data.billingPlan == 'demo'
-        && data.billingPlanName == 'Free Demo'
+        && data.billingPlanName in ['Free', 'Free Demo']
         && data.billingPlanSource in ['new_workspace_default', 'signup_free_demo']
         && data.billingStorageLimitMB == 50
         && data.billingTeamMemberLimit == 1

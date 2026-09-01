@@ -1716,7 +1716,7 @@ const TURKISH_TRANSLATIONS: Partial<Record<PublicSiteTranslationKey, string>> = 
   "pricingHero.trust.checkout": "Güvenli ödeme aktif",
   "pricingHero.trust.cancel": "İstediğin zaman iptal",
   "pricingHero.trust.billing": "Aylık veya yıllık ödeme",
-  "pricingHero.card.demo.title": "Ücretsiz Demo",
+  "pricingHero.card.demo.title": "Ücretsiz",
   "pricingHero.card.demo.body": "Ücretsiz başlayın",
   "pricingHero.card.team.title": "Tek kişi veya ekip",
   "pricingHero.card.team.body": "Her çalışma şekline uygun",
