@@ -142,6 +142,8 @@ export type IntegrationSignals = {
   shopifyStores: { shop: string; status: string }[];
   /** Real deliveries per webhook channel, and whether the last one failed. */
   channels: Record<string, { lastDeliveryAtMs: number; lastDeliveryOk: boolean; lastDeliveryWasTest: boolean }>;
+  /** Connected Etsy shops, and whether each still holds a working authorisation. */
+  etsyShops: { shop: string; status: string; needsReconnect: boolean }[];
   bankConnections: number;
 };
 
@@ -158,6 +160,22 @@ export function resolveIntegrationState(
     return {
       state: paused === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} stores`,
+    };
+  }
+
+  // Etsy is a native connection, not a webhook channel. Without this branch it
+  // fell through to the generic case below and read the INBOUND channel — a
+  // completely unrelated route — so a workspace with a live Etsy shop showed
+  // "Available", and one that had never touched Etsy but had taken a single
+  // inbound delivery showed Etsy as "Connected". Wrong in both directions, on
+  // the card whose whole job is to say whether the shop is connected.
+  if (provider.id === "etsy") {
+    const live = signals.etsyShops.filter((shop) => shop.status !== "disconnected");
+    if (live.length === 0) return { state: "available" };
+    const broken = live.filter((shop) => shop.needsReconnect || shop.status === "error").length;
+    return {
+      state: broken === live.length ? "attention" : "connected",
+      detail: live.length === 1 ? live[0].shop : `${live.length} shops`,
     };
   }
 
