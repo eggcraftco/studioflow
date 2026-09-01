@@ -305,6 +305,7 @@ struct HomeView: View {
                 .help(t("Try again", lang: seciliDil))
                 Button(customising ? t("Done", lang: seciliDil) : t("Customise", lang: seciliDil)) {
                     customising.toggle()
+                    draggingID = nil; dropTargetID = nil; dropHole = nil
                 }
                 .buttonStyle(.bordered)
             }
@@ -415,6 +416,14 @@ struct HomeView: View {
                                   onDrop: { dropInto(hole) })
                 }
             )
+            // A drop that lands on neither a card nor a gap still ends the drag,
+            // and .onDrag has no completion — so without this the flag stayed
+            // set and the card it belonged to stayed at half opacity for good.
+            // That is the card that "stays faded after you move it".
+            .onDrop(of: [.text], isTargeted: nil) { _ in
+                draggingID = nil; dropTargetID = nil; dropHole = nil
+                return false
+            }
             .onAppear { measuredUnit = unit }
             .onChange(of: proxy.size.width) { width in
                 measuredUnit = (min(width, HomeGridMetrics.maxWidth)
