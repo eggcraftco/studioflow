@@ -48,7 +48,7 @@ struct HomeCardBody: View {
             HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal,
                           compact: compact, period: period)
         case .banking:
-            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, period: period, data: data)
+            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, period: period, onOpen: onOpen, data: data)
         case .inventory:
             HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .customers:
@@ -1339,6 +1339,9 @@ struct HomeBankingBody: View {
     let decimal: String
     var compact: Bool = false
     var period: HomeCardPeriod = .month
+    /// The receipts strip offers to take you to the feed, so it has to be able
+    /// to — it was accent-blue text with an arrow and no gesture behind it.
+    var onOpen: (String) -> Void = { _ in }
     @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
@@ -1664,9 +1667,12 @@ struct HomeBankingBody: View {
                                         .font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
                                 }
                                 Spacer()
-                                Text(t("Go to banking", lang: lang) + "  →")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(HomeTone.accent)
+                                Button { onOpen("BankSpending") } label: {
+                                    Text(t("Go to banking", lang: lang) + "  →")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(HomeTone.accent)
+                                }
+                                .buttonStyle(.plain)
                             }
                             .padding(.horizontal, 12).padding(.vertical, 9)
                             .background(RoundedRectangle(cornerRadius: 12).fill(HomeTone.orange.opacity(0.09)))

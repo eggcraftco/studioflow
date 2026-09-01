@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeActivityIcon, HomeTileIcon, type HomeActionIconName, type HomeActivityIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
@@ -405,7 +405,8 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
       <MoneyTile icon="receiptAlert" label={t("Missing receipts")} value={String(missingReceipts)}
                  tone={missingReceipts > 0 ? "red" : "blue"} />
       <MoneyTile icon="recurring" label={t("Fixed")}
-                 value={data.bankMonthlyFixed > 0 ? `≈ ${money(data.bankMonthlyFixed)}` : "—"} tone="blue" />
+                 value={data.bankMonthlyFixed > 0 ? `≈\u00a0${money(data.bankMonthlyFixed)}` : "—"}
+                 sub={data.bankMonthlyFixed > 0 ? t("per month") : undefined} tone="blue" />
     </div>
   );
 
@@ -466,7 +467,7 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
       <div className="home-money-panels">
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Bank activity")}</p>
-          <BankActivityChart transactions={transactions} t={t} />
+          <BankActivityChart transactions={transactions} t={t} symbol={moneySymbol(moneySettings)} />
         </div>
         <div className="home-panel">
           <p className="home-eyebrow is-strong">{t("Recent transactions")}</p>
@@ -533,7 +534,9 @@ function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy
 }
 
 /** Money in and money out, week by week, from the feed itself. */
-function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTransactions"]; t: (text: string) => string }) {
+function BankActivityChart({ transactions, t, symbol }: {
+  transactions: HomeData["bankTransactions"]; t: (text: string) => string; symbol: string;
+}) {
   const weeks = 12;
   const now = new Date();
   const buckets = Array.from({ length: weeks }, (_, index) => {
@@ -553,12 +556,19 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
     return <p className="home-card-note">{t("Not enough history yet.")}</p>;
   }
 
-  // Round the top up to something a person would write on an axis, so the
-  // gridlines land on readable numbers rather than the exact peak.
+  // Pick the gridline STEP first and let the top follow, so every line lands on
+  // a number a person would write. Rounding the top on its own and then cutting
+  // it into quarters puts the odd numbers straight back: a peak of 8,600 became
+  // a top of 9,000 and gridlines at 2.3K, 4.5K and 6.8K.
   const peak = Math.max(1, ...buckets.map((b) => Math.max(b.incoming, b.spent)));
-  const magnitude = Math.pow(10, Math.floor(Math.log10(peak)));
-  const top = Math.ceil(peak / magnitude) * magnitude;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => share * top);
+  const niceStep = (raw: number) => {
+    const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+    const scaled = raw / magnitude;
+    return (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 2.5 ? 2.5 : scaled <= 5 ? 5 : 10) * magnitude;
+  };
+  const step = niceStep(peak / 5);
+  const top = Math.ceil(peak / step) * step;
+  const ticks = Array.from({ length: Math.round(top / step) + 1 }, (_, i) => i * step);
   const shortMoney = (value: number) =>
     value >= 1000 ? `${Math.round(value / 100) / 10}K` : String(Math.round(value));
 
@@ -575,7 +585,8 @@ function BankActivityChart({ transactions, t }: { transactions: HomeData["bankTr
         <span><i className="is-spent" aria-hidden="true" />{t("Spent")}</span>
       </p>
       <div className="home-chart-frame">
-        <ul className="home-chart-axis" aria-hidden="true">
+        <ul className="home-chart-axis" aria-hidden="true"
+              style={{ "--axis-symbol": `"${symbol}"` } as CSSProperties}>
           {[...ticks].reverse().map((value) => <li key={value}>{shortMoney(value)}</li>)}
         </ul>
         <div className="home-chart-plot">
