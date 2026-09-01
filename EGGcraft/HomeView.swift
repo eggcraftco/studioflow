@@ -473,6 +473,14 @@ struct HomeView: View {
                 }
                     : nil,
                 addLabel: definition.id == .notes ? t("New note", lang: seciliDil) : "",
+                // Only where there is room to spare. It goes to the Notes
+                // screen's own search box with the caret already in it — the
+                // card has nowhere to put a results list, and a second search
+                // that finds different things would be worse than none.
+                onSearch: definition.id == .notes && placement.size == .twoByTwo ? {
+                    UserDefaults.standard.set(true, forKey: "pendingQuickActionSearchNotes")
+                    onOpen("Notes")
+                } : nil,
                 onResize: { store.resize(placement.id, to: $0) },
                 onPeriod: { store.setPeriod(placement.id, period: $0) },
                 onTone: { store.setTone(placement.id, tone: $0) },

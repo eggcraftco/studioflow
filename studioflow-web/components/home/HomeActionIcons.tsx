@@ -98,7 +98,7 @@ export type HomeTileIconName =
   // The two stock holdings that are not free shelf.
   | "reserved" | "incomingStock"
   // What a note is about.
-  | "reminder" | "order" | "customer" | "note" | "pin"
+  | "reminder" | "order" | "customer" | "note" | "pin" | "search"
   // What the Money card's four figures and four deductions mean. Added rather
   // than borrowed: the nearest existing glyphs meant something else, and a
   // clock standing in for a pie chart is worse than no icon at all.
@@ -212,6 +212,13 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
     // an emoji renders at a different weight, size and colour in every font on
     // every platform, so the same card looked different depending on where it
     // was opened — and an emoji cannot take the note's own colour.
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4.5 4.5" />
+        </svg>
+      );
     case "pin":
       return (
         <svg {...common}>

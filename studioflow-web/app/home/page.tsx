@@ -1,5 +1,7 @@
 "use client";
 
+import { HomeTileIcon } from "@/components/home/HomeActionIcons";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -407,13 +409,31 @@ export default function HomePage() {
                   // has room to name it instead — the same call the files card
                   // makes two arms up, for the same reason: a bare + on a card
                   // full of notes is not obviously "write one".
-                  <button
-                    type="button"
-                    className="home-add-button is-wide"
-                    onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
-                  >
-                    {t("New note")}
-                  </button>
+                  <>
+                    {/* Only where there is room to spare: the wide-open card.
+                        It goes to the Notes screen's own search box with the
+                        caret already in it — the card has nowhere to put a
+                        results list, and a second search that finds different
+                        things would be worse than none. */}
+                    {placement.size === "2x2" ? (
+                      <Link
+                        className="home-head-icon-button"
+                        href="/notes?search=1"
+                        aria-label={t("Search notes…")}
+                        title={t("Search notes…")}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <HomeTileIcon name="search" />
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="home-add-button is-wide"
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                    >
+                      {t("New note")}
+                    </button>
+                  </>
                 ) : placement.id === "recentActivity" && placement.size === "2x2" ? (
                   // The sheet puts the pills beside the title on the wide-open
                   // card only: the smaller sizes have no room, and a filter you

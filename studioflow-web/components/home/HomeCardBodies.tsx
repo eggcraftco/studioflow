@@ -1682,12 +1682,18 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
           </div>
         </>
       ) : null}
+      {/* Recent as tiles too, which is what the sheet draws. The rows here
+          were chosen when this card showed a title and one fact beside it —
+          "a row fits three where a tile fits two" — but the tile has since
+          learned to carry the note's colour, its chip and its reminder, and
+          those are the three things that tell you which note this is. Two
+          columns fit four of them in the space three rows took. */}
       <p className="home-eyebrow is-strong">{t("Recent")}</p>
-      <ul className="home-note-rows">
-        {recent.slice(0, pinned.length > 0 ? 3 : 5).map((note) => (
-          <NoteRow key={note.id} note={note} t={t} />
+      <div className="home-note-grid">
+        {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => (
+          <NoteTile key={note.id} note={note} t={t} />
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
@@ -1709,20 +1715,6 @@ function noteMeta(note: HomeData["notes"][number], t: (text: string) => string) 
   if (note.linkedOrderLabel) return { icon: "order" as const, text: note.linkedOrderLabel, overdue: false };
   if (note.linkedCustomerName) return { icon: "customer" as const, text: note.linkedCustomerName, overdue: false };
   return { icon: "note" as const, text: "", overdue: false };
-}
-
-function NoteRow({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
-  const meta = noteMeta(note, t);
-  const hue = note.colorName || "default";
-  return (
-    <li className={`home-note-row hue-${hue}`}>
-      <Link href={`/notes?note=${encodeURIComponent(note.id)}`}>
-        <span className="home-note-row-badge" aria-hidden="true"><HomeTileIcon name={meta.icon} /></span>
-        <strong>{note.title || t("Untitled note")}</strong>
-        {meta.text ? <em className={meta.overdue ? "is-due" : ""}>{meta.text}</em> : null}
-      </Link>
-    </li>
-  );
 }
 
 /** A note keeps its own colour — that is the note's, not the card's. */

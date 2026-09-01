@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -48,6 +48,13 @@ export default function NotesPage() {
   useQuickActionParam("new", Boolean(user), () => {
     if (!user) return;
     setEditing(newKeepNote(user.uid, user.email ?? "", user.displayName ?? ""));
+  });
+  // Arriving from the Home card's magnifier: put the caret where they were
+  // going, rather than in a search box they then have to find and click.
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useQuickActionParam("search", Boolean(user), () => {
+    searchRef.current?.focus();
+    searchRef.current?.scrollIntoView({ block: "center" });
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -487,6 +494,7 @@ export default function NotesPage() {
 
             {/* Search */}
             <input
+              ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}

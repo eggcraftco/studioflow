@@ -3152,14 +3152,14 @@ struct HomeNotesBody: View {
                         HomeNoteGrid(notes: Array(pinned.prefix(2)), lang: lang, columns: 2, compact: compact)
                     }
                     HomeEyebrow(text: t("Recent", lang: lang))
-                    // Rows rather than tiles: at this size the title and the one
-                    // fact beside it are what fit, and a row fits three where a
-                    // tile fits two.
-                    VStack(spacing: compact ? 4 : 6) {
-                        ForEach(Array(recent.prefix(pinned.isEmpty ? 5 : 3)), id: \.id) { note in
-                            HomeNoteRow(note: note, lang: lang, compact: compact)
-                        }
-                    }
+                    // Tiles here too, which is what the sheet draws. The rows
+                    // were chosen when this card showed a title and one fact
+                    // beside it; the tile has since learned to carry the note's
+                    // colour, its chip and its reminder, and those are the three
+                    // things that tell you which note this is. Two columns fit
+                    // four of them in the space three rows took.
+                    HomeNoteGrid(notes: Array(recent.prefix(pinned.isEmpty ? 6 : 4)),
+                                 lang: lang, columns: 2, compact: compact)
                     Spacer(minLength: 0)
                 }
             } else if size == .oneByOne {
@@ -3346,45 +3346,6 @@ func homeNoteColour(_ name: String) -> Color {
 
 /// What a note is about, and the one fact worth showing beside it: when it is
 /// due, or what it is attached to. Derived from the note — never invented.
-struct HomeNoteRow: View {
-    let note: StudioKeepNote
-    let lang: String
-    var compact: Bool = false
-
-    private var meta: (symbol: String, text: String, overdue: Bool) {
-        if let due = note.reminderDate {
-            return ("calendar", homeDayLabel(due, lang: lang), due < homeStartOfToday())
-        }
-        if !note.linkedOrderLabel.isEmpty { return ("doc.text", note.linkedOrderLabel, false) }
-        if !note.linkedCustomerName.isEmpty { return ("person", note.linkedCustomerName, false) }
-        return ("note.text", "", false)
-    }
-
-    var body: some View {
-        let accent = homeNoteAccent(note.colorName)
-        HStack(spacing: compact ? 7 : 10) {
-            Image(systemName: meta.symbol)
-                .font(.system(size: compact ? 10 : 12, weight: .semibold))
-                .foregroundColor(accent)
-                .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
-                .background(Circle().fill(accent.opacity(0.16)))
-            Text(note.title.isEmpty ? t("Untitled note", lang: lang) : note.title)
-                .font(.system(size: compact ? 11 : 12.5, weight: .bold)).lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if !meta.text.isEmpty {
-                Text(meta.text)
-                    .font(.system(size: compact ? 10 : 11.5, weight: .semibold))
-                    .foregroundColor(meta.overdue ? HomeTone.red : accent)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, compact ? 8 : 10).padding(.vertical, compact ? 4 : 7)
-        .background(RoundedRectangle(cornerRadius: compact ? 9 : 10).fill(homeNoteColour(note.colorName)))
-    }
-}
-
-/// The chip on a coloured note takes that note's colour — grey on a tinted
-/// ground reads as disabled.
 func homeNoteAccent(_ name: String) -> Color {
     switch name.lowercased() {
     case "yellow": return Color(red: 0.541, green: 0.380, blue: 0.000)

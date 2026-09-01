@@ -1860,6 +1860,9 @@ struct StudioKeepNotesView: View {
     @AppStorage("seciliDil") private var seciliDil: String = "English"
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @FocusState private var isComposerTextFocused: Bool
+    /// Arriving from the Home card's magnifier: the caret goes where they were
+    /// going, rather than into a search box they then have to find and click.
+    @FocusState private var isNotesSearchFocused: Bool
 
     @State private var notes: [StudioKeepNote] = []
     @State private var selectedSection: String = "notes"
@@ -2550,6 +2553,15 @@ struct StudioKeepNotesView: View {
 
                     TextField(t("Search notes", lang: seciliDil), text: $searchText)
                         .textFieldStyle(.plain)
+                        .focused($isNotesSearchFocused)
+                        .onAppear {
+                            let defaults = UserDefaults.standard
+                            guard defaults.bool(forKey: "pendingQuickActionSearchNotes") else { return }
+                            defaults.removeObject(forKey: "pendingQuickActionSearchNotes")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                isNotesSearchFocused = true
+                            }
+                        }
 
                     if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Button {

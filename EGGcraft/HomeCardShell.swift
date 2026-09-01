@@ -28,6 +28,9 @@ struct HomeCardShell<CardBody: View>: View {
     /// When set, the header names the action instead of showing a bare +. A
     /// plus on a card full of notes is not obviously "write one".
     var addLabel: String = ""
+    /// A header action drawn as a mark rather than a word, for the card that
+    /// has room for both. Nil on every card that does not.
+    var onSearch: (() -> Void)? = nil
     let onResize: (HomeCardSize) -> Void
     let onPeriod: (HomeCardPeriod) -> Void
     let onTone: (HomeCardTone) -> Void
@@ -123,6 +126,16 @@ struct HomeCardShell<CardBody: View>: View {
                 }
             }
             Spacer(minLength: 4)
+            if let onSearch {
+                Button(action: onSearch) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: compact ? 12 : 13.5, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(t("Search notes", lang: lang))
+            }
             if let onAdd {
                 Button(action: onAdd) {
                     if addLabel.isEmpty {
