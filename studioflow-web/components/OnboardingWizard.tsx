@@ -86,7 +86,33 @@ const TIME_ZONES = [
   "America/Toronto", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC",
 ];
 
-const TOTAL_STEPS = 5;
+/**
+ * The order the five steps are asked in.
+ *
+ * They used to be numbers, checked as `step === 4` in a dozen places, so moving
+ * one meant editing every one of them and hoping none was missed. The step is
+ * named now and the order lives here: to reorder the wizard, reorder this list.
+ */
+type OnboardingStepKey = "basics" | "bringWork" | "goal" | "work" | "plan";
+
+const STEP_ORDER: OnboardingStepKey[] = ["basics", "bringWork", "goal", "work", "plan"];
+const TOTAL_STEPS = STEP_ORDER.length;
+
+const STEP_TITLE: Record<OnboardingStepKey, string> = {
+  basics: "Workspace basics",
+  bringWork: "Bring your work in",
+  goal: "What should NivaDesk help with first?",
+  work: "Tell us about your work",
+  plan: "Your plan",
+};
+
+const STEP_LEDE: Record<OnboardingStepKey, string> = {
+  basics: "We've suggested these from your location. You can change them now or later in Settings.",
+  bringWork: "Pick how you'd like to start. You can do any of the others later.",
+  goal: "Your answer decides what your dashboard and first tasks show.",
+  work: "This sets up your order cards, production stages and labels.",
+  plan: "Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.",
+};
 
 export function OnboardingWizard({
   t,
@@ -139,12 +165,15 @@ export function OnboardingWizard({
   // The plan step arrives with a recommendation already chosen, so it is
   // answerable the moment it opens — the reader confirms it or picks another.
   const chosenPlan = answers.plan || recommendedTrialPlan(answers);
-  const canContinue =
-    step === 1 ? Boolean(answers.country && answers.currency && answers.language && answers.timeZone)
-      : step === 2 ? Boolean(answers.mainGoal)
-        : step === 3 ? answers.workKinds.length > 0
-          : step === 4 ? Boolean(answers.start)
-            : Boolean(chosenPlan);
+  const stepKey = STEP_ORDER[step - 1];
+  const answered: Record<OnboardingStepKey, boolean> = {
+    basics: Boolean(answers.country && answers.currency && answers.language && answers.timeZone),
+    bringWork: Boolean(answers.start),
+    goal: Boolean(answers.mainGoal),
+    work: answers.workKinds.length > 0,
+    plan: Boolean(chosenPlan),
+  };
+  const canContinue = answered[stepKey];
 
   // Fourteen days from now, which is what sign-up wrote. Shown so the price has
   // a date attached rather than being an abstract "later".
@@ -186,23 +215,11 @@ export function OnboardingWizard({
           <div className="onboard-progress" aria-hidden="true">
             <span style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
           </div>
-          <h1>{
-            step === 1 ? t("Workspace basics")
-              : step === 2 ? t("What should NivaDesk help with first?")
-                : step === 3 ? t("Tell us about your work")
-                  : step === 4 ? t("Bring your work in")
-                    : t("Your plan")
-          }</h1>
-          <p>{
-            step === 1 ? t("We've suggested these from your location. You can change them now or later in Settings.")
-              : step === 2 ? t("Your answer decides what your dashboard and first tasks show.")
-                : step === 3 ? t("This sets up your order cards, production stages and labels.")
-                  : step === 4 ? t("Pick how you'd like to start. You can do any of the others later.")
-                    : t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
-          }</p>
+          <h1>{t(STEP_TITLE[stepKey])}</h1>
+          <p>{t(STEP_LEDE[stepKey])}</p>
         </header>
 
-        {step === 1 ? (
+        {stepKey === "basics" ? (
           <div className="onboard-grid">
             <label className="onboard-field">
               <span>{t("Country")}</span>
@@ -250,7 +267,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 3 ? (
+        {stepKey === "work" ? (
           <div className="onboard-sections">
             <div>
               <h2>{t("What kind of work do you do?")}</h2>
@@ -308,7 +325,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 2 ? (
+        {stepKey === "goal" ? (
           <div className="onboard-sections">
             <div className="onboard-options">
               {visibleGoals.map(goal => (
@@ -353,7 +370,7 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 4 ? (
+        {stepKey === "bringWork" ? (
           <>
             <div className="onboard-connect">
               <h2>{t("Connect your accounts")}</h2>
@@ -443,7 +460,7 @@ export function OnboardingWizard({
           </>
         ) : null}
 
-        {step === 5 ? (
+        {stepKey === "plan" ? (
           <div className="onboard-plan-list">
             {ONBOARDING_TRIAL_PLANS.map(plan => {
               const selected = chosenPlan === plan.id;
