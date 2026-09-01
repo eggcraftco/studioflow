@@ -28095,6 +28095,20 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
 .home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
 .home-card-1x1 .home-card-title { font-size: 15px; }
 
+/* The range picker on a square.
+   A 1x1 header carries a handle, a badge, the title, this control and the
+   overflow button in about 240px, and the control was taking 130 of them at
+   full size. The reference sheet solves it by not drawing a picker on the
+   square at all — but the overflow menu offers Resize, colour, heading, hide
+   and reset, and NOT the range, so hiding it would take away the only way to
+   change the period on a square rather than tidy it. Compact instead: same
+   control, less of it. */
+.home-card-1x1 .home-period select {
+  font-size: 11.5px; max-width: 92px;
+  padding: 4px 20px 4px 8px;
+}
+.home-card-1x1 .home-period::after { right: 7px; }
+
 /* A 1x1 is ~240px of content. Disc, title, detail and time on one line left
    the title with about 120px, so "Order #10234 created" arrived as
    "Order #…". Two rows instead: the title gets the full width, and the detail
@@ -28999,4 +29013,20 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   width: 15px; height: 15px; border-radius: 999px; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid currentColor; font-style: normal; font-size: 10px; font-weight: 700;
+}
+
+/* Text for screen readers only.
+   Two places used this class and it was never defined, so both rendered the
+   text visibly: the Money card's header read "Money — Date range" and clipped
+   its own title on a square, and Settings showed a stray "Search
+   integrations...". The clip-rect form rather than display:none, because a
+   screen reader skips anything that is not rendered at all. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
