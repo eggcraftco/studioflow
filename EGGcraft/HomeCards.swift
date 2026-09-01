@@ -121,7 +121,7 @@ enum HomeCards {
                            financeOnly: true, periods: true, destination: "BankSpending", linkLabel: "Go to banking"),
         HomeCardDefinition(id: .inventory, title: "Inventory", icon: "shippingbox.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .orders,
-                           financeOnly: false, destination: "Inventory", linkLabel: "View inventory"),
+                           financeOnly: false, destination: "Inventory", linkLabel: "Open Inventory"),
         HomeCardDefinition(id: .customers, title: "Customers", icon: "person.2.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .customers,
                            financeOnly: false, destination: "Customers", linkLabel: "View customers"),

@@ -87,6 +87,7 @@ val STUDIO_SUPPORTED_LANGUAGES = listOf(
 
 
 private val TR_HOME: Map<String, Map<String, String>> by lazy { mapOf(
+        "Open Inventory" to mapOf("Türkçe" to "Envanteri aç", "Deutsch" to "Bestand öffnen", "Français" to "Ouvrir l'inventaire", "Italiano" to "Apri inventario", "Español (Spanish)" to "Abrir inventario", "Português" to "Abrir inventário", "Русский (Russian)" to "Открыть склад", "日本語 (Japanese)" to "在庫を開く", "中文 (Chinese)" to "打开库存", "العربية (Arabic)" to "فتح المخزون", "हिन्दी (Hindi)" to "इन्वेंटरी खोलें"),
     "{count} files are not linked to a record." to mapOf("Türkçe" to "{count} dosya hiçbir kayda bağlı değil.", "Deutsch" to "{count} Dateien sind keinem Datensatz zugeordnet.", "Français" to "{count} fichiers ne sont rattachés à aucune fiche.", "Italiano" to "{count} file non sono collegati a nessun record.", "Español (Spanish)" to "{count} archivos no están vinculados a ningún registro.", "Português" to "{count} ficheiros não estão ligados a nenhum registo.", "Русский (Russian)" to "{count} файлов не привязаны ни к одной записи.", "日本語 (Japanese)" to "{count} 件のファイルがどの記録にも紐づいていません。", "中文 (Chinese)" to "{count} 个文件未关联到任何记录。", "العربية (Arabic)" to "{count} ملفات غير مرتبطة بأي سجل.", "हिन्दी (Hindi)" to "{count} फ़ाइलें किसी रिकॉर्ड से लिंक नहीं हैं।"),
     "Starts {day}" to mapOf("Türkçe" to "{day} başlıyor", "Deutsch" to "Beginnt {day}", "Français" to "Débute {day}", "Italiano" to "Inizia {day}", "Español (Spanish)" to "Empieza el {day}", "Português" to "Começa {day}", "Русский (Russian)" to "Начало {day}", "日本語 (Japanese)" to "{day} 開始", "中文 (Chinese)" to "{day} 开始", "العربية (Arabic)" to "يبدأ {day}", "हिन्दी (Hindi)" to "{day} से शुरू"),
     "Import orders automatically." to mapOf("Türkçe" to "Siparişleri otomatik olarak içe aktarın.", "Deutsch" to "Bestellungen automatisch importieren.", "Français" to "Importez les commandes automatiquement.", "Italiano" to "Importa gli ordini automaticamente.", "Español (Spanish)" to "Importa los pedidos automáticamente.", "Português" to "Importe as encomendas automaticamente.", "Русский (Russian)" to "Импортируйте заказы автоматически.", "日本語 (Japanese)" to "注文を自動で取り込みます。", "中文 (Chinese)" to "自动导入订单。", "العربية (Arabic)" to "استورد الطلبات تلقائيًا.", "हिन्दी (Hindi)" to "ऑर्डर स्वतः आयात करें।"),
@@ -300,7 +301,63 @@ private val TR_HOME: Map<String, Map<String, String>> by lazy { mapOf(
     "{done} of {total} complete" to mapOf("Türkçe" to "{total} adımdan {done} tamam", "Deutsch" to "{done} von {total} erledigt", "Français" to "{done} sur {total} terminés", "Italiano" to "{done} di {total} completati", "Español (Spanish)" to "{done} de {total} completados", "Português" to "{done} de {total} concluídos", "Русский (Russian)" to "{done} из {total} выполнено", "日本語 (Japanese)" to "{total}件中{done}件完了", "中文 (Chinese)" to "已完成 {done}/{total}", "العربية (Arabic)" to "{done} من {total} مكتملة", "हिन्दी (Hindi)" to "{total} में से {done} पूर्ण"),
 ) }
 
-private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_1 + TR_2 + TR_3 + TR_4 + TR_5 + TR_6 + TR_7 + TR_8 + TR_9 + TR_10 + TR_11 + TR_12 + TR_13 + TR_14 + TR_15 + TR_ONBOARDING_WIZARD + TR_HOME + TR_ETSY }
+// Customer SMS settings. English sources only for now: the other eleven are
+// copied over from the web table once it carries them, and inventing them here
+// is how the two tables drift apart. studioT falls back to the English key, so
+// an entry with no translations behaves exactly as the string did before.
+//
+// Merged FIRST on purpose. A map later in the chain wins, so if one of these
+// sentences ever also lands in TR_1..TR_15 with real translations, the real one
+// takes it — an English-only entry can never shadow a translated one.
+private val TR_SMS: Map<String, Map<String, String>> by lazy { mapOf(
+    "Only the workspace owner can change these settings." to emptyMap(),
+    "Customer texts are part of NivaDesk Pro and Team." to emptyMap(),
+    "The SMS settings could not be loaded." to emptyMap(),
+    "Saved. Your sender ID has gone to the mobile networks for approval." to emptyMap(),
+    "Saved." to emptyMap(),
+    "A short text to your customer at the moments they actually care about: the estimate, the bench, and the day it is ready." to emptyMap(),
+    "Text messages" to emptyMap(),
+    "Customer texts are part of NivaDesk Pro and Team. You can read the settings here, but nothing on this plan can be switched on." to emptyMap(),
+    "Needs" to emptyMap(),
+    "The text-message provider is not set up on this server yet. Contact support and we will enable it." to emptyMap(),
+    "Texts are going out. Your customers see them arrive from the sender below." to emptyMap(),
+    "Nothing is being sent yet. Our sender ID is registered with the mobile networks and still waiting for their approval, and until that lands every text is refused. Set it all up now — it starts working the day the approval comes through." to emptyMap(),
+    "Sending" to emptyMap(),
+    "Live" to emptyMap(),
+    "Not yet" to emptyMap(),
+    "Texts come from" to emptyMap(),
+    "When to text a customer" to emptyMap(),
+    "Estimate is ready" to emptyMap(),
+    "When you send an estimate for them to approve." to emptyMap(),
+    "Work has started" to emptyMap(),
+    "When their item goes on the bench." to emptyMap(),
+    "Ready for collection" to emptyMap(),
+    "When the work is finished and it is waiting to be picked up." to emptyMap(),
+    "Every status change" to emptyMap(),
+    "A text at every internal step. Off unless you turn it on: most customers want the three above and nothing else." to emptyMap(),
+    "Who the text comes from" to emptyMap(),
+    "Approved by the networks" to emptyMap(),
+    "Waiting for the networks to approve it" to emptyMap(),
+    "Every workspace sends from the NivaDesk name until it registers one of its own. Your business name goes inside the message, where the customer reads it." to emptyMap(),
+    "Your own sender ID" to emptyMap(),
+    "Your studio name" to emptyMap(),
+    "Your sender" to emptyMap(),
+    "Approved — your texts carry this name" to emptyMap(),
+    "Not set" to emptyMap(),
+    "Up to 11 letters, digits and spaces. A customer trusts a name they recognise more than ours." to emptyMap(),
+    "Changing this name starts the registration again. The mobile networks approve each name themselves; NivaDesk cannot do it for you, and texts keep going out under the NivaDesk name until they do." to emptyMap(),
+    "A sender ID of your own is already waiting for approval, and its name cannot be read back here. Type it again to keep it — saving with this box empty drops it and goes back to the NivaDesk name." to emptyMap(),
+    "Phone numbers" to emptyMap(),
+    "Default country code" to emptyMap(),
+    "Used when a customer's number is stored without a country code of its own. 44 is the United Kingdom." to emptyMap(),
+    "Spend" to emptyMap(),
+    "Nothing has been sent from this workspace yet." to emptyMap(),
+    "A long message is split into segments, and the networks charge for each one." to emptyMap(),
+    "Customer SMS" to emptyMap(),
+    "Text messages to customers: sender, triggers and usage." to emptyMap(),
+) }
+
+private val TRANSLATIONS: Map<String, Map<String, String>> by lazy { TR_SMS + TR_1 + TR_2 + TR_3 + TR_4 + TR_5 + TR_6 + TR_7 + TR_8 + TR_9 + TR_10 + TR_11 + TR_12 + TR_13 + TR_14 + TR_15 + TR_ONBOARDING_WIZARD + TR_HOME + TR_ETSY }
 
 
 // --- ETSY (Settings → Integrations → Etsy) ---

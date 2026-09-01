@@ -634,9 +634,18 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
     // The sheet reads: what the stock is worth, then the three counts that say
     // whether it needs attention, then the mix as one bar. Reserved is the third
     // — stock that is spoken for is not stock you can sell.
-    const items = summary.uniqueCount + summary.quantityCount;
-    const healthy = Math.max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount);
-    const share = (value: number) => (items > 0 ? value / items : 0);
+    // Every one of these is a count of ITEMS, and the server settles what each
+    // means (functions/inventory.js): an item still on its way is counted as
+    // incoming and then returns before the totals, so it is not on the shelf at
+    // all; low stock is only ever a quantity-tracked item at or below its
+    // reorder level; and an item can be low AND reserved at once. The old bar
+    // subtracted incoming from a shelf it was never part of and subtracted the
+    // overlap twice, so its four segments partitioned nothing.
+    // What these numbers CAN say truthfully is how much of the shelf needs
+    // reordering. That is what stock health means, and the counts above already
+    // say how much is spoken for and how much is coming.
+    const shelf = summary.uniqueCount + summary.quantityCount;
+    const low = Math.min(summary.lowStockCount, shelf);
     return (
       <div className="home-money is-stock">
         <p className="home-metric-label">{t("total value")}</p>
@@ -655,13 +664,16 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
             <b className={summary.reservedCount > 0 ? "is-warning" : ""}>{summary.reservedCount}</b>
           </span>
         </div>
-        {items > 0 ? (
-          <span className="home-mix-bar" aria-hidden="true">
-            <i className="tone-green" style={{ flex: `${share(healthy)} 1 0` }} />
-            <i className="tone-orange" style={{ flex: `${share(summary.incomingCount)} 1 0` }} />
-            <i className="tone-red" style={{ flex: `${share(summary.lowStockCount)} 1 0` }} />
-            <i className="tone-slate" style={{ flex: `${share(summary.reservedCount)} 1 0` }} />
-          </span>
+        {shelf > 0 ? (
+          <>
+            <p className="home-stock-health">{t("Stock health")}</p>
+            <span className="home-mix-bar"
+                  role="img"
+                  aria-label={`${t("Stock health")}: ${low} / ${shelf} ${t("low stock")}`}>
+              <i className="tone-green" style={{ flex: `${shelf - low} 1 0` }} />
+              <i className="tone-red" style={{ flex: `${low} 1 0` }} />
+            </span>
+          </>
         ) : null}
       </div>
     );

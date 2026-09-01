@@ -6199,6 +6199,18 @@ mergeIntoTranslations({
   "Customer SMS settings": {},
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
+// Six of the eleven cards say "Open X"; this one said "View inventory", and the
+// sheet says "Open Inventory".
+mergeIntoTranslations({
+  "Open Inventory": { "Türkçe": "Envanteri aç", "Deutsch": "Bestand öffnen", "Français": "Ouvrir l'inventaire", "Italiano": "Apri inventario", "Español (Spanish)": "Abrir inventario", "Português": "Abrir inventário", "Русский (Russian)": "Открыть склад", "日本語 (Japanese)": "在庫を開く", "中文 (Chinese)": "打开库存", "العربية (Arabic)": "فتح المخزون", "हिन्दी (Hindi)": "इन्वेंटरी खोलें" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
+// The Inventory small card names its bar. Without a name it reads as a
+// progress meter rather than as how much of the shelf needs reordering.
+mergeIntoTranslations({
+  "Stock health": { "Türkçe": "Stok sağlığı", "Deutsch": "Bestandszustand", "Français": "État du stock", "Italiano": "Stato delle scorte", "Español (Spanish)": "Estado del stock", "Português": "Estado do stock", "Русский (Russian)": "Состояние запасов", "日本語 (Japanese)": "在庫の状態", "中文 (Chinese)": "库存状况", "العربية (Arabic)": "حالة المخزون", "हिन्दी (Hindi)": "स्टॉक स्थिति" },
+} as Record<string, Partial<Record<StudioLanguage, string>>>);
+
 // The Schedule small card names its deadline list. NOT t("Next"): that key is
 // already spoken for by the wizard button, and its German is "Weiter" and its
 // Italian "Avanti" — a Continue button sitting over a list of deadlines.

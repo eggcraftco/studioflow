@@ -1846,7 +1846,10 @@ struct HomeHolding: View {
                 .font(.system(size: compact ? 12 : 14, weight: .semibold))
                 .foregroundColor(tone)
                 .frame(width: compact ? 26 : 30, height: compact ? 26 : 30)
-                .background(Circle().fill(tone.opacity(0.15)))
+                // Ringed, not filled: the sheet outlines these two marks, and a
+                // filled disc beside a filled figure reads as a status the
+                // figure does not have.
+                .overlay(Circle().strokeBorder(tone, lineWidth: 1.5))
             VStack(alignment: .leading, spacing: 1) {
                 Text(label).font(.system(size: compact ? 11 : 12.5, weight: .semibold)).lineLimit(1)
                 Text("\(count) \(t("items", lang: lang))")
@@ -2077,8 +2080,19 @@ struct HomeInventoryBody: View {
                 // that say whether it needs attention, then the mix as one bar.
                 // Reserved is the third — stock that is spoken for is not stock
                 // you can sell.
-                let items = summary.uniqueCount + summary.quantityCount
-                let healthy = max(0, items - summary.lowStockCount - summary.incomingCount - summary.reservedCount)
+                // Every one of these is a count of ITEMS, and the server settles
+                // what each means (functions/inventory.js): an item still on its
+                // way is counted as incoming and then returns before the totals,
+                // so it is not on the shelf at all; low stock is only ever a
+                // quantity-tracked item at or below its reorder level; and an
+                // item can be low AND reserved at once. The old bar subtracted
+                // incoming from a shelf it was never part of and subtracted the
+                // overlap twice, so its four segments partitioned nothing.
+                // What these numbers CAN say truthfully is how much of the shelf
+                // needs reordering — which is what stock health means, and the
+                // counts above already say what is spoken for and what is coming.
+                let shelf = summary.uniqueCount + summary.quantityCount
+                let low = min(summary.lowStockCount, shelf)
                 VStack(alignment: .leading, spacing: compact ? 2 : 8) {
                     Text(t("total value", lang: lang).homeCapitalisedFirst)
                         .font(.system(size: compact ? 10.5 : 13)).foregroundColor(.secondary)
@@ -2089,22 +2103,31 @@ struct HomeInventoryBody: View {
                     Spacer(minLength: 0)
                     Divider()
                     HStack(spacing: 0) {
-                        HomeBankFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                        // Two of these three keys are lowercase and the third is
+                        // not, so the row read "low stock | incoming | Reserved".
+                        HomeBankFigure(label: t("low stock", lang: lang).homeCapitalisedFirst,
+                                       value: "\(summary.lowStockCount)",
                                        tone: summary.lowStockCount > 0 ? HomeTone.red : .primary, compact: compact)
                         Divider().frame(height: compact ? 30 : 34)
-                        HomeBankFigure(label: t("incoming", lang: lang), value: "\(summary.incomingCount)",
+                        HomeBankFigure(label: t("incoming", lang: lang).homeCapitalisedFirst,
+                                       value: "\(summary.incomingCount)",
                                        tone: summary.incomingCount > 0 ? HomeTone.orange : .primary, compact: compact)
                         Divider().frame(height: compact ? 30 : 34)
-                        HomeBankFigure(label: t("Reserved", lang: lang), value: "\(summary.reservedCount)",
+                        HomeBankFigure(label: t("Reserved", lang: lang).homeCapitalisedFirst,
+                                       value: "\(summary.reservedCount)",
                                        tone: summary.reservedCount > 0 ? HomeTone.orange : .primary, compact: compact)
                     }
-                    if items > 0 {
+                    if shelf > 0 {
+                        // The sheet gives the bar a name. Without one it reads as
+                        // a progress meter.
+                        Text(t("Stock health", lang: lang))
+                            .font(.system(size: compact ? 9.5 : 11)).foregroundColor(.secondary)
+                            .padding(.top, compact ? 2 : 4)
                         HomeStockBar(segments: [
-                            (healthy, HomeTone.green),
-                            (summary.incomingCount, HomeTone.orange),
-                            (summary.lowStockCount, HomeTone.red),
-                            (summary.reservedCount, HomeTone.slate)
+                            (shelf - low, HomeTone.green),
+                            (low, HomeTone.red)
                         ], height: compact ? 6 : 9)
+                        .accessibilityLabel("\(t("Stock health", lang: lang)): \(low) / \(shelf)")
                     }
                 }
             } else if size == .twoByOne {
@@ -2115,7 +2138,7 @@ struct HomeInventoryBody: View {
                 // say how much of the shelf it is.
                 VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                     HStack(spacing: 0) {
-                        HomeBankFigure(label: t("total value", lang: lang),
+                        HomeBankFigure(label: t("total value", lang: lang).homeCapitalisedFirst,
                                        value: money(summary.totalValue),
                                        tone: HomeTone.indigo, compact: compact)
                             .layoutPriority(1.4)
@@ -2126,20 +2149,24 @@ struct HomeInventoryBody: View {
                         HomeBankFigure(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)",
                                        compact: compact, sub: money(summary.quantityValue))
                         Divider().frame(height: compact ? 34 : 40)
-                        HomeBankFigure(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                        HomeBankFigure(label: t("low stock", lang: lang).homeCapitalisedFirst,
+                                       value: "\(summary.lowStockCount)",
                                        tone: summary.lowStockCount > 0 ? HomeTone.red : .primary, compact: compact)
                             .layoutPriority(0.7)
                     }
                     Spacer(minLength: 0)
                     Divider()
                     HStack(spacing: 0) {
-                        HomeHolding(symbol: "cart", label: t("Reserved", lang: lang),
+                        HomeHolding(symbol: "cart", label: t("Reserved", lang: lang).homeCapitalisedFirst,
                                     count: summary.reservedCount, value: money(summary.reservedValue),
                                     tone: HomeTone.orange, lang: lang, compact: compact)
                         Divider().frame(height: compact ? 26 : 32)
-                        HomeHolding(symbol: "shippingbox", label: t("incoming", lang: lang),
+                        // Incoming stock is money already spent, not money
+                        // arriving — green read it as a credit. Neither holding
+                        // is free shelf, and the sheet gives both the same tone.
+                        HomeHolding(symbol: "shippingbox", label: t("incoming", lang: lang).homeCapitalisedFirst,
                                     count: summary.incomingCount, value: money(summary.incomingValue),
-                                    tone: HomeTone.green, lang: lang, compact: compact)
+                                    tone: HomeTone.orange, lang: lang, compact: compact)
                     }
                 }
             } else {
@@ -2150,13 +2177,13 @@ struct HomeInventoryBody: View {
                 let share = total > 0 ? summary.uniqueValue / total : 0
                 VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                     HStack(spacing: compact ? 5 : 10) {
-                        HomeStockTile(label: t("total value", lang: lang), value: money(summary.totalValue),
+                        HomeStockTile(label: t("total value", lang: lang).homeCapitalisedFirst, value: money(summary.totalValue),
                                       tone: HomeTone.indigo, compact: compact)
                         HomeStockTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
                                       tone: HomeTone.accent, compact: compact, sub: money(summary.uniqueValue))
                         HomeStockTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)",
                                       tone: HomeTone.accent, compact: compact, sub: money(summary.quantityValue))
-                        HomeStockTile(label: t("low stock", lang: lang), value: "\(summary.lowStockCount)",
+                        HomeStockTile(label: t("low stock", lang: lang).homeCapitalisedFirst, value: "\(summary.lowStockCount)",
                                       tone: summary.lowStockCount > 0 ? HomeTone.red : HomeTone.accent,
                                       compact: compact)
                     }

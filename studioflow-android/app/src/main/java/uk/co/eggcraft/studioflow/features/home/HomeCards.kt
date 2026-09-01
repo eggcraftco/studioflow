@@ -127,7 +127,7 @@ object HomeCards {
             sizes = everySize, defaultSize = HomeCardSize.OneByOne, access = HomeCardAccess.BankFeed,
             financeOnly = true, destination = "BankSpending", linkLabel = "Go to banking"),
         HomeCardDefinition(HomeCardId.Inventory, "Inventory", Icons.Filled.Inventory2, everySize, HomeCardSize.OneByOne,
-            HomeCardAccess.Orders, false, "Inventory", "View inventory"),
+            HomeCardAccess.Orders, false, "Inventory", "Open Inventory"),
         HomeCardDefinition(HomeCardId.Customers, "Customers", Icons.Filled.People, everySize, HomeCardSize.OneByOne,
             HomeCardAccess.Customers, false, "Customers", "View customers"),
         HomeCardDefinition(HomeCardId.OrdersProduction, "Orders & production", Icons.Filled.Handyman, everySize, HomeCardSize.TwoByOne,

@@ -148,7 +148,7 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
     href: "/inventory",
-    linkLabel: "View inventory",
+    linkLabel: "Open Inventory",
   },
   {
     id: "customers",
