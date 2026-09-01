@@ -27400,8 +27400,18 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
   content: ""; position: absolute; left: -50%; top: 13px; width: 100%; height: 1px;
   background: var(--border);
 }
-.home-flow-node { width: 26px; height: 26px; border-radius: 999px; position: relative; z-index: 1; }
-.home-flow em { font-style: normal; font-size: 10.5px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.home-flow-node {
+  width: 26px; height: 26px; border-radius: 999px; position: relative; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.home-flow-node svg { width: 14px; height: 14px; }
+/* The names are the workspace's own — "Waiting / Blocked" is longer than the
+   sheet's "Waiting" — so they wrap to a second line rather than being cut. */
+.home-flow em {
+  font-style: normal; font-size: 10.5px; opacity: 0.7; max-width: 100%;
+  line-height: 1.15; text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 .home-flow b { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 /* The bare .tone-green / .tone-blue / .tone-positive / .tone-negative classes
    have a global `color: … !important` earlier in this file, and !important is
@@ -28870,14 +28880,22 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
 .home-card-2x1 .home-lane-row em { font-size: 11.5px; }
 .home-card-2x1 .home-lane-row b { font-size: 19px; }
 .home-card-2x1 .home-lane-row li { padding: 0 9px; }
+/* The tall card keeps three rows, and pays for the third the same way — less
+   than the wide card needs, because it has the height and only wants ~20px. */
+.home-card-2x2 .home-order-list a { padding: 5px 0; gap: 10px; grid-template-columns: 34px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px; }
+.home-card-2x2 .home-order-thumb { width: 34px; height: 34px; border-radius: 8px; }
 .home-card-2x1 .home-order-list a { padding: 3px 0; gap: 9px; grid-template-columns: 28px minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto 12px; }
 .home-card-2x1 .home-order-thumb { width: 28px; height: 28px; border-radius: 7px; }
 .home-card-2x1 .home-order-thumb.is-blank { font-size: 12px; }
 .home-card-2x1 .home-order-list strong { font-size: 12.5px; }
 .home-card-2x1 .home-order-design { font-size: 12px; }
-@container (max-width: 685px) { .home-order-list li:nth-child(n + 3) { display: none; } }
-@container (max-width: 430px) { .home-order-list li:nth-child(n + 2) { display: none; } }
-@container (max-width: 461px) { .home-order-list { display: none; } }
+/* Scoped to the wide card. Both sizes are 492px across, so a width query hits
+   the 2x2 as well — and the 2x2 is TWO units tall at that width, with room for
+   all three. The comment above is right that "the card's width gives its height
+   away", but only within one size. */
+@container (max-width: 685px) { .home-card-2x1 .home-order-list li:nth-child(n + 3) { display: none; } }
+@container (max-width: 430px) { .home-card-2x1 .home-order-list li:nth-child(n + 2) { display: none; } }
+@container (max-width: 461px) { .home-card-2x1 .home-order-list { display: none; } }
 
 .home-flow-row { list-style: none; margin: 6px 0 0; padding: 0; display: flex; gap: 8px; flex-wrap: wrap; }
 .home-flow-row li { display: flex; align-items: center; gap: 6px; font-size: 12px; flex: 1 1 90px; }

@@ -1095,6 +1095,10 @@ struct HomeOrderRows: View {
     let stages: [ProductionStage]
     let resolved: [(Siparis, ResolvedProductionStage)]
     let lang: String
+    /// The tall card wants all three rows and is only ~20pt short of them, so it
+    /// takes the difference out of the thumbnail and the padding rather than
+    /// dropping a row the way the wide card has to.
+    var dense: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1104,14 +1108,15 @@ struct HomeOrderRows: View {
                 let stage = stages.first { $0.id == entry?.1.stageId }
                 let due = homeDueDate(order)
                 let overdue = (due ?? .distantFuture) < Date()
-                HStack(spacing: 12) {
+                HStack(spacing: dense ? 10 : 12) {
                     HomeOrderThumb(link: order.designLink,
-                                   initial: order.customerName.isEmpty ? order.designName : order.customerName)
+                                   initial: order.customerName.isEmpty ? order.designName : order.customerName,
+                                   side: dense ? 34 : 40)
                     Text(order.customerName.isEmpty ? order.designName : order.customerName)
-                        .font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                        .font(.system(size: dense ? 12.5 : 13.5, weight: .semibold)).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(order.designName)
-                        .font(.system(size: 13)).foregroundColor(.secondary).lineLimit(1)
+                        .font(.system(size: dense ? 12 : 13)).foregroundColor(.secondary).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if overdue, let due {
                         let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
@@ -1126,7 +1131,7 @@ struct HomeOrderRows: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.secondary.opacity(0.5))
                 }
-                .padding(.vertical, 5)
+                .padding(.vertical, dense ? 4 : 5)
                 if order.id != orders.last?.id { Divider() }
             }
             Spacer(minLength: 0)
@@ -1164,10 +1169,11 @@ struct HomeLaneFigure: View {
 struct HomeOrderThumb: View {
     let link: String
     let initial: String
+    var side: CGFloat = 40
     var body: some View {
-        RoundedRectangle(cornerRadius: 9)
+        RoundedRectangle(cornerRadius: side >= 40 ? 9 : 8)
             .fill(Color.primary.opacity(0.07))
-            .frame(width: 40, height: 40)
+            .frame(width: side, height: side)
             .overlay(
                 Group {
                     if let url = URL(string: link), !link.isEmpty {
@@ -1178,12 +1184,12 @@ struct HomeOrderThumb: View {
                         }
                     } else {
                         Text(initial.prefix(1).uppercased())
-                            .font(.system(size: 15, weight: .heavy))
+                            .font(.system(size: side >= 40 ? 15 : 13, weight: .heavy))
                             .foregroundColor(.secondary.opacity(0.6))
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .clipShape(RoundedRectangle(cornerRadius: side >= 40 ? 9 : 8))
     }
 }
 
@@ -2571,32 +2577,35 @@ struct HomeOrdersProductionBody: View {
                         // when the square runs short.
                         HomePanel(compact: compact) {
                             HomeEyebrow(text: t("Priority orders", lang: lang))
-                            ForEach(Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(compact ? 2 : 3)), id: \.id) { order in
-                                let entry = resolved.first { $0.0.id == order.id }
-                                let stage = data.stages.first { $0.id == entry?.1.stageId }
-                                HStack(spacing: 7) {
-                                    VStack(alignment: .leading, spacing: 1) {
+                            let priority = Array((late + live.filter { o in !late.contains(where: { $0.id == o.id }) }).prefix(compact ? 2 : 3))
+                            if compact {
+                                // The phone square has no width for a thumbnail
+                                // and a second name, so it keeps its own row.
+                                ForEach(priority, id: \.id) { order in
+                                    let entry = resolved.first { $0.0.id == order.id }
+                                    let stage = data.stages.first { $0.id == entry?.1.stageId }
+                                    HStack(spacing: 7) {
                                         Text(order.customerName.isEmpty ? order.designName : order.customerName)
-                                            .font(.system(size: compact ? 11.5 : 12, weight: .bold)).lineLimit(1)
-                                        // One line on the square: the second was
-                                        // what tipped the content past the card.
-                                        if !compact, !order.designName.isEmpty {
-                                            Text(order.designName)
-                                                .font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
+                                            .font(.system(size: 11.5, weight: .bold)).lineLimit(1)
+                                        Spacer(minLength: 6)
+                                        if let stage {
+                                            HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
+                                        }
+                                        if let due = homeDueDate(order), due < Date() {
+                                            let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
+                                            HomeChip(text: days > 0
+                                                ? t("{days}d late", lang: lang).replacingOccurrences(of: "{days}", with: "\(days)")
+                                                : t("Overdue", lang: lang), tone: HomeTone.red)
                                         }
                                     }
-                                    Spacer(minLength: 6)
-                                    if let stage {
-                                        HomeChip(text: t(stage.title, lang: lang), tone: homeStageTone(stage.kind))
-                                    }
-                                    if let due = homeDueDate(order), due < Date() {
-                                        let days = Calendar.current.dateComponents([.day], from: due, to: Date()).day ?? 0
-                                        HomeChip(text: days > 0
-                                            ? t("{days}d late", lang: lang).replacingOccurrences(of: "{days}", with: "\(days)")
-                                            : t("Overdue", lang: lang), tone: HomeTone.red)
-                                    }
+                                    .padding(.vertical, 3)
                                 }
-                                .padding(.vertical, compact ? 3 : 5)
+                            } else {
+                                // Same row the wide card draws, one notch denser:
+                                // a priority order should look the same wherever
+                                // it is listed.
+                                HomeOrderRows(orders: priority, stages: data.stages,
+                                              resolved: resolved, lang: lang, dense: true)
                             }
                         }
                     }
@@ -2659,9 +2668,15 @@ struct HomeStageFlow: View {
                             .font(.system(size: compact ? 11 : 13, weight: .semibold))
                             .foregroundColor(tone)
                     }
+                    // Two lines' worth of name whether it needs them or not:
+                    // "Waiting / Blocked" does not survive one line at this width,
+                    // and a fixed block keeps every count on the same baseline.
                     Text(t(stage.title, lang: lang))
                         .font(.system(size: compact ? 9 : 10.5)).foregroundColor(.secondary)
-                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2).minimumScaleFactor(0.75)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(height: compact ? 22 : 26, alignment: .top)
                     Text("\(count)").font(.system(size: compact ? 14 : 16, weight: .heavy)).foregroundColor(tone)
                 }
                 .frame(maxWidth: .infinity)

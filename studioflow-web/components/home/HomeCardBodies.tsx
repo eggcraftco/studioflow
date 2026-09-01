@@ -814,6 +814,14 @@ const STAGE_TONE: Record<string, string> = {
   ready: "green", active: "blue", blocked: "red", review: "purple", shipready: "green", done: "slate",
 };
 
+/** The mark inside each flow node. The nodes were bare coloured discs — six
+ *  blobs above six names, on the one row of the card whose job is to say what
+ *  each stage IS. Every one of these already existed for another card. */
+const STAGE_ICON: Record<string, HomeTileIconName> = {
+  ready: "ready", active: "inProduction", blocked: "overdue",
+  review: "search", shipready: "readyToShip", done: "paid",
+};
+
 export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   const open = data.scheduleOrders.filter((order) => !order.isDelivered);
   if (open.length === 0) return null;
@@ -831,6 +839,44 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
     count: resolved.filter((entry) => entry.stageId === stage.id).length,
   }));
   const late = open.filter((order) => order.dueDate && order.dueDate.getTime() < Date.now());
+
+  /** One row for an order that needs a decision: what it looks like, who it is
+   *  for, what it is, where it has got to and whether it is late. Written once
+   *  because the 2x2 had its own thinner version — a name and two chips, no
+   *  thumbnail and no order — so the biggest card said less per row than the
+   *  medium one, which is backwards and is not what the sheet draws. */
+  const orderRow = (order: (typeof open)[number]) => {
+    const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
+    const days = order.dueDate
+      ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
+      : 0;
+    const stage = byStage.find((entry) =>
+      entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
+    const name = order.customerName || order.designName || order.watchRef;
+    return (
+      <li key={order.id}>
+        <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
+          {order.previewImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
+          ) : (
+            <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
+          )}
+          <strong>{name}</strong>
+          <span className="home-order-design">{order.designName}</span>
+          {overdue ? (
+            <span className="home-chip is-late">
+              {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
+            </span>
+          ) : <span />}
+          {stage ? (
+            <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
+          ) : <span />}
+          <span className="home-order-chevron" aria-hidden="true">›</span>
+        </Link>
+      </li>
+    );
+  };
 
   if (size === "1x1") {
     // The square reads top to bottom: how many are live, how they are split,
@@ -873,11 +919,16 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
     );
   }
 
+  // Done is left out here for the reason the wide card gives for leaving it out
+  // of its lanes: finished work is not a bottleneck, and its node only narrowed
+  // the five that are. The sheet draws five.
   const flow = (
     <ol className="home-flow">
-      {byStage.map((stage) => (
+      {byStage.filter((stage) => stage.kind !== "done").map((stage) => (
         <li key={stage.id}>
-          <span className={`home-flow-node tone-${STAGE_TONE[stage.kind] ?? "slate"}`} aria-hidden="true" />
+          <span className={`home-flow-node tone-${STAGE_TONE[stage.kind] ?? "slate"}`} aria-hidden="true">
+            <HomeTileIcon name={STAGE_ICON[stage.kind] ?? "order"} />
+          </span>
           <em>{t(stage.title)}</em>
           <b className={`tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{stage.count}</b>
         </li>
@@ -904,40 +955,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
             </li>
           ))}
         </ol>
-        <ul className="home-order-list">
-          {priority.map((order) => {
-            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
-            const days = order.dueDate
-              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
-              : 0;
-            const stage = byStage.find((entry) =>
-              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
-            const name = order.customerName || order.designName || order.watchRef;
-            return (
-              <li key={order.id}>
-                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                  {order.previewImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img className="home-order-thumb" src={order.previewImageUrl} alt="" loading="lazy" />
-                  ) : (
-                    <span className="home-order-thumb is-blank" aria-hidden="true">{name.slice(0, 1)}</span>
-                  )}
-                  <strong>{name}</strong>
-                  <span className="home-order-design">{order.designName}</span>
-                  {overdue ? (
-                    <span className="home-chip is-late">
-                      {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
-                    </span>
-                  ) : <span />}
-                  {stage ? (
-                    <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span>
-                  ) : <span />}
-                  <span className="home-order-chevron" aria-hidden="true">›</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="home-order-list">{priority.map(orderRow)}</ul>
       </div>
     );
   }
@@ -946,8 +964,12 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
   return (
     <div className="home-money is-large is-production">
       <div className="home-tile-row is-pair">
-        <MoneyTile label={t("active orders")} value={String(open.length)} tone="blue" />
-        <MoneyTile label={t("Overdue")} value={String(late.length)} tone={late.length > 0 ? "orange" : "blue"} />
+        {/* Both wore an empty disc: the tile takes an icon and neither was
+            given one. And the first was labelled "active orders" in lower case
+            beside "Overdue" — that is the phrase from the lede, not a label. */}
+        <MoneyTile icon="order" label={t("Active orders")} value={String(open.length)} tone="blue" />
+        <MoneyTile icon="overdue" label={t("Overdue")} value={String(late.length)}
+                   tone={late.length > 0 ? "orange" : "blue"} />
       </div>
       <div className="home-panel">
         <p className="home-eyebrow is-strong">{t("Production flow")}</p>
@@ -955,29 +977,7 @@ export function OrdersProductionCardBody({ size, data, t }: CardBodyProps) {
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Priority orders")}</p>
-        <ul className="home-record-list">
-          {priority.map((order) => {
-            const overdue = order.dueDate && order.dueDate.getTime() < Date.now();
-            const days = order.dueDate
-              ? Math.floor((Date.now() - order.dueDate.getTime()) / (24 * 3600 * 1000))
-              : 0;
-            const stage = byStage.find((entry) =>
-              entry.id === resolved.find((r) => r.order.id === order.id)?.stageId);
-            return (
-              <li key={order.id}>
-                <Link href={`/orders?selectedOrderId=${encodeURIComponent(order.id)}`}>
-                  {order.customerName || order.designName || order.watchRef}
-                </Link>
-                {stage ? <span className={`home-chip tone-${STAGE_TONE[stage.kind] ?? "slate"}`}>{t(stage.title)}</span> : null}
-                {overdue ? (
-                  <span className="home-chip is-late">
-                    {days > 0 ? t("{days}d late").replace("{days}", String(days)) : t("Overdue")}
-                  </span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="home-order-list">{priority.map(orderRow)}</ul>
       </div>
     </div>
   );
