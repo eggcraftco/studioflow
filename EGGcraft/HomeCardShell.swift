@@ -73,7 +73,8 @@ struct HomeCardShell<CardBody: View>: View {
             if customising { HomeGripDots() }
             // A 1×1 is a small square now, so it gets the small badge too — the
             // desktop one ate the width the title needed.
-            HomeBadge(symbol: definition.icon, tone: placement.tone,
+            HomeBadge(symbol: definition.icon,
+                      tone: placement.tone == .standard ? (definition.badgeTone ?? .standard) : placement.tone,
                       style: definition.badge,
                       size: (compact || placement.size == .oneByOne) ? 30 : 38)
             VStack(alignment: .leading, spacing: 1) {

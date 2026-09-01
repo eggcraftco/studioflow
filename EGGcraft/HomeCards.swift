@@ -77,6 +77,10 @@ struct HomeCardDefinition {
     /// "ring" is the default anchor; Banking uses the solid badge the reference
     /// gives it, with the glyph knocked out of the colour.
     var badge: HomeBadgeStyle = .ring
+    /// The card's own identity colour on its badge, where the sheet gives it
+    /// one. Not `placement.tone`, which is the owner's choice for the whole
+    /// card and still wins when they make one.
+    var badgeTone: HomeCardTone? = nil
     let sizes: [HomeCardSize]
     let defaultSize: HomeCardSize
     let access: HomeCardAccess
@@ -126,9 +130,12 @@ enum HomeCards {
         HomeCardDefinition(id: .files, title: "File library", icon: "folder.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .files,
                            financeOnly: false, destination: "Files", linkLabel: "View all files"),
-        HomeCardDefinition(id: .notes, title: "Notes", icon: "note.text",
+        // A page with a pencil on it, not a page: the card is where you write
+        // one down, and the document mark said "reading" while sitting next to
+        // a + that meant the opposite.
+        HomeCardDefinition(id: .notes, title: "Notes", icon: "square.and.pencil", badgeTone: .amber,
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .notes,
-                           financeOnly: false, destination: "Notes", linkLabel: "View all notes"),
+                           financeOnly: false, destination: "Notes", linkLabel: "Open Notes"),
     ]
 
     static func definition(_ id: HomeCardID) -> HomeCardDefinition? {

@@ -462,7 +462,10 @@ struct HomeView: View {
                     ? homeSyncLabel(data.bankLastSync, lang: seciliDil) : "",
                 onOpen: { onOpen(definition.destination) },
                 onAdd: definition.id == .files ? { onOpen("Files") }
-                    : definition.id == .notes ? {
+                    // Not on the square: that size now opens with the composer,
+                    // and a + in the header beside it would be a second control
+                    // for the one action.
+                    : definition.id == .notes && placement.size != .oneByOne ? {
                     // The same route the app-icon shortcut takes: raise the flag
                     // the Notes tab reads, then go there.
                     UserDefaults.standard.set(true, forKey: "pendingQuickActionNewNote")

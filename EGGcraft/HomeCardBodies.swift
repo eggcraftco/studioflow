@@ -3162,10 +3162,36 @@ struct HomeNotesBody: View {
                     }
                     Spacer(minLength: 0)
                 }
+            } else if size == .oneByOne {
+                // The square opens where you would start typing, as the sheet
+                // draws it, and the + that used to sit in the header comes with
+                // it — two controls for one action do not fit a card this size.
+                // Still a button rather than a field, for the reason the 2x2
+                // gives above.
+                VStack(alignment: .leading, spacing: 5) {
+                    Button(action: onNewNote) {
+                        HStack(spacing: 6) {
+                            Text(t("Take a note…", lang: lang))
+                                .font(.system(size: 12)).foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text("+")
+                                .font(.system(size: 14, weight: .heavy)).foregroundColor(.white)
+                                .frame(width: 22, height: 22)
+                                .background(RoundedRectangle(cornerRadius: 7).fill(HomeTone.accent))
+                        }
+                        .padding(.leading, 10).padding(.trailing, 3)
+                        .padding(.vertical, 3)
+                        .overlay(RoundedRectangle(cornerRadius: 9)
+                            .stroke(Color.primary.opacity(0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    HomeNoteGrid(notes: Array((pinned + recent).prefix(2)), lang: lang,
+                                 columns: 1, compact: compact)
+                    Spacer(minLength: 0)
+                }
             } else {
-                let shown = Array((pinned + recent).prefix(size == .oneByOne ? 2 : 3))
-                HomeNoteGrid(notes: shown, lang: lang,
-                             columns: size == .oneByOne ? 1 : 3, compact: compact)
+                let shown = Array((pinned + recent).prefix(3))
+                HomeNoteGrid(notes: shown, lang: lang, columns: 3, compact: compact)
             }
         }
     }

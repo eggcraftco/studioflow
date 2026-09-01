@@ -55,6 +55,10 @@ export type HomeCardDefinition = {
    *  badge an earlier sheet showed. Badge is per card, not per size, so this
    *  moves Banking at all three. */
   badge?: "ring" | "filled" | "tinted";
+  /** The card's own identity colour on its badge, where the sheet gives it one.
+   *  Not the same thing as `placement.tone`, which is the owner's choice for
+   *  the whole card and still wins when they make one. */
+  badgeTone?: "amber";
   sizes: HomeCardSize[];
   defaultSize: HomeCardSize;
   /**
@@ -189,11 +193,12 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     id: "notes",
     title: "Notes",
     icon: "notes",
+    badgeTone: "amber",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
     access: "notes",
     href: "/notes",
-    linkLabel: "View all notes",
+    linkLabel: "Open Notes",
   },
 ];
 

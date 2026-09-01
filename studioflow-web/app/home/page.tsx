@@ -401,7 +401,10 @@ export default function HomePage() {
                   >
                     ↑ {t("Upload file")}
                   </button>
-                ) : placement.id === "notes" ? (
+                ) : placement.id === "notes" && placement.size !== "1x1" ? (
+                  // Not on the square: that size now opens with the composer,
+                  // and a + in the header beside it would be a second control
+                  // for the one action.
                   <button
                     type="button"
                     className="home-add-button"

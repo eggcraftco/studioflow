@@ -219,7 +219,10 @@ export function HomeCardShell({
         </button>
         {/* A ringed badge, not a bare glyph: it is what gives every card the same
             anchor at the same size regardless of which icon it carries. */}
-        <span className={`home-card-badge${definition.badge && definition.badge !== "ring" ? ` is-${definition.badge}` : ""}`} aria-hidden="true">
+        <span
+          className={`home-card-badge${definition.badge && definition.badge !== "ring" ? ` is-${definition.badge}` : ""}${definition.badgeTone && !placement.tone ? ` tone-${definition.badgeTone}` : ""}`}
+          aria-hidden="true"
+        >
           <CardIconGlyph icon={definition.icon} />
         </span>
         {renaming ? (

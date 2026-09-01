@@ -1634,9 +1634,29 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
   const shown = [...pinned, ...recent].slice(0, limit);
 
   if (size !== "2x2") {
+    // The square opens where you would start typing, as the sheet draws it —
+    // and the + that used to sit in the header comes with it, because two
+    // controls for one action on a 236px card is one too many.
+    //
+    // Still a button rather than a real field, for the reason the 2x2 already
+    // gives: the composer lives on the Notes screen, and a second place to
+    // draft the same note would need its own save, discard and undo, and would
+    // be the one that loses what you typed.
     return (
-      <div className="home-note-grid" data-size={size}>
-        {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+      <div className="home-notes-small" data-size={size}>
+        {size === "1x1" ? (
+          <button
+            type="button"
+            className="home-note-composer is-inline"
+            onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
+          >
+            <span>{t("Take a note…")}</span>
+            <span className="home-note-composer-add" aria-hidden="true">+</span>
+          </button>
+        ) : null}
+        <div className="home-note-grid" data-size={size}>
+          {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+        </div>
       </div>
     );
   }
