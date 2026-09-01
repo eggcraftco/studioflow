@@ -26991,6 +26991,18 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   column-gap: 18px; row-gap: 16px;
 }
 .onboard-grid.is-pairs .onboard-why { grid-column: 1 / -1; margin: 0; }
+/* Their own words, inside the row they picked — not a section that appears
+   underneath it. */
+/* The row is a flex line and the label text sizes itself to its words, so the
+   field would sit at half width beside it. It takes the rest of the row. */
+.onboard-options label > span.has-own-goal { flex: 1 1 auto; min-width: 0; }
+.onboard-own-goal {
+  margin-top: 8px; width: 100%; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13.5px; font-weight: 500;
+}
+.onboard-own-goal:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+
 .onboard-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .onboard-field select {
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);

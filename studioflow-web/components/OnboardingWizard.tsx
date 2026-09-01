@@ -146,7 +146,6 @@ export function OnboardingWizard({
 }) {
   const suggested = useMemo(suggestedSettings, []);
   const [step, setStep] = useState(1);
-  const [showMoreGoals, setShowMoreGoals] = useState(false);
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => ({
     country: suggested.country,
     currency: suggested.currency,
@@ -160,6 +159,7 @@ export function OnboardingWizard({
     inventoryExperience: "",
     heardFrom: "",
     mainGoal: "",
+    otherGoal: "",
     extraGoals: [],
     start: "",
     plan: "",
@@ -189,21 +189,8 @@ export function OnboardingWizard({
     catch { return ""; }
   }, [language]);
 
-  const visibleGoals = showMoreGoals ? ONBOARDING_GOALS : ONBOARDING_GOALS.filter(goal => goal.primary);
 
   // At most two extras, and never the main goal twice.
-  function toggleExtraGoal(id: OnboardingGoal) {
-    setAnswers(current => {
-      if (id === current.mainGoal) return current;
-      const has = current.extraGoals.includes(id);
-      if (!has && current.extraGoals.length >= 2) return current;
-      return {
-        ...current,
-        extraGoals: has ? current.extraGoals.filter(goal => goal !== id) : [...current.extraGoals, id],
-      };
-    });
-  }
-
   return (
     <section className="onboard-shell" aria-label={t("Set up your workspace")}>
       <div className="onboard-card">
@@ -356,47 +343,40 @@ export function OnboardingWizard({
         ) : null}
 
         {stepKey === "goal" ? (
-          <div className="onboard-sections">
-            <div className="onboard-options">
-              {visibleGoals.map(goal => (
-                <label key={goal.id} className={answers.mainGoal === goal.id ? "is-on" : ""}>
-                  <input
-                    type="radio"
-                    name="onboard-goal"
-                    checked={answers.mainGoal === goal.id}
-                    onChange={() => setAnswers(current => ({
-                      ...current,
-                      mainGoal: goal.id,
-                      extraGoals: current.extraGoals.filter(extra => extra !== goal.id),
-                    }))}
-                  />
-                  <span><strong>{t(goal.label)}</strong></span>
-                </label>
-              ))}
-            </div>
-            {!showMoreGoals ? (
-              <button type="button" className="onboard-more" onClick={() => setShowMoreGoals(true)}>
-                {t("Show more goals")}
-              </button>
-            ) : null}
-            {answers.mainGoal ? (
-              <div>
-                <h2>{t("Anything else?")}</h2>
-                <p className="onboard-hint">{t("Up to two more. Optional.")}</p>
-                <div className="onboard-chips">
-                  {ONBOARDING_GOALS.filter(goal => goal.id !== answers.mainGoal).map(goal => (
-                    <button
-                      key={goal.id}
-                      type="button"
-                      className={answers.extraGoals.includes(goal.id) ? "is-on" : ""}
-                      onClick={() => toggleExtraGoal(goal.id)}
-                    >
-                      {t(goal.label)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+          /* One question, one list, one answer.
+             Picking a goal used to open a second question underneath it —
+             "Anything else?", with a row of chips — so the screen grew a new
+             section the moment you touched it, and the answer it collected was
+             never the thing the preset engine read. It asks once now, and the
+             last row is the one that takes their own words. */
+          <div className="onboard-options">
+            {ONBOARDING_GOALS.map(goal => (
+              <label key={goal.id} className={answers.mainGoal === goal.id ? "is-on" : ""}>
+                <input
+                  type="radio"
+                  name="onboard-goal"
+                  checked={answers.mainGoal === goal.id}
+                  onChange={() => set("mainGoal", goal.id)}
+                />
+                <span className={goal.id === "other" && answers.mainGoal === "other" ? "has-own-goal" : undefined}>
+                  <strong>{t(goal.label)}</strong>
+                  {goal.id === "other" && answers.mainGoal === "other" ? (
+                    <input
+                      className="onboard-own-goal"
+                      type="text"
+                      value={answers.otherGoal}
+                      maxLength={200}
+                      autoFocus
+                      placeholder={t("In your own words")}
+                      onChange={event => set("otherGoal", event.target.value)}
+                      /* The row is a label wrapping a radio: a click inside the
+                         field would re-pick the radio and take the focus back. */
+                      onClick={event => event.preventDefault()}
+                    />
+                  ) : null}
+                </span>
+              </label>
+            ))}
           </div>
         ) : null}
 

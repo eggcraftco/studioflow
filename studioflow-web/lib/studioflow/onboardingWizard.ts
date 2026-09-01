@@ -49,6 +49,8 @@ export type OnboardingAnswers = {
    *  someone is the difference between guessing at marketing and measuring it. */
   heardFrom: OnboardingHeardFrom | "";
   mainGoal: OnboardingGoal | "";
+  /** What they typed when the goal is "Something else". Their words, not ours. */
+  otherGoal: string;
   extraGoals: OnboardingGoal[];
   start: OnboardingStart | "";
   /** The plan the last step confirmed. Empty until that step is reached. */
@@ -451,6 +453,7 @@ export async function saveOnboardingAnswers(
       onboardingHeardFrom: answers.heardFrom,
       onboardingGoals: goals,
       onboardingMainGoal: answers.mainGoal,
+      onboardingOtherGoal: answers.otherGoal.trim().slice(0, 200),
       onboardingStartChoice: answers.start,
       productionStages: productionStagesForWorkflow(answers.workflow),
       // The workshop's own word for each card. Read by all four platforms when
