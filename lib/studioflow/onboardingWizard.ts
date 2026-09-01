@@ -37,11 +37,22 @@ export type OnboardingAnswers = {
    *  than hunted for in Settings after the fact. */
   language: string;
   timeZone: string;
+  /** Kept as a list because businessTypeForWorkKinds reads kinds[0] and the
+   *  saved answers are read elsewhere; the question itself is now one choice. */
   workKinds: OnboardingWorkKind[];
   workflow: OnboardingWorkflow;
   teamSize: OnboardingTeamSize;
   volume: OnboardingVolume;
+  businessAge: OnboardingBusinessAge | "";
+  inventoryExperience: OnboardingInventoryExperience | "";
+  /** Their own words. Not used to set anything up — asked because knowing what
+   *  brought someone is the difference between guessing at marketing and
+   *  measuring it, and a list of channels we thought of first would only ever
+   *  collect the ones we thought of. */
+  heardFrom: string;
   mainGoal: OnboardingGoal | "";
+  /** What they typed when the goal is "Something else". Their words, not ours. */
+  otherGoal: string;
   extraGoals: OnboardingGoal[];
   start: OnboardingStart | "";
   /** The plan the last step confirmed. Empty until that step is reached. */
@@ -95,6 +106,25 @@ export const ONBOARDING_WORKFLOWS: { id: OnboardingWorkflow; label: string; deta
   { id: "mixed", label: "A mix of these", detail: "My business uses more than one workflow." },
 ];
 
+export type OnboardingBusinessAge = "starting" | "under_1" | "1_3" | "3_10" | "over_10";
+export type OnboardingInventoryExperience = "none" | "some" | "confident" | "no_stock";
+
+export const ONBOARDING_BUSINESS_AGES: { id: OnboardingBusinessAge; label: string }[] = [
+  { id: "starting", label: "Just starting out" },
+  { id: "under_1", label: "Less than a year" },
+  { id: "1_3", label: "1–3 years" },
+  { id: "3_10", label: "3–10 years" },
+  { id: "over_10", label: "More than 10 years" },
+];
+
+export const ONBOARDING_INVENTORY_EXPERIENCE: { id: OnboardingInventoryExperience; label: string }[] = [
+  { id: "no_stock", label: "I don't hold stock" },
+  { id: "none", label: "New to it" },
+  { id: "some", label: "I track some of it" },
+  { id: "confident", label: "I track it closely" },
+];
+
+
 export const ONBOARDING_TEAM_SIZES: { id: OnboardingTeamSize; label: string; seats: number }[] = [
   { id: "solo", label: "Just me", seats: 1 },
   { id: "2_5", label: "2–5 people", seats: 5 },
@@ -144,18 +174,44 @@ export type OnboardingIntegration = {
   href: string;
   logo: string;
   colour: string;
+  /** True when the connection can only be started on the provider's side, so
+   *  the tile offers directions rather than a button that cannot connect. */
+  startsElsewhere?: boolean;
+  /** True when there is nowhere to send anyone yet. The tile says so instead of
+   *  carrying a button that leads to a dead end. */
+  comingSoon?: boolean;
   /** Whether the asset already carries the brand's name. Shopify, Woo and our
    *  own bank glyph do; OpenAI's Blossom is the mark alone, and their
    *  guidelines forbid altering it, so the tile sets the name beside it. */
   logoIncludesName: boolean;
 };
 
+/**
+ * The NivaDesk listing on the Shopify App Store.
+ *
+ * A Shopify connection cannot start from this side: the merchant installs the
+ * app in their own admin and presses Connect there, and the listing is the one
+ * link that takes them straight to it. Leave it empty until the listing is
+ * live — every candidate handle 404s while the app is in review, and sending
+ * someone to a 404 is the dead end this whole change exists to remove. Empty
+ * falls back to the Settings panel, which explains the install in words.
+ */
+export const SHOPIFY_APP_STORE_URL = "";
+
 export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
   {
     id: "shopify",
     name: "Shopify",
     detail: "Import your store's orders and customers automatically.",
-    href: "/connect/shopify",
+    // NOT /connect/shopify. That page is the far end of the handshake: it is
+    // opened BY the embedded app with ?shop= and a one-time nonce, and cold it
+    // can only say so.
+    href: SHOPIFY_APP_STORE_URL || "/settings?section=shopify",
+    // No listing, no button. Until the app is published there is nowhere to send
+    // anyone that is not a 404 or a page telling them to go somewhere else, and
+    // "Coming soon" is the true thing to say. Fill SHOPIFY_APP_STORE_URL in and
+    // this tile turns into a working Connect on its own.
+    comingSoon: !SHOPIFY_APP_STORE_URL,
     logo: "/brand/integrations/shopify.svg",
     colour: "#5E8E3E",
     logoIncludesName: true,
@@ -164,7 +220,10 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     id: "woocommerce",
     name: "WooCommerce",
     detail: "Import your store's orders and customers automatically.",
-    href: "/settings?section=integrations",
+    // ?section=integrations opens the hub but not the WooCommerce panel — the
+    // provider is only preselected for the four aliases below, so this landed
+    // one screen short of the delivery URL the merchant came for.
+    href: "/settings?section=woocommerce",
     logo: "/brand/integrations/woocommerce.svg",
     colour: "#7F54B3",
     logoIncludesName: true,
@@ -196,18 +255,31 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     id: "chatgpt",
     name: "ChatGPT",
     detail: "Ask about your orders, and draft replies, from inside ChatGPT.",
-    href: "/settings?section=quick-reply",
+    // NOT ?section=quick-reply. That panel is the AI reply engine — an OpenAI
+    // API key for drafting customer replies — which is a different feature that
+    // happens to share a company name. The ChatGPT app is an OAuth connection
+    // that only ChatGPT can start, so the tile goes to the page that says how.
+    href: "/chatgpt",
+    startsElsewhere: true,
     logo: "/brand/integrations/chatgpt.svg",
     colour: "#10A37F",
     logoIncludesName: false,
   },
 ];
 
+/**
+ * One row, and it is the honest one.
+ *
+ * There were five. Not one of them did anything: onboardingStartChoice is
+ * written by all three platforms and read by none, so "Create my first order"
+ * created no order, "Explore a sample workspace" had no sample data anywhere in
+ * the repo to explore, and "Import a spreadsheet" had no importer to open. Four
+ * promises the product could not keep, on the screen where someone decides
+ * whether to trust it.
+ *
+ * The type still admits the old ids because workspaces already carry them.
+ */
 export const ONBOARDING_STARTS: { id: OnboardingStart; label: string; detail: string }[] = [
-  { id: "first_order", label: "Create my first order", detail: "Start with the thing you actually do." },
-  { id: "sample", label: "Explore a sample workspace", detail: "Look around with example orders before adding your own." },
-  { id: "spreadsheet", label: "Import a spreadsheet", detail: "Move what you already track into NivaDesk." },
-  { id: "empty", label: "Start empty", detail: "A clean workspace, set up your way." },
   { id: "later", label: "I'll set this up later", detail: "Go straight to your workspace." },
 ];
 
@@ -375,8 +447,12 @@ export async function saveOnboardingAnswers(
       onboardingWorkflow: answers.workflow,
       onboardingTeamSizeBand: answers.teamSize,
       onboardingOrderVolume: answers.volume,
+      onboardingBusinessAge: answers.businessAge,
+      onboardingInventoryExperience: answers.inventoryExperience,
+      onboardingHeardFrom: answers.heardFrom.trim().slice(0, 200),
       onboardingGoals: goals,
       onboardingMainGoal: answers.mainGoal,
+      onboardingOtherGoal: answers.otherGoal.trim().slice(0, 200),
       onboardingStartChoice: answers.start,
       productionStages: productionStagesForWorkflow(answers.workflow),
       // The workshop's own word for each card. Read by all four platforms when

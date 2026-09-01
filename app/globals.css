@@ -26978,8 +26978,34 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .onboard-hint { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
 
 .onboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+/* The work step asks six questions and reads as a form, not a row of tiles: at
+   664px of card the auto-fit above makes three columns, and the sheet draws two.
+   Below 560px it stacks, because a select with a full sentence above it is not
+   a thing to put two-across on a phone. */
+/* Two columns on the card, one on a phone, decided by the space the grid is
+   actually given rather than by the width of the window: min(100%, 260px) is a
+   floor that fits twice in the 664px card and once in a phone's. Same mechanism
+   the plain .onboard-grid above uses. */
+.onboard-grid.is-pairs {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  column-gap: 18px; row-gap: 16px;
+}
+.onboard-grid.is-pairs .onboard-why { grid-column: 1 / -1; margin: 0; }
+/* Their own words, inside the row they picked — not a section that appears
+   underneath it. */
+/* The row is a flex line and the label text sizes itself to its words, so the
+   field would sit at half width beside it. It takes the rest of the row. */
+.onboard-options label > span.has-own-goal { flex: 1 1 auto; min-width: 0; }
+.onboard-own-goal {
+  margin-top: 8px; width: 100%; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 13.5px; font-weight: 500;
+}
+.onboard-own-goal:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+
 .onboard-field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.onboard-field select {
+.onboard-field select,
+.onboard-field input[type="text"] {
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font-size: 14px; font-weight: 500;
 }
@@ -27053,7 +27079,7 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   letter-spacing: -0.01em;
 }
 .onboard-subhead { margin: 4px 0 10px; }
-.onboard-connect > p { margin: 0; font-size: 12.5px; color: rgba(60, 60, 75, 0.72); }
+.onboard-connect > p { margin: 0; font-size: 12.5px; color: var(--muted); }
 .onboard-connect-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -27062,8 +27088,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .onboard-connect-tile {
   display: grid;
+  /* Logo, description, action — and the description takes the slack, so the
+     buttons land on one line across the row however long each description
+     runs. Packed to the top before, which put every button at a different
+     height and made the grid look thrown together. */
+  grid-template-rows: auto 1fr auto;
   gap: 8px;
-  align-content: start;
   padding: 14px;
   border: 1px solid rgba(120, 120, 140, 0.22);
   border-radius: 14px;
@@ -27094,8 +27124,29 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   font-style: normal;
   font-size: 12px;
   line-height: 1.45;
-  color: rgba(60, 60, 75, 0.7);
+  color: var(--muted);
 }
+/* Connected and Coming soon stand where the button stood, so the tile keeps its
+   shape whichever state it is in. */
+/* All three states are the same box, because they occupy the same row of every
+   tile: measured, the button was 39pt tall, the Coming soon pill 27 and the
+   Connected line 16, so the bottoms lined up and nothing else did. */
+.onboard-connect-done,
+.onboard-connect-soon,
+.onboard-connect-btn { min-height: 39px; }
+.onboard-connect-done {
+  justify-self: start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; color: #15803d;
+}
+.onboard-connect-done i { font-style: normal; font-weight: 900; }
+body[data-studio-theme="dark"] .onboard-connect-done { color: #4ade80; }
+.onboard-connect-soon {
+  justify-self: start; display: inline-flex; align-items: center;
+  font-size: 12.5px; font-weight: 650;
+  color: var(--foreground); opacity: 0.55;
+  border: 1px dashed var(--border); border-radius: 999px; padding: 5px 12px;
+}
+
 .onboard-connect-btn {
   justify-self: start;
   border-color: var(--brand, rgba(120, 120, 140, 0.35));
@@ -27104,14 +27155,14 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 }
 .onboard-connect-note {
   margin: 2px 0 0;
-  font-size: 11.5px;
-  color: rgba(60, 60, 75, 0.62);
+  font-size: 12px;
+  color: var(--muted);
 }
 
 @media (prefers-color-scheme: dark) {
   .onboard-connect > p,
-  .onboard-connect-tile em { color: rgba(226, 228, 238, 0.66); }
-  .onboard-connect-note { color: rgba(226, 228, 238, 0.55); }
+  .onboard-connect-tile em,
+  .onboard-connect-note { color: var(--muted); }
   .onboard-connect-tile { background: rgba(255, 255, 255, 0.04); }
 }
 

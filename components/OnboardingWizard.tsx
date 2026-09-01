@@ -22,9 +22,12 @@ import {
   ONBOARDING_TRIAL_PLANS,
   ONBOARDING_VOLUMES,
   ONBOARDING_WORKFLOWS,
+  ONBOARDING_BUSINESS_AGES,
+  ONBOARDING_INVENTORY_EXPERIENCE,
   ONBOARDING_WORK_KINDS,
   type OnboardingAnswers,
   type OnboardingGoal,
+  type OnboardingIntegration,
   type OnboardingStart,
   type OnboardingTeamSize,
   type OnboardingVolume,
@@ -85,7 +88,33 @@ const TIME_ZONES = [
   "America/Toronto", "Asia/Dubai", "Asia/Tokyo", "Australia/Sydney", "UTC",
 ];
 
-const TOTAL_STEPS = 5;
+/**
+ * The order the five steps are asked in.
+ *
+ * They used to be numbers, checked as `step === 4` in a dozen places, so moving
+ * one meant editing every one of them and hoping none was missed. The step is
+ * named now and the order lives here: to reorder the wizard, reorder this list.
+ */
+type OnboardingStepKey = "basics" | "bringWork" | "goal" | "work" | "plan";
+
+const STEP_ORDER: OnboardingStepKey[] = ["basics", "bringWork", "goal", "work", "plan"];
+const TOTAL_STEPS = STEP_ORDER.length;
+
+const STEP_TITLE: Record<OnboardingStepKey, string> = {
+  basics: "Workspace basics",
+  bringWork: "Bring your work in",
+  goal: "What should NivaDesk help with first?",
+  work: "Tell us about your work",
+  plan: "Your plan",
+};
+
+const STEP_LEDE: Record<OnboardingStepKey, string> = {
+  basics: "We've suggested these from your location. You can change them now or later in Settings.",
+  bringWork: "Pick how you'd like to start. You can do any of the others later.",
+  goal: "Your answer decides what your dashboard and first tasks show.",
+  work: "This sets up your order cards, production stages and labels.",
+  plan: "Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.",
+};
 
 export function OnboardingWizard({
   t,
@@ -95,6 +124,7 @@ export function OnboardingWizard({
   onFinish,
   onLanguageChange,
   onConnect,
+  connected,
 }: {
   t: (text: string) => string;
   /** The workspace language, so the trial's end date is written in it rather
@@ -105,14 +135,16 @@ export function OnboardingWizard({
   onFinish: (answers: OnboardingAnswers) => void;
   /** Applied the moment it changes, so the wizard itself switches over. */
   onLanguageChange?: (language: string) => void;
-  /** Saves what has been answered so far, then hands off to the integration.
-   *  Connecting leaves the app for an OAuth round trip, so the answers have to
-   *  be on disk before we go or the whole wizard is lost on the way back. */
+  /** Opens the integration in a tab of its own and leaves the wizard where it
+   *  is. It used to finish the setup and navigate away, which meant the first
+   *  Connect you pressed was the last one you could press. */
   onConnect: (answers: OnboardingAnswers, href: string) => void;
+  /** Which accounts the workspace can already see, refreshed while the wizard
+   *  is open — so connecting one in the other tab shows up here. */
+  connected?: Partial<Record<OnboardingIntegration["id"], boolean>>;
 }) {
   const suggested = useMemo(suggestedSettings, []);
   const [step, setStep] = useState(1);
-  const [showMoreGoals, setShowMoreGoals] = useState(false);
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => ({
     country: suggested.country,
     currency: suggested.currency,
@@ -122,9 +154,15 @@ export function OnboardingWizard({
     workflow: "made_to_order",
     teamSize: "solo",
     volume: "",
+    businessAge: "",
+    inventoryExperience: "",
+    heardFrom: "",
     mainGoal: "",
+    otherGoal: "",
     extraGoals: [],
-    start: "",
+    // Pre-picked: it is the only row, and making someone tick the one choice
+    // there is before Continue will let them through is a ritual, not a question.
+    start: "later",
     plan: "",
   }));
 
@@ -134,12 +172,15 @@ export function OnboardingWizard({
   // The plan step arrives with a recommendation already chosen, so it is
   // answerable the moment it opens — the reader confirms it or picks another.
   const chosenPlan = answers.plan || recommendedTrialPlan(answers);
-  const canContinue =
-    step === 1 ? Boolean(answers.country && answers.currency && answers.language && answers.timeZone)
-      : step === 2 ? Boolean(answers.mainGoal)
-        : step === 3 ? answers.workKinds.length > 0
-          : step === 4 ? Boolean(answers.start)
-            : Boolean(chosenPlan);
+  const stepKey = STEP_ORDER[step - 1];
+  const answered: Record<OnboardingStepKey, boolean> = {
+    basics: Boolean(answers.country && answers.currency && answers.language && answers.timeZone),
+    bringWork: Boolean(answers.start),
+    goal: Boolean(answers.mainGoal),
+    work: answers.workKinds.length > 0,
+    plan: Boolean(chosenPlan),
+  };
+  const canContinue = answered[stepKey];
 
   // Fourteen days from now, which is what sign-up wrote. Shown so the price has
   // a date attached rather than being an abstract "later".
@@ -149,30 +190,8 @@ export function OnboardingWizard({
     catch { return ""; }
   }, [language]);
 
-  const visibleGoals = showMoreGoals ? ONBOARDING_GOALS : ONBOARDING_GOALS.filter(goal => goal.primary);
-
-  function toggleWorkKind(id: OnboardingWorkKind) {
-    setAnswers(current => ({
-      ...current,
-      workKinds: current.workKinds.includes(id)
-        ? current.workKinds.filter(kind => kind !== id)
-        : [...current.workKinds, id],
-    }));
-  }
 
   // At most two extras, and never the main goal twice.
-  function toggleExtraGoal(id: OnboardingGoal) {
-    setAnswers(current => {
-      if (id === current.mainGoal) return current;
-      const has = current.extraGoals.includes(id);
-      if (!has && current.extraGoals.length >= 2) return current;
-      return {
-        ...current,
-        extraGoals: has ? current.extraGoals.filter(goal => goal !== id) : [...current.extraGoals, id],
-      };
-    });
-  }
-
   return (
     <section className="onboard-shell" aria-label={t("Set up your workspace")}>
       <div className="onboard-card">
@@ -181,23 +200,11 @@ export function OnboardingWizard({
           <div className="onboard-progress" aria-hidden="true">
             <span style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
           </div>
-          <h1>{
-            step === 1 ? t("Workspace basics")
-              : step === 2 ? t("What should NivaDesk help with first?")
-                : step === 3 ? t("Tell us about your work")
-                  : step === 4 ? t("Bring your work in")
-                    : t("Your plan")
-          }</h1>
-          <p>{
-            step === 1 ? t("We've suggested these from your location. You can change them now or later in Settings.")
-              : step === 2 ? t("Your answer decides what your dashboard and first tasks show.")
-                : step === 3 ? t("This sets up your order cards, production stages and labels.")
-                  : step === 4 ? t("Pick how you'd like to start. You can do any of the others later.")
-                    : t("Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.")
-          }</p>
+          <h1>{t(STEP_TITLE[stepKey])}</h1>
+          <p>{t(STEP_LEDE[stepKey])}</p>
         </header>
 
-        {step === 1 ? (
+        {stepKey === "basics" ? (
           <div className="onboard-grid">
             <label className="onboard-field">
               <span>{t("Country")}</span>
@@ -245,110 +252,130 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 3 ? (
-          <div className="onboard-sections">
-            <div>
-              <h2>{t("What kind of work do you do?")}</h2>
-              <p className="onboard-hint">{t("Pick as many as apply.")}</p>
-              <div className="onboard-chips">
+        {stepKey === "work" ? (
+          /* A short grey label above, the question itself inside the control.
+             With the whole question as the label the rows came out at different
+             heights — "How familiar are you with stock tracking?" wraps where
+             "Team size" does not — and a grid of controls that do not line up
+             reads as untidy however carefully it is spaced. */
+          <div className="onboard-grid is-pairs">
+            <label className="onboard-field">
+              <span>{t("What you make")}</span>
+              <select
+                value={answers.workKinds[0] ?? ""}
+                onChange={event => set("workKinds", event.target.value
+                  ? [event.target.value as OnboardingWorkKind]
+                  : [])}
+              >
+                <option value="">{t("What do you mostly make?")}</option>
                 {ONBOARDING_WORK_KINDS.map(kind => (
-                  <button
-                    key={kind.id}
-                    type="button"
-                    className={answers.workKinds.includes(kind.id) ? "is-on" : ""}
-                    onClick={() => toggleWorkKind(kind.id)}
-                  >
-                    {t(kind.label)}
-                  </button>
+                  <option key={kind.id} value={kind.id}>{t(kind.label)}</option>
                 ))}
-              </div>
-            </div>
-
-            <div>
-              <h2>{t("How do you mainly work?")}</h2>
-              <div className="onboard-options">
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("How you work")}</span>
+              <select value={answers.workflow} onChange={event => set("workflow", event.target.value as OnboardingWorkflow)}>
                 {ONBOARDING_WORKFLOWS.map(option => (
-                  <label key={option.id} className={answers.workflow === option.id ? "is-on" : ""}>
-                    <input
-                      type="radio"
-                      name="onboard-workflow"
-                      checked={answers.workflow === option.id}
-                      onChange={() => set("workflow", option.id as OnboardingWorkflow)}
-                    />
-                    <span>
-                      <strong>{t(option.label)}</strong>
-                      <em>{t(option.detail)}</em>
-                    </span>
-                  </label>
+                  <option key={option.id} value={option.id}>{t(option.label)}</option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </label>
 
-            <div className="onboard-grid">
-              <label className="onboard-field">
-                <span>{t("How many people will use NivaDesk?")}</span>
-                <select value={answers.teamSize} onChange={event => set("teamSize", event.target.value as OnboardingTeamSize)}>
-                  {ONBOARDING_TEAM_SIZES.map(size => <option key={size.id} value={size.id}>{t(size.label)}</option>)}
-                </select>
-              </label>
-              <label className="onboard-field">
-                <span>{t("Roughly how many orders a month?")}</span>
-                <select value={answers.volume} onChange={event => set("volume", event.target.value as OnboardingVolume)}>
-                  <option value="">{t("Rather not say")}</option>
-                  {ONBOARDING_VOLUMES.map(volume => <option key={volume.id} value={volume.id}>{t(volume.label)}</option>)}
-                </select>
-                <em className="onboard-why">{t("This helps us suggest the right setup. It won't affect your trial.")}</em>
-              </label>
-            </div>
+            <label className="onboard-field">
+              <span>{t("Team size")}</span>
+              <select value={answers.teamSize} onChange={event => set("teamSize", event.target.value as OnboardingTeamSize)}>
+                {ONBOARDING_TEAM_SIZES.map(size => <option key={size.id} value={size.id}>{t(size.label)}</option>)}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("Monthly orders")}</span>
+              <select value={answers.volume} onChange={event => set("volume", event.target.value as OnboardingVolume)}>
+                <option value="">{t("How many a month?")}</option>
+                {ONBOARDING_VOLUMES.map(volume => <option key={volume.id} value={volume.id}>{t(volume.label)}</option>)}
+              </select>
+            </label>
+
+            <label className="onboard-field">
+              <span>{t("Business age")}</span>
+              <select
+                value={answers.businessAge}
+                onChange={event => set("businessAge", event.target.value as OnboardingAnswers["businessAge"])}
+              >
+                <option value="">{t("How long in business?")}</option>
+                {ONBOARDING_BUSINESS_AGES.map(age => <option key={age.id} value={age.id}>{t(age.label)}</option>)}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("Stock tracking")}</span>
+              <select
+                value={answers.inventoryExperience}
+                onChange={event => set("inventoryExperience", event.target.value as OnboardingAnswers["inventoryExperience"])}
+              >
+                <option value="">{t("How well do you track it?")}</option>
+                {ONBOARDING_INVENTORY_EXPERIENCE.map(level => (
+                  <option key={level.id} value={level.id}>{t(level.label)}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="onboard-field">
+              <span>{t("How did you find us?")}</span>
+              {/* Typed, not chosen: a list of the channels we thought of first
+                  only ever collects the channels we thought of first. */}
+              <input
+                type="text"
+                value={answers.heardFrom}
+                maxLength={200}
+                placeholder={t("A search, a friend, an advert…")}
+                onChange={event => set("heardFrom", event.target.value)}
+              />
+            </label>
+            <p className="onboard-why onboard-field">
+              {t("This helps us suggest the right setup. It won't affect your trial.")}
+            </p>
           </div>
         ) : null}
 
-        {step === 2 ? (
-          <div className="onboard-sections">
-            <div className="onboard-options">
-              {visibleGoals.map(goal => (
-                <label key={goal.id} className={answers.mainGoal === goal.id ? "is-on" : ""}>
-                  <input
-                    type="radio"
-                    name="onboard-goal"
-                    checked={answers.mainGoal === goal.id}
-                    onChange={() => setAnswers(current => ({
-                      ...current,
-                      mainGoal: goal.id,
-                      extraGoals: current.extraGoals.filter(extra => extra !== goal.id),
-                    }))}
-                  />
-                  <span><strong>{t(goal.label)}</strong></span>
-                </label>
-              ))}
-            </div>
-            {!showMoreGoals ? (
-              <button type="button" className="onboard-more" onClick={() => setShowMoreGoals(true)}>
-                {t("Show more goals")}
-              </button>
-            ) : null}
-            {answers.mainGoal ? (
-              <div>
-                <h2>{t("Anything else?")}</h2>
-                <p className="onboard-hint">{t("Up to two more. Optional.")}</p>
-                <div className="onboard-chips">
-                  {ONBOARDING_GOALS.filter(goal => goal.id !== answers.mainGoal).map(goal => (
-                    <button
-                      key={goal.id}
-                      type="button"
-                      className={answers.extraGoals.includes(goal.id) ? "is-on" : ""}
-                      onClick={() => toggleExtraGoal(goal.id)}
-                    >
-                      {t(goal.label)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+        {stepKey === "goal" ? (
+          /* One question, one list, one answer.
+             Picking a goal used to open a second question underneath it —
+             "Anything else?", with a row of chips — so the screen grew a new
+             section the moment you touched it, and the answer it collected was
+             never the thing the preset engine read. It asks once now, and the
+             last row is the one that takes their own words. */
+          <div className="onboard-options">
+            {ONBOARDING_GOALS.map(goal => (
+              <label key={goal.id} className={answers.mainGoal === goal.id ? "is-on" : ""}>
+                <input
+                  type="radio"
+                  name="onboard-goal"
+                  checked={answers.mainGoal === goal.id}
+                  onChange={() => set("mainGoal", goal.id)}
+                />
+                <span className={goal.id === "other" && answers.mainGoal === "other" ? "has-own-goal" : undefined}>
+                  <strong>{t(goal.label)}</strong>
+                  {goal.id === "other" && answers.mainGoal === "other" ? (
+                    <input
+                      className="onboard-own-goal"
+                      type="text"
+                      value={answers.otherGoal}
+                      maxLength={200}
+                      autoFocus
+                      placeholder={t("In your own words")}
+                      onChange={event => set("otherGoal", event.target.value)}
+                      /* The row is a label wrapping a radio: a click inside the
+                         field would re-pick the radio and take the focus back. */
+                      onClick={event => event.preventDefault()}
+                    />
+                  ) : null}
+                </span>
+              </label>
+            ))}
           </div>
         ) : null}
 
-        {step === 4 ? (
+        {stepKey === "bringWork" ? (
           <>
             <div className="onboard-connect">
               <h2>{t("Connect your accounts")}</h2>
@@ -389,22 +416,35 @@ export function OnboardingWizard({
                       <b>{integration.name}</b>
                     </span>
                     <em>{t(integration.detail)}</em>
-                    <button
-                      type="button"
-                      className="onboard-btn onboard-connect-btn"
-                      disabled={saving}
-                      onClick={() => onConnect(answers, integration.href)}
-                    >
-                      {t("Connect")}
-                    </button>
+                    {connected?.[integration.id] ? (
+                      <span className="onboard-connect-done">
+                        <i aria-hidden="true">✓</i>{t("Connected")}
+                      </span>
+                    ) : integration.comingSoon ? (
+                      <span className="onboard-connect-soon">{t("Coming soon")}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="onboard-btn onboard-connect-btn"
+                        disabled={saving}
+                        onClick={() => onConnect(answers, integration.href)}
+                      >
+                        {/* The ChatGPT app can only be started from ChatGPT's
+                            side, so its tile offers directions rather than a
+                            button that says Connect and cannot connect. */}
+                        {t(integration.startsElsewhere ? "How to connect" : "Connect")}
+                      </button>
+                    )}
                   </article>
                 ))}
               </div>
               <p className="onboard-connect-note">
+                {t("Each one opens in a new tab. Come back here when you are done — you can connect as many as you like before you continue.")}
+              </p>
+              <p className="onboard-connect-note">
                 {t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time.")}
               </p>
             </div>
-            <h2 className="onboard-subhead">{t("Or start another way")}</h2>
             <div className="onboard-options">
             {ONBOARDING_STARTS.map(option => (
               <label key={option.id} className={answers.start === option.id ? "is-on" : ""}>
@@ -424,7 +464,7 @@ export function OnboardingWizard({
           </>
         ) : null}
 
-        {step === 5 ? (
+        {stepKey === "plan" ? (
           <div className="onboard-plan-list">
             {ONBOARDING_TRIAL_PLANS.map(plan => {
               const selected = chosenPlan === plan.id;
