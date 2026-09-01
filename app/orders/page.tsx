@@ -617,7 +617,15 @@ export default function OrdersPage() {
         orderId: order.id,
         designStatus: status,
         paintingStatus: status,
-        details: { extraStatuses: nextExtraStatuses }
+        details: {
+          extraStatuses: nextExtraStatuses,
+          // Marking an order done ticked every step and stopped there, which
+          // left the Production board showing it as Ready to Ship — made, but
+          // still in the workshop. Done means it has gone, and dispatch is the
+          // record of that; the Mac's own Mark as Done has always set it. It
+          // writes a history line and nothing else: no customer email, no text.
+          ...(status === "Done" ? { isDispatched: true } : {})
+        }
       });
       setOrderActionStatus(status === "Done" ? "Order marked as done." : "Order cancelled.");
     } catch (actionError) {

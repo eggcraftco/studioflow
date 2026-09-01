@@ -163,6 +163,9 @@ export type ResolvedProductionStage = {
   blocker: ProductionBlocker | null;
   /** The step now being worked — the card's "current operation" line. */
   currentStep: HeadingItem | null;
+  /** It arrived. Done says it left the workshop; this says it got there, and
+   *  it is true whichever branch decided the stage. */
+  delivered: boolean;
 };
 
 export function resolveProductionStage(
@@ -181,7 +184,7 @@ export function resolveProductionStage(
   const total = steps.length;
   const currentIndex = values.findIndex(value => !productionStepIsDone(value));
   const currentStep = currentIndex >= 0 ? steps[currentIndex] ?? null : null;
-  const base = { doneCount, total, currentStep };
+  const base = { doneCount, total, currentStep, delivered: order.isDelivered === true };
 
   const blocker = cleanProductionBlocker(order.productionBlocker);
   if (blocker && blocked) return { ...base, stageId: blocked.id, source: "blocker", blocker };
@@ -191,14 +194,21 @@ export function resolveProductionStage(
   if (override && stages.some(stage => stage.id === override)) {
     return { ...base, stageId: override, source: "manual", blocker: null };
   }
+  // Done is the job leaving the workshop, and dispatch is the record of that.
+  // It used to be read only after every step was ticked, so an order that had
+  // shipped with a step still open sat in the middle of the board — and one
+  // with no steps at all sat in Ready however long ago it went. Whether the
+  // checklist was finished is the checklist's business; the board's question
+  // is whether the thing is still here.
+  if (order.isDispatched === true && done) {
+    return { ...base, stageId: done.id, source: "auto", blocker: null };
+  }
 
   if (total === 0) return { ...base, stageId: ready.id, source: "auto", blocker: null };
-  // Two milestones, not one: the work being finished and the job leaving the
-  // workshop. Every step ticked means it is MADE — Ready to Ship. It only
-  // becomes Done once it has actually gone, which dispatch is the record of.
+  // Every step ticked means it is MADE — Ready to Ship. It becomes Done when it
+  // goes, which is the branch above.
   if (doneCount >= total) {
-    const gone = order.isDispatched === true;
-    return { ...base, stageId: gone && done ? done.id : shipReady.id, source: "auto", blocker: null };
+    return { ...base, stageId: shipReady.id, source: "auto", blocker: null };
   }
   if (values.every(stepIsIdle)) return { ...base, stageId: ready.id, source: "auto", blocker: null };
 

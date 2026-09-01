@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
-import { entitlementsForPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+import { entitlementsForPlan, normalizeBillingPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -960,8 +960,13 @@ export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContex
     memberAccess: workspaceMemberAccess(companyData, uid, normalizeWorkspaceRole(role) === "owner"),
     billingPlan: entitlements.plan,
     billingPlanSource: stringValue(companyData.billingPlanSource, hasBillingPlan ? "workspace" : "legacy_default"),
-    // An expired trial must not keep announcing the plan it used to have.
-    billingPlanName: trialExpired
+    // An expired trial must not keep announcing the plan it used to have, and
+    // neither must a rename: the name belongs to the plan, not to the workspace
+    // document. Workspaces opened before "Free Demo" became "Free" kept the old
+    // string forever, so Settings ▸ Plan & Access still greeted paid-plan owners
+    // with the demo name. The stored string only stands in for a plan id this
+    // build does not recognise.
+    billingPlanName: trialExpired || normalizeBillingPlan(companyData.billingPlan as string | undefined) !== null
       ? entitlements.title
       : stringValue(companyData.billingPlanName, entitlements.title),
     billingStatus: stringValue(companyData.billingStatus, hasBillingPlan ? "active" : "free"),
