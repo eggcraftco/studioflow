@@ -2211,7 +2211,21 @@ export function GettingStartedCardBody({
             ) : null}
           </>
         ) : (
-          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+          <>
+            {/* Nothing left to do left 89px of the square empty. What was done
+                is the only true thing the card still has to say, and a jeweller
+                who wants to check one off against memory can now see it. The
+                square does not also carry "All set — nice work.": six ticks
+                under "6 of 6 complete" say it, and the sentence costs a step. */}
+            {skipped.length > 0 && onRestoreSkipped ? (
+              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            ) : null}
+            <ul className="home-check-list is-ruled is-recap">
+              {done.map((step) => (
+                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     );
@@ -2225,28 +2239,37 @@ export function GettingStartedCardBody({
     return (
       <div className="home-setup is-split">
         <HomeProgress complete={complete} total={steps.length} t={t} />
-        <div className="home-setup-columns">
-          <div className="home-setup-next">
-            {next ? (
-              <>
-                <NextStepPanel step={next} t={t} inline />
-                {onSkip ? (
-                  <button type="button" className="home-setup-skip"
-                          onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-                    {t("Skip for now")}
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
-            )}
+        {next ? (
+          <div className="home-setup-columns">
+            <div className="home-setup-next">
+              <NextStepPanel step={next} t={t} inline />
+              {onSkip ? (
+                <button type="button" className="home-setup-skip"
+                        onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
+                  {t("Skip for now")}
+                </button>
+              ) : null}
+            </div>
+            <ul className="home-check-list is-ruled">
+              {todo.slice(0, 3).map((step) => (
+                <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
           </div>
-          <ul className="home-check-list is-ruled">
-            {todo.slice(0, 3).map((step) => (
-              <li key={step.id}><span className="home-check is-todo" aria-hidden="true" />{t(step.label)}</li>
-            ))}
-          </ul>
-        </div>
+        ) : (
+          // With nothing left to do the second column has nothing in it, and its
+          // rule was standing on its own beside a sentence with half the card
+          // empty. Done, the card is one column: the sentence and the work it
+          // is talking about.
+          <>
+            <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            <ul className="home-check-list is-recap is-two-up">
+              {done.map((step) => (
+                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     );
   }

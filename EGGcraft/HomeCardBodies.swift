@@ -351,7 +351,18 @@ struct HomeGettingStartedBody: View {
                         HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                     }
                 } else {
-                    HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
+                    // Nothing left to do left the square empty. What was done is
+                    // the only true thing the card still has to say, and six
+                    // ticks under "6 of 6 complete" say "all set" better than
+                    // the sentence, which cost a step's worth of room.
+                    if !skipped.isEmpty, onRestoreSkipped != nil {
+                        HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(done, id: \.id) { step in
+                            HomeCheckRow(label: t(step.label, lang: lang), state: .done, recap: true)
+                        }
+                    }
                 }
                 Spacer(minLength: 0)
             } else if size == .twoByOne {
@@ -359,27 +370,47 @@ struct HomeGettingStartedBody: View {
                 // the right. The Completed list that used to hold the left column
                 // is gone: a card whose job is to move you forward spent half
                 // itself on work already finished.
-                HStack(alignment: .top, spacing: compact ? 10 : 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let step = next {
+                if let step = next {
+                    HStack(alignment: .top, spacing: compact ? 10 : 16) {
+                        VStack(alignment: .leading, spacing: 4) {
                             HomeNextPanel(step: step, lang: lang, style: .inline, compact: compact)
                             if let onSkip {
                                 HomeSkipButton(label: t("Skip for now", lang: lang)) { onSkip(step.id) }
                             }
-                        } else {
-                            HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(todo.prefix(3), id: \.id) { step in
-                            HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(todo.prefix(3), id: \.id) { step in
+                                HomeCheckRow(label: t(step.label, lang: lang), state: .todo)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    // With nothing left to do the second column has nothing in
+                    // it, and its rule was standing on its own beside a sentence
+                    // with half the card empty. Done, the card is one block: the
+                    // sentence and the work it is talking about, two up.
+                    HomeAllSetNote(skipped: skipped, onRestore: onRestoreSkipped, lang: lang)
+                    let half = (done.count + 1) / 2
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(done.prefix(half), id: \.id) { step in
+                                HomeCheckRow(label: t(step.label, lang: lang), state: .done, recap: true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(done.dropFirst(half), id: \.id) { step in
+                                HomeCheckRow(label: t(step.label, lang: lang), state: .done, recap: true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    Spacer(minLength: 0)
                 }
             } else {
                 // One column, not two: side by side the list had about half the
@@ -424,19 +455,22 @@ struct HomeCheckRow: View {
     /// six lines divided by hairlines read as one block, and the current step
     /// has nothing to stand out against.
     var boxed: Bool = false
+    /// A receipt of what was done, once there is nothing left to do: tighter
+    /// than a list you were meant to tick here, and its tick smaller.
+    var recap: Bool = false
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: recap ? 6 : 9) {
             mark
             Text(label)
-                .font(.system(size: 12, weight: state == .current ? .bold : .regular))
+                .font(.system(size: recap ? 11 : 12, weight: state == .current ? .bold : .regular))
                 .foregroundColor(state == .done ? .secondary : (state == .current ? HomeTone.accent : .primary))
                 // Six struck-through lines read as a list of mistakes rather
                 // than a list of things done.
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .padding(.vertical, boxed ? 3 : 4)
+        .padding(.vertical, recap ? 1 : (boxed ? 3 : 4))
         .padding(.horizontal, boxed ? 10 : (state == .current ? 8 : 0))
         .background(
             RoundedRectangle(cornerRadius: boxed ? 9 : 8)
@@ -453,7 +487,8 @@ struct HomeCheckRow: View {
     @ViewBuilder private var mark: some View {
         switch state {
         case .done:
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundColor(HomeTone.green)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: recap ? 11 : 15)).foregroundColor(HomeTone.green)
         case .current:
             Image(systemName: "arrow.right.circle").font(.system(size: 15)).foregroundColor(HomeTone.accent)
         case .todo:

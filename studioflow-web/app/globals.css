@@ -28574,7 +28574,11 @@ body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2
 .home-card-1x1 .home-card-head.has-title-badge > .home-pill { display: none; }
 .home-card-1x1 .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
 .home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
-.home-card-1x1 .home-card-title { font-size: 15px; }
+/* "Getting started" is 112px of a 107px slot at 15px, so the card could not
+   show its own name. The header's gap gives up four of the five and the type
+   the last one — measured, not guessed. */
+.home-card-1x1 .home-card-title { font-size: 14.5px; }
+.home-card-1x1 .home-card-head { gap: 6px; }
 
 /* The range picker on a square.
    A 1x1 header carries a handle, a badge, the title, this control and the
@@ -28926,6 +28930,7 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 
 /* ---- Getting started ------------------------------------------------- */
 .home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.home-setup.is-square { gap: 3px; }
 /* Six rows, a heading, the count, the bar and a panel share 283px. */
 .home-setup.is-large { gap: 5px; }
 .home-setup.is-large .home-eyebrow.is-strong { font-size: 12px; }
@@ -28950,13 +28955,34 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 }
 .home-setup-next .home-next-panel.is-inline { padding: 8px 12px; }
 /* Three things share a 240px card: the count, the bar and the columns. */
-.home-setup.is-split { gap: 7px; }
+.home-setup.is-split { gap: 4px; }
+/* Measured: the wide card gives its columns 99px and the panel alone wanted
+   122, so both columns overflowed their own box and the card clipped them. The
+   sentence goes to one line for the reason the square gives for dropping it
+   altogether — the page the button opens explains itself — and the rows that
+   are left give up the padding of a list you were meant to tick here. */
+.home-setup.is-split .home-setup-next .home-next-body p { -webkit-line-clamp: 1; }
+.home-setup.is-split .home-next-panel.is-inline { padding: 5px 10px; }
+.home-setup.is-split .home-next-body { gap: 5px; }
+.home-setup.is-split .home-next-button { padding: 4px 12px; font-size: 12px; }
+.home-setup.is-split .home-setup-skip { margin-top: 2px; }
+.home-setup.is-split .home-check-list li { padding: 2px 0; font-size: 11.5px; }
 .home-setup.is-split .home-setup-skip { margin-top: 3px; }
 /* The "Up next" label goes. A single tinted panel under a progress bar does not
    need to be told it is what comes next, and the line that says why — which the
    card measured at 240px tall has no room for otherwise — earns the space. */
 .home-setup-next .home-next-panel .home-eyebrow.is-accent { display: none; }
 .home-setup-allset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+/* What was done, once there is nothing left to do. Tighter than the live list:
+   it is a receipt, not a thing to act on. */
+.home-check-list.is-recap { border-left: 0; padding-left: 0; margin-top: 2px; }
+.home-check-list.is-recap li {
+  padding: 0; font-size: 11px; line-height: 13.5px; opacity: 0.72;
+  border-bottom: 0; gap: 6px;
+}
+/* A receipt's tick does not need to be the size of one you are about to press. */
+.home-check-list.is-recap .home-check { width: 11px; height: 11px; flex: 0 0 auto; }
+.home-check-list.is-two-up { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; margin-top: 0; }
 
 /* A 2x1 on a phone is 359x174 with a 46px header — the sheet's card is drawn
    nearly five times that wide. Measured, the panel as drawn overshoots the
@@ -28995,7 +29021,10 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .home-eyebrow.is-strong { font-weight: 800; opacity: 0.9; font-size: 13px; }
 .home-eyebrow.is-accent { color: #2563eb; font-weight: 700; opacity: 1; margin-bottom: 4px; }
 
-.home-progress { height: 6px; border-radius: 999px; background: rgba(120, 130, 150, 0.18); overflow: hidden; }
+/* flex: 0 0 auto, or the bar is the first thing a crowded card squashes — a
+   6px element with no basis went to nothing and the card lost the one figure
+   its whole job is to show. */
+.home-progress { height: 6px; flex: 0 0 auto; border-radius: 999px; background: rgba(120, 130, 150, 0.18); overflow: hidden; }
 .home-progress > span { display: block; height: 100%; border-radius: 999px; background: #2563eb; }
 
 /* The checklist: a filled green tick for done, a blue arrow for the step you
