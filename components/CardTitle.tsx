@@ -20,6 +20,7 @@ export type CardIcon =
   | "lock"
   | "unlock"
   | "notes"
+  | "noteCompose"
   | "orders"
   | "paintbrush"
   | "photo"
@@ -57,6 +58,12 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   lock: ["M7 11V8a5 5 0 0 1 10 0v3", "M6 11h12v10H6V11Z"],
   unlock: ["M7 11V8a5 5 0 0 1 9.4-2.4", "M6 11h12v10H6V11Z"],
   notes: ["M6 3h9l3 3v15H6V3Z", "M14 3v4h4", "M8 12h8M8 16h6"],
+  // A page with a pencil on it: the Home card is where you write one down, and
+  // the document mark said "reading" while sitting next to a + that meant the
+  // opposite. Its own key, NOT a redraw of `notes` — that one is shared with
+  // eleven other cards across Settings, Customers, the admin hub and the
+  // logged-out marketing site, none of which are about composing anything.
+  noteCompose: ["M20 12.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6.5", "M18.4 3.6a2.1 2.1 0 0 1 3 3L13 15l-4 1 1-4 8.4-8.4Z"],
   orders: ["M6 3h12v18H6V3Z", "M9 7h6M9 11h6M9 15h4"],
   paintbrush: ["M14 4l6 6-7 7-6-6 7-7Z", "M6 12l6 6", "M5 14c-2 2-2 5-2 7 2 0 5 0 7-2"],
   photo: ["M4 5h16v14H4V5Z", "M8 13l2.5-2.5L14 14l2-2 4 4", "M9 9h.01"],

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -49,6 +49,10 @@ export default function NotesPage() {
     if (!user) return;
     setEditing(newKeepNote(user.uid, user.email ?? "", user.displayName ?? ""));
   });
+  // Arriving from the Home card's magnifier: put the caret where they were
+  // going, rather than in a search box they then have to find and click.
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 768px)");
@@ -331,6 +335,17 @@ export default function NotesPage() {
     });
   }
 
+  // Not Boolean(user): this page returns a LoadingScreen on the line below
+  // while `loading` is still true, so the search input is not mounted and the
+  // ref is null — and useQuickActionParam strips the parameter on that first
+  // run and never fires again. It waits for the same condition the render does.
+  // Declared here rather than beside the sibling "new" hook because it reads
+  // state that is set up further down the component.
+  useQuickActionParam("search", !authLoading && !loading && Boolean(workspace) && Boolean(user), () => {
+    searchRef.current?.focus();
+    searchRef.current?.scrollIntoView({ block: "center" });
+  });
+
   if (authLoading || loading || !workspace || !user) return <LoadingScreen />;
 
   return (
@@ -487,6 +502,7 @@ export default function NotesPage() {
 
             {/* Search */}
             <input
+              ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}

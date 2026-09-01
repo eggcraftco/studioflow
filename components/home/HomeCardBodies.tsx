@@ -212,9 +212,13 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 }
 
 function MoneyTile({
-  label, value, tone, sub, icon,
+  label, value, tone, sub, icon, bar,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string; icon?: HomeTileIconName;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string;
+  icon?: HomeTileIconName;
+  /** 0–100 for a figure that is a proportion, drawn under it as the sheet
+   *  draws storage. A number on its own does not say how close to full it is. */
+  bar?: number;
 }) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
@@ -223,6 +227,11 @@ function MoneyTile({
       </span>
       <em>{label}</em>
       <b>{value}</b>
+      {bar !== undefined ? (
+        <span className="home-money-tile-bar" aria-hidden="true">
+          <i style={{ width: `${Math.max(0, Math.min(100, bar))}%` }} />
+        </span>
+      ) : null}
       {sub ? <i>{sub}</i> : null}
     </div>
   );
@@ -1526,17 +1535,45 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
 
   /** The sheet's row: what kind of file it is, its name, what it is attached to,
    *  and when it arrived. */
-  const fileRow = (file: (typeof files)[number]) => {
+  // The sheet's row is four things wide — kind, name, what it is attached to,
+  // when it arrived — and the wide cards have room for all four. The square
+  // does not: at 236px the link chip was taking 140px, which left the file's
+  // own name at zero, and capped to its share it reads "Cus…", which answers
+  // nothing. So there the chip goes under the name instead of beside it, which
+  // is the same answer the Mac card reached and says so in its own comment:
+  // "on a square the name and the chip cannot share a line".
+  const fileRow = (file: (typeof files)[number], stacked = false) => {
     const kind = fileKind(file.fileName, file.contentType);
-    const ext = (file.fileName.split(".").pop() || "").slice(0, 4).toUpperCase();
+    // Only when the name actually has one. `split(".").pop()` on a dotless name
+    // returns the whole name, so a scan saved as "invoice 4471" wore a badge
+    // reading "INVO" in the slot that everywhere else names the file's type.
+    const dot = file.fileName.lastIndexOf(".");
+    const ext = dot > 0 ? file.fileName.slice(dot + 1, dot + 5).toUpperCase() : "";
     return (
       <li key={file.fileId || file.id}>
-        <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
+        {/* is-plain when there is no chip: the row is a four-track grid and
+            three children auto-place into the first three, which strands the
+            date in the middle with the last track collapsed to nothing. */}
+        <Link
+          className={file.orderId ? undefined : "is-plain"}
+          href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}
+        >
           <span className={`home-file-icon is-${kind}`} aria-hidden="true">{ext}</span>
-          <strong>{file.fileName}</strong>
-          {file.orderId ? (
-            <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
-          ) : null}
+          {stacked ? (
+            <span className="home-file-stack">
+              <strong>{file.fileName}</strong>
+              {file.orderId ? (
+                <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+              ) : null}
+            </span>
+          ) : (
+            <>
+              <strong>{file.fileName}</strong>
+              {file.orderId ? (
+                <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+              ) : null}
+            </>
+          )}
           <em>{file.uploadedAt ? homeAgo(file.uploadedAt, t) : ""}</em>
         </Link>
       </li>
@@ -1559,17 +1596,20 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
 
   const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
   const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
-  const quota = limitBytes > 0 ? (
+  const quotaLine = (withPercent: boolean) => (
     <div className="home-quota">
       <span className="home-quota-line">
         <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
-        <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
+        {/* The bar below says this, and the two figures beside it say it more
+            precisely. On the square there is no room to say it a third time. */}
+        {withPercent ? <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b> : null}
       </span>
       <span className="home-quota-bar" aria-hidden="true">
         <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
       </span>
     </div>
-  ) : null;
+  );
+  const quota = limitBytes > 0 ? quotaLine(size !== "1x1") : null;
 
   if (size === "1x1") {
     // The square asks the same question as the wide card — how full is this
@@ -1578,8 +1618,10 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     return (
       <div className="home-money is-files">
         {quota}
-        <p className="home-eyebrow is-strong">{t("Recent")}</p>
-        <ul className="home-file-list">{files.slice(0, 2).map(fileRow)}</ul>
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list is-stacked">
+          {files.slice(0, 2).map((file) => fileRow(file, true))}
+        </ul>
       </div>
     );
   }
@@ -1589,7 +1631,7 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
       <div className="home-money is-wide is-files">
         {quota}
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-        <ul className="home-file-list">{files.slice(0, 3).map(fileRow)}</ul>
+        <ul className="home-file-list">{files.slice(0, 3).map((file) => fileRow(file))}</ul>
       </div>
     );
   }
@@ -1598,19 +1640,38 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   // free. The last is the only one that asks for anything to be done.
   return (
     <div className="home-money is-large is-files">
+      {/* Three discs with nothing in them is what this row was drawing: the
+          tiles take an icon and none was passed. And the storage tile led with
+          the percentage while the size — the figure a seller can act on — was
+          the small line underneath; the sheet has it the other way round, with
+          the bar carrying the proportion. */}
       <div className="home-tile-row is-triple">
-        <MoneyTile label={t("files")} value={String(files.length)} tone="blue" />
-        <MoneyTile label={t("Storage")} value={pct !== null ? `${pct}%` : humanSize(used)}
-                   tone="green" sub={limitBytes > 0 ? `${humanSize(used)} ${t("of")} ${humanSize(limitBytes)}` : undefined} />
-        <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
+        <MoneyTile icon="fileStack" label={t("Total files")} value={String(files.length)} tone="blue" />
+        {/* The used size is the figure; the ceiling and the percentage are what
+            qualify it. All three on one line does not fit a third of this card
+            — "7.2 MB of 225.5 GB" at the tile's weight overruns it. */}
+        <MoneyTile icon="pie" label={t("Storage")} value={humanSize(used)}
+                   tone="green" bar={pct ?? undefined}
+                   sub={limitBytes > 0
+                     ? `${t("of")} ${humanSize(limitBytes)}${pct !== null ? ` · ${pct}%` : ""}`
+                     : undefined} />
+        <MoneyTile icon="link" label={t("Unlinked")} value={String(unlinked.length)}
+                   tone={unlinked.length > 0 ? "orange" : "blue"} />
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-        <ul className="home-file-list">{files.slice(0, 4).map(fileRow)}</ul>
+        {/* Two more rows when nothing needs linking: the banner below is where
+            the card's last inches go, and with an empty workspace-wide link
+            queue they were going nowhere. */}
+        <ul className="home-file-list">
+          {files.slice(0, unlinked.length > 0 ? 4 : 6).map((file) => fileRow(file))}
+        </ul>
       </div>
       {unlinked.length > 0 ? (
         <Link className="home-linking-banner" href="/files">
-          <span aria-hidden="true">🔗</span>
+          {/* Drawn, not 🔗: an emoji renders at a different weight in every font
+              on every platform, and cannot take the banner's own colour. */}
+          <span className="home-linking-mark" aria-hidden="true"><HomeTileIcon name="link" /></span>
           <strong>{t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}</strong>
           <em>{t("Review")}</em>
         </Link>
@@ -1634,9 +1695,30 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
   const shown = [...pinned, ...recent].slice(0, limit);
 
   if (size !== "2x2") {
+    // The square opens where you would start typing, as the sheet draws it —
+    // and the + that used to sit in the header comes with it, because two
+    // controls for one action on a 236px card is one too many.
+    //
+    // Still a button rather than a real field, for the reason the 2x2 already
+    // gives: the composer lives on the Notes screen, and a second place to
+    // draft the same note would need its own save, discard and undo, and would
+    // be the one that loses what you typed.
     return (
-      <div className="home-note-grid" data-size={size}>
-        {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+      <div className="home-notes-small" data-size={size}>
+        {/* The square carries its + here, because its header has no room for a
+            named button. The wide card's header does, so the sheet gives it
+            "New note" up there and leaves the field plain. */}
+        <button
+          type="button"
+          className={`home-note-composer is-inline${size === "1x1" ? " has-add" : ""}`}
+          onClick={(event) => { event.stopPropagation(); onQuickAction?.("note"); }}
+        >
+          <span>{t("Take a note…")}</span>
+          {size === "1x1" ? <span className="home-note-composer-add" aria-hidden="true">+</span> : null}
+        </button>
+        <div className="home-note-grid" data-size={size}>
+          {shown.map((note) => <NoteTile key={note.id} note={note} t={t} />)}
+        </div>
       </div>
     );
   }
@@ -1661,12 +1743,25 @@ export function NotesCardBody({ size, data, t, onQuickAction }: CardBodyProps) {
           </div>
         </>
       ) : null}
-      <p className="home-eyebrow is-strong">{t("Recent")}</p>
-      <ul className="home-note-rows">
-        {recent.slice(0, pinned.length > 0 ? 3 : 5).map((note) => (
-          <NoteRow key={note.id} note={note} t={t} />
-        ))}
-      </ul>
+      {/* Recent as tiles too, which is what the sheet draws. The rows here
+          were chosen when this card showed a title and one fact beside it —
+          "a row fits three where a tile fits two" — but the tile has since
+          learned to carry the note's colour, its chip and its reminder, and
+          those are the three things that tell you which note this is. Two
+          columns fit four of them in the space three rows took. */}
+      {/* Only when there is a recent note to put under it. `recent` excludes
+          everything pinned, so a workspace whose live notes are all pinned got
+          a heading over an empty grid. */}
+      {recent.length > 0 ? (
+        <>
+          <p className="home-eyebrow is-strong">{t("Recent")}</p>
+          <div className="home-note-grid">
+            {recent.slice(0, pinned.length > 0 ? 4 : 6).map((note) => (
+              <NoteTile key={note.id} note={note} t={t} />
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1690,20 +1785,6 @@ function noteMeta(note: HomeData["notes"][number], t: (text: string) => string) 
   return { icon: "note" as const, text: "", overdue: false };
 }
 
-function NoteRow({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
-  const meta = noteMeta(note, t);
-  const hue = note.colorName || "default";
-  return (
-    <li className={`home-note-row hue-${hue}`}>
-      <Link href={`/notes?note=${encodeURIComponent(note.id)}`}>
-        <span className="home-note-row-badge" aria-hidden="true"><HomeTileIcon name={meta.icon} /></span>
-        <strong>{note.title || t("Untitled note")}</strong>
-        {meta.text ? <em className={meta.overdue ? "is-due" : ""}>{meta.text}</em> : null}
-      </Link>
-    </li>
-  );
-}
-
 /** A note keeps its own colour — that is the note's, not the card's. */
 function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: string) => string }) {
   const chip = note.linkedOrderLabel || note.linkedCustomerName;
@@ -1720,7 +1801,11 @@ function NoteTile({ note, t }: { note: HomeData["notes"][number]; t: (text: stri
     >
       {/* Top right, out of the title's way — the sheet marks the corner rather
           than pushing the heading along. */}
-      {note.isPinned ? <span className="home-note-pin" aria-label={t("Pinned")}>📌</span> : null}
+      {note.isPinned ? (
+        <span className="home-note-pin" aria-label={t("Pinned")}>
+          <HomeTileIcon name="pin" />
+        </span>
+      ) : null}
       <strong>{note.title || t("Untitled note")}</strong>
       {note.text ? <p>{note.text}</p> : null}
       <span className="home-note-foot">

@@ -98,11 +98,15 @@ export type HomeTileIconName =
   // The two stock holdings that are not free shelf.
   | "reserved" | "incomingStock"
   // What a note is about.
-  | "reminder" | "order" | "customer" | "note"
+  | "reminder" | "order" | "customer" | "note" | "pin" | "search" | "upload"
   // What the Money card's four figures and four deductions mean. Added rather
   // than borrowed: the nearest existing glyphs meant something else, and a
   // clock standing in for a pie chart is worse than no icon at all.
-  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator";
+  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator"
+  // What the Files card's three figures mean. Same rule as the line above:
+  // added, not borrowed — the card was drawing three empty coloured discs
+  // because it passed no icon at all, and a stand-in would have been worse.
+  | "fileStack" | "pie" | "link";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -206,6 +210,54 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
         <svg {...common}>
           <rect x="4" y="5" width="16" height="15" rx="2" />
           <path d="M4 9.5h16M8.5 3.5v3M15.5 3.5v3" />
+        </svg>
+      );
+    // A drawn pin, not 📌. This file already learned that lesson on the grip:
+    // an emoji renders at a different weight, size and colour in every font on
+    // every platform, so the same card looked different depending on where it
+    // was opened — and an emoji cannot take the note's own colour.
+    case "fileStack":
+      return (
+        <svg {...common}>
+          <path d="M8 3h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+          <path d="M14 3v4h4" />
+        </svg>
+      );
+    case "pie":
+      return (
+        <svg {...common}>
+          <path d="M12 3a9 9 0 1 0 9 9h-9V3Z" />
+          <path d="M14.5 3.6A9 9 0 0 1 20.4 9.5" />
+        </svg>
+      );
+    case "link":
+      return (
+        <svg {...common}>
+          <path d="M10 13.5a4 4 0 0 0 5.7.3l2.6-2.6a4 4 0 0 0-5.7-5.7l-1.5 1.5" />
+          <path d="M14 10.5a4 4 0 0 0-5.7-.3l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.5-1.5" />
+        </svg>
+      );
+    case "upload":
+      return (
+        <svg {...common}>
+          <path d="M12 16V5" />
+          <path d="m7.5 9.5 4.5-4.5 4.5 4.5" />
+          <path d="M5 15v3.5h14V15" />
+        </svg>
+      );
+    case "search":
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4.5 4.5" />
+        </svg>
+      );
+    case "pin":
+      return (
+        <svg {...common}>
+          <path d="M14.5 3.5 20.5 9.5" />
+          <path d="M17.6 6.6 12.8 9.1a3 3 0 0 0-1.4 1.5l-1 2.4 4.6 4.6 2.4-1a3 3 0 0 0 1.5-1.4l2.5-4.8" />
+          <path d="M10.4 13 4.5 19.5" />
         </svg>
       );
     case "order":

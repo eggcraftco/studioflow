@@ -27267,6 +27267,12 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 /* The tinted badge: a wash of the colour with the glyph drawn in it, no ring.
    The cutout follows the wash, because the two knocked-out glyphs (shippingBox,
    finance) punch through to whatever sits behind them. */
+/* A card's own colour on its badge, where the sheet gives it one. It yields to
+   placement.tone: the owner recolouring the card is a decision, this is only a
+   default. Named tone- to match the card's own tone classes; the badge is the
+   one element that reads it. */
+.home-card-badge.tone-amber { color: #c2760a; }
+body[data-studio-theme="dark"] .home-card-badge.tone-amber { color: #e8a542; }
 .home-card-badge.is-tinted {
   background: rgba(37, 99, 235, 0.13); border-color: transparent; color: #2563eb;
   --card-title-icon-cutout: #dce6fb;
@@ -27609,7 +27615,10 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-note strong { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-note p { margin: 0; font-size: 11.5px; opacity: 0.75; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .home-note { position: relative; }
-.home-note-pin { position: absolute; top: 6px; right: 8px; font-size: 11px; line-height: 1; }
+/* The pin takes the note's own colour: on a coloured ground a grey mark reads
+   as disabled, and the note is what the pin belongs to. */
+.home-note-pin { position: absolute; top: 7px; right: 8px; line-height: 0; opacity: 0.75; }
+.home-note-pin svg { width: 13px; height: 13px; }
 /* Only a pinned note pays for the pin's corner: reserving it on every note
    would cost the unpinned ones a word of their title for nothing. */
 .home-note.is-pinned strong { padding-right: 19px; }
@@ -27633,8 +27642,49 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-file-list li + li { border-top: 1px solid var(--border); }
 .home-file-list a {
   display: grid; align-items: center; gap: 10px; padding: 6px 0; min-width: 0;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  /* The chip used to be an `auto` track, so it took whatever its text wanted
+     and the name — a 1fr that can go to zero — was the one that gave way. On a
+     236px card that meant a row showing PNG, "Custom Leather Duffel Bag" and a
+     clipped date, with the file's own name at exactly 0px. The name is what the
+     row is; the chip is a detail about it, so the chip is what shrinks. */
+  grid-template-columns: 28px minmax(0, 1.6fr) minmax(0, 1fr) auto;
   text-decoration: none; color: inherit;
+}
+/* Three columns on the square, because the chip has moved under the name. The
+   padding comes down to pay for the second line: two stacked rows are what fit,
+   and one file with a chip would be worse than two with one each. */
+.home-file-list.is-stacked a { grid-template-columns: 28px minmax(0, 1fr) auto; padding: 3px 0; }
+/* Two rows and the quota above them come to 2px more than the square has, and
+   the gap is the cheapest place to find it: 14px between three blocks is 28px
+   of air on a card with none to spare. */
+.home-card-1x1 .home-money.is-files { gap: 10px; }
+/* The wide card's storage line, laid out the way the sheet lays it out: the
+   figures, the percentage, and the bar on one line rather than stacked. The
+   sheet puts them in the header; at 492px that truncates the card's own name
+   to "File librar…", which is the defect the square just had. So they stay in
+   the body and pay for themselves by taking one line instead of two — which is
+   what lets the third row exist at all. It did not before: the body has 147px
+   and three rows wanted 186, so the last one was cut off. */
+.home-card-2x1 .home-money.is-files { gap: 6px; }
+.home-card-2x1 .home-money.is-files .home-eyebrow { margin-top: 0; }
+.home-card-2x1 .home-quota { flex-direction: row; align-items: center; gap: 10px; }
+.home-card-2x1 .home-quota-line { flex: 0 0 auto; gap: 8px; }
+.home-card-2x1 .home-quota-line b { margin-left: 0; }
+.home-card-2x1 .home-quota-bar { flex: 1 1 auto; height: 6px; }
+.home-card-2x1 .home-file-list a { padding: 4px 0; }
+.home-card-2x1 .home-file-icon { width: 24px; height: 24px; border-radius: 6px; font-size: 7.5px; }
+.home-card-2x1 .home-file-list a { grid-template-columns: 24px minmax(0, 1.5fr) minmax(0, 1fr) auto; }
+.home-file-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.home-file-stack strong { max-width: 100%; }
+/* A row without a chip is three columns, not four with a hole in it. */
+.home-file-list a.is-plain { grid-template-columns: 28px minmax(0, 1fr) auto; }
+.home-card-2x1 .home-file-list a.is-plain { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.home-file-list .home-chip {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* start, so a short chip is a pill rather than a stretched bar — and a
+     max-width, because `justify-self: start` otherwise lets the item size to
+     its own text and spill straight out of the track it was given. */
+  justify-self: start; max-width: 100%;
 }
 .home-file-list a:hover strong { text-decoration: underline; }
 .home-file-icon {
@@ -27668,6 +27718,43 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
   padding: 9px 12px; font: inherit; font-size: 12.5px; color: inherit; opacity: 0.6;
 }
 .home-note-composer:hover { border-color: rgba(37, 99, 235, 0.45); opacity: 0.85; }
+/* The square's version: the field and its + read as one control, because they
+   are one — the whole thing opens the Notes composer. */
+.home-notes-small { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+.home-note-composer.is-inline {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 6px 6px 11px; opacity: 1; flex: 0 0 auto;
+}
+/* 0.55 at 12px composites to 3.91:1 on white, under AA's 4.5 for normal text —
+   and this is the only words on the card's primary control. 0.72 reads 3.0:1
+   darker at 5.3:1 and still sits back from the note titles below it. */
+.home-note-composer.is-inline > span:first-child { opacity: 0.72; font-size: 12px; }
+.home-note-composer-add {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 8px;
+  background: #2563eb; color: #fff; font-weight: 800; font-size: 15px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.home-notes-small .home-note-grid { min-height: 0; }
+/* The square has 155px of body for a composer and two notes. The tiles are
+   built for the wider sizes, where 79px each is right; here that fits one note
+   and half of the next. Measured down rather than guessed: composer 30, two
+   notes and their gaps in what is left. */
+.home-card-1x1 .home-notes-small { gap: 5px; }
+.home-card-1x1 .home-note-grid { gap: 5px; }
+.home-card-1x1 .home-note-composer.is-inline { padding: 3px 3px 3px 10px; border-radius: 9px; }
+.home-card-1x1 .home-note-composer-add { width: 22px; height: 22px; font-size: 14px; }
+.home-card-1x1 .home-note { padding: 5px 9px; gap: 1px; border-radius: 10px; }
+.home-card-1x1 .home-note .home-chip { font-size: 9.5px; padding: 1px 6px; }
+.home-card-1x1 .home-note strong { font-size: 12px; }
+/* One line of the note's own words, not two: the title says what it is and the
+   chip says what it is attached to, and those are what the sheet leads with. */
+.home-card-1x1 .home-note p {
+  font-size: 11px; line-height: 1.25; margin: 0;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+.home-card-1x1 .home-note-foot { margin-top: 1px; }
+.home-card-1x1 .home-note-pin { top: 5px; right: 6px; }
+.home-card-1x1 .home-note-pin svg { width: 11px; height: 11px; }
 
 /* Recent as rows rather than tiles: at this size the title and the one fact
    beside it are what fit, and a row fits three where a tile fits two. */
@@ -27731,6 +27818,26 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
    not the obvious reading of a plus on a card full of documents. */
 .home-add-button.is-wide { width: auto; padding: 0 11px; font-size: 12px; font-weight: 700; gap: 5px; }
 .home-add-button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* A header action that is a mark rather than a word — sized to the ... button
+   it sits next to, so the two read as one row of controls. */
+.home-head-icon-button {
+  /* This file has no global button reset, so a bare <button> arrives with the
+     UA's grey buttonface — every sibling control clears it explicitly. */
+  border: 0; background: transparent; cursor: pointer; padding: 0;
+  width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: inherit; opacity: 0.65; text-decoration: none;
+}
+.home-head-icon-button:hover { opacity: 1; background: rgba(120, 130, 150, 0.12); }
+.home-head-icon-button svg { width: 17px; height: 17px; }
+.home-head-icon-button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* The square has no room to name the action: 87px of "↑ Upload file" left the
+   card's own title at 25px, rendering as "Fil…". The mark carries it there,
+   with the border the sheet gives it so it still reads as a button. */
+.home-head-icon-button.is-outline {
+  border: 1.5px solid rgba(37, 99, 235, 0.5); color: #2563eb; opacity: 1;
+}
+.home-head-icon-button.is-outline:hover { background: rgba(37, 99, 235, 0.08); border-color: #2563eb; }
 .home-note-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; flex-wrap: wrap; }
 .home-note-foot em { font-style: normal; font-size: 10.5px; opacity: 0.7; }
 .home-note-foot em.is-due { color: #dc2626; font-weight: 700; opacity: 1; }
@@ -28310,6 +28417,23 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
 }
 .home-card-2x2 .home-money-tile b { white-space: nowrap; }
 .home-money-tile b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* The proportion under the figure, for the one tile that is a proportion. */
+/* width:100% and align-self, because at <=640px the tile switches to
+   align-items:flex-start and a block whose only content is a percentage-width
+   child contributes zero — the bar vanished on phones and nowhere else. */
+.home-money-tile-bar {
+  display: block; width: 100%; align-self: stretch;
+  height: 5px; border-radius: 999px; background: rgba(120, 130, 150, 0.2);
+  overflow: hidden; margin-top: 2px;
+}
+/* opacity, because `.home-money-tile i` — written for the tile's sub line —
+   also matches this fill and washed it out to 60% on one card while the same
+   figure drew solid on the other two. */
+.home-money-tile-bar i { display: block; height: 100%; border-radius: 999px; background: currentColor; opacity: 1; }
+.home-money-tile.tone-green .home-money-tile-bar i { background: #15803d; }
+.home-money-tile.tone-orange .home-money-tile-bar i { background: #c2410c; }
+.home-linking-mark { display: inline-flex; line-height: 0; }
+.home-linking-mark svg { width: 16px; height: 16px; }
 .home-money-tile.tone-green b { color: #15803d; }
 .home-money-tile.tone-blue b { color: #1d4ed8; }
 
@@ -28999,7 +29123,8 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
   .home-note-grid[data-size="1x1"] .home-note-foot { gap: 4px; }
   .home-note-grid[data-size="1x1"] .home-chip { font-size: 9px; padding: 0 6px; line-height: 1.5; }
   .home-note-grid[data-size="1x1"] .home-note-foot em { font-size: 9px; }
-  .home-note-pin { font-size: 9px; margin-right: 4px; }
+  .home-note-pin { margin-right: 4px; }
+  .home-note-pin svg { width: 10px; height: 10px; }
 
   /* No footer link on a phone at any size — the card is the tap target. */
   .home-card .home-card-foot { display: none; }

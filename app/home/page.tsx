@@ -1,5 +1,7 @@
 "use client";
 
+import { HomeTileIcon } from "@/components/home/HomeActionIcons";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -394,23 +396,76 @@ export default function HomePage() {
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
                 placement.id === "files" ? (
-                  <button
-                    type="button"
-                    className="home-add-button is-wide"
-                    onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
-                  >
-                    ↑ {t("Upload file")}
-                  </button>
+                  // 87px of "↑ Upload file" left the card's own title at 25px
+                  // on the square, rendering as "Fil…". There the action is a
+                  // mark; the wider cards have the room to name it.
+                  placement.size === "1x1" ? (
+                    <button
+                      type="button"
+                      className="home-head-icon-button is-outline"
+                      aria-label={t("Upload file")}
+                      title={t("Upload file")}
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                    >
+                      <HomeTileIcon name="upload" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="home-add-button is-wide"
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                    >
+                      ↑ {t("Upload file")}
+                    </button>
+                  )
+                ) : placement.id === "notes" && placement.size === "1x1" ? (
+                  // The square's create control is the composer in its body —
+                  // except when there are no notes, because then the body is
+                  // replaced by "Nothing here yet." and the composer never
+                  // renders at all. Taking the + out of the header left a brand
+                  // new workspace with no way to write its first note from this
+                  // card. Exactly one control, in every state.
+                  isEmpty("notes", placement.period ?? "month") ? (
+                    <button
+                      type="button"
+                      className="home-add-button"
+                      aria-label={t("New note")}
+                      title={t("New note")}
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                    >
+                      +
+                    </button>
+                  ) : undefined
                 ) : placement.id === "notes" ? (
-                  <button
-                    type="button"
-                    className="home-add-button"
-                    aria-label={t("New Note")}
-                    title={t("New Note")}
-                    onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
-                  >
-                    +
-                  </button>
+                  // The wider header has room to name the action instead — the
+                  // same call the files card makes two arms up, for the same
+                  // reason: a bare + on a card full of notes is not obviously
+                  // "write one".
+                  <>
+                    {/* Only where there is room to spare: the wide-open card.
+                        It goes to the Notes screen's own search box with the
+                        caret already in it — the card has nowhere to put a
+                        results list, and a second search that finds different
+                        things would be worse than none. */}
+                    {placement.size === "2x2" ? (
+                      <Link
+                        className="home-head-icon-button"
+                        href="/notes?search=1"
+                        aria-label={t("Search notes…")}
+                        title={t("Search notes…")}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <HomeTileIcon name="search" />
+                      </Link>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="home-add-button is-wide"
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("note"); }}
+                    >
+                      {t("New note")}
+                    </button>
+                  </>
                 ) : placement.id === "recentActivity" && placement.size === "2x2" ? (
                   // The sheet puts the pills beside the title on the wide-open
                   // card only: the smaller sizes have no room, and a filter you
