@@ -23,7 +23,6 @@ import {
   ONBOARDING_VOLUMES,
   ONBOARDING_WORKFLOWS,
   ONBOARDING_BUSINESS_AGES,
-  ONBOARDING_HEARD_FROM,
   ONBOARDING_INVENTORY_EXPERIENCE,
   ONBOARDING_WORK_KINDS,
   type OnboardingAnswers,
@@ -252,93 +251,87 @@ export function OnboardingWizard({
         ) : null}
 
         {stepKey === "work" ? (
-          /* Six questions as six dropdowns, in two columns.
-             It was a wall of nine chips and four radio cards before, which is a
-             lot of reading for a screen whose answers only pick a preset — and
-             the chip row was a multiple choice that nothing downstream used:
-             businessTypeForWorkKinds reads kinds[0] and stops. One choice, kept
-             in a list so the saved shape does not change. */
-          <div className="onboard-sections">
-            <div className="onboard-grid is-pairs">
-              <label className="onboard-field">
-                <span>{t("What do you mostly make?")}</span>
-                <select
-                  value={answers.workKinds[0] ?? ""}
-                  onChange={event => set("workKinds", event.target.value
-                    ? [event.target.value as OnboardingWorkKind]
-                    : [])}
-                >
-                  <option value="">{t("Choose…")}</option>
-                  {ONBOARDING_WORK_KINDS.map(kind => (
-                    <option key={kind.id} value={kind.id}>{t(kind.label)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="onboard-field">
-                <span>{t("How do you mainly work?")}</span>
-                <select value={answers.workflow} onChange={event => set("workflow", event.target.value as OnboardingWorkflow)}>
-                  {ONBOARDING_WORKFLOWS.map(option => (
-                    <option key={option.id} value={option.id}>{t(option.label)}</option>
-                  ))}
-                </select>
-                <em className="onboard-why">
-                  {t(ONBOARDING_WORKFLOWS.find(option => option.id === answers.workflow)?.detail ?? "")}
-                </em>
-              </label>
+          /* A short grey label above, the question itself inside the control.
+             With the whole question as the label the rows came out at different
+             heights — "How familiar are you with stock tracking?" wraps where
+             "Team size" does not — and a grid of controls that do not line up
+             reads as untidy however carefully it is spaced. */
+          <div className="onboard-grid is-pairs">
+            <label className="onboard-field">
+              <span>{t("What you make")}</span>
+              <select
+                value={answers.workKinds[0] ?? ""}
+                onChange={event => set("workKinds", event.target.value
+                  ? [event.target.value as OnboardingWorkKind]
+                  : [])}
+              >
+                <option value="">{t("What do you mostly make?")}</option>
+                {ONBOARDING_WORK_KINDS.map(kind => (
+                  <option key={kind.id} value={kind.id}>{t(kind.label)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("How you work")}</span>
+              <select value={answers.workflow} onChange={event => set("workflow", event.target.value as OnboardingWorkflow)}>
+                {ONBOARDING_WORKFLOWS.map(option => (
+                  <option key={option.id} value={option.id}>{t(option.label)}</option>
+                ))}
+              </select>
+            </label>
 
-              <label className="onboard-field">
-                <span>{t("How many people will use NivaDesk?")}</span>
-                <select value={answers.teamSize} onChange={event => set("teamSize", event.target.value as OnboardingTeamSize)}>
-                  {ONBOARDING_TEAM_SIZES.map(size => <option key={size.id} value={size.id}>{t(size.label)}</option>)}
-                </select>
-              </label>
-              <label className="onboard-field">
-                <span>{t("Roughly how many orders a month?")}</span>
-                <select value={answers.volume} onChange={event => set("volume", event.target.value as OnboardingVolume)}>
-                  <option value="">{t("Rather not say")}</option>
-                  {ONBOARDING_VOLUMES.map(volume => <option key={volume.id} value={volume.id}>{t(volume.label)}</option>)}
-                </select>
-              </label>
+            <label className="onboard-field">
+              <span>{t("Team size")}</span>
+              <select value={answers.teamSize} onChange={event => set("teamSize", event.target.value as OnboardingTeamSize)}>
+                {ONBOARDING_TEAM_SIZES.map(size => <option key={size.id} value={size.id}>{t(size.label)}</option>)}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("Monthly orders")}</span>
+              <select value={answers.volume} onChange={event => set("volume", event.target.value as OnboardingVolume)}>
+                <option value="">{t("How many a month?")}</option>
+                {ONBOARDING_VOLUMES.map(volume => <option key={volume.id} value={volume.id}>{t(volume.label)}</option>)}
+              </select>
+            </label>
 
-              <label className="onboard-field">
-                <span>{t("How long have you been in business?")}</span>
-                <select
-                  value={answers.businessAge}
-                  onChange={event => set("businessAge", event.target.value as OnboardingAnswers["businessAge"])}
-                >
-                  <option value="">{t("Rather not say")}</option>
-                  {ONBOARDING_BUSINESS_AGES.map(age => <option key={age.id} value={age.id}>{t(age.label)}</option>)}
-                </select>
-              </label>
-              <label className="onboard-field">
-                <span>{t("How familiar are you with stock tracking?")}</span>
-                <select
-                  value={answers.inventoryExperience}
-                  onChange={event => set("inventoryExperience", event.target.value as OnboardingAnswers["inventoryExperience"])}
-                >
-                  <option value="">{t("Rather not say")}</option>
-                  {ONBOARDING_INVENTORY_EXPERIENCE.map(level => (
-                    <option key={level.id} value={level.id}>{t(level.label)}</option>
-                  ))}
-                </select>
-              </label>
+            <label className="onboard-field">
+              <span>{t("Business age")}</span>
+              <select
+                value={answers.businessAge}
+                onChange={event => set("businessAge", event.target.value as OnboardingAnswers["businessAge"])}
+              >
+                <option value="">{t("How long in business?")}</option>
+                {ONBOARDING_BUSINESS_AGES.map(age => <option key={age.id} value={age.id}>{t(age.label)}</option>)}
+              </select>
+            </label>
+            <label className="onboard-field">
+              <span>{t("Stock tracking")}</span>
+              <select
+                value={answers.inventoryExperience}
+                onChange={event => set("inventoryExperience", event.target.value as OnboardingAnswers["inventoryExperience"])}
+              >
+                <option value="">{t("How well do you track it?")}</option>
+                {ONBOARDING_INVENTORY_EXPERIENCE.map(level => (
+                  <option key={level.id} value={level.id}>{t(level.label)}</option>
+                ))}
+              </select>
+            </label>
 
-              <label className="onboard-field">
-                <span>{t("How did you find us?")}</span>
-                <select
-                  value={answers.heardFrom}
-                  onChange={event => set("heardFrom", event.target.value as OnboardingAnswers["heardFrom"])}
-                >
-                  <option value="">{t("Rather not say")}</option>
-                  {ONBOARDING_HEARD_FROM.map(source => (
-                    <option key={source.id} value={source.id}>{t(source.label)}</option>
-                  ))}
-                </select>
-              </label>
-              <p className="onboard-why onboard-field">
-                {t("This helps us suggest the right setup. It won't affect your trial.")}
-              </p>
-            </div>
+            <label className="onboard-field">
+              <span>{t("How did you find us?")}</span>
+              {/* Typed, not chosen: a list of the channels we thought of first
+                  only ever collects the channels we thought of first. */}
+              <input
+                type="text"
+                value={answers.heardFrom}
+                maxLength={200}
+                placeholder={t("A search, a friend, an advert…")}
+                onChange={event => set("heardFrom", event.target.value)}
+              />
+            </label>
+            <p className="onboard-why onboard-field">
+              {t("This helps us suggest the right setup. It won't affect your trial.")}
+            </p>
           </div>
         ) : null}
 

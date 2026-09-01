@@ -45,9 +45,11 @@ export type OnboardingAnswers = {
   volume: OnboardingVolume;
   businessAge: OnboardingBusinessAge | "";
   inventoryExperience: OnboardingInventoryExperience | "";
-  /** Not used to set anything up. Asked because knowing which channel brought
-   *  someone is the difference between guessing at marketing and measuring it. */
-  heardFrom: OnboardingHeardFrom | "";
+  /** Their own words. Not used to set anything up — asked because knowing what
+   *  brought someone is the difference between guessing at marketing and
+   *  measuring it, and a list of channels we thought of first would only ever
+   *  collect the ones we thought of. */
+  heardFrom: string;
   mainGoal: OnboardingGoal | "";
   /** What they typed when the goal is "Something else". Their words, not ours. */
   otherGoal: string;
@@ -106,8 +108,6 @@ export const ONBOARDING_WORKFLOWS: { id: OnboardingWorkflow; label: string; deta
 
 export type OnboardingBusinessAge = "starting" | "under_1" | "1_3" | "3_10" | "over_10";
 export type OnboardingInventoryExperience = "none" | "some" | "confident" | "no_stock";
-export type OnboardingHeardFrom =
-  "search" | "shopify" | "etsy" | "social" | "word_of_mouth" | "advert" | "other";
 
 export const ONBOARDING_BUSINESS_AGES: { id: OnboardingBusinessAge; label: string }[] = [
   { id: "starting", label: "Just starting out" },
@@ -124,15 +124,6 @@ export const ONBOARDING_INVENTORY_EXPERIENCE: { id: OnboardingInventoryExperienc
   { id: "confident", label: "I track it closely" },
 ];
 
-export const ONBOARDING_HEARD_FROM: { id: OnboardingHeardFrom; label: string }[] = [
-  { id: "search", label: "A search engine" },
-  { id: "shopify", label: "The Shopify App Store" },
-  { id: "etsy", label: "Etsy, or a sellers' group" },
-  { id: "social", label: "Social media" },
-  { id: "word_of_mouth", label: "A friend or colleague" },
-  { id: "advert", label: "An advert" },
-  { id: "other", label: "Somewhere else" },
-];
 
 export const ONBOARDING_TEAM_SIZES: { id: OnboardingTeamSize; label: string; seats: number }[] = [
   { id: "solo", label: "Just me", seats: 1 },
@@ -450,7 +441,7 @@ export async function saveOnboardingAnswers(
       onboardingOrderVolume: answers.volume,
       onboardingBusinessAge: answers.businessAge,
       onboardingInventoryExperience: answers.inventoryExperience,
-      onboardingHeardFrom: answers.heardFrom,
+      onboardingHeardFrom: answers.heardFrom.trim().slice(0, 200),
       onboardingGoals: goals,
       onboardingMainGoal: answers.mainGoal,
       onboardingOtherGoal: answers.otherGoal.trim().slice(0, 200),
