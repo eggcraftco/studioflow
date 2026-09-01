@@ -74,7 +74,7 @@ struct HomeCardShell<CardBody: View>: View {
             // A 1×1 is a small square now, so it gets the small badge too — the
             // desktop one ate the width the title needed.
             HomeBadge(symbol: definition.icon, tone: placement.tone,
-                      filled: definition.filledBadge,
+                      style: definition.badge,
                       size: (compact || placement.size == .oneByOne) ? 30 : 38)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 7) {
@@ -269,19 +269,26 @@ struct HomeGripDots: View {
     }
 }
 
+/// Ring is the default anchor; filled is a solid disc with a white glyph;
+/// tinted is a wash of the colour with the glyph drawn in it and no ring —
+/// what the 2x1 sheet gives Banking, in place of the solid badge an earlier
+/// sheet showed.
+enum HomeBadgeStyle { case ring, filled, tinted }
+
 struct HomeBadge: View {
     let symbol: String
     var tone: HomeCardTone = .standard
-    var filled: Bool = false
+    var style: HomeBadgeStyle = .ring
     var size: CGFloat = 38
     private var colour: Color { tone == .standard ? HomeTone.accent : tone.accent }
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundColor(filled ? .white : colour)
+            .foregroundColor(style == .filled ? .white : colour)
             .frame(width: size, height: size)
-            .background(Circle().fill(filled ? colour : .clear))
-            .overlay(Circle().stroke(colour, lineWidth: filled ? 0 : 2))
+            .background(Circle().fill(style == .filled ? colour
+                                      : style == .tinted ? colour.opacity(0.14) : .clear))
+            .overlay(Circle().stroke(colour, lineWidth: style == .ring ? 2 : 0))
     }
 }
 

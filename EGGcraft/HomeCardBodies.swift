@@ -48,7 +48,7 @@ struct HomeCardBody: View {
             HomeMoneyBody(size: size, lang: lang, currency: currency, decimal: decimal,
                           compact: compact, period: period)
         case .banking:
-            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
+            HomeBankingBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, period: period, data: data)
         case .inventory:
             HomeInventoryBody(size: size, lang: lang, currency: currency, decimal: decimal, compact: compact, data: data)
         case .customers:
@@ -1338,6 +1338,7 @@ struct HomeBankingBody: View {
     let currency: String
     let decimal: String
     var compact: Bool = false
+    var period: HomeCardPeriod = .month
     @ObservedObject var data: HomeData
     @EnvironmentObject var firebaseManager: FirebaseManager
 
@@ -1348,10 +1349,21 @@ struct HomeBankingBody: View {
             HomeCardNote(text: t("Nothing here yet.", lang: lang))
         } else {
             let money = { (value: Double) in homeMoney(value, currency: currency, decimal: decimal) }
-            let monthPrefix = String(homeISODate(Date()).prefix(7))
-            let thisMonth = transactions.filter { $0.bookingDate.hasPrefix(monthPrefix) }
-            let incoming = thisMonth.filter { $0.amount > 0 }.reduce(0.0) { $0 + $1.amount }
-            let spent = thisMonth.filter { $0.amount < 0 }.reduce(0.0) { $0 + abs($1.amount) }
+            // The header offers a range, so the totals have to cover it. Booking
+            // dates are ISO strings, and an ISO date compares as a string in the
+            // same order it compares as a date, so the window converts rather
+            // than every row parsing.
+            let window = period.range
+            let from = homeISODate(window.start), to = homeISODate(window.end)
+            let inRange = transactions.filter { $0.bookingDate >= from && $0.bookingDate <= to }
+            let incoming = inRange.filter { $0.amount > 0 }.reduce(0.0) { $0 + $1.amount }
+            let spent = inRange.filter { $0.amount < 0 }.reduce(0.0) { $0 + abs($1.amount) }
+            // "Incoming this month" beside a header reading "This year" is just
+            // wrong, and at All time there is no window to name at all.
+            let incomingLabel = period == .month ? "Incoming this month"
+                : period == .year ? "Incoming this year" : "Incoming"
+            let spentLabel = period == .month ? "Spent this month"
+                : period == .year ? "Spent this year" : "Spent"
             let toReview = transactions.filter { $0.category.trimmingCharacters(in: .whitespaces).isEmpty }.count
             let missing = transactions.filter { $0.amount < 0 && !$0.hasReceipt }.count
 
@@ -1363,7 +1375,7 @@ struct HomeBankingBody: View {
                 VStack(alignment: .leading, spacing: 0) {
                     Divider()
                     Spacer(minLength: 8)
-                    Text(t("Spent this month", lang: lang))
+                    Text(t(spentLabel, lang: lang))
                         .font(.system(size: 11)).foregroundColor(.secondary)
                     Text(money(spent))
                         .font(.system(size: 27, weight: .heavy))
@@ -1398,7 +1410,7 @@ struct HomeBankingBody: View {
             } else if size == .oneByOne {
                 VStack(alignment: .leading, spacing: 8) {
                     HomeSyncLine(lastSync: data.bankLastSync, unhealthy: data.bankNeedsAttention, lang: lang)
-                    Text(t("Spent this month", lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
+                    Text(t(spentLabel, lang: lang)).font(.system(size: compact ? 11 : 13)).foregroundColor(.secondary)
                     Text(money(spent))
                         .font(.system(size: compact ? 25 : 33, weight: .heavy))
                         .foregroundColor(.primary)
@@ -1407,7 +1419,7 @@ struct HomeBankingBody: View {
                     HomeSplitPair {
                         HomeFigure(label: t("Incoming", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                     } right: {
-                        HomeFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
+                        HomeFigure(label: t("Missing receipts", lang: lang), value: "\(missing)",
                                    tone: missing > 0 ? HomeTone.red : .primary)
                     }
                 }
@@ -1421,9 +1433,9 @@ struct HomeBankingBody: View {
                 let yearOut = totals.spent
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 0) {
-                        HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
+                        HomeBankFigure(label: t(incomingLabel, lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
                         Divider().frame(height: 34)
-                        HomeBankFigure(label: t("Spent this month", lang: lang), value: money(spent), tone: .primary)
+                        HomeBankFigure(label: t(spentLabel, lang: lang), value: money(spent), tone: .primary)
                         Divider().frame(height: 34)
                         HomeBankFigure(label: t("Missing receipts", lang: lang), value: "\(missing)",
                                        tone: missing > 0 ? HomeTone.orange : .primary)
@@ -1471,21 +1483,39 @@ struct HomeBankingBody: View {
                 let fixed = bankMonthlyFixedTotal(firebaseManager)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 0) {
-                        HomeBankFigure(label: t("Incoming this month", lang: lang), value: "+" + money(incoming), tone: HomeTone.green)
+                        HomeBankFigure(label: t(incomingLabel, lang: lang), value: "+" + money(incoming),
+                                       tone: HomeTone.green, centred: true)
+                            .frame(maxWidth: .infinity)
                         Divider().frame(height: 32)
-                        HomeBankFigure(label: t("Spent this month", lang: lang), value: money(spent), tone: .primary)
+                        HomeBankFigure(label: t(spentLabel, lang: lang), value: money(spent),
+                                       tone: .primary, centred: true)
+                            .frame(maxWidth: .infinity)
                         Divider().frame(height: 32)
-                        HomeBankFigure(label: t("missing receipts", lang: lang), value: "\(missing)",
-                                       tone: missing > 0 ? HomeTone.orange : .primary)
+                        HomeBankFigure(label: t("Missing receipts", lang: lang), value: "\(missing)",
+                                       tone: missing > 0 ? HomeTone.orange : .primary, centred: true)
+                            .frame(maxWidth: .infinity)
                     }
                     Divider()
                     HStack(alignment: .top, spacing: 14) {
                         VStack(alignment: .leading, spacing: 2) {
                             HomeEyebrow(text: t("Recent transactions", lang: lang))
-                            ForEach(transactions.prefix(3), id: \.id) { tx in
-                                HomeRow(title: tx.counterparty.isEmpty ? tx.description : tx.counterparty,
-                                        detail: (tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)),
-                                        tone: tx.amount < 0 ? .primary : HomeTone.green)
+                            ForEach(Array(transactions.prefix(3).enumerated()), id: \.element.id) { index, tx in
+                                if index > 0 { Divider() }
+                                HStack(spacing: 8) {
+                                    Text(String((tx.counterparty.isEmpty ? tx.description : tx.counterparty).prefix(1)).uppercased())
+                                        .font(.system(size: 10, weight: .heavy))
+                                        .foregroundColor(HomeTone.accent)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(HomeTone.accent.opacity(0.14)))
+                                    Text(tx.counterparty.isEmpty ? tx.description : tx.counterparty)
+                                        .font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                    Spacer(minLength: 6)
+                                    Text((tx.amount < 0 ? "−" : "+") + money(abs(tx.amount)))
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(tx.amount < 0 ? .primary : HomeTone.green)
+                                        .lineLimit(1).minimumScaleFactor(0.7)
+                                }
+                                .padding(.vertical, 3)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1519,9 +1549,9 @@ struct HomeBankingBody: View {
                         // Four across a phone truncates every label and every
                         // figure. Two by two gives each one half the width.
                         HStack(spacing: 7) {
-                            HomeSlimTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
+                            HomeSlimTile(label: t(incomingLabel, lang: lang), value: "+" + money(incoming),
                                          tone: HomeTone.green, symbol: "arrow.down")
-                            HomeSlimTile(label: t("Spent this month", lang: lang), value: money(spent),
+                            HomeSlimTile(label: t(spentLabel, lang: lang), value: money(spent),
                                          tone: HomeTone.slate, valueTone: .primary, symbol: "arrow.up")
                         }
                         HStack(spacing: 7) {
@@ -1534,9 +1564,9 @@ struct HomeBankingBody: View {
                         }
                     } else {
                         HStack(spacing: 10) {
-                            HomeMetricTile(label: t("Incoming this month", lang: lang), value: "+" + money(incoming),
+                            HomeMetricTile(label: t(incomingLabel, lang: lang), value: "+" + money(incoming),
                                            tone: HomeTone.green, symbol: "arrow.down")
-                            HomeMetricTile(label: t("Spent this month", lang: lang), value: money(spent),
+                            HomeMetricTile(label: t(spentLabel, lang: lang), value: money(spent),
                                            tone: HomeTone.slate, valueTone: .primary, symbol: "arrow.up")
                             HomeMetricTile(label: t("Missing receipts", lang: lang), value: "\(missing)",
                                            tone: missing > 0 ? HomeTone.red : HomeTone.accent, symbol: "doc.text.magnifyingglass")
@@ -1561,9 +1591,10 @@ struct HomeBankingBody: View {
                             ForEach(transactions.prefix(2), id: \.id) { tx in
                                 HStack(spacing: 8) {
                                     Text(String((tx.counterparty.isEmpty ? tx.description : tx.counterparty).prefix(1)).uppercased())
-                                        .font(.system(size: 10, weight: .heavy)).foregroundColor(.white)
+                                        .font(.system(size: 10, weight: .heavy))
+                                        .foregroundColor(HomeTone.accent)
                                         .frame(width: 20, height: 20)
-                                        .background(Circle().fill(HomeTone.accent))
+                                        .background(Circle().fill(HomeTone.accent.opacity(0.14)))
                                     Text(tx.counterparty.isEmpty ? tx.description : tx.counterparty)
                                         .font(.system(size: 11.5)).lineLimit(1)
                                     Spacer(minLength: 6)
@@ -1660,8 +1691,11 @@ struct HomeBankFigure: View {
     var compact: Bool = false
     /// A quieter second figure under the value — what those items are worth.
     var sub: String = ""
+    /// The 2x1 sheet centres each figure in its third rather than ranging them
+    /// left against their dividers.
+    var centred: Bool = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: centred ? .center : .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: compact ? 9.5 : 11.5)).foregroundColor(.secondary)
                 .lineLimit(compact ? 2 : 1)

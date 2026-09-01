@@ -31,6 +31,7 @@ export type CardIcon =
   | "team"
   | "timer"
   | "workTime"
+  | "bank"
   | "warningTriangle";
 
 const ICON_PATHS: Record<CardIcon, string[]> = {
@@ -67,6 +68,7 @@ const ICON_PATHS: Record<CardIcon, string[]> = {
   team: ["M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M17 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "M2.5 21a7 7 0 0 1 13 0", "M13 21a5.5 5.5 0 0 1 8.5 0"],
   timer: ["M10 2h4", "M12 14V9", "M16.2 5.8l1.4-1.4", "M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"],
   workTime: ["M12 7v5l3 2", "M19 12a7 7 0 1 1-2.05-4.95", "M19 4v5h-5"],
+  bank: ["M3 9.5 12 4.5l9 5", "M5.5 11v7M9.8 11v7M14.2 11v7M18.5 11v7", "M3.5 20.5h17"],
   warningTriangle: ["M12 3 2 21h20L12 3Z", "M12 9v5", "M12 17h.01"]
 };
 

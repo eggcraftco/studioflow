@@ -382,6 +382,14 @@ export default function HomePage() {
               }
               subtitleInline={placement.id === "ordersProduction" || placement.id === "files"
                 || placement.id === "schedule"}
+              titleBadge={
+                // The promise belongs to the card's name: this feed can never
+                // move money. Outlined rather than filled, so it reads as a
+                // note on the heading and not as a warning about the data.
+                placement.id === "banking" && data.bankTransactions.length > 0
+                  ? <span className="home-pill is-warning">{t("Read-only")}</span>
+                  : undefined
+              }
               headerSlot={
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
@@ -419,10 +427,6 @@ export default function HomePage() {
                       </button>
                     ))}
                   </span>
-                ) : placement.id === "banking" && data.bankTransactions.length > 0 ? (
-                  // The promise sits beside the title, not in a footnote: this
-                  // feed can never move money and the card should lead with that.
-                  <span className="home-pill is-warning is-solid">{t("Read-only")}</span>
                 ) : undefined
               }
               onMove={(direction) => void commit(moveHomeCard(layout, index, index + direction))}

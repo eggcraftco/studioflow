@@ -27264,8 +27264,26 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   background: #2563eb; border-color: #2563eb; color: #fff;
   --card-title-icon-cutout: #2563eb;
 }
+/* The tinted badge: a wash of the colour with the glyph drawn in it, no ring.
+   The cutout follows the wash, because the two knocked-out glyphs (shippingBox,
+   finance) punch through to whatever sits behind them. */
+.home-card-badge.is-tinted {
+  background: rgba(37, 99, 235, 0.13); border-color: transparent; color: #2563eb;
+  --card-title-icon-cutout: #dce6fb;
+}
+body[data-studio-theme="dark"] .home-card-badge.is-tinted {
+  background: rgba(96, 165, 250, 0.2); color: #9cc0fc;
+  --card-title-icon-cutout: #1e293b;
+}
 
 .home-card-titles { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+/* The titles column grows to fill the header, which is what pushes the period
+   select and the ... menu to the right edge. A badge that belongs to the
+   heading has to defeat that or it lands out by the menu — so on those cards
+   the column shrinks to its text and the period select's own margin-left:auto
+   takes the slack instead. Scoped, so no other card's header moves. */
+.home-card-head.has-title-badge .home-card-titles { flex: 0 1 auto; }
+.home-card-head.has-title-badge > .home-pill { flex: 0 0 auto; margin-right: auto; }
 /* "10 active" belongs beside the heading, not under it — the wide card has the
    width and the sheet reads it as one line. */
 .home-card-titles.is-inline { flex-direction: row; align-items: baseline; gap: 9px; }
@@ -27280,6 +27298,10 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; background: var(--surface);
 }
 .home-card-head-slot { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+/* An empty slot is not nothing: it still claims a share of the header's free
+   space through its own margin-left:auto and still costs a 12px gap, which is
+   what left the period select floating 35px short of the ... menu. */
+.home-card-head-slot:empty { display: none; }
 /* The range the card's totals cover. A native select, so it opens the way the
    platform expects and stays reachable by keyboard; the chevron is drawn on the
    wrapper because a select cannot be styled reliably across engines. */
@@ -27888,7 +27910,9 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   border: 1px solid currentColor; white-space: nowrap;
 }
 .home-pill.is-warning { color: #c2410c; }
-.home-pill.is-solid { border-color: transparent; background: rgba(249, 115, 22, 0.16); font-weight: 800; }
+/* Outlined on a dark card, #c2410c is a dark orange on a dark ground — legible
+   enough when it had a tinted fill behind it, not on its own. */
+body[data-studio-theme="dark"] .home-pill.is-warning { color: #fb9a5c; }
 
 /* Freshness, not liveness: a stale or unhealthy feed gets the warning mark, a
    healthy one gets the refresh mark. */
@@ -28018,6 +28042,7 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   background: rgba(37, 99, 235, 0.12); color: #1d4ed8;
   display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800;
 }
+body[data-studio-theme="dark"] .home-aside-mark { background: rgba(96, 165, 250, 0.2); color: #9cc0fc; }
 .home-cost-list b.is-negative { color: #dc2626; }
 .home-cost-list b.is-positive { color: #15803d; }
 
@@ -28065,6 +28090,9 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 800;
 }
+/* #1d4ed8 initials on a dark card are close to invisible; the same wash needs a
+   light glyph on that ground, the way the tinted card badge does. */
+body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2); color: #9cc0fc; }
 .home-chart-line.is-spent { stroke: #f97316; }
 .home-chart-key i.is-spent { background: #f97316; }
 .home-year-line { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11.5px; opacity: 0.75; }
@@ -28097,6 +28125,14 @@ body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
    that needs a little more, so "Recent activity" came out as "Recent …".
    The badge is the part with room to give — it is an anchor, not a picture. */
 .home-card-1x1 .home-card-head { gap: 8px; padding-left: 16px; padding-right: 16px; }
+/* A 236px square holds a badge, a name and the menu, and that is the lot. The
+   range select is 87px of the 196px available, which is why the Money 1x1 has
+   been drawing its title at 10px — an ellipsis where the word should be — and
+   why Banking, which also carries a pill, overflowed its header by 46px. The
+   range and the pill live on the sizes with room for them; a 1x1 keeps
+   whatever range was last chosen on a bigger size, and defaults to the month. */
+.home-card-1x1 .home-period,
+.home-card-1x1 .home-card-head.has-title-badge > .home-pill { display: none; }
 .home-card-1x1 .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
 .home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
 .home-card-1x1 .home-card-title { font-size: 15px; }
@@ -28223,6 +28259,24 @@ body[data-studio-theme="dark"] .home-ratio-foot b.is-costs { color: #fb9a5c; }
 }
 
 .home-money.is-large { gap: 12px; }
+
+/* The Banking 2x1 asks for three transaction rows underneath three figures, and
+   at the card's 236px that did not fit: the body wanted 199px and had 145, so
+   the list was cut off mid-row and the card showed one and a half payments.
+   Every number here is space taken out of padding rather than out of the row
+   count, because the third row is the point of the card. Scoped to .is-bank —
+   .is-wide is shared with five other bodies. */
+.home-money.is-bank { gap: 8px; }
+.home-money.is-bank .home-figure-row b { font-size: 17.5px; }
+.home-money.is-bank .home-bank-split { margin-top: 4px; padding-top: 4px; }
+.home-money.is-bank .home-eyebrow { margin-top: 0; font-size: 11px; }
+.home-money.is-bank .home-cost-list { margin-top: 0; }
+.home-money.is-bank .home-cost-list li { padding: 3px 0; }
+.home-money.is-bank .home-avatar { width: 18px; height: 18px; font-size: 9.5px; }
+/* The sheet centres each figure in its third. The first column's padding has to
+   come back for that, or its centre sits 7px left of the column's. */
+.home-money.is-bank .home-figure-row > span { align-items: center; text-align: center; }
+.home-money.is-bank .home-figure-row > span:first-child { padding-left: 14px; }
 .home-tile-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .home-money-tile { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .home-money-tile-dot { width: 22px; height: 22px; border-radius: 999px; }

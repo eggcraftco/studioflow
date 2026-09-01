@@ -345,28 +345,40 @@ function compactMoney(value: number, settings: StudioMoneySettings): string {
 
 /* ---------------------------------------------------------------- Banking */
 
-export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+export function BankingCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
   const transactions = data.bankTransactions;
   if (transactions.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const thisMonth = transactions.filter((tx) => tx.bookingDate && tx.bookingDate >= monthStart);
-  const incoming = thisMonth.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-  const spent = thisMonth.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  // The header offers a range, so the totals have to cover it — the month was
+  // hardcoded here while the card said nothing about which month it meant.
+  const { start, end } = homePeriodRange(period);
+  const inRange = transactions.filter((tx) =>
+    tx.bookingDate !== null && tx.bookingDate >= start && tx.bookingDate <= end);
+  const incoming = inRange.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+  const spent = inRange.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
   const toReview = transactions.filter((tx) => !tx.reviewed).length;
+  // Not scoped to the range, and deliberately: this is a queue, not a
+  // statistic. A receipt you still owe from March does not stop being owed
+  // because the card is showing April, and the label never claims a period.
   const missingReceipts = transactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
+  // "Incoming this month" beside a header reading "This year" is just wrong,
+  // and at All time there is no window to name at all.
+  const incomingLabel = period === "month" ? "Incoming this month"
+    : period === "year" ? "Incoming this year" : "Incoming";
+  const spentLabel = period === "month" ? "Spent this month"
+    : period === "year" ? "Spent this year" : "Spent";
 
   // 1x1, as the sheet draws it: the freshness of the feed, then what left the
   // account this month, then what came in against what still needs a receipt.
-  // The read-only promise moved up beside the title where it belongs.
+  // The read-only promise and the range select both belong beside the title,
+  // and both are hidden at this size — the square has no room for either and
+  // was rendering the card's own name as an ellipsis to make space.
   if (size === "1x1") {
     return (
       <div className="home-money">
         <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
-        <p className="home-metric-label">{t("Spent this month")}</p>
+        <p className="home-metric-label">{t(spentLabel)}</p>
         {/* Spending is not a loss and not an error. It is what a workshop does
             every week, and painting it red with a minus made an ordinary month
             look like a warning — the label already says "Spent", so the sign
@@ -375,7 +387,7 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
         <div className="home-split-pair">
           <span><em>{t("Incoming")}</em><b className="is-positive">+{money(incoming)}</b></span>
           <span>
-            <em>{t("missing receipts")}</em>
+            <em>{t("Missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-negative" : ""}>{missingReceipts}</b>
           </span>
         </div>
@@ -388,8 +400,8 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   // tile implies would waste the slot.
   const tiles = (
     <div className="home-tile-row">
-      <MoneyTile icon="in" label={t("Incoming this month")} value={`+${money(incoming)}`} tone="green" />
-      <MoneyTile icon="out" label={t("Spent this month")} value={money(spent)} tone="neutral" />
+      <MoneyTile icon="in" label={t(incomingLabel)} value={`+${money(incoming)}`} tone="green" />
+      <MoneyTile icon="out" label={t(spentLabel)} value={money(spent)} tone="neutral" />
       <MoneyTile icon="receiptAlert" label={t("Missing receipts")} value={String(missingReceipts)}
                  tone={missingReceipts > 0 ? "red" : "blue"} />
       <MoneyTile icon="recurring" label={t("Fixed")}
@@ -404,12 +416,12 @@ export function BankingCardBody({ size, data, t, moneySettings, hideNumbers }: C
   // the feed is.
   if (size === "2x1") {
     return (
-      <div className="home-money is-wide">
+      <div className="home-money is-wide is-bank">
         <div className="home-figure-row">
-          <span><em>{t("Incoming this month")}</em><b className="is-positive">+{money(incoming)}</b></span>
-          <span><em>{t("Spent this month")}</em><b>{money(spent)}</b></span>
+          <span><em>{t(incomingLabel)}</em><b className="is-positive">+{money(incoming)}</b></span>
+          <span><em>{t(spentLabel)}</em><b>{money(spent)}</b></span>
           <span>
-            <em>{t("missing receipts")}</em>
+            <em>{t("Missing receipts")}</em>
             <b className={missingReceipts > 0 ? "is-warning" : ""}>{missingReceipts}</b>
           </span>
         </div>

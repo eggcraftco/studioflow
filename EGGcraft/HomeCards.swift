@@ -76,7 +76,7 @@ struct HomeCardDefinition {
     let icon: String
     /// "ring" is the default anchor; Banking uses the solid badge the reference
     /// gives it, with the glyph knocked out of the colour.
-    var filledBadge: Bool = false
+    var badge: HomeBadgeStyle = .ring
     let sizes: [HomeCardSize]
     let defaultSize: HomeCardSize
     let access: HomeCardAccess
@@ -106,9 +106,9 @@ enum HomeCards {
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .dashboard,
                            financeOnly: true, periods: true,
                            destination: "Dashboard", linkLabel: "Open Dashboard"),
-        HomeCardDefinition(id: .banking, title: "Banking", icon: "building.columns.fill", filledBadge: true,
+        HomeCardDefinition(id: .banking, title: "Banking", icon: "building.columns", badge: .tinted,
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .bankFeed,
-                           financeOnly: true, destination: "BankSpending", linkLabel: "Go to banking"),
+                           financeOnly: true, periods: true, destination: "BankSpending", linkLabel: "Go to banking"),
         HomeCardDefinition(id: .inventory, title: "Inventory", icon: "shippingbox.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .oneByOne, access: .orders,
                            financeOnly: false, destination: "Inventory", linkLabel: "View inventory"),
