@@ -232,7 +232,13 @@ function topPaths(question, limit = 4) {
     path.join(__dirname, "..", "..", "..", "studioflow-web", "components", "OnboardingWizard.tsx"),
     "utf8"
   );
-  const totalSteps = Number((WIZARD.match(/const TOTAL_STEPS = (\d+)/) || [])[1]);
+  // The wizard's steps are a named list now (STEP_ORDER), and the count is its
+  // length — so count the entries rather than read a literal that no longer
+  // exists. The literal is kept as a fallback for the day the list goes away.
+  const orderMatch = WIZARD.match(/const STEP_ORDER: OnboardingStepKey\[\] = \[([^\]]+)\]/);
+  const totalSteps = orderMatch
+    ? orderMatch[1].split(",").map((entry) => entry.trim()).filter(Boolean).length
+    : Number((WIZARD.match(/const TOTAL_STEPS = (\d+)/) || [])[1]);
   assert(
     Number.isFinite(totalSteps) && totalSteps > 0,
     "could not read TOTAL_STEPS out of OnboardingWizard.tsx"

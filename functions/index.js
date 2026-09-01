@@ -13899,6 +13899,7 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
   const settings = (await companySettingsDocRef(companyId).get()).data() || {};
   const defaultDeliveryTime = resolveDefaultDeliveryTime(settings);
   let imported = 0;
+  let unknown = 0;
 
   for (const doc of snap.docs) {
     const capacity = await integrationOrderCapacity(companyId, companyData);
@@ -13919,13 +13920,40 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
           integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.woocommerce),
           { merge: true }
         );
+      } else if (provider === "shopify" && data.shop) {
+        // Parked by the official app. Replayed through applyShopifyOrderEvent
+        // rather than the bare mapper, so it gets the store's filters, workflow
+        // rule and card fields — the same result the live webhook would have
+        // produced (MERGE-006). A store that is gone, or one that now belongs to
+        // another workspace, leaves the order in place rather than guessing.
+        const storeSnap = await shopifyStoreRef(String(data.shop)).get();
+        const store = storeSnap.exists ? storeSnap.data() : null;
+        if (!store || String(store.companyId || "") !== companyId) {
+          console.warn("releaseHeldIntegrationOrders: store not linked, left in place", doc.id);
+          unknown += 1;
+          continue;
+        }
+        const outcome = await applyShopifyOrderEvent(String(data.shop), store, "orders/create", order, { release: true });
+        if (outcome && outcome.status === "held") continue;
+        await doc.ref.delete();
+        if (outcome && outcome.status === "ok") imported += 1;
+        continue;
       } else if (provider === "shopify") {
         const docId = shopifyOrderDocId(companyId, data.externalId);
         const ref = orderDocRef(docId);
         const existing = await ref.get();
-        const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
+        const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists, defaultDeliveryTime);
         await ref.set(
           integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.shopify),
+          { merge: true }
+        );
+      } else if (provider === "inbound") {
+        const docId = inboundOrderDocId(companyId, data.externalId);
+        const ref = orderDocRef(docId);
+        const existing = await ref.get();
+        const mapped = mapGenericInboundOrderToSiparis(order, companyId, !existing.exists);
+        await ref.set(
+          integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound),
           { merge: true }
         );
       } else if (provider === "etsy") {
@@ -13974,7 +14002,12 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         imported += 1;
         continue;
       } else {
-        await doc.ref.delete();
+        // TEST-016. A provider this build does not know how to replay. Deleting
+        // it was the old behaviour, and deleting is the one thing that cannot be
+        // undone: the order is only here because the workspace could not take it
+        // yet. It stays, and the count says so.
+        console.warn("releaseHeldIntegrationOrders: unknown provider left in place", doc.id, provider);
+        unknown += 1;
         continue;
       }
       await doc.ref.delete();
@@ -13987,7 +14020,7 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
   const remaining = await heldIntegrationOrdersRef(companyId).count().get()
     .then((agg) => agg.data().count || 0)
     .catch(() => 0);
-  return { ok: true, imported, stillHeld: remaining };
+  return { ok: true, imported, unknown, stillHeld: remaining };
 });
 
 exports.createWebOrder = onCall({ region: "europe-west2" }, async (request) => {
@@ -18798,7 +18831,7 @@ function shopifyShippingCost(order) {
   return lines.reduce((sum, line) => sum + wooNumber(line?.price, 0), 0);
 }
 
-function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
+function mapShopifyOrderToSiparis(order, companyId, isNew = true, defaultDeliveryTime = 45) {
   const now = new Date();
   const shopifyId = cleanWooText(order?.id || order?.order_number || crypto.randomUUID());
   const orderNumber = cleanWooText(order?.name || order?.order_number || order?.number || shopifyId);
@@ -18846,7 +18879,10 @@ function mapShopifyOrderToSiparis(order, companyId, isNew = true) {
     remainingAmount: 0,
     watchPurchasePrice: 0,
     watchRef,
-    deliveryTime: 45,
+    // MERGE-004: Shopify does not say how long the piece takes, so this is the
+    // workspace's own default rather than a number the mapper made up. Callers
+    // that have not resolved one still get the 45 they always got.
+    deliveryTime: defaultDeliveryTime,
     designName,
     lineItems,
     designLink: cleanWooText(order?.order_status_url || ""),
@@ -19188,6 +19224,21 @@ function inboundAddressParts(addr) {
   };
 }
 
+// INB-002 / INB-003. The senders that can post to the generic inbound endpoint,
+// and the label each one shows. Anything else — including "shopify", "etsy" and
+// "woocommerce" — is "Website": a sender must not be able to choose a real
+// provider's identity by typing it into a JSON field, because that identity
+// decides which customer pool the buyer is merged into (upsertIntegrationCustomer
+// matches on it) and which channel the dashboard credits the sale to.
+const INBOUND_SOURCE_LABELS = Object.freeze({
+  zapier: "Zapier", make: "Make", wix: "Wix", squarespace: "Squarespace", website: "Website", inbound: "Website"
+});
+function inboundSourceLabel(claimed) {
+  const key = String(claimed || "").trim().toLowerCase();
+  const label = INBOUND_SOURCE_LABELS[key];
+  return label ? { key: key === "inbound" ? "website" : key, label } : { key: "website", label: "Website" };
+}
+
 function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
   const now = new Date();
   const externalId = cleanWooText(inboundValue(payload, ["orderId", "id", "order_id", "orderNumber", "number"]) || crypto.randomUUID());
@@ -19203,7 +19254,8 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
   const lineItems = inboundItems.some((i) => i.lineTotal > 0.005) ? reconcileLineItems(inboundItems, total) : [];
   const designName = cleanWooText(inboundValue(payload, ["designName", "design_name", "title"]) || productsSummary || `Order ${orderNumber}`);
   const customerName = cleanWooText(inboundValue(payload, ["customerName", "customer_name", "name", "fullName", "buyerName"]) || "Website Customer");
-  const sourceLabel = cleanWooText(inboundValue(payload, ["source", "platform", "store"]) || "Website");
+  const inboundSource = inboundSourceLabel(inboundValue(payload, ["source", "platform", "store"]));
+  const sourceLabel = inboundSource.label;
   // The actual payment method the customer used; empty when none, rather than the source name.
   const paymentMethod = cleanWooText(inboundValue(payload, ["paymentMethod", "payment_method", "gateway"]) || "");
   const email = cleanWooText(inboundValue(payload, ["email", "customerEmail", "buyerEmail"]));
@@ -19242,6 +19294,11 @@ function mapGenericInboundOrderToSiparis(payload, companyId, isNew = true) {
     remainingAmount: 0,
     watchPurchasePrice: 0,
     watchRef: cleanWooText(inboundValue(payload, ["sku", "ref", "watchRef"])),
+    // DATA-007: the source is its own field, not a custom-field string. Faz 2's
+    // canonical envelope reads this; the dashboard still reads customFields.Source
+    // until then.
+    orderSource: "inbound",
+    inboundChannel: inboundSource.key,
     deliveryTime: wooNumber(inboundValue(payload, ["deliveryTime", "delivery_days"]), 45),
     designName,
     lineItems,
@@ -19435,6 +19492,22 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       return;
     }
 
+    // INB-006. A NEW order has to fit the plan, exactly as it does on the
+    // WooCommerce and Etsy paths. This one never checked, so a free workspace
+    // could take unlimited orders from Zapier while its own New Order button
+    // was gated. An update to an order already here always goes through.
+    if (!existing.exists) {
+      const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+      const capacity = await integrationOrderCapacity(companyId, companySnap.data() || {});
+      if (!capacity.allowed) {
+        await holdIntegrationOrder(companyId, "inbound", externalId, payload, capacity);
+        // 200 on purpose: the sender must not retry forever over something
+        // only the workspace owner can resolve.
+        res.status(200).json({ ok: true, held: true, reason: "plan_limit_reached", orderId: docId });
+        return;
+      }
+    }
+
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
     await ref.set(
       integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound),
@@ -19448,7 +19521,10 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
       const rawShipping = inboundValue(payload, ["shipping", "shippingAddress", "shipping_address"]);
       const shipParts = inboundAddressParts(rawShipping);
       const shipping = (shipParts.street || shipParts.city || shipParts.postalCode) ? shipParts : billing;
-      const sourceTag = (cleanWooText(inboundValue(payload, ["source", "platform", "store"])) || "inbound").toLowerCase();
+      // Always "inbound". This used to be whatever the payload said, so a sender
+      // could write source:"shopify" and have the buyer merged into the Shopify
+      // customer pool — a stranger's identity attached to a real customer.
+      const sourceTag = "inbound";
       await upsertIntegrationCustomer(companyId, {
         name: mappedOrder.customerName,
         externalCustomerId: cleanWooText(inboundValue(payload, ["customerId", "customer_id", "externalCustomerId"])),
@@ -29577,7 +29653,21 @@ async function applyShopifyOrderEvent(shop, store, topic, order, options = {}) {
       return { status: "skipped", error: `unpaid_${financialStatus || "unknown"}`, ...base };
     }
 
-    const mapped = mapShopifyOrderToSiparis(order, companyId, true);
+    // INB-006. A NEW order has to fit the plan. The legacy webhook, WooCommerce
+    // and Etsy all park an over-limit order for the owner to release; the
+    // official app — the path new merchants actually use — never checked, live
+    // or on import, so a free workspace could fill up without limit. The held
+    // copy is replayed through this same function on release, so it keeps the
+    // store's filters, workflow rule and card fields.
+    const companySnap = await admin.firestore().collection("companies").doc(companyId).get();
+    const capacity = await integrationOrderCapacity(companyId, companySnap.data() || {});
+    if (!capacity.allowed) {
+      await holdIntegrationOrder(companyId, "shopify", shopifyOrderId, order, capacity, { shop, topic });
+      return { status: "held", error: "plan_limit_reached", ...base };
+    }
+
+    const settingsSnap = await companySettingsDocRef(companyId).get();
+    const mapped = mapShopifyOrderToSiparis(order, companyId, true, resolveDefaultDeliveryTime(settingsSnap.data()));
     const rule = pickShopifyWorkflowRule(order, settings);
     mapped.status = String(rule?.status || settings.defaultStatus || "Not Yet") || "Not Yet";
     const template = (rule?.todoTemplate?.length ? rule.todoTemplate : settings.todoTemplate) || [];
@@ -30206,7 +30296,7 @@ exports.shopifyImportOrders = onRequest({
       startedAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    const counters = { processed: 0, created: 0, skipped: 0, failedCount: 0 };
+    const counters = { processed: 0, created: 0, skipped: 0, held: 0, failedCount: 0 };
     const failed = [];
     const applyNode = async (node) => {
       const restOrder = shopifyGraphQLOrderToRest(node);
@@ -30215,6 +30305,7 @@ exports.shopifyImportOrders = onRequest({
         const outcome = await applyShopifyOrderEvent(shop, store, "orders/create", restOrder, { manualImport: true });
         counters.processed += 1;
         if (outcome.status === "ok" && outcome.created) counters.created += 1;
+        else if (outcome.status === "held") counters.held += 1;
         else counters.skipped += 1;
         await writeShopifySyncRow(shop, {
           topic: "import",
@@ -30316,6 +30407,14 @@ if (process.env.NIVADESK_E2E === "1") {
     // Etsy has no live sellers yet; these do.
     mapShopifyOrderToSiparis,
     mapWooCommerceOrderToSiparis,
-    mapGenericInboundOrderToSiparis
+    mapGenericInboundOrderToSiparis,
+    // Faz 1 (INB-002/006, TEST-016): the guard, the apply path it protects and
+    // the label allowlist, so the emulator suite can drive them directly.
+    applyShopifyOrderEvent,
+    integrationOrderCapacity,
+    inboundSourceLabel,
+    inboundOrderDocId,
+    shopifyOrderDocId,
+    heldIntegrationOrdersRef
   };
 }

@@ -10,7 +10,13 @@ cd "$(dirname "$0")/.."
 
 export NIVADESK_E2E=1
 export GCLOUD_PROJECT="${GCLOUD_PROJECT:-eggcraft-studio}"
-export FIREBASE_CONFIG="${FIREBASE_CONFIG:-{\"projectId\":\"$GCLOUD_PROJECT\"}}"
+# Not ${VAR:-{...}}: the first "}" inside the default closes the expansion
+# early and the leftover brace is appended to whatever the emulator already
+# exported — which is exactly how this ran under `emulators:exec` and every
+# test died with "Failed to parse app options file".
+if [ -z "${FIREBASE_CONFIG:-}" ]; then
+  export FIREBASE_CONFIG="{\"projectId\":\"$GCLOUD_PROJECT\"}"
+fi
 export FIRESTORE_EMULATOR_HOST="${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080}"
 
 if ! curl -sf -m 3 -o /dev/null "http://$FIRESTORE_EMULATOR_HOST/"; then
