@@ -30,6 +30,35 @@ enum class OnboardingWorkKind(val id: String, val label: String, val businessTyp
     OTHER("other", "Other", "General Small Business")
 }
 
+/**
+ * The order-detail card headings each trade uses. Generated from the same table the
+ * web wizard writes, because all four platforms READ companySettings.orderCardLabels —
+ * a heading that differs by a character is a different heading.
+ */
+private val ONBOARDING_CARD_LABELS: Map<OnboardingWorkKind, Map<String, String>> = mapOf(
+    OnboardingWorkKind.WATCHES_JEWELLERY to mapOf("preview" to "Design Preview", "materials" to "Metals & Stones", "workTime" to "Bench Time", "summary" to "Piece Summary"),
+    OnboardingWorkKind.REPAIRS to mapOf("preview" to "Item Photos", "materials" to "Parts Used", "workTime" to "Bench Time", "summary" to "Repair Summary", "delivery" to "Collection"),
+    OnboardingWorkKind.LEATHER to mapOf("preview" to "Design Preview", "materials" to "Leather & Hardware", "workTime" to "Bench Time", "summary" to "Piece Summary"),
+    OnboardingWorkKind.ART_DESIGN to mapOf("preview" to "Artwork Preview", "materials" to "Media & Supplies", "workTime" to "Studio Time", "summary" to "Commission Summary"),
+    OnboardingWorkKind.CLOTHING to mapOf("preview" to "Garment Photos", "materials" to "Fabric & Trims", "workTime" to "Machine Time", "summary" to "Garment Summary", "delivery" to "Fitting & Collection"),
+    OnboardingWorkKind.FOOD to mapOf("preview" to "Design Reference", "materials" to "Ingredients", "workTime" to "Kitchen Time", "summary" to "Order Summary", "delivery" to "Delivery / Pickup"),
+    OnboardingWorkKind.CERAMICS to mapOf("preview" to "Piece Photos", "materials" to "Clay & Glazes", "workTime" to "Studio Time", "summary" to "Piece Summary"),
+)
+
+/**
+ * The chosen trades folded into one map. The first pick wins where two trades
+ * disagree, so a jeweller who also repairs keeps jeweller wording and gains
+ * "Collection" from repairs rather than losing it.
+ */
+fun cardLabelsForWorkKinds(kinds: List<OnboardingWorkKind>): Map<String, String> {
+    val merged = LinkedHashMap<String, String>()
+    for (kind in kinds) {
+        val labels = ONBOARDING_CARD_LABELS[kind] ?: continue
+        for ((cardId, label) in labels) merged.putIfAbsent(cardId, label)
+    }
+    return merged
+}
+
 enum class OnboardingWorkflow(val id: String, val label: String, val detail: String) {
     MADE_TO_ORDER("made_to_order", "Made to order", "I start work after a customer places an order."),
     REPAIRS("repairs", "Repairs and servicing", "Customers send or bring items for work."),
@@ -280,6 +309,10 @@ fun onboardingWizardUpdates(answers: OnboardingAnswers, userId: String): Map<Str
     put("selectedLanguage", answers.language)
     put("selectedTimeZone", answers.timeZone)
     put("onboardingWorkKinds", answers.workKinds.map { it.id })
+    // The workshop's own word for each card. Read by all four platforms when they
+    // draw an order-detail heading — and until now only the web wizard wrote it,
+    // so a workspace set up on a phone quietly got the default headings.
+    put("orderCardLabels", cardLabelsForWorkKinds(answers.workKinds))
     put("onboardingWorkflow", answers.workflow.id)
     put("onboardingTeamSizeBand", answers.teamSize.id)
     put("onboardingBusinessAge", answers.businessAge?.id ?: "")

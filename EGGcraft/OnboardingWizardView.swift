@@ -55,6 +55,31 @@ enum OnboardingWorkKind: String, CaseIterable {
     }
 }
 
+/// The order-detail card headings each trade uses. Generated from the same table the
+/// web wizard writes, because all four platforms READ companySettings.orderCardLabels —
+/// a heading that differs by a character is a different heading.
+let onboardingCardLabels: [OnboardingWorkKind: [String: String]] = [
+    .watchesJewellery: ["preview": "Design Preview", "materials": "Metals & Stones", "workTime": "Bench Time", "summary": "Piece Summary"],
+    .repairs: ["preview": "Item Photos", "materials": "Parts Used", "workTime": "Bench Time", "summary": "Repair Summary", "delivery": "Collection"],
+    .leather: ["preview": "Design Preview", "materials": "Leather & Hardware", "workTime": "Bench Time", "summary": "Piece Summary"],
+    .artDesign: ["preview": "Artwork Preview", "materials": "Media & Supplies", "workTime": "Studio Time", "summary": "Commission Summary"],
+    .clothing: ["preview": "Garment Photos", "materials": "Fabric & Trims", "workTime": "Machine Time", "summary": "Garment Summary", "delivery": "Fitting & Collection"],
+    .food: ["preview": "Design Reference", "materials": "Ingredients", "workTime": "Kitchen Time", "summary": "Order Summary", "delivery": "Delivery / Pickup"],
+    .ceramics: ["preview": "Piece Photos", "materials": "Clay & Glazes", "workTime": "Studio Time", "summary": "Piece Summary"],
+]
+
+/// The chosen trades folded into one map. The first pick wins where two trades
+/// disagree, so a jeweller who also repairs keeps jeweller wording and gains
+/// "Collection" from repairs rather than losing it.
+func onboardingCardLabels(for kinds: [OnboardingWorkKind]) -> [String: String] {
+    var merged: [String: String] = [:]
+    for kind in kinds {
+        guard let labels = onboardingCardLabels[kind] else { continue }
+        for (cardId, label) in labels where merged[cardId] == nil { merged[cardId] = label }
+    }
+    return merged
+}
+
 enum OnboardingWorkflow: String, CaseIterable {
     case madeToOrder = "made_to_order"
     case repairs

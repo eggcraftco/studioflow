@@ -10470,6 +10470,11 @@ struct ContentView: View {
             "selectedLanguage": answers.language,
             "selectedTimeZone": answers.timeZone,
             "onboardingWorkKinds": answers.workKinds.map { $0.rawValue },
+            // The workshop's own word for each card. Read by all four platforms
+            // when they draw an order-detail heading — and until now only the web
+            // wizard wrote it, so a workspace set up on a phone quietly got the
+            // default headings.
+            "orderCardLabels": onboardingCardLabels(for: answers.workKinds),
             "onboardingWorkflow": answers.workflow.rawValue,
             "onboardingTeamSizeBand": answers.teamSize.rawValue,
             "onboardingBusinessAge": answers.businessAge?.rawValue ?? "",
