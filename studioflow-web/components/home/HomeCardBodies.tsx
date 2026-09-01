@@ -124,11 +124,15 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
     );
   }
 
+  // "VAT" rather than the Dashboard's "VAT Amount": this row has six things to
+  // fit across one card and the longer label is what pushed the last two into
+  // each other. The Dashboard keeps its own wording — a summary card there has
+  // the room and the context to be explicit.
   const deductions = [
     { label: "Costs", value: costs },
     { label: "Platform fees", value: fees },
     { label: "Shipping", value: shipping },
-    { label: "VAT Amount", value: vat },
+    { label: "VAT", value: vat },
   ];
 
   // 2x1: the four headline figures, then how revenue becomes profit.
@@ -141,14 +145,20 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
           <Stat label={t("Outstanding")} value={money(outstanding)} tone="info" />
           <Stat label={t("Net profit")} value={money(profit)} tone={profit >= 0 ? "positive" : "warning"} />
         </div>
+        {/* How revenue becomes profit, read left to right. The two arrows are
+            the point of the row: without them it is six figures in a line and
+            nothing says the middle four are taken OUT of the first to reach the
+            last. */}
         <ol className="home-waterfall">
           <li className="is-end"><em>{t("Revenue")}</em><b className="is-positive">{money(revenue)}</b></li>
+          <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           {deductions.map((entry) => (
-            <li key={entry.label}>
-              <em><span className="home-minus" aria-hidden="true">−</span>{t(entry.label)}</em>
+            <li key={entry.label} className="is-deduction">
+              <em><span className="home-minus" aria-hidden="true">−</span><span>{t(entry.label)}</span></em>
               <b className="is-warning">{money(entry.value)}</b>
             </li>
           ))}
+          <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           <li className="is-end"><em>{t("Net profit")}</em><b className="is-positive">{money(profit)}</b></li>
         </ol>
       </div>
