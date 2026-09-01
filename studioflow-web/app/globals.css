@@ -28408,6 +28408,13 @@ body[data-studio-theme="dark"] .home-money-tile.tone-orange b { color: #fb9a5c !
 }
 .home-card-2x2 .home-money-tile b { white-space: nowrap; }
 .home-money-tile b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+/* The proportion under the figure, for the one tile that is a proportion. */
+.home-money-tile-bar { display: block; height: 5px; border-radius: 999px; background: rgba(120, 130, 150, 0.2); overflow: hidden; margin-top: 2px; }
+.home-money-tile-bar i { display: block; height: 100%; border-radius: 999px; background: currentColor; }
+.home-money-tile.tone-green .home-money-tile-bar i { background: #15803d; }
+.home-money-tile.tone-orange .home-money-tile-bar i { background: #c2410c; }
+.home-linking-mark { display: inline-flex; line-height: 0; }
+.home-linking-mark svg { width: 16px; height: 16px; }
 .home-money-tile.tone-green b { color: #15803d; }
 .home-money-tile.tone-blue b { color: #1d4ed8; }
 

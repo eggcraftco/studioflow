@@ -212,9 +212,13 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
 }
 
 function MoneyTile({
-  label, value, tone, sub, icon,
+  label, value, tone, sub, icon, bar,
 }: {
-  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string; icon?: HomeTileIconName;
+  label: string; value: string; tone: "green" | "blue" | "orange" | "red" | "neutral"; sub?: string;
+  icon?: HomeTileIconName;
+  /** 0–100 for a figure that is a proportion, drawn under it as the sheet
+   *  draws storage. A number on its own does not say how close to full it is. */
+  bar?: number;
 }) {
   return (
     <div className={`home-money-tile tone-${tone}`}>
@@ -223,6 +227,11 @@ function MoneyTile({
       </span>
       <em>{label}</em>
       <b>{value}</b>
+      {bar !== undefined ? (
+        <span className="home-money-tile-bar" aria-hidden="true">
+          <i style={{ width: `${Math.max(0, Math.min(100, bar))}%` }} />
+        </span>
+      ) : null}
       {sub ? <i>{sub}</i> : null}
     </div>
   );
@@ -1621,19 +1630,38 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
   // free. The last is the only one that asks for anything to be done.
   return (
     <div className="home-money is-large is-files">
+      {/* Three discs with nothing in them is what this row was drawing: the
+          tiles take an icon and none was passed. And the storage tile led with
+          the percentage while the size — the figure a seller can act on — was
+          the small line underneath; the sheet has it the other way round, with
+          the bar carrying the proportion. */}
       <div className="home-tile-row is-triple">
-        <MoneyTile label={t("files")} value={String(files.length)} tone="blue" />
-        <MoneyTile label={t("Storage")} value={pct !== null ? `${pct}%` : humanSize(used)}
-                   tone="green" sub={limitBytes > 0 ? `${humanSize(used)} ${t("of")} ${humanSize(limitBytes)}` : undefined} />
-        <MoneyTile label={t("Unlinked")} value={String(unlinked.length)} tone={unlinked.length > 0 ? "orange" : "blue"} />
+        <MoneyTile icon="fileStack" label={t("Total files")} value={String(files.length)} tone="blue" />
+        {/* The used size is the figure; the ceiling and the percentage are what
+            qualify it. All three on one line does not fit a third of this card
+            — "7.2 MB of 225.5 GB" at the tile's weight overruns it. */}
+        <MoneyTile icon="pie" label={t("Storage")} value={humanSize(used)}
+                   tone="green" bar={pct ?? undefined}
+                   sub={limitBytes > 0
+                     ? `${t("of")} ${humanSize(limitBytes)}${pct !== null ? ` · ${pct}%` : ""}`
+                     : undefined} />
+        <MoneyTile icon="link" label={t("Unlinked")} value={String(unlinked.length)}
+                   tone={unlinked.length > 0 ? "orange" : "blue"} />
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-        <ul className="home-file-list">{files.slice(0, 4).map((file) => fileRow(file))}</ul>
+        {/* Two more rows when nothing needs linking: the banner below is where
+            the card's last inches go, and with an empty workspace-wide link
+            queue they were going nowhere. */}
+        <ul className="home-file-list">
+          {files.slice(0, unlinked.length > 0 ? 4 : 6).map((file) => fileRow(file))}
+        </ul>
       </div>
       {unlinked.length > 0 ? (
         <Link className="home-linking-banner" href="/files">
-          <span aria-hidden="true">🔗</span>
+          {/* Drawn, not 🔗: an emoji renders at a different weight in every font
+              on every platform, and cannot take the banner's own colour. */}
+          <span className="home-linking-mark" aria-hidden="true"><HomeTileIcon name="link" /></span>
           <strong>{t("{count} files are not linked to a record.").replace("{count}", String(unlinked.length))}</strong>
           <em>{t("Review")}</em>
         </Link>

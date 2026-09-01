@@ -102,7 +102,11 @@ export type HomeTileIconName =
   // What the Money card's four figures and four deductions mean. Added rather
   // than borrowed: the nearest existing glyphs meant something else, and a
   // clock standing in for a pie chart is worse than no icon at all.
-  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator";
+  | "trendUp" | "paid" | "awaiting" | "margin" | "percent" | "calculator"
+  // What the Files card's three figures mean. Same rule as the line above:
+  // added, not borrowed — the card was drawing three empty coloured discs
+  // because it passed no icon at all, and a stand-in would have been worse.
+  | "fileStack" | "pie" | "link";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -212,6 +216,27 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
     // an emoji renders at a different weight, size and colour in every font on
     // every platform, so the same card looked different depending on where it
     // was opened — and an emoji cannot take the note's own colour.
+    case "fileStack":
+      return (
+        <svg {...common}>
+          <path d="M8 3h6l4 4v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+          <path d="M14 3v4h4" />
+        </svg>
+      );
+    case "pie":
+      return (
+        <svg {...common}>
+          <path d="M12 3a9 9 0 1 0 9 9h-9V3Z" />
+          <path d="M14.5 3.6A9 9 0 0 1 20.4 9.5" />
+        </svg>
+      );
+    case "link":
+      return (
+        <svg {...common}>
+          <path d="M10 13.5a4 4 0 0 0 5.7.3l2.6-2.6a4 4 0 0 0-5.7-5.7l-1.5 1.5" />
+          <path d="M14 10.5a4 4 0 0 0-5.7-.3l-2.6 2.6a4 4 0 0 0 5.7 5.7l1.5-1.5" />
+        </svg>
+      );
     case "upload":
       return (
         <svg {...common}>

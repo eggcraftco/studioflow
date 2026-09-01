@@ -2091,8 +2091,21 @@ struct HomeStockTile: View {
     var tone: Color = .primary
     var compact: Bool = false
     var sub: String = ""
+    /// The mark that says what the figure is, in a tinted disc. Empty leaves
+    /// the tile as it was, which is what every caller but Files still wants.
+    var symbol: String = ""
+    /// 0–100 for a figure that is a proportion, drawn under it. A number on its
+    /// own does not say how close to full it is.
+    var bar: Double? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
+            if !symbol.isEmpty && !compact {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold)).foregroundColor(tone)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(tone.opacity(0.14)))
+                    .padding(.bottom, 3)
+            }
             Text(label)
                 .font(.system(size: compact ? 8.5 : 11)).foregroundColor(.secondary)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
@@ -2100,6 +2113,11 @@ struct HomeStockTile: View {
             Text(value)
                 .font(.system(size: compact ? 12 : 17, weight: .heavy)).foregroundColor(tone)
                 .lineLimit(1).minimumScaleFactor(0.5)
+            if let bar, !compact {
+                HomeProgressBar(fraction: max(0, min(1, bar / 100)), tint: tone)
+                    .frame(height: 5)
+                    .padding(.top, 2)
+            }
             if !sub.isEmpty && !compact {
                 Text(sub).font(.system(size: 10.5)).foregroundColor(.secondary).lineLimit(1)
             }
@@ -3057,17 +3075,23 @@ struct HomeFilesBody: View {
                 let unlinked = files.filter { $0.0.id?.isEmpty ?? true }
                 VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                     HStack(spacing: compact ? 5 : 10) {
-                        HomeStockTile(label: t("files", lang: lang), value: "\(files.count)",
-                                      tone: HomeTone.accent, compact: compact)
+                        // Each figure gets the mark that says what it is, and
+                        // the used size leads rather than the percentage — the
+                        // size is the figure a seller can act on, and the bar
+                        // is what carries the proportion.
+                        HomeStockTile(label: t("Total files", lang: lang), value: "\(files.count)",
+                                      tone: HomeTone.accent, compact: compact, symbol: "doc.on.doc")
                         HomeStockTile(label: t("Storage", lang: lang),
-                                      value: limitBytes > 0 ? "\(pct)%" : homeFileSize(used),
+                                      value: homeFileSize(used),
                                       tone: pct >= 90 ? HomeTone.red : HomeTone.green, compact: compact,
                                       sub: limitBytes > 0
-                                        ? "\(homeFileSize(used)) \(t("of", lang: lang)) \(homeFileSize(limitBytes))"
-                                        : "")
+                                        ? "\(t("of", lang: lang)) \(homeFileSize(limitBytes)) · \(pct)%"
+                                        : "",
+                                      symbol: "chart.pie",
+                                      bar: limitBytes > 0 ? Double(pct) : nil)
                         HomeStockTile(label: t("Unlinked", lang: lang), value: "\(unlinked.count)",
                                       tone: unlinked.isEmpty ? HomeTone.accent : HomeTone.orange,
-                                      compact: compact)
+                                      compact: compact, symbol: "link")
                     }
                     HomePanel(compact: compact) {
                         HomeEyebrow(text: t("Recent files", lang: lang))
