@@ -25,6 +25,7 @@ import {
   ONBOARDING_WORK_KINDS,
   type OnboardingAnswers,
   type OnboardingGoal,
+  type OnboardingIntegration,
   type OnboardingStart,
   type OnboardingTeamSize,
   type OnboardingVolume,
@@ -95,6 +96,7 @@ export function OnboardingWizard({
   onFinish,
   onLanguageChange,
   onConnect,
+  connected,
 }: {
   t: (text: string) => string;
   /** The workspace language, so the trial's end date is written in it rather
@@ -105,10 +107,13 @@ export function OnboardingWizard({
   onFinish: (answers: OnboardingAnswers) => void;
   /** Applied the moment it changes, so the wizard itself switches over. */
   onLanguageChange?: (language: string) => void;
-  /** Saves what has been answered so far, then hands off to the integration.
-   *  Connecting leaves the app for an OAuth round trip, so the answers have to
-   *  be on disk before we go or the whole wizard is lost on the way back. */
+  /** Opens the integration in a tab of its own and leaves the wizard where it
+   *  is. It used to finish the setup and navigate away, which meant the first
+   *  Connect you pressed was the last one you could press. */
   onConnect: (answers: OnboardingAnswers, href: string) => void;
+  /** Which accounts the workspace can already see, refreshed while the wizard
+   *  is open — so connecting one in the other tab shows up here. */
+  connected?: Partial<Record<OnboardingIntegration["id"], boolean>>;
 }) {
   const suggested = useMemo(suggestedSettings, []);
   const [step, setStep] = useState(1);
@@ -389,17 +394,31 @@ export function OnboardingWizard({
                       <b>{integration.name}</b>
                     </span>
                     <em>{t(integration.detail)}</em>
-                    <button
-                      type="button"
-                      className="onboard-btn onboard-connect-btn"
-                      disabled={saving}
-                      onClick={() => onConnect(answers, integration.href)}
-                    >
-                      {t("Connect")}
-                    </button>
+                    {connected?.[integration.id] ? (
+                      <span className="onboard-connect-done">
+                        <i aria-hidden="true">✓</i>{t("Connected")}
+                      </span>
+                    ) : integration.comingSoon ? (
+                      <span className="onboard-connect-soon">{t("Coming soon")}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="onboard-btn onboard-connect-btn"
+                        disabled={saving}
+                        onClick={() => onConnect(answers, integration.href)}
+                      >
+                        {/* The ChatGPT app can only be started from ChatGPT's
+                            side, so its tile offers directions rather than a
+                            button that says Connect and cannot connect. */}
+                        {t(integration.startsElsewhere ? "How to connect" : "Connect")}
+                      </button>
+                    )}
                   </article>
                 ))}
               </div>
+              <p className="onboard-connect-note">
+                {t("Each one opens in a new tab. Come back here when you are done — you can connect as many as you like before you continue.")}
+              </p>
               <p className="onboard-connect-note">
                 {t("Nothing is shared with them until you sign in on their side, and you can disconnect at any time.")}
               </p>

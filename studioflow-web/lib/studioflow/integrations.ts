@@ -18,6 +18,13 @@
  *              "Request an integration" opens a support ticket, which is a
  *              real thing that reaches a person.
  */
+
+import { collection, getDocs } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
+import { getEtsyConnections } from "@/lib/studioflow/etsy";
+import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
+
 export type IntegrationCategory = "commerce" | "banking" | "automation";
 
 export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[] = [
@@ -135,6 +142,55 @@ export type IntegrationLiveState = {
   state: IntegrationState;
   /** A line under the name — the store it is connected to, when we know it. */
   detail?: string;
+};
+
+/**
+ * The five reads that say what is actually connected.
+ *
+ * They lived inside the Settings hub, which meant the onboarding wizard had no
+ * way to know whether the account someone had just connected in another tab had
+ * arrived — so its Connect buttons could only ever say "Connect", however many
+ * times you pressed them. One loader, two callers, no second source of truth.
+ *
+ * Each read settles on its own: a slow or refused answer must not blank the
+ * others. ChatGPT is deliberately absent — its connection lives in a top-level
+ * collection the client cannot read, and a tile that guesses would be worse
+ * than one that says nothing.
+ */
+export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
+  if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
+  const [stores, woo, inbound, banks, etsy] = await Promise.allSettled([
+    httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
+      functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
+    getIntegrationWebhookInfo("woocommerce", companyId),
+    getIntegrationWebhookInfo("inbound", companyId),
+    getDocs(collection(db, "companies", companyId, "bankConnections")),
+    getEtsyConnections(companyId),
+  ]);
+  const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
+    result.status === "fulfilled"
+      ? {
+          lastDeliveryAtMs: result.value.lastDeliveryAtMs,
+          lastDeliveryOk: result.value.lastDeliveryOk,
+          lastDeliveryWasTest: result.value.lastDeliveryWasTest,
+        }
+      : { lastDeliveryAtMs: 0, lastDeliveryOk: false, lastDeliveryWasTest: false };
+  return {
+    shopifyStores: stores.status === "fulfilled" ? (stores.value.data?.stores ?? []) : [],
+    channels: { woocommerce: channel(woo), inbound: channel(inbound) },
+    etsyShops: etsy.status === "fulfilled"
+      ? (etsy.value.connections ?? []).map((row) => ({
+          shop: row.shopName || row.shopId,
+          status: row.status,
+          needsReconnect: Boolean(row.needsReconnect),
+        }))
+      : [],
+    bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
+  };
+}
+
+export const EMPTY_INTEGRATION_SIGNALS: IntegrationSignals = {
+  shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0,
 };
 
 export type IntegrationSignals = {

@@ -27096,6 +27096,20 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
   line-height: 1.45;
   color: rgba(60, 60, 75, 0.7);
 }
+/* Connected and Coming soon stand where the button stood, so the tile keeps its
+   shape whichever state it is in. */
+.onboard-connect-done {
+  justify-self: start; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 700; color: #15803d;
+}
+.onboard-connect-done i { font-style: normal; font-weight: 900; }
+body[data-studio-theme="dark"] .onboard-connect-done { color: #4ade80; }
+.onboard-connect-soon {
+  justify-self: start; font-size: 12.5px; font-weight: 650;
+  color: var(--foreground); opacity: 0.55;
+  border: 1px dashed var(--border); border-radius: 999px; padding: 5px 12px;
+}
+
 .onboard-connect-btn {
   justify-self: start;
   border-color: var(--brand, rgba(120, 120, 140, 0.35));

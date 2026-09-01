@@ -26,6 +26,8 @@ import {
   type IntegrationManageTarget,
   type IntegrationProvider,
   type IntegrationSignals,
+  loadIntegrationSignals,
+  EMPTY_INTEGRATION_SIGNALS,
 } from "@/lib/studioflow/integrations";
 import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
@@ -4989,48 +4991,18 @@ function IntegrationsSection({
   const [managing, setManaging] = useState<IntegrationManageTarget>(openProvider ?? "");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
-  const [signals, setSignals] = useState<IntegrationSignals>({
-    shopifyStores: [], channels: {}, etsyShops: [], bankConnections: 0,
-  });
+  const [signals, setSignals] = useState<IntegrationSignals>(EMPTY_INTEGRATION_SIGNALS);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!companyId) return;
     let active = true;
-    (async () => {
-      // Five independent reads: one slow or refused answer must not blank the
-      // other cards, so each settles on its own.
-      const [stores, woo, inbound, banks, etsy] = await Promise.allSettled([
-        httpsCallable<{ companyId: string }, { stores: ShopifyStoreView[] }>(
-          functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
-        getIntegrationWebhookInfo("woocommerce", companyId),
-        getIntegrationWebhookInfo("inbound", companyId),
-        getDocs(collection(db, "companies", companyId, "bankConnections")),
-        getEtsyConnections(companyId),
-      ]);
+    // The same five reads the onboarding wizard makes, from one place.
+    void loadIntegrationSignals(companyId).then((next) => {
       if (!active) return;
-      const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
-        result.status === "fulfilled"
-          ? {
-              lastDeliveryAtMs: result.value.lastDeliveryAtMs,
-              lastDeliveryOk: result.value.lastDeliveryOk,
-              lastDeliveryWasTest: result.value.lastDeliveryWasTest,
-            }
-          : { lastDeliveryAtMs: 0, lastDeliveryOk: false, lastDeliveryWasTest: false };
-      setSignals({
-        shopifyStores: stores.status === "fulfilled" ? (stores.value.data?.stores ?? []) : [],
-        channels: { woocommerce: channel(woo), inbound: channel(inbound) },
-        etsyShops: etsy.status === "fulfilled"
-          ? (etsy.value.connections ?? []).map((row: EtsyConnection) => ({
-              shop: row.shopName || row.shopId,
-              status: row.status,
-              needsReconnect: Boolean(row.needsReconnect),
-            }))
-          : [],
-        bankConnections: banks.status === "fulfilled" ? banks.value.size : 0,
-      });
+      setSignals(next);
       setLoaded(true);
-    })();
+    });
     return () => { active = false; };
   }, [companyId]);
 

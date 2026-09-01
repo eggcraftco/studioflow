@@ -144,18 +144,44 @@ export type OnboardingIntegration = {
   href: string;
   logo: string;
   colour: string;
+  /** True when the connection can only be started on the provider's side, so
+   *  the tile offers directions rather than a button that cannot connect. */
+  startsElsewhere?: boolean;
+  /** True when there is nowhere to send anyone yet. The tile says so instead of
+   *  carrying a button that leads to a dead end. */
+  comingSoon?: boolean;
   /** Whether the asset already carries the brand's name. Shopify, Woo and our
    *  own bank glyph do; OpenAI's Blossom is the mark alone, and their
    *  guidelines forbid altering it, so the tile sets the name beside it. */
   logoIncludesName: boolean;
 };
 
+/**
+ * The NivaDesk listing on the Shopify App Store.
+ *
+ * A Shopify connection cannot start from this side: the merchant installs the
+ * app in their own admin and presses Connect there, and the listing is the one
+ * link that takes them straight to it. Leave it empty until the listing is
+ * live — every candidate handle 404s while the app is in review, and sending
+ * someone to a 404 is the dead end this whole change exists to remove. Empty
+ * falls back to the Settings panel, which explains the install in words.
+ */
+export const SHOPIFY_APP_STORE_URL = "";
+
 export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
   {
     id: "shopify",
     name: "Shopify",
     detail: "Import your store's orders and customers automatically.",
-    href: "/connect/shopify",
+    // NOT /connect/shopify. That page is the far end of the handshake: it is
+    // opened BY the embedded app with ?shop= and a one-time nonce, and cold it
+    // can only say so.
+    href: SHOPIFY_APP_STORE_URL || "/settings?section=shopify",
+    // No listing, no button. Until the app is published there is nowhere to send
+    // anyone that is not a 404 or a page telling them to go somewhere else, and
+    // "Coming soon" is the true thing to say. Fill SHOPIFY_APP_STORE_URL in and
+    // this tile turns into a working Connect on its own.
+    comingSoon: !SHOPIFY_APP_STORE_URL,
     logo: "/brand/integrations/shopify.svg",
     colour: "#5E8E3E",
     logoIncludesName: true,
@@ -164,7 +190,10 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     id: "woocommerce",
     name: "WooCommerce",
     detail: "Import your store's orders and customers automatically.",
-    href: "/settings?section=integrations",
+    // ?section=integrations opens the hub but not the WooCommerce panel — the
+    // provider is only preselected for the four aliases below, so this landed
+    // one screen short of the delivery URL the merchant came for.
+    href: "/settings?section=woocommerce",
     logo: "/brand/integrations/woocommerce.svg",
     colour: "#7F54B3",
     logoIncludesName: true,
@@ -196,7 +225,12 @@ export const ONBOARDING_INTEGRATIONS: OnboardingIntegration[] = [
     id: "chatgpt",
     name: "ChatGPT",
     detail: "Ask about your orders, and draft replies, from inside ChatGPT.",
-    href: "/settings?section=quick-reply",
+    // NOT ?section=quick-reply. That panel is the AI reply engine — an OpenAI
+    // API key for drafting customer replies — which is a different feature that
+    // happens to share a company name. The ChatGPT app is an OAuth connection
+    // that only ChatGPT can start, so the tile goes to the page that says how.
+    href: "/chatgpt",
+    startsElsewhere: true,
     logo: "/brand/integrations/chatgpt.svg",
     colour: "#10A37F",
     logoIncludesName: false,

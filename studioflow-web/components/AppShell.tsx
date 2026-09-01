@@ -37,6 +37,7 @@ import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
+import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
 import { savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
   businessTypeForWorkKinds,
@@ -1635,10 +1636,21 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     return names.size;
   }, [financeOrders]);
 
+  // A tab opened from the wizard's Connect buttons has to show the real page.
+  // The gate is global — while setup is unfinished EVERY route renders the
+  // wizard — so without this the new tab would show a second copy of the wizard
+  // and the connection could never be made. Setup is not a security boundary;
+  // the flag only says "this tab was sent here to connect something".
+  const setupPassthrough = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("fromSetup") === "1";
+  }, [pathname]);
+
   const showWorkspaceOnboarding = Boolean(
     user &&
     workspace &&
     settings &&
+    !setupPassthrough &&
     !settings.businessOnboardingCompleted &&
     financeOrdersLoaded &&
     financeOrders.length === 0 &&
@@ -1820,20 +1832,47 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }
 
   /**
-   * Connecting an account leaves the app for an OAuth round trip. Save the
-   * answers first, mark setup done, and only then hand off — otherwise a person
-   * who connects Shopify comes back to an empty workspace and the wizard again.
+   * Connecting an account opens in a tab of its own and leaves the wizard where
+   * it is.
+   *
+   * It used to finish setup and navigate away in the same tab: pressing any one
+   * of the five Connect buttons ended the onboarding for good, so nobody could
+   * connect a second account from the wizard, and nobody could come back and
+   * press Continue. The answers are not saved here either — saving IS finishing
+   * (saveOnboardingAnswers writes businessOnboardingCompleted), and this step
+   * is explicitly not the finish.
    */
-  async function connectFromOnboarding(answers: OnboardingAnswers, href: string) {
-    await completeOnboardingWizard(answers);
-    if (onboardingError) return;
-    setSettings((current) => {
-      const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
-      if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
-      return merged;
-    });
-    window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
-    router.push(href);
+  /**
+   * What the wizard can already see connected. Read once when step 4 can be
+   * reached and again whenever this tab regains focus, which is exactly when
+   * someone comes back from the tab they connected in.
+   */
+  const [onboardingSignals, setOnboardingSignals] = useState<IntegrationSignals>(EMPTY_INTEGRATION_SIGNALS);
+  const onboardingConnected = useMemo(() => ({
+    shopify: onboardingSignals.shopifyStores.some((store) => store.status !== "unlinked"),
+    woocommerce: (onboardingSignals.channels.woocommerce?.lastDeliveryAtMs ?? 0) > 0
+      && !onboardingSignals.channels.woocommerce?.lastDeliveryWasTest,
+    etsy: onboardingSignals.etsyShops.some((shop) => shop.status !== "disconnected"),
+    bank: onboardingSignals.bankConnections > 0,
+    // No client-readable signal: the ChatGPT app's token lives in a top-level
+    // collection, and a tile that guessed would be worse than one that is quiet.
+    chatgpt: false,
+  }), [onboardingSignals]);
+
+  useEffect(() => {
+    if (!showWorkspaceOnboarding || !workspace?.id) return;
+    let active = true;
+    const refresh = () => {
+      void loadIntegrationSignals(workspace.id).then((next) => { if (active) setOnboardingSignals(next); });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
+  }, [showWorkspaceOnboarding, workspace?.id]);
+
+  function connectFromOnboarding(_answers: OnboardingAnswers, href: string) {
+    const url = `${href}${href.includes("?") ? "&" : "?"}fromSetup=1`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function completeWorkspaceOnboarding(
@@ -1909,7 +1948,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             error={t(onboardingError)}
             onFinish={(answers) => void completeOnboardingWizard(answers)}
             onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
-            onConnect={(answers, href) => void connectFromOnboarding(answers, href)}
+            onConnect={(answers, href) => connectFromOnboarding(answers, href)}
+            connected={onboardingConnected}
           />
         )}
       </AppShellMountedContext.Provider>
