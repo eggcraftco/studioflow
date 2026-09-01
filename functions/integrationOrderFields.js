@@ -96,9 +96,21 @@ function isBlank(value) {
 
 // Fields a channel cannot know anything about, which its mapper only fills in
 // to complete the new-order shape. Unlike the blank rule above this also covers
-// numbers: Etsy returns no tax RATE, so its mapper says 0 — and 0 is a real
-// answer for Shopify, which is why this has to be per-channel and declared
-// rather than guessed from the value.
+// numbers, and that is the whole reason it has to be a declared list rather
+// than something read off the value: 0 is a placeholder in one channel and a
+// real answer in another, and nothing about the number itself says which.
+//
+// All four channels hardcode `taxRate: 0` while sending a real `taxAmount`,
+// because none of the four APIs returns a rate. So a studio that set the VAT
+// rate on an imported order by hand lost it on that order's next sync — on
+// Shopify and WooCommerce too, where there are live merchants. taxAmount is on
+// none of these lists: that one they really do send.
+const UNKNOWN_ON_UPDATE_BY_SOURCE = {
+  etsy: new Set(["designLink", "instagramUsername", "whatsappNumber", "shippingPhone", "taxRate"]),
+  shopify: new Set(["taxRate"]),
+  woocommerce: new Set(["taxRate"]),
+  inbound: new Set(["taxRate"])
+};
 function integrationOrderUpdate(mappedOrder, isNew, existingOrder = null, unknownOnUpdate = null) {
   if (isNew) return mappedOrder;
   const patch = {};
@@ -117,4 +129,10 @@ function integrationOrderUpdate(mappedOrder, isNew, existingOrder = null, unknow
   return patch;
 }
 
-module.exports = { INTEGRATION_SHOP_OWNED_FIELDS, mergeShopNote, integrationOrderUpdate, isBlank };
+module.exports = {
+  INTEGRATION_SHOP_OWNED_FIELDS,
+  UNKNOWN_ON_UPDATE_BY_SOURCE,
+  mergeShopNote,
+  integrationOrderUpdate,
+  isBlank
+};

@@ -30,6 +30,7 @@ const {
   mapGenericInboundOrderToSiparis,
   integrationOrderUpdate
 } = index._e2e;
+const { UNKNOWN_ON_UPDATE_BY_SOURCE } = require("../../integrationOrderFields.js");
 
 const db = admin.firestore();
 const CID = "e2e_shops";
@@ -131,6 +132,27 @@ test("Shopify: a resync keeps the studio's notes", async () => {
   assert.strictEqual(after.materialCost, 40, "studio cost lost");
 });
 
+// All four channels hardcode `taxRate: 0` while sending a real `taxAmount`,
+// because none of the four APIs returns a rate. The 0 is a placeholder, not an
+// answer — and it is shop-owned, so it was copied into the patch and reset a
+// VAT rate the studio had set by hand, on every resync of that order. Etsy has
+// no live sellers yet. These two do.
+test("Shopify: a resync does not reset a VAT rate the studio set", async () => {
+  const id = "e2e_shopify_taxrate";
+  await store(id, mapShopifyOrderToSiparis(SHOPIFY_FULL, CID, true));
+  await db.collection("siparisler").doc(id).set({ taxRate: 20, instagramUsername: "@adalovelace" }, { merge: true });
+  const existing = (await db.collection("siparisler").doc(id).get()).data();
+  const patch = integrationOrderUpdate(
+    mapShopifyOrderToSiparis(SHOPIFY_FULL, CID, false), false, existing,
+    UNKNOWN_ON_UPDATE_BY_SOURCE.shopify
+  );
+  await db.collection("siparisler").doc(id).set(patch, { merge: true });
+  const after = (await db.collection("siparisler").doc(id).get()).data();
+  assert.strictEqual(after.taxRate, 20, `VAT rate reset to ${after.taxRate}`);
+  assert.strictEqual(after.instagramUsername, "@adalovelace", `Instagram handle blanked: "${after.instagramUsername}"`);
+  assert.ok(Number(after.taxAmount) > 0, "the tax AMOUNT Shopify does send must still come through");
+});
+
 // ---------------------------------------------------------------------------
 // WooCommerce
 // ---------------------------------------------------------------------------
@@ -178,6 +200,21 @@ test("WooCommerce: the workspace's default delivery time is used, not a stray ze
   // incoming order looked due immediately.
   const stored = await store("e2e_woo_delivery", mapWooCommerceOrderToSiparis(WOO_SPARSE, CID, true, 21));
   assert.strictEqual(Number(stored.deliveryTime), 21, `delivery time was ${stored.deliveryTime}`);
+});
+
+test("WooCommerce: a resync does not reset a VAT rate the studio set", async () => {
+  const id = "e2e_woo_taxrate";
+  await store(id, mapWooCommerceOrderToSiparis(WOO_FULL, CID, true, 30));
+  await db.collection("siparisler").doc(id).set({ taxRate: 20, instagramUsername: "@adalovelace" }, { merge: true });
+  const existing = (await db.collection("siparisler").doc(id).get()).data();
+  const patch = integrationOrderUpdate(
+    mapWooCommerceOrderToSiparis(WOO_FULL, CID, false, 30), false, existing,
+    UNKNOWN_ON_UPDATE_BY_SOURCE.woocommerce
+  );
+  await db.collection("siparisler").doc(id).set(patch, { merge: true });
+  const after = (await db.collection("siparisler").doc(id).get()).data();
+  assert.strictEqual(after.taxRate, 20, `VAT rate reset to ${after.taxRate}`);
+  assert.strictEqual(after.instagramUsername, "@adalovelace", `Instagram handle blanked: "${after.instagramUsername}"`);
 });
 
 // ---------------------------------------------------------------------------

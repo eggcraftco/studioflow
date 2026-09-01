@@ -73,7 +73,8 @@ admin.initializeApp();
 const {
   INTEGRATION_SHOP_OWNED_FIELDS,
   mergeShopNote,
-  integrationOrderUpdate
+  integrationOrderUpdate,
+  UNKNOWN_ON_UPDATE_BY_SOURCE
 } = require("./integrationOrderFields");
 
 const TRACK17_TOKEN = defineSecret("TRACK17_TOKEN");
@@ -13914,13 +13915,19 @@ exports.releaseHeldIntegrationOrders = onCall({ region: "europe-west2", timeoutS
         const ref = orderDocRef(docId);
         const existing = await ref.get();
         const mapped = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, defaultDeliveryTime);
-        await ref.set(integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}), { merge: true });
+        await ref.set(
+          integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.woocommerce),
+          { merge: true }
+        );
       } else if (provider === "shopify") {
         const docId = shopifyOrderDocId(companyId, data.externalId);
         const ref = orderDocRef(docId);
         const existing = await ref.get();
         const mapped = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
-        await ref.set(integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}), { merge: true });
+        await ref.set(
+          integrationOrderUpdate(mapped, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.shopify),
+          { merge: true }
+        );
       } else if (provider === "etsy") {
         // Etsy replays through its own applyReceipt rather than a second copy
         // of the mapping here: that path also writes the external-order row,
@@ -18628,7 +18635,10 @@ exports.woocommerceOrderWebhook = onRequest({ region: "europe-west2" }, async (r
 
     const wooDefaultDeliveryTime = resolveDefaultDeliveryTime((await companySettingsDocRef(companyId).get()).data());
     const mappedOrder = mapWooCommerceOrderToSiparis(order, companyId, !existing.exists, wooDefaultDeliveryTime);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
+    await ref.set(
+      integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.woocommerce),
+      { merge: true }
+    );
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -19032,7 +19042,10 @@ exports.shopifyOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapShopifyOrderToSiparis(order, companyId, !existing.exists);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
+    await ref.set(
+      integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.shopify),
+      { merge: true }
+    );
 
     // Mirror the billing contact into the workspace's customer list (address,
     // phone, email). Best-effort: never block the order webhook on this.
@@ -19423,7 +19436,10 @@ exports.inboundOrderWebhook = onRequest({ region: "europe-west2" }, async (req, 
     }
 
     const mappedOrder = mapGenericInboundOrderToSiparis(payload, companyId, !existing.exists);
-    await ref.set(integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}), { merge: true });
+    await ref.set(
+      integrationOrderUpdate(mappedOrder, !existing.exists, existing.data() || {}, UNKNOWN_ON_UPDATE_BY_SOURCE.inbound),
+      { merge: true }
+    );
 
     // Mirror the billing contact into the workspace's customer list (best-effort).
     try {
