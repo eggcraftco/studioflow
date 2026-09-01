@@ -389,6 +389,27 @@ test("a cancelled receipt is marked cancelled, not silently paid", async () => {
   assert.strictEqual(order.status, "Cancelled", `cancelled receipt stored status ${order.status}`);
 });
 
+// Every dated view in NivaDesk reads paymentDate — the Dashboard, the Money
+// card, the CSV exports, the tax period. The Etsy mapper computed the receipt's
+// creation date, used it to work out a delivery window, and then never wrote
+// it. So an imported Etsy order was invisible everywhere that asks "how much
+// did we make in March", and dated today everywhere that defaults a missing
+// date to now. Shopify and WooCommerce have always set it.
+test("an imported order carries the date its money happened", async () => {
+  const seeded = await seed();
+  const created = Math.floor(new Date("2026-03-14T10:00:00Z").getTime() / 1000);
+  const result = await applyReceipt({
+    companyId: CID, connectionRef: seeded.connRef, connectionData: seeded.connData,
+    receipt: FULL_RECEIPT({ receipt_id: 900500, create_timestamp: created }), defaultDeliveryTime: 21
+  });
+  assert.strictEqual(result.status, "created");
+  const order = (await db.collection("siparisler").doc(result.orderId).get()).data();
+  assert.ok(order.paymentDate, "an Etsy order was stored with no payment date");
+  const stored = order.paymentDate.toDate ? order.paymentDate.toDate() : new Date(order.paymentDate);
+  assert.strictEqual(stored.toISOString().slice(0, 10), "2026-03-14",
+    `payment date stored as ${stored.toISOString()}`);
+});
+
 // The panel says "Choose what to import" and hides Sync now until the owner has
 // been through the preview. The server did not agree: a shop connected but
 // never imported has no importRules, so the rules gate was skipped whole and

@@ -707,6 +707,17 @@ function normalizeEtsyReceipt(receipt, {
   const order = {
     companyId,
     customerName: addressParts.name || `Etsy buyer ${buyerId || receiptId}`,
+    // When the money happened. Every dated view in NivaDesk reads this field —
+    // the Dashboard, the Money card, the CSV exports, the tax period — and it
+    // was the one field the mapper computed and never wrote. Shopify and
+    // WooCommerce both set it from the order's creation. Without it an Etsy
+    // order is either invisible (the clients skip an order with no payment
+    // date) or dated today (the server paths default to now), so a receipt from
+    // March counted as March revenue nowhere and as this month's revenue in the
+    // places that guessed. It is not shop-owned, so a studio that corrects the
+    // date keeps its correction through every resync — same as the other two
+    // channels.
+    paymentDate: createdAt,
     orderValue: grand.value,
     paidAmount: isPaid ? grand.value : 0,
     remainingAmount: isPaid ? 0 : grand.value,
