@@ -252,7 +252,9 @@ function formatTeamDate(date: Date | null) {
 }
 
 function planOrderLimitText(plan: { orderLimit: number | null }) {
-  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} orders`;
+  // ACTIVE orders: finished work is not using anything, and saying so is the
+  // difference between a limit you can get back under and one you cannot.
+  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} active orders`;
 }
 
 function planBillingStateLabel(status: string) {
