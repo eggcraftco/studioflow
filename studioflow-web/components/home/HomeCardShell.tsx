@@ -86,6 +86,7 @@ export function HomeCardShell({
   onPeriod,
   dragHandlers,
   lastUpdatedLabel,
+  footerNote,
 }: {
   definition: HomeCardDefinition;
   placement: HomeCardPlacement;
@@ -114,6 +115,10 @@ export function HomeCardShell({
     dropTarget: boolean;
   };
   lastUpdatedLabel?: string;
+  /** A sentence that belongs beside the footer link rather than inside the
+   *  card body — the reference sheet puts the activity card's permission note
+   *  there, level with "View all activity", not stranded under the last row. */
+  footerNote?: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   /** Which way the menu opens. Below by default, above when there is no room. */
@@ -344,7 +349,11 @@ export function HomeCardShell({
       </div>
 
       <footer className="home-card-foot">
-        {lastUpdatedLabel ? <span className="home-card-stale">{lastUpdatedLabel}</span> : <span />}
+        {lastUpdatedLabel ? (
+          <span className="home-card-stale">{lastUpdatedLabel}</span>
+        ) : footerNote ? (
+          <span className="home-card-footnote"><i aria-hidden="true">i</i>{footerNote}</span>
+        ) : <span />}
         <Link href={definition.href} className="home-card-link">
           {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
         </Link>

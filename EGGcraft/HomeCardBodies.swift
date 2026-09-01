@@ -687,11 +687,11 @@ struct HomeRecentActivityBody: View {
             VStack(alignment: .leading, spacing: 6) {
                 if !today.isEmpty {
                     HomeEyebrow(text: t("Today", lang: lang))
-                    ForEach(today, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true) }
+                    ForEach(today, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true, size: size) }
                 }
                 if !earlier.isEmpty {
                     HomeEyebrow(text: t("Earlier", lang: lang))
-                    ForEach(earlier, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true) }
+                    ForEach(earlier, id: \.id) { HomeActivityRow(item: $0, lang: lang, showActor: true, size: size) }
                 }
                 Text(t("Only activity you have permission to view is shown", lang: lang))
                     .font(.system(size: 11)).foregroundColor(.secondary)
@@ -737,7 +737,10 @@ struct HomeActivityRow: View {
         // disc and keeps the glyph in the colour. Same hue either way, so the
         // two treatments cannot drift into different palettes.
         let tone = homeActivityTone(item.type)
-        let solid = size == .oneByOne
+        // Solid on the square AND on the wide-open card; tinted only on 2x1.
+        // The sheet is not being inconsistent — it gives the densest layouts
+        // the strongest marks, and 2x2 is the densest of the three.
+        let solid = size != .twoByOne
         return ZStack {
             Circle().fill(solid ? tone : tone.opacity(0.13))
             if !solid { Circle().strokeBorder(tone.opacity(0.32), lineWidth: 1.5) }

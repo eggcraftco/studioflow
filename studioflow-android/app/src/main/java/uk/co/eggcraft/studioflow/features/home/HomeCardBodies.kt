@@ -878,7 +878,8 @@ private fun ActivityRow(
         // The reference draws the two sizes differently on purpose: a square
         // fills the disc with a white glyph, a wide card tints it and keeps the
         // glyph in the colour. One hue either way, so they cannot drift apart.
-        val solid = size == HomeCardSize.OneByOne
+        // Solid on the square AND on the wide-open card; tinted only on 2x1.
+        val solid = size != HomeCardSize.TwoByOne
         Box(
             Modifier
                 .size(24.dp)

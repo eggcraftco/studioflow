@@ -36,7 +36,35 @@ export type CardBodyProps = {
   moneySettings: StudioMoneySettings;
   hideNumbers: boolean;
   onQuickAction?: (action: QuickActionId) => void;
+  /** Which slice of the activity feed to show. Only the 2x2 activity card
+   *  offers the pills; every other size and card ignores it. */
+  activityFilter?: ActivityFilterId;
 };
+
+/** The filter pills on the wide-open activity card, as the reference sheet
+ *  draws them. Client-side over rows already loaded and already permission
+ *  filtered — a pill narrows what you look at, never what you may see. */
+export const ACTIVITY_FILTERS: Array<{ id: ActivityFilterId; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "orders", label: "Orders" },
+  { id: "production", label: "Production" },
+  { id: "payments", label: "Payments" },
+  { id: "files", label: "Files" }
+];
+
+export type ActivityFilterId = "all" | "orders" | "production" | "payments" | "files";
+
+const ACTIVITY_FILTER_MATCH: Record<Exclude<ActivityFilterId, "all">, RegExp> = {
+  orders: /order|estimate|delivery|dispatch|shipped/,
+  production: /production|status|stage|schedule|reminder/,
+  payments: /payment|refund|invoice_paid|bank_/,
+  files: /file|upload|document|note/
+};
+
+export function activityMatchesFilter(type: string, filter: ActivityFilterId): boolean {
+  if (filter === "all") return true;
+  return ACTIVITY_FILTER_MATCH[filter].test(String(type || "").toLowerCase());
+}
 
 export type QuickActionId =
   | "order" | "customer" | "note" | "file" | "inventory" | "reviewSpending" | "receipt" | "aiReply";
@@ -1224,14 +1252,24 @@ function detailFor(item: { message: string; senderName: string }): string {
   return `${message} · ${who}`;
 }
 
-export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBodyProps) {
+export function RecentActivityCardBody({ size, data, t, moneySettings, activityFilter = "all" }: CardBodyProps) {
   // The workspace's own stream, already filtered to what this user is a
-  // recipient of — activity never widens what someone can see (§12).
+  // recipient of — activity never widens what someone can see (§12). The pills
+  // narrow what is LOOKED at, on top of that; they are not a permission.
+  const visible = size === "2x2"
+    ? data.activity.filter((item) => activityMatchesFilter(item.type, activityFilter))
+    : data.activity;
   // Six on a wide card, because it is two columns of three now rather than one
   // column of five — an odd number left the second column short by one and the
   // card looked like it had run out of events.
-  const rows = data.activity.slice(0, size === "1x1" ? 3 : size === "2x1" ? 6 : 8);
-  if (rows.length === 0) return null;
+  const rows = visible.slice(0, size === "1x1" ? 3 : size === "2x1" ? 6 : 8);
+  if (rows.length === 0) {
+    // A pill with nothing behind it has to say so, or it reads as a card that
+    // has stopped working.
+    return activityFilter === "all"
+      ? null
+      : <p className="home-empty-note">{t("Nothing in this filter yet.")}</p>;
+  }
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -1279,6 +1317,38 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
     return <ul className="home-activity-list">{rows.map(row)}</ul>;
   }
 
+  // The wide-open card draws a row as columns rather than a stack: title,
+  // detail, who, when, and a chevron — the reference sheet's layout, and the
+  // one that makes a row scannable down its columns instead of read one block
+  // at a time.
+  const wideRow = (item: (typeof rows)[number]) => {
+    const { tone, glyph } = activityLook(item.type);
+    const who = String(item.senderName || "").trim() || t("System");
+    const href = item.orderId
+      ? `/orders?selectedOrderId=${encodeURIComponent(item.orderId)}`
+      : (item.route ? `/${String(item.route).replace(/^\//, "")}` : "");
+    const inner = (
+      <>
+        <span className={`home-activity-mark tone-${tone}`} aria-hidden="true">
+          {glyph === "payment" ? <b className="home-activity-symbol">{symbol}</b> : <HomeActivityIcon name={glyph} />}
+        </span>
+        <strong className="home-activity-head">{item.title || t("Update")}</strong>
+        <span className="home-activity-detail">{item.message}</span>
+        <span className="home-activity-actor">
+          <i aria-hidden="true"><HomeActivityIcon name={item.senderName ? "customer" : "production"} /></i>
+          {who}
+        </span>
+        <span className="home-activity-when">{relative(item.createdAtMillis)}</span>
+        {/* The chevron is only drawn when it goes somewhere. An arrow that does
+            nothing when pressed is worse than no arrow. */}
+        <span className="home-activity-go" aria-hidden="true">{href ? "\u203A" : ""}</span>
+      </>
+    );
+    return href
+      ? <li key={item.id}><Link href={href} className="home-activity-wide is-link">{inner}</Link></li>
+      : <li key={item.id}><span className="home-activity-wide">{inner}</span></li>;
+  };
+
   const today = rows.filter((item) => item.createdAtMillis >= startOfToday.getTime());
   const earlier = rows.filter((item) => item.createdAtMillis < startOfToday.getTime());
   return (
@@ -1286,16 +1356,17 @@ export function RecentActivityCardBody({ size, data, t, moneySettings }: CardBod
       {today.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Today")}</p>
-          <ul className="home-activity-list">{today.map(row)}</ul>
+          <ul className="home-activity-list is-wide">{today.map(wideRow)}</ul>
         </>
       ) : null}
       {earlier.length > 0 ? (
         <>
           <p className="home-eyebrow is-strong">{t("Earlier")}</p>
-          <ul className="home-activity-list">{earlier.map(row)}</ul>
+          <ul className="home-activity-list is-wide">{earlier.map(wideRow)}</ul>
         </>
       ) : null}
-      <p className="home-action-note">{t("Only activity you have permission to view is shown")}</p>
+      {/* The permission note now sits in the card footer, beside the link —
+          see footerNote in HomeCardShell. */}
     </div>
   );
 }

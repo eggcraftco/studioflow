@@ -27748,17 +27748,17 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .home-activity-mark.tone-cyan { --activity-tone: #0891b2; }
 .home-activity-mark { background: var(--activity-tone, #64748b); }
 
-/* The wide card: a tinted disc with a ring and the glyph in the tone, as the
-   reference draws it. color-mix keeps the tint tied to the one hue above
-   instead of adding nine more hex values that can drift out of step. */
-.home-card-2x1 .home-activity-mark,
-.home-card-2x2 .home-activity-mark {
+/* The 2x1 card: a tinted disc with a ring and the glyph in the tone, as the
+   reference draws it. The square and the wide-open card keep the solid fill —
+   the sheet is not being inconsistent, it is giving the densest layout the
+   strongest marks. color-mix keeps the tint tied to the one hue above instead
+   of adding nine more hex values that can drift out of step. */
+.home-card-2x1 .home-activity-mark {
   background: color-mix(in srgb, var(--activity-tone, #64748b) 13%, #fff);
   border: 1.5px solid color-mix(in srgb, var(--activity-tone, #64748b) 32%, #fff);
   color: var(--activity-tone, #64748b);
 }
-body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark,
-body[data-studio-theme="dark"] .home-card-2x2 .home-activity-mark {
+body[data-studio-theme="dark"] .home-card-2x1 .home-activity-mark {
   background: color-mix(in srgb, var(--activity-tone, #64748b) 22%, transparent);
   border-color: color-mix(in srgb, var(--activity-tone, #64748b) 45%, transparent);
 }
@@ -28940,4 +28940,63 @@ body[data-studio-theme="dark"] .home-card-2x2 .home-activity-mark {
 @media (max-width: 640px) {
   .integrations-count { margin-left: 0; }
   .integrations-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+/* ---- Activity, wide open (2x2) ---------------------------------------- */
+/* The reference draws a row here as COLUMNS — mark, title, detail, who, when,
+   chevron — so the eye can run down one column instead of reading each row as
+   a block. Grid rather than flex: the columns have to line up between rows, and
+   that is the whole point of the layout. */
+.home-activity-list.is-wide { display: block; }
+.home-activity-wide {
+  display: grid;
+  grid-template-columns: 30px minmax(120px, 1.15fr) minmax(0, 1.35fr) minmax(96px, auto) auto 10px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 7px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.home-activity-wide.is-link:hover { background: var(--surface-2, rgba(0, 0, 0, 0.03)); border-radius: 10px; }
+.home-activity-head {
+  font-size: 13px; font-weight: 700; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-activity-detail {
+  font-size: 12px; opacity: 0.62; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.home-activity-actor {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; opacity: 0.72; white-space: nowrap;
+}
+.home-activity-actor i {
+  width: 20px; height: 20px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2, rgba(37, 99, 235, 0.1)); color: #2563eb;
+}
+.home-activity-actor i svg { width: 11px; height: 11px; display: block; }
+.home-activity-go { font-size: 15px; opacity: 0.35; text-align: right; }
+.home-empty-note { font-size: 12.5px; opacity: 0.6; margin: 8px 0 0; }
+
+/* The filter pills. Narrow the card enough and they would push the title out,
+   so they wrap under it rather than clipping the one thing that names the card. */
+.home-activity-filters { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.home-activity-filters button {
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  background: transparent; color: inherit;
+  border-radius: 999px; padding: 4px 11px;
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.home-activity-filters button[aria-pressed="true"] {
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+  border-color: color-mix(in srgb, #2563eb 34%, transparent);
+  color: #2563eb;
+}
+@media (max-width: 880px) { .home-activity-filters { display: none; } }
+.home-card-footnote { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; opacity: 0.6; }
+.home-card-footnote i {
+  width: 15px; height: 15px; border-radius: 999px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid currentColor; font-style: normal; font-size: 10px; font-weight: 700;
 }
