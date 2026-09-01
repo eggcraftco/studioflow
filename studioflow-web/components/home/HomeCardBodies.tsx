@@ -758,28 +758,67 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
     .sort((a, b) => a.rank - b.rank)
     .slice(0, 3);
   const kindLabel = { low: t("Low stock"), reserved: t("Reserved"), incoming: t("Incoming") };
+  const pct = (value: number) => (total > 0 ? `${((value / total) * 100).toFixed(1)}%` : "—");
+  // The three things that are not free shelf, worst last so the eye lands on
+  // it. Low stock is here as well as in the tile above: the tile counts it,
+  // this says what it is worth having to reorder.
+  const statuses = [
+    { key: "reserved", icon: "reserved" as const, label: t("Reserved"), count: summary.reservedCount, value: money(summary.reservedValue) },
+    { key: "incoming", icon: "incomingStock" as const, label: t("incoming"), count: summary.incomingCount, value: money(summary.incomingValue) },
+    { key: "low", icon: "alert" as const, label: t("Low stock"), count: summary.lowStockCount, value: "" },
+  ];
   return (
     <div className="home-money is-large is-stock">
       <div className="home-tile-row">
-        <MoneyTile label={t("total value")} value={money(summary.totalValue)} tone="blue" />
-        <MoneyTile label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
-        <MoneyTile label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
-        <MoneyTile label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
+        {/* Four tiles, four empty discs: the tile takes an icon and none of
+            them was given one. */}
+        <MoneyTile icon="money" label={t("total value")} value={money(summary.totalValue)} tone="blue" />
+        <MoneyTile icon="tag" label={t("Unique items")} value={String(summary.uniqueCount)} tone="blue" sub={money(summary.uniqueValue)} />
+        <MoneyTile icon="box" label={t("Quantity stock")} value={String(summary.quantityCount)} tone="blue" sub={money(summary.quantityValue)} />
+        <MoneyTile icon="alert" label={t("low stock")} value={String(summary.lowStockCount)} tone={summary.lowStockCount > 0 ? "red" : "blue"} />
       </div>
-      <div className="home-panel home-donut-panel">
-        <Donut share={uniqueShare} />
-        <ul className="home-donut-key">
-          <li>
-            <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
-            <em>{t("Unique items")}</em>
-            <b>{money(summary.uniqueValue)}</b>
-          </li>
-          <li>
-            <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
-            <em>{t("Quantity stock")}</em>
-            <b>{money(summary.quantityValue)}</b>
-          </li>
-        </ul>
+      {/* The sheet sets the two of them side by side: what the value is made
+          of, and what is not free shelf. The ring on its own left the card
+          with a third of its height empty. */}
+      <div className="home-stock-split">
+        <div className="home-panel home-donut-panel">
+          <p className="home-eyebrow is-strong">{t("Inventory value")}</p>
+          {/* Ring on the left, its key beside it — the sheet's arrangement, and
+              the only one that fits: the panel is half a card wide, and two key
+              columns left 95px for an amount that needs 88. */}
+          <div className="home-donut-body">
+          <Donut share={uniqueShare} />
+          <ul className="home-donut-key">
+            <li>
+              <span className="home-cost-dot is-small tone-unique" aria-hidden="true" />
+              <em>{t("Unique items")}</em>
+              <b>{money(summary.uniqueValue)}</b>
+              <i>{pct(summary.uniqueValue)}</i>
+            </li>
+            <li>
+              <span className="home-cost-dot is-small tone-quantity" aria-hidden="true" />
+              <em>{t("Quantity stock")}</em>
+              <b>{money(summary.quantityValue)}</b>
+              <i>{pct(summary.quantityValue)}</i>
+            </li>
+          </ul>
+          </div>
+        </div>
+        <div className="home-panel home-status-panel">
+          <p className="home-eyebrow is-strong">{t("Stock status")}</p>
+          <ul className="home-status-list">
+            {statuses.map((row) => (
+              <li key={row.key} className={`is-${row.key}`}>
+                <span className="home-status-mark" aria-hidden="true"><HomeTileIcon name={row.icon} /></span>
+                <span className="home-status-name">
+                  <strong>{row.label}</strong>
+                  <em>{row.count} {t("items")}</em>
+                </span>
+                {row.value ? <b>{row.value}</b> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Needs attention")}</p>
@@ -787,6 +826,16 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
           <p className="home-card-note">{t("Nothing here yet.")}</p>
         ) : (
           <ul className="home-attention-list">
+            {/* The sheet heads the columns. Four rows of thumbnail, chip and
+                place with nothing naming them is a list pretending to be a
+                table. */}
+            <li className="is-head" aria-hidden="true">
+              <span />
+              <em>{t("Item")}</em>
+              <em>{t("Status")}</em>
+              <em>{t("Location")}</em>
+              <em>{t("Value")}</em>
+            </li>
             {attention.map(({ item, kind }) => (
               <li key={item.id}>
                 {item.photos?.[0] ? (
@@ -798,6 +847,11 @@ export function InventoryCardBody({ size, data, t, moneySettings, hideNumbers }:
                 <strong>{item.name}</strong>
                 <span className={`home-attention-chip is-${kind}`}>{kindLabel[kind]}</span>
                 <span className="home-attention-where">{item.location || "—"}</span>
+                {/* The same line value the server totals with: one for a unique
+                    piece, the count on the shelf for a quantity line. */}
+                <b>{money(item.trackingType === "unique"
+                  ? item.valuationCost
+                  : item.valuationCost * (item.quantity?.onHand ?? 0))}</b>
               </li>
             ))}
           </ul>

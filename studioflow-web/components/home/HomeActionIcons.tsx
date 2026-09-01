@@ -106,7 +106,12 @@ export type HomeTileIconName =
   // What the Files card's three figures mean. Same rule as the line above:
   // added, not borrowed — the card was drawing three empty coloured discs
   // because it passed no icon at all, and a stand-in would have been worse.
-  | "fileStack" | "pie" | "link";
+  | "fileStack" | "pie" | "link"
+  // What the Inventory card's four figures mean. Same rule again: added, not
+  // borrowed. The nearest thing to a box was a delivery truck and the nearest
+  // thing to an alert was a clock, and the card was drawing four empty discs
+  // because it passed no icon at all.
+  | "money" | "tag" | "box" | "alert";
 
 export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
   const common = {
@@ -228,6 +233,38 @@ export function HomeTileIcon({ name }: { name: HomeTileIconName }) {
         <svg {...common}>
           <path d="M12 3a9 9 0 1 0 9 9h-9V3Z" />
           <path d="M14.5 3.6A9 9 0 0 1 20.4 9.5" />
+        </svg>
+      );
+    case "money":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M10 16h5" />
+          <path d="M13.6 16c-1.6-1-2.2-2.4-2.2-4.2V10a2.1 2.1 0 0 1 3.9-1" />
+          <path d="M9.6 12.6h4" />
+        </svg>
+      );
+    case "tag":
+      return (
+        <svg {...common}>
+          <path d="M11.4 3.2H19a1.8 1.8 0 0 1 1.8 1.8v7.6a1.8 1.8 0 0 1-.53 1.27l-6.4 6.4a1.8 1.8 0 0 1-2.55 0l-7.6-7.6a1.8 1.8 0 0 1 0-2.55l6.4-6.4a1.8 1.8 0 0 1 1.27-.53Z" />
+          <circle cx="16.2" cy="7.8" r="1.3" />
+        </svg>
+      );
+    case "box":
+      return (
+        <svg {...common}>
+          <path d="M4 8 12 4l8 4-8 4-8-4Z" />
+          <path d="M4 8v8l8 4 8-4V8" />
+          <path d="M12 12v8" />
+        </svg>
+      );
+    case "alert":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.6v5" />
+          <path d="M12 16.1v.1" />
         </svg>
       );
     case "link":

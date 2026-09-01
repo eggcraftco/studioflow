@@ -2177,25 +2177,58 @@ struct HomeInventoryBody: View {
                 let share = total > 0 ? summary.uniqueValue / total : 0
                 VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                     HStack(spacing: compact ? 5 : 10) {
+                        // Four tiles, four empty spaces where a mark belongs:
+                        // the tile takes a symbol and none of them was given one.
                         HomeStockTile(label: t("total value", lang: lang).homeCapitalisedFirst, value: money(summary.totalValue),
-                                      tone: HomeTone.indigo, compact: compact)
+                                      tone: HomeTone.indigo, compact: compact, symbol: "sterlingsign.circle")
                         HomeStockTile(label: t("Unique items", lang: lang), value: "\(summary.uniqueCount)",
-                                      tone: HomeTone.accent, compact: compact, sub: money(summary.uniqueValue))
+                                      tone: HomeTone.accent, compact: compact, sub: money(summary.uniqueValue),
+                                      symbol: "tag")
                         HomeStockTile(label: t("Quantity stock", lang: lang), value: "\(summary.quantityCount)",
-                                      tone: HomeTone.accent, compact: compact, sub: money(summary.quantityValue))
+                                      tone: HomeTone.accent, compact: compact, sub: money(summary.quantityValue),
+                                      symbol: "shippingbox")
                         HomeStockTile(label: t("low stock", lang: lang).homeCapitalisedFirst, value: "\(summary.lowStockCount)",
                                       tone: summary.lowStockCount > 0 ? HomeTone.red : HomeTone.accent,
-                                      compact: compact)
+                                      compact: compact, symbol: "exclamationmark.circle")
                     }
-                    HomePanel(compact: compact) {
-                        HStack(spacing: compact ? 10 : 16) {
-                            HomeDonut(share: share)
-                                .frame(width: compact ? 46 : 74, height: compact ? 46 : 74)
-                            HomeBankFigure(label: t("Unique items", lang: lang),
-                                           value: money(summary.uniqueValue), compact: compact)
-                            Divider().frame(height: compact ? 26 : 32)
-                            HomeBankFigure(label: t("Quantity stock", lang: lang),
-                                           value: money(summary.quantityValue), compact: compact)
+                    // The sheet sets the two of them side by side: what the
+                    // value is made of, and what is not free shelf. The ring on
+                    // its own left a third of the card empty.
+                    let pct = { (v: Double) in total > 0 ? String(format: "%.1f%%", v / total * 100) : "—" }
+                    HStack(alignment: .top, spacing: compact ? 7 : 10) {
+                        HomePanel(compact: compact) {
+                            HomeEyebrow(text: t("Inventory value", lang: lang))
+                            HStack(spacing: compact ? 8 : 12) {
+                                HomeDonut(share: share)
+                                    .frame(width: compact ? 46 : 74, height: compact ? 46 : 74)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HomeDonutKeyRow(label: t("Unique items", lang: lang),
+                                                    value: money(summary.uniqueValue),
+                                                    share: pct(summary.uniqueValue), compact: compact)
+                                    Divider()
+                                    HomeDonutKeyRow(label: t("Quantity stock", lang: lang),
+                                                    value: money(summary.quantityValue),
+                                                    share: pct(summary.quantityValue), compact: compact)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        HomePanel(compact: compact) {
+                            HomeEyebrow(text: t("Stock status", lang: lang))
+                            // Low stock is here as well as in the tile above:
+                            // the tile counts it, this says what it is worth
+                            // having to reorder.
+                            HomeStockStatusRow(symbol: "cart", label: t("Reserved", lang: lang),
+                                               count: summary.reservedCount, value: money(summary.reservedValue),
+                                               tone: HomeTone.orange, lang: lang, compact: compact)
+                            Divider()
+                            HomeStockStatusRow(symbol: "shippingbox", label: t("incoming", lang: lang).homeCapitalisedFirst,
+                                               count: summary.incomingCount, value: money(summary.incomingValue),
+                                               tone: HomeTone.orange, lang: lang, compact: compact)
+                            Divider()
+                            HomeStockStatusRow(symbol: "exclamationmark.circle", label: t("Low stock", lang: lang),
+                                               count: summary.lowStockCount, value: "",
+                                               tone: HomeTone.red, lang: lang, compact: compact)
                         }
                     }
                     HomePanel(compact: compact) {
@@ -2204,9 +2237,14 @@ struct HomeInventoryBody: View {
                         if attention.isEmpty {
                             HomeCardNote(text: t("Nothing here yet.", lang: lang))
                         } else {
+                            // The sheet heads the columns. Three rows of
+                            // thumbnail, chip and place with nothing naming
+                            // them is a list pretending to be a table.
+                            HomeAttentionHead(lang: lang, compact: compact)
                             ForEach(attention, id: \.item.id) { entry in
                                 HomeAttentionRow(item: entry.item, kind: entry.kind,
-                                                 lang: lang, compact: compact)
+                                                 lang: lang, compact: compact,
+                                                 value: money(homeStockLineValue(entry.item)))
                                 if entry.item.id != attention.last?.item.id { Divider() }
                             }
                         }
@@ -2299,11 +2337,85 @@ func homeStockAttention(_ items: [InventoryItem]) -> [(item: InventoryItem, kind
     .map { $0 }
 }
 
+/// One entry of the value ring's key: what it is, what it is worth, and what
+/// share of the whole that is — the ring draws the share, this says it.
+struct HomeDonutKeyRow: View {
+    let label: String
+    let value: String
+    let share: String
+    var compact: Bool = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.system(size: compact ? 10 : 11.5)).foregroundColor(.secondary).lineLimit(1)
+            Text(value).font(.system(size: compact ? 11.5 : 13, weight: .heavy))
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(share).font(.system(size: compact ? 9 : 10.5)).foregroundColor(.secondary.opacity(0.8))
+        }
+    }
+}
+
+/// One line of the stock that is not free shelf: the mark, what it is, how many
+/// items, and what they are worth. Low stock carries no amount — the count is
+/// the thing to act on.
+struct HomeStockStatusRow: View {
+    let symbol: String
+    let label: String
+    let count: Int
+    let value: String
+    let tone: Color
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        HStack(spacing: compact ? 6 : 8) {
+            Image(systemName: symbol)
+                .font(.system(size: compact ? 11 : 12, weight: .semibold)).foregroundColor(tone)
+                .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
+                .background(Circle().fill(tone.opacity(0.14)))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label).font(.system(size: compact ? 10.5 : 12, weight: .bold)).lineLimit(1)
+                Text("\(count) \(t("items", lang: lang))")
+                    .font(.system(size: compact ? 9.5 : 10.5)).foregroundColor(tone).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if !value.isEmpty {
+                Text(value).font(.system(size: compact ? 11 : 12, weight: .heavy)).foregroundColor(tone)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }
+        }
+        .padding(.vertical, compact ? 2 : 4)
+    }
+}
+
+/// The same line value the server totals with: one for a unique piece, the
+/// count on the shelf for a quantity line.
+func homeStockLineValue(_ item: InventoryItem) -> Double {
+    item.trackingType == .unique ? item.valuationCost : item.valuationCost * item.onHand
+}
+
+/// The column heads of the attention table.
+struct HomeAttentionHead: View {
+    let lang: String
+    var compact: Bool = false
+    var body: some View {
+        HStack(spacing: compact ? 7 : 10) {
+            Spacer(minLength: 0).frame(width: compact ? 22 : 28)
+            Text(t("Item", lang: lang)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(t("Status", lang: lang)).frame(width: compact ? 54 : 70, alignment: .leading)
+            Text(t("Location", lang: lang)).frame(width: compact ? 58 : 84, alignment: .trailing)
+            Text(t("Value", lang: lang)).frame(width: compact ? 52 : 68, alignment: .trailing)
+        }
+        .font(.system(size: compact ? 9 : 10.5, weight: .semibold))
+        .foregroundColor(.secondary.opacity(0.7))
+        .padding(.bottom, 2)
+    }
+}
+
 struct HomeAttentionRow: View {
     let item: InventoryItem
     let kind: HomeStockAttention
     let lang: String
     var compact: Bool = false
+    var value: String = ""
     var body: some View {
         HStack(spacing: compact ? 7 : 10) {
             HomeOrderThumb(link: item.photos.first ?? "", initial: item.name)
@@ -2312,9 +2424,16 @@ struct HomeAttentionRow: View {
                 .font(.system(size: compact ? 11 : 12.5, weight: .semibold)).lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HomeChip(text: t(kind.label, lang: lang), tone: kind.tone)
+                .frame(width: compact ? 54 : 70, alignment: .leading)
             Text(item.location.isEmpty ? "—" : item.location)
                 .font(.system(size: compact ? 10 : 11.5)).foregroundColor(.secondary)
-                .lineLimit(1).frame(maxWidth: compact ? 58 : 84, alignment: .trailing)
+                .lineLimit(1).frame(width: compact ? 58 : 84, alignment: .trailing)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.system(size: compact ? 10.5 : 12, weight: .heavy))
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(width: compact ? 52 : 68, alignment: .trailing)
+            }
         }
         .padding(.vertical, compact ? 2 : 5)
     }
