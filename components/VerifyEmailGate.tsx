@@ -117,48 +117,32 @@ export function VerifyEmailBanner({ user }: { user: User }) {
   }
 
   return (
-    <div
-      role="status"
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-        padding: "9px 14px",
-        background: "#fff7e6",
-        borderBottom: "1px solid #f1d9a7",
-        color: "#7a5200",
-        fontSize: 13,
-        fontWeight: 650
-      }}
-    >
-      <span>📬 {t("Verify your email to keep your account.")} ({user.email}) {t("Unverified accounts with no data are removed after 30 days.")}</span>
-      <button type="button" onClick={() => void resend()} disabled={busy} style={{ border: "1px solid #d9b96a", background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 700, cursor: "pointer", color: "#7a5200" }}>
-        {t("Resend email")}
-      </button>
-      <button type="button" onClick={() => void check()} disabled={busy} style={{ border: 0, background: "transparent", fontWeight: 800, cursor: "pointer", color: "#7a5200", textDecoration: "underline" }}>
-        {t("I've verified — continue")}
-      </button>
-      {status ? <span style={{ fontWeight: 800 }}>{t(status)}</span> : null}
-      <button
-        type="button"
-        aria-label={t("Collapse")}
-        onClick={() => setCollapsed(true)}
-        style={{
-          border: 0,
-          background: "rgba(122, 82, 0, 0.10)",
-          color: "#7a5200",
-          borderRadius: 999,
-          width: 24,
-          height: 24,
-          fontWeight: 700,
-          fontSize: 12,
-          cursor: "pointer",
-        }}
-      >
-        ✕
-      </button>
+    <div className="verify-strip" role="status">
+      {/* The sentence and the buttons are two things, not five items on one
+          wrapping line. Centred and wrapped, a phone put "Resend email" alone in
+          the middle of its own row with the dismiss cross somewhere below it. */}
+      <p className="verify-strip-text">
+        <span aria-hidden="true">📬</span>{" "}
+        {t("Verify your email to keep your account.")} ({user.email}){" "}
+        {t("Unverified accounts with no data are removed after 30 days.")}
+      </p>
+      <div className="verify-strip-actions">
+        <button type="button" className="verify-strip-btn" onClick={() => void resend()} disabled={busy}>
+          {t("Resend email")}
+        </button>
+        <button type="button" className="verify-strip-link" onClick={() => void check()} disabled={busy}>
+          {t("I've verified — continue")}
+        </button>
+        {status ? <span className="verify-strip-status">{t(status)}</span> : null}
+        <button
+          type="button"
+          className="verify-strip-close"
+          aria-label={t("Collapse")}
+          onClick={() => setCollapsed(true)}
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
