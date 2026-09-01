@@ -1526,17 +1526,35 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
 
   /** The sheet's row: what kind of file it is, its name, what it is attached to,
    *  and when it arrived. */
-  const fileRow = (file: (typeof files)[number]) => {
+  // The sheet's row is four things wide — kind, name, what it is attached to,
+  // when it arrived — and the wide cards have room for all four. The square
+  // does not: at 236px the link chip was taking 140px, which left the file's
+  // own name at zero, and capped to its share it reads "Cus…", which answers
+  // nothing. So there the chip goes under the name instead of beside it, which
+  // is the same answer the Mac card reached and says so in its own comment:
+  // "on a square the name and the chip cannot share a line".
+  const fileRow = (file: (typeof files)[number], stacked = false) => {
     const kind = fileKind(file.fileName, file.contentType);
     const ext = (file.fileName.split(".").pop() || "").slice(0, 4).toUpperCase();
     return (
       <li key={file.fileId || file.id}>
         <Link href={file.orderId ? `/orders?selectedOrderId=${encodeURIComponent(file.orderId)}` : "/files"}>
           <span className={`home-file-icon is-${kind}`} aria-hidden="true">{ext}</span>
-          <strong>{file.fileName}</strong>
-          {file.orderId ? (
-            <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
-          ) : null}
+          {stacked ? (
+            <span className="home-file-stack">
+              <strong>{file.fileName}</strong>
+              {file.orderId ? (
+                <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+              ) : null}
+            </span>
+          ) : (
+            <>
+              <strong>{file.fileName}</strong>
+              {file.orderId ? (
+                <span className="home-chip is-link">{file.designName || file.customerName || t("Order")}</span>
+              ) : null}
+            </>
+          )}
           <em>{file.uploadedAt ? homeAgo(file.uploadedAt, t) : ""}</em>
         </Link>
       </li>
@@ -1559,17 +1577,20 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
 
   const limitBytes = (data.storageLimitMB || 0) * 1024 * 1024;
   const pct = limitBytes > 0 ? Math.min(100, Math.round((used / limitBytes) * 100)) : null;
-  const quota = limitBytes > 0 ? (
+  const quotaLine = (withPercent: boolean) => (
     <div className="home-quota">
       <span className="home-quota-line">
         <em>{humanSize(used)} {t("of")} {humanSize(limitBytes)}</em>
-        <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b>
+        {/* The bar below says this, and the two figures beside it say it more
+            precisely. On the square there is no room to say it a third time. */}
+        {withPercent ? <b className={pct !== null && pct >= 90 ? "is-full" : ""}>{pct}%</b> : null}
       </span>
       <span className="home-quota-bar" aria-hidden="true">
         <i className={pct !== null && pct >= 90 ? "is-full" : ""} style={{ width: `${pct ?? 0}%` }} />
       </span>
     </div>
-  ) : null;
+  );
+  const quota = limitBytes > 0 ? quotaLine(size !== "1x1") : null;
 
   if (size === "1x1") {
     // The square asks the same question as the wide card — how full is this
@@ -1578,8 +1599,10 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
     return (
       <div className="home-money is-files">
         {quota}
-        <p className="home-eyebrow is-strong">{t("Recent")}</p>
-        <ul className="home-file-list">{files.slice(0, 2).map(fileRow)}</ul>
+        <p className="home-eyebrow is-strong">{t("Recent files")}</p>
+        <ul className="home-file-list is-stacked">
+          {files.slice(0, 2).map((file) => fileRow(file, true))}
+        </ul>
       </div>
     );
   }
@@ -1589,7 +1612,7 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
       <div className="home-money is-wide is-files">
         {quota}
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-        <ul className="home-file-list">{files.slice(0, 3).map(fileRow)}</ul>
+        <ul className="home-file-list">{files.slice(0, 3).map((file) => fileRow(file))}</ul>
       </div>
     );
   }
@@ -1606,7 +1629,7 @@ export function FilesCardBody({ size, data, t }: CardBodyProps) {
       </div>
       <div className="home-panel is-flush">
         <p className="home-eyebrow is-strong">{t("Recent files")}</p>
-        <ul className="home-file-list">{files.slice(0, 4).map(fileRow)}</ul>
+        <ul className="home-file-list">{files.slice(0, 4).map((file) => fileRow(file))}</ul>
       </div>
       {unlinked.length > 0 ? (
         <Link className="home-linking-banner" href="/files">

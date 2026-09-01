@@ -27642,8 +27642,30 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-file-list li + li { border-top: 1px solid var(--border); }
 .home-file-list a {
   display: grid; align-items: center; gap: 10px; padding: 6px 0; min-width: 0;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  /* The chip used to be an `auto` track, so it took whatever its text wanted
+     and the name — a 1fr that can go to zero — was the one that gave way. On a
+     236px card that meant a row showing PNG, "Custom Leather Duffel Bag" and a
+     clipped date, with the file's own name at exactly 0px. The name is what the
+     row is; the chip is a detail about it, so the chip is what shrinks. */
+  grid-template-columns: 28px minmax(0, 1.6fr) minmax(0, 1fr) auto;
   text-decoration: none; color: inherit;
+}
+/* Three columns on the square, because the chip has moved under the name. The
+   padding comes down to pay for the second line: two stacked rows are what fit,
+   and one file with a chip would be worse than two with one each. */
+.home-file-list.is-stacked a { grid-template-columns: 28px minmax(0, 1fr) auto; padding: 3px 0; }
+/* Two rows and the quota above them come to 2px more than the square has, and
+   the gap is the cheapest place to find it: 14px between three blocks is 28px
+   of air on a card with none to spare. */
+.home-card-1x1 .home-money.is-files { gap: 10px; }
+.home-file-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.home-file-stack strong { max-width: 100%; }
+.home-file-list .home-chip {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* start, so a short chip is a pill rather than a stretched bar — and a
+     max-width, because `justify-self: start` otherwise lets the item size to
+     its own text and spill straight out of the track it was given. */
+  justify-self: start; max-width: 100%;
 }
 .home-file-list a:hover strong { text-decoration: underline; }
 .home-file-icon {
@@ -27784,6 +27806,13 @@ body[data-studio-theme="dark"] .home-card-badge.is-tinted {
 .home-head-icon-button:hover { opacity: 1; background: rgba(120, 130, 150, 0.12); }
 .home-head-icon-button svg { width: 17px; height: 17px; }
 .home-head-icon-button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* The square has no room to name the action: 87px of "↑ Upload file" left the
+   card's own title at 25px, rendering as "Fil…". The mark carries it there,
+   with the border the sheet gives it so it still reads as a button. */
+.home-head-icon-button.is-outline {
+  border: 1.5px solid rgba(37, 99, 235, 0.5); color: #2563eb; opacity: 1;
+}
+.home-head-icon-button.is-outline:hover { background: rgba(37, 99, 235, 0.08); border-color: #2563eb; }
 .home-note-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; flex-wrap: wrap; }
 .home-note-foot em { font-style: normal; font-size: 10.5px; opacity: 0.7; }
 .home-note-foot em.is-due { color: #dc2626; font-weight: 700; opacity: 1; }

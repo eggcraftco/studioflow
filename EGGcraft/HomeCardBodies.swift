@@ -3004,7 +3004,7 @@ struct HomeFilesBody: View {
                             HomeProgressBar(fraction: Double(pct) / 100, tint: pct >= 90 ? HomeTone.red : HomeTone.accent)
                         }
                     }
-                    if !compact { HomeEyebrow(text: t("Recent", lang: lang)) }
+                    if !compact { HomeEyebrow(text: t("Recent files", lang: lang)) }
                     ForEach(Array(files.prefix(2).enumerated()), id: \.offset) { _, entry in
                         HomeFileRow(file: entry.1, order: entry.0, lang: lang,
                                     compact: compact, stacked: true)

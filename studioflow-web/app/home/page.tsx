@@ -396,13 +396,28 @@ export default function HomePage() {
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
                 placement.id === "files" ? (
-                  <button
-                    type="button"
-                    className="home-add-button is-wide"
-                    onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
-                  >
-                    ↑ {t("Upload file")}
-                  </button>
+                  // 87px of "↑ Upload file" left the card's own title at 25px
+                  // on the square, rendering as "Fil…". There the action is a
+                  // mark; the wider cards have the room to name it.
+                  placement.size === "1x1" ? (
+                    <button
+                      type="button"
+                      className="home-head-icon-button is-outline"
+                      aria-label={t("Upload file")}
+                      title={t("Upload file")}
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                    >
+                      <HomeTileIcon name="upload" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="home-add-button is-wide"
+                      onClick={(event) => { event.stopPropagation(); handleQuickAction("file"); }}
+                    >
+                      ↑ {t("Upload file")}
+                    </button>
+                  )
                 ) : placement.id === "notes" && placement.size !== "1x1" ? (
                   // Not on the square: that size opens with the composer, whose
                   // own + is the one control for the action. The wider header

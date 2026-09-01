@@ -187,7 +187,7 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     defaultSize: "2x1",
     access: "clientFiles",
     href: "/files",
-    linkLabel: "View all files",
+    linkLabel: "Open Files",
   },
   {
     id: "notes",

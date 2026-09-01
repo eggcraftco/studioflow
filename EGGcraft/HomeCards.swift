@@ -129,7 +129,7 @@ enum HomeCards {
         // files" in several languages. This card is the library itself.
         HomeCardDefinition(id: .files, title: "File library", icon: "folder.fill",
                            sizes: HomeCardSize.allCases, defaultSize: .twoByOne, access: .files,
-                           financeOnly: false, destination: "Files", linkLabel: "View all files"),
+                           financeOnly: false, destination: "Files", linkLabel: "Open Files"),
         // A page with a pencil on it, not a page: the card is where you write
         // one down, and the document mark said "reading" while sitting next to
         // a + that meant the opposite.
