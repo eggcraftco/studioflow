@@ -109,6 +109,39 @@ function topPaths(question, limit = 4) {
   assert(/financial access|access allows/i.test(home.text), "Home must say why a card is absent for a colleague");
   pass("Home questions reach the Home chapter, not the Notes widget");
 }
+
+// Customer SMS: the server has been complete for a week with no screen anywhere,
+// so the first questions about it will arrive the day the screen ships. The one
+// that matters most is "why has nothing sent" — the honest answer is that the
+// sender name is with the operator, and a bot that cannot say that will invent
+// a reason.
+{
+  const questions = [
+    "how do I text my customer when their order is ready?",
+    "why has no SMS been sent?",
+    "can I use my own name as the SMS sender?",
+    "how much does an SMS cost?",
+    "how do I stop texting the customer about every status change?",
+    "which plan includes customer SMS?"
+  ];
+  for (const question of questions) {
+    const paths = topPaths(question);
+    assert(
+      paths.some((p) => /sms/i.test(p)),
+      `"${question}" should reach Customer SMS, got: ${paths.join(" | ")}`
+    );
+  }
+  const sms = CORPUS.find((s) => s.id === "set-sms");
+  assert(sms, "the Customer SMS chapter is missing from the corpus");
+  // The three facts a person cannot work out from the screen alone.
+  assert(/not switched on yet|approval|registered/i.test(sms.text),
+    "it must say why nothing sends yet");
+  assert(/OFF by default/i.test(sms.text),
+    "it must say every-status-change is off, and that this is deliberate");
+  assert(/segment/i.test(sms.text),
+    "it must explain that a long message costs more than one segment");
+  pass("Customer SMS questions reach the SMS chapter");
+}
 }
 
 // 3. The same for categories — and these must land on Inventory, not somewhere

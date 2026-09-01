@@ -418,6 +418,14 @@
    "search": "Team Access Invite your team and control exactly what each person can see and do. Team Access Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin."
   },
   {
+   "id": "set-sms",
+   "title": "Customer SMS",
+   "path": "Settings › Customer SMS",
+   "headings": "",
+   "text": "Text your customer when their work reaches a milestone, with a link to their order page. Owner only, under Settings ▸ Customer SMS, and available on NivaDesk Pro and Team.\nA text can only be sent from a sender name the mobile networks have registered. NivaDesk's own sender name is with the network operator for approval, so you can set everything up now and nothing will be sent until it clears. The screen says which state you are in rather than leaving you guessing.",
+   "search": "Customer SMS Text your customer when their work reaches a milestone, with a link to their order page. Owner only, under Settings ▸ Customer SMS, and available on NivaDesk Pro and Team.\nA text can only be sent from a sender name the mobile networks have registered. NivaDesk's own sender name is with the network operator for approval, so you can set everything up now and nothing will be sent until it clears. The screen says which state you are in rather than leaving you guessing. Müşteri SMS'i İş bir aşamaya geldiğinde müşterinize kısa mesaj gönderin; içinde sipariş sayfasının bağlantısı olur. Yalnız sahip görür, Settings ▸ Customer SMS altındadır ve NivaDesk Pro ile Team planlarında bulunur.\nKısa mesaj, ancak operatörlerin kaydettiği bir gönderen adından gönderilebilir. NivaDesk'in kendi gönderen adı şu anda operatör onayında; yani her şeyi şimdi ayarlayabilirsiniz ve onay çıkana kadar hiçbir mesaj gitmez. Ekran hangi durumda olduğunuzu tahmine bırakmadan yazar."
+  },
+  {
    "id": "set-client-domain",
    "title": "Customer Portal Domain",
    "path": "Settings › Customer Portal Domain",

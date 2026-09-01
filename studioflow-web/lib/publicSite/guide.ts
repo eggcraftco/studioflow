@@ -1078,6 +1078,34 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-sms",
+        title: "Customer SMS",
+        blocks: [
+          { kind: "para", text: "Text your customer when their work reaches a milestone, with a link to their order page. Owner only, under Settings ▸ Customer SMS, and available on NivaDesk Pro and Team." },
+          { kind: "sub", text: "Sending is not switched on yet" },
+          { kind: "para", text: "A text can only be sent from a sender name the mobile networks have registered. NivaDesk's own sender name is with the network operator for approval, so you can set everything up now and nothing will be sent until it clears. The screen says which state you are in rather than leaving you guessing." },
+          { kind: "sub", text: "Which status changes send a text, and stopping the ones you do not want" },
+          { kind: "bullets", items: [
+            "Estimate ready — on by default.",
+            "Work started — on by default.",
+            "Ready for collection — on by default.",
+            "Every status change — OFF by default, and deliberately. Telling a customer about every internal step is a choice your business makes, not one made for you.",
+          ] },
+          { kind: "sub", text: "The SMS sender name your customer sees" },
+          { kind: "bullets", items: [
+            "By default the platform sender name, with your workspace name written into the message so the customer knows who it is from.",
+            "You can register your own sender name instead — a customer trusts your studio's name more than ours. Enter it and it goes to \"pending\": a workspace cannot mark its own sender approved, the network operator does that.",
+            "Changing the name starts registration again, because the approval was for the old name.",
+            "The default calling code decides how a local number like 07700 900123 is dialled. It is 44 unless you change it.",
+          ] },
+          { kind: "sub", text: "What each text costs, and this month\u2019s usage" },
+          { kind: "bullets", items: [
+            "The screen shows this month's messages, segments and spend. A long message is more than one segment, and each segment is charged.",
+            "The number used is the one on the order's customer field; an order with no number is skipped rather than failing.",
+          ] },
+        ]
+      },
+      {
         id: "set-client-domain",
         title: "Customer Portal Domain",
         blocks: [
@@ -2206,6 +2234,34 @@ const TREE_TR: GuideNode[] = [
             "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
           ] }
+        ]
+      },
+      {
+        id: "set-sms",
+        title: "Müşteri SMS'i",
+        blocks: [
+          { kind: "para", text: "İş bir aşamaya geldiğinde müşterinize kısa mesaj gönderin; içinde sipariş sayfasının bağlantısı olur. Yalnız sahip görür, Settings ▸ Customer SMS altındadır ve NivaDesk Pro ile Team planlarında bulunur." },
+          { kind: "sub", text: "Gönderim henüz açık değil" },
+          { kind: "para", text: "Kısa mesaj, ancak operatörlerin kaydettiği bir gönderen adından gönderilebilir. NivaDesk'in kendi gönderen adı şu anda operatör onayında; yani her şeyi şimdi ayarlayabilirsiniz ve onay çıkana kadar hiçbir mesaj gitmez. Ekran hangi durumda olduğunuzu tahmine bırakmadan yazar." },
+          { kind: "sub", text: "Hangi durum değişikliği SMS gönderir, istemediğinizi nasıl durdurursunuz" },
+          { kind: "bullets", items: [
+            "Teklif hazır — varsayılan açık.",
+            "İşe başlandı — varsayılan açık.",
+            "Teslime hazır — varsayılan açık.",
+            "Her durum değişikliği — varsayılan KAPALI, bilerek. Müşteriye her iç adımı haber vermek işletmenizin vereceği bir karardır, sizin adınıza verilmez.",
+          ] },
+          { kind: "sub", text: "Müşterinizin gördüğü SMS gönderen adı" },
+          { kind: "bullets", items: [
+            "Varsayılan olarak platformun gönderen adından; çalışma alanınızın adı mesajın içine yazılır ki müşteri kimden geldiğini bilsin.",
+            "Bunun yerine kendi gönderen adınızı kaydettirebilirsiniz — müşteri sizin atölyenizin adına bizimkinden çok güvenir. Girdiğinizde \"beklemede\" olur: bir çalışma alanı kendi gönderenini onaylı ilan edemez, bunu operatör yapar.",
+            "Adı değiştirmek kaydı yeniden başlatır, çünkü onay eski ad içindi.",
+            "Varsayılan ülke kodu, 07700 900123 gibi yerel bir numaranın nasıl aranacağını belirler. Değiştirmezseniz 44'tür.",
+          ] },
+          { kind: "sub", text: "Her SMS ne kadar tutar, bu ayki kullanım" },
+          { kind: "bullets", items: [
+            "Ekran bu ayın mesaj, segment ve harcama sayılarını gösterir. Uzun bir mesaj birden fazla segmenttir ve her segment ücretlidir.",
+            "Kullanılan numara siparişin müşteri alanındaki numaradır; numarası olmayan sipariş hata vermeden atlanır.",
+          ] },
         ]
       },
       {

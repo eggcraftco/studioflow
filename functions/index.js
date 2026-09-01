@@ -24781,6 +24781,23 @@ function cleanSmsTriggers(value) {
 // and the workspace's name goes in the body where the customer actually reads it.
 const PLATFORM_SMS_SENDER_ID = String(process.env.NIVADESK_SMS_SENDER_ID || "NivaDesk").trim();
 
+// Is the platform's own sender ID actually registered with the aggregator?
+//
+// This is the switch that turns SMS on. "NivaDesk" has been In Review with
+// Twilio since 25 Aug 2026 (Alphanumeric Sender ID, United Kingdom), and until
+// they approve it, a message sent From: NivaDesk is rejected at Twilio.
+//
+// It matters that this is separate from "are the Twilio credentials set". They
+// are set. Reading that as readiness is how the send gate came to pass on a
+// sender nobody could send from: config.senderId falls back to the platform
+// name, the name is a non-empty string, and a non-empty string looked like a
+// working sender.
+//
+// Flip to "verified" when Twilio approves. Nothing else changes.
+const PLATFORM_SMS_SENDER_STATUS = ["pending", "verified"].includes(
+  String(process.env.NIVADESK_SMS_SENDER_STATUS || "").trim().toLowerCase()
+) ? String(process.env.NIVADESK_SMS_SENDER_STATUS).trim().toLowerCase() : "pending";
+
 function workspaceSmsConfig(settings = {}) {
   const ownSenderId = cleanSmsSenderId(settings.smsSenderId);
   // Ofcom's July 2026 rules put KYC on the aggregator, and Twilio requires UK
@@ -24814,6 +24831,12 @@ async function sendWorkspaceSMS({ companyData, settings, companyId, orderId, ord
   // Always resolves: an unregistered workspace falls back to the platform sender
   // rather than being refused, so SMS works on day one of a subscription.
   if (!config.senderId) return { sent: false, reason: "no_sender_id" };
+  // A sender the aggregator has not registered is not a sender. Without this
+  // the workspace's own unverified name is refused but the platform's own
+  // unregistered one sails through, because it is merely non-empty.
+  if (!config.usesOwnSender && PLATFORM_SMS_SENDER_STATUS !== "verified") {
+    return { sent: false, reason: "platform_sender_unregistered" };
+  }
 
   const to = cleanE164Phone(toNumber, config.defaultCallingCode);
   if (!to) return { sent: false, reason: "invalid_number" };
@@ -24913,6 +24936,12 @@ exports.getWorkspaceSmsSettings = onCall({ region: "europe-west2" }, async (requ
     triggers: config.triggers,
     available: entitlements.smsNotificationsEnabled === true,
     providerConfigured: activeMessagingProvider().isConfigured(),
+    // Credentials being present is not the same as being able to send, and the
+    // screens have to be able to tell the difference or they will promise
+    // something that silently does not happen.
+    platformSenderId: PLATFORM_SMS_SENDER_ID,
+    platformSenderStatus: PLATFORM_SMS_SENDER_STATUS,
+    sendingLive: PLATFORM_SMS_SENDER_STATUS === "verified" || config.usesOwnSender,
     usage: {
       month: monthKey,
       messages: sameMonth ? Number(company.smsMessagesThisMonth) || 0 : 0,
