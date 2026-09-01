@@ -10695,6 +10695,112 @@ async function deleteWorkspaceCollectionDocuments(collectionName, companyId) {
   return deleted;
 }
 
+// What the providers keep about a workspace OUTSIDE companies/{id}. The
+// workspace tree itself goes with recursiveDelete; these are root collections
+// keyed by companyId (Etsy) or by the store's link to it (Shopify), and an
+// account deletion that forgot them left OAuth tokens and buyer ids behind
+// with no owner left to disconnect them (RET-004 / ETSY-012).
+//
+//   etsyConnections     companyId — the encrypted OAuth tokens live here
+//   etsyOAuthStates     companyId — half-finished connect attempts
+//   etsyExternalOrders  companyId — receipt ↔ order id mapping
+//   etsyCustomerLinks   companyId — Etsy buyer ids ↔ musteriler
+//   etsyWebhookEvents   shopId    — dedup markers for the shops above, unless
+//                                   another workspace still has that shop
+//   shopifyStores       companyId — UNLINKED, not deleted: the app is still
+//                                   installed on the merchant's Shopify and the
+//                                   token belongs to that install, which the
+//                                   app/uninstalled webhook blanks when it goes.
+//                                   The store's syncLog rows name this
+//                                   workspace's orders, so those go.
+//   etsyQuota                     — global daily API counters, nothing per workspace
+//
+// Best-effort per collection: one failing must not stop the rest, and the
+// caller carries on with the deletion regardless. What was taken and what was
+// skipped comes back in the report and goes to the log.
+const PROVIDER_PURGE_PAGE = 400;
+
+async function purgeProviderDataForWorkspace(companyId) {
+  const db = admin.firestore();
+  const report = {
+    etsyConnections: 0, etsyOAuthStates: 0, etsyExternalOrders: 0, etsyCustomerLinks: 0,
+    etsyWebhookEvents: 0, shopifyStoresUnlinked: 0, shopifySyncLogRows: 0, errors: []
+  };
+  if (!companyId) return report;
+
+  // Page-and-delete: a query re-run after each batch, so it needs no cursor and
+  // stops on its own when nothing matches any more.
+  async function deleteMatching(query) {
+    let removed = 0;
+    for (;;) {
+      const page = await query.limit(PROVIDER_PURGE_PAGE).get();
+      if (page.empty) return removed;
+      const batch = db.batch();
+      for (const doc of page.docs) batch.delete(doc.ref);
+      await batch.commit();
+      removed += page.size;
+      if (page.size < PROVIDER_PURGE_PAGE) return removed;
+    }
+  }
+  async function step(key, fn) {
+    try { report[key] = await fn(); } catch (error) {
+      report.errors.push(`${key}: ${String(error?.message || error).slice(0, 200)}`);
+    }
+  }
+
+  // Etsy — the shop ids come off the connections BEFORE those are deleted,
+  // and a shop's dedup markers are only taken when no other workspace is
+  // connected to that same shop.
+  const shopIds = new Set();
+  try {
+    const connections = await db.collection("etsyConnections").where("companyId", "==", companyId).get();
+    for (const doc of connections.docs) {
+      const shopId = String((doc.data() || {}).externalShopId || "");
+      if (shopId) shopIds.add(shopId);
+    }
+  } catch (error) {
+    report.errors.push(`etsyConnections(list): ${String(error?.message || error).slice(0, 200)}`);
+  }
+  for (const key of ["etsyConnections", "etsyOAuthStates", "etsyExternalOrders", "etsyCustomerLinks"]) {
+    await step(key, () => deleteMatching(db.collection(key).where("companyId", "==", companyId)));
+  }
+  await step("etsyWebhookEvents", async () => {
+    let removed = 0;
+    for (const shopId of shopIds) {
+      const stillConnected = await db.collection("etsyConnections").where("externalShopId", "==", shopId).limit(1).get();
+      if (!stillConnected.empty) continue;
+      removed += await deleteMatching(db.collection("etsyWebhookEvents").where("shopId", "==", shopId));
+    }
+    return removed;
+  });
+
+  // Shopify — the same fields the bridge's own "disconnect" action writes, so a
+  // store unlinked by a deletion looks exactly like one unlinked by hand and
+  // the embedded app offers "Connect a workspace" again. A store that was
+  // already uninstalled stays uninstalled.
+  await step("shopifyStoresUnlinked", async () => {
+    const stores = await db.collection("shopifyStores").where("companyId", "==", companyId).get();
+    let unlinked = 0;
+    for (const doc of stores.docs) {
+      const status = String((doc.data() || {}).status || "");
+      report.shopifySyncLogRows += await deleteMatching(doc.ref.collection("syncLog"));
+      await doc.ref.set({
+        companyId: "",
+        linkedUid: "",
+        linkedEmail: "",
+        status: status === "uninstalled" ? "uninstalled" : "pending",
+        unlinkedAt: admin.firestore.FieldValue.serverTimestamp(),
+        unlinkReason: "account_deleted",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      unlinked += 1;
+    }
+    return unlinked;
+  });
+
+  return report;
+}
+
 exports.deleteWorkspaceData = onCall({ region: "europe-west2" }, async (request) => {
   const { uid, companyId, companyRef, companyData } = await requireWorkspaceForBilling(request, false);
   const role = normalizeWorkspaceRole(workspaceOrderRole(companyData, uid));
@@ -28674,7 +28780,7 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
   }
 
   // 2) Own workspace top-level documents (collections keyed by companyId).
-  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets"]) {
+  for (const collection of ["siparisler", "musteriler", "notes", "messages", "workspaceTickets", "supportTickets"]) {
     try {
       await deleteWorkspaceCollectionDocuments(collection, uid);
     } catch (error) {
@@ -28698,6 +28804,16 @@ exports.deleteMyAccount = onCall({ region: "europe-west2", timeoutSeconds: 300, 
     }
   } catch (error) {
     console.warn("deleteMyAccount billing cleanup failed:", error?.message || error);
+  }
+
+  // 3b) What the providers keep about this workspace outside its own tree:
+  // Etsy tokens, buyer ids and connect attempts, the Shopify store link and
+  // its sync log. Best-effort like the billing step — logged, never fatal.
+  try {
+    const providerCleanup = await purgeProviderDataForWorkspace(uid);
+    console.log("deleteMyAccount provider cleanup:", JSON.stringify(providerCleanup));
+  } catch (error) {
+    console.warn("deleteMyAccount provider cleanup failed:", error?.message || error);
   }
 
   // 4) Own workspace doc + every nested subcollection, then the user doc tree.
@@ -30490,6 +30606,8 @@ if (process.env.NIVADESK_E2E === "1") {
     // RET-001: the sync-log writer, so the suite can see the row carry expireAt.
     writeShopifySyncRow,
     shopifyStoreRef,
-    shopifyRedactedPayloadJson
+    shopifyRedactedPayloadJson,
+    // RET-004: what an account deletion takes from the provider root collections.
+    purgeProviderDataForWorkspace
   };
 }

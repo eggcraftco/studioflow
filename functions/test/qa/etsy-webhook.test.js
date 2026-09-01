@@ -61,7 +61,7 @@ function makeWorld({ connections = [{ id: "c1_222", companyId: "c1", externalSho
       }
     })
   });
-  const admin = { firestore: Object.assign(firestore, { FieldValue: { serverTimestamp: () => SERVER_TS } }) };
+  const admin = { firestore: Object.assign(firestore, { FieldValue: { serverTimestamp: () => SERVER_TS }, Timestamp: { fromMillis: (ms) => ({ toMillis: () => ms, seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000) * 1e6 }) } }) };
   return { admin, docs, created, events, handle };
 }
 

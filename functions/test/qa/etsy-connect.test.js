@@ -102,7 +102,9 @@ function makeAdmin(nowRef) {
   const store = makeFirestore(nowRef);
   const admin = {
     firestore: Object.assign(store.firestore, {
-      FieldValue: { serverTimestamp: () => SERVER_TS, delete: () => DELETE }
+      FieldValue: { serverTimestamp: () => SERVER_TS, delete: () => DELETE },
+      // The SDK's static the OAuth-state writer uses for its TTL twin (RET-001).
+      Timestamp: { fromMillis: (ms) => ({ toMillis: () => ms, seconds: Math.floor(ms / 1000), nanoseconds: (ms % 1000) * 1e6 }) }
     })
   };
   return { admin, store };
